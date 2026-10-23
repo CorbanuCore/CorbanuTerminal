@@ -1,0 +1,73 @@
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:     loading   /model to change                 │
+│ directory: <repo-root>/…/before1/ws │
+╰───────────────────────────────────────────────────────╯
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.3 Flash via zai default · <run>/ws · Corbanu Terminal · TPS: -- tok/s
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:     glm-5.3-flash   /model to change           │
+│ directory: <repo-root>/…/before1/ws │
+╰───────────────────────────────────────────────────────╯
+
+
+› Run exactly this shell command once, unchanged, and wait for it to finish: touch cmd-started.txt && sleep 45 && touch ran-after-kill-switch.txt && echo
+  FINISHED
+
+
+• Working (35s • esc to interrupt) · 1 background terminal running · /ps to view · /stop to close
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.3 Flash via zai default · <run>/ws · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -9,6 +9,7 @@ use codex_protocol::config_types::Settings;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
+use codex_protocol::protocol::ExecCommandStatus;
 use codex_protocol::protocol::GranularApprovalConfig;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::ReviewDecision;
@@ -149,7 +150,9 @@ async fn granular_complex_forced_rm_denial_explains_why_the_command_was_rejected
 
     let server = start_mock_server().await;
     let mut builder = test_codex();
-    let test = builder.build_with_auto_env(&server).await?;
+    // Local executor only: `shell_command` runs commands on the Codex host,
+    // never in a remote environment (#708, #721).
+    let test = builder.build(&server).await?;
     let call_id = "forced-rm-denied";
     let args = json!({
         "command": COMPLEX_FORCED_RM_COMMAND,
@@ -213,7 +216,9 @@ async fn granular_complex_forced_rm_requests_approval_when_allowed() -> Result<(
 
     let server = start_mock_server().await;
     let mut builder = test_codex();
-    let test = builder.build_with_auto_env(&server).await?;
+    // Local executor only: `shell_command` runs commands on the Codex host,
+    // never in a remote environment (#708, #721).
+    let test = builder.build(&server).await?;
     let call_id = "forced-rm-approval";
     let args = json!({
         "command": COMPLEX_FORCED_RM_COMMAND,
@@ -447,6 +452,105 @@ async fn execpolicy_blocks_shell_invocation() -> Result<()> {
         end.aggregated_output
     );
 
+    Ok(())
+}
+
+/// #439 (AGG-14): a command an exec-policy rule forbids reads as the rule's
+/// justification, not as `CreateProcess { message: "Rejected(..)" }`.
+#[tokio::test]
+async fn unified_exec_forbidden_command_reads_as_the_rule_justification() -> Result<()> {
+    let mut builder = test_codex().with_config(|config| {
+        config
+            .features
+            .enable(Feature::UnifiedExec)
+            .expect("test config should allow feature update");
+        let policy_path = config.codex_home.join("rules").join("policy.rules");
+        fs::create_dir_all(
+            policy_path
+                .parent()
+                .expect("policy directory must have a parent"),
+        )
+        .expect("create policy directory");
+        fs::write(
+            &policy_path,
+            r#"prefix_rule(pattern=["echo"], decision="forbidden", justification="Security level Aggressive: no echo.")"#,
+        )
+        .expect("write policy file");
+    });
+    let server = start_mock_server().await;
+    let test = builder.build(&server).await?;
+    let call_id = "unified-exec-forbidden";
+    let args = json!({
+        "cmd": "echo blocked",
+        "yield_time_ms": 1_000,
+    });
+    mount_sse_once(
+        &server,
+        sse(vec![
+            ev_response_created("resp-forbidden-1"),
+            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_completed("resp-forbidden-1"),
+        ]),
+    )
+    .await;
+    let results_mock = mount_sse_once(
+        &server,
+        sse(vec![
+            ev_assistant_message("msg-forbidden-1", "done"),
+            ev_completed("resp-forbidden-2"),
+        ]),
+    )
+    .await;
+
+    submit_user_turn(
+        &test,
+        "run a forbidden command",
+        AskForApproval::OnRequest,
+        PermissionProfile::read_only(),
+        /*collaboration_mode*/ None,
+    )
+    .await?;
+    // #873 (item 4): the refused command is shown once, and ends as refused
+    // with the rule's reason (it never started).
+    let mut began = 0;
+    let mut ended = Vec::new();
+    wait_for_event(&test.codex, |event| match event {
+        EventMsg::ExecCommandBegin(begin) if begin.call_id == call_id => {
+            began += 1;
+            false
+        }
+        EventMsg::ExecCommandEnd(end) if end.call_id == call_id => {
+            ended.push(end.clone());
+            false
+        }
+        EventMsg::TurnComplete(_) => true,
+        _ => false,
+    })
+    .await;
+    assert_eq!(began, 1, "the refused command is shown once");
+    let [ended] = ended.as_slice() else {
+        panic!("the refused command ends once: {ended:?}");
+    };
+    assert_eq!(ended.status, ExecCommandStatus::Refused);
+    assert!(
+        ended
+            .aggregated_output
+            .contains("Security level Aggressive: no echo."),
+        "{}",
+        ended.aggregated_output
+    );
+
+    let output_item = results_mock.single_request().function_call_output(call_id);
+    let output = output_item
+        .get("output")
+        .and_then(Value::as_str)
+        .expect("function call output should include a string output payload");
+    assert!(
+        output.contains("Security level Aggressive: no echo.")
+            && !output.contains("CreateProcess")
+            && !output.contains("Rejected("),
+        "unexpected output: {output}",
+    );
     Ok(())
 }
 

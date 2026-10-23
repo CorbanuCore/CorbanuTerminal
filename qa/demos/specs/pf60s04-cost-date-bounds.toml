@@ -1,0 +1,65 @@
+# PF-60-S04: /cost date bounds. One real Kimi Code K3 turn creates the conversation; its 14 earlier days are seeded
+# off screen with synthetic GLM 5.2 and GPT-5.4 requests at catalogue rates (accounting_demo_seed, as in PF-60-S03).
+# A past day and a range open; a future day and a reversed range are refused with a plain reason.
+# Needs CORBANU_DEMO_SEED=<target>/debug/examples/accounting_demo_seed (cargo build -p codex-state --example accounting_demo_seed).
+id = "pf60s04-cost-date-bounds"
+feature = "/cost date bounds: a past day and a range open; a future day and a reversed range are refused (earlier days seeded with synthetic requests)"
+expected = "/cost 2026-10-07 shows that day's requests. /cost 2026-10-01 2026-10-11 day groups the range by day. /cost 2026-10-11 says the date is after today; a reversed range is refused with its reason and the usage."
+model = "k3"
+provider = "kimi-code"
+rows = 46
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+KIMI_API_KEY = "provider/kimi_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with the single word OK."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*OK\\W*$"
+timeout = 180
+compress = 3
+[[steps]]
+run = '"$CORBANU_DEMO_SEED" "$CODEX_HOME" history "$(sqlite3 "$CODEX_HOME/pfterminal_state_5.sqlite" "select id from threads order by created_at desc limit 1")"'
+[[steps]]
+type = "/cost 2026-10-07"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "This conversation on 2026-10-07 \\(UTC\\)"
+[[steps]]
+pause = 4
+[[steps]]
+key = "Escape"
+[[steps]]
+type = "/cost 2026-10-01 2026-10-11 day"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "grouping: Day"
+[[steps]]
+pause = 4
+[[steps]]
+key = "Escape"
+[[steps]]
+type = "/cost 2026-10-11"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "2026-10-11 is after today"
+[[steps]]
+pause = 2
+[[steps]]
+type = "/cost 2026-10-08 2026-10-03 day"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Range refused"
+[[steps]]
+pause = 5

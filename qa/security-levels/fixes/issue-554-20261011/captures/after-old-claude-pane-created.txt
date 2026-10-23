@@ -1,0 +1,10 @@
+
+
+⚠ This Claude pane cannot run yet. Claude panes run in Corbanu's sandbox here (contained), which needs Claude Code 2.1.292 or later, and the `claude` found on
+  PATH (`/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js`) is 2.1.92. Update Claude Code (`claude update`, or the way you installed it) or put a
+  newer `claude` first on PATH; Codex panes are not affected.
+•
+
+› Explain this codebase
+
+  Opus 5.5 Claude Plan · <runs>/old-after/ws · Corbanu Terminal · TPS: -- tok/s · Claude C…

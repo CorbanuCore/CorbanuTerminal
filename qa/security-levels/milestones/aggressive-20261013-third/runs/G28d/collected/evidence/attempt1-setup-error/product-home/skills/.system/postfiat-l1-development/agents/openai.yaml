@@ -1,0 +1,4 @@
+interface:
+  display_name: "PostFiat L1 Development"
+  short_description: "Build safe, deterministic PostFiat L1 changes"
+  default_prompt: "Use $postfiat-l1-development to implement and verify a focused change in the PostFiat L1 Rust workspace."

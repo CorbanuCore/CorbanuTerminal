@@ -1,0 +1,7 @@
+---
+source: tui/src/security/current_tests.rs
+expression: before_restart
+---
+Sandbox: commands can write to the current folder; under Aggressive approved and allow-listed commands stay inside the sandbox; permission-request tools are off
+Network: off for agent commands; web search cached
+Vault: the vault store and sign-in file are unreadable (Aggressive, also when you approve a command) to agent commands, and direct `corbanu vault …` commands are refused

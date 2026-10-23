@@ -1,0 +1,96 @@
+# PF-84 #428 (Travis 2026-10-11, option 1): D3 also asks when the TUI shows
+# Aggressive while Core's level stays Permissive. Aggressive is saved through
+# /security without the activation preflight ("Core's level stays
+# Permissive"), then the TUI restarts with Aggressive active. A model-chosen
+# spawn `account` switch to `work` (a named account holding a fake key) now
+# asks first; Cancel runs nothing. The coordinator uses the default Z.AI
+# account (real key from the vault helper, never shown).
+# Record with
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-d3-tui-aggressive.toml \
+#     --bin <candidate> --sprint PF-84-S03 --publish
+id = "pf84-d3-tui-aggressive"
+feature = "PF-84 #428: a spawn account switch asks whenever the TUI shows Aggressive"
+expected = "Aggressive saved without the preflight (Core's level stays Permissive) and active after restart; the spawn on account work asks first, and Cancel runs nothing."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 140
+rows = 40
+config = """
+suppress_unstable_features_warning = true
+[features]
+named_accounts = true
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+run = "printf pf84-fake-zai-key-0428 | {bin} account add zai work >/dev/null && echo enrolled"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Core's level stays Permissive"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Restarting Corbanu Terminal"
+[[steps]]
+wait = "(?s)Restarting Corbanu Terminal.*Corbanu Terminal \\(v"
+timeout = 60
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Aggressive"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Escape"
+
+[[steps]]
+type = "Use the spawn_agent tool exactly once with account set to work and the message 'Reply with the single word pong'. Do not retry on another account."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Allow the spawned agent to run on account `work`"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "declined"
+timeout = 120
+compress = 3
+[[steps]]
+pause = 3.0

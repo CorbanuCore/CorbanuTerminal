@@ -1,0 +1,40 @@
+│ >_ Corbanu Terminal (v0.1.48)                │
+│                                              │
+│ model:     openai.gpt-5.4   /model to change │
+│ directory: /tmp/tmp.SnRbCLioJY/ws            │
+╰──────────────────────────────────────────────╯
+
+⚠ Under-development features enabled: named_accounts. Under-development features are incomplete and may behave
+  unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /tmp/tmp.SnRbCLioJY/
+  corbanu/config.toml.
+
+
+› Reply with exactly: pong
+
+
+• bedrock-mock: signed by AKIDOTHERPROFILE
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                GPT-5.4 (reasoning medium, summaries auto)                        │
+│  Model provider:       Amazon Bedrock - http://127.0.0.1:34300/openai/v1 · account prod  │
+│  Directory:            /tmp/tmp.SnRbCLioJY/ws                                            │
+│  Permissions:          Next turn: Workspace (Ask for approval)                           │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Amazon Bedrock AWS credentials                                    │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12dc7-a655-7692-b0e2-1ca28dff929e                              │
+│                                                                                          │
+│  Token usage:          107 total  (100 input + 7 output)                                 │
+│  Context window:       100% left (107 used / 258K)                                       │
+│  Limits:               not available for this account                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Use /skills to list available skills
+
+  GPT-5.4 via amazon-bedrock default · /tmp/tmp.SnRbCLioJY/ws · Corbanu Terminal · TPS: 70.7 tok/s

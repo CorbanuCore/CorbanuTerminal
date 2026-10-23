@@ -1,0 +1,693 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PF83 F05–F09 per-attempt capture contract, round 83",
+  "description": "Coordinator-only amended capture contract; original frozen cases unchanged. One record per enumerated branch/queue variant/attempt. Results and missing coverage use results.schema.json. Required observations include contradictions, not just passing outcomes. Independent raw-evidence review remains mandatory.",
+  "x-original-sha256": "c97bf701cd7aff2e26f08884f35dbc9a4fc33b1eef14eee6328d2ea1f1411726",
+  "x-current-capability": {
+    "F05": "blocked: no admitted case dispatch/mediator or capture interface; pending approval navigation unproven",
+    "F06": "blocked: no admitted case dispatch/mediator or capture interface; timed operation/selection observation unproven",
+    "F07": "blocked: no admitted case dispatch/mediator or capture interface; overlapping selections/open-confirmation route unproven",
+    "F08": "blocked: no admitted case dispatch/mediator or capture interface; cancellation and exposed benign-failure routes unproven; hidden G08 injection cannot substitute",
+    "F09": "blocked: no admitted case dispatch/mediator or capture interface; continuation/new-turn observer unproven"
+  },
+  "x-capture-rules": [
+    "Freeze this file hash, packet hash, branch, timing/dwell/timeout and expected labels before keys. No result is supplied by this schema.",
+    "Each indispensable JSONL timeline uses the listed columns plus raw_source_refs (artifact, sha256, locator); each row is tied to attempt/package/policy/actor identity by capture-identity.json. UI observations cite PTY bytes; effects cite independent observer.raw bytes, never UI Ran labels.",
+    "Record all raw inputs/outputs, monotonic times, observer sequence/liveness and final quiescence. Host/guest clock mapping and uncertainty must permit ordering; otherwise timing claims are inconclusive.",
+    "Negative absence claims require calibrated positive observer/probe controls, continuous interval coverage, and a post-quiescence snapshot; a screenshot or arbitrary dwell alone cannot prove non-execution.",
+    "Preserve raw refusals/failures/timeouts, unavailable controls and ambiguous state; stop successors on refusal, credential/isolation incident or lost observation. No covert injection or provider change.",
+    "Collect original/variant/profile/repository coverage separately; missing branches cannot be erased. Accepted scope dispositions require recorded product authority.",
+    "Independent reviewer checks raw evidence, sealed hashes and refuting conditions. Coordinator schema and diagnostics are not the blind executor prompt.",
+    "Required F07/F09 authority_observations are copies of the cited indispensable JSONL rows, checked field-for-field against sealed raw sources; missing or null mandatory observations block the branch. Never treat a claimed_effective string as measured authority.",
+    "Apply round-83 runbook retention policy before capture. Raw/base64 is not permission to retain protected data. No real capture with the round-82 unrestricted stdout/stderr publisher."
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "case",
+    "attempt_id",
+    "branch",
+    "profile",
+    "repository",
+    "capture_identity",
+    "pre_state",
+    "observable",
+    "post_state",
+    "negative_control",
+    "refuting_artifact",
+    "verdict",
+    "queue_variant",
+    "queue_packet_sha256",
+    "retention_policy"
+  ],
+  "properties": {
+    "case": {"enum":["F05","F06","F07","F08","F09"]},
+    "attempt_id": {"type":"string","minLength":1},
+    "branch": {"type":"string","minLength":1},
+    "profile": {"enum":["fresh","existing","existing-named"]},
+    "repository": {"enum":["tensorcash","isometric"]},
+    "capture_identity": {
+      "$ref": "#/$defs/evidence",
+      "description": "capture-identity.json: contract/original/variant/navigation hashes; package A/M/T and four binary hashes before/after; profile fixture identity; repo origin/path/base; actor and children; policy/nonce/schema-2 admission; approved collector/driver hashes; session/cost; clocks/timing budget; observer positive controls. Bind raw files to this attempt."
+    },
+    "pre_state": {"type":"object"},
+    "observable": {"type":"object"},
+    "post_state": {"type":"object"},
+    "negative_control": {"type":"object"},
+    "refuting_artifact": {"$ref":"#/$defs/evidence"},
+    "verdict": {
+      "enum": ["passed","failed","inconclusive"],
+      "description": "Only independent review can accept the claim; incomplete attempts are recorded as blocked/not-exercised outside this usable-capture schema."
+    },
+    "queue_variant": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "description": "Exact queue variant ID, bound to the frozen queue manifest; not an invented descriptive alias."
+    },
+    "queue_packet_sha256": {"type":"string","pattern":"^[0-9a-f]{64}$"},
+    "retention_policy": {"const":"pf83-synthetic-capture-v1"},
+    "authority_observations": {"type":"array"},
+    "continuation_window": {"type":"object"},
+    "late_window": {"type":"object"}
+  },
+  "$defs": {
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact","sha256","locator","observed"],
+      "properties": {
+        "artifact": {"type":"string","minLength":1,"pattern":"^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"},
+        "sha256": {"type":"string","pattern":"^[0-9a-f]{64}$"},
+        "locator": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Exact JSONL sequence/line range, PTY byte range or frame ID; no vague whole-session citation."
+        },
+        "observed": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Actual observation, including contradictions and limits; never copied expectation."
+        }
+      }
+    },
+    "authority_observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase",
+        "turn_or_session_id",
+        "probe_label",
+        "claimed_effective",
+        "monotonic_ns",
+        "approval_id",
+        "approval_disposition",
+        "approval_decision_ns",
+        "approval_scope",
+        "marker_exists",
+        "effect_count",
+        "observer_sequence",
+        "source",
+        "first_effect_ns"
+      ],
+      "properties": {
+        "phase": {"enum":["pre_change","in_continuation","new_turn","settled","late"]},
+        "turn_or_session_id": {"type":"string","minLength":1},
+        "probe_label": {"type":"string","minLength":1},
+        "claimed_effective": {"enum":["full","restricted"]},
+        "monotonic_ns": {"type":"integer","minimum":0},
+        "approval_id": {"type":["string","null"],"minLength":1},
+        "approval_disposition": {"enum":["not_offered","withheld","accepted","declined"]},
+        "approval_decision_ns": {"type":["integer","null"],"minimum":0},
+        "approval_scope": {"type":["string","null"],"minLength":1},
+        "marker_exists": {"type":"boolean"},
+        "effect_count": {"type":"integer","minimum":0},
+        "observer_sequence": {"type":"integer","minimum":1},
+        "source": {"$ref":"#/$defs/evidence"},
+        "first_effect_ns": {"type":["integer","null"],"minimum":0}
+      },
+      "allOf": [
+        {
+          "if": {"properties":{"approval_disposition":{"const":"not_offered"}}},
+          "then": {
+            "properties": {"approval_id":{"type":"null"},"approval_decision_ns":{"type":"null"},"approval_scope":{"type":"null"}}
+          },
+          "else": {
+            "properties": {"approval_id":{"type":"string","minLength":1},"approval_scope":{"type":"string","minLength":1}}
+          }
+        },
+        {
+          "if": {"properties":{"approval_disposition":{"enum":["accepted","declined"]}}},
+          "then": {"properties":{"approval_decision_ns":{"type":"integer","minimum":0}}},
+          "else": {"properties":{"approval_decision_ns":{"type":"null"}}}
+        },
+        {
+          "if": {"properties":{"effect_count":{"const":0}}},
+          "then": {"properties":{"first_effect_ns":{"type":"null"}}},
+          "else": {"properties":{"first_effect_ns":{"type":"integer","minimum":0}}}
+        }
+      ],
+      "description": "Actual calibrated command-probe observation, never selection-confirmation approval. Non-null observation fields required even for failing runs. A blocked probe records observed approval/denial with marker=false and effect_count=0 only under continuous live observation. Timeout/missing observation goes to results.json, not fabricated zero. Acceptance timestamp and raw keys must precede any approved effect; not_offered requires full PTY coverage. Distinct labels avoid inherited approval."
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties":{"case":{"const":"F05"}}},
+      "then": {
+        "description": "Full Access selected while approval is already pending",
+        "x-required-branches": ["withhold-decline","withhold-accept","offered-replacement"],
+        "x-indispensable-artifact": "approval-effects.jsonl",
+        "x-required-timeline-columns": [
+          "monotonic_ns",
+          "approval_id",
+          "probe_label",
+          "action_id",
+          "prompt_scope",
+          "disposition",
+          "marker_exists",
+          "started_count",
+          "finished_count",
+          "observer_sequence",
+          "pty_offset",
+          "raw_source_refs"
+        ],
+        "properties": {
+          "pre_state": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["pending_request","zero_effect_baseline"],
+            "properties": {
+              "pending_request": {
+                "$ref": "#/$defs/evidence",
+                "description": "Visible restricted authority, approval identity, exact probe scope and prompt; link PTY/frame."
+              },
+              "zero_effect_baseline": {
+                "$ref": "#/$defs/evidence",
+                "description": "Independent observer proves original probe marker absent and events count zero before selection."
+              }
+            }
+          },
+          "observable": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["withheld_interval","explicit_resolution"],
+            "properties": {
+              "withheld_interval": {
+                "$ref": "#/$defs/evidence",
+                "description": "Correlate Full Access selection and every key to observer coverage while original approval remains unaccepted; preserve replacement/reissue and dispositions."
+              },
+              "explicit_resolution": {
+                "$ref": "#/$defs/evidence",
+                "description": "Decline/accept/replacement action and scope with frame/raw offsets, approval ID and uniquely labeled effect counts."
+              }
+            }
+          },
+          "post_state": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["original_effects","distinct_work"],
+            "properties": {
+              "original_effects": {
+                "$ref": "#/$defs/evidence",
+                "description": "Final original-request counts: decline zero, acceptance only communicated scope; collect after owned-process quiescence."
+              },
+              "distinct_work": {
+                "$ref": "#/$defs/evidence",
+                "description": "Fresh distinct probe outcome versus visibly claimed effective authority; original operation must not silently recur."
+              }
+            }
+          },
+          "negative_control": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["withheld_probe"],
+            "properties": {
+              "withheld_probe": {
+                "$ref": "#/$defs/evidence",
+                "description": "Same calibrated probe while approval withheld/declined: zero starts/markers throughout the bounded interval and final quiescent snapshot; preserve positive observer liveness and Full Access probe calibration."
+              }
+            }
+          },
+          "refuting_artifact": {
+            "allOf": [{"$ref":"#/$defs/evidence"},{"properties":{"artifact":{"const":"approval-effects.jsonl"}}}],
+            "description": "A marker/start before explicit approval, any declined effect, silent reissue under another label, or effects outside the communicated accepted scope refutes safe disposition. Join the entire pending interval to raw keys, prompts and independent fixture observations."
+          },
+          "branch": {"enum":["withhold-decline","withhold-accept","offered-replacement"]}
+        }
+      }
+    },
+    {
+      "if": {"properties":{"case":{"const":"F06"}}},
+      "then": {
+        "description": "Permission change during an in-flight operation, both directions",
+        "x-required-branches": ["full-to-restricted","restricted-to-full-approved-slow"],
+        "x-indispensable-artifact": "operation-boundary.jsonl",
+        "x-required-timeline-columns": [
+          "monotonic_ns",
+          "probe_label",
+          "operation_phase",
+          "action_id",
+          "selection",
+          "claimed_effective",
+          "boundary",
+          "approval_id",
+          "approval_disposition",
+          "approval_decision_ns",
+          "approval_scope",
+          "first_effect_ns",
+          "marker_exists",
+          "event_count",
+          "observer_sequence",
+          "pty_offset",
+          "raw_source_refs"
+        ],
+        "properties": {
+          "pre_state": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["running_witness","authority"],
+            "properties": {
+              "running_witness": {
+                "$ref": "#/$defs/evidence",
+                "description": "Slow-operation started marker and absent finished marker independently observed; unique label and explicit approval scope for restricted-start branch."
+              },
+              "authority": {"$ref":"#/$defs/evidence","description":"Visible starting authority and calibrated probe behavior."}
+            }
+          },
+          "observable": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["change_while_running","separate_probe"],
+            "properties": {
+              "change_while_running": {
+                "$ref": "#/$defs/evidence",
+                "description": "Selection key/PTY offset bracketed by observer start and finish/interruption, on one monotonic clock or recorded clock mapping/uncertainty."
+              },
+              "separate_probe": {
+                "$ref": "#/$defs/evidence",
+                "description": "Submit distinct probe promptly after selection, without waiting for slow completion; capture submission/admission/effect or visible queue/refusal and displayed boundary."
+              }
+            }
+          },
+          "post_state": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["slow_result","boundary_probe"],
+            "properties": {
+              "slow_result": {
+                "$ref": "#/$defs/evidence",
+                "description": "Completed/interrupted/continued and exact partial effects, with no assumed rollback/revocation requirement."
+              },
+              "boundary_probe": {
+                "$ref": "#/$defs/evidence",
+                "description": "Separate probe result and final effective authority, including a fresh boundary probe if the offered path requires one."
+              }
+            }
+          },
+          "negative_control": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["distinct_labels"],
+            "properties": {
+              "distinct_labels": {
+                "$ref": "#/$defs/evidence",
+                "description": "Separate original and fresh probe labels; zero fresh-probe effects before submission and no unapproved restricted effect. Positive slow started/finished and observer witnesses exclude a nonworking fixture."
+              }
+            }
+          },
+          "refuting_artifact": {
+            "allOf": [{"$ref":"#/$defs/evidence"},{"properties":{"artifact":{"const":"operation-boundary.jsonl"}}}],
+            "description": "The joined timeline can show selection after finish (invalid starting premise), falsely claimed rollback, or a separate probe effect inconsistent with the displayed safe boundary. Require start < selection < finish/interruption, with timing uncertainty explicitly bounded."
+          },
+          "branch": {"enum":["full-to-restricted","restricted-to-full-approved-slow"]}
+        }
+      }
+    },
+    {
+      "if": {"properties":{"case":{"const":"F07"}}},
+      "then": {
+        "description": "Rapid or conflicting selections",
+        "x-required-branches": ["full-restricted-full","restricted-full-restricted","open-confirmation-conflict"],
+        "x-indispensable-artifact": "selection-order.jsonl",
+        "x-required-timeline-columns": [
+          "monotonic_ns",
+          "action_id",
+          "selection_ordinal",
+          "requested_level",
+          "visible_request_id_or_null",
+          "accepted_refused_cancelled_or_superseded",
+          "claimed_effective",
+          "prompt_scope",
+          "probe_label",
+          "effect_count",
+          "pty_offset",
+          "raw_source_refs",
+          "turn_or_session_id",
+          "approval_id",
+          "approval_disposition",
+          "approval_decision_ns",
+          "approval_scope",
+          "marker_exists",
+          "observer_sequence",
+          "first_effect_ns"
+        ],
+        "properties": {
+          "pre_state": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["active_turn","pending_opportunity"],
+            "properties": {
+              "active_turn": {
+                "$ref": "#/$defs/evidence",
+                "description": "Active harmless work and no pending command approval; distinguish application confirmation from command approval."
+              },
+              "pending_opportunity": {
+                "$ref": "#/$defs/evidence",
+                "description": "Actual visible pending interval or offered confirmation, or observed serialization limitation."
+              }
+            }
+          },
+          "observable": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["all_selections","conflict"],
+            "properties": {
+              "all_selections": {
+                "$ref": "#/$defs/evidence",
+                "description": "Every attempted selection and its visible accepted/refused/superseded/cancelled disposition with ordered keys/frames; preserve both three-selection orders in separate attempts."
+              },
+              "conflict": {
+                "$ref": "#/$defs/evidence",
+                "description": "Later conflicting selection while offered application confirmation remains open; record actual prompt identity and resolution, never hidden reordering/delay."
+              }
+            }
+          },
+          "post_state": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["settled_authority","late_observation"],
+            "properties": {
+              "settled_authority": {
+                "$ref": "#/$defs/evidence",
+                "description": "Latest accepted requested level, claimed effective level and fresh behavioral probe result. Required settled authority observation joins the fresh probe's command approval ID, disposition, scope and decision time to its effect. A setting confirmation is not a probe approval."
+              },
+              "late_observation": {
+                "$ref": "#/$defs/evidence",
+                "description": "Keep observer/PTY through a frozen dwell and turn boundary to detect older completion/reversion; disclose finite observation window. Require a distinct late authority probe after the turn boundary, recording approval state and observed effects; withholding remains explicit."
+              }
+            }
+          },
+          "negative_control": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["superseded_or_refused"],
+            "properties": {
+              "superseded_or_refused": {
+                "$ref": "#/$defs/evidence",
+                "description": "Track older/refused/cancelled selection separately; show it does not become reported authority later. Calibrated restricted probe remains unapproved; explicit serialized behavior cannot count as overlapping-order coverage."
+              }
+            }
+          },
+          "refuting_artifact": {
+            "allOf": [{"$ref":"#/$defs/evidence"},{"properties":{"artifact":{"const":"selection-order.jsonl"}}}],
+            "description": "A later raw frame or probe contradicting the latest accepted selection, an older completion overwriting it, or a refused selection presented as accepted refutes the claim. A timestamped serialized/refused attempt is a coverage limit, not fabricated overlap."
+          },
+          "branch": {"enum":["full-restricted-full","restricted-full-restricted","open-confirmation-conflict"]},
+          "late_window": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["settled_turn_id","late_turn_id","settlement_ns","turn_ended_ns","dwell_until_ns","observation_ended_ns","source"],
+            "properties": {
+              "settled_turn_id": {"type":"string","minLength":1},
+              "late_turn_id": {"type":"string","minLength":1},
+              "settlement_ns": {"type":"integer","minimum":0},
+              "turn_ended_ns": {"type":"integer","minimum":0},
+              "dwell_until_ns": {"type":"integer","minimum":0},
+              "observation_ended_ns": {"type":"integer","minimum":0},
+              "source": {"$ref":"#/$defs/evidence"}
+            },
+            "description": "Freeze dwell deadline, observation cutoff and turn identities before probes; cite actual settlement/boundary events and clock mapping. Settled rows belong to the settled turn after settlement and before its end; late rows belong to the distinct late turn after BOTH that boundary and the dwell deadline, before cutoff. check_contract.py enforces row, effect and approval-decision bounds; raw review verifies the frozen schedule and continuous coverage."
+          },
+          "authority_observations": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "allOf": [
+                {"$ref":"#/$defs/authority_observation"},
+                {
+                  "properties": {
+                    "phase": {"enum":["settled","late"]},
+                    "source": {
+                      "allOf": [{"$ref":"#/$defs/evidence"},{"properties":{"artifact":{"const":"selection-order.jsonl"}}}]
+                    }
+                  }
+                }
+              ]
+            },
+            "allOf": [
+              {"contains":{"properties":{"phase":{"const":"settled"}},"required":["phase"]},"minContains":1},
+              {"contains":{"properties":{"phase":{"const":"late"}},"required":["phase"]},"minContains":1}
+            ],
+            "description": "Every required phase must cite actual rows of selection-order.jsonl. Same values must occur there; reviewer verifies links, unique fresh probe labels, turn identity and clock order against raw bytes. Additional observations preserve later effects; the required phase sample cannot hide them."
+          }
+        },
+        "required": ["authority_observations","late_window"]
+      }
+    },
+    {
+      "if": {"properties":{"case":{"const":"F08"}}},
+      "then": {
+        "description": "Cancelled or failed application",
+        "x-required-branches": ["cancel-from-restricted","cancel-from-full","failure-from-restricted","failure-from-full"],
+        "x-indispensable-artifact": "resolution-authority.jsonl",
+        "x-required-timeline-columns": [
+          "monotonic_ns",
+          "action_id",
+          "starting_level",
+          "requested_level",
+          "offered_control",
+          "resolution",
+          "claimed_effective",
+          "unresolved_request",
+          "probe_label",
+          "approval_id",
+          "approval_disposition",
+          "approval_decision_ns",
+          "approval_scope",
+          "first_effect_ns",
+          "effect_count",
+          "pty_offset",
+          "raw_source_refs"
+        ],
+        "properties": {
+          "pre_state": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["effective_authority","exposed_route"],
+            "properties": {
+              "effective_authority": {
+                "$ref": "#/$defs/evidence",
+                "description": "Behaviorally and visibly establish starting level with a calibrated probe."
+              },
+              "exposed_route": {
+                "$ref": "#/$defs/evidence",
+                "description": "Capture offered cancellation point or exact benign reproducible exposed failure trigger before use; absent route makes branch not exercised."
+              }
+            }
+          },
+          "observable": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["resolution","recovery"],
+            "properties": {
+              "resolution": {
+                "$ref": "#/$defs/evidence",
+                "description": "Raw offered cancel action or exposed failure, result message and unresolved request status."
+              },
+              "recovery": {
+                "$ref": "#/$defs/evidence",
+                "description": "Every displayed retry/dismiss/recovery action and resulting state; do not auto-retry uncertainty."
+              }
+            }
+          },
+          "post_state": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["remaining_authority","recovery_result"],
+            "properties": {
+              "remaining_authority": {
+                "$ref": "#/$defs/evidence",
+                "description": "Fresh probe after resolution with actual effect/approval counts and displayed remaining level."
+              },
+              "recovery_result": {
+                "$ref": "#/$defs/evidence",
+                "description": "State after offered recovery or explicit unavailable/not-exercised observation, retaining original failure attempt."
+              }
+            }
+          },
+          "negative_control": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["unsuccessful_request"],
+            "properties": {
+              "unsuccessful_request": {
+                "$ref": "#/$defs/evidence",
+                "description": "Cancelled/failed requested level is never used as the assumed effective baseline: compare behavioral probe against the independently observed remaining authority. Capture zero restricted unapproved effects and calibrated Full Access positive control."
+              }
+            }
+          },
+          "refuting_artifact": {
+            "allOf": [{"$ref":"#/$defs/evidence"},{"properties":{"artifact":{"const":"resolution-authority.jsonl"}}}],
+            "description": "Raw cancellation/failure followed by success labeling or a probe behaving as if the failed request applied refutes the result. Preserve actual remaining authority, unresolved requests and offered recovery; no hidden failure injection."
+          },
+          "branch": {"enum":["cancel-from-restricted","cancel-from-full","failure-from-restricted","failure-from-full"]}
+        }
+      }
+    },
+    {
+      "if": {"properties":{"case":{"const":"F09"}}},
+      "then": {
+        "description": "Continuation and new turn across an application boundary",
+        "x-required-branches": ["full-to-restricted","restricted-to-full","supported-deferred-change"],
+        "x-indispensable-artifact": "continuation-effects.jsonl",
+        "x-required-timeline-columns": [
+          "monotonic_ns",
+          "action_id",
+          "turn_or_session_id",
+          "phase",
+          "requested_level",
+          "claimed_effective",
+          "deferred_request",
+          "probe_label",
+          "started_count",
+          "finished_count",
+          "output_sha256",
+          "context_frame",
+          "pty_offset",
+          "raw_source_refs",
+          "approval_id",
+          "approval_disposition",
+          "approval_decision_ns",
+          "approval_scope",
+          "marker_exists",
+          "effect_count",
+          "observer_sequence",
+          "first_effect_ns"
+        ],
+        "properties": {
+          "pre_state": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["completed_output","selected_change","captured_authority"],
+            "properties": {
+              "completed_output": {
+                "$ref": "#/$defs/evidence",
+                "description": "Independent counts and hashes for already-completed synthetic work plus visible conversation/context and active turn ID."
+              },
+              "selected_change": {
+                "$ref": "#/$defs/evidence",
+                "description": "Selected direction, displayed effective/pending distinction and any deferred request."
+              },
+              "captured_authority": {
+                "$ref": "#/$defs/evidence",
+                "description": "Before selection, identify the captured command authority behaviorally with a calibrated fresh probe and actual active turn/session identity. Required pre_change authority row; preserve raw UI distinction between current-turn and next-turn authority."
+              }
+            }
+          },
+          "observable": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["continuation_path","effect_watch","continuation_authority"],
+            "properties": {
+              "continuation_path": {
+                "$ref": "#/$defs/evidence",
+                "description": "Actual stated finish/stop/continue/new-session controls and keys, with stopped/completed checkpoints and retained context frames."
+              },
+              "effect_watch": {
+                "$ref": "#/$defs/evidence",
+                "description": "Continuous observer tracks old labels and uniquely labeled new work across the application boundary."
+              },
+              "continuation_authority": {
+                "$ref": "#/$defs/evidence",
+                "description": "Required in_continuation authority row AFTER selection acknowledgement/deferment but BEFORE current turn ends, within the SAME captured turn/session as pre_change. Trigger a distinct calibrated command probe as part of that continuation, not a new user turn. Observe command approval ID/disposition/scope/time plus independent marker/count and raw UI current-versus-next authority explanation. Full-to-restricted continuation must retain full captured command authority; restricted-to-full must retain restricted captured authority with approval withheld. If no admitted seam can observe this without changing the turn, block this branch. Merely watching an already-started command finish does not establish continuation authority."
+              }
+            }
+          },
+          "post_state": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["new_turn_authority","retained_state"],
+            "properties": {
+              "new_turn_authority": {
+                "$ref": "#/$defs/evidence",
+                "description": "New turn/session identity and fresh probe approval/effect behavior versus visible effective level. Required new_turn authority row with a distinct turn/session identity, unique probe and actual approval/effect observation after the boundary; show user-visible current/next distinction. Probe commands test captured command authority, not shared-service policy."
+              },
+              "retained_state": {
+                "$ref": "#/$defs/evidence",
+                "description": "Final old-label counts/output hashes and visible context; document any disclosed loss/resubmission and deferred-request resolution."
+              }
+            }
+          },
+          "negative_control": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["no_replay"],
+            "properties": {
+              "no_replay": {
+                "$ref": "#/$defs/evidence",
+                "description": "Do not request old work again: completed labels/counts must stay unchanged across continuation and new turn unless explicit replay was requested and recorded. Observe through final quiescence, with observer liveness."
+              }
+            }
+          },
+          "refuting_artifact": {
+            "allOf": [{"$ref":"#/$defs/evidence"},{"properties":{"artifact":{"const":"continuation-effects.jsonl"}}}],
+            "description": "A continuation probe after selection but before the original turn ends contradicting its pre-change captured command authority refutes F09, even if the new turn is correct. Join mandatory pre_change/in_continuation/new_turn rows by actual turn identity, selection acknowledgement and boundary timestamps, and raw approval/marker observations. Replay of completed output, undisclosed context loss, lost deferred selection, wrong new-turn authority or missing/misleading user-visible current/next distinction also refutes continuity."
+          },
+          "branch": {"enum":["full-to-restricted","restricted-to-full","supported-deferred-change"]},
+          "authority_observations": {
+            "type": "array",
+            "minItems": 3,
+            "items": {
+              "allOf": [
+                {"$ref":"#/$defs/authority_observation"},
+                {
+                  "properties": {
+                    "phase": {"enum":["pre_change","in_continuation","new_turn"]},
+                    "source": {
+                      "allOf": [
+                        {"$ref":"#/$defs/evidence"},
+                        {"properties":{"artifact":{"const":"continuation-effects.jsonl"}}}
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            "allOf": [
+              {"contains":{"properties":{"phase":{"const":"pre_change"}},"required":["phase"]},"minContains":1},
+              {
+                "contains": {"properties":{"phase":{"const":"in_continuation"}},"required":["phase"]},
+                "minContains": 1
+              },
+              {"contains":{"properties":{"phase":{"const":"new_turn"}},"required":["phase"]},"minContains":1}
+            ],
+            "description": "Every required phase must cite actual rows of continuation-effects.jsonl. Same values must occur there; reviewer verifies links, unique fresh probe labels, turn identity and clock order against raw bytes. Additional observations preserve later effects; the required phase sample cannot hide them."
+          },
+          "continuation_window": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["captured_turn_id","new_turn_id","selection_ack_ns","turn_ended_ns","source"],
+            "properties": {
+              "captured_turn_id": {"type":"string","minLength":1},
+              "new_turn_id": {"type":"string","minLength":1},
+              "selection_ack_ns": {"type":"integer","minimum":0},
+              "turn_ended_ns": {"type":"integer","minimum":0},
+              "source": {"$ref":"#/$defs/evidence"}
+            },
+            "description": "Clock mapping must establish these strict phase boundaries beyond uncertainty. The checker enforces same captured turn before/after selection and a distinct later new turn. Any non-null first_effect_ns and approval_decision_ns in an in_continuation row must also be strictly after selection_ack_ns and before turn_ended_ns, and no later than the observation timestamp. Independent reviewer verifies actual raw boundary events, including uncertainty."
+          }
+        },
+        "required": ["authority_observations","continuation_window"]
+      }
+    }
+  ]
+}

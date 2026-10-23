@@ -1,0 +1,11 @@
+######## switch to default on BASE: TUI on named `chat`, forced_login_method=chatgpt, default login = API key
+default login before: auth.json a2695992fdf5
+send_line: composer never showed the text
+-- turn on chat:
+send_line: composer never showed the text
+pick: /OpenAI · default/ not found
+pick: /Use default account/ not found
+-- after Use default account for this session:
+default login after: auth.json ABSENT (logged out)
+-- mock requests carrying the default key: 0
+send_line: composer never showed the text

@@ -138,7 +138,7 @@ impl<C: BrokerJournalClock> DurableBrokerAudit for JournalBrokerAudit<C> {
             .map_err(unavailable)?
             .reserve_dispatch(
                 self.context.clone(),
-                None,
+                /*causal_parent*/ None,
                 &request,
                 self.binding.authority.clone(),
                 deduplication,

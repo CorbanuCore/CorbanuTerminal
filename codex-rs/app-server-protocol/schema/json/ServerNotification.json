@@ -42,6 +42,14 @@
     },
     "AccountUpdatedNotification": {
       "properties": {
+        "apiKeyEnvVar": {
+          "default": null,
+          "description": "For API key auth, the environment variable the key is read from (for example `OPENAI_API_KEY`), or `null` for a saved key.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "authMode": {
           "anyOf": [
             {
@@ -1045,7 +1053,8 @@
         "inProgress",
         "completed",
         "failed",
-        "declined"
+        "declined",
+        "refused"
       ],
       "type": "string"
     },
@@ -3968,6 +3977,26 @@
       ],
       "type": "object"
     },
+    "ThreadAccountTokenUsage": {
+      "description": "PF-84: provider-reported token usage of one named provider account: its provider id and account name, never credential material.",
+      "properties": {
+        "account": {
+          "type": "string"
+        },
+        "providerId": {
+          "type": "string"
+        },
+        "usage": {
+          "$ref": "#/definitions/TokenUsageBreakdown"
+        }
+      },
+      "required": [
+        "account",
+        "providerId",
+        "usage"
+      ],
+      "type": "object"
+    },
     "ThreadActiveFlag": {
       "enum": [
         "waitingOnApproval",
@@ -4581,6 +4610,13 @@
             },
             "prompt": {
               "description": "Prompt text sent as part of the collab tool call, when available.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "providerAccount": {
+              "description": "The named account the spawned agent uses (`default` included), only while named accounts are on.",
               "type": [
                 "string",
                 "null"
@@ -5343,6 +5379,16 @@
     },
     "ThreadTokenUsageUpdatedNotification": {
       "properties": {
+        "accountUsage": {
+          "description": "PF-84: this thread's provider-reported usage per (provider, named account), `default` included. Sent only while named accounts are on.",
+          "items": {
+            "$ref": "#/definitions/ThreadAccountTokenUsage"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "threadId": {
           "type": "string"
         },

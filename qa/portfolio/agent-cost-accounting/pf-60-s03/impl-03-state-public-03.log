@@ -1,0 +1,124 @@
+python3 ../scripts/isolated_rust_tests.py "$@"
+Test isolation: disposable profile; native keyring disabled (debug lane)
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on artifact directory
+   Compiling codex-state v0.1.42 (/Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915/codex-rs/state)
+warning: field `runtime` is never read
+  --> state/src/runtime/accounting.rs:27:5
+   |
+26 | struct Journal<'a> {
+   |        ------- field in this struct
+27 |     runtime: &'a StateRuntime,
+   |     ^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: methods `begin_attempt`, `append_observation`, and `read_observations` are never used
+   --> state/src/runtime/accounting.rs:49:14
+    |
+ 30 | impl<'a> Journal<'a> {
+    | -------------------- methods in this implementation
+...
+ 49 |     async fn begin_attempt(&self, attempt: &Attempt) -> anyhow::Result<()> {
+    |              ^^^^^^^^^^^^^
+...
+ 54 |     async fn append_observation(
+    |              ^^^^^^^^^^^^^^^^^^
+...
+162 |     async fn read_observations(
+    |              ^^^^^^^^^^^^^^^^^
+
+warning: field `journal` is never read
+  --> state/src/runtime/accounting_estimates.rs:27:5
+   |
+26 | struct EstimateStore<'a> {
+   |        ------------- field in this struct
+27 |     journal: Journal<'a>,
+   |     ^^^^^^^
+
+warning: methods `persist_current` and `read_estimate` are never used
+  --> state/src/runtime/accounting_estimates.rs:50:14
+   |
+30 | impl<'a> EstimateStore<'a> {
+   | -------------------------- methods in this implementation
+...
+50 |     async fn persist_current(
+   |              ^^^^^^^^^^^^^^^
+...
+99 |     async fn read_estimate(
+   |              ^^^^^^^^^^^^^
+
+warning: method `full` is never used
+  --> state/src/runtime/accounting_lifecycle.rs:25:8
+   |
+24 | impl Metric {
+   | ----------- method in this implementation
+25 |     fn full(&self) -> Option<i64> {
+   |        ^^^^
+
+warning: method `full_usd` is never used
+  --> state/src/runtime/accounting_lifecycle.rs:52:8
+   |
+51 | impl DayTotals {
+   | -------------- method in this implementation
+52 |     fn full_usd(&self) -> Option<Decimal> {
+   |        ^^^^^^^^
+
+warning: struct `Lifecycle` is never constructed
+  --> state/src/runtime/accounting_lifecycle.rs:82:8
+   |
+82 | struct Lifecycle<'a> {
+   |        ^^^^^^^^^
+
+warning: methods `refresh_current`, `read_day`, and `delete_recorded_thread` are never used
+   --> state/src/runtime/accounting_lifecycle.rs:103:14
+    |
+ 86 | impl<'a> Lifecycle<'a> {
+    | ---------------------- methods in this implementation
+...
+103 |     async fn refresh_current(&self, id: Uuid) -> anyhow::Result<Current<()>> {
+    |              ^^^^^^^^^^^^^^^
+...
+124 |     async fn read_day(&self, thread: ThreadId, day: i64) -> anyhow::Result<Current<DayTotals>> {
+    |              ^^^^^^^^
+...
+167 |     async fn delete_recorded_thread(&self, thread: ThreadId, as_of_ms: i64) -> anyhow::Result<()> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `maintain_retention` and `read_retained_day` are never used
+  --> state/src/runtime/accounting_retention_atomic.rs:55:14
+   |
+54 | impl Lifecycle<'_> {
+   | ------------------ methods in this implementation
+55 |     async fn maintain_retention(&self, as_of_ms: i64) -> anyhow::Result<()> {
+   |              ^^^^^^^^^^^^^^^^^^
+...
+73 |     pub(in crate::runtime::accounting::pricing::storage::lifecycle) async fn read_retained_day(
+   |                                                                              ^^^^^^^^^^^^^^^^^
+
+warning: method `append_native` is never used
+  --> state/src/runtime/accounting_native.rs:53:49
+   |
+ 8 | impl Journal<'_> {
+   | ---------------- method in this implementation
+...
+53 |     pub(in crate::runtime::accounting) async fn append_native(
+   |                                                 ^^^^^^^^^^^^^
+
+warning: `codex-state` (lib) generated 10 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 46.18s
+────────────
+ Nextest run ID 3154b29f-c23e-4a3f-a893-0b1e57bd540d with nextest profile: local
+    Starting 6 tests across 1 binary (4 tests skipped)
+        PASS [   0.127s] (1/6) codex-state::accounting_store accounting_inspect_public_reads_do_not_write
+        PASS [   0.138s] (2/6) codex-state::accounting_store accounting_inspect_public_delete_and_empty
+        PASS [   0.156s] (3/6) codex-state::accounting_store accounting_inspect_public_identity_retry_scope
+        PASS [   0.157s] (4/6) codex-state::accounting_store accounting_inspect_public_reopens_twice
+        PASS [   0.315s] (5/6) codex-state::accounting_store accounting_inspect_public_literal_partial_goldens
+        PASS [   6.355s] (6/6) codex-state::accounting_store accounting_inspect_public_limits_no_truncation
+────────────
+     Summary [   6.356s] 6 tests run: 6 passed, 4 skipped

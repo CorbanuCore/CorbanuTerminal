@@ -1,0 +1,6 @@
+fa: same key K1 as zai/same -> exec exit=1; ledger accounts: {"name":"same","fingerprint":"b68b222e8d72"} 
+fb: same key K1 as zai/same -> exec exit=1; ledger accounts: {"name":"same","fingerprint":"11069f57a072"} 
+Saved zai account `same` (api_key).
+fa: replaced with K2 -> exec exit=1; ledger accounts (in order): {"name":"same","fingerprint":"b68b222e8d72"} {"name":"same","fingerprint":"33702e7de6df"} 
+fa: back to K1 -> exec exit=1; ledger accounts (in order): {"name":"same","fingerprint":"b68b222e8d72"} {"name":"same","fingerprint":"33702e7de6df"} {"name":"same","fingerprint":"b68b222e8d72"} 
+canary scan of fa/fb (all files): 0 files contain a canary value

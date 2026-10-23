@@ -1,0 +1,45 @@
+
+✔ You approved Corbanu to run cat /Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/secrets/.v... this time
+
+• Explored
+  └ Read .vault.lock
+
+⚠ Secretless agent launch blocked access to `/Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/secrets/.vault.lock`: at every security
+  level, Moderate included, agent commands can't read Corbanu's own files (such as its sign-in, vault, config and history) or common CLI tokens, even
+  when you approve them, so changing the level would not allow it.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Blocked:
+
+  cat: /Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/secrets/.vault.lock: Operation not permitted
+
+  This is a vault file — blocked at every security level (like the config and history files), so switching to Permissive wouldn't help. You'd need to
+  read it yourself outside the agent sandbox.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+Security inspector (read only)
+● Protected: Moderate; every required control observed or checked at launch
+Observed 27s ago, policy generation 0.1
+Not available
+  [not available] Financial preview and approvals: not available in this build (PF-38, PF-39) [fixed]
+  [not available] Isolated retrieval: not available in this build (PF-31) [fixed]
+  [not available] Screened search routing: not available in this build (PF-32) [fixed]
+  [not available] Brokered browser login: not available in this build (PF-37) [fixed]
+  [not available] Quarantine: not available in this build (PF-34) [fixed]
+  [not available] Untrusted-content detectors: not available in this build (PF-35, PF-36) [fixed]
+  [not available] Agent Sweep: not available in this build (PF-40) [fixed]
+
+Recent denials
+  45s ago: reading Corbanu's own files or CLI tokens: denied by the sandbox; secretless agent launch keeps it at every level, even when you approve
+      (main session) [observed: this process]
+  1m ago: reading Corbanu's security state or keys: denied by the sandbox under Moderate, even when you approve (main session) [observed: this
+      process]
+  1m ago: reading Corbanu's security state or keys: denied by the sandbox under Moderate, even when you approve (main session) [observed: this
+      process]
+  2m ago: reading Corbanu's own files or CLI tokens: denied by the sandbox; secretless agent launch keeps it at every level, even when you approve
+      (main session) [observed: this process]
+  2m ago: reading Corbanu's own files or CLI tokens: denied by the sandbox; secretless agent launch keeps it at every level, even when you approve
+      (main session) [observed: this process]
+↑/↓ scroll · r refresh · esc back to /security

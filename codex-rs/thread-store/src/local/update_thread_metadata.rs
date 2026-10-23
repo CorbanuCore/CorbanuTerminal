@@ -30,17 +30,69 @@ use crate::ThreadStoreResult;
 use crate::UpdateThreadMetadataParams;
 use crate::local::read_thread;
 
+/// What became of a best-effort SQLite metadata write.
+enum Written {
+    /// Written, or nothing to write.
+    Now,
+    /// Not tried: the state DB is known to be busy.
+    PutOff,
+}
+
 struct ResolvedRolloutPath {
     path: PathBuf,
     archived: bool,
+}
+
+/// How a best-effort SQLite metadata write meets a busy state DB.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BusyDb {
+    /// Wait at most `codex_state::QUICK_BUSY_TIMEOUT` (or not at all while the
+    /// DB is known to be busy) and put the patch off: it is applied with the
+    /// thread's next metadata update. A turn writes metadata about three times
+    /// per model request; each used to wait out SQLite's 5 s busy timeout
+    /// (#359).
+    PutOff,
+    /// Wait SQLite's full busy timeout; a failure is logged, as before.
+    Wait,
 }
 
 pub(super) async fn update_thread_metadata(
     store: &LocalThreadStore,
     params: UpdateThreadMetadataParams,
 ) -> ThreadStoreResult<StoredThread> {
+    update_thread_metadata_with(store, params, BusyDb::PutOff).await
+}
+
+/// Apply the metadata patches put off for `thread_id`, waiting for a busy
+/// state DB. Called when the thread's writer shuts down.
+pub(super) async fn flush_deferred_metadata(store: &LocalThreadStore, thread_id: ThreadId) {
+    if !store.has_deferred_metadata(thread_id) {
+        return;
+    }
+    let params = UpdateThreadMetadataParams {
+        thread_id,
+        patch: ThreadMetadataPatch::default(),
+        include_archived: true,
+    };
+    if let Err(err) = update_thread_metadata_with(store, params, BusyDb::Wait).await {
+        warn!("failed to apply put-off thread metadata for {thread_id}: {err}");
+    }
+}
+
+async fn update_thread_metadata_with(
+    store: &LocalThreadStore,
+    params: UpdateThreadMetadataParams,
+    busy_db: BusyDb,
+) -> ThreadStoreResult<StoredThread> {
     let thread_id = params.thread_id;
-    let patch = params.patch;
+    // A patch put off earlier goes first; this one's fields win.
+    let patch = match store.take_deferred_metadata(thread_id) {
+        Some(mut deferred) => {
+            deferred.merge(params.patch);
+            deferred
+        }
+        None => params.patch,
+    };
     if patch.is_empty() {
         return read_thread::read_thread(
             store,
@@ -80,6 +132,7 @@ pub(super) async fn update_thread_metadata(
         params.include_archived,
         require_sqlite_write,
         history_mode,
+        busy_db,
     )
     .await?;
     if paginated
@@ -254,6 +307,7 @@ async fn apply_metadata_update(
     include_archived: bool,
     require_sqlite_write: bool,
     history_mode: Option<ThreadHistoryMode>,
+    busy_db: BusyDb,
 ) -> ThreadStoreResult<StoredThread> {
     let live_rollout_path = live_writer::rollout_path(store, thread_id).await.ok();
     let mut rollout_path = patch.rollout_path.clone().or(live_rollout_path);
@@ -261,7 +315,17 @@ async fn apply_metadata_update(
         .as_deref()
         .is_some_and(|path| rollout_path_is_archived(store, path));
     let state_db = store.state_db().await;
-    let sqlite_write_result: ThreadStoreResult<()> = if let Some(state_db) = state_db.as_ref() {
+    // Set when a write met another connection's write lock.
+    let busy = std::sync::atomic::AtomicBool::new(false);
+    // Set when the update would create the thread's row.
+    let creating = std::sync::atomic::AtomicBool::new(false);
+    let note_busy = |err: &_| {
+        if codex_state::is_state_db_busy(err) {
+            busy.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    };
+    let sqlite_write_result: ThreadStoreResult<Written> = if let Some(state_db) = state_db.as_ref()
+    {
         let patch = patch.clone();
         async {
             let existing =
@@ -271,6 +335,17 @@ async fn apply_metadata_update(
                     .map_err(|err| ThreadStoreError::Internal {
                         message: format!("failed to read thread metadata for {thread_id}: {err}"),
                     })?;
+            creating.store(existing.is_none(), std::sync::atomic::Ordering::Relaxed);
+            // A best-effort update waits briefly for the lock. While the DB is
+            // known to be busy, one for an existing row is put off untried; a
+            // new row is still tried once, since the ledger's records refer to
+            // it (they wait for it if it is put off).
+            let quick = busy_db == BusyDb::PutOff && !require_sqlite_write;
+            if quick && existing.is_some() && state_db.state_db_contended() {
+                return Ok(Written::PutOff);
+            }
+            let writer: &codex_state::StateRuntime =
+                if quick { state_db.quick() } else { state_db };
             let advance_recency_at = patch.advance_recency_at;
             if existing.is_none() && rollout_path.is_none() {
                 let resolved = resolve_rollout_path(store, thread_id, include_archived).await?;
@@ -376,9 +451,10 @@ async fn apply_metadata_update(
                 metadata.git_branch = branch;
                 metadata.git_origin_url = origin_url;
             }
-            state_db
+            writer
                 .upsert_thread(&metadata)
                 .await
+                .inspect_err(note_busy)
                 .map_err(|err| ThreadStoreError::Internal {
                     message: format!("failed to update thread metadata for {thread_id}: {err}"),
                 })?;
@@ -390,16 +466,15 @@ async fn apply_metadata_update(
                 })?;
                 let updated = match history_mode {
                     ThreadHistoryMode::Legacy => {
-                        state_db
+                        writer
                             .update_thread_title(thread_id, name.as_deref().unwrap_or_default())
                             .await
                     }
                     ThreadHistoryMode::Paginated => {
-                        state_db
-                            .update_thread_name(thread_id, name.as_deref())
-                            .await
+                        writer.update_thread_name(thread_id, name.as_deref()).await
                     }
                 }
+                .inspect_err(note_busy)
                 .map_err(|err| ThreadStoreError::Internal {
                     message: format!("failed to set thread name: {err}"),
                 })?;
@@ -414,9 +489,10 @@ async fn apply_metadata_update(
             if existing.is_some()
                 && let Some(recency_at) = advance_recency_at
             {
-                state_db
+                writer
                     .touch_thread_recency_at(thread_id, recency_at)
                     .await
+                    .inspect_err(note_busy)
                     .map_err(|err| ThreadStoreError::Internal {
                         message: format!(
                             "failed to advance thread recency_at for {thread_id}: {err}"
@@ -424,14 +500,15 @@ async fn apply_metadata_update(
                     })?;
             }
             if let Some(memory_mode) = patch.memory_mode {
-                state_db
+                writer
                     .set_thread_memory_mode(thread_id, memory_mode_as_str(memory_mode))
                     .await
+                    .inspect_err(note_busy)
                     .map_err(|err| ThreadStoreError::Internal {
                         message: format!("failed to update memory mode for {thread_id}: {err}"),
                     })?;
             }
-            Ok(())
+            Ok(Written::Now)
         }
         .await
     } else if require_sqlite_write {
@@ -439,12 +516,35 @@ async fn apply_metadata_update(
             message: format!("sqlite state db unavailable for thread {thread_id}"),
         })
     } else {
-        Ok(())
+        Ok(Written::Now)
     };
     match sqlite_write_result {
-        Ok(()) => {}
+        Ok(Written::Now) => {
+            if let Some(state_db) = state_db.as_ref() {
+                state_db.note_state_db_written();
+                state_db.note_thread_row_put_off(thread_id, /*put_off*/ false);
+            }
+        }
+        Ok(Written::PutOff) => {
+            tracing::debug!("state db busy; put off the metadata update for {thread_id}");
+            store.defer_metadata(thread_id, patch);
+        }
         Err(err) if require_sqlite_write || !sqlite_write_error_is_best_effort(&err) => {
             return Err(err);
+        }
+        Err(err)
+            if busy.load(std::sync::atomic::Ordering::Relaxed) && busy_db == BusyDb::PutOff =>
+        {
+            // Applied with the next update; a turn does not wait the lock out.
+            if let Some(state_db) = state_db.as_ref() {
+                state_db.note_state_db_contended();
+                if creating.load(std::sync::atomic::Ordering::Relaxed) {
+                    // Its ledger records wait for the row instead of failing.
+                    state_db.note_thread_row_put_off(thread_id, /*put_off*/ true);
+                }
+            }
+            tracing::debug!("state db busy; put off the metadata update for {thread_id}: {err}");
+            store.defer_metadata(thread_id, patch);
         }
         Err(err) => {
             warn!("state db update_thread_metadata failed for {thread_id}: {err}");
@@ -2227,5 +2327,96 @@ mod tests {
             .expect("last line")
             .to_string();
         serde_json::from_str(&last_line).expect("json line")
+    }
+
+    /// #359: while another process holds the state DB's write lock, a
+    /// best-effort metadata update used to wait out SQLite's 5 s busy timeout
+    /// and was then dropped. Now it waits at most `QUICK_BUSY_TIMEOUT` (not at
+    /// all once the DB is known to be busy) and is applied later.
+    #[tokio::test]
+    async fn a_busy_state_db_puts_metadata_updates_off_and_applies_them_later() {
+        let home = TempDir::new().expect("temp dir");
+        let config = test_config(home.path());
+        let uuid = Uuid::from_u128(359);
+        let thread_id = ThreadId::from_string(&uuid.to_string()).expect("valid thread id");
+        write_session_file(home.path(), "2025-01-03T15-00-00", uuid).expect("session file");
+        let runtime = codex_state::StateRuntime::init(
+            codex_state::SqliteConfig::new_for_testing(home.path().abs()),
+            config.default_model_provider_id.clone(),
+        )
+        .await
+        .expect("state db should initialize");
+        let store = LocalThreadStore::new(config.clone(), Some(runtime.clone()));
+        let update = |patch: ThreadMetadataPatch| {
+            store.update_thread_metadata(UpdateThreadMetadataParams {
+                thread_id,
+                patch,
+                include_archived: true,
+            })
+        };
+        update(ThreadMetadataPatch {
+            preview: Some("first".to_string()),
+            ..Default::default()
+        })
+        .await
+        .expect("first update");
+
+        let holder = runtime
+            .sqlite()
+            .open_read_write_pool(&runtime.sqlite().state_db_path())
+            .await
+            .expect("holder pool");
+        let mut lock = holder.acquire().await.expect("holder connection");
+        sqlx::query("BEGIN IMMEDIATE")
+            .execute(&mut *lock)
+            .await
+            .expect("hold the write lock");
+        let started = std::time::Instant::now();
+        update(ThreadMetadataPatch {
+            preview: Some("second".to_string()),
+            ..Default::default()
+        })
+        .await
+        .expect("an update put off is not an error");
+        assert!(
+            started.elapsed() < codex_state::QUICK_BUSY_TIMEOUT + std::time::Duration::from_secs(1),
+            "waited {:?}",
+            started.elapsed()
+        );
+        assert!(runtime.state_db_contended());
+        let started = std::time::Instant::now();
+        update(ThreadMetadataPatch {
+            title: Some("titled".to_string()),
+            ..Default::default()
+        })
+        .await
+        .expect("an update put off is not an error");
+        assert!(
+            started.elapsed() < std::time::Duration::from_millis(300),
+            "waited {:?}",
+            started.elapsed()
+        );
+        sqlx::query("ROLLBACK")
+            .execute(&mut *lock)
+            .await
+            .expect("release the write lock");
+        drop(lock);
+        let metadata = runtime
+            .get_thread(thread_id)
+            .await
+            .expect("read")
+            .expect("row");
+        assert_eq!(metadata.preview.as_deref(), Some("first"));
+
+        // Applied with the thread's next update, or when its writer shuts down.
+        flush_deferred_metadata(&store, thread_id).await;
+        let metadata = runtime
+            .get_thread(thread_id)
+            .await
+            .expect("read")
+            .expect("row");
+        assert_eq!(metadata.preview.as_deref(), Some("second"));
+        assert_eq!(metadata.title, "titled");
+        assert!(!store.has_deferred_metadata(thread_id));
     }
 }

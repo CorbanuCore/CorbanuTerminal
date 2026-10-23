@@ -1,0 +1,84 @@
+# #625 (AGG-27): /model can save the current model on route zai under Aggressive.
+id = "issue625-model-save-under-aggressive"
+feature = "#625: /model saves the current model under Aggressive"
+expected = "After switching to Aggressive (the broker now holds ZAI_API_KEY) and a pong turn on zai, /model, Enter, Enter saves GLM 5.3 Flash (no 'inactive or unavailable' error), and /providers shows Z.AI configured and current."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 140
+rows = 50
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Z.AI GLM 5.3 Flash via zai"
+timeout = 60
+compress = 2
+[[steps]]
+type = "Reply with exactly: pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^• pong"
+timeout = 120
+compress = 2
+[[steps]]
+type = "/model"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Z.AI GLM 5.3 Flash \\(current\\)"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Reasoning Level"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Model changed to Z.AI GLM 5.3 Flash"
+[[steps]]
+pause = 2.0
+[[steps]]
+type = "/providers"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Z.AI +Enabled · configured · current"
+[[steps]]
+pause = 4.0

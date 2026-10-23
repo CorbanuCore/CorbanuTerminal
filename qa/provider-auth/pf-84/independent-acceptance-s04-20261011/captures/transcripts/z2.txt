@@ -1,0 +1,102 @@
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     loading   /model to change                  │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+
+› Improve documentation in @filename
+
+  Z.AI GLM 5.3 Flash via zai default · $S/work · Corbanu Terminal · TPS: -- tok/s
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Z.AI GLM 5.3 Flash                                                │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account default             │
+│  Directory:            $S/work                 │
+│  Permissions:          Next turn: Workspace (Ask for approval)                           │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              OpenAI API key configured (run corbanu login to use ChatGPT)      │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12a7a-77e9-7380-9004-bc1fb8d75664                              │
+│                                                                                          │
+│  Token usage:          8.35K total  (8.35K input + 3 output)                             │
+│  Context window:       100% left (8.35K used / 950K)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+• Saved zai account `fake`. Use it from /providers, `--account fake` or a spawn `account`.
+
+■ zai already has an account `fake`. Choose another name, or remove it first.
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+Token usage: total=16,726 input=16,707 output=19 (reasoning 13)
+To continue this session, run corbanu resume 01a12a7a-77e9-7380-9004-bc1fb8d75664
+
+• New session: requests to zai use account `fake`.
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Z.AI GLM 5.3 Flash                                                │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account fake                │
+│  Directory:            $S/work                 │
+│  Permissions:          Next turn: Workspace (Ask for approval)                           │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              OpenAI API key configured (run corbanu login to use ChatGPT)      │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12a7d-3832-7350-a576-6b046ede014f                              │
+│                                                                                          │
+│  Token usage:          0 total  (0 input + 0 output)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+⚠ Z.AI (zai) account `fake` was rejected. Replace its key with `corbanu account add zai fake` (reads stdin), or choose another account. The default Z.AI
+  credential is unchanged.
+
+■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id:
+bef6017b-4d70-4c65-8571-79bb5c37869c
+
+• New sessions use zai account `fake`. This session is unchanged.
+
+■ This session uses zai account `fake`. Use another account for this session first, then rename it.
+To continue this session, run corbanu resume 01a12a7d-3832-7350-a576-6b046ede014f
+TUI_EXITED rc=0

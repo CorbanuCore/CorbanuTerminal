@@ -1,0 +1,37 @@
+== Aggressive in force: -c security.version=1 -c security.level="aggressive" --enable source_envelopes (security_level.toml also aggressive)
+== SP10 Aggressive in force (exec, no approver): spawn account=work (exit 0)
+   exec args: --account main --enable security_levels -c security.version=1 -c security.level="aggressive" --enable source_envelopes
+   spawn request: {message, account:"work"}
+   final reply: Running a spawned agent on account `work` of `zai` needs the user's approval under the Aggressive security level, and approvals are off.
+   thread 01a128ca-37a0 provider=zai role=None
+     turn_context provider=zai provider_account=main
+     call spawn_agent_v1 {"message":"Reply with exactly the word child-ok","account":"work"}
+     result Running a spawned agent on account `work` of `zai` needs the user's approval under the Aggressive security level, and approvals are off.
+== SP11 Aggressive in force (exec): spawn without account (inherit; not a switch) (exit 0)
+   exec args: --account main --enable security_levels -c security.version=1 -c security.level="aggressive" --enable source_envelopes
+   spawn request: {message}
+   final reply: child-ok
+   thread 01a128ca-5d36 provider=zai role=None
+     turn_context provider=zai provider_account=main
+     call spawn_agent_v1 {"message":"Reply with exactly the word child-ok"}
+     result {"agent_id":"01a128ca-731e-7bd0-a395-323f802299cf","nickname":"Cicero","account":"main"}
+     call wait_agent_v1 {"targets":["01a128ca-731e-7bd0-a395-323f802299cf"],"timeout_ms":30000}
+       thread 01a128ca-731e provider=zai role=None
+         turn_context provider=zai provider_account=main
+== SP12 Aggressive in force (exec): spawn account=main (same as the parent) (exit 0)
+   exec args: --account main --enable security_levels -c security.version=1 -c security.level="aggressive" --enable source_envelopes
+   spawn request: {message, account:"main"}
+   final reply: Not run: this is a tool the security level has not classified after untrusted content entered the session, so it needs your approval, and approvals are off (approval_policy = never).
+   final reply: child-ok
+   thread 01a128ca-990b provider=zai role=None
+     turn_context provider=zai provider_account=main
+     call spawn_agent_v1 {"account":"main","message":"Reply with exactly the word child-ok"}
+     result {"agent_id":"01a128ca-b290-7ca0-96dd-a3782923a95e","nickname":"Hubble","account":"main"}
+     call wait_agent_v1 {"targets":["01a128ca-b290-7ca0-96dd-a3782923a95e"],"timeout_ms":30000}
+       thread 01a128ca-b290 provider=zai role=None
+         turn_context provider=zai provider_account=main
+turn_context 01a128ca-37a0 {'approval_policy': 'never', 'security_level': 'aggressive', 'provider_account': 'main'} workspace-write
+turn_context 01a128ca-5d36 {'approval_policy': 'never', 'security_level': 'aggressive', 'provider_account': 'main'} workspace-write
+turn_context 01a128ca-731e {'approval_policy': 'never', 'security_level': 'aggressive', 'provider_account': 'main'} workspace-write
+turn_context 01a128ca-990b {'approval_policy': 'never', 'security_level': 'aggressive', 'provider_account': 'main'} workspace-write
+turn_context 01a128ca-b290 {'approval_policy': 'never', 'security_level': 'aggressive', 'provider_account': 'main'} workspace-write

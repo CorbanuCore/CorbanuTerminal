@@ -263,7 +263,7 @@ async fn guardian_test_session_turn_and_rx(
     let config = Arc::new(config);
     let models_manager = test_support::models_manager_with_provider(
         config.codex_home.to_path_buf(),
-        Arc::clone(&session.services.auth_manager),
+        session.services.auth_manager(),
         config.model_provider.clone(),
     );
     Arc::get_mut(&mut session)
@@ -299,7 +299,7 @@ async fn guardian_test_session_and_turn_with_base_url(
     let config = Arc::new(config);
     let models_manager = test_support::models_manager_with_provider(
         config.codex_home.to_path_buf(),
-        Arc::clone(&session.services.auth_manager),
+        session.services.auth_manager(),
         config.model_provider.clone(),
     );
     session.services.models_manager = models_manager;
@@ -1481,7 +1481,7 @@ async fn guardian_request_model_for_auto_review(
         GuardianTestCatalog::Bundled => {}
         GuardianTestCatalog::ParentOnly => {
             let parent_model = turn.model_info.clone();
-            let auth_manager = Arc::clone(&session.services.auth_manager);
+            let auth_manager = session.services.auth_manager();
             let models_manager = StaticModelsManager::new(
                 Some(auth_manager),
                 ModelsResponse {
@@ -1694,7 +1694,7 @@ async fn guardian_review_request_layout_matches_model_visible_request_snapshot()
     let config = Arc::new(config);
     let models_manager = test_support::models_manager_with_provider(
         config.codex_home.to_path_buf(),
-        Arc::clone(&session.services.auth_manager),
+        session.services.auth_manager(),
         config.model_provider.clone(),
     );
     session.services.models_manager = models_manager;
@@ -2339,7 +2339,7 @@ async fn guardian_review_surfaces_responses_api_errors_in_rejection_reason() -> 
     let config = Arc::new(config);
     let models_manager = test_support::models_manager_with_provider(
         config.codex_home.to_path_buf(),
-        Arc::clone(&session.services.auth_manager),
+        session.services.auth_manager(),
         config.model_provider.clone(),
     );
     Arc::get_mut(&mut session)
@@ -2992,7 +2992,7 @@ async fn guardian_review_session_config_preserves_context_overrides_for_same_eff
     let server = start_mock_server().await;
     let (mut session, mut turn) = guardian_test_session_and_turn(&server).await;
     let parent_model = turn.model_info.clone();
-    let auth_manager = Arc::clone(&session.services.auth_manager);
+    let auth_manager = session.services.auth_manager();
     Arc::get_mut(&mut session)
         .expect("session should be unique")
         .services
@@ -3034,7 +3034,7 @@ async fn guardian_review_session_config_keeps_deepseek_review_on_deepseek() {
     let config = Arc::new(config);
     session.services.models_manager = test_support::models_manager_with_provider(
         config.codex_home.to_path_buf(),
-        Arc::clone(&session.services.auth_manager),
+        session.services.auth_manager(),
         config.model_provider.clone(),
     );
     turn.config = Arc::clone(&config);
@@ -3087,7 +3087,7 @@ async fn guardian_review_session_config_uses_active_model_for_unknown_provider()
         &config.to_models_manager_config(),
     );
     session.services.models_manager = Arc::new(StaticModelsManager::new(
-        Some(Arc::clone(&session.services.auth_manager)),
+        Some(session.services.auth_manager()),
         ModelsResponse {
             models: vec![parent_model.clone(), openai_hidden_model],
         },

@@ -106,6 +106,9 @@ pub enum Feature {
     UnifiedExec,
     /// Route shell tool execution through the zsh exec bridge.
     ShellZshFork,
+    /// Under Moderate/Aggressive security, send external content (tool, MCP,
+    /// hook and agent output) as labelled untrusted data instead of failing closed.
+    SourceEnvelopes,
     /// Allow unified exec to compose with the zsh exec bridge.
     ///
     /// This flag is only a composition gate. Enabling it by itself must not turn
@@ -150,6 +153,20 @@ pub enum Feature {
     EnableRequestCompression,
     /// Start the managed network proxy for sandboxed sessions.
     NetworkProxy,
+    /// Virtualize provider credentials through a separate broker process (PF-27-S04).
+    IsolatedCredentialBroker,
+    /// Launch agent commands without raw secrets and refuse launches the OS cannot contain (PF-27-S02).
+    SecretlessAgentLaunch,
+    /// Run Claude panes under the secretless launch contract, in the OS sandbox and behind the bridge (#218).
+    ContainedExternalAgents,
+    /// Gate managed secrets out of model, tool, transcript, trace and diagnostic output (PF-28-S01).
+    SecretOutputGate,
+    /// Enforce URL, DNS and redirect destination policy in the managed proxy (PF-33-S01).
+    UrlDestinationPolicy,
+    /// Inventory secrets and check readiness before a protected `/security` level activates (PF-29-S01).
+    ProtectedModePreflight,
+    /// Hold Core's own model-provider API keys in the isolated credential broker (PF-27-S05).
+    BrokerModelAuth,
     /// Respect host system proxy settings for Codex-owned network clients.
     RespectSystemProxy,
     /// Enable collab tools.
@@ -268,6 +285,11 @@ pub enum Feature {
     UseAgentIdentity,
     /// Enable workspace dependency support.
     WorkspaceDependencies,
+    /// Let a human choose a `/security` level (Permissive or Aggressive).
+    SecurityLevels,
+    /// PF-84: named accounts per provider (`[provider_accounts]`,
+    /// `corbanu account`).
+    NamedAccounts,
 
     // Removed
     /// Removed compatibility flag retained as a no-op so old configs can
@@ -858,6 +880,50 @@ pub const FEATURES: &[FeatureSpec] = &[
         default_enabled: cfg!(windows),
     },
     FeatureSpec {
+        id: Feature::IsolatedCredentialBroker,
+        key: "isolated_credential_broker",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::SecretlessAgentLaunch,
+        key: "secretless_agent_launch",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::ContainedExternalAgents,
+        key: "contained_external_agents",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::SecretOutputGate,
+        key: "secret_output_gate",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::UrlDestinationPolicy,
+        key: "url_destination_policy",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::ProtectedModePreflight,
+        key: "protected_mode_preflight",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    // #391: security level Aggressive turns it on unless config sets it
+    // (`codex_core::config`); this default covers the other levels.
+    FeatureSpec {
+        id: Feature::BrokerModelAuth,
+        key: "broker_model_auth",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
         id: Feature::UnifiedExec,
         key: "unified_exec",
         stage: Stage::Stable,
@@ -866,6 +932,12 @@ pub const FEATURES: &[FeatureSpec] = &[
     FeatureSpec {
         id: Feature::ShellZshFork,
         key: "shell_zsh_fork",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::SourceEnvelopes,
+        key: "source_envelopes",
         stage: Stage::UnderDevelopment,
         default_enabled: false,
     },
@@ -1472,6 +1544,18 @@ pub const FEATURES: &[FeatureSpec] = &[
         key: "workspace_dependencies",
         stage: Stage::Stable,
         default_enabled: true,
+    },
+    FeatureSpec {
+        id: Feature::SecurityLevels,
+        key: "security_levels",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::NamedAccounts,
+        key: "named_accounts",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
     },
 ];
 

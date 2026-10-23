@@ -59,6 +59,65 @@ pub fn create_linux_sandbox_command_args_for_permission_profile(
     linux_cmd
 }
 
+/// The helper flag carrying the writable roots' pinned real locations
+/// (#536): the helper binds each root there, and refuses to run when the
+/// root no longer leads there.
+pub const PINNED_WRITABLE_ROOTS_FLAG: &str = "--pinned-writable-roots";
+
+/// Adds the pinned writable roots (#536) to helper arguments built by
+/// [`create_linux_sandbox_command_args_for_permission_profile`], before the
+/// command separator; also when there are none, so the helper checks the
+/// roots it computes itself.
+pub fn insert_pinned_writable_roots_arg(
+    args: &mut Vec<String>,
+    pinned: &[codex_protocol::permissions::PinnedWritableRoot],
+) {
+    let json = serde_json::to_string(pinned)
+        .unwrap_or_else(|err| panic!("failed to serialize pinned writable roots: {err}"));
+    let separator = args
+        .iter()
+        .position(|arg| arg == "--")
+        .unwrap_or(args.len());
+    args.splice(
+        separator..separator,
+        [PINNED_WRITABLE_ROOTS_FLAG.to_string(), json],
+    );
+}
+
+/// The helper flag naming the folder where each run records the
+/// placeholders it makes (#348), so one a run left behind (killed, then the
+/// temporary folder lost on a reboot) is removed by a later run.
+pub const PLACEHOLDER_RECORD_DIR_FLAG: &str = "--placeholder-record-dir";
+
+/// That folder's name in the Corbanu home.
+pub const PLACEHOLDER_RECORD_DIR_NAME: &str = "sandbox-placeholders";
+
+/// Adds the placeholder record folder in `codex_home` (#348) to helper
+/// arguments built by
+/// [`create_linux_sandbox_command_args_for_permission_profile`], before the
+/// command separator. Nothing when the home is not an existing folder (the
+/// helper never makes the home) or its path is not UTF-8.
+pub fn insert_placeholder_record_dir_arg(args: &mut Vec<String>, codex_home: &Path) {
+    if !codex_home.is_absolute() || !codex_home.is_dir() {
+        return;
+    }
+    let Some(dir) = codex_home
+        .join(PLACEHOLDER_RECORD_DIR_NAME)
+        .to_str()
+        .map(str::to_string)
+    else {
+        return;
+    };
+    let separator = args
+        .iter()
+        .position(|arg| arg == "--")
+        .unwrap_or(args.len());
+    args.splice(
+        separator..separator,
+        [PLACEHOLDER_RECORD_DIR_FLAG.to_string(), dir],
+    );
+}
+
 /// Converts the sandbox cwd and execution options into the CLI invocation for
 /// `codex-linux-sandbox`.
 #[cfg_attr(not(test), allow(dead_code))]

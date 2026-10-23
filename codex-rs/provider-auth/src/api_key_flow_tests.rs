@@ -12,7 +12,9 @@ use crate::*;
 
 #[test]
 fn target_derivation_covers_builtin_custom_shared_and_unsupported_entries() {
-    let builtins = ProviderCatalog::from_runtime_providers(&built_in_model_providers(None));
+    let builtins = ProviderCatalog::from_runtime_providers(&built_in_model_providers(
+        /*openai_base_url*/ None,
+    ));
     let deepseek = builtins.get(DEEPSEEK_PROVIDER_ID).unwrap();
     let deepseek_api_key = deepseek.setup_capabilities.iter().next().unwrap();
     assert_eq!(

@@ -4,7 +4,11 @@
 // user-visible output must go through the appropriate abstraction (e.g.,
 // the TUI or the tracing stack).
 #![deny(clippy::print_stdout, clippy::print_stderr)]
+// The `Send` check of the file tools' futures nests through the tool
+// orchestrator's rounds (D50, #1001) deeper than the default limit of 128.
+#![recursion_limit = "256"]
 
+mod account_models_manager;
 mod anthropic_payload;
 mod apply_patch;
 mod apps;
@@ -33,6 +37,8 @@ pub use codex_thread::ThreadConfigSnapshot;
 pub use codex_thread::TryStartTurnIfIdleError;
 pub use codex_thread::TryStartTurnIfIdleRejectionReason;
 pub use session::turn_context::TurnContext;
+mod accounting;
+pub mod accounting_extensions;
 mod agent;
 mod agent_communication;
 mod attestation;
@@ -51,6 +57,7 @@ mod exec_policy;
 #[cfg(test)]
 mod git_info_tests;
 mod guardian;
+pub mod home_access;
 mod hook_runtime;
 mod image_preparation;
 mod installation_id;
@@ -58,6 +65,7 @@ pub(crate) mod mcp;
 mod mcp_skill_dependencies;
 mod mcp_tool_approval_templates;
 mod mcp_tool_exposure;
+mod model_info_for_provider;
 mod network_policy_decision;
 pub use mcp::McpManager;
 mod original_image_detail;
@@ -85,6 +93,20 @@ pub(crate) mod mentions {
 mod sandbox_tags;
 pub mod sandboxing;
 pub(crate) mod security;
+/// PF-41-S01 read-only runtime facts for the `/security` inspector.
+pub use security::inspection as security_inspection;
+pub use security::launch_contract::external_agent_contract_armed;
+pub use security::launch_contract::protect_external_agent_launch;
+/// PF-29-S01 protected-mode inventory and activation preflight.
+pub use security::level_change as security_level_change;
+pub use security::preflight as protected_preflight;
+
+/// PF-25-S01 Aggressive grant offers. Only the TUI's grant review may call
+/// `confirm` (`tui/src/security/grant_view_tests.rs` checks it).
+pub use security::grant_offer as security_grant;
+/// PF-25-S02 human revocation and kill switch; called only by the TUI's
+/// grants and kill switch view.
+pub use security::revocation_change as security_revocation;
 mod session_prefix;
 mod session_startup_prewarm;
 pub mod skills;
@@ -202,4 +224,10 @@ pub use installation_id::resolve_installation_id;
 pub mod compact;
 pub mod memory_stage_one;
 mod memory_usage;
+mod model_broker_auth;
+mod provider_throttle;
+pub use model_broker_auth::BrokerModelAuthOrigin;
+pub use model_broker_auth::holds_environment_key as broker_holds_environment_key;
+pub use model_broker_auth::install_for_config as install_broker_model_auth;
+pub use model_broker_auth::removed_environment_keys as broker_removed_environment_keys;
 pub mod otel_init;

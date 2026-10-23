@@ -1,0 +1,3 @@
+buffered MSG_PEEK: b'x'
+POLLRDHUP-only readiness: [(3, 8192)]
+second MSG_PEEK: b'x'

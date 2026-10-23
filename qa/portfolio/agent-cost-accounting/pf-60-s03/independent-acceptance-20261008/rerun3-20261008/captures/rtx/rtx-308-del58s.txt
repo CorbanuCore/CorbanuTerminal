@@ -1,0 +1,6 @@
+--- rollouts for 01a11daa-d8fc-7c30-bfd7-1769227e63f8 before:
+<rtx-dir>/h-del/sessions/2026/10/08/rollout-2026-10-08T22-38-18-01a11daa-d8fc-7c30-bfd7-1769227e63f8.jsonl
+$ FAKETIME=@2026-10-08 22:39:54 corbanu delete --force 01a11daa-d8fc-7c30-bfd7-1769227e63f8
+Deleted session 01a11daa-d8fc-7c30-bfd7-1769227e63f8.
+exit=0 real_end=2026-10-08T22:40:53Z
+--- rollouts for 01a11daa-d8fc-7c30-bfd7-1769227e63f8 after:

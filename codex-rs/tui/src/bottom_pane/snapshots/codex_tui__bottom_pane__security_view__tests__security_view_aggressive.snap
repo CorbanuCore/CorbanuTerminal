@@ -11,8 +11,8 @@ Protected modes are blocked; required controls are not qualified.
   Moderate
 > Aggressive
 
-Planned: all Moderate controls, plus deny sensitive access by default, narrow
-expiring grants, and exact human approval for every sign or broadcast. Not
-available yet.
+Sensitive access denied by default: writes only in the current folder, approval
+for every command that is not known read-only, no network, and no vault access
+for agents. Chosen in /security with the security_levels feature.
 
 ↑/↓ explore · enter inspect · esc close

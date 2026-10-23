@@ -33,6 +33,7 @@ fn client_management_handle(
         pairing_persistence_key: watch::channel(None).0,
         pairing_persistence_key_required: false,
         auth_manager,
+        desired_state_stored_hook: None,
     }
 }
 

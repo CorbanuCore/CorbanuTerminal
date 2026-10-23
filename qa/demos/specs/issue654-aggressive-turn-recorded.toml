@@ -1,0 +1,53 @@
+# #654: under Aggressive the credential broker serves model requests; developer accounting records them.
+id = "issue654-aggressive-turn-recorded"
+feature = "Developer accounting records turns under Aggressive"
+expected = "Under Aggressive (model keys held by the credential broker) a plain GLM turn shows no 'could not record' warning, and /cost lists the request on Z.AI with its tokens."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+"""
+
+# The stored /security level, as the picker saves it (off screen, before launch).
+setup = "printf 'version = 1\\nlevel = \"aggressive\"\\n' > \"$CODEX_HOME/security_level.toml\" && cat \"$CODEX_HOME/security_level.toml\""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Aggressive active"
+[[steps]]
+pause = 2.5
+[[steps]]
+type = "Reply with exactly one word: pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^• +[Pp]ong"
+timeout = 180
+compress = 2
+[[steps]]
+wait = "(?m)^› "
+timeout = 120
+compress = 1
+[[steps]]
+pause = 2
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Z\\.AI GLM 5\\.3 Flash .*1 request"
+timeout = 60
+[[steps]]
+pause = 4

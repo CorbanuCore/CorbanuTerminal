@@ -83,7 +83,7 @@ jobs:
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends pkg-config libcap-dev bubblewrap
           fi
 
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
         with:
           targets: ${{ inputs.target }}
 
@@ -207,8 +207,11 @@ jobs:
               --target ${{ inputs.target }} \
               --profile ${{ inputs.profile }} \
               -p codex-linux-sandbox \
-              --bin codex-linux-sandbox
+              --bin codex-linux-sandbox \
+              -p codex-wallet-daemon \
+              --bin corbanu-walletd
             cp "${CARGO_TARGET_DIR}/${{ inputs.target }}/${{ inputs.profile }}/codex-linux-sandbox" "${helper_dir}/"
+            cp "${CARGO_TARGET_DIR}/${{ inputs.target }}/${{ inputs.profile }}/corbanu-walletd" "${helper_dir}/"
           else
             cargo build \
               --target ${{ inputs.target }} \
@@ -245,8 +248,9 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      # Only main saves caches; branch runs restore main's (#636).
       - name: Save cargo home cache
-        if: always() && !cancelled() && steps.cache_cargo_home_restore.outputs.cache-hit != 'true'
+        if: always() && !cancelled() && steps.cache_cargo_home_restore.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
         continue-on-error: true
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
@@ -258,7 +262,7 @@ jobs:
           key: cargo-home-${{ env.ARCHIVE_CACHE_RUNNER }}-${{ inputs.target }}-${{ inputs.profile }}-${{ steps.lockhash.outputs.hash }}-${{ steps.lockhash.outputs.toolchain_hash }}
 
       - name: Save sccache cache (fallback)
-        if: always() && !cancelled() && env.USE_SCCACHE == 'true' && env.SCCACHE_GHA_ENABLED != 'true'
+        if: always() && !cancelled() && env.USE_SCCACHE == 'true' && env.SCCACHE_GHA_ENABLED != 'true' && github.ref == 'refs/heads/main'
         continue-on-error: true
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
@@ -314,7 +318,7 @@ jobs:
             sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends pkg-config libcap-dev bubblewrap
           fi
 
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
         with:
           targets: ${{ inputs.target }}
 
@@ -375,6 +379,13 @@ jobs:
             mkdir -p "${helper_target_dir}"
             cp "${helper_dir}/codex-linux-sandbox" "${helper_target_dir}/"
             chmod +x "${helper_target_dir}/codex-linux-sandbox"
+            # The TUI resolves the wallet daemon only beside its own binary, which
+            # lives in the extracted archive. Pre-place it in the extraction dir.
+            extract_dir="${RUNNER_TEMP}/nextest-extract"
+            extract_bin_dir="${extract_dir}/target/${{ inputs.target }}/${{ inputs.profile }}"
+            mkdir -p "${extract_bin_dir}"
+            cp "${helper_dir}/corbanu-walletd" "${extract_bin_dir}/"
+            chmod +x "${extract_bin_dir}/corbanu-walletd"
           elif [[ "${RUNNER_OS}" == "Windows" ]]; then
             helper_dir="${RUNNER_TEMP}/${TEST_HELPERS_ARTIFACT}"
             helper_target_dir="${CARGO_TARGET_DIR}/${{ inputs.target }}/${{ inputs.profile }}"
@@ -390,6 +401,9 @@ jobs:
             --workspace-remap "${workspace_root}"
             --partition "hash:${{ matrix.shard }}/4"
           )
+          if [[ -n "${extract_dir:-}" ]]; then
+            nextest_args+=(--extract-to "${extract_dir}" --extract-overwrite)
+          fi
           if [[ "${{ inputs.test_threads }}" != "0" ]]; then
             nextest_args+=(--test-threads "${{ inputs.test_threads }}")
           fi

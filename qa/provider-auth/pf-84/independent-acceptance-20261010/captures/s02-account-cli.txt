@@ -1,0 +1,38 @@
+-- features list: named_accounts                       under development  false
+-- flag OFF (fresh home, no config)
+   Error: named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts`
+   Error: named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts`
+   secrets/ exists after refused add: no
+-- flag ON
+   No named accounts. Every provider uses its default account.
+-- names
+   [exit 1] account add zai default -> Error: `default` names today's credentials; choose another account name 
+   [exit 1] account add zai Default -> Error: invalid account name: use 1-32 lowercase letters, digits or '-', starting with a letter or digit 
+   [exit 1] account add zai a_b -> Error: invalid account name: use 1-32 lowercase letters, digits or '-', starting with a letter or digit 
+   [exit 1] account add zai a b -> Error: invalid account name: use 1-32 lowercase letters, digits or '-', starting with a letter or digit 
+   [exit 1] account add zai é -> Error: invalid account name: use 1-32 lowercase letters, digits or '-', starting with a letter or digit 
+   [exit 1] account add zai  -> Error: invalid account name: use 1-32 lowercase letters, digits or '-', starting with a letter or digit 
+   [exit 1] account add zai -- -lead -> Error: invalid account name: use 1-32 lowercase letters, digits or '-', starting with a letter or digit 
+   [exit 1] account add zai aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -> Error: invalid account name: use 1-32 lowercase letters, digits or '-', starting with a letter or digit 
+   [exit 0] account add zai aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -> Saved zai account `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` (api_key). 
+   [exit 0] account add zai 0k-1 -> Saved zai account `0k-1` (api_key). 
+-- providers / kinds
+   [exit 1] account add nosuchprov x1 -> Error: unknown provider `nosuchprov` 
+   [exit 1] account add openai work -> Error: provider `openai` does not take a api_key account 
+   [exit 1] account add amazon-bedrock work -> Error: provider `amazon-bedrock` does not take a api_key account 
+   [exit 1] account add claude-plan work -> Error: provider `claude-plan` does not take a api_key account 
+   [exit 1] account add zai x2 --kind claude-token -> Error: provider `zai` does not take a claude_oauth_token account 
+   [exit 1] account add zai x4 --kind command -> Error: provider `zai` does not take a command account 
+   [exit 1] account add claude-plan cfg --kind claude-config-dir -> Error: this kind needs --value 
+-- secret only from piped stdin
+   [exit 1] account add zai x3 --value fake-canary-arg -> Error: secret values are read from stdin, never from --value 
+   [exit 1] empty stdin -> Error: no secret on stdin
+   [exit 1] whitespace stdin -> Error: no secret on stdin
+   tty stdin -> Error: pipe the secret in instead of typing it, for example `cat key.txt | corbanu account add <provider> <name>`
+   tty stdin -> [exit 1]
+-- list / remove
+   zai	0k-1	api_key
+   zai	aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	api_key
+   Removed zai account `0k-1`.
+   Error: zai has no account `nope`
+   zai	aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	api_key

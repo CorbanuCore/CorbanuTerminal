@@ -1,0 +1,28 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Reply with the single word OK.
+
+
+• OK
+
+
+  Attempt, components and original price
+  Requested UTC day: 2026-10-16
+
+  Opaque scope: 24120f8e-e6be-4013-bffd-347cff588284
+  Arithmetic dialect: Inclusive
+  Admission time: 2026-10-16T03:56:15.794Z
+  Retry predecessor: none
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Estimated token cost for recorded attempts: $0.001295 (rounded)
+  Billing basis: pay per use
+› Input: 8461
+
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

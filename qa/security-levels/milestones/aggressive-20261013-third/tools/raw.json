@@ -1,0 +1,197 @@
+{
+ "AGG-01": {
+  "G01": "failed"
+ },
+ "AGG-02": {
+  "G01": "passed"
+ },
+ "AGG-35": {
+  "G01": "passed"
+ },
+ "AGG-29": {
+  "G02": "passed"
+ },
+ "AGG-03": {
+  "G02": "passed"
+ },
+ "AGG-04": {
+  "G03": "passed"
+ },
+ "AGG-37": {
+  "G03": "passed"
+ },
+ "AGG-05": {
+  "G04": "passed"
+ },
+ "AGG-06": {
+  "G04": "failed"
+ },
+ "AGG-36": {
+  "G04": "passed"
+ },
+ "AGG-07": {
+  "G05": "passed"
+ },
+ "AGG-08": {
+  "G05": "passed"
+ },
+ "AGG-09": {
+  "G06": "passed"
+ },
+ "AGG-10": {
+  "G06": "failed"
+ },
+ "AGG-11": {
+  "G06": "passed"
+ },
+ "AGG-12": {
+  "G07": "passed"
+ },
+ "AGG-13": {
+  "G07": "passed"
+ },
+ "AGG-14": {
+  "G07": "passed"
+ },
+ "AGG-19": {
+  "G07": "passed"
+ },
+ "AGG-15": {
+  "G08": "passed"
+ },
+ "AGG-38": {
+  "G08": "passed"
+ },
+ "AGG-16": {
+  "G09": "passed"
+ },
+ "AGG-17": {
+  "G10": "passed"
+ },
+ "AGG-18": {
+  "G10": "failed"
+ },
+ "AGG-23": {
+  "G10": "passed"
+ },
+ "AGG-33": {
+  "G11": "passed"
+ },
+ "AGG-20": {
+  "G12": "failed"
+ },
+ "AGG-21": {
+  "G12": "passed"
+ },
+ "AGG-22": {
+  "G13": "passed"
+ },
+ "AGG-24": {
+  "G14": "passed"
+ },
+ "AGG-25": {
+  "G15": "failed"
+ },
+ "AGG-34": {
+  "G15": "passed"
+ },
+ "AGG-26": {
+  "G16": "passed"
+ },
+ "AGG-27": {
+  "G17": "passed"
+ },
+ "AGG-A01": {
+  "G17": "passed"
+ },
+ "AGG-28": {
+  "G18": "passed"
+ },
+ "AGG-30": {
+  "G19": "failed"
+ },
+ "AGG-31": {
+  "G20": "passed"
+ },
+ "AGG-32": {
+  "G21": "passed"
+ },
+ "AGG-R01": {
+  "G22": "passed"
+ },
+ "AGG-R02": {
+  "G22": "passed"
+ },
+ "AGG-R03": {
+  "G22": "blocked"
+ },
+ "AGG-R04": {
+  "G22": "blocked",
+  "G22b": "passed"
+ },
+ "AGG-R05": {
+  "G23": "passed"
+ },
+ "AGG-R07": {
+  "G24": "failed",
+  "G24b": "failed"
+ },
+ "AGG-R09": {
+  "G24": "failed",
+  "G24b": "passed"
+ },
+ "AGG-R08": {
+  "G25": "passed"
+ },
+ "AGG-R10": {
+  "G26": "failed"
+ },
+ "AGG-R11": {
+  "G26": "passed"
+ },
+ "AGG-R16": {
+  "G26": "failed"
+ },
+ "AGG-R13": {
+  "G27": "passed"
+ },
+ "AGG-R12": {
+  "G27": "passed"
+ },
+ "AGG-R18": {
+  "G27": "passed"
+ },
+ "AGG-R14": {
+  "G28": "failed",
+  "G28b": "failed"
+ },
+ "AGG-R15": {
+  "G28": "failed",
+  "G28c": "passed"
+ },
+ "AGG-R17": {
+  "G28": "failed",
+  "G28d": "passed"
+ },
+ "AGG-T01": {
+  "G29": "failed"
+ },
+ "AGG-T02": {
+  "G29": "failed"
+ },
+ "AGG-T03": {
+  "G30": "failed"
+ },
+ "AGG-T04": {
+  "G30": "passed"
+ },
+ "AGG-T06": {
+  "G31": "passed"
+ },
+ "AGG-T07": {
+  "G32": "passed"
+ },
+ "AGG-T08": {
+  "G32": "passed"
+ }
+}

@@ -1,0 +1,28 @@
+{
+  "commit": "b4513f6cc699773a7ca922d08b67683f47586a96",
+  "entrypoint": "corbanu",
+  "files": {
+    "codex-code-mode-host": {
+      "mode": 365,
+      "sha256": "f99578408d9f6424724809eeb52b4f23b4d0889a24b939d12a71448d25fdb1c0"
+    },
+    "corbanu": {
+      "mode": 365,
+      "sha256": "e552180a2dfc5457a93881cc4822054e18a4a90e8bf86f67008238e461e758f6"
+    },
+    "corbanu-acp": {
+      "mode": 365,
+      "sha256": "e65e681a7a00cdbf330194e232edca02cd241c4beeb8e7b8539a228334814c8f"
+    },
+    "corbanu-walletd": {
+      "mode": 365,
+      "sha256": "d27f1348bbde699e06a210e4bf692c29b72b945cfc92860c486a89b19f551a11"
+    }
+  },
+  "format": "cargo-darwin-runtime-binaries",
+  "limitations": [
+    "Unsigned local qualification package, not a notarized release archive.",
+    "Uses guest system shell/search tools; optional bundled rg and patched zsh are not included."
+  ],
+  "tree": "d6a3d723e0591cdd65f5a13e41fc8b9f92ff2c49"
+}

@@ -901,7 +901,7 @@ impl App {
         else {
             return Err("Expected an assignment attach command.".to_string());
         };
-        self.attach_whip(
+        let attached = self.attach_whip(
             target,
             whip_name,
             mode,
@@ -910,7 +910,13 @@ impl App {
             cooldown_s,
             holder,
             CommandOrigin::User,
-        )
+        );
+        // #613: as for `/orchestrate attach`, paused at once while the kill
+        // switch is on.
+        if attached.is_ok() {
+            self.pause_whips_for_kill_switch();
+        }
+        attached
     }
 
     pub(crate) fn open_orchestrate_status_view(&mut self) {
@@ -2088,6 +2094,24 @@ impl App {
         cause: &str,
         will_retry: bool,
     ) {
+        self.note_assignment_dispatch_failure_with_turns(
+            holder_node_id,
+            cause,
+            will_retry,
+            /*start_turns*/ true,
+        );
+    }
+
+    /// `start_turns` false (#660): the Manager is told without starting a
+    /// turn in it (a dispatch sent while the kill switch was on, or held or
+    /// refused because of it).
+    pub(crate) fn note_assignment_dispatch_failure_with_turns(
+        &mut self,
+        holder_node_id: &str,
+        cause: &str,
+        will_retry: bool,
+        start_turns: bool,
+    ) {
         let holder_node_id = normalize_orchestrate_node_id(holder_node_id);
         let Some((id, worker_node_id)) =
             self.assignment_dispatch_target_for_holder(&holder_node_id)
@@ -2128,9 +2152,11 @@ impl App {
         // The active UI can change between an automated dispatch and its failure. Persist the
         // operational notice to the Manager as a report as well, so switching panes cannot hide
         // the retry or pause reason from the operator or the Manager's next turn.
-        self.record_spawn_parent_report(
+        self.record_spawn_parent_report_with_notify(
             holder_node_id,
             format!("assignment_dispatch_notice; {message}"),
+            /*notify*/ true,
+            start_turns,
         );
         self.persist_pane_state();
     }
@@ -2315,6 +2341,9 @@ impl App {
         for id in ids {
             self.expire_whip_if_needed(&id, now);
         }
+        if self.pause_whips_for_kill_switch() {
+            return;
+        }
         self.watch_assignment_reachability(now);
         let target_generations: Vec<(String, u64)> = self
             .orchestrate_whips
@@ -2413,6 +2442,38 @@ impl App {
             self.chat_widget.add_error_message(err);
             return;
         }
+        // #613: while the kill switch is on nothing is resumed or started
+        // (it could fire right after switch-off), and a whip attached now is
+        // paused at once, like those armed when the switch went on. The saved
+        // state decides (not the state this process last learned): a switch-off
+        // elsewhere allows it at once, and a switch-on is already saved.
+        let refused = match &command {
+            OrchestrateCommand::Resume(id) => Some(("resumed", "resume", id)),
+            OrchestrateCommand::Start(id) => Some(("started", "start", id)),
+            _ => None,
+        };
+        if let Some((done, verb, id_or_target)) = refused
+            && crate::legacy_core::security_revocation::kill_switch_on(
+                self.config.codex_home.as_ref(),
+            )
+        {
+            self.chat_widget.add_error_message(format!(
+                "Not {done}: the security kill switch is on. Turn it off in /security, then run /orchestrate {verb} {id_or_target}."
+            ));
+            return;
+        }
+        let attaches = matches!(command, OrchestrateCommand::Attach { .. });
+        self.dispatch_orchestrate_command(command, origin);
+        if attaches {
+            self.pause_whips_for_kill_switch();
+        }
+    }
+
+    fn dispatch_orchestrate_command(
+        &mut self,
+        command: OrchestrateCommand,
+        origin: CommandOrigin<'_>,
+    ) {
         match command {
             OrchestrateCommand::Status => self.chat_widget.add_info_message(
                 format_whip_status(&self.orchestrate_whips, self.orchestrate_now()),
@@ -2637,6 +2698,45 @@ impl App {
         ))
     }
 
+    /// #507: while the security kill switch is on, no assignment or whip
+    /// fires on its own. Each armed one is paused, so none starts work when
+    /// the switch is turned off either: a person resumes it. Returns whether
+    /// the switch is on.
+    pub(crate) fn pause_whips_for_kill_switch(&mut self) -> bool {
+        if !self
+            .orchestrate_whips
+            .values()
+            .any(|whip| whip.state == WhipState::Armed)
+        {
+            return false;
+        }
+        if !crate::legacy_core::security_revocation::kill_switch_on(self.config.codex_home.as_ref())
+        {
+            return false;
+        }
+        let mut paused: Vec<(String, bool)> = self
+            .orchestrate_whips
+            .values_mut()
+            .filter(|whip| whip.state == WhipState::Armed)
+            .map(|whip| {
+                whip.state = WhipState::Paused;
+                (whip.id.clone(), whip.is_assignment())
+            })
+            .collect();
+        paused.sort();
+        self.persist_pane_state();
+        for (id, is_assignment) in paused {
+            let subject = if is_assignment { "Assignment" } else { "Whip" };
+            self.chat_widget.add_info_message(
+                format!(
+                    "{subject} {id} paused: the security kill switch is on. Turning it off does not resume it; resume it with /orchestrate resume {id} when you want it to run again."
+                ),
+                /*hint*/ None,
+            );
+        }
+        true
+    }
+
     fn set_whip_state_by_ref(&mut self, id_or_target: &str, state: WhipState, action: &str) {
         let Some(id) = self.find_whip_id(id_or_target) else {
             self.chat_widget
@@ -2717,6 +2817,11 @@ impl App {
         idle_generation: u64,
         trigger: FireTrigger,
     ) {
+        if !matches!(trigger, FireTrigger::Manual | FireTrigger::Test)
+            && self.pause_whips_for_kill_switch()
+        {
+            return;
+        }
         let ids: Vec<String> = self
             .orchestrate_whips
             .values()
@@ -2767,8 +2872,12 @@ impl App {
         match destination {
             FireDestination::Native(thread_id) => self.send_native_task_event(thread_id, task),
             FireDestination::ClaudePane(pane_id) => {
-                self.app_event_tx
-                    .send(AppEvent::SubmitSpawnClaudePaneTask { pane_id, task });
+                let sent_while_kill_switch_on = self.kill_switch_on_now();
+                self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
+                    pane_id,
+                    task,
+                    sent_while_kill_switch_on,
+                });
             }
         }
         self.chat_widget.add_info_message(
@@ -3001,9 +3110,11 @@ impl App {
                 self.send_native_task_event(thread_id, plan.task);
             }
             FireDestination::ClaudePane(pane_id) => {
+                let sent_while_kill_switch_on = self.kill_switch_on_now();
                 self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
                     pane_id,
                     task: plan.task,
+                    sent_while_kill_switch_on,
                 });
             }
         }
@@ -3187,9 +3298,14 @@ impl App {
                 Ok(FireDestination::Native(thread_id)) => {
                     self.send_native_task_event(thread_id, task)
                 }
-                Ok(FireDestination::ClaudePane(pane_id)) => self
-                    .app_event_tx
-                    .send(AppEvent::SubmitSpawnClaudePaneTask { pane_id, task }),
+                Ok(FireDestination::ClaudePane(pane_id)) => {
+                    let sent_while_kill_switch_on = self.kill_switch_on_now();
+                    self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
+                        pane_id,
+                        task,
+                        sent_while_kill_switch_on,
+                    });
+                }
                 Err(err) => {
                     pause_ids.push(id.clone());
                     self.chat_widget.add_error_message(format!(
@@ -3513,6 +3629,10 @@ impl App {
                 .iter()
                 .any(|pane| pane.id == pane_id)
             {
+                // Refused before the fire is counted or reported as started.
+                if let Some(reason) = crate::security::level::external_agent_block_reason() {
+                    return Err(reason);
+                }
                 return Ok(FireDestination::ClaudePane(pane_id.to_string()));
             }
         }

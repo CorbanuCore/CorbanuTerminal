@@ -1,0 +1,91 @@
+# Issue #787 (AGG-R14, replay Q11b): keys pressed as an approval appears never answer it.
+id = "issue787-new-prompt-ignores-early-keys"
+feature = "#787: keys pressed as a prompt appears never answer it"
+expected = "Under Aggressive the parent asks about wait_agent while its child asks to run sleep 60; echo finished > ks-child.txt: the child's prompt waits under the question, Down Enter answers the question (Cancel), and the Down Enter pressed again as the child's prompt appears is ignored; nothing is approved and ks-child.txt is not written."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 140
+rows = 50
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 8.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Z.AI GLM 5.3 Flash via zai"
+timeout = 60
+compress = 2
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Spawn a child agent and have it run exactly this command: sleep 60; echo finished > ks-child.txt. Then wait for the child agent to finish."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)Another request is waiting; it shows after you answer this one.*Allow `wait_agent"
+timeout = 240
+compress = 2
+[[steps]]
+pause = 3.0
+[[steps]]
+run = "tmux -L \"$(ls -t \"${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)\" | grep '^demo-issue787-new-prompt-ignores-early-keys-' | head -1)\" capture-pane -p -t demo > {run}/question-787-child-waiting.txt"
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Keys pressed as this request appeared were ignored"
+[[steps]]
+run = "tmux -L \"$(ls -t \"${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)\" | grep '^demo-issue787-new-prompt-ignores-early-keys-' | head -1)\" capture-pane -p -t demo > {run}/prompt-787-after-early-keys.txt"
+[[steps]]
+pause = 4.0
+[[steps]]
+run = "test ! -e '{workspace}/ks-child.txt' && echo 'ks-child.txt not written'"
+[[steps]]
+wait = "(?s)Thread: Agent.*Keys pressed as this request appeared were ignored"
+[[steps]]
+pause = 4.0

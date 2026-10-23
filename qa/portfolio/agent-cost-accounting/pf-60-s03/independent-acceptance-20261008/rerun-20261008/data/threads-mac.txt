@@ -1,0 +1,19 @@
+mac skew/probe homes
+ms0 01a11c57-755f-7d83-a994-e3e01beb7c8f (mh-skew, real clock)
+ms58s (mh-skew, clock 58 s behind) — no thread: thread/start timed out
+mftprobe-ahead 01a11c59-5444-7932-ad7d-a108e3bb339e (fresh mh-ftprobe, clock +60 s)
+mftprobe-behind-freshhome (fresh mh-ftprobe2, clock -6 d) — no thread: thread/start timed out
+
+mac deletion home mh-del (all runs on a faked clock AHEAD of real time)
+m1 01a1201a-f5b1-7470-9e16-ba73043ef7d2 child "01a1201b-0716-7a52-99d7-fe2f28b5e9d0"
+m2 01a12541-515d-7360-9386-92b8c762af52 child "01a12541-63cd-7201-b6ca-6480702ee6c2"
+m3 01a12578-3fd8-7a80-ba8d-45d1cbfc0f9e 
+mk 01a125af-2e58-7800-9ab3-1118cd91644e 
+m1, m2 deleted
+
+mac no-usage home mh-nousage (real clock)
+nu-zai 01a11c5e-6df9-7462-9812-44caeaf237da
+nu-proxy 01a11c5e-8899-7a43-bb9b-2c8a9bf05af3
+nu-nousage 01a11c5e-9aa7-7a11-892c-5b0c7ea71d0f
+
+mac fresh home mh-fresh: one TUI turn (4 requests)

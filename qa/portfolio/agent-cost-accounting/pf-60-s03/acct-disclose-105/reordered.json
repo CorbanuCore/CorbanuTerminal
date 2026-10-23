@@ -1,0 +1,93 @@
+{
+  "old_commit": "967425cc72ea28b5f59ecc38a56419b7db6885e8",
+  "new_commit": "a8dfff98892e60aaa0d7f05321fd7e57b79cdc2a",
+  "old_note_sha256": "d46df323a5d5538c6b4e8bddec84aa08266346d5cc827bc7ac5581d204457864",
+  "old_guard_sha256": "b61e26646bf1f018be1f5b67cf495e1287a8d1e4b4324910a9340df1f53ca00d",
+  "new_guard_sha256": "ec6f5f185147855411ca1fd4da610336a9bf0e7d893e045edf0319249a4f9aa8",
+  "note_sha256": "aa688e99db130333cb692beb44ba9e33c4bb0860a827725bdad5cd11e39a1f6d",
+  "scope": "Exact extracted destination segment, through the pre-clone guard; no clone/replay claim.",
+  "environment": {
+    "PATH": "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-final9-20260910/codex-path:/Users/Neo/.local/bin:/Users/Neo/.local/bin:/Users/Neo/.yarn/bin:/Users/Neo/.local/bin:/opt/homebrew/opt/postgresql@17/bin:/opt/homebrew/opt/postgresql@17/bin:/opt/homebrew/opt/postgresql@17/bin:/Users/Neo/.codeium/windsurf/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/Neo/bin/g8:/Users/Neo/bin/cs:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/opt/X11/bin://Applications/Topaz Photo AI.app/Contents/Resources/bin:/Library/Apple/usr/bin:/usr/local/MacGPG2/bin:/Library/TeX/texbin:/Applications/Wireshark.app/Contents/MacOS:/private/tmp/cacctdis105.ROmo9R/home/tmp/arg0/codex-arg0KbvjtG:/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-final9-20260910/codex-path:/Volumes/CorbanuDrive/Corbanu/.codex-work/resume-fix.q96t3X/integration-package/codex-path:/Users/Neo/.local/bin:/Users/Neo/.yarn/bin:/opt/homebrew/opt/postgresql@17/bin:/Users/Neo/.codeium/windsurf/bin:/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/home/tmp/arg0/codex-arg0h2L9mn:/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/rustup/toolchains/1.95.0-aarch64-apple-darwin/bin:/Users/Neo/.cargo/bin:/Users/Neo/gcloud/google-cloud-sdk/bin:/Users/Neo/.lmstudio/bin:/Users/Neo/llama.cpp/build/bin:/Users/Neo/.lmstudio/bin:/Users/Neo/llama.cpp/build/bin:/Users/Neo/.lmstudio/bin",
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_TERMINAL_PROMPT": "0",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "fixture": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-j1i26gen",
+  "passed": 7,
+  "cases": [
+    {
+      "case": "existing-destination",
+      "destination": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-j1i26gen/source/ignored",
+      "resolved": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-j1i26gen/source/ignored",
+      "expected_exit": 1,
+      "exit": 1,
+      "stdout": "",
+      "stderr": "",
+      "command": "set -eu\nq=unused\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\ntest ! -e \"$audit\"\ntest ! -L \"$audit\"\npython3 - \"$PWD\" \"$audit\" <<'PY'\nfrom pathlib import Path\nimport subprocess\nimport sys\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    sys.exit(subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)]))\nPY\nprintf 'DESTINATION_ALLOWED\\n'\n"
+    },
+    {
+      "case": "direct-ignored",
+      "destination": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-j1i26gen/source/ignored/new-audit",
+      "resolved": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-j1i26gen/source/ignored/new-audit",
+      "expected_exit": 0,
+      "exit": 0,
+      "stdout": ".gitignore:1:ignored/\t/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-j1i26gen/source/ignored/new-audit\nDESTINATION_ALLOWED\n",
+      "stderr": "",
+      "command": "set -eu\nq=unused\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\ntest ! -e \"$audit\"\ntest ! -L \"$audit\"\npython3 - \"$PWD\" \"$audit\" <<'PY'\nfrom pathlib import Path\nimport subprocess\nimport sys\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    sys.exit(subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)]))\nPY\nprintf 'DESTINATION_ALLOWED\\n'\n"
+    },
+    {
+      "case": "external",
+      "destination": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-j1i26gen/external-audit",
+      "resolved": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-j1i26gen/external-audit",
+      "expected_exit": 0,
+      "exit": 0,
+      "stdout": "DESTINATION_ALLOWED\n",
+      "stderr": "",
+      "command": "set -eu\nq=unused\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\ntest ! -e \"$audit\"\ntest ! -L \"$audit\"\npython3 - \"$PWD\" \"$audit\" <<'PY'\nfrom pathlib import Path\nimport subprocess\nimport sys\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    sys.exit(subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)]))\nPY\nprintf 'DESTINATION_ALLOWED\\n'\n"
+    },
+    {
+      "case": "dotdot-unignored",
+      "destination": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-j1i26gen/../destination-j1i26gen/source/unignored",
+      "resolved": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-j1i26gen/source/unignored",
+      "expected_exit": 1,
+      "exit": 1,
+      "stdout": "",
+      "stderr": "",
+      "command": "set -eu\nq=unused\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\ntest ! -e \"$audit\"\ntest ! -L \"$audit\"\npython3 - \"$PWD\" \"$audit\" <<'PY'\nfrom pathlib import Path\nimport subprocess\nimport sys\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    sys.exit(subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)]))\nPY\nprintf 'DESTINATION_ALLOWED\\n'\n"
+    },
+    {
+      "case": "alias-ignored",
+      "destination": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-j1i26gen/outside-alias/ignored/new-audit",
+      "resolved": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-j1i26gen/source/ignored/new-audit",
+      "expected_exit": 0,
+      "exit": 0,
+      "stdout": ".gitignore:1:ignored/\t/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-j1i26gen/source/ignored/new-audit\nDESTINATION_ALLOWED\n",
+      "stderr": "",
+      "command": "set -eu\nq=unused\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\ntest ! -e \"$audit\"\ntest ! -L \"$audit\"\npython3 - \"$PWD\" \"$audit\" <<'PY'\nfrom pathlib import Path\nimport subprocess\nimport sys\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    sys.exit(subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)]))\nPY\nprintf 'DESTINATION_ALLOWED\\n'\n"
+    },
+    {
+      "case": "alias-unignored-regression",
+      "destination": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-j1i26gen/outside-alias/unignored",
+      "resolved": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-j1i26gen/source/unignored",
+      "expected_exit": 1,
+      "exit": 1,
+      "stdout": "",
+      "stderr": "",
+      "command": "set -eu\nq=unused\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\ntest ! -e \"$audit\"\ntest ! -L \"$audit\"\npython3 - \"$PWD\" \"$audit\" <<'PY'\nfrom pathlib import Path\nimport subprocess\nimport sys\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    sys.exit(subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)]))\nPY\nprintf 'DESTINATION_ALLOWED\\n'\n",
+      "old_guard_exit": 0,
+      "old_guard_stdout": "",
+      "old_guard_stderr": ""
+    },
+    {
+      "case": "direct-unignored",
+      "destination": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-j1i26gen/source/unignored",
+      "resolved": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-j1i26gen/source/unignored",
+      "expected_exit": 1,
+      "exit": 1,
+      "stdout": "",
+      "stderr": "",
+      "command": "set -eu\nq=unused\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\ntest ! -e \"$audit\"\ntest ! -L \"$audit\"\npython3 - \"$PWD\" \"$audit\" <<'PY'\nfrom pathlib import Path\nimport subprocess\nimport sys\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    sys.exit(subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)]))\nPY\nprintf 'DESTINATION_ALLOWED\\n'\n"
+    }
+  ]
+}

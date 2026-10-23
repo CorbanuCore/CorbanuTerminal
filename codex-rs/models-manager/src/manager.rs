@@ -22,6 +22,11 @@ use tracing::Instrument as _;
 use tracing::error;
 use tracing::info;
 
+/// OpenAI's default model, and so the overall default.
+pub const OPENAI_DEFAULT_MODEL: &str = "gpt-6-sol";
+/// OpenAI default used when the catalog does not offer `gpt-6-sol`.
+pub const OPENAI_FALLBACK_DEFAULT_MODEL: &str = "gpt-5.6-sol";
+
 const MODEL_CACHE_FILE: &str = "models_cache.json";
 const DEFAULT_MODEL_CACHE_TTL: Duration = Duration::from_secs(300);
 
@@ -118,6 +123,13 @@ pub trait ModelsManager: fmt::Debug + Send + Sync {
     /// Return the auth manager used for picker filtering.
     fn auth_manager(&self) -> Option<&AuthManager>;
 
+    /// Slugs the provider's `/models` response (or its cache) advertised, if one
+    /// was applied. A model the bundled catalogue keeps but the server did not
+    /// advertise stays selectable, but is not chosen as the default.
+    fn server_advertised_models(&self) -> Option<Vec<String>> {
+        None
+    }
+
     /// Build picker-ready presets from the active catalog snapshot.
     fn build_available_models(&self, mut remote_models: Vec<ModelInfo>) -> Vec<ModelPreset> {
         remote_models.sort_by_key(|model| model.priority);
@@ -129,10 +141,27 @@ pub trait ModelsManager: fmt::Debug + Send + Sync {
         presets = ModelPreset::filter_by_auth(presets, uses_codex_backend);
 
         ModelPreset::mark_default_by_picker_visibility(&mut presets);
-        if let Some(sol_index) = presets
-            .iter()
-            .position(|preset| preset.model == "gpt-5.6-sol" && preset.show_in_picker)
-        {
+        let candidates = [OPENAI_DEFAULT_MODEL, OPENAI_FALLBACK_DEFAULT_MODEL];
+        let pick = |advertised: Option<&[String]>| {
+            candidates
+                .iter()
+                .filter(|slug| {
+                    advertised
+                        .is_none_or(|advertised| advertised.iter().any(|model| model == **slug))
+                })
+                .find_map(|slug| {
+                    presets
+                        .iter()
+                        .position(|preset| preset.model == *slug && preset.show_in_picker)
+                })
+        };
+        // Prefer a candidate the server advertised; a list that names neither
+        // (or no list at all) says nothing about them, so keep catalogue order.
+        let default_index = self
+            .server_advertised_models()
+            .and_then(|advertised| pick(Some(&advertised)))
+            .or_else(|| pick(None));
+        if let Some(sol_index) = default_index {
             for preset in &mut presets {
                 preset.is_default = false;
             }
@@ -211,6 +240,26 @@ pub trait ModelsManager: fmt::Debug + Send + Sync {
         etag: String,
         http_client_factory: HttpClientFactory,
     ) -> ModelsManagerFuture<'_, ()>;
+
+    /// PF-84: list models with the sign-in of named account `account` (`None`:
+    /// the default login) from now on. Returns whether that changed. Managers
+    /// not bound to an OpenAI sign-in keep their list and return `false`.
+    fn follow_sign_in_account(&self, _account: Option<&codex_login::NamedChatgptAccount>) -> bool {
+        false
+    }
+
+    /// PF-84: whether a response from a request to `provider` describes this
+    /// list, so its models etag may refresh it.
+    fn lists_for_provider(&self, _provider: &codex_model_provider_info::ModelProviderInfo) -> bool {
+        true
+    }
+
+    /// PF-84: loads a usable cached list (the same check refreshing uses:
+    /// fresh, this client version) and returns whether the list is current
+    /// without a fetch. `true` when this manager never fetches.
+    fn load_cached_list(&self) -> ModelsManagerFuture<'_, bool> {
+        Box::pin(async { true })
+    }
 }
 
 pub type ModelsManagerFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -226,6 +275,7 @@ pub struct OpenAiModelsManager {
     cache_manager: Option<ModelsCacheManager>,
     endpoint_client: SharedModelsEndpointClient,
     auth_manager: Option<Arc<AuthManager>>,
+    advertised: std::sync::RwLock<Option<Vec<String>>>,
 }
 
 /// Static model manager backed by an authoritative in-process catalog.
@@ -270,6 +320,7 @@ impl OpenAiModelsManager {
             cache_manager,
             endpoint_client,
             auth_manager,
+            advertised: std::sync::RwLock::new(None),
         }
     }
 }
@@ -309,6 +360,13 @@ impl ModelsManager for OpenAiModelsManager {
         self.auth_manager.as_deref()
     }
 
+    fn server_advertised_models(&self) -> Option<Vec<String>> {
+        self.advertised
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
     fn list_collaboration_modes(&self) -> Vec<CollaborationModeMask> {
         builtin_collaboration_mode_presets()
     }
@@ -323,6 +381,10 @@ impl ModelsManager for OpenAiModelsManager {
             etag,
             http_client_factory,
         ))
+    }
+
+    fn load_cached_list(&self) -> ModelsManagerFuture<'_, bool> {
+        Box::pin(async move { !self.should_refresh_models().await || self.try_load_cache().await })
     }
 }
 
@@ -428,6 +490,16 @@ impl OpenAiModelsManager {
 
     /// Replace the cached remote models and rebuild the derived presets list.
     async fn apply_remote_models(&self, models: Vec<ModelInfo>) {
+        *self
+            .advertised
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(
+            models
+                .iter()
+                .filter(|model| model.visibility != ModelVisibility::Hide)
+                .map(|model| model.slug.clone())
+                .collect(),
+        );
         let mut existing_models = load_remote_models_from_file().unwrap_or_default();
         for mut model in models {
             if let Some(existing_index) = existing_models

@@ -1,4 +1,5 @@
 use super::*;
+#[cfg(unix)]
 use pretty_assertions::assert_eq;
 
 #[test]

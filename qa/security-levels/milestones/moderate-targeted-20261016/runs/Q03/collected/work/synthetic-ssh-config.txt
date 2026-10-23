@@ -1,0 +1,3 @@
+Host synthetic-example
+  HostName synthetic.invalid
+  User synthetic-user

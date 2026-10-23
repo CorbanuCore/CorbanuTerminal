@@ -1,0 +1,55 @@
+binary: before
+  zai	fake	api_key
+recorded: fake=01a1297b-6360-7862-8258-f4b60272fee7 default=01a1297b-6607-7530-ac0d-9dcf8dad4585
+== T1 #426: corbanu --account ghost
+   | > Use your Z.AI API key
+   | 
+   | Paste your ZAI_API_KEY API key. Corbanu stores it in the encrypted vault and never adds it to chat. An existing environment variable takes precedence; unset it
+   | outside Corbanu to use the saved key.
+   | 
+   |   Detected ZAI_API_KEY environment variable.
+   |   Paste a different key if you prefer to use another account.
+   | 
+   | 
+   | 
+   | 
+   | 
+   | ╭API key───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+   | │•••••••••••••••••••••••••••••••••••••••••••••••••                                                                                                             │
+   | ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+   |   Press enter to save
+   |   Press esc to go back
+== T2 #426: corbanu resume --account ghost <default session>
+   | > Use your Z.AI API key
+   | 
+   | Paste your ZAI_API_KEY API key. Corbanu stores it in the encrypted vault and never adds it to chat. An existing environment variable takes precedence; unset it
+   | outside Corbanu to use the saved key.
+   | 
+   |   Detected ZAI_API_KEY environment variable.
+   |   Paste a different key if you prefer to use another account.
+   | 
+   | 
+   | 
+   | 
+   | 
+   | ╭API key───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+   | │•••••••••••••••••••••••••••••••••••••••••••••••••                                                                                                             │
+   | ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+   |   Press enter to save
+   |   Press esc to go back
+== T3 #425: corbanu --account kimi-code:ghost
+   | ╭──────────────────────────────────────────────────────────╮
+   | │ >_ Corbanu Terminal (v0.1.48)                            │
+   | │                                                          │
+   | │ model:     glm-5.3-flash   /model to change              │
+   | │ directory: /Volumes/CorbanuDrive/Corbanu/…/pf84fix2/work │
+   | ╰──────────────────────────────────────────────────────────╯
+   | 
+   | 
+   | › Write tests for @filename
+   | 
+   |   Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/tmp/pf84fix2/work · Corbanu Terminal · TPS: -- tok/s
+== T4 #427: corbanu resume <session recorded on fake>, send ping
+   | ■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id:
+   | ⚠ Z.AI (zai) credential was rejected. Open /providers, select Z.AI, and press r to recover. Other providers are unchanged.
+   | ■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id:

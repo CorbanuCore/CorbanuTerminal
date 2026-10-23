@@ -523,7 +523,7 @@ impl TraceExecutionStatus for ExecCommandStatus {
         match self {
             ExecCommandStatus::Completed => ExecutionStatus::Completed,
             ExecCommandStatus::Failed => ExecutionStatus::Failed,
-            ExecCommandStatus::Declined => ExecutionStatus::Cancelled,
+            ExecCommandStatus::Declined | ExecCommandStatus::Refused => ExecutionStatus::Cancelled,
         }
     }
 }

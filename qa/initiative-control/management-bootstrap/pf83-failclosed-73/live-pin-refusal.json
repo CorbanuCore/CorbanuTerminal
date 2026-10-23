@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "python3",
+    "-B",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-failclosed-73/dispatch_guard.py",
+    "--harness",
+    "/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915",
+    "--packets",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-handoff-70/artifacts/rebound",
+    "--bundle",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-handoff-70/artifacts/handoff-root"
+  ],
+  "exit_code": 1,
+  "dispatch_command_supplied": false,
+  "guest_contact": false,
+  "live_harness_modified": false
+}

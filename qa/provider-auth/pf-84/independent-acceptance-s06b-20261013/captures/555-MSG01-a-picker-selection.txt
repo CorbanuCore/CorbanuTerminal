@@ -1,0 +1,7 @@
+ Resume a previous session
+ Type to search                                                                                                             Filter: [Cwd] All    Sort: [Updated] Created
+    4s ago      Reply with exactly the word first
+  ❯ 28s ago     Reply with exactly the word ping
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 2 / 2 · 100% ─
+ enter resume   esc exit   ctrl+c exit   tab focus sort/filter   ←/→ change option
+ ctrl+o comfortable view   ctrl+t transcript   ctrl+e expand   ↑/↓ browse

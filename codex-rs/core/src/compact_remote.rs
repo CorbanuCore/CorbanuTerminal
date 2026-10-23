@@ -209,15 +209,36 @@ async fn run_remote_compact_task_inner_impl(
     let compaction_item = TurnItem::ContextCompaction(context_compaction_item);
     sess.emit_turn_item_started(turn_context, &compaction_item)
         .await;
+    // The legacy compaction endpoint is inference the operator paid for, so it
+    // is collected like every other compaction, on a client session of its own
+    // and under the same `compact:` identity. Best effort: a compaction that
+    // cannot be recorded still runs.
+    let client_session = sess.services.new_model_client_session();
+    let accounting = match crate::accounting::attach_turn(
+        sess,
+        turn_context.as_ref(),
+        &client_session,
+        crate::accounting::compaction_turn_label(&turn_context.sub_id),
+    )
+    .await
+    {
+        Ok(scopes) => Some(scopes),
+        Err(error) => {
+            tracing::warn!(%error, "accounting: legacy compaction proceeding unrecorded");
+            None
+        }
+    };
     let attempt = run_remote_compact_attempt(
         sess,
         step_context,
+        &client_session,
         turn_state.clone(),
         &compaction_trace,
         compaction_metadata,
         analytics_details,
     )
     .await;
+    crate::accounting::warn_if_unrecorded(sess, turn_context, accounting.as_ref()).await;
     let (attempt, compaction_turn_context) = match attempt {
         Ok(attempt) => (attempt, turn_context),
         Err(error) => {
@@ -238,12 +259,15 @@ async fn run_remote_compact_task_inner_impl(
             let fallback_result = run_remote_compact_attempt(
                 sess,
                 fallback_step_context,
+                &client_session,
                 turn_state,
                 &fallback_compaction_trace,
                 compaction_metadata,
                 analytics_details,
             )
             .await;
+            // The retry may have gone unrecorded where the first attempt did not.
+            crate::accounting::warn_if_unrecorded(sess, turn_context, accounting.as_ref()).await;
             record_model_fallback(
                 &sess.services.session_telemetry,
                 turn_context.model_info.slug.as_str(),
@@ -259,9 +283,19 @@ async fn run_remote_compact_task_inner_impl(
         }
     };
     let RemoteCompactAttempt {
-        new_history,
+        mut new_history,
         trace_input_history,
     } = attempt;
+    // #578: the encrypted summary is sealed for this provider (and account).
+    let producer = compaction_turn_context.output_producer();
+    for item in &mut new_history {
+        if matches!(
+            item,
+            ResponseItem::Compaction { .. } | ResponseItem::ContextCompaction { .. }
+        ) {
+            item.set_producer(&producer);
+        }
+    }
     let (new_window_number, new_window_ids) = sess.advance_auto_compact_window().await;
     let (new_history, world_state_baseline) =
         process_compacted_history(sess.as_ref(), new_history, &initial_context_injection).await;

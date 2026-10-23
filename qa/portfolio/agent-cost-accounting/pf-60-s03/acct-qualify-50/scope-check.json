@@ -1,0 +1,6 @@
+{
+  "new_or_changed_files": 163,
+  "outside_scope": [],
+  "parser": "git status --porcelain -z",
+  "source_diff": ""
+}

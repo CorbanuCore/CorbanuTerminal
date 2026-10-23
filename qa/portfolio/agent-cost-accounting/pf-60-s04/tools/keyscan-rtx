@@ -1,0 +1,9 @@
+#!/bin/bash
+# local. usage: keyscan-rtx <remote paths...>: count remote files containing each vault value (value piped over ssh
+# stdin, never printed) plus key-shaped strings. Prints counts only.
+V(){ env -u CORBANU_TEST_NO_NATIVE_KEYRING -u CORBANU_HOME -u CODEX_HOME -u PFTERMINAL_HOME ~/.local/bin/corbanu vault auth-helper "$1" < /dev/null; }
+for lab in provider/zai_api_key provider/kimi_api_key claude-plan-test-token openai-api-key provider/deepseek_api_key; do
+  n=$(printf '%s\n' "$(V "$lab")" | ssh -o BatchMode=yes <rtx-user>@<rtx-host> "grep -rlF -f /dev/stdin $* 2>/dev/null | wc -l")
+  echo "$lab: $n files"
+done
+ssh -o BatchMode=yes <rtx-user>@<rtx-host> "echo key-shaped: \$(grep -rlE 'sk-[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|Bearer [A-Za-z0-9._-]{20,}' $* 2>/dev/null | wc -l) files"

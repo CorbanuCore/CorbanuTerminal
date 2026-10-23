@@ -1,0 +1,50 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     gpt-5.4 low   /model to change   │
+│ directory: ~/corbanu-rtx/pf60s04-ia/work/ws │
+╰─────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  gpt-5.4 low · ~/corbanu-rtx/pf60s04-ia/work/ws · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

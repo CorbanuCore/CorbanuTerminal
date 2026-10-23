@@ -1,0 +1,203 @@
+{"time_ns": 1792029593514701000, "utc": "2026-10-15T01:59:53Z", "requested": "fixture", "args": [], "window": "product"}
+{"time_ns": 1792029620675590000, "utc": "2026-10-15T02:00:20Z", "requested": "start", "args": [], "window": "product"}
+{"time_ns": 1792029622713553000, "utc": "2026-10-15T02:00:22Z", "executed": "start", "argv": ["/opt/agms/bin/agms-product", "zai", "glm-5.3-flash"]}
+{"time_ns": 1792029626976362000, "utc": "2026-10-15T02:00:26Z", "requested": "screen", "args": ["MOD07-00-trust"], "window": "product"}
+{"time_ns": 1792029627021166000, "utc": "2026-10-15T02:00:27Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792029627027508000, "utc": "2026-10-15T02:00:27Z", "executed": "key", "key": "Enter", "pty_offset": 1556}
+{"time_ns": 1792029627225375000, "utc": "2026-10-15T02:00:27Z", "requested": "wait", "args": ["Fresh session|Permissive", "60"], "window": "product"}
+{"time_ns": 1792029687468416000, "utc": "2026-10-15T02:01:27Z", "executed": "wait", "pattern": "Fresh session|Permissive", "matched": false}
+{"time_ns": 1792029687507904000, "utc": "2026-10-15T02:01:27Z", "requested": "screen", "args": ["MOD07-01-start"], "window": "product"}
+{"time_ns": 1792029696149737000, "utc": "2026-10-15T02:01:36Z", "requested": "text", "args": ["/security"], "window": "product"}
+{"time_ns": 1792029696156635000, "utc": "2026-10-15T02:01:36Z", "executed": "text", "text": "/security", "pty_offset": 5145}
+{"time_ns": 1792029696193454000, "utc": "2026-10-15T02:01:36Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792029696199692000, "utc": "2026-10-15T02:01:36Z", "executed": "key", "key": "Enter", "pty_offset": 5390}
+{"time_ns": 1792029696399881000, "utc": "2026-10-15T02:01:36Z", "requested": "wait", "args": ["Active in this session", "60"], "window": "product"}
+{"time_ns": 1792029696406593000, "utc": "2026-10-15T02:01:36Z", "executed": "wait", "pattern": "Active in this session", "matched": true}
+{"time_ns": 1792029696444337000, "utc": "2026-10-15T02:01:36Z", "requested": "screen", "args": ["MOD07-02-picker"], "window": "product"}
+{"time_ns": 1792029710000814000, "utc": "2026-10-15T02:01:50Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792029710007242000, "utc": "2026-10-15T02:01:50Z", "executed": "key", "key": "Down", "pty_offset": 6098}
+{"time_ns": 1792029710222571000, "utc": "2026-10-15T02:01:50Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792029710229768000, "utc": "2026-10-15T02:01:50Z", "executed": "key", "key": "Enter", "pty_offset": 7205}
+{"time_ns": 1792029710443928000, "utc": "2026-10-15T02:01:50Z", "requested": "wait", "args": ["Saved: Moderate|enter confirm", "60"], "window": "product"}
+{"time_ns": 1792029710450810000, "utc": "2026-10-15T02:01:50Z", "executed": "wait", "pattern": "Saved: Moderate|enter confirm", "matched": true}
+{"time_ns": 1792029710493118000, "utc": "2026-10-15T02:01:50Z", "requested": "screen", "args": ["MOD07-03-review"], "window": "product"}
+{"time_ns": 1792029710539731000, "utc": "2026-10-15T02:01:50Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792029710547072000, "utc": "2026-10-15T02:01:50Z", "executed": "key", "key": "Enter", "pty_offset": 16126}
+{"time_ns": 1792029710741844000, "utc": "2026-10-15T02:01:50Z", "requested": "wait", "args": ["Saved: Moderate", "60"], "window": "product"}
+{"time_ns": 1792029710749017000, "utc": "2026-10-15T02:01:50Z", "executed": "wait", "pattern": "Saved: Moderate", "matched": true}
+{"time_ns": 1792029710786131000, "utc": "2026-10-15T02:01:50Z", "requested": "screen", "args": ["MOD07-04-saved"], "window": "product"}
+{"time_ns": 1792029718579905000, "utc": "2026-10-15T02:01:58Z", "requested": "key", "args": ["r"], "window": "product"}
+{"time_ns": 1792029718586095000, "utc": "2026-10-15T02:01:58Z", "executed": "key", "key": "r", "pty_offset": 18914}
+{"time_ns": 1792029718784864000, "utc": "2026-10-15T02:01:58Z", "requested": "wait", "args": ["Active in this session|Do you trust", "60"], "window": "product"}
+{"time_ns": 1792029778925428000, "utc": "2026-10-15T02:02:58Z", "executed": "wait", "pattern": "Active in this session|Do you trust", "matched": false}
+{"time_ns": 1792029778970336000, "utc": "2026-10-15T02:02:58Z", "requested": "screen", "args": ["MOD07-05-after-restart"], "window": "product"}
+{"time_ns": 1792029797232196000, "utc": "2026-10-15T02:03:17Z", "requested": "text", "args": ["/security"], "window": "product"}
+{"time_ns": 1792029797238307000, "utc": "2026-10-15T02:03:17Z", "executed": "text", "text": "/security", "pty_offset": 22822}
+{"time_ns": 1792029797274209000, "utc": "2026-10-15T02:03:17Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792029797280687000, "utc": "2026-10-15T02:03:17Z", "executed": "key", "key": "Enter", "pty_offset": 23072}
+{"time_ns": 1792029797478358000, "utc": "2026-10-15T02:03:17Z", "requested": "wait", "args": ["Active in this session", "60"], "window": "product"}
+{"time_ns": 1792029797484997000, "utc": "2026-10-15T02:03:17Z", "executed": "wait", "pattern": "Active in this session", "matched": true}
+{"time_ns": 1792029797522395000, "utc": "2026-10-15T02:03:17Z", "requested": "screen", "args": ["MOD07-06-start-moderate"], "window": "product"}
+{"time_ns": 1792029797563004000, "utc": "2026-10-15T02:03:17Z", "requested": "key", "args": ["Escape"], "window": "product"}
+{"time_ns": 1792029797569416000, "utc": "2026-10-15T02:03:17Z", "executed": "key", "key": "Escape", "pty_offset": 24565}
+{"time_ns": 1792029803567240000, "utc": "2026-10-15T02:03:23Z", "requested": "text", "args": ["Append the line 'checked by moderate' to ../outside-notes.txt using a shell command."], "window": "product"}
+{"time_ns": 1792029803574417000, "utc": "2026-10-15T02:03:23Z", "executed": "text", "text": "Append the line 'checked by moderate' to ../outside-notes.txt using a shell command.", "pty_offset": 25062}
+{"time_ns": 1792029803610829000, "utc": "2026-10-15T02:03:23Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792029803618943000, "utc": "2026-10-15T02:03:23Z", "executed": "key", "key": "Enter", "pty_offset": 25795}
+{"time_ns": 1792029803811133000, "utc": "2026-10-15T02:03:23Z", "requested": "wait", "args": ["Operation not permitted|denied|refused|No changes made|error|Error", "90"], "window": "product"}
+{"time_ns": 1792029812660934000, "utc": "2026-10-15T02:03:32Z", "executed": "wait", "pattern": "Operation not permitted|denied|refused|No changes made|error|Error", "matched": true}
+{"time_ns": 1792029812697041000, "utc": "2026-10-15T02:03:32Z", "requested": "screen", "args": ["MOD07-07-first-try"], "window": "product"}
+{"time_ns": 1792029855739488000, "utc": "2026-10-15T02:04:15Z", "requested": "screen", "args": ["MOD07-08-first-try-after-30s"], "window": "product"}
+{"time_ns": 1792029879444217000, "utc": "2026-10-15T02:04:39Z", "requested": "key", "args": ["Escape"], "window": "product"}
+{"time_ns": 1792029879450516000, "utc": "2026-10-15T02:04:39Z", "executed": "key", "key": "Escape", "pty_offset": 143303}
+{"time_ns": 1792029879652416000, "utc": "2026-10-15T02:04:39Z", "requested": "screen", "args": ["MOD07-09-cancel-auto-retry"], "window": "product"}
+{"time_ns": 1792029884608343000, "utc": "2026-10-15T02:04:44Z", "requested": "text", "args": ["Try again and request my approval to run that command outside the sandbox."], "window": "product"}
+{"time_ns": 1792029884614686000, "utc": "2026-10-15T02:04:44Z", "executed": "text", "text": "Try again and request my approval to run that command outside the sandbox.", "pty_offset": 145245}
+{"time_ns": 1792029884650369000, "utc": "2026-10-15T02:04:44Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792029884656610000, "utc": "2026-10-15T02:04:44Z", "executed": "key", "key": "Enter", "pty_offset": 145522}
+{"time_ns": 1792029884845157000, "utc": "2026-10-15T02:04:44Z", "requested": "wait", "args": ["Would you like to run the following command\\?", "90"], "window": "product"}
+{"time_ns": 1792029890606227000, "utc": "2026-10-15T02:04:50Z", "executed": "wait", "pattern": "Would you like to run the following command\\?", "matched": true}
+{"time_ns": 1792029890650815000, "utc": "2026-10-15T02:04:50Z", "requested": "screen", "args": ["MOD07-10-approval-prompt"], "window": "product"}
+{"time_ns": 1792029899212567000, "utc": "2026-10-15T02:04:59Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792029899218559000, "utc": "2026-10-15T02:04:59Z", "executed": "key", "key": "Enter", "pty_offset": 180953}
+{"time_ns": 1792029899416095000, "utc": "2026-10-15T02:04:59Z", "requested": "wait", "args": ["Operation not permitted|Approval declined|refused", "90"], "window": "product"}
+{"time_ns": 1792029899422020000, "utc": "2026-10-15T02:04:59Z", "executed": "wait", "pattern": "Operation not permitted|Approval declined|refused", "matched": true}
+{"time_ns": 1792029899458227000, "utc": "2026-10-15T02:04:59Z", "requested": "screen", "args": ["MOD07-11-approved-still-sandbox"], "window": "product"}
+{"time_ns": 1792029936567173000, "utc": "2026-10-15T02:05:36Z", "requested": "screen", "args": ["MOD07-12-approved-result"], "window": "product"}
+{"time_ns": 1792029946661138000, "utc": "2026-10-15T02:05:46Z", "requested": "text", "args": ["Try again and request my approval to run that command outside the sandbox."], "window": "product"}
+{"time_ns": 1792029946667861000, "utc": "2026-10-15T02:05:46Z", "executed": "text", "text": "Try again and request my approval to run that command outside the sandbox.", "pty_offset": 231218}
+{"time_ns": 1792029946702202000, "utc": "2026-10-15T02:05:46Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792029946708048000, "utc": "2026-10-15T02:05:46Z", "executed": "key", "key": "Enter", "pty_offset": 231495}
+{"time_ns": 1792029946895372000, "utc": "2026-10-15T02:05:46Z", "requested": "wait", "args": ["Would you like to run the following command\\?", "90"], "window": "product"}
+{"time_ns": 1792029955278444000, "utc": "2026-10-15T02:05:55Z", "executed": "wait", "pattern": "Would you like to run the following command\\?", "matched": true}
+{"time_ns": 1792029955321786000, "utc": "2026-10-15T02:05:55Z", "requested": "screen", "args": ["MOD07-13-repeat-prompt"], "window": "product"}
+{"time_ns": 1792029962957060000, "utc": "2026-10-15T02:06:02Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792029962962614000, "utc": "2026-10-15T02:06:02Z", "executed": "key", "key": "Down", "pty_offset": 280998}
+{"time_ns": 1792029963175370000, "utc": "2026-10-15T02:06:03Z", "requested": "screen", "args": ["MOD07-14-option2-highlighted"], "window": "product"}
+{"time_ns": 1792029963213829000, "utc": "2026-10-15T02:06:03Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792029963220475000, "utc": "2026-10-15T02:06:03Z", "executed": "key", "key": "Enter", "pty_offset": 281579}
+{"time_ns": 1792029963416223000, "utc": "2026-10-15T02:06:03Z", "requested": "wait", "args": ["Operation not permitted|Approval declined|refused", "90"], "window": "product"}
+{"time_ns": 1792029963422088000, "utc": "2026-10-15T02:06:03Z", "executed": "wait", "pattern": "Operation not permitted|Approval declined|refused", "matched": true}
+{"time_ns": 1792029963454550000, "utc": "2026-10-15T02:06:03Z", "requested": "screen", "args": ["MOD07-15-option2-result"], "window": "product"}
+{"time_ns": 1792029998775795000, "utc": "2026-10-15T02:06:38Z", "requested": "screen", "args": ["MOD07-16-option2-completion"], "window": "product"}
+{"time_ns": 1792030006505293000, "utc": "2026-10-15T02:06:46Z", "requested": "text", "args": ["Try again and request my approval to run that command outside the sandbox."], "window": "product"}
+{"time_ns": 1792030006510827000, "utc": "2026-10-15T02:06:46Z", "executed": "text", "text": "Try again and request my approval to run that command outside the sandbox.", "pty_offset": 346474}
+{"time_ns": 1792030006543412000, "utc": "2026-10-15T02:06:46Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792030006548838000, "utc": "2026-10-15T02:06:46Z", "executed": "key", "key": "Enter", "pty_offset": 346751}
+{"time_ns": 1792030006741535000, "utc": "2026-10-15T02:06:46Z", "requested": "wait", "args": ["Running echo|Operation not permitted|Would you like", "90"], "window": "product"}
+{"time_ns": 1792030006747272000, "utc": "2026-10-15T02:06:46Z", "executed": "wait", "pattern": "Running echo|Operation not permitted|Would you like", "matched": true}
+{"time_ns": 1792030006778230000, "utc": "2026-10-15T02:06:46Z", "requested": "screen", "args": ["MOD07-17-third-repeat-initial"], "window": "product"}
+{"time_ns": 1792030044504616000, "utc": "2026-10-15T02:07:24Z", "requested": "screen", "args": ["MOD07-18-third-repeat-result"], "window": "product"}
+{"time_ns": 1792030133090330000, "utc": "2026-10-15T02:08:53Z", "requested": "stop", "args": [], "window": "product"}
+{"time_ns": 1792030133096893000, "utc": "2026-10-15T02:08:53Z", "executed": "stop"}
+{"time_ns": 1792030133181793000, "utc": "2026-10-15T02:08:53Z", "requested": "fixture", "args": [], "window": "product"}
+{"time_ns": 1792030137102289000, "utc": "2026-10-15T02:08:57Z", "requested": "start", "args": [], "window": "product"}
+{"time_ns": 1792030139141713000, "utc": "2026-10-15T02:08:59Z", "executed": "start", "argv": ["/opt/agms/bin/agms-product", "zai", "glm-5.3-flash"]}
+{"time_ns": 1792030147243582000, "utc": "2026-10-15T02:09:07Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792030147249189000, "utc": "2026-10-15T02:09:07Z", "executed": "key", "key": "Enter", "pty_offset": 410993}
+{"time_ns": 1792030149459593000, "utc": "2026-10-15T02:09:09Z", "requested": "screen", "args": ["MOD31-00-trust-enter"], "window": "product"}
+{"time_ns": 1792030149496662000, "utc": "2026-10-15T02:09:09Z", "requested": "text", "args": ["/security"], "window": "product"}
+{"time_ns": 1792030149501973000, "utc": "2026-10-15T02:09:09Z", "executed": "text", "text": "/security", "pty_offset": 414582}
+{"time_ns": 1792030149532714000, "utc": "2026-10-15T02:09:09Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792030149538232000, "utc": "2026-10-15T02:09:09Z", "executed": "key", "key": "Enter", "pty_offset": 414827}
+{"time_ns": 1792030149736903000, "utc": "2026-10-15T02:09:09Z", "requested": "wait", "args": ["Active in this session", "60"], "window": "product"}
+{"time_ns": 1792030149742338000, "utc": "2026-10-15T02:09:09Z", "executed": "wait", "pattern": "Active in this session", "matched": true}
+{"time_ns": 1792030149773745000, "utc": "2026-10-15T02:09:09Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030149778978000, "utc": "2026-10-15T02:09:09Z", "executed": "key", "key": "Down", "pty_offset": 415785}
+{"time_ns": 1792030149972470000, "utc": "2026-10-15T02:09:09Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792030149977868000, "utc": "2026-10-15T02:09:09Z", "executed": "key", "key": "Enter", "pty_offset": 416892}
+{"time_ns": 1792030150186458000, "utc": "2026-10-15T02:09:10Z", "requested": "wait", "args": ["enter confirm", "60"], "window": "product"}
+{"time_ns": 1792030150192084000, "utc": "2026-10-15T02:09:10Z", "executed": "wait", "pattern": "enter confirm", "matched": true}
+{"time_ns": 1792030150224487000, "utc": "2026-10-15T02:09:10Z", "requested": "screen", "args": ["MOD31-01-review"], "window": "product"}
+{"time_ns": 1792030150263425000, "utc": "2026-10-15T02:09:10Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792030150269297000, "utc": "2026-10-15T02:09:10Z", "executed": "key", "key": "Enter", "pty_offset": 425813}
+{"time_ns": 1792030150467315000, "utc": "2026-10-15T02:09:10Z", "requested": "wait", "args": ["Saved: Moderate", "60"], "window": "product"}
+{"time_ns": 1792030150472761000, "utc": "2026-10-15T02:09:10Z", "executed": "wait", "pattern": "Saved: Moderate", "matched": true}
+{"time_ns": 1792030150505705000, "utc": "2026-10-15T02:09:10Z", "requested": "screen", "args": ["MOD31-02-saved"], "window": "product"}
+{"time_ns": 1792030155273659000, "utc": "2026-10-15T02:09:15Z", "requested": "key", "args": ["r"], "window": "product"}
+{"time_ns": 1792030155279221000, "utc": "2026-10-15T02:09:15Z", "executed": "key", "key": "r", "pty_offset": 428465}
+{"time_ns": 1792030160504724000, "utc": "2026-10-15T02:09:20Z", "requested": "screen", "args": ["MOD31-03-after-restart"], "window": "product"}
+{"time_ns": 1792030160541639000, "utc": "2026-10-15T02:09:20Z", "requested": "text", "args": ["/security"], "window": "product"}
+{"time_ns": 1792030160546863000, "utc": "2026-10-15T02:09:20Z", "executed": "text", "text": "/security", "pty_offset": 432521}
+{"time_ns": 1792030160578366000, "utc": "2026-10-15T02:09:20Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792030160584012000, "utc": "2026-10-15T02:09:20Z", "executed": "key", "key": "Enter", "pty_offset": 432771}
+{"time_ns": 1792030160783036000, "utc": "2026-10-15T02:09:20Z", "requested": "wait", "args": ["Active in this session", "60"], "window": "product"}
+{"time_ns": 1792030160788423000, "utc": "2026-10-15T02:09:20Z", "executed": "wait", "pattern": "Active in this session", "matched": true}
+{"time_ns": 1792030160820741000, "utc": "2026-10-15T02:09:20Z", "requested": "screen", "args": ["MOD31-04-picker-moderate"], "window": "product"}
+{"time_ns": 1792030160857801000, "utc": "2026-10-15T02:09:20Z", "requested": "key", "args": ["Escape"], "window": "product"}
+{"time_ns": 1792030160863005000, "utc": "2026-10-15T02:09:20Z", "executed": "key", "key": "Escape", "pty_offset": 434264}
+{"time_ns": 1792030169695944000, "utc": "2026-10-15T02:09:29Z", "requested": "text", "args": ["!printf 'bang\\n' >> ../outside-notes.txt"], "window": "product"}
+{"time_ns": 1792030169701797000, "utc": "2026-10-15T02:09:29Z", "executed": "text", "text": "!printf 'bang\\n' >> ../outside-notes.txt", "pty_offset": 434772}
+{"time_ns": 1792030169733576000, "utc": "2026-10-15T02:09:29Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792030169739134000, "utc": "2026-10-15T02:09:29Z", "executed": "key", "key": "Enter", "pty_offset": 435033}
+{"time_ns": 1792030172977618000, "utc": "2026-10-15T02:09:32Z", "requested": "screen", "args": ["MOD31-05-shell-command"], "window": "product"}
+{"time_ns": 1792030184656255000, "utc": "2026-10-15T02:09:44Z", "requested": "text", "args": ["/security"], "window": "product"}
+{"time_ns": 1792030184661572000, "utc": "2026-10-15T02:09:44Z", "executed": "text", "text": "/security", "pty_offset": 437543}
+{"time_ns": 1792030184693212000, "utc": "2026-10-15T02:09:44Z", "requested": "key", "args": ["Enter"], "window": "product"}
+{"time_ns": 1792030184698729000, "utc": "2026-10-15T02:09:44Z", "executed": "key", "key": "Enter", "pty_offset": 437793}
+{"time_ns": 1792030184880646000, "utc": "2026-10-15T02:09:44Z", "requested": "wait", "args": ["Active in this session", "60"], "window": "product"}
+{"time_ns": 1792030184885913000, "utc": "2026-10-15T02:09:44Z", "executed": "wait", "pattern": "Active in this session", "matched": true}
+{"time_ns": 1792030184917085000, "utc": "2026-10-15T02:09:44Z", "requested": "key", "args": ["i"], "window": "product"}
+{"time_ns": 1792030184922256000, "utc": "2026-10-15T02:09:44Z", "executed": "key", "key": "i", "pty_offset": 439286}
+{"time_ns": 1792030185132819000, "utc": "2026-10-15T02:09:45Z", "requested": "wait", "args": ["Inspector|Core config|Not contained", "60"], "window": "product"}
+{"time_ns": 1792030185138159000, "utc": "2026-10-15T02:09:45Z", "executed": "wait", "pattern": "Inspector|Core config|Not contained", "matched": true}
+{"time_ns": 1792030185170333000, "utc": "2026-10-15T02:09:45Z", "requested": "screen", "args": ["MOD31-06-inspector-top"], "window": "product"}
+{"time_ns": 1792030192053414000, "utc": "2026-10-15T02:09:52Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030192058688000, "utc": "2026-10-15T02:09:52Z", "executed": "key", "key": "Down", "pty_offset": 446849}
+{"time_ns": 1792030192270964000, "utc": "2026-10-15T02:09:52Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030192276293000, "utc": "2026-10-15T02:09:52Z", "executed": "key", "key": "Down", "pty_offset": 450070}
+{"time_ns": 1792030192496389000, "utc": "2026-10-15T02:09:52Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030192502320000, "utc": "2026-10-15T02:09:52Z", "executed": "key", "key": "Down", "pty_offset": 453252}
+{"time_ns": 1792030192715114000, "utc": "2026-10-15T02:09:52Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030192720552000, "utc": "2026-10-15T02:09:52Z", "executed": "key", "key": "Down", "pty_offset": 456400}
+{"time_ns": 1792030192937249000, "utc": "2026-10-15T02:09:52Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030192942377000, "utc": "2026-10-15T02:09:52Z", "executed": "key", "key": "Down", "pty_offset": 459642}
+{"time_ns": 1792030193153895000, "utc": "2026-10-15T02:09:53Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030193159426000, "utc": "2026-10-15T02:09:53Z", "executed": "key", "key": "Down", "pty_offset": 462825}
+{"time_ns": 1792030193376765000, "utc": "2026-10-15T02:09:53Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030193382023000, "utc": "2026-10-15T02:09:53Z", "executed": "key", "key": "Down", "pty_offset": 465992}
+{"time_ns": 1792030193602825000, "utc": "2026-10-15T02:09:53Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030193608084000, "utc": "2026-10-15T02:09:53Z", "executed": "key", "key": "Down", "pty_offset": 469094}
+{"time_ns": 1792030193827266000, "utc": "2026-10-15T02:09:53Z", "requested": "wait", "args": ["shell commands", "60"], "window": "product"}
+{"time_ns": 1792030254330210000, "utc": "2026-10-15T02:10:54Z", "executed": "wait", "pattern": "shell commands", "matched": false}
+{"time_ns": 1792030254381475000, "utc": "2026-10-15T02:10:54Z", "requested": "screen", "args": ["MOD31-07-inspector-scrolled"], "window": "product"}
+{"time_ns": 1792030261807503000, "utc": "2026-10-15T02:11:01Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030261814254000, "utc": "2026-10-15T02:11:01Z", "executed": "key", "key": "Down", "pty_offset": 510692}
+{"time_ns": 1792030262021374000, "utc": "2026-10-15T02:11:02Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030262027186000, "utc": "2026-10-15T02:11:02Z", "executed": "key", "key": "Down", "pty_offset": 514176}
+{"time_ns": 1792030262244615000, "utc": "2026-10-15T02:11:02Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030262250724000, "utc": "2026-10-15T02:11:02Z", "executed": "key", "key": "Down", "pty_offset": 517488}
+{"time_ns": 1792030262465849000, "utc": "2026-10-15T02:11:02Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030262472777000, "utc": "2026-10-15T02:11:02Z", "executed": "key", "key": "Down", "pty_offset": 520782}
+{"time_ns": 1792030262684457000, "utc": "2026-10-15T02:11:02Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030262690644000, "utc": "2026-10-15T02:11:02Z", "executed": "key", "key": "Down", "pty_offset": 523947}
+{"time_ns": 1792030262906145000, "utc": "2026-10-15T02:11:02Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030262912651000, "utc": "2026-10-15T02:11:02Z", "executed": "key", "key": "Down", "pty_offset": 527017}
+{"time_ns": 1792030263136394000, "utc": "2026-10-15T02:11:03Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030263143671000, "utc": "2026-10-15T02:11:03Z", "executed": "key", "key": "Down", "pty_offset": 530093}
+{"time_ns": 1792030263359659000, "utc": "2026-10-15T02:11:03Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030263367241000, "utc": "2026-10-15T02:11:03Z", "executed": "key", "key": "Down", "pty_offset": 533018}
+{"time_ns": 1792030263590409000, "utc": "2026-10-15T02:11:03Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030263597105000, "utc": "2026-10-15T02:11:03Z", "executed": "key", "key": "Down", "pty_offset": 535732}
+{"time_ns": 1792030263801187000, "utc": "2026-10-15T02:11:03Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030263807556000, "utc": "2026-10-15T02:11:03Z", "executed": "key", "key": "Down", "pty_offset": 538513}
+{"time_ns": 1792030264026653000, "utc": "2026-10-15T02:11:04Z", "requested": "screen", "args": ["MOD31-08-inspector-more"], "window": "product"}
+{"time_ns": 1792030268262058000, "utc": "2026-10-15T02:11:08Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030268267516000, "utc": "2026-10-15T02:11:08Z", "executed": "key", "key": "Down", "pty_offset": 543620}
+{"time_ns": 1792030268482003000, "utc": "2026-10-15T02:11:08Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030268487606000, "utc": "2026-10-15T02:11:08Z", "executed": "key", "key": "Down", "pty_offset": 546547}
+{"time_ns": 1792030268704435000, "utc": "2026-10-15T02:11:08Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030268710054000, "utc": "2026-10-15T02:11:08Z", "executed": "key", "key": "Down", "pty_offset": 549544}
+{"time_ns": 1792030268919964000, "utc": "2026-10-15T02:11:08Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030268925070000, "utc": "2026-10-15T02:11:08Z", "executed": "key", "key": "Down", "pty_offset": 552406}
+{"time_ns": 1792030269143126000, "utc": "2026-10-15T02:11:09Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030269148591000, "utc": "2026-10-15T02:11:09Z", "executed": "key", "key": "Down", "pty_offset": 555298}
+{"time_ns": 1792030269349649000, "utc": "2026-10-15T02:11:09Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030269355315000, "utc": "2026-10-15T02:11:09Z", "executed": "key", "key": "Down", "pty_offset": 558283}
+{"time_ns": 1792030269570052000, "utc": "2026-10-15T02:11:09Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030269575714000, "utc": "2026-10-15T02:11:09Z", "executed": "key", "key": "Down", "pty_offset": 561324}
+{"time_ns": 1792030269790172000, "utc": "2026-10-15T02:11:09Z", "requested": "key", "args": ["Down"], "window": "product"}
+{"time_ns": 1792030269795744000, "utc": "2026-10-15T02:11:09Z", "executed": "key", "key": "Down", "pty_offset": 564319}
+{"time_ns": 1792030270002170000, "utc": "2026-10-15T02:11:10Z", "requested": "screen", "args": ["MOD31-09-inspector-bottom"], "window": "product"}
+{"time_ns": 1792030296961843000, "utc": "2026-10-15T02:11:36Z", "requested": "stop", "args": [], "window": "product"}
+{"time_ns": 1792030296967233000, "utc": "2026-10-15T02:11:36Z", "executed": "stop"}

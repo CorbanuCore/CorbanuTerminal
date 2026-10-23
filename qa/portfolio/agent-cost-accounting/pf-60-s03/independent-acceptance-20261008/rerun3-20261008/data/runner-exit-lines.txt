@@ -1,0 +1,12 @@
+# runner output lines (transcribed); every listed .jsonl ends in turn.completed (captures/exec-json/)
+# RTX (tools/rtxrun.sh -> rtx-execrun.sh), home h-del
+a1 exit=0 real_end=22:38:22
+a2 exit=0 real_end=22:38:23
+vk exit=0 real_end=22:39:58
+sk58s exit=0 real_end=22:40:35      # FAKETIME="@2026-10-08 22:39:09" started at real 22:40:07
+cp1 exit=0 real_end=22:40:51
+# macOS (tools/execrun.sh)
+dev-zai exit=0 real_end=22:44:41
+nu-nousage exit=0 real_end=22:44:41
+def-zai exit=0 real_end=22:44:43    # CORBANU_BIN=corbanu-default, home mh-def
+d1 exit=0 real_end=22:45:00

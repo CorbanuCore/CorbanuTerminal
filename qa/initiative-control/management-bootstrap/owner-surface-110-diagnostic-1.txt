@@ -1,0 +1,58 @@
+test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure (test_slack_transport.TransportTests.test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure) ... 
+  test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure (test_slack_transport.TransportTests.test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure) (prior=None, failure='final-write') ... ERROR
+  test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure (test_slack_transport.TransportTests.test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure) (prior='ingress-held', failure='final-write') ... ERROR
+test_review_rechecks_undrained_events_after_auth (test_slack_transport.TransportTests.test_review_rechecks_undrained_events_after_auth) ... FAIL
+
+======================================================================
+ERROR: test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure (test_slack_transport.TransportTests.test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure) (prior=None, failure='final-write')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_slack_transport.py", line 1665, in test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure
+    self.transport.qualify(ui_evidence(), review)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/slack_transport.py", line 736, in qualify
+    return self._qualify(ui_evidence, gap_review, rollback)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/slack_transport.py", line 797, in _qualify
+    with self.store.lock(), locked(self.store) as value:
+         ~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_alerts.py", line 83, in lock
+    raise d.Invalid() from None
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+======================================================================
+ERROR: test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure (test_slack_transport.TransportTests.test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure) (prior='ingress-held', failure='final-write')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_slack_transport.py", line 1665, in test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure
+    self.transport.qualify(ui_evidence(), review)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/slack_transport.py", line 736, in qualify
+    return self._qualify(ui_evidence, gap_review, rollback)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/slack_transport.py", line 797, in _qualify
+    with self.store.lock(), locked(self.store) as value:
+         ~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_alerts.py", line 83, in lock
+    raise d.Invalid() from None
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+======================================================================
+FAIL: test_review_rechecks_undrained_events_after_auth (test_slack_transport.TransportTests.test_review_rechecks_undrained_events_after_auth)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_slack_transport.py", line 1768, in test_review_rechecks_undrained_events_after_auth
+    self.assertIsNotNone(after["hold"])
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None
+
+----------------------------------------------------------------------
+Ran 2 tests in 2.619s
+
+FAILED (failures=1, errors=2)

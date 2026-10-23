@@ -1,0 +1,53 @@
+
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     loading   /model to change                │
+│ directory: /Volumes/CorbanuDrive/…/panes-a/workspace │
+╰──────────────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.2 via zai standard · <run>/workspace …
+
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.2   /model to change                │
+│ directory: /Volumes/CorbanuDrive/…/panes-a/workspace │
+╰──────────────────────────────────────────────────────╯
+
+
+  New Claude Pane
+  Choose the provider route for Claude Code headless.
+
+  Search Claude providers
+› + GLM 5.2 Ambient      Use Ambient's Claude Code endpoint with the Ambient vault key.
+  + GLM 5.2 Z.AI         Experimental direct Z.AI Anthropic-compatible route; smoke test before relying on it.
+  + GLM 5.2 Baseten      Experimental Baseten Anthropic-compatible route; smoke test before relying on it.
+  + GLM 5.2 OpenRouter   Experimental OpenRouter Anthropic-compatible route; smoke test before relying on it.
+  + GLM 5.2 Vercel       Use Vercel AI Gateway's Anthropic-compatible Claude Code route with the Vercel vault key.
+  + GLM 5.2 Fast Vercel  Use Vercel AI Gateway's fast GLM 5.2 route with the Vercel vault key.
+  + Opus 5 Claude Plan   Use Claude Code's native auth with Opus 5 Claude Plan.
+
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

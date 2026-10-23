@@ -1,0 +1,1 @@
+^[[1m‚M-^@∫^[[0m /cost ^[[2m[YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)^[[0m

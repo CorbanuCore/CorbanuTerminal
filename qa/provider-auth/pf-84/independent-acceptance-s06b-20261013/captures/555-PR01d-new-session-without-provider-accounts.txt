@@ -1,0 +1,40 @@
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       glm-5.3-flash   /model to change           │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word prec
+
+
+• prec
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Z.AI GLM 5.3 Flash                                                │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account default             │
+│  Directory:            $S/ws              │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Z.AI API key configured                                           │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a13447-b711-75c3-a5c0-8e2e83aec110                              │
+│                                                                                          │
+│  Token usage:          7.43K total  (7.4K input + 22 output)                             │
+│  Context window:       100% left (7.43K used / 950K)                                     │
+│  Account usage:        default · 7,404 input · 22 output (19 reasoning)                  │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Find and fix a bug in @filename
+
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: 7.9 tok/s

@@ -1,0 +1,6 @@
+{
+  "findings": [],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "No actionable defects found in the provided change bundle. The adapter preserves descriptor ownership, restricts child execution, and retains cleanup ownership on errors within its documented embedding preconditions. Production integration and asynchronous supervision are explicitly outside this gated increment. Review used the supplied code and evidence; no tests were run.",
+  "overall_confidence": 0.9
+}

@@ -1,0 +1,44 @@
+$ /usage requests 2026-10-06
+  Cost — this conversation
+  Requested UTC day: 2026-10-06
+  This conversation on 2026-10-06 (UTC): no recorded requests.
+  Other conversations on this day, not included above: 7 requests in 1 conversation.
+  • Z.AI · Z.AI GLM 5.2 — Pay per use. 7 requests, 36,646 tokens. Estimated cost: $0.021341 (rounded).
+  Other conversations' estimated cost: $0.021341 (rounded).
+  To see those requests, open that conversation with /resume and run /cost there.
+  Costs are estimates from published prices; your provider's bill is the final amount.
+  —— Details ——
+  No recorded attempts in this conversation or its subagents; collection coverage unknown.
+  ↑↓ scroll · Enter open · Esc back/close
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-06T00:00:00.000Z, 2026-10-07T00:00:00.000Z)
+  Read at: 2026-10-08T16:14:30.909Z; ledger current to: 2026-10-08T16:14:00.638Z (30271 ms behind)
+  Retention: request detail kept since 2026-07-10T16:14:30.909Z; daily totals kept since 2025-10-09; oldest recorded day in this conversation 2026-10-08
+  Known subtotal exact USD: none — no recorded attempts in this conversation
+  Input: 0
+  Noncached input (derived for inclusive input): 0
+  Cache read: 0
+  Cache write: 0
+  Output: 0
+  Reasoning (subset, not separately billed): 0
+  Total (not separately billed): 0
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Unknown parent population: 0 attempts, excluded from root total
+  Estimate versus billed difference: unknown — no settlement evidence
+  —— Open ——
+  → Root's own attempts (none)
+  → Descendant attempts (none)
+  → Unknown provider/model attribution (none)
+  → Unknown parent population (none)
+  Refresh
+  Close
+--- last screen:
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+› Day covered (UTC): [2026-10-06T00:00:00.000Z, 2026-10-07T00:00:00.000Z)
+  ↑↓ scroll · Enter open · Esc back/close

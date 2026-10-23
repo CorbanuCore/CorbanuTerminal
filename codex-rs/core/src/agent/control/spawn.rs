@@ -56,7 +56,11 @@ fn keep_forked_rollout_item(item: &RolloutItem, preserve_reference_context_item:
         // from the parent's durable baseline. Truncated forks drop part of that prompt,
         // so they must rebuild context on their first child turn.
         RolloutItem::TurnContext(_) | RolloutItem::WorldState(_) => preserve_reference_context_item,
-        RolloutItem::Compacted(_) | RolloutItem::EventMsg(_) | RolloutItem::SessionMeta(_) => true,
+        // Origin records are content-keyed: a dropped item's record matches nothing.
+        RolloutItem::Compacted(_)
+        | RolloutItem::EventMsg(_)
+        | RolloutItem::SessionMeta(_)
+        | RolloutItem::SourceOrigin(_) => true,
     }
 }
 
@@ -129,6 +133,23 @@ fn latest_runtime_from_model_context(
         }
     }
     (model, model_provider, reasoning_effort)
+}
+
+/// #1129: the account (`default` included) the newest turn context recorded,
+/// while named accounts were on, when it ran on `provider_id`.
+fn recorded_account_from_model_context<'a>(
+    history: &'a [RolloutItem],
+    provider_id: &str,
+) -> Option<&'a str> {
+    history.iter().rev().find_map(|item| match item {
+        RolloutItem::TurnContext(turn_context) => Some(
+            turn_context
+                .provider_account
+                .as_deref()
+                .filter(|_| turn_context.model_provider.as_deref() == Some(provider_id)),
+        ),
+        _ => None,
+    })?
 }
 
 impl AgentControl {
@@ -318,6 +339,11 @@ impl AgentControl {
             self.touch_loaded_v2_residency(&state, thread_id).await;
             return Ok(());
         }
+        // The caller's runtime provider, before the stored runtime replaces it.
+        let caller = (
+            config.model_provider_id.clone(),
+            config.model_provider.clone(),
+        );
         if self.state.agent_metadata_for_thread(thread_id).is_none() {
             warn!(%thread_id, "cannot cold-load V2 agent without restored metadata");
             return Err(CodexErr::ThreadNotFound(thread_id));
@@ -403,7 +429,7 @@ impl AgentControl {
         } else {
             stored_thread.model_provider.clone()
         };
-        let stored_provider = config
+        let mut stored_provider = config
             .model_providers
             .get(&stored_provider_id)
             .cloned()
@@ -412,6 +438,27 @@ impl AgentControl {
                     "cannot resume agent {thread_id}: persisted provider `{stored_provider_id}` is not configured"
                 ))
             })?;
+        // #1129: back on the account it ran on, or refused.
+        if let Some(recorded) = recorded_account_from_model_context(&history, &stored_provider_id) {
+            crate::config::restore_recorded_agent_account(
+                &config,
+                &stored_provider_id,
+                &mut stored_provider,
+                recorded,
+            )
+            .map_err(CodexErr::InvalidRequest)?;
+        }
+        // #1074: refused before it starts when its connection has no
+        // credential of its own (#689).
+        if let Some(message) = crate::config::resume_default_key_error(
+            &config,
+            &stored_provider_id,
+            &stored_provider,
+            &caller.0,
+            &caller.1,
+        ) {
+            return Err(CodexErr::InvalidRequest(message));
+        }
         config.model = Some(stored_model);
         config.model_provider_id = stored_provider_id;
         config.model_provider = stored_provider;
@@ -701,8 +748,19 @@ impl AgentControl {
 
         match initial_input {
             SpawnInitialInput::UserInput(input) => {
+                // The spawning agent wrote this task; it carries that agent's standing.
+                let sender = options
+                    .parent_thread_id
+                    .or(match notification_source.as_ref() {
+                        Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                            parent_thread_id,
+                            ..
+                        })) => Some(*parent_thread_id),
+                        _ => None,
+                    });
                 self.send_input_after_capacity_check(
                     new_thread.thread_id,
+                    sender,
                     &state,
                     input,
                     options.parent_turn_id,
@@ -883,10 +941,9 @@ impl AgentControl {
             if let Some(parent_developer_instructions) = parent_developer_instructions.as_ref()
                 && let Some(subagent_developer_instructions) =
                     subagent_developer_instructions.as_ref()
-                && let ResponseItem::Message { role, content, .. } = response_item
-                && role == "developer"
+                && matches!(response_item, ResponseItem::Message { role, .. } if role == "developer")
             {
-                content.retain_mut(|content_item| {
+                response_item.retain_message_content(|content_item| {
                     let ContentItem::InputText { text } = content_item else {
                         return true;
                     };
@@ -904,7 +961,10 @@ impl AgentControl {
                     *text = text.replace(parent_developer_instructions, replacement);
                     !text.is_empty()
                 });
-                return !content.is_empty();
+                return !matches!(
+                    response_item,
+                    ResponseItem::Message { content, .. } if content.is_empty()
+                );
             }
 
             true
@@ -947,7 +1007,8 @@ impl AgentControl {
                 | RolloutItem::TurnContext(_)
                 | RolloutItem::InterAgentCommunication(_)
                 | RolloutItem::InterAgentCommunicationMetadata { .. }
-                | RolloutItem::WorldState(_) => true,
+                | RolloutItem::WorldState(_)
+                | RolloutItem::SourceOrigin(_) => true,
             }
         });
         // Full forks reuse the parent's reference context instead of rebuilding it. If that
@@ -1002,27 +1063,45 @@ impl AgentControl {
     }
 
     /// Resume an existing agent thread from a recorded rollout file.
+    #[cfg(test)]
     pub(crate) async fn resume_agent_from_rollout(
         &self,
         config: Config,
         thread_id: ThreadId,
         session_source: SessionSource,
     ) -> CodexResult<ThreadId> {
+        self.resume_agent_tree_from_rollout(config, thread_id, session_source)
+            .await
+            .map(|(thread_id, _)| thread_id)
+    }
+
+    /// Resume an existing agent thread from a recorded rollout file, with its
+    /// open V1 descendants. A descendant that cannot be resumed (its recorded
+    /// account is gone, say) does not fail the resume; it is returned with
+    /// why, after the resumed thread's id, so the caller can tell the model
+    /// and the user (#1144).
+    pub(crate) async fn resume_agent_tree_from_rollout(
+        &self,
+        config: Config,
+        thread_id: ThreadId,
+        session_source: SessionSource,
+    ) -> CodexResult<(ThreadId, Vec<(ThreadId, String)>)> {
         let root_depth = thread_spawn_depth(&session_source).unwrap_or(0);
         let (resumed_thread_id, resumed_multi_agent_version) = Box::pin(
             self.resume_single_agent_from_rollout(config.clone(), thread_id, session_source),
         )
         .await?;
+        let mut refused_descendants = Vec::new();
         let state = self.upgrade()?;
         if config.multi_agent_version_from_features() == MultiAgentVersion::V2
             || resumed_multi_agent_version == MultiAgentVersion::V2
         {
             self.restore_persisted_agent_subtree(resumed_thread_id)
                 .await?;
-            return Ok(resumed_thread_id);
+            return Ok((resumed_thread_id, refused_descendants));
         }
         let Some(agent_graph_store) = state.agent_graph_store() else {
-            return Ok(resumed_thread_id);
+            return Ok((resumed_thread_id, refused_descendants));
         };
 
         let mut resume_queue = VecDeque::from([(thread_id, root_depth)]);
@@ -1067,6 +1146,7 @@ impl AgentControl {
                         Ok((_, _)) => true,
                         Err(err) => {
                             warn!("failed to resume descendant thread {child_thread_id}: {err}");
+                            refused_descendants.push((child_thread_id, err.to_string()));
                             false
                         }
                     }
@@ -1077,12 +1157,12 @@ impl AgentControl {
             }
         }
 
-        Ok(resumed_thread_id)
+        Ok((resumed_thread_id, refused_descendants))
     }
 
     async fn resume_single_agent_from_rollout(
         &self,
-        config: Config,
+        mut config: Config,
         thread_id: ThreadId,
         session_source: SessionSource,
     ) -> CodexResult<(ThreadId, MultiAgentVersion)> {
@@ -1105,6 +1185,35 @@ impl AgentControl {
         let history = load_agent_model_context(&state, thread_id, stored_thread.history_mode)
             .await?
             .ok_or(CodexErr::ThreadNotFound(thread_id))?;
+        // #1129: an agent that ran on another account of its parent's
+        // provider is resumed on that account, or refused.
+        if let Some(recorded) =
+            recorded_account_from_model_context(&history, &config.model_provider_id)
+        {
+            let parent = config.model_provider.clone();
+            let mut provider = parent.clone();
+            crate::config::restore_recorded_agent_account(
+                &config,
+                &config.model_provider_id,
+                &mut provider,
+                recorded,
+            )
+            .map_err(CodexErr::InvalidRequest)?;
+            if provider.account != parent.account {
+                // #1074: its own connection's credential, checked again now
+                // that it may run on the default account.
+                if let Some(message) = crate::config::resume_default_key_error(
+                    &config,
+                    &config.model_provider_id,
+                    &provider,
+                    &config.model_provider_id,
+                    &parent,
+                ) {
+                    return Err(CodexErr::InvalidRequest(message));
+                }
+                config.model_provider = provider;
+            }
+        }
         let initial_history = InitialHistory::Resumed(ResumedHistory {
             conversation_id: thread_id,
             history: Arc::new(history),

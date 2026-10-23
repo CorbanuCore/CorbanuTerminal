@@ -4,6 +4,38 @@
     "AbsolutePathBuf": {
       "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
       "type": "string"
+    },
+    "ForcedLoginMethod": {
+      "enum": [
+        "chatgpt",
+        "api"
+      ],
+      "type": "string"
+    },
+    "RuledOutDefaultLoginPolicy": {
+      "description": "The login restrictions under which a server leaves a ruled-out default OpenAI login in place and refuses to use it.",
+      "properties": {
+        "forcedChatgptWorkspaceId": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "forcedLoginMethod": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ForcedLoginMethod"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
     }
   },
   "properties": {
@@ -22,6 +54,17 @@
     "platformOs": {
       "description": "Operating system for the running app-server target, for example `\"macos\"`, `\"linux\"`, or `\"windows\"`.",
       "type": "string"
+    },
+    "ruledOutDefaultLogin": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/RuledOutDefaultLoginPolicy"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Set when this server leaves a default OpenAI login that its login restrictions rule out in place, never logging it out, and refuses to use it (the `named_accounts` feature is on). Carries those restrictions."
     },
     "userAgent": {
       "type": "string"

@@ -7,6 +7,7 @@ use codex_protocol::models::ResponseItem;
 use codex_tools::ToolSpec;
 use futures::Stream;
 use serde_json::Value;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::pin::Pin;
 use std::task::Context;
@@ -34,6 +35,17 @@ pub struct Prompt {
 
     /// Whether the Responses API should strictly validate `output_schema`.
     pub output_schema_strict: bool,
+
+    /// #578: the producer of this request's provider (see
+    /// `TurnContext::output_producer`). Another producer's items lose their
+    /// IDs on a Responses request, after source labelling looked them up by
+    /// their recorded bytes. `None` leaves every item as recorded.
+    pub(crate) producer: Option<String>,
+
+    /// #688: the flat names `tools` offers for namespaced tools on a wire
+    /// without namespaces, so recorded namespaced calls replay under exactly
+    /// the name offered for them. Empty on wires with namespaces.
+    pub(crate) flat_tool_names: crate::tools::flat_tool_names::FlatToolNames,
 }
 
 impl Default for Prompt {
@@ -45,6 +57,8 @@ impl Default for Prompt {
             base_instructions: BaseInstructions::default(),
             output_schema: None,
             output_schema_strict: true,
+            producer: None,
+            flat_tool_names: Default::default(),
         }
     }
 }
@@ -68,26 +82,32 @@ impl Prompt {
 /// prefix. Some compatible providers instead obey an older contradictory section. Their wire
 /// adapters call this before serialization so persisted audit history remains intact while the
 /// model receives one authoritative permissions/model/mode/environment section.
+///
+/// Sections are keyed by marker and recorded producer, so distinct producers sharing a marker
+/// (such as the host, executor and thread skill catalogs) each keep their newest copy. An
+/// unattributed section, including one persisted before producers were recorded, still replaces
+/// every older section with its marker.
 pub(crate) fn retain_latest_contextual_developer_fragments(items: &mut Vec<ResponseItem>) {
-    let mut seen = HashSet::new();
+    let mut newer_sections = HashMap::<&'static str, NewerSections>::new();
     for item in items.iter_mut().rev() {
-        let ResponseItem::Message { role, content, .. } = item else {
+        let ResponseItem::Message { role, content, .. } = &*item else {
             continue;
         };
         if role != "developer" {
             continue;
         }
 
-        let mut retained = Vec::with_capacity(content.len());
-        for content_item in std::mem::take(content).into_iter().rev() {
-            let keep = crate::event_mapping::contextual_dev_fragment_key(&content_item)
-                .is_none_or(|key| seen.insert(key));
-            if keep {
-                retained.push(content_item);
+        let mut keep = vec![true; content.len()];
+        for (index, content_item) in content.iter().enumerate().rev() {
+            if let Some(marker) = crate::event_mapping::contextual_dev_fragment_key(content_item) {
+                keep[index] = newer_sections
+                    .entry(marker)
+                    .or_default()
+                    .admit(item.context_fragment_source(index));
             }
         }
-        retained.reverse();
-        *content = retained;
+        let mut keep = keep.into_iter();
+        item.retain_message_content(|_| keep.next().unwrap_or(true));
     }
     items.retain(|item| {
         !matches!(
@@ -98,7 +118,30 @@ pub(crate) fn retain_latest_contextual_developer_fragments(items: &mut Vec<Respo
     });
 }
 
-fn strip_image_details(items: &mut [ResponseItem]) {
+/// Newer copies of one contextual developer marker, seen while walking history backwards.
+#[derive(Default)]
+struct NewerSections {
+    unattributed: bool,
+    sources: HashSet<String>,
+}
+
+impl NewerSections {
+    /// Returns whether an older section from `source` is still the newest copy of its source.
+    fn admit(&mut self, source: Option<&str>) -> bool {
+        if self.unattributed {
+            return false;
+        }
+        match source {
+            Some(source) => self.sources.insert(source.to_string()),
+            None => {
+                self.unattributed = true;
+                self.sources.is_empty()
+            }
+        }
+    }
+}
+
+pub(crate) fn strip_image_details(items: &mut [ResponseItem]) {
     for item in items {
         match item {
             ResponseItem::Message { content, .. } => {

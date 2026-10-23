@@ -1,0 +1,9 @@
+# diff -r stage/packet (v2 groups, as run 01:05Z-06:30Z) stage/packet (v2 plus replay prompts, restaged 06:36Z, after the group results were read)
+Only in /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts: G18b.md
+Only in /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts: G21b.md
+# frozen files re-checked against design/FROZEN.sha256 (v1 names; v2 shares them byte for byte):
+64ecf9c951f89d645e0b2eb3243dd422c80436f24fadb4d9283a5daa97239c23  design-cases.md
+203685710b74d3cf864ed00e35a5c6e30e10296ea82ec60ab707b09b53da02d1  amendments.md
+b58cdf0c3cbc98aaefd2d356b2cb88d2c9716cdc295dfb9f4224a3ef7b92fde6  navigation.md
+991e5804e4b598b31f51301fc17a7cdea3e89161663c862ceef7a88c017ba983  executor-prompt.md
+# reasons: tools/replays.json

@@ -64,6 +64,9 @@ pub(crate) struct Session {
     pub(super) git_enrichment_policy: GitEnrichmentPolicy,
     pub(super) fork_persistence: ForkPersistence,
     pub(super) next_internal_sub_id: AtomicU64,
+    /// #564: sampling responses streaming whose usage is not recorded yet
+    /// (see `begin_response_usage`).
+    pub(super) response_usage_pending: watch::Sender<usize>,
 }
 
 #[derive(Clone)]
@@ -92,6 +95,10 @@ pub(crate) struct SessionConfiguration {
     /// When to escalate for approval for execution
     pub(super) approval_policy: Constrained<AskForApproval>,
     pub(super) approvals_reviewer: ApprovalsReviewer,
+    /// #505: a person confirmed Aggressive in `/security` in this process, so
+    /// approval for every command (`untrusted`, reviewer: user) holds until
+    /// the restart; settings updates cannot lower it.
+    pub(super) aggressive_approvals: bool,
     /// Permission profile state for the session. Keep the constrained profile,
     /// active profile id, and profile-defined workspace roots in sync by using
     /// the methods below instead of mutating the fields independently.
@@ -161,6 +168,47 @@ impl SessionConfiguration {
 
     pub(super) fn permission_profile(&self) -> PermissionProfile {
         self.permission_profile_state.permission_profile().clone()
+    }
+
+    /// #505: approval for every command that is not known read-only, decided
+    /// by a person, as Aggressive requires, unless a managed requirement rules
+    /// out the policy or the reviewer (then nothing changes). Internal
+    /// sessions (reviews, compaction, memory) keep their own settings.
+    pub(crate) fn require_approval_for_every_command(
+        &mut self,
+    ) -> crate::security::confirmed_approvals::ApprovalsOutcome {
+        use crate::security::confirmed_approvals::ApprovalsOutcome;
+        match self.try_require_approval_for_every_command() {
+            Ok(true) => ApprovalsOutcome::Held,
+            Ok(false) => ApprovalsOutcome::NotCovered,
+            Err(err) => ApprovalsOutcome::Kept(err.to_string()),
+        }
+    }
+
+    /// [`Self::require_approval_for_every_command`]: whether the session is
+    /// covered (and now holds it), or why a requirement rules it out.
+    fn try_require_approval_for_every_command(&mut self) -> ConstraintResult<bool> {
+        match &self.session_source {
+            SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. }) => {}
+            SessionSource::SubAgent(_) | SessionSource::Internal(_) => return Ok(false),
+            _ => {}
+        }
+        if self.aggressive_approvals {
+            return Ok(true);
+        }
+        self.approval_policy
+            .can_set(&AskForApproval::UnlessTrusted)
+            .and_then(|()| {
+                self.original_config_do_not_use
+                    .config_layer_stack
+                    .requirements()
+                    .approvals_reviewer
+                    .can_set(&ApprovalsReviewer::User)
+            })
+            .and_then(|()| self.approval_policy.set(AskForApproval::UnlessTrusted))?;
+        self.approvals_reviewer = ApprovalsReviewer::User;
+        self.aggressive_approvals = true;
+        Ok(true)
     }
 
     pub(super) fn mcp_inputs_differ(&self, next: &Self) -> bool {
@@ -241,6 +289,15 @@ impl SessionConfiguration {
             parent_thread_id: self.parent_thread_id,
             thread_source: self.thread_source.clone(),
             originator: self.originator.clone(),
+            provider_account: Some(self.provider.account.as_ref().map_or_else(
+                || {
+                    format!(
+                        "{}:default",
+                        self.original_config_do_not_use.model_provider_id
+                    )
+                },
+                ToString::to_string,
+            )),
         }
     }
 
@@ -310,11 +367,21 @@ impl SessionConfiguration {
         if let Some(personality) = updates.personality {
             next_configuration.personality = Some(personality);
         }
-        if let Some(approval_policy) = updates.approval_policy {
-            next_configuration.approval_policy.set(approval_policy)?;
+        // #505: approval for every command, set when a person confirmed
+        // Aggressive, holds until the restart: a client replaying its earlier
+        // values does not lower it.
+        if !next_configuration.aggressive_approvals {
+            if let Some(approval_policy) = updates.approval_policy {
+                next_configuration.approval_policy.set(approval_policy)?;
+            }
+            if let Some(approvals_reviewer) = updates.approvals_reviewer {
+                next_configuration.approvals_reviewer = approvals_reviewer;
+            }
         }
-        if let Some(approvals_reviewer) = updates.approvals_reviewer {
-            next_configuration.approvals_reviewer = approvals_reviewer;
+        if updates.aggressive_approvals {
+            // A requirement that rules it out fails the update: nothing
+            // changes, and the caller reports it.
+            next_configuration.try_require_approval_for_every_command()?;
         }
         if let Some(windows_sandbox_level) = updates.windows_sandbox_level {
             next_configuration.windows_sandbox_level = windows_sandbox_level;
@@ -475,6 +542,9 @@ pub(crate) struct SessionSettingsUpdate {
     pub(crate) personality: Option<Personality>,
     pub(crate) app_server_client_name: Option<String>,
     pub(crate) app_server_client_version: Option<String>,
+    /// #505: require approval for every command (see
+    /// [`SessionConfiguration::require_approval_for_every_command`]).
+    pub(crate) aggressive_approvals: bool,
 }
 
 pub(crate) struct AppServerClientMetadata {
@@ -559,6 +629,19 @@ impl Session {
             session_configuration.collaboration_mode.model(),
             session_configuration.provider
         );
+        // PF-84-S06: a session on a named OpenAI sign-in account uses that
+        // account's manager for everything (requests, refresh, connectors),
+        // never the default login; any other provider uses the default login,
+        // also when spawned from a session on a named account (as after a
+        // mid-session switch, `ActiveAuthManager::follow_provider`).
+        let auth_manager =
+            match codex_model_provider::named_sign_in_account(&session_configuration.provider) {
+                Some(account) => auth_manager.for_named_account_loaded(account).await,
+                None => auth_manager.default_account_manager(),
+            };
+        // PF-27-S05: provider credentials move into the broker before anything
+        // (MCP servers, hooks, tools) starts from this process.
+        crate::model_broker_auth::install_for_config(config.as_ref()).await;
         let forked_from_id = session_configuration
             .forked_from_thread_id
             .or_else(|| initial_history.forked_from_id());
@@ -617,6 +700,13 @@ impl Session {
             }
         });
         let initial_auto_compact_window_ids = AutoCompactWindowIds::new_initial();
+        // PF-23-S03: the stored level and revocations, read again at every
+        // session start; unreadable state is reported below.
+        let security_recovery =
+            crate::security::recovery::recover(config.codex_home.as_path(), config.security_level);
+        let security_recovery_warning = security_recovery
+            .warning()
+            .filter(|warning| !config.startup_warnings.contains(warning));
         let agent_control = agent_control
             .with_session_id(
                 session_id,
@@ -624,8 +714,8 @@ impl Session {
                     .effective_agent_max_threads(MultiAgentVersion::V2)
                     .unwrap_or(usize::MAX),
             )
-            .with_effective_security_policy(
-                config.security_level,
+            .with_recovered_security_policy(
+                security_recovery,
                 thread_id,
                 matches!(
                     session_configuration.session_source,
@@ -831,7 +921,10 @@ impl Session {
                 approval_policy: session_configuration.approval_policy.value().to_string(),
                 sandbox_policy: format!("{:?}", session_configuration.sandbox_policy()),
             };
-            let rollout_thread_trace = if matches!(
+            let rollout_thread_trace = if crate::security::disclosure_gate::active().is_some() {
+                // PF-28-S01: rollout traces record raw tool and model output.
+                ThreadTraceContext::disabled()
+            } else if matches!(
                 session_configuration.session_source,
                 SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. })
             ) {
@@ -854,7 +947,32 @@ impl Session {
                     }),
                 });
             }
-            for message in &config.startup_warnings {
+            let session_file_system_policy = session_configuration.file_system_sandbox_policy();
+            // Issue #536: where each writable root leads when the session
+            // starts; a command is refused once one leads elsewhere.
+            codex_sandboxing::writable_root_ledger::record_writable_roots(
+                &session_file_system_policy,
+                session_configuration.cwd().as_path(),
+            );
+            // Issue #535: configured writable links into another root's
+            // read-only path are left out of the sandbox; say so at launch
+            // (once, not again in each sub-agent's thread).
+            let excluded_writable_links = if session_configuration.session_source.is_non_root_agent()
+            {
+                Vec::new()
+            } else {
+                crate::tools::writable_root_notices::excluded_writable_link_warnings(
+                    thread_id,
+                    &session_file_system_policy,
+                    session_configuration.cwd().as_path(),
+                )
+            };
+            for message in config
+                .startup_warnings
+                .iter()
+                .chain(security_recovery_warning.iter())
+                .chain(excluded_writable_links.iter())
+            {
                 post_session_configured_events.push(Event {
                     id: "".to_owned(),
                     msg: EventMsg::Warning(WarningEvent {
@@ -978,6 +1096,7 @@ impl Session {
                     thread_id,
                     session_telemetry.clone(),
                     state_db_ctx.clone(),
+                    crate::exec_env::all_provider_auth_env_vars(&config),
                 )
             } else {
                 ShellSnapshot::disabled()
@@ -1023,6 +1142,24 @@ impl Session {
             session_configuration.thread_name = thread_name.clone();
             validate_config_lock_if_configured(&session_configuration).await?;
             export_config_lock_if_configured(&session_configuration, thread_id).await?;
+            // #505: a person confirmed Aggressive in this process on this
+            // home: the session starts requiring approval for every command.
+            let started_confirmed =
+                crate::security::confirmed_approvals::confirmed_here(config.codex_home.as_path());
+            if started_confirmed {
+                let outcome = session_configuration.require_approval_for_every_command();
+                crate::security::confirmed_approvals::note_outcome(thread_id, &outcome);
+                if let crate::security::confirmed_approvals::ApprovalsOutcome::Kept(reason) =
+                    &outcome
+                {
+                    post_session_configured_events.push(Event {
+                        id: "".to_owned(),
+                        msg: EventMsg::Warning(WarningEvent {
+                            message: crate::security::confirmed_approvals::kept_warning(reason),
+                        }),
+                    });
+                }
+            }
             let state = SessionState::new_with_auto_compact_window_ids(
                 session_configuration.clone(),
                 initial_auto_compact_window_ids,
@@ -1060,7 +1197,15 @@ impl Session {
                     });
             let (network_proxy, session_network_proxy) =
                 if let Some(spec) = config.permissions.network.as_ref() {
-                    let current_exec_policy = exec_policy.current();
+                    // D52 (#1001): under Aggressive (as the model client reads
+                    // the level), network allow rules saved outside it are
+                    // suspended.
+                    let live_aggressive = crate::client::live_level_of(
+                        config.security_level,
+                        Some(&ingress_policy),
+                        thread_id,
+                    ) == codex_security_policy::SecurityLevel::Aggressive;
+                    let current_exec_policy = exec_policy.current_for(live_aggressive);
                     let (network_proxy, session_network_proxy) = Self::start_managed_network_proxy(
                         spec,
                         current_exec_policy.as_ref(),
@@ -1146,7 +1291,11 @@ impl Session {
                 user_shell: Arc::new(default_shell),
                 show_raw_agent_reasoning: config.show_raw_agent_reasoning,
                 exec_policy,
-                auth_manager: Arc::clone(&auth_manager),
+                active_auth: crate::state::ActiveAuthManager::new(Arc::clone(&auth_manager))
+                    .for_user_session(
+                        !session_configuration.session_source.is_non_root_agent(),
+                        &session_configuration.provider,
+                    ),
                 openai_file_upload_client_pool: RouteAwareClientPool::new_without_request_logging(
                     config.http_client_factory(),
                     ClientRouteClass::Api,
@@ -1176,6 +1325,8 @@ impl Session {
                 managed_network_requirements_configured,
                 network_approval: Arc::clone(&network_approval),
                 state_db: state_db_ctx.clone(),
+                accounting_notices: Default::default(),
+                state_db_fallback_noticed: Default::default(),
                 live_thread: live_thread_init.as_ref().cloned(),
                 thread_store: Arc::clone(&thread_store),
                 attestation_provider: attestation_provider.clone(),
@@ -1202,6 +1353,8 @@ impl Session {
                     config.http_client_factory(),
                 )
                 .with_ingress_policy(config.security_level, ingress_policy)
+                .with_source_envelopes(config.features.enabled(Feature::SourceEnvelopes))
+                .with_source_origin_key(config.codex_home.as_path())
                 .with_prompt_cache_key_override(
                     crate::guardian::prompt_cache_key_override_for_review_session(
                         &session_configuration.session_source,
@@ -1243,11 +1396,44 @@ impl Session {
                 git_enrichment_policy,
                 fork_persistence,
                 next_internal_sub_id: AtomicU64::new(0),
+                response_usage_pending: watch::Sender::new(0),
             });
             if let Some(network_policy_decider_session) = network_policy_decider_session {
                 let mut guard = network_policy_decider_session.write().await;
                 *guard = Arc::downgrade(&sess);
             }
+            // PF-23-S03: a restrictive security transition or the kill switch
+            // revokes this session's brokered credentials.
+            sess.services
+                .agent_control
+                .effective_security_policy()
+                .register_revocation_sink(Arc::downgrade(&sess) as _);
+            // #505: a person's Aggressive confirmation in this process
+            // reaches this session's stored settings.
+            crate::security::confirmed_approvals::register(
+                config.codex_home.as_path(),
+                &sess,
+                started_confirmed,
+            );
+            // #507: turning the kill switch on also stops this session's work.
+            let kill_switch_stop = sess.services.thread_extension_data.get_or_init(|| {
+                crate::security::kill_switch_stop::KillSwitchStop::new(
+                    Arc::downgrade(&sess),
+                    sess.services.agent_control.effective_security_policy(),
+                    tokio::runtime::Handle::current(),
+                )
+            });
+            sess.services
+                .agent_control
+                .effective_security_policy()
+                .register_revocation_sink(Arc::downgrade(&kill_switch_stop) as _);
+            // Extensions own their own model clients - image generation ships on
+            // by default - and those requests are billed to the operator like
+            // any other inference. This is how they record. It is inserted once
+            // the session exists and holds it weakly.
+            sess.services.thread_extension_data.insert(
+                crate::accounting_extensions::ExtensionAccounting::new(Arc::downgrade(&sess)),
+            );
             // Dispatch the SessionConfiguredEvent first and then report any errors.
             // If resuming, include converted initial messages in the payload so UIs can render them immediately.
             let initial_messages = initial_history.get_event_msgs();
@@ -1290,7 +1476,7 @@ impl Session {
             if startup_auth_changed {
                 mcp_auth_changes.mark_unchanged();
             }
-            let latest_auth = sess.services.auth_manager.auth().await;
+            let latest_auth = sess.services.auth_manager().auth().await;
             let mcp_projection = if startup_auth_changed
                 || mcp_auth_changes.has_changed().unwrap_or(false)
             {
@@ -1320,8 +1506,21 @@ impl Session {
             )
             .await?;
             sess.start_mcp_prewarm_worker(mcp_prewarm_rx, mcp_auth_changes);
-            sess.schedule_startup_prewarm(session_configuration.base_instructions.clone())
-                .await;
+            // #403: a conversation the user resumes or forks (restart, `/resume`,
+            // `/side`, editing a message, the first one too: #1038) is a reopen:
+            // its warm-up is shown as such, and can be skipped. A sub-agent or
+            // reviewer started with copied history is not one; its warm-up
+            // stays an ordinary one.
+            let reopened = crate::session_startup_prewarm::is_reopen(
+                &initial_history,
+                &session_configuration.session_source,
+                config.reopened_by_prompt_edit,
+            );
+            sess.schedule_startup_prewarm(
+                session_configuration.base_instructions.clone(),
+                reopened,
+            )
+            .await;
             let session_start_source = match &initial_history {
                 InitialHistory::Resumed(_) => codex_hooks::SessionStartSource::Resume,
                 InitialHistory::New | InitialHistory::Forked(_) => {
@@ -1350,6 +1549,8 @@ impl Session {
             }
             Err(err) => {
                 live_thread_init.discard().await;
+                // #872: its init appends may have failed; nothing writes them now.
+                crate::home_access::note_thread_ended(thread_id);
                 Err(err)
             }
         }

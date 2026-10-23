@@ -1,0 +1,39 @@
+# tui-release-work: bin=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s05-indep-rel-20261011/release/corbanu home=$S/homes/hr args: --account work
+--- after prompt ---
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s05acc/ws │
+╰──────────────────────────────────────────────────────╯
+⚠ Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set
+  `suppress_unstable_features_warning = true` in $S/homes/hr/config.toml.
+› Reply with exactly the word pong and nothing else.
+• pong
+› Improve documentation in @filename
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: 0.7 tok/s
+--- /status ---
+/status
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Z.AI GLM 5.3 Flash                                                │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account work                │
+│  Directory:            $S/ws               │
+│  Permissions:          Next turn: Workspace (Ask for approval)                           │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Z.AI API key configured                                           │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12b39-60af-7853-853c-3c56ba8f00ed                              │
+│                                                                                          │
+│  Token usage:          7.76K total  (7.76K input + 3 output)                             │
+│  Context window:       100% left (8.34K used / 950K)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+› Improve documentation in @filename
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: 0.7 tok/s
+--- /cost ---
+• Unrecognized command '/cost'. Type "/" for a list of supported commands.
+› /cost
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: 0.7 tok/s
+--- exit ---
+Token usage: total=7,764 input=7,761 (+ 576 cached) output=3
+To continue this session, run corbanu resume 01a12b39-60af-7853-853c-3c56ba8f00ed
+EXITED-0

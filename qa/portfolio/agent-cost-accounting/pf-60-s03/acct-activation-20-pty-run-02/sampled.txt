@@ -1,0 +1,55 @@
+╭───────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                 │
+│                                               │
+│ model:     gpt-5.6-sol low   /model to change │
+│ directory: ~/work                             │
+╰───────────────────────────────────────────────╯
+
+
+› Reply with fixture completion.
+
+
+⚠ Code Mode is unavailable because failed to spawn code-mode host /Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/
+  portfolio/agent-cost-accounting/pf-60-s03/acct-activation-20-artifacts/codex-code-mode-host: host executable was not found. Code mode will
+  fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.
+
+• Activation fixture complete.
+
+
+› Find and fix a bug in @filename
+
+  GPT-5.6-Sol low · ~/work · Corbanu Terminal · TPS: 29.7 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,16 @@
+{
+ "agent": "01a13d29-2fc3-78d0-ac25-d635465b478d",
+ "verdict": "fail",
+ "round": 2,
+ "start": "2026-10-15T01:24:31Z",
+ "end": "2026-10-15T01:32:28Z",
+ "record_commit": "e6a82c669a",
+ "usage": {
+  "input_tokens": 14229621,
+  "cached_input_tokens": 14010337,
+  "cache_write_input_tokens": 219144,
+  "output_tokens": 39733,
+  "reasoning_output_tokens": 0
+ },
+ "note": "prompt as sent has a stray duplicated half-line before item 6 (an integrator editing slip); the content is otherwise the round-1 prompt plus item 6"
+}

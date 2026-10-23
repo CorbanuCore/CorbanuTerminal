@@ -700,6 +700,12 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadInjectItemsResponse,
     },
+    /// Report a model request the client sent itself, so it reaches the ledger.
+    ThreadRecordSentModelRequest => "thread/recordSentModelRequest" {
+        params: v2::ThreadRecordSentModelRequestParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadRecordSentModelRequestResponse,
+    },
     SkillsList => "skills/list" {
         params: v2::SkillsListParams,
         serialization: global_shared_read("config"),
@@ -3185,12 +3191,20 @@ mod tests {
 
     #[test]
     fn account_serializes_fields_in_camel_case() -> Result<()> {
-        let api_key = v2::Account::ApiKey {};
+        let api_key = v2::Account::ApiKey {
+            env_var: Some("OPENAI_API_KEY".to_string()),
+        };
         assert_eq!(
             json!({
                 "type": "apiKey",
+                "envVar": "OPENAI_API_KEY",
             }),
             serde_json::to_value(&api_key)?,
+        );
+        // Older servers omit `envVar`.
+        assert_eq!(
+            serde_json::from_value::<v2::Account>(json!({ "type": "apiKey" }))?,
+            v2::Account::ApiKey { env_var: None },
         );
 
         let chatgpt = v2::Account::Chatgpt {

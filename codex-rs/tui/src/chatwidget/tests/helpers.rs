@@ -18,14 +18,25 @@ pub(super) async fn test_config() -> Config {
     config.codex_home = codex_home.abs();
     config.sqlite = codex_state::SqliteConfig::new_for_testing(codex_home.as_path().abs());
     config.log_dir = codex_home.join("log");
-    config.cwd = PathBuf::from(test_path_display("/tmp/project")).abs();
+    config.cwd = test_project_path().abs();
     config.config_layer_stack = ConfigLayerStack::default();
     config.startup_warnings.clear();
     config
 }
 
+/// Display form of the chat widget's test cwd. On Windows it has the same
+/// width as `/tmp/project` (and the same `project` basename), so footers that
+/// overflow 80 columns truncate at the same place on every platform.
+pub(super) fn test_cwd_display() -> String {
+    if cfg!(windows) {
+        r"C:\t\project".to_string()
+    } else {
+        "/tmp/project".to_string()
+    }
+}
+
 pub(super) fn test_project_path() -> PathBuf {
-    PathBuf::from(test_path_display("/tmp/project"))
+    PathBuf::from(test_cwd_display())
 }
 
 pub(super) fn cache_test_project_root(chat: &mut ChatWidget, root_name: Option<&str>) {
@@ -47,12 +58,23 @@ pub(super) fn truncated_path_variants(path: &str) -> Vec<String> {
 }
 
 pub(super) fn normalize_snapshot_paths(text: impl Into<String>) -> String {
-    let mut text = text.into();
+    let mut text = crate::status::snapshot_helpers::normalize_snapshot_version(&text.into());
 
     for unix_path in ["/tmp/project", "/tmp/hooks.json"] {
         let platform_path = test_path_display(unix_path);
         if platform_path != unix_path {
             text = text.replace(&platform_path, unix_path);
+        }
+    }
+    let test_cwd = test_cwd_display();
+    if test_cwd != "/tmp/project" {
+        text = text.replace(&test_cwd, "/tmp/project");
+        for platform_prefix in truncated_path_variants(&test_cwd).into_iter().rev() {
+            let unix_prefix: String = "/tmp/project"
+                .chars()
+                .take(platform_prefix.chars().count())
+                .collect();
+            text = text.replace(&format!("{platform_prefix}…"), &format!("{unix_prefix}…"));
         }
     }
 
@@ -80,7 +102,7 @@ pub(super) fn normalized_backend_snapshot<T: std::fmt::Display>(value: &T) -> St
     let rendered = format!("{value}");
 
     if platform_test_cwd == "/tmp/project" {
-        return rendered;
+        return normalize_snapshot_paths(rendered);
     }
 
     rendered
@@ -99,6 +121,21 @@ pub(super) fn normalized_backend_snapshot<T: std::fmt::Display>(value: &T) -> St
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+#[test]
+fn backend_snapshot_normalizes_status_header_and_update_version() {
+    let version = crate::version::CODEX_CLI_VERSION;
+    let rendered = format!(
+        "\"│ >_ Corbanu Terminal (v{version})│\"\n\"│ Update available! {version} -> 9.9.9│\""
+    );
+    let padding = " ".repeat(version.len() - 3);
+    assert_eq!(
+        normalized_backend_snapshot(&rendered),
+        format!(
+            "\"│ >_ Corbanu Terminal (v<V>){padding}│\"\n\"│ Update available! <V> -> 9.9.9{padding}│\""
+        )
+    );
 }
 
 pub(super) fn invalid_value(
@@ -176,12 +213,22 @@ fn set_config_provider_for_test_model(config: &mut Config, model: &str) {
             codex_model_provider_info::ZAI_PROVIDER_ID.to_string(),
             codex_model_provider_info::ModelProviderInfo::create_zai_provider(),
         ))
+    } else if trimmed == codex_model_provider_info::KIMI_CODE_K3_MODEL {
+        Some((
+            codex_model_provider_info::KIMI_CODE_PROVIDER_ID.to_string(),
+            codex_model_provider_info::ModelProviderInfo::create_kimi_code_provider(),
+        ))
     } else if matches!(
         trimmed,
         codex_model_provider_info::OPENROUTER_DEFAULT_MODEL
             | "minimax/minimax-m3"
             | "openrouter/owl-alpha"
             | "google/gemini-3.5-flash"
+            // Served by OpenRouter and by Vercel both, so the model alone
+            // cannot say which provider a session is on. That is precisely why
+            // the picker reads the configured provider, and why this mapping
+            // has to exist for a fixture that claims to be on OpenRouter.
+            | "moonshotai/kimi-k3"
     ) {
         Some((
             codex_model_provider_info::OPENROUTER_PROVIDER_ID.to_string(),
@@ -492,6 +539,7 @@ pub(super) fn handle_token_count(chat: &mut ChatWidget, info: Option<TokenUsageI
                             last: token_usage_breakdown(info.last_token_usage),
                             model_context_window: info.model_context_window,
                         },
+                        account_usage: None,
                     },
                 ),
                 /*replay_kind*/ None,
@@ -1810,4 +1858,11 @@ fn hook_event_label(event_name: codex_app_server_protocol::HookEventName) -> &'s
         codex_app_server_protocol::HookEventName::SubagentStop => "SubagentStop",
         codex_app_server_protocol::HookEventName::Stop => "Stop",
     }
+}
+
+/// Answer an approval prompt with a decision key: the key highlights its
+/// option and Enter confirms it.
+pub(super) fn press_approval_shortcut(chat: &mut ChatWidget, key: char) {
+    chat.handle_key_event(KeyEvent::new(KeyCode::Char(key), KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 }

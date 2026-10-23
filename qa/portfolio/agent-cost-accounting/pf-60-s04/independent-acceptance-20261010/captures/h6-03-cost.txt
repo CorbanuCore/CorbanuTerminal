@@ -1,0 +1,95 @@
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     gpt-5.6-terra low   /model to change │
+│ directory: ~/corbanu-rtx/pf60s04-ia/work/ws     │
+╰─────────────────────────────────────────────────╯
+
+› Reply with the single word LUNA.
+• LUNA
+› /model/exit
+⚠ This session was recorded with model `gpt-5.6-luna` but is resuming with `gpt-5.6-terra`. Consider switching back to `gpt-5.6-luna` as it may affect Codex
+  performance.
+› Reply with the single word TERRA.
+⚠ Code Mode is unavailable because failed to spawn code-mode host <rtx-home>/corbanu-rtx/pf60s04-ia/bin/codex-code-mode-host: host executable was not found.
+  Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.
+• TERRA
+  Cost — this conversation
+  Requested UTC day: 2026-10-10
+› Today (UTC) in this conversation:
+  • OpenAI · GPT-5.6-Luna — Pay per use. 3 requests, 37,871 tokens. Estimated cost: $0.005813 (rounded).
+  • OpenAI · GPT-5.6-Terra — Pay per use. 2 requests, 24,284 tokens. Estimated cost: $0.055490 (rounded).
+  No other conversation recorded requests on this day.
+  Costs are estimates from published prices; OpenAI doesn't report its charges — check OpenAI's bill.
+  Select a provider below to see its requests.
+  —— Details ——
+  Estimated token cost for recorded attempts: $0.061303 (rounded)
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Today (UTC) in this conversation:
+› • OpenAI · GPT-5.6-Luna — Pay per use. 3 requests, 37,871 tokens. Estimated cost: $0.005813 (rounded).
+› • OpenAI · GPT-5.6-Terra — Pay per use. 2 requests, 24,284 tokens. Estimated cost: $0.055490 (rounded).
+› No other conversation recorded requests on this day.
+› Costs are estimates from published prices; OpenAI doesn't report its charges — check OpenAI's bill.
+› Select a provider below to see its requests.
+› —— Details ——
+› Estimated token cost for recorded attempts: $0.061303 (rounded)
+› Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+› Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+› Snapshot is not current; newer activity is unverified
+  Snapshot is not current; newer activity is unverified
+› Day covered (UTC): [2026-10-10T00:00:00.000Z, 2026-10-11T00:00:00.000Z)
+  Day covered (UTC): [2026-10-10T00:00:00.000Z, 2026-10-11T00:00:00.000Z)
+› Read at: 2026-10-10T06:24:25.817Z; ledger current to: 2026-10-10T06:24:21.692Z (4125 ms behind)
+  Read at: 2026-10-10T06:24:25.817Z; ledger current to: 2026-10-10T06:24:21.692Z (4125 ms behind)
+› Retention: request detail kept since 2026-07-12T06:24:25.817Z; daily totals kept since 2025-10-11; oldest recorded day in this conversation 2026-10-10
+  Retention: request detail kept since 2026-07-12T06:24:25.817Z; daily totals kept since 2025-10-11; oldest recorded day in this conversation 2026-10-10
+› Known subtotal exact USD: 0.06130286
+  Known subtotal exact USD: 0.06130286
+› Input: 62,137
+  Input: 62,137
+› Noncached input (derived for inclusive input): 21,113
+  Noncached input (derived for inclusive input): 21,113
+› Cache read: 13,643
+  Cache read: 13,643
+› Cache write: 27,381
+  Cache write: 27,381
+› Output: 18
+  Output: 18
+› Reasoning (subset, not separately billed): 0
+  Reasoning (subset, not separately billed): 0
+› Total (not separately billed): 62,155
+  Total (not separately billed): 62,155
+› Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+› Unknown parent population: 0 attempts, excluded from root total
+  Unknown parent population: 0 attempts, excluded from root total
+› —— Open ——
+  —— Open ——
+› → OpenAI · GPT-5.6-Luna — estimated $0.005813 (rounded) (3 requests)
+  → OpenAI · GPT-5.6-Luna — estimated $0.005813 (rounded) (3 requests)
+› → OpenAI · GPT-5.6-Terra — estimated $0.055490 (rounded) (2 requests)
+  → OpenAI · GPT-5.6-Terra — estimated $0.055490 (rounded) (2 requests)
+› → Request 1 · OpenAI · GPT-5.6-Luna · estimated $0.002110 (rounded)
+  → Request 1 · OpenAI · GPT-5.6-Luna · estimated $0.002110 (rounded)
+› → Request 2 · OpenAI · GPT-5.6-Luna · estimated $0.003419 (rounded)
+  → Request 2 · OpenAI · GPT-5.6-Luna · estimated $0.003419 (rounded)
+› → Request 3 · OpenAI · GPT-5.6-Luna · estimated $0.000284 (rounded)
+  → Request 3 · OpenAI · GPT-5.6-Luna · estimated $0.000284 (rounded)
+› → Request 4 · OpenAI · GPT-5.6-Terra · estimated $0.021104
+  → Request 4 · OpenAI · GPT-5.6-Terra · estimated $0.021104
+› → Request 5 · OpenAI · GPT-5.6-Terra · estimated $0.034386 (rounded)
+  → Request 5 · OpenAI · GPT-5.6-Terra · estimated $0.034386 (rounded)
+› → Root's own attempts (5 attempts)
+  → Root's own attempts (5 attempts)
+› → Descendant attempts (none)
+  → Descendant attempts (none)
+› → Unknown provider/model attribution (none)
+  → Unknown provider/model attribution (none)
+› → Unknown parent population (none)
+  → Unknown parent population (none)
+› Refresh
+  Refresh
+› Close

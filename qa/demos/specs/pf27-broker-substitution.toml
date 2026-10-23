@@ -1,0 +1,70 @@
+# PF-27-S04 isolated credential broker. Needs the synthetic GitHub Enterprise fixture:
+# see qa/security-levels/sprints/PF-27-S04/isolated-broker-20261006/README.md (GH_HOST,
+# SSL_CERT_FILE exported; GH_ENTERPRISE_TOKEN passed with --credential ...=file:...).
+id = "pf27-broker-substitution"
+feature = "Isolated credential broker: the agent holds a dummy, the broker adds the real token"
+expected = "The broker process is running. The agent's GH_ENTERPRISE_TOKEN hashes to something other than 946ae98e9fbe, yet the server reports authorized: true and received sha 946ae98e9fbe."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+isolated_credential_broker = true
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+
+[features.network_proxy.domains]
+"127.0.0.1.nip.io" = "allow"
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"check.sh" = '''
+printf 'agent env token sha256: %s\n' "$(printf %s "$GH_ENTERPRISE_TOKEN" | shasum -a 256 | cut -c1-12)"
+curl -sS https://127.0.0.1.nip.io:8443/api/v3/user -H "Authorization: Bearer $GH_ENTERPRISE_TOKEN"
+echo
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "!ps -ax -o pid,ppid,command | grep -e --codex-run-as-credential-broker | grep -v grep"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "└\\s+\\d+\\s+\\d+\\s+/\\S+"
+
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "Run sh check.sh once and show me its raw output, then stop."
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "\"authorized\": true"
+timeout = 180
+compress = 3
+
+[[steps]]
+pause = 4.0

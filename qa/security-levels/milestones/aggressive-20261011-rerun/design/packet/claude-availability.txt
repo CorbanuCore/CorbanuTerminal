@@ -1,0 +1,1 @@
+Claude Code in the test machine (checked 2026-10-12T04:40Z, guest "macOS 3"): not installed (no claude on PATH, Homebrew or user bin folders). The test machine has no network except the Z.AI inference relay, so it cannot be installed there for this run. Cases that need a Claude pane will be recorded as blocked.

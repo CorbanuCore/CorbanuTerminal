@@ -1,0 +1,20 @@
+/status
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                GPT-5.4 (reasoning medium, summaries auto)                        │
+│  Model provider:       Amazon Bedrock - http://127.0.0.1:34631/openai/v1 · account work  │
+│  Directory:            /Volumes/CorbanuDrive/Corbanu/.codex-work/s06acc/ws               │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Amazon Bedrock AWS credentials                                    │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12e80-fe34-75a3-ae65-6b5305124bff                              │
+│                                                                                          │
+│  Token usage:          0 total  (0 input + 0 output)                                     │
+│  Account usage:        work · no usage yet                                               │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+› Find and fix a bug in @filename
+  GPT-5.4 via amazon-bedrock default · /Volumes/CorbanuDrive/Corbanu/.codex-work/s06acc/ws · Corbanu Terminal · TPS: -- tok/s

@@ -1,0 +1,19 @@
+ Grant this command?
+ Under Aggressive an approval never lifts the write protections (shell and git startup files, git hooks and config outside the project's .git). This grant lets
+ exactly this command run without them; a file written this way can run code later, outside the sandbox. Credential files and the Corbanu home stay unreadable,
+ and Corbanu's own files and the project's .git, .codex and .agents read-only: that is never granted under Aggressive.
+   Agent       human:session:01a12d1f-9cf7-7302-80a0-24a10a5df1a2 → agent:01a12d1f-9cf7-7302-80a0-24a10a5df1a2
+   Session     01a12d1f-9cf7-7302-80a0-24a10a5df1a2
+   Action      execute
+   Resource    protected_data/sandbox_protected_paths
+   Command     $ printf x > .codex/notes.toml; echo codex=$?; printf x > .git/hooks/post-merge; echo hook=$?
+   Folder      <runs>/after/ws
+   Digest      command:sha256:716f3a5e2bdbcdafedcfd0f5a04ea6a9346dc69e170b8b23378c41c6b7f0a9cc
+   Destination none
+   Limit       1 run (press u for any run until it expires)
+   Expires     10 minutes after you confirm, or at a level change, revocation, kill switch or restart
+ Still denied: any other command or folder, this command a second time, its parent, sibling and child agents, other sessions, and everything else Aggressive
+ denies.
+ › Back to the approval (nothing granted)
+   Grant and run
+ ↑/↓ choose · enter confirm · u change limit · esc back to the approval

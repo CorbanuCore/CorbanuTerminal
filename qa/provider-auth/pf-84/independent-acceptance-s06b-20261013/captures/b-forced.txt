@@ -1,0 +1,143 @@
+## CAND 53c02c9301 (origin/main); BASE 82b1b2cf32 (main before #561) (main before #604)
+
+### 1 CAND default=API key, forced chatgpt, --account chat (named ChatGPT: allowed)
+   default auth.json: 4a089ca8527f9c78
+$ run $S/bin/corbanu-cand $S/homes/f1 exec --skip-git-repo-check -C $S/ws -c forced_login_method="chatgpt" --account chat Reply with exactly: pong
+mock: chatgpt named gen1
+mock: chatgpt named gen1
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "named", "gen": 1, "expired": false}, "model": null}
+   default auth.json: 4a089ca8527f9c78
+
+### 1b BASE same
+   default auth.json: 4a089ca8527f9c78
+$ run $S/bin/corbanu-base $S/homes/f1b exec --skip-git-repo-check -C $S/ws -c forced_login_method="chatgpt" --account chat Reply with exactly: pong
+mock: chatgpt named gen1
+mock: chatgpt named gen1
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "named", "gen": 1, "expired": false}, "model": null}
+   default auth.json: ABSENT
+
+### 2 CAND default=API key, forced chatgpt, --account key (named API key: refused)
+   default auth.json: 4a089ca8527f9c78
+$ run $S/bin/corbanu-cand $S/homes/f2 exec --skip-git-repo-check -C $S/ws -c forced_login_method="chatgpt" --account key Reply with exactly: pong
+Error: thread/start: thread/start failed: account `key` holds an OpenAI API key, but this configuration requires a ChatGPT sign-in; sign in with `corbanu login --account key` (code -32600)
+[exit 1]
+   default auth.json: 4a089ca8527f9c78
+
+### 2b BASE same
+   default auth.json: 4a089ca8527f9c78
+$ run $S/bin/corbanu-base $S/homes/f2b exec --skip-git-repo-check -C $S/ws -c forced_login_method="chatgpt" --account key Reply with exactly: pong
+Error: thread/start: thread/start failed: account `key` holds an OpenAI API key, but this configuration requires a ChatGPT sign-in; sign in with `corbanu login --account key` (code -32600)
+[exit 1]
+   default auth.json: ABSENT
+
+### 3 CAND default=API key, forced chatgpt, default session (old enforcement expected)
+   default auth.json: 4a089ca8527f9c78
+$ run $S/bin/corbanu-cand $S/homes/f3 exec --skip-git-repo-check -C $S/ws -c forced_login_method="chatgpt" Reply with exactly: pong
+ERROR: OpenAI rejected the request because no ChatGPT sign-in was found. This configuration requires one: run `corbanu login`, url: http://127.0.0.1:34723/v1/responses
+ERROR: OpenAI rejected the request because no ChatGPT sign-in was found. This configuration requires one: run `corbanu login`, url: http://127.0.0.1:34723/v1/responses
+[exit 1]
+   mock: {"ev": "responses-401-noauth", "path": "/v1/responses", "who": {"scheme": "none"}, "model": "gpt-5.4"}
+   default auth.json: ABSENT
+
+### 5 CAND default=ChatGPT, forced api, --account key (allowed)
+   default auth.json: 83a6cfb51e88cd64
+$ run $S/bin/corbanu-cand $S/homes/f5 exec --skip-git-repo-check -C $S/ws -c forced_login_method="api" --account key Reply with exactly: pong
+mock: bearer keyacct
+mock: bearer keyacct
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "keyacct"}, "model": "gpt-5.4"}
+   default auth.json: 83a6cfb51e88cd64
+
+### 5b BASE same
+   default auth.json: 3e797b93badfdba6
+$ run $S/bin/corbanu-base $S/homes/f5b exec --skip-git-repo-check -C $S/ws -c forced_login_method="api" --account key Reply with exactly: pong
+mock: bearer keyacct
+mock: bearer keyacct
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "keyacct"}, "model": "gpt-5.4"}
+   default auth.json: ABSENT
+
+### 6 CAND default=ChatGPT, forced api, --account chat (named ChatGPT: refused)
+   default auth.json: 45e495e49a3cb60f
+$ run $S/bin/corbanu-cand $S/homes/f6 exec --skip-git-repo-check -C $S/ws -c forced_login_method="api" --account chat Reply with exactly: pong
+Error: thread/start: thread/start failed: account `chat` holds a ChatGPT sign-in, but this configuration requires an API key; use `corbanu login --account chat --with-api-key` (code -32600)
+[exit 1]
+   default auth.json: 45e495e49a3cb60f
+
+### 7 CAND default=ChatGPT ws-main, forced ws-other, --account key
+   default auth.json: d3403b9c97916f21
+$ run $S/bin/corbanu-cand $S/homes/f7 exec --skip-git-repo-check -C $S/ws -c forced_chatgpt_workspace_id="ws-other" --account key Reply with exactly: pong
+mock: bearer keyacct
+mock: bearer keyacct
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "keyacct"}, "model": "gpt-5.4"}
+   default auth.json: d3403b9c97916f21
+
+### 7b BASE same
+   default auth.json: a0945861963f9ae8
+$ run $S/bin/corbanu-base $S/homes/f7b exec --skip-git-repo-check -C $S/ws -c forced_chatgpt_workspace_id="ws-other" --account key Reply with exactly: pong
+Login is restricted to workspace(s) ws-other, but current credentials belong to ws-main. Logging out.
+[exit 1]
+   default auth.json: ABSENT
+
+### 8 CAND default=ChatGPT ws-main, forced ws-other, --account chato (ws-other: allowed)
+   default auth.json: 9613ced1b1f6a86f
+$ run $S/bin/corbanu-cand $S/homes/f8 exec --skip-git-repo-check -C $S/ws -c forced_chatgpt_workspace_id="ws-other" --account chato Reply with exactly: pong
+mock: chatgpt namedo@ws=other gen1
+mock: chatgpt namedo@ws=other gen1
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "namedo@ws=other", "gen": 1, "expired": false}, "model": null}
+   default auth.json: 9613ced1b1f6a86f
+
+### 9 CAND default=ChatGPT ws-main, forced ws-other, --account chat (ws-main: refused)
+   default auth.json: 8e5f33f1f07018b4
+$ run $S/bin/corbanu-cand $S/homes/f9 exec --skip-git-repo-check -C $S/ws -c forced_chatgpt_workspace_id="ws-other" --account chat Reply with exactly: pong
+Error: thread/start: thread/start failed: account `chat` is signed in to a ChatGPT workspace this configuration does not allow; sign in again with `corbanu login --account chat` (code -32600)
+[exit 1]
+   default auth.json: 8e5f33f1f07018b4
+
+### 10 CAND default=API key, forced chatgpt, --account chat with CODEX_API_KEY and OPENAI_API_KEY decoys
+   default auth.json: 4a089ca8527f9c78
+$ run $S/bin/corbanu-cand $S/homes/f10 exec --skip-git-repo-check -C $S/ws -c forced_login_method="chatgpt" --account chat Reply with exactly: pong
+mock: chatgpt named gen1
+mock: chatgpt named gen1
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "named", "gen": 1, "expired": false}, "model": null}
+   default auth.json: 4a089ca8527f9c78
+### 10b same, --account key (named API key under forced chatgpt, decoys set): refused by the named check, not 'Logging out'
+$ run $S/bin/corbanu-cand $S/homes/f10 exec --skip-git-repo-check -C $S/ws -c forced_login_method="chatgpt" --account key Reply with exactly: pong
+Error: thread/start: thread/start failed: account `key` holds an OpenAI API key, but this configuration requires a ChatGPT sign-in; sign in with `corbanu login --account key` (code -32600)
+[exit 1]
+   default auth.json: 4a089ca8527f9c78
+
+### 11 CAND exec resume of a named thread under forced chatgpt (default=API key)
+thread: 01a13443-d055-7b62-8280-cfe165a2458e
+   default auth.json: 4a089ca8527f9c78
+$ run $S/bin/corbanu-cand $S/homes/f11 exec --skip-git-repo-check -C $S/ws -c forced_login_method="chatgpt" resume 01a13443-d055-7b62-8280-cfe165a2458e Reply with exactly: pong
+mock: chatgpt named gen1
+258
+mock: chatgpt named gen1
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "named", "gen": 1, "expired": false}, "model": null}
+   default auth.json: 4a089ca8527f9c78
+### 11b the same thread resumed with no restriction (control)
+$ run $S/bin/corbanu-cand $S/homes/f11 exec --skip-git-repo-check -C $S/ws resume 01a13443-d055-7b62-8280-cfe165a2458e Reply with exactly: pong
+mock: chatgpt named gen1
+387
+mock: chatgpt named gen1
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "named", "gen": 1, "expired": false}, "model": null}
+   default auth.json: 4a089ca8527f9c78
+
+### 12 CAND login status / account list under the restriction (default=API key, forced chatgpt)
+$ run $S/bin/corbanu-cand $S/homes/f11 -c forced_login_method="chatgpt" login status
+Logged in using an API key - sk-canar***y-S6B
+[exit 0]
+$ run $S/bin/corbanu-cand $S/homes/f11 -c forced_login_method="chatgpt" account list openai
+openai	chat	chatgpt_auth	ChatGPT sign-in · n…@example.com · Plus
+openai	chato	chatgpt_auth	ChatGPT sign-in · n…@example.com · Plus
+openai	key	chatgpt_auth	OpenAI API key
+[exit 0]
+   default auth.json: 4a089ca8527f9c78

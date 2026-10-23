@@ -1,0 +1,33 @@
+
+######## B572 on BASE (corbanu-base)
+#572: TUI on Z.AI; /providers -> Amazon Bedrock · work -> Use for this session; /model -> Other tab
+• New session: requests to amazon-bedrock use account `work`.
+› Find and fix a bug in @filename
+  Z.AI GLM 5.3 Flash via zai medium · $S/ws · Corbanu Terminal · TPS: -- tok/s
+-- /model, tab right of Z.AI:
+│                                                       │
+│ model:       glm-5.3-flash medium   /model to change  │
+│ directory:   $S/ws │
+│ permissions: YOLO mode                                │
+╰───────────────────────────────────────────────────────�
+To continue this session, run corbanu resume 01a12ecc-5337-7f81-a173-27b8e590d745
+• New session: requests to amazon-bedrock use account `work`.
+  Select Model and Effort
+  Configured custom providers
+  OpenAI  Z.AI  [Other]
+› 1. Z.AI GLM 5.2 via zai-anthropic  Model: glm-5.2. GLM 5.2 through the Z.AI API, billed per token.
+  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back
+pick: /GPT-5.4/ not found
+  Configured custom providers
+  OpenAI  Z.AI  [Other]
+› 1. Z.AI GLM 5.2 via zai-anthropic  Model: glm-5.2. GLM 5.2 through the Z.AI API, billed per token.
+  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back
+send_line: composer never showed the text
+-- mock lines for this turn:
+• New session: requests to amazon-bedrock use account `work`.
+  Select Model and Effort
+  Configured custom providers
+  OpenAI  Z.AI  [Other]
+› 1. Z.AI GLM 5.2 via zai-anthropic  Model: glm-5.2. GLM 5.2 through the Z.AI API, billed per token.
+  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back
+send_line: composer never showed the text

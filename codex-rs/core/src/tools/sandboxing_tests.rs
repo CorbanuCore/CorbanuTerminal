@@ -287,3 +287,302 @@ fn exec_server_env_keeps_command_native_and_carries_sandbox_context() {
     assert!(!request.exec_server_enforce_managed_network);
     assert_eq!(request.exec_server_managed_network, Some(managed_network));
 }
+
+/// PF-27-S02: drives `env_for` / `env_for_exec_server` with an explicit armed
+/// contract (the process-wide one is never armed in unit tests).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn pf_27_s02_env_for_applies_the_launch_contract() {
+    use crate::security::launch_contract::LaunchContract;
+    use std::ffi::OsString;
+
+    const RAW: &str = "ghp_pf27s02EnvForCanary000000000000000000000";
+    let codex_home_dir = tempfile::tempdir().expect("codex home");
+    let workspace_dir = tempfile::tempdir().expect("workspace");
+    let codex_home =
+        AbsolutePathBuf::from_absolute_path(codex_home_dir.path()).expect("absolute home");
+    let cwd = AbsolutePathBuf::from_absolute_path(workspace_dir.path()).expect("absolute cwd");
+    let contract = LaunchContract::capture(
+        &codex_home,
+        [(OsString::from("GITHUB_TOKEN"), OsString::from(RAW))],
+        /*hardened*/ true,
+    );
+    let cwd_uri = PathUri::from_abs_path(&cwd);
+    let exec_server_permissions = codex_protocol::models::PermissionProfile::workspace_write();
+    let permissions = exec_server_permissions
+        .clone()
+        .materialize_project_roots_with_workspace_roots(std::slice::from_ref(&cwd));
+    let manager = SandboxManager::new();
+    let sandbox = if cfg!(target_os = "macos") {
+        SandboxType::MacosSeatbelt
+    } else {
+        SandboxType::LinuxSeccomp
+    };
+    let linux_sandbox_exe = std::path::PathBuf::from("/bin/true");
+    let mut attempt = SandboxAttempt {
+        sandbox,
+        sandbox_requested: true,
+        permissions: &permissions,
+        exec_server_permissions: &exec_server_permissions,
+        enforce_managed_network: false,
+        manager: &manager,
+        sandbox_cwd: &cwd_uri,
+        workspace_roots: std::slice::from_ref(&cwd_uri),
+        codex_linux_sandbox_exe: Some(&linux_sandbox_exe),
+        use_legacy_landlock: false,
+        windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel::Disabled,
+        windows_sandbox_private_desktop: false,
+        network_denial_cancellation_token: None,
+        network_proxy: None,
+    };
+    let command = |args: &[&str], env: &[(&str, &str)]| SandboxCommand {
+        program: "/bin/sh".into(),
+        args: args.iter().map(ToString::to_string).collect(),
+        cwd: cwd_uri.clone(),
+        env: env
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .collect(),
+        managed_network: None,
+        additional_permissions: None,
+    };
+    let options = || crate::sandboxing::ExecOptions {
+        expiration: crate::exec::ExecExpiration::DefaultTimeout,
+        capture_policy: crate::exec::ExecCapturePolicy::ShellTool,
+    };
+    let refusal = |result: Result<crate::sandboxing::ExecRequest, CodexErr>| match result {
+        Err(err) => err.to_string(),
+        Ok(_) => "accepted".to_string(),
+    };
+
+    // Accepted: the protected profile denies the vault store; raw values are scrubbed.
+    let request = attempt
+        .env_for_with_contract(
+            Some(&contract),
+            command(&["-c", "true"], &[("LEAK", RAW), ("PATH", "/usr/bin")]),
+            options(),
+            /*network*/ None,
+            /*environment_id*/ None,
+        )
+        .expect("protected launch");
+    assert!(request.env.values().all(|value| value != RAW));
+    assert!(
+        !request
+            .permission_profile
+            .file_system_sandbox_policy()
+            .can_read_path_with_cwd(codex_home.join("secrets").as_path(), cwd.as_path())
+    );
+
+    // Refused: login shell, raw argv, unsandboxed attempt, remote environment.
+    assert!(
+        refusal(attempt.env_for_with_contract(
+            Some(&contract),
+            command(&["-lc", "true"], &[]),
+            options(),
+            /*network*/ None,
+            /*environment_id*/ None,
+        ))
+        .contains("Protected launch refused: login shells")
+    );
+    assert!(
+        refusal(attempt.env_for_with_contract(
+            Some(&contract),
+            command(&["-c", &format!("echo {RAW}")], &[]),
+            options(),
+            /*network*/ None,
+            /*environment_id*/ None,
+        ))
+        .contains("command line contains a managed secret")
+    );
+    assert!(
+        refusal(attempt.env_for_exec_server_with_contract(
+            Some(&contract),
+            command(&["-c", "true"], &[]),
+            options(),
+        ))
+        .contains("remote environment")
+    );
+    attempt.sandbox = SandboxType::None;
+    attempt.sandbox_requested = false;
+    assert!(
+        refusal(attempt.env_for_with_contract(
+            Some(&contract),
+            command(&["-c", "true"], &[]),
+            options(),
+            /*network*/ None,
+            /*environment_id*/ None,
+        ))
+        .contains("outside the OS sandbox")
+    );
+    // Without a contract the same unsandboxed launch is unchanged.
+    assert_eq!(
+        refusal(attempt.env_for_with_contract(
+            /*contract*/ None,
+            command(&["-c", "true"], &[]),
+            options(),
+            /*network*/ None,
+            /*environment_id*/ None,
+        )),
+        "accepted"
+    );
+}
+
+/// PF-27-S06: on Windows the contract accepts only launches that run under
+/// the elevated sandbox; the unelevated restricted-token one is refused.
+#[cfg(windows)]
+#[test]
+fn pf_27_s06_env_for_requires_the_elevated_windows_sandbox() {
+    use crate::security::launch_contract::LaunchContract;
+    use codex_protocol::config_types::WindowsSandboxLevel;
+
+    let codex_home_dir = tempfile::tempdir().expect("codex home");
+    let workspace_dir = tempfile::tempdir().expect("workspace");
+    let codex_home =
+        AbsolutePathBuf::from_absolute_path(codex_home_dir.path()).expect("absolute home");
+    let cwd = AbsolutePathBuf::from_absolute_path(workspace_dir.path()).expect("absolute cwd");
+    let contract = LaunchContract::capture(&codex_home, std::iter::empty(), /*hardened*/ true);
+    let cwd_uri = PathUri::from_abs_path(&cwd);
+    let exec_server_permissions = codex_protocol::models::PermissionProfile::workspace_write();
+    let permissions = exec_server_permissions
+        .clone()
+        .materialize_project_roots_with_workspace_roots(std::slice::from_ref(&cwd));
+    let manager = SandboxManager::new();
+    let mut attempt = SandboxAttempt {
+        sandbox: SandboxType::WindowsRestrictedToken,
+        sandbox_requested: true,
+        permissions: &permissions,
+        exec_server_permissions: &exec_server_permissions,
+        enforce_managed_network: false,
+        manager: &manager,
+        sandbox_cwd: &cwd_uri,
+        workspace_roots: std::slice::from_ref(&cwd_uri),
+        codex_linux_sandbox_exe: None,
+        use_legacy_landlock: false,
+        windows_sandbox_level: WindowsSandboxLevel::RestrictedToken,
+        windows_sandbox_private_desktop: false,
+        network_denial_cancellation_token: None,
+        network_proxy: None,
+    };
+    let launch = |attempt: &SandboxAttempt<'_>| {
+        attempt
+            .env_for_with_contract(
+                Some(&contract),
+                SandboxCommand {
+                    program: "cmd.exe".into(),
+                    args: vec!["/D".to_string(), "/C".to_string(), "echo ok".to_string()],
+                    cwd: cwd_uri.clone(),
+                    env: std::collections::HashMap::new(),
+                    managed_network: None,
+                    additional_permissions: None,
+                },
+                crate::sandboxing::ExecOptions {
+                    expiration: crate::exec::ExecExpiration::DefaultTimeout,
+                    capture_policy: crate::exec::ExecCapturePolicy::ShellTool,
+                },
+                /*network*/ None,
+                /*environment_id*/ None,
+            )
+            .map(|_| ())
+            .map_err(|err| err.to_string())
+    };
+    let refused = launch(&attempt).expect_err("unelevated launch refused");
+    assert!(refused.contains("unelevated Windows sandbox"), "{refused}");
+    attempt.windows_sandbox_level = WindowsSandboxLevel::Elevated;
+    match launch(&attempt) {
+        Ok(()) => {}
+        // Before the elevated sandbox's first setup its users group does not
+        // exist, and the launch is refused rather than left unprotected.
+        Err(refused)
+            if codex_windows_sandbox::resolve_sid("CodexSandboxUsers").is_err()
+                && refused.contains("not set up yet") => {}
+        Err(refused) => panic!("elevated launch refused: {refused}"),
+    }
+}
+
+/// #300: the unelevated Windows sandbox cannot block reads, so the tool path
+/// (`env_for`) refuses a profile with deny-read entries, as
+/// `process_exec_tool_call` does. The same profile without the deny entry,
+/// and the elevated backend, are unaffected.
+#[test]
+fn sec_win_300_unelevated_tool_path_refuses_deny_read_profiles() {
+    use codex_protocol::config_types::WindowsSandboxLevel;
+    use codex_protocol::models::PermissionProfile;
+    use codex_protocol::permissions::NetworkSandboxPolicy;
+
+    let workspace_dir = tempfile::tempdir().expect("workspace");
+    let cwd = AbsolutePathBuf::from_absolute_path(
+        dunce::canonicalize(workspace_dir.path()).expect("canonical workspace"),
+    )
+    .expect("absolute cwd");
+    let secret = cwd.join("secret.env");
+    std::fs::write(&secret, "sec-win-300").expect("secret file");
+    let cwd_uri = PathUri::from_abs_path(&cwd);
+    let base = PermissionProfile::workspace_write()
+        .materialize_project_roots_with_workspace_roots(std::slice::from_ref(&cwd));
+    let (mut file_system, _) = base.to_runtime_permissions();
+    file_system.entries.push(FileSystemSandboxEntry {
+        path: FileSystemPath::Path {
+            path: secret.clone(),
+        },
+        access: FileSystemAccessMode::Deny,
+        missing_path_behavior: None,
+    });
+    let denying =
+        PermissionProfile::from_runtime_permissions(&file_system, NetworkSandboxPolicy::Restricted);
+    let manager = SandboxManager::new();
+    let launch = |permissions: &PermissionProfile, level: WindowsSandboxLevel| {
+        SandboxAttempt {
+            sandbox: SandboxType::WindowsRestrictedToken,
+            sandbox_requested: true,
+            permissions,
+            exec_server_permissions: permissions,
+            enforce_managed_network: false,
+            manager: &manager,
+            sandbox_cwd: &cwd_uri,
+            workspace_roots: std::slice::from_ref(&cwd_uri),
+            codex_linux_sandbox_exe: None,
+            use_legacy_landlock: false,
+            windows_sandbox_level: level,
+            windows_sandbox_private_desktop: false,
+            network_denial_cancellation_token: None,
+            network_proxy: None,
+        }
+        .env_for_with_contract(
+            /*contract*/ None,
+            SandboxCommand {
+                program: "cmd.exe".into(),
+                args: vec!["/D".to_string(), "/C".to_string(), "echo ok".to_string()],
+                cwd: cwd_uri.clone(),
+                env: HashMap::new(),
+                managed_network: None,
+                additional_permissions: None,
+            },
+            crate::sandboxing::ExecOptions {
+                expiration: crate::exec::ExecExpiration::DefaultTimeout,
+                capture_policy: crate::exec::ExecCapturePolicy::ShellTool,
+            },
+            /*network*/ None,
+            /*environment_id*/ None,
+        )
+    };
+
+    let refused = launch(&denying, WindowsSandboxLevel::RestrictedToken)
+        .expect_err("the unelevated tool path must refuse a deny-read profile");
+    assert_eq!(
+        refused.to_string(),
+        format!(
+            "unsupported operation: {}",
+            codex_sandboxing::UNELEVATED_DENY_READ_REFUSAL
+        )
+    );
+    launch(&base, WindowsSandboxLevel::RestrictedToken)
+        .expect("a profile without deny-read entries still runs unelevated");
+    let elevated = launch(&denying, WindowsSandboxLevel::Elevated)
+        .expect("the elevated backend enforces deny-read entries");
+    assert!(
+        elevated
+            .windows_sandbox_filesystem_overrides
+            .is_some_and(|overrides| overrides.additional_deny_read.contains_path(&secret)),
+        "the elevated launch carries the deny entry"
+    );
+}

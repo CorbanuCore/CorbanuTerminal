@@ -586,7 +586,10 @@ where
             (CredentialUsageOutcome::Cancelled, None) if stored_reservation.dispatch_authorized => {
                 stored_reservation.reserved
             }
-            (CredentialUsageOutcome::Cancelled, None) => CredentialUsage::new(1, 0, 0, 0),
+            (CredentialUsageOutcome::Cancelled, None) => CredentialUsage::new(
+                /*requests*/ 1, /*tokens*/ 0, /*bytes*/ 0,
+                /*spend_microunits*/ 0,
+            ),
             (CredentialUsageOutcome::Unknown, None) => stored_reservation.reserved,
             (
                 CredentialUsageOutcome::Completed | CredentialUsageOutcome::Partial,

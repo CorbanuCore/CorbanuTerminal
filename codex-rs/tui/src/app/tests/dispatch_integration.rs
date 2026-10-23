@@ -12,8 +12,10 @@ use core_test_support::responses::sse_completed;
 use wiremock::MockServer;
 use wiremock::ResponseTemplate;
 
+/// D106 (#1176): an assignment's birth brief for a Manager in a pane the
+/// person opened goes to that pane's mailbox, as for an agent-opened pane.
 #[tokio::test]
-async fn operator_assignment_birth_brief_routes_as_normal_user_pane_turn() {
+async fn operator_assignment_birth_brief_routes_through_the_mailbox() {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
     write_test_whip(
         &app,
@@ -46,13 +48,13 @@ async fn operator_assignment_birth_brief_routes_as_normal_user_pane_turn() {
     let mut manager_tasks = Vec::new();
     while let Ok(event) = app_event_rx.try_recv() {
         match event {
-            AppEvent::SubmitCodexUserPaneTask { thread_id, task }
-                if thread_id == manager_thread_id =>
-            {
+            AppEvent::SubmitSpawnAgentTask {
+                thread_id, task, ..
+            } if thread_id == manager_thread_id => {
                 manager_tasks.push(task);
             }
-            AppEvent::SubmitSpawnAgentTask { thread_id, .. } if thread_id == manager_thread_id => {
-                panic!("operator-owned Manager must never receive a collaboration mailbox task");
+            AppEvent::CodexOp(_) | AppEvent::SubmitThreadOp { .. } => {
+                panic!("an agent's task must never reach the Manager as the person's input");
             }
             _ => {}
         }
@@ -446,6 +448,7 @@ fn direct_orc_task_reaches_provider_through_core_mailbox_without_prompt_wrapper(
             .send(AppEvent::SubmitSpawnAgentTask {
                 thread_id: target,
                 task: "run the direct acceptance command".to_string(),
+                sent_while_kill_switch_on: false,
             });
 
         fixture
@@ -471,42 +474,166 @@ fn direct_orc_task_reaches_provider_through_core_mailbox_without_prompt_wrapper(
     })
 }
 
+/// Whether `item` is a user message whose text is exactly `text`.
+fn is_user_text(item: &serde_json::Value, text: &str) -> bool {
+    item.get("type").and_then(serde_json::Value::as_str) == Some("message")
+        && item.get("role").and_then(serde_json::Value::as_str) == Some("user")
+        && item
+            .get("content")
+            .and_then(serde_json::Value::as_array)
+            .is_some_and(|content| {
+                content
+                    .iter()
+                    .any(|span| span.get("text").and_then(serde_json::Value::as_str) == Some(text))
+            })
+}
+
+/// The developer messages of `request` (settings such as approval and
+/// sandbox are given to the model there), without the TUI's per-turn spawn
+/// context, which a typed turn carries too.
+fn developer_texts(request: &core_test_support::responses::ResponsesRequest) -> Vec<String> {
+    request
+        .input()
+        .into_iter()
+        .filter(|item| item.get("role").and_then(serde_json::Value::as_str) == Some("developer"))
+        .map(|item| item.to_string())
+        .filter(|text| !text.contains("<pfterminal_spawn_context>"))
+        .collect()
+}
+
+/// D95 (#1146): a task the person types in Spawn status's "Send task to"
+/// prompt reaches the Orc as the person's own input, a plain user message as
+/// if typed in its pane, with no inter-agent wrapper. A task another agent
+/// sends the same Orc is unchanged: it still arrives as an inter-agent
+/// message (which source envelopes label untrusted). The person's task sends
+/// no settings: even with the TUI's own approval policy and the pane's cached
+/// settings changed, the Orc's settings (its developer messages) stay as
+/// they were.
 #[test]
-fn operator_pane_dispatch_starts_normal_turn_with_target_session_model() -> Result<()> {
+fn spawn_status_person_task_reaches_child_as_user_input() -> Result<()> {
     run_dispatch_integration(|| async {
         let mock = MockServer::start().await;
-        let responses = mount_sse_repeating(&mock, sse_completed("operator-pane-response")).await;
+        let responses = mount_sse_repeating(&mock, sse_completed("orc-person-response")).await;
         let mut fixture = RealDispatchFixture::start(&mock, /*max_threads*/ 3).await?;
-        fixture
-            .app
-            .handle_event(
-                &mut fixture.tui,
-                &mut fixture.server,
-                AppEvent::CreateCodexPane {
-                    model: "dispatch-worker-model".to_string(),
-                    provider: Some("dispatch_mock".to_string()),
-                    effort: None,
-                    display_name: Some("Worker".to_string()),
-                },
-            )
-            .await?;
-        let target = fixture
-            .app
-            .active_thread_id
-            .expect("created operator pane is selected");
-        assert_ne!(target, fixture.root);
+        let target = fixture.spawn_target("Snaga").await?;
+        let idle = move |app: &App| {
+            app.agent_navigation
+                .get(&target)
+                .is_some_and(|entry| !entry.is_running)
+        };
 
-        // Exercise inactive-pane routing: dispatch must use the target's cached session instead of
-        // whichever model happens to be visible in Main.
-        fixture.app.active_thread_id = Some(fixture.root);
-        let task = "run the operator-pane acceptance command";
+        // A task from an agent: unchanged.
+        let agent_task = "agent relayed task 1146";
         fixture
             .app
             .app_event_tx
-            .send(AppEvent::SubmitCodexUserPaneTask {
+            .send(AppEvent::SubmitSpawnAgentTask {
                 thread_id: target,
-                task: task.to_string(),
+                task: agent_task.to_string(),
+                sent_while_kill_switch_on: false,
             });
+        fixture
+            .route_until(std::time::Duration::from_secs(20), |app| {
+                !responses.requests().is_empty() && idle(app)
+            })
+            .await?;
+        let agent_request = responses.requests().into_iter().last().expect("request");
+        let items = agent_request.input();
+        let serialized = serde_json::to_string(&items)?;
+        assert!(
+            pending_agent_message_text(&agent_request).contains(agent_task),
+            "{serialized}"
+        );
+        assert!(
+            !items.iter().any(|item| is_user_text(item, agent_task)),
+            "{serialized}"
+        );
+        assert!(
+            serialized.contains(&format!(
+                "<inter_agent_message sender=\\\"/root\\\" recipient=\\\"/root/orc_snaga\\\">\\n{agent_task}\\n</inter_agent_message>"
+            )),
+            "{serialized}"
+        );
+
+        // Settings the person's task must not send: the TUI's own approval
+        // policy and the pane's cached session.
+        fixture.app.config.permissions.approval_policy = codex_config::Constrained::allow_any(
+            codex_app_server_protocol::AskForApproval::Never.to_core(),
+        );
+        if let Some(channel) = fixture.app.thread_event_channels.get(&target) {
+            let mut store = channel.store.lock().await;
+            if let Some(session) = store.session.as_mut() {
+                session.approval_policy = codex_app_server_protocol::AskForApproval::Never;
+                session.permission_profile = codex_protocol::models::PermissionProfile::Disabled;
+                session.active_permission_profile = None;
+                session.model = "not-the-orc-model".to_string();
+            }
+        }
+
+        // What the prompt does with the text the person typed.
+        let person_task = "run the person's acceptance command 1146";
+        let before = responses.requests().len();
+        (crate::spawn_orchestration::spawn_agent_task_prompt_submit(
+            fixture.app.app_event_tx.clone(),
+            target,
+        ))(format!("  {person_task}\n"));
+        fixture
+            .route_until(std::time::Duration::from_secs(20), |app| {
+                responses.requests().len() > before && idle(app)
+            })
+            .await?;
+        let person_request = responses.requests().into_iter().last().expect("request");
+        let items = person_request.input();
+        let serialized = serde_json::to_string(&items)?;
+        assert!(
+            items.iter().any(|item| is_user_text(item, person_task)),
+            "{serialized}"
+        );
+        assert!(
+            !pending_agent_message_text(&person_request).contains(person_task),
+            "{serialized}"
+        );
+        assert!(
+            !serialized.contains(&format!("{person_task}\\n</inter_agent_message>")),
+            "{serialized}"
+        );
+        assert!(
+            !serialized.contains("corbanu_untrusted_data"),
+            "{serialized}"
+        );
+        // No settings changed: the same developer messages as before, and the
+        // Orc's own model.
+        pretty_assertions::assert_eq!(
+            developer_texts(&person_request),
+            developer_texts(&agent_request),
+            "{serialized}"
+        );
+        pretty_assertions::assert_eq!(
+            person_request.body_json()["model"],
+            agent_request.body_json()["model"]
+        );
+        fixture.server.shutdown().await?;
+        Ok(())
+    })
+}
+
+/// D95 review: a pane its parent controls takes no typed input, so a task the
+/// person sends it from Spawn status is not made their input: it goes as
+/// before, as an inter-agent message.
+#[test]
+fn spawn_status_person_task_to_parent_owned_pane_stays_a_message() -> Result<()> {
+    run_dispatch_integration(|| async {
+        let mock = MockServer::start().await;
+        let responses = mount_sse_repeating(&mock, sse_completed("orc-owned-response")).await;
+        let mut fixture = RealDispatchFixture::start(&mock, /*max_threads*/ 3).await?;
+        let target = fixture.spawn_target("Snaga").await?;
+        fixture.app.agent_navigation.mark_parent_owned(target);
+
+        let task = "task for a parent-owned pane 1146";
+        (crate::spawn_orchestration::spawn_agent_task_prompt_submit(
+            fixture.app.app_event_tx.clone(),
+            target,
+        ))(task.to_string());
         fixture
             .route_until(std::time::Duration::from_secs(20), |app| {
                 !responses.requests().is_empty()
@@ -516,101 +643,149 @@ fn operator_pane_dispatch_starts_normal_turn_with_target_session_model() -> Resu
                         .is_some_and(|entry| !entry.is_running)
             })
             .await?;
-
-        let requests = responses.requests();
-        pretty_assertions::assert_eq!(requests.len(), 1);
-        let request = &requests[0];
+        let request = responses.requests().into_iter().last().expect("request");
+        let items = request.input();
+        let serialized = serde_json::to_string(&items)?;
         assert!(
-            request
-                .message_input_texts("user")
-                .join("\n")
-                .contains(task)
+            pending_agent_message_text(&request).contains(task),
+            "{serialized}"
         );
         assert!(
-            !request
-                .body_json()
-                .to_string()
-                .contains("<inter_agent_message ")
-        );
-        pretty_assertions::assert_eq!(
-            request
-                .body_json()
-                .get("model")
-                .and_then(serde_json::Value::as_str),
-            Some("dispatch-worker-model")
+            !items.iter().any(|item| is_user_text(item, task)),
+            "{serialized}"
         );
         fixture.server.shutdown().await?;
         Ok(())
     })
 }
 
+/// Creates a pane as the person does in `/panes` and returns its thread,
+/// leaving Main selected.
+async fn create_person_opened_pane(fixture: &mut RealDispatchFixture) -> Result<ThreadId> {
+    fixture
+        .app
+        .handle_event(
+            &mut fixture.tui,
+            &mut fixture.server,
+            AppEvent::CreateCodexPane {
+                model: "dispatch-worker-model".to_string(),
+                provider: Some("dispatch_mock".to_string()),
+                effort: None,
+                display_name: Some("Worker".to_string()),
+            },
+        )
+        .await?;
+    let target = fixture
+        .app
+        .active_thread_id
+        .expect("created operator pane is selected");
+    assert_ne!(target, fixture.root);
+    let entry = fixture
+        .app
+        .agent_navigation
+        .get(&target)
+        .expect("pane entry")
+        .clone();
+    assert!(
+        fixture
+            .app
+            .is_operator_owned_codex_user_pane(target, &entry)
+    );
+    fixture.app.active_thread_id = Some(fixture.root);
+    Ok(target)
+}
+
+/// D106 (#1176): an agent's task for a pane the person opened in `/panes`
+/// reaches it as an inter-agent message from its mailbox (labelled untrusted
+/// data), not as the person's input, and runs on that pane's own model. A
+/// task the person sends the same pane from Spawn status is still their own
+/// input (D95).
 #[test]
-fn operator_pane_dispatch_defers_contended_store_without_blocking_ui() -> Result<()> {
+fn agent_task_to_person_opened_pane_arrives_as_mailbox_data() -> Result<()> {
     run_dispatch_integration(|| async {
         let mock = MockServer::start().await;
-        let responses =
-            mount_sse_repeating(&mock, sse_completed("deferred-operator-response")).await;
+        let responses = mount_sse_repeating(&mock, sse_completed("operator-pane-response")).await;
         let mut fixture = RealDispatchFixture::start(&mock, /*max_threads*/ 3).await?;
-        fixture
-            .app
-            .handle_event(
-                &mut fixture.tui,
-                &mut fixture.server,
-                AppEvent::CreateCodexPane {
-                    model: "dispatch-worker-model".to_string(),
-                    provider: Some("dispatch_mock".to_string()),
-                    effort: None,
-                    display_name: Some("Worker".to_string()),
-                },
-            )
-            .await?;
-        let target = fixture
-            .app
-            .active_thread_id
-            .expect("created operator pane is selected");
-        let store = Arc::clone(
-            &fixture
-                .app
-                .thread_event_channels
+        let target = create_person_opened_pane(&mut fixture).await?;
+        let idle = move |app: &App| {
+            app.agent_navigation
                 .get(&target)
-                .expect("operator pane event channel")
-                .store,
-        );
-        let store_guard = store.lock().await;
-        let task = "submit after the thread store becomes available";
+                .is_some_and(|entry| !entry.is_running)
+        };
 
-        tokio::time::timeout(
-            std::time::Duration::from_millis(250),
-            fixture.app.handle_event(
-                &mut fixture.tui,
-                &mut fixture.server,
-                AppEvent::SubmitCodexUserPaneTask {
-                    thread_id: target,
-                    task: task.to_string(),
-                },
-            ),
-        )
-        .await
-        .expect("contended dispatch must return control to the UI")?;
-        assert!(
-            responses.requests().is_empty(),
-            "submission must wait for a coherent session snapshot"
-        );
-
-        drop(store_guard);
+        // The route agents' tasks take (assignment fires, model dispatch).
+        // A /spawn crew that is read-only does not stop it: the pane is not
+        // part of that crew.
+        fixture.app.spawn_legacy_read_only = true;
+        let agent_task = "agent task for a person-opened pane 1176";
         fixture
-            .route_until(std::time::Duration::from_secs(20), |_| {
-                !responses.requests().is_empty()
+            .app
+            .send_native_task_event(target, agent_task.to_string());
+        fixture
+            .route_until(std::time::Duration::from_secs(20), |app| {
+                !responses.requests().is_empty() && idle(app)
             })
             .await?;
-
         let requests = responses.requests();
         pretty_assertions::assert_eq!(requests.len(), 1);
+        let agent_request = &requests[0];
+        let items = agent_request.input();
+        let serialized = serde_json::to_string(&items)?;
         assert!(
-            requests[0]
+            pending_agent_message_text(agent_request).contains(agent_task),
+            "{serialized}"
+        );
+        assert!(
+            !items.iter().any(|item| is_user_text(item, agent_task)),
+            "{serialized}"
+        );
+        assert!(
+            !agent_request
                 .message_input_texts("user")
-                .join("\n")
-                .contains(task)
+                .iter()
+                .any(|text| text == agent_task),
+            "{serialized}"
+        );
+        // #1248: the sender's `/root` is Main's tree, not the pane's own; the
+        // recipient is told which tree sent it.
+        let root = fixture.root;
+        assert!(
+            serialized.contains(&format!(
+                "<inter_agent_message sender=\\\"/root\\\" recipient=\\\"/root\\\">\\nSender: agent /root in another pane's agent tree (thread {root}), not this pane's /root\\n{agent_task}\\n</inter_agent_message>"
+            )),
+            "{serialized}"
+        );
+        pretty_assertions::assert_eq!(
+            agent_request
+                .body_json()
+                .get("model")
+                .and_then(serde_json::Value::as_str),
+            Some("dispatch-worker-model")
+        );
+
+        fixture.app.spawn_legacy_read_only = false;
+
+        // The person's own task from Spawn status: unchanged, their input.
+        let person_task = "person task for a person-opened pane 1176";
+        (crate::spawn_orchestration::spawn_agent_task_prompt_submit(
+            fixture.app.app_event_tx.clone(),
+            target,
+        ))(person_task.to_string());
+        fixture
+            .route_until(std::time::Duration::from_secs(20), |app| {
+                responses.requests().len() > 1 && idle(app)
+            })
+            .await?;
+        let person_request = responses.requests().into_iter().last().expect("request");
+        let items = person_request.input();
+        let serialized = serde_json::to_string(&items)?;
+        assert!(
+            items.iter().any(|item| is_user_text(item, person_task)),
+            "{serialized}"
+        );
+        assert!(
+            !pending_agent_message_text(&person_request).contains(person_task),
+            "{serialized}"
         );
         fixture.server.shutdown().await?;
         Ok(())
@@ -659,6 +834,7 @@ fn cold_restored_orc_task_is_readmitted_through_core_mailbox() -> Result<()> {
             .send(AppEvent::SubmitSpawnAgentTask {
                 thread_id: target,
                 task: "seed the child rollout before restart".to_string(),
+                sent_while_kill_switch_on: false,
             });
         fixture
             .route_until(std::time::Duration::from_secs(20), |app| {
@@ -706,6 +882,7 @@ fn cold_restored_orc_task_is_readmitted_through_core_mailbox() -> Result<()> {
             .send(AppEvent::SubmitSpawnAgentTask {
                 thread_id: target,
                 task: "run the cold-restored acceptance command".to_string(),
+                sent_while_kill_switch_on: false,
             });
         fixture
             .route_until(std::time::Duration::from_secs(20), |app| {
@@ -761,6 +938,7 @@ fn real_event_path_preserves_fifo_when_mailbox_coalesces_turns() -> Result<()> {
                 .send(AppEvent::SubmitSpawnAgentTask {
                     thread_id: target,
                     task: task.to_string(),
+                    sent_while_kill_switch_on: false,
                 });
         }
 
@@ -901,6 +1079,7 @@ fn three_real_turns_saturate_and_one_release_schedules_one_followup() -> Result<
                 .send(AppEvent::SubmitSpawnAgentTask {
                     thread_id: *target,
                     task: format!("capacity-target-{index}-initial"),
+                    sent_while_kill_switch_on: false,
                 });
         }
 
@@ -921,6 +1100,7 @@ fn three_real_turns_saturate_and_one_release_schedules_one_followup() -> Result<
                 .send(AppEvent::SubmitSpawnAgentTask {
                     thread_id: *target,
                     task: format!("capacity-target-{index}-followup"),
+                    sent_while_kill_switch_on: false,
                 });
         }
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
@@ -996,6 +1176,7 @@ fn mailbox_delivery_wakes_waiting_target_without_turn_start_fallback() -> Result
             .send(AppEvent::SubmitSpawnAgentTask {
                 thread_id: target,
                 task: initial_task.to_string(),
+                sent_while_kill_switch_on: false,
             });
         fixture
             .route_until(std::time::Duration::from_secs(10), |app| {
@@ -1012,6 +1193,7 @@ fn mailbox_delivery_wakes_waiting_target_without_turn_start_fallback() -> Result
             .send(AppEvent::SubmitSpawnAgentTask {
                 thread_id: target,
                 task: steer_task.to_string(),
+                sent_while_kill_switch_on: false,
             });
         fixture
             .route_until(std::time::Duration::from_secs(10), |_| {
@@ -1054,6 +1236,7 @@ fn queue_bound_rejection_is_visible_and_accepts_nothing() -> Result<()> {
             .send(AppEvent::SubmitSpawnAgentTask {
                 thread_id: target,
                 task: "x".repeat(crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES + 1),
+                sent_while_kill_switch_on: false,
             });
         for _ in 0..20 {
             fixture.route_once().await?;
@@ -1107,6 +1290,7 @@ fn low_context_agent_compacts_and_continues_real_dispatch() -> Result<()> {
             .send(AppEvent::SubmitSpawnAgentTask {
                 thread_id: target,
                 task: before.to_string(),
+                sent_while_kill_switch_on: false,
             });
         fixture
             .route_until(std::time::Duration::from_secs(10), |_| {
@@ -1154,6 +1338,7 @@ fn low_context_agent_compacts_and_continues_real_dispatch() -> Result<()> {
             .send(AppEvent::SubmitSpawnAgentTask {
                 thread_id: target,
                 task: after.to_string(),
+                sent_while_kill_switch_on: false,
             });
         fixture
             .route_until(std::time::Duration::from_secs(10), |_| {
@@ -1165,6 +1350,367 @@ fn low_context_agent_compacts_and_continues_real_dispatch() -> Result<()> {
         assert!(pending_agent_message_text(&requests[0]).contains(before));
         assert!(pending_agent_message_text(&requests[2]).contains(after));
         pretty_assertions::assert_eq!(requests.len(), 3);
+        fixture.server.shutdown().await?;
+        Ok(())
+    })
+}
+
+/// #660: routes events for `duration`, whatever happens.
+async fn route_for(fixture: &mut RealDispatchFixture, duration: std::time::Duration) -> Result<()> {
+    let deadline = tokio::time::Instant::now() + duration;
+    while tokio::time::Instant::now() < deadline {
+        fixture.route_once().await?;
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    Ok(())
+}
+
+/// #660: agent send paths stamp whether the switch was on when they sent.
+#[tokio::test]
+async fn issue_660_agent_sends_stamp_the_kill_switch() {
+    use crate::legacy_core::security_revocation::HumanRevocation;
+    let (app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000660").expect("thread id");
+    let stamps = |rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>| {
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .filter_map(|event| match event {
+                AppEvent::SubmitSpawnAgentTask {
+                    sent_while_kill_switch_on,
+                    ..
+                } => Some(sent_while_kill_switch_on),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    while app_event_rx.try_recv().is_ok() {}
+    super::issue_507_switch(&app, HumanRevocation::KillSwitchOn);
+    app.send_native_task_event(thread_id, "pf660 while on".to_string());
+    pretty_assertions::assert_eq!(stamps(&mut app_event_rx), vec![true]);
+    super::issue_507_switch(&app, HumanRevocation::KillSwitchOff);
+    app.send_native_task_event(thread_id, "pf660 while off".to_string());
+    pretty_assertions::assert_eq!(stamps(&mut app_event_rx), vec![false]);
+}
+
+/// #660: a task another agent sent to a managed Codex pane while the switch
+/// was on, handled only after it was turned off, waits in the mailbox for the
+/// pane's next turn instead of starting one (nothing restarts after
+/// switch-off, #507).
+#[test]
+fn issue_660_agent_task_sent_while_on_and_handled_after_off_waits() -> Result<()> {
+    run_dispatch_integration(|| async {
+        use crate::legacy_core::security_revocation::HumanRevocation;
+        let mock = MockServer::start().await;
+        let responses = mount_sse_repeating(&mock, sse_completed("pf660-response")).await;
+        let mut fixture = RealDispatchFixture::start(&mock, /*max_threads*/ 3).await?;
+        let target = fixture.spawn_target("Snaga").await?;
+        super::issue_507_switch(&fixture.app, HumanRevocation::KillSwitchOn);
+        let sent_while_kill_switch_on = fixture.app.kill_switch_on_now();
+        assert!(sent_while_kill_switch_on);
+        super::issue_507_switch(&fixture.app, HumanRevocation::KillSwitchOff);
+        fixture
+            .app
+            .app_event_tx
+            .send(AppEvent::SubmitSpawnAgentTask {
+                thread_id: target,
+                task: "pf660 queued".to_string(),
+                sent_while_kill_switch_on,
+            });
+        route_for(&mut fixture, std::time::Duration::from_secs(2)).await?;
+        assert!(responses.requests().is_empty(), "no turn started");
+        assert!(
+            fixture
+                .app
+                .agent_navigation
+                .get(&target)
+                .is_some_and(|entry| !entry.is_running)
+        );
+
+        // Control: a task sent after switch-off starts the pane's turn, and
+        // the waiting task goes with it.
+        fixture
+            .app
+            .app_event_tx
+            .send(AppEvent::SubmitSpawnAgentTask {
+                thread_id: target,
+                task: "pf660 after".to_string(),
+                sent_while_kill_switch_on: false,
+            });
+        fixture
+            .route_until(std::time::Duration::from_secs(20), |_| {
+                !responses.requests().is_empty()
+            })
+            .await?;
+        let presented = responses
+            .requests()
+            .iter()
+            .map(|request| request.body_json().to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(presented.contains("pf660 queued"), "{presented}");
+        assert!(presented.contains("pf660 after"), "{presented}");
+        fixture.server.shutdown().await?;
+        Ok(())
+    })
+}
+
+/// #660 follow-up: the transcript text added since `from` cells.
+fn transcript_since(app: &App, from: usize) -> String {
+    app.transcript_cells
+        .iter()
+        .skip(from)
+        .map(|cell| lines_to_single_string(&cell.display_lines(/*width*/ 400)))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// #660 follow-up (Travis, 2026-10-13): when the switch is turned off, a
+/// managed Codex pane whose task waits is named in the same "Nothing
+/// restarted" notice Claude panes get. Once the task went with the pane's
+/// next turn, the pane is no longer named.
+#[test]
+fn issue_660_switch_off_names_a_codex_pane_whose_task_waits() -> Result<()> {
+    run_dispatch_integration(|| async {
+        use crate::legacy_core::security_revocation::HumanRevocation;
+        let mock = MockServer::start().await;
+        let responses = mount_sse_repeating(&mock, sse_completed("pf660n-response")).await;
+        let mut fixture = RealDispatchFixture::start(&mock, /*max_threads*/ 3).await?;
+        let target = fixture.spawn_target("Snaga").await?;
+        let label = fixture.app.thread_label(target);
+
+        super::issue_507_switch(&fixture.app, HumanRevocation::KillSwitchOn);
+        fixture
+            .app
+            .on_kill_switch_changed(/*on*/ true, /*elsewhere*/ false);
+        fixture
+            .app
+            .app_event_tx
+            .send(AppEvent::SubmitSpawnAgentTask {
+                thread_id: target,
+                task: "pf660 waits".to_string(),
+                sent_while_kill_switch_on: fixture.app.kill_switch_on_now(),
+            });
+        fixture
+            .route_until(std::time::Duration::from_secs(20), |app| {
+                transcript_since(app, /*from*/ 0).contains("waits: the security kill switch is on")
+            })
+            .await?;
+        assert!(responses.requests().is_empty(), "no turn started");
+
+        let from = fixture.app.transcript_cells.len();
+        super::issue_507_switch(&fixture.app, HumanRevocation::KillSwitchOff);
+        fixture
+            .app
+            .on_kill_switch_changed(/*on*/ false, /*elsewhere*/ false);
+        route_for(&mut fixture, std::time::Duration::from_millis(200)).await?;
+        let notice = transcript_since(&fixture.app, from);
+        assert!(
+            notice.contains("Nothing restarted") && notice.contains(&format!("`{label}`")),
+            "{notice}"
+        );
+        assert!(
+            responses.requests().is_empty(),
+            "switch-off started nothing"
+        );
+
+        // The person's next task starts the pane's turn; the waiting task
+        // goes with it, so the next switch-off names nothing.
+        fixture
+            .app
+            .app_event_tx
+            .send(AppEvent::SubmitSpawnAgentTask {
+                thread_id: target,
+                task: "pf660 next".to_string(),
+                sent_while_kill_switch_on: false,
+            });
+        fixture
+            .route_until(std::time::Duration::from_secs(20), |app| {
+                !responses.requests().is_empty()
+                    && app
+                        .agent_navigation
+                        .get(&target)
+                        .is_some_and(|entry| !entry.is_running)
+            })
+            .await?;
+        super::issue_507_switch(&fixture.app, HumanRevocation::KillSwitchOn);
+        fixture
+            .app
+            .on_kill_switch_changed(/*on*/ true, /*elsewhere*/ false);
+        route_for(&mut fixture, std::time::Duration::from_millis(200)).await?;
+        let from = fixture.app.transcript_cells.len();
+        super::issue_507_switch(&fixture.app, HumanRevocation::KillSwitchOff);
+        fixture
+            .app
+            .on_kill_switch_changed(/*on*/ false, /*elsewhere*/ false);
+        route_for(&mut fixture, std::time::Duration::from_millis(200)).await?;
+        let notice = transcript_since(&fixture.app, from);
+        assert!(!notice.contains("Nothing restarted"), "{notice}");
+        fixture.server.shutdown().await?;
+        Ok(())
+    })
+}
+
+/// D106 review: an agent's task for a pane the person opened that Core has
+/// not loaded fails, as it did when the pane had no live session; the pane
+/// is never re-created as a saved agent, also when it is bound as the
+/// Nazgul.
+#[test]
+fn agent_task_to_unloaded_person_opened_pane_fails_without_recreating_it() -> Result<()> {
+    run_dispatch_integration(|| async {
+        let mock = MockServer::start().await;
+        let responses = mount_sse_repeating(&mock, sse_completed("pf1176-unloaded")).await;
+        let mut fixture = RealDispatchFixture::start(&mock, /*max_threads*/ 3).await?;
+        let pane = ThreadId::from_string("00000000-0000-0000-0000-000000011760")?;
+        fixture.app.upsert_agent_picker_thread(
+            pane,
+            Some("Restored".to_string()),
+            /*agent_role*/ None,
+            /*is_closed*/ false,
+        );
+        let pane_node = crate::spawn_orchestration::thread_node_id(pane);
+        fixture.app.set_spawn_nazgul_pane_binding(pane_node.clone());
+        let entry = fixture
+            .app
+            .agent_navigation
+            .get(&pane)
+            .expect("pane entry")
+            .clone();
+        assert!(fixture.app.is_operator_owned_codex_user_pane(pane, &entry));
+        let root = fixture.root;
+        let other_threads = move |app: &App| {
+            let mut threads = app
+                .thread_event_channels
+                .keys()
+                .copied()
+                .filter(|thread_id| *thread_id != pane && *thread_id != root)
+                .collect::<Vec<_>>();
+            threads.sort_by_key(ToString::to_string);
+            threads
+        };
+        // Let start-up work settle before taking the snapshot.
+        route_for(&mut fixture, std::time::Duration::from_secs(2)).await?;
+        let threads_before = other_threads(&fixture.app);
+        let navigation_before = fixture.app.agent_navigation.ordered_threads().len();
+
+        let before = fixture.app.transcript_cells.len();
+        fixture
+            .app
+            .send_native_task_event(pane, "pf1176 unloaded".to_string());
+        route_for(&mut fixture, std::time::Duration::from_secs(2)).await?;
+        let said = transcript_since(&fixture.app, before);
+        assert!(said.contains("Could not admit task"), "{said}");
+        assert!(said.contains("thread not found"), "{said}");
+        assert!(!said.contains("materialize"), "{said}");
+        assert!(responses.requests().is_empty(), "no turn started");
+        // No thread was started or resumed in the pane's place.
+        pretty_assertions::assert_eq!(other_threads(&fixture.app), threads_before);
+        pretty_assertions::assert_eq!(
+            fixture.app.agent_navigation.ordered_threads().len(),
+            navigation_before
+        );
+        pretty_assertions::assert_eq!(
+            fixture.app.spawn_nazgul_pane_id.as_deref(),
+            Some(pane_node.as_str())
+        );
+        fixture.server.shutdown().await?;
+        Ok(())
+    })
+}
+
+/// D106/D107 (#1176): with the kill switch on, an agent's task for a pane
+/// the person opened waits in that pane's mailbox, as for an agent-opened
+/// pane: no turn starts, and turning the switch off starts nothing. The
+/// person's own Spawn status task is refused while the switch is on (D107).
+/// The waiting task goes with the pane's next turn, still as an inter-agent
+/// message, while the person's task is their input.
+#[test]
+fn agent_task_to_person_opened_pane_waits_in_mailbox_while_kill_switch_on() -> Result<()> {
+    run_dispatch_integration(|| async {
+        use crate::legacy_core::security_revocation::HumanRevocation;
+        let mock = MockServer::start().await;
+        let responses = mount_sse_repeating(&mock, sse_completed("pf1176-operator")).await;
+        let mut fixture = RealDispatchFixture::start(&mock, /*max_threads*/ 3).await?;
+        let target = create_person_opened_pane(&mut fixture).await?;
+
+        super::issue_507_switch(&fixture.app, HumanRevocation::KillSwitchOn);
+        fixture
+            .app
+            .send_native_task_event(target, "pf1176 agent queued".to_string());
+        route_for(&mut fixture, std::time::Duration::from_secs(2)).await?;
+        assert!(responses.requests().is_empty(), "no turn started");
+        assert!(
+            fixture
+                .app
+                .agent_navigation
+                .get(&target)
+                .is_some_and(|entry| !entry.is_running)
+        );
+        pretty_assertions::assert_eq!(
+            fixture.app.kill_switch_held_native_tasks.clone(),
+            vec![target]
+        );
+
+        // D107: the person's Spawn status task is refused while it is on.
+        let before = fixture.app.transcript_cells.len();
+        (crate::spawn_orchestration::spawn_agent_task_prompt_submit(
+            fixture.app.app_event_tx.clone(),
+            target,
+        ))("pf1176 person while on".to_string());
+        route_for(&mut fixture, std::time::Duration::from_secs(1)).await?;
+        assert!(responses.requests().is_empty(), "no turn started");
+        let said = transcript_since(&fixture.app, before);
+        assert!(said.contains("the security kill switch is on"), "{said}");
+
+        super::issue_507_switch(&fixture.app, HumanRevocation::KillSwitchOff);
+        Box::pin(fixture.app.handle_event(
+            &mut fixture.tui,
+            &mut fixture.server,
+            AppEvent::KillSwitchTurnedOff,
+        ))
+        .await?;
+        route_for(&mut fixture, std::time::Duration::from_secs(2)).await?;
+        assert!(
+            responses.requests().is_empty(),
+            "switch-off started nothing"
+        );
+
+        // The person's next task starts the pane's turn; the waiting task
+        // goes with it as an inter-agent message, not as their input.
+        let person_task = "pf1176 person after";
+        (crate::spawn_orchestration::spawn_agent_task_prompt_submit(
+            fixture.app.app_event_tx.clone(),
+            target,
+        ))(person_task.to_string());
+        fixture
+            .route_until(std::time::Duration::from_secs(20), |_| {
+                !responses.requests().is_empty()
+            })
+            .await?;
+        let request = responses.requests().into_iter().next().expect("request");
+        let items = request.input();
+        let serialized = serde_json::to_string(&items)?;
+        assert!(
+            items.iter().any(|item| is_user_text(item, person_task)),
+            "{serialized}"
+        );
+        assert!(
+            pending_agent_message_text(&request).contains("pf1176 agent queued")
+                || serialized.contains(&format!(
+                    "<inter_agent_message sender=\\\"/root\\\" recipient=\\\"/root\\\">\\nSender: agent /root in another pane's agent tree (thread {}), not this pane's /root\\npf1176 agent queued\\n</inter_agent_message>",
+                    fixture.root
+                )),
+            "{serialized}"
+        );
+        assert!(
+            !items
+                .iter()
+                .any(|item| is_user_text(item, "pf1176 agent queued")),
+            "{serialized}"
+        );
+        assert!(
+            !serialized.contains("pf1176 person while on"),
+            "{serialized}"
+        );
         fixture.server.shutdown().await?;
         Ok(())
     })

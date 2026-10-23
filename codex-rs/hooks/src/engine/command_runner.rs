@@ -188,6 +188,7 @@ fn build_command(shell: &CommandShell, handler: &ConfiguredHandler) -> Command {
         #[cfg(not(windows))]
         command.arg(&handler.command);
     }
+    crate::registry::apply_secretless_launch_env(&mut command);
     command.envs(&handler.env);
     command
 }
@@ -205,7 +206,12 @@ fn default_shell_command() -> Command {
     {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
         let mut command = Command::new(shell);
-        command.arg("-lc");
+        // PF-27-S02: login shells re-load profile files that can export secrets.
+        if codex_protocol::secretless_launch::is_armed() {
+            command.arg("-c");
+        } else {
+            command.arg("-lc");
+        }
         command
     }
 }

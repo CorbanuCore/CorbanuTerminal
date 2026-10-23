@@ -1,0 +1,130 @@
++ tui[fk] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --account work 
++ tui[fk2] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws -c model_reasoning_effort=\"high\" resume 01a13438-c16b-73c2-9ba1-8795c38ffd94 
++ tui[fk5] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws fork 01a13438-c16b-73c2-9ba1-8795c38ffd94 
++ tui[fk6personal] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws fork 01a13438-c16b-73c2-9ba1-8795c38ffd94 --account personal 
++ tui[fk6zaipersonal] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws fork 01a13438-c16b-73c2-9ba1-8795c38ffd94 --account zai:personal 
++ tui[pa] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws resume 01a13438-c16b-73c2-9ba1-8795c38ffd94 --account personal 
++ tui[pc] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws 
++ tui[pd] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws 
++ tui[fk] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --account work 
++ tui[fk2] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws -c model_reasoning_effort=\"high\" resume 01a13442-f9c8-72c0-a277-02a7cdac38ff 
++ tui[fk5none] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws fork 01a13442-f9c8-72c0-a277-02a7cdac38ff 
++ tui[fk5personal] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws fork 01a13442-f9c8-72c0-a277-02a7cdac38ff --account personal 
++ tui[fk5zaipersonal] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws fork 01a13442-f9c8-72c0-a277-02a7cdac38ff --account zai:personal 
++ tui[pa] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws resume 01a13442-f9c8-72c0-a277-02a7cdac38ff --account personal 
++ tui[pc] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws 
++ tui[tb] home=$S/homes/t1 HOME=$S/fh-t1 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws 
++ tui[pd] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws 
++ tui[c1] home=o1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws -c model_provider=\"zai\" -m glm-5.3-flash --account work 
++ tui[v2] home=$S/homes/t1 HOME=$S/fh-t1 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws --account openai:work 
++ tui[c2] home=o2 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws -c model_provider=\"zai\" -m glm-5.3-flash --account work 
++ tui[v2] home=$S/homes/t1 HOME=$S/fh-t1 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws --account openai:work 
++ tui[c3] home=o3 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws -c model_provider=\"zai\" -m glm-5.3-flash --account work 
++ tui[c4] home=n1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws --account work 
++ tui[v3] home=$S/homes/t1 HOME=$S/fh-t1 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws 
++ tui[v4] home=$S/homes/t1 HOME=$S/fh-t1 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws --account openai:fake 
++ tui[r1] home=o1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 01a13449-7f78-7d03-ada5-f98c72986d6a 
++ tui[v5] home=$S/homes/t1 HOME=$S/fh-t1 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws 
++ tui[r5] home=o1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 01a13449-7f78-7d03-ada5-f98c72986d6a 
++ tui[r2] home=o2 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 01a13449-e7ed-73a0-a8ae-88457f7d1b50 
++ tui[r3] home=$S/homes/o3 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws resume 01a1344a-5ac3-7d30-a0d0-85aaf635e410 
++ tui[p1] home=o1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 
++ tui[p2] home=o2 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 
++ tui[v1] home=$S/homes/t1 HOME=$S/fh-t1 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws -c model_provider=\"openai\" -m gpt-6-luna --account fpx 
++ tui[e1] home=n1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 
++ tui[e2] home=n1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 
++ tui[e4] home=fresh (no ZAI key) : $S/bin/corbanu-cand -C $S/ws 
++ tui[g1] home=$S/homes/z2 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws resume 01a13442-f9c8-72c0-a277-02a7cdac38ff 
++ tui[v1] home=$S/homes/t1 HOME=$S/fh-t1 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws -c model_provider=\"openai\" -m gpt-6-luna --account fpx 
++ tui[fp] home=$S/homes/t1 HOME=$S/fh-t1 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws 
++ tui[fp] home=$S/homes/t1 HOME=$S/fh-t1 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws 
++ tui[g3] home=$S/homes/z2 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws 
++ tui[g2] home=$S/homes/z2 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws resume 01a13442-f9c8-72c0-a277-02a7cdac38ff 
++ tui[q1] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws resume 01a13442-f9c8-72c0-a277-02a7cdac38ff --account openai:x 
++ tui[d2] home=o2 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 01a13449-e7ed-73a0-a8ae-88457f7d1b50 
++ tui[c1] home=o1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws -c model_provider=\"zai\" -m glm-5.3-flash --account work 
++ tui[ad] home=$S/homes/t1 HOME=$S/fh-t1 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws 
++ tui[c2] home=o2 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws -c model_provider=\"zai\" -m glm-5.3-flash --account work 
++ tui[c3] home=o3 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws -c model_provider=\"zai\" -m glm-5.3-flash --account work 
++ tui[c4] home=n1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws --account work 
++ tui[r1] home=o1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 01a13453-65a1-7d72-80d8-64005d5a4b28 
++ tui[r5] home=o1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 01a13453-65a1-7d72-80d8-64005d5a4b28 
++ tui[glm] home=$S/homes/t1 HOME=$S/fh-t1 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws 
++ tui[r2] home=o2 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 01a13453-d274-7263-bcdf-0c7c4a86f92f 
++ tui[r3] home=$S/homes/o3 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws resume 01a13454-3c44-7e82-8c84-fda678b14324 
++ tui[p1] home=o1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 
++ tui[p2] home=o2 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 
++ tui[e1] home=n1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 
++ tui[e2] home=n1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 
++ tui[e4] home=fresh (no ZAI key) : $S/bin/corbanu-cand -C $S/ws 
++ tui[c5] home=$S/homes/z2 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --account work 
++ tui[g1] home=$S/homes/z2 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws resume 01a13456-fa03-70c0-9aa7-04f09aef40b2 
++ tui[glm] home=$S/homes/t1 HOME=$S/fh-t1 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws 
++ tui[g3] home=$S/homes/z2 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws 
++ tui[g2] home=$S/homes/z2 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws resume 01a13456-fa03-70c0-9aa7-04f09aef40b2 
++ tui[q1] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws resume 01a13445-80bb-7990-a76a-75db6141a097 --account openai:x 
++ tui[r2] home=o2 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 01a13453-d274-7263-bcdf-0c7c4a86f92f 
++ tui[r2p] home=o2 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 
++ tui[r1p] home=o1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 
++ tui[c6] home=$S/homes/z3 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --account work 
++ tui[r3] home=$S/homes/o3 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws resume 01a13454-3c44-7e82-8c84-fda678b14324 
++ tui[e1] home=n1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 
++ tui[m] home=$S/homes/z3 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws 
++ tui[e2] home=n1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 
++ tui[g3] home=$S/homes/z2 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws 
++ tui[g2] home=$S/homes/z2 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws resume 01a13456-fa03-70c0-9aa7-04f09aef40b2 
++ tui[g2b] home=$S/homes/z2 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws resume 01a13456-fa03-70c0-9aa7-04f09aef40b2 --account personal 
++ tui[fcand] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --disable named_accounts 
++ tui[rcand] home=o1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws --disable named_accounts resume 01a13453-65a1-7d72-80d8-64005d5a4b28 
++ tui[d3] home=$S/homes/t1 HOME=$S/fh-t1 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws 
++ tui[ecand] home=n1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws --disable named_accounts resume 
++ tui[fbase] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-base -C $S/ws --disable named_accounts 
++ tui[d3] home=$S/homes/t1 HOME=$S/fh-t1 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws --enable security_levels 
++ tui[d3] home=$S/homes/t1 HOME=$S/fh-t1 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws --enable security_levels 
++ tui[rbase] home=o1 (no ZAI key) : $S/bin/corbanu-base -C $S/ws --disable named_accounts resume 01a13453-65a1-7d72-80d8-64005d5a4b28 
++ tui[ebase] home=n1 (no ZAI key) : $S/bin/corbanu-base -C $S/ws --disable named_accounts resume 
++ tui[d3z] home=$S/homes/z3 HOME=$S/fh-z env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws --enable security_levels 
++ tui[d3z] home=$S/homes/z3 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --enable security_levels 
++ tui[v6] home=$S/homes/t2 HOME=$S/fh-t2 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 : $S/bin/corbanu-cand -C $S/ws 
++ tui[fk7] home=$S/homes/z3 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws fork 01a13459-bed2-7af0-9206-a5a23c1915df 
++ tui[fk7b] home=$S/homes/z3 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws resume 01a13459-bed2-7af0-9206-a5a23c1915df 
++ tui[fa] home=$S/homes/t2 HOME=$S/fh-t2 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 : $S/bin/corbanu-cand -C $S/ws -c forced_login_method=\"api\" 
++ tui[fb] home=$S/homes/t2 HOME=$S/fh-t2 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 : $S/bin/corbanu-base -C $S/ws -c forced_login_method=\"api\" 
++ tui[fc] home=$S/homes/t2 HOME=$S/fh-t2 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 : $S/bin/corbanu-cand -C $S/ws -c forced_login_method=\"api\" -c model_provider=\"openai\" -m gpt-6-luna --account work 
++ tui[fd] home=$S/homes/t2 HOME=$S/fh-t2 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 : $S/bin/corbanu-cand -C $S/ws -c forced_login_method=\"api\" -c model_provider=\"openai\" -m gpt-6-luna --account k2 
++ tui[pr] home=$S/homes/t1 HOME=$S/fh-t1 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 AWS_ACCESS_KEY_ID=AKIDENVDECOY AWS_SECRET_ACCESS_KEY=fakesecret-env-S06CANARY AWS_PROFILE=other AWS_BEARER_TOKEN_BEDROCK=fakebearer-env-S06CANARY OPENAI_API_KEY=sk-envdecoy-S6B : $S/bin/corbanu-cand -C $S/ws 
++ tui[a] home=z4 ZAI_API_KEY=<fake default key> : $S/bin/corbanu-cand -C $S/ws --account work 
++ tui[r4] home=o1 (no ZAI key) : $S/bin/corbanu-cand -C $S/ws resume 
++ tui[acc] home=$S/homes/z1 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --account work 
++ tui[ag] home=$S/homes/z3 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --enable security_levels 
++ tui[b] home=z4 ZAI_API_KEY=<fake default key> : $S/bin/corbanu-cand -C $S/ws resume 01a1347c-2525-71e3-be20-156b4cbc9bd0 
++ tui[ag2] home=$S/homes/z3 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --enable security_levels 
++ tui[c] home=z4 ZAI_API_KEY=<fake default key> : $S/bin/corbanu-cand -C $S/ws fork 01a1347c-2525-71e3-be20-156b4cbc9bd0 
++ tui[ag3] home=$S/homes/z3 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --enable security_levels --account work 
++ tui[d] home=z4 ZAI_API_KEY=<fake default key> : $S/bin/corbanu-cand -C $S/ws fork 01a1347c-2525-71e3-be20-156b4cbc9bd0 --account zai:personal 
++ tui[e] home=z4 ZAI_API_KEY=<fake default key> : $S/bin/corbanu-cand -C $S/ws resume 01a1347c-2525-71e3-be20-156b4cbc9bd0 --account personal 
++ tui[ag4] home=$S/homes/z3 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --enable security_levels --account default 
++ tui[f] home=z4 ZAI_API_KEY=<fake default key> : $S/bin/corbanu-cand -C $S/ws 
++ tui[dc] home=$S/homes/z3 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --enable security_levels 
++ tui[g] home=z4 ZAI_API_KEY=<fake default key> : $S/bin/corbanu-cand -C $S/ws 
++ tui[h] home=z4 ZAI_API_KEY=<fake default key> : $S/bin/corbanu-cand -C $S/ws resume 01a1347c-2525-71e3-be20-156b4cbc9bd0 
++ tui[i] home=z4 ZAI_API_KEY=<fake default key> : $S/bin/corbanu-cand -C $S/ws --account work 
++ tui[h] home=z4 ZAI_API_KEY=<fake default key> : $S/bin/corbanu-cand -C $S/ws resume 01a1347e-b31e-7f10-9248-4b064f96d4c4 
++ tui[dt] home=$S/homes/t2 HOME=$S/fh-t2 env=ZAI_API_KEY(real default key) + CODEX_REFRESH_TOKEN_URL_OVERRIDE=http://127.0.0.1:34731/oauth/token CORBANU_TEST_LOGIN_ISSUER=http://127.0.0.1:34731 : $S/bin/corbanu-cand -C $S/ws -c model_provider=\"openai\" -m gpt-6-luna --account work 
++ tui[h] home=z4 ZAI_API_KEY=<fake default key> : $S/bin/corbanu-cand -C $S/ws resume 01a1347e-b31e-7f10-9248-4b064f96d4c4 
++ tui[a1cand] home=$S/homes/z5 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --enable security_levels 
++ tui[a2cand] home=$S/homes/z5 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --enable security_levels 
++ tui[a3cand] home=$S/homes/z5 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --enable security_levels --account work 
++ tui[a4cand] home=$S/homes/z5 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --enable security_levels 
++ tui[a1base] home=$S/homes/z6 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-base -C $S/ws --enable security_levels 
++ tui[a2base] home=$S/homes/z6 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-base -C $S/ws --enable security_levels 
++ tui[a3base] home=$S/homes/z6 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-base -C $S/ws --enable security_levels --account work 
++ tui[a4base] home=$S/homes/z6 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-base -C $S/ws --enable security_levels 
++ tui[a1cand] home=$S/homes/z5 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --enable security_levels 
++ tui[a2cand] home=$S/homes/z5 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --enable security_levels 
++ tui[a3cand] home=$S/homes/z5 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --enable security_levels --account work 
++ tui[a4cand] home=$S/homes/z5 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-cand -C $S/ws --enable security_levels 
++ tui[a1base] home=$S/homes/z6 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-base -C $S/ws --enable security_levels 
++ tui[a2base] home=$S/homes/z6 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-base -C $S/ws --enable security_levels 
++ tui[a3base] home=$S/homes/z6 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-base -C $S/ws --enable security_levels --account work 
++ tui[a4base] home=$S/homes/z6 HOME=$S/fh-z env=ZAI_API_KEY(real default key) +  : $S/bin/corbanu-base -C $S/ws --enable security_levels 

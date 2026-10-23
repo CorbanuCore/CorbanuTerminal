@@ -1,0 +1,11 @@
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       glm-5.3-flash   /model to change           │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+  Add account `devz`
+› 1. Sign in with ChatGPT (device code)  Shows a code to enter in your browser; saved to this account only.
+  2. OpenAI API key                      Paste it into masked entry.
+  Press enter to confirm or esc to go back

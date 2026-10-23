@@ -1,0 +1,55 @@
+$ /cost
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     glm-5.2   /model to change                    │
+│ directory: <corbanu-root>/tmp/…/work/repo │
+╰──────────────────────────────────────────────────────────╯
+
+  Use the shell tool to run: ls. Then reply with only the number of files listed.
+• 2
+  Cost — this conversation
+  Requested UTC day: 2026-10-09
+  Today (UTC) in this conversation:
+  • Z.AI Anthropic · Z.AI GLM 5.2 — Covered by your subscription (not billed per request). 2 requests, 11+ tokens. Same work at API prices: not available.
+  Other conversations on this day, not included above: 1 request in 1 conversation.
+  • Z.AI Anthropic · Z.AI GLM 5.2 — Covered by your subscription (not billed per request). 1 request, 1+ tokens. Same work at API prices: not available.
+  Other conversations' same work at API prices: not available.
+  To see those requests, open that conversation with /resume and run /cost there.
+  Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+  usage page.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Subscription work is not billed per request; any figure here is what it would cost at API prices.
+  Select a provider below to see its requests.
+  —— Details ——
+  No recorded attempt here was billed per token.
+  Subscription capacity: 2 of 2 attempts, not billed per token
+  Plan consumption: unavailable — no plan rate or token total for 2 of 2 plan attempts
+  Same tokens at API rates: unavailable — the catalogue states no API price for 2 of 2 plan attempts
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z)
+  Read at: 2026-10-09T13:10:51.904Z; ledger current to: 2026-10-09T13:07:08.939Z (222965 ms behind)
+  Retention: request detail kept since 2026-07-11T13:10:51.904Z; daily totals kept since 2025-10-10; oldest recorded day in this conversation 2026-10-09
+  Known subtotal exact USD: none — subscription work is not billed per token
+  Input: not reported (2 attempts)
+  Noncached input (derived for inclusive input): 125
+  Cache read: 19,776
+  Cache write: not reported (2 attempts)
+  Output: 11
+  Reasoning (subset, not separately billed): not reported (2 attempts)
+  Total (not separately billed): not reported (2 attempts)
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Unknown parent population: 0 attempts, excluded from root total
+  —— Open ——
+  → Z.AI Anthropic · Z.AI GLM 5.2 — covered by subscription (2 requests)
+  → Request 1 · Z.AI Anthropic · Z.AI GLM 5.2 · covered by subscription
+  → Request 2 · Z.AI Anthropic · Z.AI GLM 5.2 · covered by subscription
+  → Root's own attempts (2 attempts)
+  → Descendant attempts (none)
+  → Unknown provider/model attribution (none)
+  → Unknown parent population (none)
+  Refresh
+  Close

@@ -521,6 +521,12 @@ fn session_lifecycle_avoids_redundant_subagent_metadata_reads() -> Result<()> {
                     ),
                     Some(1)
                 );
+                // #624: the approval waits under the picker the person
+                // opened, and shows once the picker closes.
+                let popup = render_bottom_popup(&app.chat_widget, /*width*/ 80);
+                assert!(!popup.contains("echo hello"), "{popup}");
+                app.chat_widget
+                    .handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
                 assert!(render_bottom_popup(&app.chat_widget, /*width*/ 80).contains("echo hello"));
                 assert!(
                     app.agent_navigation

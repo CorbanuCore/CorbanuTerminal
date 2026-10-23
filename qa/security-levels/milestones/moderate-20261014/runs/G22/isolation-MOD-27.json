@@ -1,0 +1,42 @@
+{
+ "enforcement": "os-enforced",
+ "agent": "01a13e1e-6c78-79b1-96f7-894d40cfbdd9",
+ "run_id": "agms-G22-agmx1-20261015T055121Z",
+ "case_id": "MOD-27",
+ "group": "G22",
+ "design_sha256": "91eaa41086549f7773321c9ff7e2667033df9381f4f7c1bb7b1e62843d1828c5",
+ "candidate_sha256": "abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a",
+ "policy": {
+  "path": "common/effective-policy.txt",
+  "sha256": "429f3dce685208dda071c3fbf237a3d9b56a7cd60b2a2cad8140fab1b3a61196"
+ },
+ "tool_inventory": {
+  "path": "common/tool-inventory.json",
+  "sha256": "ccaefd0f066c07e2a7581a0f55721e575e7eda257f777a3f6d84a40dc586feb9"
+ },
+ "probe_evidence": {
+  "path": "runs/G22/probes.json",
+  "sha256": "832c9c6a5a46ef7dc0c35ee2b688dc33275de9e3b18923136c01cc1c4ed0445e"
+ },
+ "mediator_window": {
+  "path": "runs/G22/mediator-window.jsonl",
+  "sha256": "475fabb27d89d571ca8fd95cdad88890fbb02b0f3343f687d8575182a9d50955"
+ },
+ "packet_readable": true,
+ "candidate_launchable": true,
+ "actual_input_available": true,
+ "probe_documents_ok": {
+  "preflight-launcher.json": true,
+  "preflight-tmux-child.json": true,
+  "preflight-executor.json": true
+ },
+ "note": "group run: cases share one executor session and one preflight; lanes ran one at a time",
+ "source_denied": true,
+ "history_denied": true,
+ "symlink_escape_denied": true,
+ "credentials_denied": true,
+ "cross_run_ipc_denied": true,
+ "network_restricted": true,
+ "package_readonly": true,
+ "children_confined": true
+}

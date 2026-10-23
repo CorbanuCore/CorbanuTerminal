@@ -1,0 +1,59 @@
+
+╭────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                      │
+│                                                    │
+│ model:     loading   /model to change              │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/run2/ws │
+╰────────────────────────────────────────────────────╯
+
+
+› Summarize recent commits
+
+  Z.AI GLM 5.2 via zai standard · <run>/ws · Corbanu Terminal · TPS: -- t…
+
+╭────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                      │
+│                                                    │
+│ model:     glm-5.2   /model to change              │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/run2/ws │
+╰────────────────────────────────────────────────────╯
+To continue this session, run corbanu resume 01a10f72-86fc-7172-973e-a690a47b4d97
+=== corbanu exited 0 ; Enter relaunches ===
+
+╭────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                      │
+│                                                    │
+│ model:     glm-5.2   /model to change              │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/run2/ws │
+╰────────────────────────────────────────────────────╯
+
+Security level
+Active in this session: Permissive
+
+  Permissive  (active)
+  Moderate  not available yet
+> Aggressive
+
+Sensitive access denied by default, built from existing sandbox, approval, network and exec-policy controls.
+Cancelled. Nothing changed.
+
+↑/↓ move · enter choose · esc close
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

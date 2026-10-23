@@ -1,0 +1,27 @@
+  Provider: zainousage; Model: glm-5.2
+  Requested UTC day: 2026-10-08
+  Estimated token cost: unknown
+  Full recorded estimate: unavailable (2 of 2 billed attempts incomplete)
+  Recorded attempts: 2
+  Known estimate exact USD: none — no price for these attempts
+  Estimate versus billed difference: unknown — no settlement evidence
+  —— Open ——
+  → Request 1
+  → Request 2
+  ↑↓ scroll · Enter open · Esc back/close
+  Back
+  Refresh
+  Close
+  Provider: zainousage
+  Model: Z.AI GLM 5.2
+  Billing: Pay per use
+  Estimated cost: no price available
+  Next step for requests with no price: check the bill from zainousage. No published price covers them, so no cost is shown for them here.
+  Tokens: tokens not reported
+  —— Details ——
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-08T00:00:00.000Z, 2026-10-09T00:00:00.000Z)
+  Read at: 2026-10-08T18:05:26.224Z; ledger current to: 2026-10-08T18:04:40.945Z (45279 ms behind)

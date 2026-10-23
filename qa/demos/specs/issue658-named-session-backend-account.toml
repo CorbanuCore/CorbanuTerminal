@@ -1,0 +1,59 @@
+# #658: a session on named ChatGPT account `work` in a home whose default login is ChatGPT user `default`.
+# Every ChatGPT backend request the session makes (plugin listings, usage, settings, the apps directory)
+# carries work's sign-in; none carries the default login's. Local mock issuer and backend, fake tokens only.
+#   python3 scripts/demo_video.py record qa/demos/specs/issue658-named-session-backend-account.toml \
+#     --bin <candidate> --sprint PF-84-S06 --publish
+id = "issue658-named-session-backend-account"
+feature = "PF-84 #658: a named-account session never sends the default login to the ChatGPT backend"
+expected = "The session on account work answers as work; the mock backend's log shows every plugin, usage and settings request on work and none on the default login."
+model = "gpt-5.4"
+provider = "openai"
+args = ["--account", "work"]
+setup = """nohup python3 {run}/../../../../provider-auth/pf-84/s06/scripts/mock_openai.py --port 38467 --log {logs}/mock-openai.jsonl > /dev/null 2>&1 &
+echo $! > {logs}/mock.pid
+sleep 1
+curl -s -X POST -H 'content-type: application/json' -d '{"user":"default","ttl":3600}' http://127.0.0.1:38467/_next_user > /dev/null
+{bin} login --device-auth --experimental_issuer http://127.0.0.1:38467 2>&1 | tail -1
+curl -s -X POST -H 'content-type: application/json' -d '{"user":"work","ttl":3600}' http://127.0.0.1:38467/_next_user > /dev/null
+{bin} login --account work --device-auth --experimental_issuer http://127.0.0.1:38467 2>&1 | tail -1"""
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "read-only"
+openai_base_url = "http://127.0.0.1:38467/v1"
+chatgpt_base_url = "http://127.0.0.1:38467/backend-api/codex"
+cli_auth_credentials_store = "file"
+[features]
+named_accounts = true
+"""
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with exactly: pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "authorized as work"
+compress = 2
+[[steps]]
+pause = 1.5
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Session:"
+[[steps]]
+pause = 3
+[[steps]]
+type = "!python3 {run}/../../../../provider-auth/pf-84/s06/fix-658/backend_identities.py {logs}/mock-openai.jsonl"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "backend requests on the default login: 0"
+timeout = 30
+[[steps]]
+pause = 5.0
+[[steps]]
+run = "kill $(cat {logs}/mock.pid)"

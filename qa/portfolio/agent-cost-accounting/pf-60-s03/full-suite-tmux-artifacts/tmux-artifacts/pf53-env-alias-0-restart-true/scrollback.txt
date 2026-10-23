@@ -1,0 +1,78 @@
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                         │
+│                                                       │
+│ model:     loading   /model to change                 │
+│ directory: /Volumes/…/worktrees/acct-inspect-20260915 │
+╰───────────────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  corbanu/glm-5.3-flash via pfterminal-plan default · /Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915 · Corbanu Terminal · TPS: -- tok/s
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                         │
+│                                                       │
+│ model:     loading   /model to change                 │
+│ directory: /Volumes/…/worktrees/acct-inspect-20260915 │
+╰───────────────────────────────────────────────────────╯
+
+• Queued follow-up inputs
+  ↳ /wallet
+    shift + ← edit last queued message
+
+› Run /review on my current changes
+
+  corbanu/glm-5.3-flash via pfterminal-plan default · /Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915 · Corbanu Terminal · TPS: -- tok/s
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                         │
+│                                                       │
+│ model:     corbanu/glm-5.3-flash   /model to change   │
+│ directory: /Volumes/…/worktrees/acct-inspect-20260915 │
+╰───────────────────────────────────────────────────────╯
+
+
+  Corbanu API
+  $12.20 available
+  Prices are exact upstream cost with zero markup, per million tokens.
+  Unlock the wallet to list, create, or revoke API keys.
+
+› 1. Top up balance               Choose any positive canonical-USDC amount
+  2. Manage API keys              Unlock to load key summaries and balances
+  3. Create API key               Unlock and reveal a new key exactly once
+  4. GLM 5.3 Flash · Recommended  $0.10 input · $0.01 cache read · $0.10 cache write · $0.30 output · Corbanu-controlled
+  5. Refresh                      Reload balance and model prices
+
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

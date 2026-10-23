@@ -1,0 +1,19 @@
+model = "gpt-5.6-terra"
+model_provider = "openai"
+model_reasoning_effort = "low"
+service_tier = "default"
+
+[model_providers.openai-custom]
+name = "OpenAI custom route"
+base_url = "https://api.openai.com/v1"
+env_key = "QA_KEY"
+wire_api = "responses"
+
+[model_providers.kimicode-custom]
+name = "Kimi Code custom route"
+base_url = "https://api.kimi.com/coding/v1"
+env_key = "QA_KEY"
+wire_api = "chat"
+
+[projects."<scratch>/work/repo"]
+trust_level = "trusted"

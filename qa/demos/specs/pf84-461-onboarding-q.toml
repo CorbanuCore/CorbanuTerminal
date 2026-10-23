@@ -1,0 +1,70 @@
+# #461: onboarding text fields take every printable key. Typing `q` (even as
+# the first character) in the default-key field and in "Add another account"'s
+# name and masked key fields no longer quits the TUI and spills the rest of the
+# value onto the shell. Synthetic values only; no model call. Record with
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-461-onboarding-q.toml \
+#     --bin <candidate> --sprint PF-84-S04 --publish
+id = "pf84-461-onboarding-q"
+feature = "#461: typing q in onboarding text fields no longer quits"
+expected = "A Z.AI key starting with q, the account name qa-quota and a masked key full of q are all typed key by key; onboarding stays open and saves account qa-quota."
+config = """
+model = "gpt-5.4"
+model_provider = "openai"
+suppress_unstable_features_warning = true
+[features]
+named_accounts = true
+"""
+
+[[steps]]
+wait = "Choose a provider account"
+[[steps]]
+key = "Down"
+repeat = 7
+[[steps]]
+wait = "> 8. Provider: Z.AI API Key"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "never adds it to chat"
+[[steps]]
+type = "q-fake-key-0461"
+verify = false
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "API key configured"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Provider: Z.AI"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Add another account"
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Name it"
+[[steps]]
+type = "qa-quota"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "never shown"
+[[steps]]
+type = "qq-fake-key-0462-q"
+verify = false
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved zai account `qa-quota`"
+[[steps]]
+pause = 3.0

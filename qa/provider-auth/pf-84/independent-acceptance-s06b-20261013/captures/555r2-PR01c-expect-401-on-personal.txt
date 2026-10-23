@@ -1,0 +1,35 @@
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       loading   /model to change                 │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: -- tok/s
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       glm-5.3-flash   /model to change           │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word prec
+
+
+⚠ Z.AI (zai) account `personal` was rejected. Replace its key with `corbanu account add zai personal` (reads stdin), or choose another account. The default Z.AI
+  credential is unchanged.
+
+■ unexpected status 401 Unauthorized: Authentication Failed, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 9a004383-3b7a-4393-a745-8ee9bf16593d
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: -- tok/s

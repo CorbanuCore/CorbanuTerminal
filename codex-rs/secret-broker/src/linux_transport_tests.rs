@@ -23,7 +23,7 @@ fn frame() -> SignedBrokerFrame {
                 run_id: "run".into(),
                 run_generation: 1,
             },
-            1,
+            /*sequence*/ 1,
             BrokerOperation::OpenAiResponses {
                 credential: CredentialReference::from_sha256_hex("a".repeat(64)).unwrap(),
                 request: OpenAiResponsesOperation::new("/v1/responses").unwrap(),

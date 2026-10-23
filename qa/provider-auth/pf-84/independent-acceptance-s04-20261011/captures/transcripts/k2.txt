@@ -1,0 +1,88 @@
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     loading   /model to change                  │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+
+› Summarize recent commits
+
+  Kimi Code K3 via kimi-code default · $S/work · Corbanu Terminal · TPS: -- tok/s
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     k3   /model to change                       │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+
+• Saved kimi-code account `fake`. Use it from /providers, `--account fake` or a spawn `account`.
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     k3   /model to change                       │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+Token usage: total=7,389 input=7,264 (+ 1,024 cached) output=125 (reasoning 68)
+To continue this session, run corbanu resume 01a12a8b-ef72-7420-8114-cc5ea3d6621a
+
+• New session: requests to kimi-code use account `fake`.
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Kimi Code K3                                                      │
+│  Model provider:       Kimi Code - https://api.kimi.com/coding/v1 · account fake         │
+│  Directory:            $S/work                 │
+│  Permissions:          Next turn: Workspace (Ask for approval)                           │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              OpenAI API key configured (run corbanu login to use ChatGPT)      │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12a8c-fbc9-7640-90ca-3d51c448227d                              │
+│                                                                                          │
+│  Token usage:          0 total  (0 input + 0 output)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+⚠ Kimi Code (kimi-code) account `fake` was rejected. Replace its key with `corbanu account add kimi-code fake` (reads stdin), or choose another account. The
+  default Kimi Code credential is unchanged.
+
+■ unexpected status 401 Unauthorized: The API Key appears to be invalid or may have expired. Please verify your credentials and try again., url:
+https://api.kimi.com/coding/v1/chat/completions, cf-ray: a48d3fcb9b712499-PHX
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     k3   /model to change                       │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+To continue this session, run corbanu resume 01a12a8c-fbc9-7640-90ca-3d51c448227d
+
+• New session: requests to kimi-code use account `default`.
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+Token usage: total=31 input=0 (+ 7,942 cached) output=31 (reasoning 13)
+To continue this session, run corbanu resume 01a12a8d-7b4d-7582-8d6a-99930e8b0e2d
+TUI_EXITED rc=0

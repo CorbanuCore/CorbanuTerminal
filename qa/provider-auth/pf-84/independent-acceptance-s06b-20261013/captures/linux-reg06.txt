@@ -1,0 +1,45 @@
+Saved zai account `work` (api_key).
+Saved zai account `personal` (api_key).
+## uname: Linux 6.8.0-146-generic x86_64; binary: corbanu 0.1.48
+source conversation: 01a1345c-7e48-75d2-816a-c8103a3875e9
+### FK-05 linux
+• Thread forked from 01a1345c-7e48-75d2-816a-c8103a3875e9
+• ping
+• clifork
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account work                │
+│  Forked from:          01a1345c-7e48-75d2-816a-c8103a3875e9                              │
+│  Account usage:        work · 6,780 input · 576 cached input · 5 output                  │
+### FK-06 linux
+• Thread forked from 01a1345c-7e48-75d2-816a-c8103a3875e9
+• ping
+• acctfork
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account personal            │
+│  Forked from:          01a1345c-7e48-75d2-816a-c8103a3875e9                              │
+│  Account usage:        personal · 59 input · 7,296 cached input · 4 output               │
+### GH-01 linux
+• ping
+• pong
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account work                │
+│  Session:              01a1345c-7e48-75d2-816a-c8103a3875e9                              │
+│  Account usage:        work · 7,401 input · 7,296 cached input · 6 output                │
+### GH-03 linux
+account `ghost` of provider `zai` is not configured; add it with `corbanu account add zai ghost` or pick another with `--account` (see `corbanu account list`)
+EXITED-1
+Removed zai account `work`.
+### GH-02 / MSG-03 linux
+ERROR: This conversation ran on zai account `work` and resumes on it: account `work` of provider `zai` is not configured; add it with `corbanu account add zai work` or pi
+ck another with `--account` (see `corbanu account list`)
+EXITED-1
+Saved zai account `work` (api_key).
+### ESC-01 linux (picker)
+ Resume a previous session
+ Type to search                                                                                                             Filter: [Cwd] All    Sort: [Updated] Created
+  ❯ 6s ago      Reply with exactly the word ping
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 1 / 1 · 100% ─
+ enter resume   esc quit   ctrl+c quit   tab focus sort/filter   ←/→ change option
+ ctrl+o comfortable view   ctrl+t transcript   ctrl+e expand   ↑/↓ browse
+### ESC-01 linux (after Esc)
+EXITED-0
+### leak check: real key in any file under /home/ambient/corbanu-rtx/s06b-qa
+0 files
+LINUX_DONE

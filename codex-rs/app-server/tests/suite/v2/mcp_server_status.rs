@@ -397,8 +397,11 @@ async fn mcp_server_status_list_tools_and_auth_only_skips_slow_inventory_calls()
             thread_id: None,
         })
         .await?;
+    // Under the 2 s the slow inventory calls take, so the status can only
+    // arrive this soon if it skipped them; 500 ms was too short for loaded
+    // nightly Bazel runners (#636).
     let response: ListMcpServerStatusResponse =
-        timeout(Duration::from_millis(500), mcp.read_response(request_id)).await??;
+        timeout(Duration::from_millis(1_500), mcp.read_response(request_id)).await??;
 
     assert_eq!(response.next_cursor, None);
     assert_eq!(response.data.len(), 1);

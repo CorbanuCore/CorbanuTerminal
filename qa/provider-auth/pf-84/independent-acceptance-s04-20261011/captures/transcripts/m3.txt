@@ -1,0 +1,32 @@
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     loading   /model to change                  │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.3 Flash via zai default · $S/work · Corbanu Terminal · TPS: -- tok/s
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+• Saved zai account `extra`. Use it from /providers, `--account extra` or a spawn `account`.
+
+• Removed zai account `extra`.
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+Token usage: total=7,069 input=7,066 (+ 1,280 cached) output=3
+To continue this session, run corbanu resume 01a12aa4-419d-7640-a07d-820a2bac352e
+TUI_EXITED rc=0

@@ -1,0 +1,87 @@
+# PF-60-S06 #400: an automatic approval review of a command inside /side is paid inference for the conversation /side
+# came from. A real GLM 5.3 Flash turn, then a /side request that needs approval; the auto-reviewer (the product's
+# Z.AI review model, GLM 5.2) approves it. Back in the main conversation, /cost lists the review as its own request,
+# and its technical page names the turn side:review:. Before PF-60-S06 the review was not recorded at all.
+id = "pf60s06-side-guardian-review-cost"
+feature = "/cost after an approval review inside /side: the review is recorded under the conversation /side came from"
+expected = "/cost in the main conversation lists the reviewer's GLM 5.2 request with the conversation's own; its technical page names the turn side:review:…. Before PF-60-S06 it was missing."
+model = "glm-5.3-flash"
+provider = "zai"
+rows = 46
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+approvals_reviewer = "auto_review"
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with the single word READY."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*READY\\W*$"
+timeout = 180
+compress = 3
+[[steps]]
+run = "sleep 10"
+timeout = 30
+[[steps]]
+type = "/side I explicitly ask you to create ../outside/side-note.txt containing hi, with one shell command that has escalated permissions."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Auto-reviewer approved"
+timeout = 240
+compress = 3
+[[steps]]
+wait = "(?m)^• (Created|Done|I created|The file)"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "C-c"
+[[steps]]
+wait = "(?m)^\\W*READY\\W*$"
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Z.AI GLM 5.2 — Pay per use. 1 request"
+[[steps]]
+pause = 3
+# Requests are listed after the summary; eight steps up from the first line is request 4, the reviewer's.
+[[steps]]
+key = "Up"
+repeat = 8
+[[steps]]
+wait = "› → Request \\d+ · Z.AI · Z.AI GLM 5.2"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Model: Z.AI GLM 5.2"
+[[steps]]
+key = "Up"
+repeat = 4
+[[steps]]
+wait = "› → Technical details"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Attempt, components and original price"
+[[steps]]
+key = "Down"
+repeat = 11
+[[steps]]
+wait = "Turn: side:review:"
+[[steps]]
+pause = 5

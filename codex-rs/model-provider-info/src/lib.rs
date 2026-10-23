@@ -30,6 +30,23 @@ use std::fmt;
 use std::num::NonZeroU64;
 use std::time::Duration;
 
+mod billing;
+mod model_routes;
+mod provider_debug;
+
+pub use billing::BillingBasis;
+pub use billing::BillingCredential;
+pub use billing::BillingDeclaration;
+pub use billing::built_in_basis;
+pub use billing::declared_billing;
+pub use billing::not_declared_next_step;
+pub use billing::route_basis;
+pub use model_routes::ModelRoute;
+pub use model_routes::ModelRouteStyle;
+pub use model_routes::default_model_route;
+pub use model_routes::model_route;
+pub use model_routes::model_routes;
+
 const DEFAULT_ANTHROPIC_REQUEST_BODY_MAX_BYTES: usize = 30_000_000;
 const DEFAULT_ANTHROPIC_RETRY_BODY_MAX_BYTES: usize = 15_000_000;
 
@@ -42,6 +59,9 @@ const DEFAULT_REQUEST_MAX_RETRIES: u64 = 4;
 pub const DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS: u64 = 15_000;
 /// Canonical executable guaranteed by every supported Corbanu Terminal install.
 const CORBANU_PROVIDER_AUTH_COMMAND: &str = "corbanu";
+/// The hidden `corbanu` subcommand that prints a Claude Plan token (the
+/// built-in Claude Plan provider's auth command).
+pub const CLAUDE_PLAN_TOKEN_HELPER_SUBCOMMAND: &str = "internal-claude-oauth-token";
 /// Hard cap for user-configured `stream_max_retries`.
 const MAX_STREAM_MAX_RETRIES: u64 = 100;
 /// Hard cap for user-configured `request_max_retries`.
@@ -63,14 +83,20 @@ fn claude_provider_auth_cwd() -> AbsolutePathBuf {
     // its credentials-file identity cannot drift from the profile selected by
     // the TUI. The command remains a bare installed executable resolved via
     // PATH, never a project-relative program.
-    AbsolutePathBuf::current_dir().unwrap_or_else(|err| {
-        panic!("current directory must resolve to determine Claude provider auth cwd: {err}")
-    })
+    //
+    // #616: this runs whenever the provider table is built, including on
+    // request and accounting paths. If the directory can't be resolved there
+    // (e.g. macOS revoked access to the volume holding it), keep the last
+    // resolved one instead of panicking a runtime worker; a helper that can't
+    // run from it fails its request with an error instead.
+    AbsolutePathBuf::current_dir_or_last_known()
 }
 
 const OPENAI_PROVIDER_NAME: &str = "OpenAI";
 const OPENAI_ACTOR_AUTHORIZATION_HEADER: &str = "x-openai-actor-authorization";
 pub const OPENAI_PROVIDER_ID: &str = "openai";
+/// Provider an install uses when nothing names one.
+pub const DEFAULT_MODEL_PROVIDER_ID: &str = OPENAI_PROVIDER_ID;
 /// OpenAI backend compatibility version for protocol-gated model access.
 ///
 /// This is intentionally separate from Corbanu Terminal's product version. The OpenAI
@@ -90,9 +116,10 @@ pub const ANTHROPIC_API_KEY_ENV_VAR: &str = "ANTHROPIC_API_KEY";
 const CLAUDE_PLAN_PROVIDER_NAME: &str = "Claude Plan";
 pub const CLAUDE_PLAN_PROVIDER_ID: &str = "claude-plan";
 pub const CLAUDE_PLAN_MODEL: &str = "claude-opus-5-plan";
-pub const CLAUDE_OPUS_5_5_PLAN_MODEL: &str = "claude-opus-5-5-plan";
 pub const CLAUDE_PLAN_UPSTREAM_MODEL: &str = ANTHROPIC_DEFAULT_MODEL;
 pub const CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL: &str = "claude-opus-4-8-plan";
+pub const CLAUDE_OPUS_5_5_PLAN_MODEL: &str = "claude-opus-5-5-plan";
+pub const CLAUDE_OPUS_5_5_PLAN_UPSTREAM_MODEL: &str = ANTHROPIC_OPUS_5_5_MODEL;
 pub const CLAUDE_FABLE_5_1_PLAN_MODEL: &str = "claude-fable-5-1-plan";
 pub const CLAUDE_FABLE_5_1_PLAN_UPSTREAM_MODEL: &str = CLAUDE_FABLE_5_1_MODEL;
 pub const CLAUDE_FABLE_5_PLAN_MODEL: &str = "claude-fable-5-plan";
@@ -180,7 +207,7 @@ pub const KIMI_CODE_K3_MODEL: &str = "k3";
 pub const KIMI_CODE_API_KEY_ENV_VAR: &str = "KIMI_API_KEY";
 const ZAI_PROVIDER_NAME: &str = "Z.AI";
 pub const ZAI_PROVIDER_ID: &str = "zai";
-pub const ZAI_BASE_URL: &str = "https://api.z.ai/api/coding/paas/v4";
+pub const ZAI_BASE_URL: &str = "https://api.z.ai/api/paas/v4";
 const ZAI_ANTHROPIC_PROVIDER_NAME: &str = "Z.AI Anthropic";
 pub const ZAI_ANTHROPIC_PROVIDER_ID: &str = "zai-anthropic";
 pub const ZAI_ANTHROPIC_BASE_URL: &str = "https://api.z.ai/api/anthropic/v1";
@@ -198,7 +225,11 @@ pub const OPENROUTER_API_KEY_ENV_VAR: &str = "OPENROUTER_API_KEY";
 const DEEPSEEK_PROVIDER_NAME: &str = "DeepSeek";
 pub const DEEPSEEK_PROVIDER_ID: &str = "deepseek";
 pub const DEEPSEEK_BASE_URL: &str = "https://api.deepseek.com";
-pub const DEEPSEEK_DEFAULT_MODEL: &str = "deepseek-v4-flash";
+/// DeepSeek V4.1 Flash, served under this API name since 2026-09-10.
+pub const DEEPSEEK_DEFAULT_MODEL: &str = "deepseek-flash";
+/// The retired V4 Flash name. DeepSeek still accepts it, serves V4.1 Flash on
+/// it and bills it at V4.1 Flash's price.
+pub const DEEPSEEK_LEGACY_FLASH_MODEL: &str = "deepseek-v4-flash";
 pub const DEEPSEEK_PRO_MODEL: &str = "deepseek-v4-pro";
 pub const OPENROUTER_DEEPSEEK_V4_PRO_0813_MODEL: &str = "deepseek/deepseek-v4-pro-0813";
 pub const DEEPSEEK_API_KEY_ENV_VAR: &str = "DEEPSEEK_API_KEY";
@@ -355,9 +386,10 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     ) {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
-    // Keep the API row's ownership distinct from the explicit Plan row.
-    // An explicitly selected Claude Plan provider can resolve this bare slug
-    // to its exact subscription alias without changing the model.
+    // Bare Opus 5.5 is catalogued on the metered `anthropic` provider, so the
+    // picker owns it there. `claude-plan` also serves it, translated exactly to
+    // `claude-opus-5-5-plan`, so `corrected_catalog_provider` leaves that pair
+    // alone rather than moving a subscription session onto per-token billing.
     if model == ANTHROPIC_OPUS_5_5_MODEL {
         return Some(ANTHROPIC_PROVIDER_ID);
     }
@@ -369,7 +401,10 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     if model == META_DEFAULT_MODEL {
         return Some(META_PROVIDER_ID);
     }
-    if matches!(model, DEEPSEEK_DEFAULT_MODEL | DEEPSEEK_PRO_MODEL) {
+    if matches!(
+        model,
+        DEEPSEEK_DEFAULT_MODEL | DEEPSEEK_LEGACY_FLASH_MODEL | DEEPSEEK_PRO_MODEL
+    ) {
         return Some(DEEPSEEK_PROVIDER_ID);
     }
     if matches!(
@@ -381,6 +416,7 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
             | OPENROUTER_GROK_4_6_MODEL
             | OPENROUTER_GROK_4_7_MODEL
             | "deepseek/deepseek-v4.1-flash"
+            | "xiaomi/mimo-v2.6-pro"
             | "z-ai/glm-5.3-flash"
             | "nvidia/nemotron-3-ultra-550b-a55b:free"
             | "x-ai/grok-4.5"
@@ -478,8 +514,11 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
-    // Both explicit Opus 5.5 routes are valid; never replace a chosen Plan
-    // route with API billing. Impossible pairs use the bare API row's owner.
+    // Bare Opus 5.5 is servable on its own metered row and, translated exactly
+    // to `claude-opus-5-5-plan`, on the subscription. Anywhere else it is
+    // corrected onto the provider its row states, where the slug survives
+    // untranslated. Moving a `claude-plan` session off the subscription would
+    // silently turn plan capacity into per-token spend.
     if model == ANTHROPIC_OPUS_5_5_MODEL
         && provider != ANTHROPIC_PROVIDER_ID
         && provider != CLAUDE_PLAN_PROVIDER_ID
@@ -502,8 +541,10 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     if model == KIMI_CODE_K3_MODEL && provider != KIMI_CODE_PROVIDER_ID {
         return Some(KIMI_CODE_PROVIDER_ID);
     }
-    if matches!(model, DEEPSEEK_DEFAULT_MODEL | DEEPSEEK_PRO_MODEL)
-        && provider != DEEPSEEK_PROVIDER_ID
+    if matches!(
+        model,
+        DEEPSEEK_DEFAULT_MODEL | DEEPSEEK_LEGACY_FLASH_MODEL | DEEPSEEK_PRO_MODEL
+    ) && provider != DEEPSEEK_PROVIDER_ID
         && provider != PFTERMINAL_PLAN_PROVIDER_ID
     {
         return Some(DEEPSEEK_PROVIDER_ID);
@@ -514,10 +555,77 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     None
 }
 
+/// The subscription slug `claude-plan` serves a bare Anthropic slug as, when it
+/// has an exact one. The subscription only answers requests carrying its plan
+/// identity, which is keyed on these slugs, and the ledger prices the plan slug;
+/// a bare slug sent as-is is refused upstream and left unpriced.
+pub fn claude_plan_translation(model: &str) -> Option<&'static str> {
+    match model.trim() {
+        ANTHROPIC_DEFAULT_MODEL => Some(CLAUDE_PLAN_MODEL),
+        ANTHROPIC_LEGACY_OPUS_4_8_MODEL => Some(CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL),
+        ANTHROPIC_OPUS_5_5_MODEL => Some(CLAUDE_OPUS_5_5_PLAN_MODEL),
+        CLAUDE_FABLE_5_1_MODEL => Some(CLAUDE_FABLE_5_1_PLAN_MODEL),
+        CLAUDE_FABLE_5_MODEL => Some(CLAUDE_FABLE_5_PLAN_MODEL),
+        _ => None,
+    }
+}
+
+/// The Anthropic API slug a Claude subscription slug serves: the inverse of
+/// [`claude_plan_translation`]. The subscription row states only a plan rate;
+/// the same model's published API price lives on this API row.
+pub fn claude_plan_api_model(plan_model: &str) -> Option<&'static str> {
+    [
+        ANTHROPIC_DEFAULT_MODEL,
+        ANTHROPIC_LEGACY_OPUS_4_8_MODEL,
+        ANTHROPIC_OPUS_5_5_MODEL,
+        CLAUDE_FABLE_5_1_MODEL,
+        CLAUDE_FABLE_5_MODEL,
+    ]
+    .into_iter()
+    .find(|api| claude_plan_translation(api) == Some(plan_model.trim()))
+}
+
+/// The model that replaces a retired slug on `model_provider_id`, if `model`
+/// is retired there.
+///
+/// Claude Opus 4.8 left the bundled `anthropic` and `claude-plan` catalogues,
+/// so no request can be built for it any more (its maximum output length is
+/// unknown). A pin left in `config.toml`, a saved session or a connector's
+/// state moves to the provider's current default instead of failing every
+/// turn. Other providers keep their own catalogues and are left alone.
+pub fn retired_model_replacement(model: &str, model_provider_id: &str) -> Option<&'static str> {
+    match model_provider_id {
+        CLAUDE_PLAN_PROVIDER_ID if is_retired_model(model) => Some(CLAUDE_PLAN_MODEL),
+        ANTHROPIC_PROVIDER_ID if is_retired_model(model) => Some(ANTHROPIC_DEFAULT_MODEL),
+        _ => None,
+    }
+}
+
+/// Whether `model` is a retired Claude slug (see [`retired_model_replacement`]).
+pub fn is_retired_model(model: &str) -> bool {
+    matches!(
+        model.trim(),
+        ANTHROPIC_LEGACY_OPUS_4_8_MODEL | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
+    )
+}
+
+/// The notice shown when a retired pin is replaced at startup.
+pub fn retired_model_notice(retired: &str, replacement: &str) -> String {
+    format!(
+        "Model `{retired}` has been retired and is no longer available; this session uses `{replacement}` instead. Choose a model with /model, or set `model = \"{replacement}\"` in config.toml, to stop this notice."
+    )
+}
+
 pub fn resolve_model_for_provider(
     model: Option<String>,
     model_provider_id: &str,
 ) -> Option<String> {
+    if let Some(replacement) = model
+        .as_deref()
+        .and_then(|model| retired_model_replacement(model, model_provider_id))
+    {
+        return Some(replacement.to_string());
+    }
     match model_provider_id {
         PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID => match model {
             Some(model)
@@ -582,20 +690,8 @@ pub fn resolve_model_for_provider(
             _ => Some(ANTHROPIC_DEFAULT_MODEL.to_string()),
         },
         CLAUDE_PLAN_PROVIDER_ID => match model {
-            Some(model) if model.trim() == ANTHROPIC_OPUS_5_5_MODEL => {
-                Some(CLAUDE_OPUS_5_5_PLAN_MODEL.to_string())
-            }
-            Some(model) if model.trim() == ANTHROPIC_DEFAULT_MODEL => {
-                Some(CLAUDE_PLAN_MODEL.to_string())
-            }
-            Some(model) if model.trim() == ANTHROPIC_LEGACY_OPUS_4_8_MODEL => {
-                Some(CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL.to_string())
-            }
-            Some(model) if model.trim() == CLAUDE_FABLE_5_1_MODEL => {
-                Some(CLAUDE_FABLE_5_1_PLAN_MODEL.to_string())
-            }
-            Some(model) if model.trim() == CLAUDE_FABLE_5_MODEL => {
-                Some(CLAUDE_FABLE_5_PLAN_MODEL.to_string())
+            Some(model) if claude_plan_translation(&model).is_some() => {
+                claude_plan_translation(&model).map(str::to_string)
             }
             Some(model)
                 if matches!(
@@ -616,7 +712,12 @@ pub fn resolve_model_for_provider(
             _ => Some(OPENROUTER_DEFAULT_MODEL.to_string()),
         },
         DEEPSEEK_PROVIDER_ID => match model {
-            Some(model) if matches!(model.trim(), DEEPSEEK_DEFAULT_MODEL | DEEPSEEK_PRO_MODEL) => {
+            Some(model)
+                if matches!(
+                    model.trim(),
+                    DEEPSEEK_DEFAULT_MODEL | DEEPSEEK_LEGACY_FLASH_MODEL | DEEPSEEK_PRO_MODEL
+                ) =>
+            {
                 Some(model)
             }
             _ => Some(DEEPSEEK_DEFAULT_MODEL.to_string()),
@@ -820,7 +921,10 @@ pub enum ModelProviderCredentialSource<'a> {
 }
 
 /// Serializable representation of a provider definition.
-#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, JsonSchema)]
+///
+/// `Debug` (in `provider_debug.rs`) redacts credentials: provider definitions
+/// are logged, for example when a session is configured.
+#[derive(Clone, Default, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct ModelProviderInfo {
     /// Friendly display name.
@@ -892,6 +996,68 @@ pub struct ModelProviderInfo {
     /// Whether this provider supports the standalone web-search endpoint.
     #[serde(default)]
     pub supports_standalone_web_search: bool,
+    /// How this provider's work is paid for: `subscription`, `pay_per_use` or
+    /// `local`. Overrides the built-in declaration for unusual setups; when
+    /// unset, the built-in table decides from the route and credential used,
+    /// and an unknown route is shown as not declared.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub billing: Option<BillingBasis>,
+    /// PF-84: the named account this provider's credential is resolved from.
+    /// `None` is the `default` account (today's credentials). Set at runtime
+    /// from `[provider_accounts]` or an explicit selection, never from a
+    /// provider definition.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub account: Option<NamedProviderAccount>,
+}
+
+/// PF-84: a selected named account of one provider. Holds names only, never
+/// credential material.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct NamedProviderAccount {
+    /// The provider id the account belongs to (the `model_providers` key).
+    pub provider_id: String,
+    /// The validated, non-`default` account name.
+    pub name: String,
+}
+
+impl std::fmt::Display for NamedProviderAccount {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.provider_id, self.name)
+    }
+}
+
+/// PF-84 (#416, #480): what to say when a provider rejected named account
+/// `name`'s credential: which account, and how to replace its credential.
+/// `/providers` recovery manages only the default credential, so a named
+/// account is recovered with `corbanu account add`. `provider` is the
+/// account's provider, when known.
+pub fn named_account_rejection_message(
+    display_name: &str,
+    provider_id: &str,
+    name: &str,
+    provider: Option<&ModelProviderInfo>,
+) -> String {
+    let recovery = if provider.is_some_and(ModelProviderInfo::is_claude_plan) {
+        format!(
+            "Replace its token with `corbanu account add {provider_id} {name} --kind claude-token` (reads stdin) or sign in again in its Claude Code config directory"
+        )
+    } else if provider.is_some_and(|provider| provider.auth.is_some()) {
+        format!("Check what the provider's auth command returns for account `{name}`")
+    } else if provider.is_some_and(|provider| provider.requires_openai_auth) {
+        format!(
+            "Sign it in again with `corbanu login --account {name}` (add `--with-api-key` for an API key)"
+        )
+    } else if provider.is_some_and(ModelProviderInfo::is_amazon_bedrock) {
+        format!(
+            "Check account `{name}`'s AWS profile and its credentials (`corbanu account list {provider_id}`)"
+        )
+    } else {
+        format!("Replace its key with `corbanu account add {provider_id} {name}` (reads stdin)")
+    };
+    format!(
+        "{display_name} ({provider_id}) account `{name}` was rejected. {recovery}, or choose another account. The default {display_name} credential is unchanged."
+    )
 }
 
 /// AWS SigV4 auth configuration for a model provider.
@@ -905,6 +1071,27 @@ pub struct ModelProviderAwsAuthInfo {
 }
 
 impl ModelProviderInfo {
+    /// Whether this configured entry only declares a billing basis (and
+    /// nothing else), so it may name a built-in provider.
+    pub fn is_billing_override_only(&self) -> bool {
+        self.billing.is_some()
+            && Self {
+                billing: None,
+                ..self.clone()
+            } == Self::default()
+    }
+
+    /// Whether requests authenticate only through OpenAI sign-in (saved
+    /// sign-ins and keys, session tokens and the `OPENAI_API_KEY` fallback),
+    /// with no provider key variable, bearer token, auth command or AWS auth.
+    pub fn uses_first_party_openai_auth(&self) -> bool {
+        self.requires_openai_auth
+            && self.env_key.is_none()
+            && self.experimental_bearer_token.is_none()
+            && self.auth.is_none()
+            && self.aws.is_none()
+    }
+
     /// Return the provider's validated credential-source classification.
     pub fn credential_source(&self) -> ModelProviderCredentialSource<'_> {
         if self.requires_openai_auth {
@@ -1007,7 +1194,12 @@ impl ModelProviderInfo {
         let mut headers = HeaderMap::with_capacity(capacity);
         if let Some(extra) = &self.http_headers {
             for (k, v) in extra {
-                if let (Ok(name), Ok(value)) = (HeaderName::try_from(k), HeaderValue::try_from(v)) {
+                if let (Ok(name), Ok(mut value)) =
+                    (HeaderName::try_from(k), HeaderValue::try_from(v))
+                {
+                    // Provider headers can carry credentials; keep them out of
+                    // `HeaderMap` Debug output.
+                    value.set_sensitive(true);
                     headers.insert(name, value);
                 }
             }
@@ -1017,9 +1209,10 @@ impl ModelProviderInfo {
             for (header, env_var) in env_headers {
                 if let Ok(val) = std::env::var(env_var)
                     && !val.trim().is_empty()
-                    && let (Ok(name), Ok(value)) =
+                    && let (Ok(name), Ok(mut value)) =
                         (HeaderName::try_from(header), HeaderValue::try_from(val))
                 {
+                    value.set_sensitive(true);
                     headers.insert(name, value);
                 }
             }
@@ -1067,10 +1260,44 @@ impl ModelProviderInfo {
         })
     }
 
+    /// PF-84: `self` replaces `original` after a model/provider correction. A
+    /// named account moves with it when both routes use the same API key;
+    /// otherwise the correction is refused rather than silently switching the
+    /// session to the other provider's default account.
+    pub fn with_account_from(mut self, original: &ModelProviderInfo) -> Result<Self, String> {
+        if self.account.is_some() {
+            // The target's own `[provider_accounts]` selection wins.
+            return Ok(self);
+        }
+        match &original.account {
+            None => Ok(self),
+            Some(account) if self.env_key.is_some() && self.env_key == original.env_key => {
+                self.account = Some(account.clone());
+                Ok(self)
+            }
+            Some(account) => Err(format!(
+                "account `{name}` of provider `{id}` cannot follow the model to another \
+                 provider; select an account for that provider or pick a model `{id}` serves",
+                name = account.name,
+                id = account.provider_id,
+            )),
+        }
+    }
+
     /// If `env_key` is Some, returns the API key for this provider if present
     /// (and non-empty) in the environment. If `env_key` is required but
     /// cannot be found, returns an error.
     pub fn api_key(&self) -> CodexResult<Option<String>> {
+        // PF-84: a named account never reads the provider's environment key;
+        // reaching here means its own stored key was not found.
+        if let (Some(account), Some(_)) = (&self.account, &self.env_key) {
+            return Err(CodexErr::Fatal(format!(
+                "account `{name}` of provider `{id}` has no stored API key; add it with \
+                 `corbanu account add {id} {name}` or choose another account",
+                name = account.name,
+                id = account.provider_id,
+            )));
+        }
         match &self.env_key {
             Some(env_key) => {
                 let api_key = api_key_from_environment(&self.api_key_env_vars(), |name| {
@@ -1155,6 +1382,7 @@ impl ModelProviderInfo {
         // falling back conservatively to SSE for custom endpoints.
         let supports_websockets = base_url.is_none();
         ModelProviderInfo {
+            account: None,
             name: OPENAI_PROVIDER_NAME.into(),
             base_url,
             env_key: None,
@@ -1196,11 +1424,13 @@ impl ModelProviderInfo {
             requires_openai_auth: true,
             supports_websockets,
             supports_standalone_web_search: true,
+            billing: None,
         }
     }
 
     pub fn create_anthropic_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: ANTHROPIC_PROVIDER_NAME.into(),
             base_url: Some(ANTHROPIC_BASE_URL.into()),
             env_key: Some(ANTHROPIC_API_KEY_ENV_VAR.into()),
@@ -1224,11 +1454,13 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
     pub fn create_claude_plan_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: CLAUDE_PLAN_PROVIDER_NAME.into(),
             base_url: Some(ANTHROPIC_BASE_URL.into()),
             env_key: None,
@@ -1236,7 +1468,7 @@ impl ModelProviderInfo {
             experimental_bearer_token: None,
             auth: Some(ModelProviderAuthInfo {
                 command: CORBANU_PROVIDER_AUTH_COMMAND.to_string(),
-                args: vec!["internal-claude-oauth-token".to_string()],
+                args: vec![CLAUDE_PLAN_TOKEN_HELPER_SUBCOMMAND.to_string()],
                 timeout_ms: claude_provider_auth_timeout_ms(),
                 // The selected Claude source has its own revision marker and
                 // 401 recovery path. Proactive reruns add no freshness while
@@ -1265,11 +1497,13 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
     pub fn create_ambient_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: AMBIENT_PROVIDER_NAME.into(),
             base_url: Some(AMBIENT_BASE_URL.into()),
             env_key: Some(AMBIENT_API_KEY_ENV_VAR.into()),
@@ -1293,11 +1527,13 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
     pub fn create_pfterminal_plan_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: PLAN_NAME.into(),
             base_url: Some(
                 std::env::var(CORBANU_API_BASE_URL_ENV_VAR)
@@ -1325,6 +1561,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1341,6 +1578,7 @@ impl ModelProviderInfo {
 
     pub fn create_kimi_code_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: KIMI_CODE_PROVIDER_NAME.into(),
             base_url: Some(KIMI_CODE_BASE_URL.into()),
             env_key: Some(KIMI_CODE_API_KEY_ENV_VAR.into()),
@@ -1364,11 +1602,13 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
     pub fn create_zai_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: ZAI_PROVIDER_NAME.into(),
             base_url: Some(ZAI_BASE_URL.into()),
             env_key: Some(ZAI_API_KEY_ENV_VAR.into()),
@@ -1392,11 +1632,13 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
     pub fn create_zai_anthropic_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: ZAI_ANTHROPIC_PROVIDER_NAME.into(),
             base_url: Some(ZAI_ANTHROPIC_BASE_URL.into()),
             env_key: Some(ZAI_API_KEY_ENV_VAR.into()),
@@ -1420,11 +1662,13 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
     pub fn create_openrouter_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: OPENROUTER_PROVIDER_NAME.into(),
             base_url: Some(OPENROUTER_BASE_URL.into()),
             env_key: Some(OPENROUTER_API_KEY_ENV_VAR.into()),
@@ -1448,11 +1692,13 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
     pub fn create_deepseek_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: DEEPSEEK_PROVIDER_NAME.into(),
             base_url: Some(DEEPSEEK_BASE_URL.into()),
             env_key: Some(DEEPSEEK_API_KEY_ENV_VAR.into()),
@@ -1476,11 +1722,13 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
     pub fn create_openrouter_anthropic_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: OPENROUTER_ANTHROPIC_PROVIDER_NAME.into(),
             base_url: Some(OPENROUTER_BASE_URL.into()),
             env_key: Some(OPENROUTER_API_KEY_ENV_VAR.into()),
@@ -1504,11 +1752,13 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
     pub fn create_meta_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: META_PROVIDER_NAME.into(),
             base_url: Some(META_BASE_URL.into()),
             env_key: Some(META_API_KEY_ENV_VAR.into()),
@@ -1532,11 +1782,13 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
     pub fn create_baseten_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: BASETEN_PROVIDER_NAME.into(),
             base_url: Some(BASETEN_BASE_URL.into()),
             env_key: Some(BASETEN_API_KEY_ENV_VAR.into()),
@@ -1560,11 +1812,13 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
     pub fn create_baseten_anthropic_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: BASETEN_ANTHROPIC_PROVIDER_NAME.into(),
             base_url: Some(BASETEN_BASE_URL.into()),
             env_key: Some(BASETEN_API_KEY_ENV_VAR.into()),
@@ -1588,11 +1842,13 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
     pub fn create_vercel_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: VERCEL_PROVIDER_NAME.into(),
             base_url: Some(VERCEL_BASE_URL.into()),
             env_key: Some(VERCEL_API_KEY_ENV_VAR.into()),
@@ -1616,11 +1872,13 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
     pub fn create_vercel_anthropic_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: VERCEL_ANTHROPIC_PROVIDER_NAME.into(),
             base_url: Some(VERCEL_BASE_URL.into()),
             env_key: Some(VERCEL_API_KEY_ENV_VAR.into()),
@@ -1644,11 +1902,13 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
     pub fn create_vercel_anthropic_fast_provider() -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: VERCEL_ANTHROPIC_FAST_PROVIDER_NAME.into(),
             base_url: Some(VERCEL_BASE_URL.into()),
             env_key: Some(VERCEL_API_KEY_ENV_VAR.into()),
@@ -1672,6 +1932,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1679,6 +1940,7 @@ impl ModelProviderInfo {
         aws: Option<ModelProviderAwsAuthInfo>,
     ) -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: AMAZON_BEDROCK_PROVIDER_NAME.into(),
             // The runtime provider derives the regional Mantle endpoint when
             // this is unset. A configured value is therefore unambiguously an
@@ -1711,6 +1973,7 @@ impl ModelProviderInfo {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -1798,6 +2061,9 @@ impl ModelProviderInfo {
         self.name == AMAZON_BEDROCK_PROVIDER_NAME
     }
 
+    /// Z.AI answers a transient overload (code 1305) with a 429, so its
+    /// transport retries one. A 429 with a `Retry-After` over a few seconds is
+    /// not retried there: the provider-request throttle owns that wait (#510).
     fn retries_transient_rate_limits(&self) -> bool {
         self.is_zai()
     }
@@ -1888,6 +2154,23 @@ pub fn built_in_model_providers(
     .collect()
 }
 
+/// Every environment variable a built-in provider reads its API key from,
+/// including accepted compatibility names, derived from
+/// [`built_in_model_providers`]. Core keeps these out of model-run commands.
+pub fn built_in_provider_api_key_env_vars() -> &'static [String] {
+    static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    NAMES.get_or_init(|| {
+        let mut names = built_in_model_providers(/*openai_base_url*/ None)
+            .values()
+            .flat_map(ModelProviderInfo::api_key_env_vars)
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        names.sort();
+        names.dedup();
+        names
+    })
+}
+
 /// Merge configured providers into the built-in provider catalog.
 ///
 /// Configured providers extend the built-in set. Built-in providers are not
@@ -1897,8 +2180,22 @@ pub fn merge_configured_model_providers(
     mut model_providers: HashMap<String, ModelProviderInfo>,
     configured_model_providers: HashMap<String, ModelProviderInfo>,
 ) -> Result<HashMap<String, ModelProviderInfo>, String> {
+    // Aliases first, so an entry under the real id always wins over one under
+    // an alias of it; then by id, so the outcome never depends on map order.
+    let mut configured_model_providers: Vec<_> = configured_model_providers.into_iter().collect();
+    configured_model_providers.sort_by(|(a, _), (b, _)| {
+        (canonical_provider_id(a) == a, a).cmp(&(canonical_provider_id(b) == b, b))
+    });
     for (key, mut provider) in configured_model_providers {
+        // A billing-only entry may name a built-in provider by an alias; it
+        // adjusts that provider.
+        let key = if provider.is_billing_override_only() {
+            canonical_provider_id(&key).to_string()
+        } else {
+            key
+        };
         if key == AMAZON_BEDROCK_PROVIDER_ID {
+            let billing_override = provider.billing.take();
             let base_url_override = provider.base_url.take();
             let auth_override = provider.auth.take();
             let aws_override = provider.aws.take();
@@ -1906,12 +2203,13 @@ pub fn merge_configured_model_providers(
             if provider != ModelProviderInfo::default() {
                 return Err(format!(
                     "model_providers.{AMAZON_BEDROCK_PROVIDER_ID} only supports changing \
-`base_url`, `auth`, `http_headers`, `aws.profile`, and `aws.region`; other non-default \
+`base_url`, `auth`, `http_headers`, `aws.profile`, `aws.region`, and `billing`; other non-default \
 provider fields are not supported"
                 ));
             }
 
             if let Some(built_in_provider) = model_providers.get_mut(AMAZON_BEDROCK_PROVIDER_ID) {
+                built_in_provider.billing = billing_override;
                 built_in_provider.base_url = base_url_override;
                 built_in_provider.auth = auth_override;
                 if let Some(aws_override) = aws_override {
@@ -1938,6 +2236,9 @@ fn apply_transport_overrides(
     built_in_provider: &mut ModelProviderInfo,
     configured_provider: ModelProviderInfo,
 ) {
+    if configured_provider.billing.is_some() {
+        built_in_provider.billing = configured_provider.billing;
+    }
     if configured_provider.request_max_retries.is_some() {
         built_in_provider.request_max_retries = configured_provider.request_max_retries;
     }
@@ -1992,6 +2293,7 @@ pub fn create_oss_provider(default_provider_port: u16, wire_api: WireApi) -> Mod
 
 pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> ModelProviderInfo {
     ModelProviderInfo {
+        account: None,
         name: OSS_PROVIDER_NAME.into(),
         base_url: Some(base_url.into()),
         env_key: None,
@@ -2015,6 +2317,7 @@ pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> M
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
+        billing: None,
     }
 }
 

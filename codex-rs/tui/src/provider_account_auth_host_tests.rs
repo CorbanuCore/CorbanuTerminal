@@ -35,7 +35,7 @@ fn claude_recovery_snapshot_presents_the_method_choice() {
     use codex_provider_auth::claude_account_flow::ClaudeUnauthorizedRecoverySource;
 
     let catalog = codex_provider_auth::ProviderCatalog::from_runtime_providers(
-        &codex_model_provider_info::built_in_model_providers(None),
+        &codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None),
     );
     let target = ClaudeAccountTarget::from_catalog_entry(
         catalog
@@ -63,7 +63,7 @@ fn submitted_claude_token_does_not_reopen_the_entry_form() {
     use codex_provider_auth::claude_account_flow::ClaudeAccountTarget;
 
     let catalog = codex_provider_auth::ProviderCatalog::from_runtime_providers(
-        &codex_model_provider_info::built_in_model_providers(None),
+        &codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None),
     );
     let target = ClaudeAccountTarget::from_catalog_entry(
         catalog

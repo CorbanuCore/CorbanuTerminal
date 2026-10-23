@@ -1,0 +1,28 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Reply with the single word OK.
+
+
+• OK
+
+
+  Attempt, components and original price
+  Requested UTC day: 2026-10-16
+
+  Price effective interval: [2026-10-16T03:56:15.794Z, unbounded)
+  Noncached input rate: 0.15 USD per million tokens
+  Cache read rate: 0.03 USD per million tokens
+  Cache write rate: 0 USD per million tokens
+  Output rate: 0.5 USD per million tokens
+  Evidence revision 49; source 5def5e26-e1be-46da-a161-14750f09b190; sequence 49; presence patch
+  {"input":8461,"read":0,"output":52,"reasoning":47,"total":8513}
+› Snapshot is not current; newer activity is unverified
+
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

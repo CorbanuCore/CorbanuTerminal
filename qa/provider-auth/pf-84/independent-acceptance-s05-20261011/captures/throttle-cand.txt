@@ -1,0 +1,33 @@
+# cand: corbanu home=$S/homes/h3
+mock	a	api_key
+mock	b	api_key
+=== b1: exec --account b -> exit=1 in 1.2s; reply=
+    mock requests so far (label,status): {('b', 429): 1}
+    stderr: warning: Model metadata for `mock-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+    stderr: ERROR: rate limited by provider (429 Too Many Requests). Wait before continuing; immediate retry may fail again
+    stderr: ERROR: rate limited by provider (429 Too Many Requests). Wait before continuing; immediate retry may fail again
+=== a1: exec --account a -> exit=0 in 0.9s; reply=pong
+    mock requests so far (label,status): {('b', 429): 1, ('a', 200): 1}
+    stderr: pong
+    stderr: tokens used
+    stderr: 1,007
+=== d1: exec  -> exit=0 in 0.3s; reply=pong
+    mock requests so far (label,status): {('b', 429): 1, ('a', 200): 1, ('default', 200): 1}
+    stderr: pong
+    stderr: tokens used
+    stderr: 1,007
+=== b2: exec --account b -> exit=1 in 0.9s; reply=
+    mock requests so far (label,status): {('b', 429): 2, ('a', 200): 1, ('default', 200): 1}
+    stderr: warning: Model metadata for `mock-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+    stderr: ERROR: rate limited by provider (429 Too Many Requests). Wait before continuing; immediate retry may fail again
+    stderr: ERROR: rate limited by provider (429 Too Many Requests). Wait before continuing; immediate retry may fail again
+=== a2: exec --account a -> exit=0 in 0.9s; reply=pong
+    mock requests so far (label,status): {('b', 429): 2, ('a', 200): 2, ('default', 200): 1}
+    stderr: pong
+    stderr: tokens used
+    stderr: 1,007
+--- provider_request_state ---
+provider_id|model|key_fingerprint|cooldown|last_status|consecutive_429_count
+mock|mock-model|account:a|none||0
+mock|mock-model|account:b|none||0
+mock|mock-model|env:MOCK_API_KEY:348c6be394d03dcd|none||0

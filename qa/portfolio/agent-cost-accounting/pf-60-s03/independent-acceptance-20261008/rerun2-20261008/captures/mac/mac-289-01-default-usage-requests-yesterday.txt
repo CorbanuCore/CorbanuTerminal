@@ -1,0 +1,20 @@
+$ /usage requests 2026-10-07
+  Cost — this conversation
+  Requested UTC day: 2026-10-07
+  Unavailable — accounting ledger not installed.
+  Next step: if this build records costs, send a turn and run /usage requests again; otherwise check your provider's bill.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Refresh
+  Close
+  ↑↓ scroll · Enter open · Esc back/close
+--- last screen:
+  Unavailable — accounting ledger not installed.
+  Next step: if this build records costs, send a turn and run /usage requests again; otherwise check your provider's bill.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+› Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Refresh
+  Close
+  ↑↓ scroll · Enter open · Esc back/close

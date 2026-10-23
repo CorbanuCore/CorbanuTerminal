@@ -1,0 +1,31 @@
+$ realtime_driver.py <corbanu> <ws>   # websocket transport, text output, appendSpeech "Reply with the single word OK."
+start: thread/realtime/started
+item: {"id": "item_EZ5r3tZgjrpOF4IqYqiLH", "type": "message", "status": "completed", "role": "user", "content": [{"type": "input_text", "text": "[BACKEND] Reply with the single word OK."}]}
+item: {"id": "item_EZ5r3RECIMwr1Zjdr9Bdr", "type": "message", "status": "in_progress", "role": "assistant", "content": []}
+reply end: thread/realtime/transcript/done
+reply text: OK
+thread: 01a13d78-d372-7fd3-863a-16eb8f87ccdf
+methods seen: ['remoteControl/status/changed', 'thread/realtime/closed', 'thread/realtime/itemAdded', 'thread/realtime/started', 'thread/realtime/transcript/delta', 'thread/realtime/transcript/done', 'thread/started']
+
+$ realtime_driver.py ... --transport webrtc --sdp-file offer.sdp   # text output
+start: thread/realtime/error
+error: {"threadId": "01a13d78-dfb1-7530-a24a-8b9cda2d0367", "message": "text realtime output modality requires realtime v2"}
+thread: 01a13d78-dfb1-7530-a24a-8b9cda2d0367
+methods seen: ['remoteControl/status/changed', 'thread/realtime/error', 'thread/started']
+
+$ realtime_driver.py ... --transport webrtc --sdp-file offer.sdp --modality audio
+start: thread/realtime/error
+error: {"threadId": "01a13d78-e309-7f32-ada3-0a5cb3c79371", "message": "{\n    \"error\": {\n        \"message\": \"AVAS requires OpenAI-Alpha: quicksilver=v2.\",\n        \"type\": \"invalid_request_error\",\n        \"code\": \"invalid_quicksilver_alpha_header\",\n        \"param\": \"\"\n    }\n}"}
+thread: 01a13d78-e309-7f32-ada3-0a5cb3c79371
+methods seen: ['remoteControl/status/changed', 'thread/realtime/error', 'thread/started']
+
+$ ledger: attempts (turn label, model)
+prewarm:9a279e54-5470-400c-9735-3031ca29e42b|gpt-6-luna
+prewarm:384729f8-2d80-49c3-9a54-855bbfa05cdc|gpt-6-luna
+prewarm:3a9dfcfd-a027-4790-a61c-d4d5aa8d4e45|gpt-6-luna
+prewarm:62e08703-f52a-4a5c-b4de-ab62ae6bccfa|gpt-6-luna
+prewarm:362c47d2-d5c3-468d-87df-84c7d2d55b31|gpt-6-luna
+prewarm:801c6a21-8d77-405a-9368-0dd42a564994|gpt-6-luna
+realtime:01a13d63-d016-72c1-a3ba-6a612b16ab8c|gpt-realtime-1.5
+prewarm:aaa43668-715e-4e67-baee-aeaba47bb2a2|gpt-6-luna
+realtime:01a13d78-e428-76b1-9896-9d29c76acd6d|gpt-realtime-1.5

@@ -1,0 +1,28 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Reply with the single word OK.
+
+
+• OK
+
+
+  Attempt, components and original price
+  Requested UTC day: 2026-10-16
+
+  Output cost: $0.000026; exact USD 0.000026
+  Known subtotal exact USD: 0.00129515
+  Price ID: 9010e43e-5521-4db0-860b-15dab9cf40ae
+  Price source: NativeCatalog; reference aba2fe65-51b4-5b06-be1a-3886c76a169d
+  Price currency/unit: Usd / PerMillionTokens
+  Price observed/approved: 2026-10-16T03:56:15.794Z / 2026-10-16T03:56:15.794Z
+  Price effective interval: [2026-10-16T03:56:15.794Z, unbounded)
+› Noncached input rate: 0.15 USD per million tokens
+
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

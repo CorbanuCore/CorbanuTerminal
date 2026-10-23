@@ -1,0 +1,15 @@
+ Resume a previous session
+ Type to search                                                                                                             Filter: [Cwd] All    Sort: [Updated] Created
+  ❯ 5s ago      Reply with exactly the word ping
+    2m ago      Reply with exactly the word ping
+    4m ago      Reply with exactly the word prec
+    6m ago      Reply with exactly the word prec
+    10m ago     Reply with exactly the word ping
+    10m ago     Reply with exactly the word ping
+    11m ago     Reply with exactly the word ping
+    11m ago     Reply with exactly the word edited
+    12m ago     Reply with exactly the word ping
+    12m ago     Reply with exactly the word ping
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 1 / 10 · 100% ─
+ enter resume   esc exit   ctrl+c exit   tab focus sort/filter   ←/→ change option
+ ctrl+o comfortable view   ctrl+t transcript   ctrl+e expand   ↑/↓ browse

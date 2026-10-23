@@ -1,0 +1,30 @@
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     loading   /model to change                  │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+
+› Summarize recent commits
+
+  Z.AI GLM 5.3 Flash via zai default · $S/work · Corbanu Terminal · TPS: -- tok/s
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+⚠ `[provider_accounts]` is ignored because the `named_accounts` feature is off; every provider uses its default account.
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+Token usage: total=8,270 input=8,267 output=3
+To continue this session, run corbanu resume 01a12a9e-d004-76c0-9a77-a751732b3e72
+TUI_EXITED rc=0

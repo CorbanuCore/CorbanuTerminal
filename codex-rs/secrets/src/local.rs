@@ -88,12 +88,21 @@ impl SecretsFile {
 #[derive(Debug, Clone)]
 struct CachedSecretsFile {
     file: SecretsFile,
-    fingerprint: Option<(u64, std::time::SystemTime)>,
+    fingerprint: Option<FileFingerprint>,
 }
 
-fn file_fingerprint(path: &Path) -> Option<(u64, std::time::SystemTime)> {
+/// Size, modification time and (on Unix) inode. The store is rewritten by an
+/// atomic rename, so a rewrite of the same size within the clock's precision
+/// still changes the inode (#434).
+type FileFingerprint = (u64, std::time::SystemTime, u64);
+
+fn file_fingerprint(path: &Path) -> Option<FileFingerprint> {
     let metadata = fs::metadata(path).ok()?;
-    Some((metadata.len(), metadata.modified().ok()?))
+    #[cfg(unix)]
+    let inode = std::os::unix::fs::MetadataExt::ino(&metadata);
+    #[cfg(not(unix))]
+    let inode = 0;
+    Some((metadata.len(), metadata.modified().ok()?, inode))
 }
 
 #[derive(Debug, Clone)]
@@ -168,6 +177,15 @@ impl LocalSecretsBackend {
         let canonical_key = scope.canonical_key(name);
         let file = self.load_file()?;
         Ok(file.secrets.get(&canonical_key).cloned())
+    }
+
+    /// Several values from one read of the store, in the order asked.
+    pub fn get_many(&self, entries: &[(SecretScope, SecretName)]) -> Result<Vec<Option<String>>> {
+        let file = self.load_file()?;
+        Ok(entries
+            .iter()
+            .map(|(scope, name)| file.secrets.get(&scope.canonical_key(name)).cloned())
+            .collect())
     }
 
     pub fn delete(&self, scope: &SecretScope, name: &SecretName) -> Result<bool> {
@@ -624,6 +642,10 @@ impl SecretsBackend for LocalSecretsBackend {
         LocalSecretsBackend::delete(self, scope, name)
     }
 
+    fn get_many(&self, entries: &[(SecretScope, SecretName)]) -> Result<Vec<Option<String>>> {
+        LocalSecretsBackend::get_many(self, entries)
+    }
+
     fn delete_many(&self, entries: &[(SecretScope, SecretName)]) -> Result<usize> {
         LocalSecretsBackend::delete_many(self, entries)
     }
@@ -727,6 +749,11 @@ fn set_private_file_permissions(path: &Path) -> Result<(), CredentialStoreError>
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
+        // Already private: no write, so a read-only reader (the PF-27-S05
+        // credential broker, whose sandbox denies chmod) can open the vault.
+        if fs::metadata(path).is_ok_and(|meta| meta.permissions().mode() & 0o777 == 0o600) {
+            return Ok(());
+        }
         fs::set_permissions(path, fs::Permissions::from_mode(0o600)).map_err(|err| {
             CredentialStoreError::from_message(format!(
                 "failed to set private permissions on {}: {err}",
@@ -745,6 +772,11 @@ fn set_private_dir_permissions(path: &Path) -> Result<(), CredentialStoreError> 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
+        // Already private: no write, so a read-only reader (the PF-27-S05
+        // credential broker, whose sandbox denies chmod) can open the vault.
+        if fs::metadata(path).is_ok_and(|meta| meta.permissions().mode() & 0o777 == 0o700) {
+            return Ok(());
+        }
         fs::set_permissions(path, fs::Permissions::from_mode(0o700)).map_err(|err| {
             CredentialStoreError::from_message(format!(
                 "failed to set private permissions on {}: {err}",
@@ -931,6 +963,39 @@ mod tests {
             .expect("replace file");
         // It must read the replacement (invalid ciphertext), not return the old plaintext.
         assert!(backend.load_file().is_err());
+    }
+
+    /// PF-27-S05: reading a vault whose files are already private changes
+    /// nothing on disk, so the credential broker's sandbox (no chmod) allows it.
+    #[cfg(unix)]
+    #[test]
+    fn already_private_permissions_are_not_rewritten() {
+        use std::os::unix::fs::MetadataExt as _;
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = tempfile::tempdir().expect("temp dir");
+        let file = dir.path().join("local.age");
+        std::fs::write(&file, b"x").expect("write");
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).expect("chmod");
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700))
+            .expect("chmod dir");
+        let ctime = |path: &Path| {
+            let meta = std::fs::metadata(path).expect("metadata");
+            (meta.ctime(), meta.ctime_nsec())
+        };
+        let before = (ctime(&file), ctime(dir.path()));
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        set_private_file_permissions(&file).expect("file");
+        set_private_dir_permissions(dir.path()).expect("dir");
+        assert_eq!((ctime(&file), ctime(dir.path())), before);
+
+        // A file that is not private is still fixed.
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).expect("chmod");
+        set_private_file_permissions(&file).expect("file");
+        let mode = std::fs::metadata(&file)
+            .expect("metadata")
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600);
     }
 
     #[test]

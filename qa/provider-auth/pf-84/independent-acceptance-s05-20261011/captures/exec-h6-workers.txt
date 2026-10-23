@@ -1,0 +1,29 @@
+=== zai-default: corbanu exec -m glm-5.3-flash -c model_provider="zai" ===
+exit=0
+thread 01a12b4b-43f1-7053-9219-aa9946767b02
+reply 'pong'
+usage {"cache_write_input_tokens": 0, "cached_input_tokens": 0, "input_tokens": 7422, "output_tokens": 3, "reasoning_output_tokens": 0}
+stderr(last 4):
+  Reading additional input from stdin...
+  {"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":32807,"ms_to_response_headers":4515,"ms_to_first_sse_byte":4517,"ms_to_first_parsed_data_event":4518,"ms_to_first_actionable_event":4519,"total_stream_ms":4534,"comment_frame_count":0,"parsed_event_count":3,"x_reques
+=== zai-work: corbanu exec -m glm-5.3-flash -c model_provider="zai" --account work ===
+exit=0
+thread 01a12b4b-58a4-7b80-9575-aed747a33c90
+reply 'pong'
+usage {"cache_write_input_tokens": 0, "cached_input_tokens": 576, "input_tokens": 7422, "output_tokens": 3, "reasoning_output_tokens": 0}
+stderr(last 4):
+  Reading additional input from stdin...
+  {"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":32807,"ms_to_response_headers":4392,"ms_to_first_sse_byte":4393,"ms_to_first_parsed_data_event":4393,"ms_to_first_actionable_event":4393,"total_stream_ms":4429,"comment_frame_count":0,"parsed_event_count":3,"x_reques
+=== zai-fake: corbanu exec -m glm-5.3-flash -c model_provider="zai" --account fake ===
+exit=1
+thread 01a12b4b-6fba-7ad3-897b-1183b140478f
+error {"type": "error", "message": "unexpected status 401 Unauthorized: Authentication Failed, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 5fe81a9d-3b22-4c22-abe3-d111b8fd6946"}
+turn.failed {"type": "turn.failed", "error": {"message": "unexpected status 401 Unauthorized: Authentication Failed, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 5fe81a9d-3b22-4c22-abe3-d111b8fd6946"}}
+stderr(last 4):
+  Reading additional input from stdin...
+  {"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":32807,"ms_to_response_headers":426,"ms_to_first_sse_byte":null,"ms_to_first_parsed_data_event":null,"ms_to_first_actionable_event":null,"total_stream_ms":426,"comment_frame_count":0,"parsed_event_count":0,"x_request_
+=== zai-ghost: corbanu exec -m glm-5.3-flash -c model_provider="zai" --account ghost ===
+exit=1
+stderr(last 4):
+  Reading additional input from stdin...
+  Error: thread/start: thread/start failed: account `ghost` of provider `zai` is not configured; add it with `corbanu account add zai ghost` or pick another with `--account` (see `corbanu account list`) (code -32600)

@@ -1,0 +1,82 @@
+[
+  {
+    "attempt_rows": 571427,
+    "compact_day_rows": 0,
+    "day": "2026-08-08",
+    "selected_attempts": 0,
+    "refused": false,
+    "elapsed": 12.159000208019279
+  },
+  {
+    "attempt_rows": 571427,
+    "compact_day_rows": 0,
+    "day": "2026-09-17",
+    "selected_attempts": 1,
+    "refused": false,
+    "elapsed": 12.56331166694872
+  },
+  {
+    "attempt_rows": 571428,
+    "compact_day_rows": 0,
+    "day": "2026-08-08",
+    "selected_attempts": 0,
+    "refused": false,
+    "elapsed": 12.237202625023201
+  },
+  {
+    "attempt_rows": 571428,
+    "compact_day_rows": 0,
+    "day": "2026-09-17",
+    "selected_attempts": 1,
+    "refused": true,
+    "elapsed": 7.588669709046371
+  },
+  {
+    "attempt_rows": 571429,
+    "compact_day_rows": 0,
+    "day": "2026-08-08",
+    "selected_attempts": 0,
+    "refused": true,
+    "elapsed": 7.511877750046551
+  },
+  {
+    "attempt_rows": 571429,
+    "compact_day_rows": 0,
+    "day": "2026-09-17",
+    "selected_attempts": 1,
+    "refused": true,
+    "elapsed": 7.629669958958402
+  },
+  {
+    "attempt_rows": 666666,
+    "compact_day_rows": 0,
+    "day": "2026-08-08",
+    "selected_attempts": 0,
+    "refused": true,
+    "elapsed": 8.35676358290948
+  },
+  {
+    "attempt_rows": 666666,
+    "compact_day_rows": 0,
+    "day": "2026-09-17",
+    "selected_attempts": 1,
+    "refused": true,
+    "elapsed": 7.734536915901117
+  },
+  {
+    "attempt_rows": 666667,
+    "compact_day_rows": 0,
+    "day": "2026-08-08",
+    "selected_attempts": 0,
+    "refused": true,
+    "elapsed": 2.7654413339914754
+  },
+  {
+    "attempt_rows": 666667,
+    "compact_day_rows": 0,
+    "day": "2026-09-17",
+    "selected_attempts": 1,
+    "refused": true,
+    "elapsed": 2.7410054159117863
+  }
+]

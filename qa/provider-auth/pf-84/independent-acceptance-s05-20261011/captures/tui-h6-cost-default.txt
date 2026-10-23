@@ -1,0 +1,89 @@
+[0] › Today (UTC) in this conversation:
+[1] › • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 6 requests, 39,762+ tokens. Estimated cost: at least $0.003190 (rounded) (1 attempt had incomplete
+[2] › usage).
+[3] › • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 1 request, tokens not reported. Estimated cost: not available — usage incomplete.
+[4] › • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 1 request, 4,622 tokens. Estimated cost: $0.000627 (rounded).
+[5] › Other conversations on this day, not included above: 3 requests in 3 conversations.
+[6] › • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 1 request, 7,425 tokens. Estimated cost: $0.001115 (rounded).
+[7] › • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 1 request, tokens not reported. Estimated cost: not available — usage incomplete.
+[8] › • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 1 request, 7,425 tokens. Estimated cost: $0.001046 (rounded).
+[9] › Other conversations' estimated cost: at least $0.002160 (rounded) (1 attempt had incomplete usage).
+[10] › To see those requests, open that conversation with /resume and run /cost there.
+[11] › Next step for requests with incomplete usage: check the bill from Z.AI. Their provider did not report every token count, so the estimate is missing or only a lower
+[12] › bound.
+[13] › Costs are estimates from published prices; Z.AI doesn't report its charges — check Z.AI's bill.
+[14] › Select a provider below to see its requests.
+[15] › —— Details ——
+[16] › Known estimated token cost: $0.003817 + unknown costs
+[17] › Full recorded estimate: unavailable (2 of 8 billed attempts incomplete)
+[18] › Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+[19] › Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+[20] › Snapshot is not current; newer activity is unverified
+[21] › Day covered (UTC): [2026-10-11T00:00:00.000Z, 2026-10-12T00:00:00.000Z)
+[22] › Read at: 2026-10-11T14:10:53.147Z; ledger current to: 2026-10-11T14:10:45.344Z (7803 ms behind)
+[23] › Retention: request detail kept since 2026-07-13T14:10:53.147Z; daily totals kept since 2025-10-12; oldest recorded day in this conversation 2026-10-11
+[24] › Known subtotal exact USD: 0.003817
+[25] › Input: 44,052 + not reported by 2 attempts
+[26] › Noncached input (derived for inclusive input): not reported (8 attempts) — costed as input − cache read for 6 attempts, whose price charges nothing for cache writes
+[27] › Cache read: 24,640 + not reported by 2 attempts
+[28] › Cache write: not reported (8 attempts) — free at the price of 8 attempts, so nothing was charged
+[29] › Output: 332 + not reported by 2 attempts
+[30] › Reasoning (subset, not separately billed): 176 + not reported by 2 attempts
+[31] › Total (not separately billed): 44,384 + not reported by 2 attempts
+[32] › Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+[33] › Unknown parent population: 0 attempts, excluded from root total
+[34] › —— Open ——
+[35] › → Z.AI · account default · Z.AI GLM 5.3 Flash — estimated at least $0.003190 (rounded) (1 attempt had incomplete usage) (6 requests)
+[36] › → Z.AI · account fake · Z.AI GLM 5.3 Flash — usage incomplete (1 request)
+[37] › → Z.AI · account work · Z.AI GLM 5.3 Flash — estimated $0.000627 (rounded) (1 request)
+[38] › → Request 1 · Z.AI · account default · Z.AI GLM 5.3 Flash · estimated $0.001155 (rounded)
+[39] › → Request 2 · Z.AI · account default · Z.AI GLM 5.3 Flash · estimated $0.001156 (rounded)
+[40] › → Request 3 · Z.AI · account default · Z.AI GLM 5.3 Flash · estimated $0.000280 (rounded)
+[41] › → Request 4 · Z.AI · account work · Z.AI GLM 5.3 Flash · estimated $0.000627 (rounded)
+[42] › → Request 5 · Z.AI · account default · Z.AI GLM 5.3 Flash · estimated $0.000288 (rounded)
+[43] › → Request 6 · Z.AI · account fake · Z.AI GLM 5.3 Flash · usage incomplete
+[44] › → Request 7 · Z.AI · account default · Z.AI GLM 5.3 Flash · estimated $0.000310 (rounded)
+[45] › → Request 8 · Z.AI · account default · Z.AI GLM 5.3 Flash · usage incomplete
+[46] › → Root's own attempts (6 attempts)
+[47] › → Descendant attempts (2 attempts)
+[48] › → Unknown provider/model attribution (none)
+[49] › → Unknown parent population (none)
+[50] › Refresh
+[51] › Close
+[52] › Today (UTC) in this conversation:
+[53] › • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 6 requests, 39,762+ tokens. Estimated cost: at least $0.003190 (rounded) (1 attempt had incomplete
+[54] › usage).
+[55] › • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 1 request, tokens not reported. Estimated cost: not available — usage incomplete.
+[56] › • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 1 request, 4,622 tokens. Estimated cost: $0.000627 (rounded).
+[57] › Other conversations on this day, not included above: 3 requests in 3 conversations.
+[58] › • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 1 request, 7,425 tokens. Estimated cost: $0.001115 (rounded).
+[59] › • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 1 request, tokens not reported. Estimated cost: not available — usage incomplete.
+[60] › • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 1 request, 7,425 tokens. Estimated cost: $0.001046 (rounded).
+[61] › Other conversations' estimated cost: at least $0.002160 (rounded) (1 attempt had incomplete usage).
+[62] › To see those requests, open that conversation with /resume and run /cost there.
+[63] › Next step for requests with incomplete usage: check the bill from Z.AI. Their provider did not report every token count, so the estimate is missing or only a lower
+[64] › bound.
+[65] › Costs are estimates from published prices; Z.AI doesn't report its charges — check Z.AI's bill.
+[66] › Select a provider below to see its requests.
+[67] › —— Details ——
+[68] › Known estimated token cost: $0.003817 + unknown costs
+[69] › Full recorded estimate: unavailable (2 of 8 billed attempts incomplete)
+--- final viewport ---
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.3-flash   /model to change          │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s05acc/ws │
+╰──────────────────────────────────────────────────────╯
+  Cost — this conversation
+  Requested UTC day: 2026-10-11
+  Next step for requests with incomplete usage: check the bill from Z.AI. Their provider did not report every token count, so the estimate is missing or only a lower
+  bound.
+  Costs are estimates from published prices; Z.AI doesn't report its charges — check Z.AI's bill.
+  Select a provider below to see its requests.
+  —— Details ——
+  Known estimated token cost: $0.003817 + unknown costs
+  Full recorded estimate: unavailable (2 of 8 billed attempts incomplete)
+› Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

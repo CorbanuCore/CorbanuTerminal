@@ -1,0 +1,6 @@
+{
+  "findings": [],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "No actionable defects found in the scoped increment. The owner retains the permit through launch and cleanup, handles cancellation without blocking the caller, and releases ownership only on terminal no-launch outcomes or observed reaping. The fixed-recipe bridge and platform/feature gates match the dependency contract. Validation used read-only inspection and the supplied evidence; no tests were run.",
+  "overall_confidence": 0.9
+}

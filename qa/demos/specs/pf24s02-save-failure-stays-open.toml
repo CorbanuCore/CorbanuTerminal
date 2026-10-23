@@ -1,0 +1,78 @@
+# PF-24-S02: when Core's record cannot be written, a downgrade changes nothing and /security stays open to try again. Mock model, no model turn (Z.AI balance was empty when recorded).
+id = "pf24s02-save-failure-stays-open"
+feature = "A failed save changes nothing and stays open"
+expected = "Aggressive is saved; then Core's lock path is blocked. Confirming Permissive reports Security level not saved and Nothing changed, the view stays open, and Esc returns to the list where Aggressive is still saved for the next start."
+model = "mock-model"
+provider = "mock"
+config = """
+suppress_unstable_features_warning = true
+
+[model_providers.mock]
+name = "mock"
+base_url = "http://127.0.0.1:9/v1"
+env_key = "MOCK_KEY"
+wire_api = "responses"
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+"""
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+key = "Escape"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "!rm {home}/security_state.lock && mkdir {home}/security_state.lock && echo blocked"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "blocked"
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive\\. It takes effect"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Return to Permissive\\?"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Security level not saved"
+[[steps]]
+wait = "Nothing changed\\."
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "Saved: Aggressive\\. It takes effect"
+[[steps]]
+pause = 3.0

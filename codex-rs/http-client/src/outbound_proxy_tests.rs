@@ -64,6 +64,10 @@ fn spawn_http_listener(
                     Err(error) => panic!("HTTP listener should accept: {error}"),
                 }
             };
+            // Windows sockets inherit the listener's nonblocking mode.
+            stream
+                .set_nonblocking(false)
+                .expect("HTTP stream should become blocking");
             stream
                 .set_read_timeout(Some(Duration::from_secs(10)))
                 .expect("HTTP stream should get a read timeout");

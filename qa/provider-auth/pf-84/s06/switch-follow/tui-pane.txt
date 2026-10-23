@@ -1,0 +1,25 @@
+╭────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                  │
+│                                                │
+│ model:     gpt-5.6-luna low   /model to change │
+│ directory: /tmp/pf84sw.rMHJ/ws                 │
+╰────────────────────────────────────────────────╯
+› Reply with exactly: openai-work-one
+• openai-work-one
+• Model changed to Z.AI GLM 5.3 Flash via Z.AI low
+• Connectors, usage and the model list now use the default account; model list refreshed.
+› Reply with exactly: glm-default-two
+• glm-default-two
+• Model changed to GPT-5.6-Luna via OpenAI low
+• Connectors, usage and the model list now use openai account `work`; model list refreshed.
+› Reply with exactly: openai-work-two
+⚠ Code Mode is unavailable because failed to spawn code-mode host /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/fix-pf84-switch-follow/
+  debug/codex-code-mode-host: host executable was not found. Code mode will fail closed; enable `features.code_mode_host` and install
+  `codex-code-mode-host`.
+■ unexpected status 404 Not Found: Item with id 'rs_2026101213421902b19754973e467e' not found. Items are not persisted when `store` is set
+to false. Try again with `store` set to true, or remove this item from your input.
+› Reply with exactly: openai-work-three
+■ unexpected status 404 Not Found: Item with id 'rs_2026101213421902b19754973e467e' not found. Items are not persisted when `store` is set
+to false. Try again with `store` set to true, or remove this item from your input.
+› Write tests for @filename
+  GPT-5.6-Luna low · /tmp/pf84sw.rMHJ/ws · Corbanu Terminal · TPS: 6.8 tok/s

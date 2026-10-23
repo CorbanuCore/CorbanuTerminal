@@ -1,0 +1,36 @@
+---
+source: tui/src/bottom_pane/approval_overlay_grant_tests.rs
+expression: "render(&view, 100)"
+---
+
+ Grant this command?
+ Under Aggressive, Grant once lets one command write files that run code later, which Aggressive
+ otherwise keeps read-only, and only inside the current folder: git hooks and config kept outside
+ a .git folder (a hooks folder set with core.hooksPath, such as Husky's .husky, or a git folder
+ with another name), and, when the current folder holds your home folder, your shell and git
+ start-up files (such as .zshrc, .profile, .gitconfig and .local/bin), login agents and services,
+ and .claude settings. Nothing else changes: credential files and Corbanu's sign-in, vault, config
+ and history stay unreadable; Corbanu's own files and the project's .git, .codex and .agents stay
+ read-only; other folders and the network stay closed.
+ An approval alone never lifts this. A start-up file written this way runs code later, outside
+ the sandbox.
+
+   Agent       human:human → agent:019a0000-0000-7000-8000-000000000001
+   Session     019a0000-0000-7000-8000-000000000001
+   Action      execute
+   Resource    protected_data/sandbox_protected_paths
+   Command     $ cat ../home/team-notes.txt
+   Folder      /work/project
+   Digest      command:sha256:3f2a
+   Destination none
+   Limit       any run of this exact command until it expires (press u for 1 run)
+   Expires     10 minutes after you confirm, or at a level change, revocation, kill switch or
+               restart
+
+ Still denied: any other command or folder, its parent, sibling and child agents, other sessions,
+ and everything else Aggressive denies. /security lists the grant until it expires.
+
+ › Back to the approval (nothing granted)
+   Grant and run
+
+ ↑/↓ choose · enter confirm · u change limit · esc back to the approval

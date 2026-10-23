@@ -50,6 +50,10 @@ mod send_message;
 mod spawn;
 pub(crate) mod wait;
 
+#[cfg(test)]
+#[path = "multi_agents_v2_source_identity_tests.rs"]
+mod source_identity_tests;
+
 pub(crate) const PLAINTEXT_SPAWN_AGENT_TOOL: &str = "spawn_agent_plaintext";
 pub(crate) const PLAINTEXT_SEND_MESSAGE_TOOL: &str = "send_message_plaintext";
 pub(crate) const PLAINTEXT_FOLLOWUP_TASK_TOOL: &str = "followup_task_plaintext";
@@ -78,10 +82,90 @@ pub(super) fn plaintext_adapter_spec(
     }
 }
 
+/// A collaborator's configured provider id and account (`None` is the
+/// default account), as encrypted collaboration content is bound to both.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct ConfiguredRuntime<'a> {
+    pub(super) provider_id: &'a str,
+    pub(super) account: Option<RuntimeAccount<'a>>,
+}
+
+/// A named account as `<provider>:<name>`: an account carried onto another
+/// connection keeps the provider it belongs to, so two accounts are the same
+/// only when both match (#1127 review).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct RuntimeAccount<'a> {
+    pub(super) provider_id: &'a str,
+    pub(super) name: &'a str,
+}
+
+impl<'a> ConfiguredRuntime<'a> {
+    /// `provider_id` on its own account `account` (its name; `None` is the
+    /// default account).
+    #[cfg(test)]
+    pub(super) fn new(provider_id: &'a str, account: Option<&'a str>) -> Self {
+        Self {
+            provider_id,
+            account: account.map(|name| RuntimeAccount { provider_id, name }),
+        }
+    }
+
+    /// `provider_id` on its default account.
+    #[cfg(test)]
+    pub(super) fn on_default(provider_id: &'a str) -> Self {
+        Self::new(provider_id, /*account*/ None)
+    }
+
+    /// `provider_id` running on `provider`'s account, with the provider that
+    /// account belongs to.
+    pub(super) fn from_provider(
+        provider_id: &'a str,
+        provider: &'a codex_model_provider_info::ModelProviderInfo,
+    ) -> Self {
+        Self {
+            provider_id,
+            account: provider.account.as_ref().map(|account| RuntimeAccount {
+                provider_id: account.provider_id.as_str(),
+                name: account.name.as_str(),
+            }),
+        }
+    }
+
+    /// From a thread snapshot's `<provider>:<name>` account.
+    pub(super) fn from_snapshot(provider_id: &'a str, provider_account: Option<&'a str>) -> Self {
+        let account = provider_account
+            .and_then(|selection| selection.split_once(':'))
+            .filter(|(_, name)| *name != "default")
+            .map(|(provider_id, name)| RuntimeAccount { provider_id, name });
+        Self {
+            provider_id,
+            account,
+        }
+    }
+
+    /// The account as shown: its name, qualified when it belongs to another
+    /// provider than the one it runs on.
+    fn shown_account(&self) -> String {
+        match self.account {
+            None => "default".to_string(),
+            Some(account) if account.provider_id == self.provider_id => account.name.to_string(),
+            Some(account) => format!("{}:{}", account.provider_id, account.name),
+        }
+    }
+}
+
+/// Refuses native (encrypted) collaboration content for a target that cannot
+/// decrypt it. `configured_source` is the sender's configured provider and
+/// account; `source_codec_id` is the codec its messages use (`openai` for an
+/// OpenAI-compatible endpoint with the reserved schema, see
+/// `collaboration_wire::message_source_provider_id`). An OpenAI-encrypted
+/// payload is admitted only for a target on the same configured provider and
+/// the same account (#1016).
 pub(super) fn ensure_message_encoding_matches_target(
-    source_provider_id: &str,
+    configured_source: ConfiguredRuntime<'_>,
+    source_codec_id: &str,
     source: &crate::tools::context::ToolCallSource,
-    target_provider_id: &str,
+    target: ConfiguredRuntime<'_>,
     encoding: CollaborationMessageEncoding,
     native_tool_name: &str,
     plaintext_tool_name: &str,
@@ -93,15 +177,27 @@ pub(super) fn ensure_message_encoding_matches_target(
         return Ok(());
     }
 
-    let source_is_encrypted_openai_call = source_provider_id == OPENAI_PROVIDER_ID
+    // Wire compatibility selects the codec; it does not make a custom provider
+    // the same configured source as the built-in OpenAI provider, nor another
+    // account of the same provider the same source.
+    let source_is_encrypted_openai_call = source_codec_id == OPENAI_PROVIDER_ID
         && matches!(source, crate::tools::context::ToolCallSource::Direct);
-    if source_is_encrypted_openai_call && target_provider_id != OPENAI_PROVIDER_ID {
-        return Err(FunctionCallError::RespondToModel(format!(
-            "target provider `{target_provider_id}` cannot consume this OpenAI-encrypted collaboration payload. Call the function named `{plaintext_tool_name}` directly with exactly the same `target` and the plaintext `message`; do not call `{native_tool_name}` again and do not add an `adapter` field. No message was admitted and no target turn was started."
-        )));
+    if !source_is_encrypted_openai_call || target == configured_source {
+        return Ok(());
     }
-
-    Ok(())
+    let target_provider_id = target.provider_id;
+    let recipient = if target_provider_id == configured_source.provider_id {
+        format!(
+            "target account `{}` of `{target_provider_id}` (this agent runs on account `{}`)",
+            target.shown_account(),
+            configured_source.shown_account(),
+        )
+    } else {
+        format!("target provider `{target_provider_id}`")
+    };
+    Err(FunctionCallError::RespondToModel(format!(
+        "{recipient} cannot consume this OpenAI-encrypted collaboration payload. Call the function named `{plaintext_tool_name}` directly with exactly the same `target` and the plaintext `message`; do not call `{native_tool_name}` again and do not add an `adapter` field. No message was admitted and no target turn was started."
+    )))
 }
 
 pub(crate) async fn emit_sub_agent_activity(
@@ -255,9 +351,10 @@ mod tests {
         for target in [OPENAI_PROVIDER_ID, "kimi-code", "custom-provider"] {
             assert_eq!(
                 ensure_message_encoding_matches_target(
+                    ConfiguredRuntime::on_default(OPENAI_PROVIDER_ID),
                     OPENAI_PROVIDER_ID,
                     &crate::tools::context::ToolCallSource::Direct,
-                    target,
+                    ConfiguredRuntime::on_default(target),
                     CollaborationMessageEncoding::PlaintextAdapter,
                     "spawn_agent",
                     PLAINTEXT_SPAWN_AGENT_TOOL,
@@ -270,9 +367,10 @@ mod tests {
     #[test]
     fn encrypted_openai_message_requires_plaintext_adapter_for_external_target() {
         let err = ensure_message_encoding_matches_target(
+            ConfiguredRuntime::on_default(OPENAI_PROVIDER_ID),
             OPENAI_PROVIDER_ID,
             &crate::tools::context::ToolCallSource::Direct,
-            "openrouter",
+            ConfiguredRuntime::on_default("openrouter"),
             CollaborationMessageEncoding::ProviderNative,
             "followup_task",
             PLAINTEXT_FOLLOWUP_TASK_TOOL,
@@ -301,6 +399,88 @@ mod tests {
         assert_eq!(
             communication.encrypted_content.as_deref(),
             Some("opaque-ciphertext")
+        );
+    }
+
+    #[tokio::test]
+    async fn issue820_custom_reserved_messages_preserve_codec_and_fail_closed_targets() {
+        let (_session, mut turn) = crate::session::tests::make_session_and_context().await;
+        let mut config = (*turn.config).clone();
+        config.model_provider_id = "myopenai".to_string();
+        config.model_provider.name = "Custom official endpoint".to_string();
+        config.model_provider.base_url = Some("https://api.openai.com/v1".to_string());
+        turn.provider = codex_model_provider::create_model_provider(
+            config.model_provider.clone(),
+            turn.auth_manager.clone(),
+        );
+        turn.config = std::sync::Arc::new(config);
+        let codec_provider = crate::tools::collaboration_wire::message_source_provider_id(&turn);
+        assert_eq!(turn.config.model_provider_id, "myopenai");
+        assert!(!turn.provider.info().is_openai());
+        assert_eq!(codec_provider, OPENAI_PROVIDER_ID);
+        let source = crate::tools::context::ToolCallSource::Direct;
+        let communication = communication_from_tool_message(
+            AgentPath::root(),
+            AgentPath::try_from("/root/worker").expect("agent path"),
+            "synthetic-opaque-payload".to_string(),
+            &source,
+            codec_provider,
+            /*trigger_turn*/ true,
+        );
+        assert!(communication.content.is_empty());
+        assert_eq!(
+            communication.encrypted_content.as_deref(),
+            Some("synthetic-opaque-payload")
+        );
+        let codex_protocol::models::ResponseItem::AgentMessage { content, .. } =
+            communication.to_model_input_item()
+        else {
+            panic!("encrypted collaboration must serialize as AgentMessage");
+        };
+        pretty_assertions::assert_eq!(
+            content,
+            vec![
+                codex_protocol::models::AgentMessageInputContent::InputText {
+                    text:
+                        "Message Type: NEW_TASK\nTask name: /root/worker\nSender: /root\nPayload:\n"
+                            .to_string(),
+                },
+                codex_protocol::models::AgentMessageInputContent::EncryptedContent {
+                    encrypted_content: "synthetic-opaque-payload".to_string(),
+                },
+            ]
+        );
+        for target in [OPENAI_PROVIDER_ID, "openrouter"] {
+            assert_eq!(
+                ensure_message_encoding_matches_target(
+                    ConfiguredRuntime::on_default(&turn.config.model_provider_id),
+                    codec_provider,
+                    &source,
+                    ConfiguredRuntime::on_default(target),
+                    CollaborationMessageEncoding::ProviderNative,
+                    "followup_task",
+                    PLAINTEXT_FOLLOWUP_TASK_TOOL,
+                ),
+                Err(FunctionCallError::RespondToModel(format!(
+                    "target provider `{target}` cannot consume this OpenAI-encrypted collaboration payload. Call the function named `followup_task_plaintext` directly with exactly the same `target` and the plaintext `message`; do not call `followup_task` again and do not add an `adapter` field. No message was admitted and no target turn was started."
+                )))
+            );
+            assert_eq!(
+                ensure_message_encoding_matches_target(
+                    ConfiguredRuntime::on_default(&turn.config.model_provider_id),
+                    codec_provider,
+                    &source,
+                    ConfiguredRuntime::on_default(target),
+                    CollaborationMessageEncoding::PlaintextAdapter,
+                    "followup_task",
+                    PLAINTEXT_FOLLOWUP_TASK_TOOL,
+                ),
+                Ok(())
+            );
+        }
+        assert_plaintext_new_task(
+            crate::tools::context::ToolCallSource::DirectPlaintextMessage,
+            codec_provider,
         );
     }
 }

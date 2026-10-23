@@ -1,0 +1,70 @@
+# #391: security level Aggressive turns broker_model_auth on by default. The
+# config sets the level and does not mention broker_model_auth.
+id = "sec391-aggressive-broker-default"
+feature = "#391: Aggressive holds the model key in the credential broker by default"
+expected = "With [security] level = \"aggressive\" and no broker_model_auth setting, the session answers and Core's log shows the broker started and the Z.AI key handed over and held by the broker."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "aggressive"
+
+[features]
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "!grep -A2 -E '^\\[(security|features)\\]' {home}/config.toml"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "source_envelopes = true"
+timeout = 30
+
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "Reply with exactly one line: answered under Aggressive"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "(?m)^. answered under Aggressive"
+timeout = 240
+compress = 3
+
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+
+[[steps]]
+type = '!grep -hoE "isolated credential broker started c[o]ntainment=[a-z]+|provider keys handed to the credential broker and removed from the environment: [A-Z_]+|model provider credential held by the credential broker \\(h[o]st=[^,]*" {logs}/*.log | sort | uniq -c'
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "h[o]st=api\\.z\\.ai"
+timeout = 30
+
+[[steps]]
+pause = 4.0

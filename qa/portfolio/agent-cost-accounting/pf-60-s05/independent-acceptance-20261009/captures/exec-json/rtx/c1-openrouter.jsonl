@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a120bd-fb6b-7440-a6ca-3d25a9dd27b8"}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 401 Unauthorized: Missing Authentication header, url: https://openrouter.ai/api/v1/chat/completions, cf-ray: a47d8e00af98e837-SEA"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: Missing Authentication header, url: https://openrouter.ai/api/v1/chat/completions, cf-ray: a47d8e00af98e837-SEA"}}

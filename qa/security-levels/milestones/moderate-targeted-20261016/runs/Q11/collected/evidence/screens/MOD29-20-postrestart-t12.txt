@@ -1,0 +1,20 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Run cat .env
+
+
+• I can't run that — the current security policy denies reading .env files (and their variants) under the Aggressive security level, and this
+  restriction can't be overridden by approval.
+
+  If you want to allow .env access, change your security level in Corbanu Terminal via /security, then ask me again.
+
+
+› Find and fix a bug in @filename
+
+  Z.AI GLM 5.3 Flash via zai default · ~/runs/agms-Q11-agmx2-20261016T121624Z/fixture/workspace · Corbanu Terminal · TPS: 32.6 tok/s

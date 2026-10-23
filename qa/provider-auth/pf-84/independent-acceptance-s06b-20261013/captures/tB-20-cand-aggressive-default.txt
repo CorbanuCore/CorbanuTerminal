@@ -1,0 +1,54 @@
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:     loading   /model to change                 │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+╰───────────────────────────────────────────────────────╯
+
+
+› Improve documentation in @filename
+
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: -- tok/s
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:     glm-5.3-flash   /model to change           │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+╰───────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word pingdefault
+
+
+• pingdefault
+
+⚠ Developer accounting could not record one or more model requests in this turn. They were sent anyway; /cost does not include them. The cause is in the log (target
+  codex_core::accounting).
+
+/status
+
+╭─────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                      │
+│                                                                                     │
+│  Model:                Z.AI GLM 5.3 Flash                                           │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account default        │
+│  Directory:            $S/ws         │
+│  Permissions:          Next turn: Profile corbanu-aggressive (workspace, untrusted) │
+│  Security:             Aggressive active (/security)                                │
+│  Agents.md:            <none>                                                       │
+│  Account:              Z.AI API key configured                                      │
+│  Collaboration mode:   Default                                                      │
+│  Session:              01a134a1-f186-7fb2-85f8-78b058f4ce5d                         │
+│                                                                                     │
+│  Token usage:          8.23K total  (8.17K input + 56 output)                       │
+│  Context window:       100% left (8.23K used / 950K)                                │
+│  Account usage:        default · 8,172 input · 56 output (52 reasoning)             │
+│  Limits:               data not available yet                                       │
+╰─────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Improve documentation in @filename
+
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: 16.0 tok/s

@@ -1,0 +1,40 @@
+│  Agents.md:            <none>                                                            │
+│  Account:              ChatGPT sign-in · w…@example.com · Plus (account work)            │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12e21-45c9-74c2-972c-f725d402edac                              │
+│                                                                                          │
+│  Token usage:          0 total  (0 input + 0 output)                                     │
+│  Account usage:        work · no usage yet                                               │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly: pong
+
+
+⚠ MCP client for `codex_apps` failed to start: MCP startup failed: handshaking with MCP server failed: Send message
+  error Transport
+  [rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rm
+  cp_client::http_client_adapter::StreamableHttpClientAdapter>>] error: unexpected server response: HTTP 404: , when
+  send initialize request
+
+⚠ MCP startup incomplete (failed: codex_apps)
+
+• openai-mock: authorized as work (token gen 3)
+
+
+  Add account `tui`
+
+› 1. Sign in with ChatGPT (device code)  Shows a code to enter in your browser; saved to this account only.
+  2. OpenAI API key                      Paste it into masked entry.
+
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+

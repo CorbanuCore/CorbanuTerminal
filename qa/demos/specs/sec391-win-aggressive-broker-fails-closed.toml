@@ -1,0 +1,57 @@
+# #391 (Windows): under Aggressive a broker that cannot start refuses every
+# model request. The candidate runs in a job object that allows one active
+# process (qa/security/issue-391/jobrun391.ps1), so the broker cannot start.
+id = "sec391-win-aggressive-broker-fails-closed"
+feature = "#391 (Windows): under Aggressive, a broker that cannot start fails closed"
+expected = "The turn fails at once with a message naming broker_model_auth, Permissive in /security and the config line that turns it off; no model request is sent."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+suppress_unstable_features_warning = true
+
+[windows]
+sandbox = "unelevated"
+
+[security]
+version = 1
+level = "aggressive"
+
+[features]
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Do you trust the contents of this directory"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Reply with exactly one word: pong"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "model\\s+requests\\s+are\\s+refused[\\s\\S]*broker_model_auth\\s*=\\s*false"
+timeout = 120
+compress = 2
+
+[[steps]]
+wait = "\\A(?![\\s\\S]*esc to interrupt)"
+timeout = 60
+compress = 1
+
+[[steps]]
+pause = 5.0

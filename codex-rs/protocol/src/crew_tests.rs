@@ -80,3 +80,51 @@ fn validation_rejects_ambiguous_identity_topology_and_policy() {
         })
     );
 }
+
+/// #646 option A: `claude-plan` also authorizes Claude Code panes on Claude Plan.
+/// Other Claude Code panes still need their own entry.
+#[test]
+fn claude_plan_allowlist_entry_authorizes_claude_plan_panes_only() {
+    let mut crew = valid_crew();
+    crew.policy.provider_allowlist = vec!["provider-a".to_string(), "claude-plan".to_string()];
+    crew.members[1].runtime_request = RuntimeRequest::exact(
+        CLAUDE_PLAN_PANE_PROVIDER_ID,
+        "claude-opus-5-5",
+        /*reasoning_effort*/ None,
+    );
+    assert_eq!(crew.validate(), Ok(()));
+
+    crew.policy.provider_allowlist = vec![
+        "provider-a".to_string(),
+        CLAUDE_PLAN_PANE_PROVIDER_ID.to_string(),
+    ];
+    assert_eq!(crew.validate(), Ok(()));
+
+    crew.policy.provider_allowlist = vec!["provider-a".to_string(), "claude-plan".to_string()];
+    crew.members[1].runtime_request = RuntimeRequest::exact(
+        "external-claude:zaiglm52",
+        "glm-5.2",
+        /*reasoning_effort*/ None,
+    );
+    assert_eq!(
+        crew.validate(),
+        Err(CrewSpecError::ProviderNotAllowed {
+            member_id: "worker".to_string(),
+            provider_id: "external-claude:zaiglm52".to_string(),
+        })
+    );
+
+    crew.policy.provider_allowlist = vec!["provider-a".to_string()];
+    crew.members[1].runtime_request = RuntimeRequest::exact(
+        CLAUDE_PLAN_PANE_PROVIDER_ID,
+        "claude-opus-5-5",
+        /*reasoning_effort*/ None,
+    );
+    assert_eq!(
+        crew.validate(),
+        Err(CrewSpecError::ProviderNotAllowed {
+            member_id: "worker".to_string(),
+            provider_id: CLAUDE_PLAN_PANE_PROVIDER_ID.to_string(),
+        })
+    );
+}

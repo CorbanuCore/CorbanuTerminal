@@ -1,0 +1,24 @@
+$ /cost
+  Cost — this conversation
+  Requested UTC day: 2026-10-08
+  Today (UTC) in this conversation:
+  • Z.AI · Z.AI GLM 5.2 — Pay per use. 5 requests, 58,410 tokens. Estimated cost: $0.041616 (rounded).
+  Other conversations on this day, not included above: 15 requests in 5 conversations.
+  • Z.AI · Z.AI GLM 5.2 — Pay per use. 11 requests, 145,400 tokens. Estimated cost: $0.126073 (rounded).
+  • zainousage · Z.AI GLM 5.2 — Pay per use. 2 requests, tokens not reported. Estimated cost: no price available.
+  • zaiproxy · Z.AI GLM 5.2 — Pay per use. 2 requests, 20,324 tokens. Estimated cost: no price available.
+  Other conversations' estimated cost: at least $0.126073 (rounded) (4 attempts had no price).
+  To see those requests, open that conversation with /resume and run /cost there.
+  ↑↓ scroll · Enter open · Esc back/close
+  Next step for requests with no price: check the bill from zaiproxy. No published price covers them, so only their tokens are shown here, not a cost.
+  Costs are estimates from published prices; your provider's bill is the final amount.
+  Select a provider below to see its requests.
+  —— Details ——
+  Estimated token cost for recorded attempts: $0.041616 (rounded)
+--- last screen:
+  Next step for requests with no price: check the bill from zaiproxy. No published price covers them, so only their tokens are shown here, not a cost.
+  Costs are estimates from published prices; your provider's bill is the final amount.
+  Select a provider below to see its requests.
+  —— Details ——
+› Estimated token cost for recorded attempts: $0.041616 (rounded)
+  ↑↓ scroll · Enter open · Esc back/close

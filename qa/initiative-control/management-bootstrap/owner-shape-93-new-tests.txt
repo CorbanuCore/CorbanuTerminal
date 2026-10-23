@@ -1,0 +1,11 @@
+test_bridge_preserves_cycle_fields_and_is_idempotent (test_owner_tmux.WorkerInputTests.test_bridge_preserves_cycle_fields_and_is_idempotent) ... ok
+test_conflicting_duplicate_runtime_is_refused (test_owner_tmux.WorkerInputTests.test_conflicting_duplicate_runtime_is_refused) ... ok
+test_flat_inputs_cannot_silently_infer_provider_or_policy (test_owner_tmux.WorkerInputTests.test_flat_inputs_cannot_silently_infer_provider_or_policy) ... ok
+test_invalid_binding_is_refused_before_freezing (test_owner_tmux.WorkerInputTests.test_invalid_binding_is_refused_before_freezing) ... ok
+test_cycle_bridge_is_frozen_through_claim_and_return (test_owner_daemon.WorkerLifecycleTests.test_cycle_bridge_is_frozen_through_claim_and_return) ... ok
+test_unbridged_or_conflicting_cycle_is_not_claimed (test_owner_daemon.WorkerLifecycleTests.test_unbridged_or_conflicting_cycle_is_not_claimed) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.222s
+
+OK

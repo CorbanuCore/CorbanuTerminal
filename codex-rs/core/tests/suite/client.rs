@@ -57,7 +57,7 @@ use codex_protocol::user_input::UserInput;
 use core_test_support::PathBufExt;
 use core_test_support::TestCodexResponsesRequestKind;
 use core_test_support::apps_test_server::AppsTestServer;
-use core_test_support::load_default_config_for_test;
+use core_test_support::load_default_config_for_test_in;
 use core_test_support::responses::ResponsesRequest;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
@@ -1476,6 +1476,7 @@ async fn amazon_bedrock_proxy_uses_command_auth_and_custom_headers() {
 /// reaches `Completed` without surfacing an auth or transport error to the client.
 async fn send_provider_auth_request(server: &MockServer, auth: ModelProviderAuthInfo) {
     let provider = ModelProviderInfo {
+        account: None,
         name: "corp".into(),
         base_url: Some(format!("{}/v1", server.uri())),
         env_key: None,
@@ -1499,6 +1500,7 @@ async fn send_provider_auth_request(server: &MockServer, auth: ModelProviderAuth
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
+        billing: None,
     };
 
     send_request_with_provider(provider).await;
@@ -1507,7 +1509,9 @@ async fn send_provider_auth_request(server: &MockServer, auth: ModelProviderAuth
 #[expect(clippy::unwrap_used)]
 async fn send_request_with_provider(provider: ModelProviderInfo) {
     let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home).await;
+    let cwd = TempDir::new().unwrap();
+    let mut config =
+        load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
     config.model_provider_id = provider.name.clone();
     config.model_provider = provider.clone();
     let effort = config.model_reasoning_effort.clone();
@@ -1757,7 +1761,9 @@ async fn prefers_apikey_when_config_prefers_apikey_even_with_chatgpt_tokens() {
         Some("acc-123"),
     );
 
-    let mut config = load_default_config_for_test(&codex_home).await;
+    let cwd = TempDir::new().unwrap();
+    let mut config =
+        load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
     config.model_provider = model_provider;
 
     let auth = CodexAuth::from_auth_storage(
@@ -3223,6 +3229,7 @@ async fn azure_responses_request_includes_store_and_prefixed_item_ids() {
     let resp_mock = mount_sse_once(&server, sse_body.to_string()).await;
 
     let provider = ModelProviderInfo {
+        account: None,
         name: "azure".into(),
         base_url: Some(format!("{}/openai", server.uri())),
         env_key: None,
@@ -3246,10 +3253,13 @@ async fn azure_responses_request_includes_store_and_prefixed_item_ids() {
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
+        billing: None,
     };
 
     let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home).await;
+    let cwd = TempDir::new().unwrap();
+    let mut config =
+        load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
     config.model_provider_id = provider.name.clone();
     config.model_provider = provider.clone();
     let effort = config.model_reasoning_effort.clone();
@@ -3882,6 +3892,7 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
         .await;
 
     let provider = ModelProviderInfo {
+        account: None,
         name: "custom".to_string(),
         base_url: Some(format!("{}/openai", server.uri())),
         // Reuse the existing environment variable to avoid using unsafe code
@@ -3912,6 +3923,7 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
+        billing: None,
     };
 
     // Init session
@@ -3977,6 +3989,7 @@ async fn env_var_overrides_loaded_auth() {
         .await;
 
     let provider = ModelProviderInfo {
+        account: None,
         name: "custom".to_string(),
         base_url: Some(format!("{}/openai", server.uri())),
         // Reuse the existing environment variable to avoid using unsafe code
@@ -4007,6 +4020,7 @@ async fn env_var_overrides_loaded_auth() {
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
+        billing: None,
     };
 
     // Init session
@@ -4177,4 +4191,87 @@ async fn history_dedupes_streamed_and_final_messages_across_turns() {
         r3_tail_expected,
         "request 3 tail mismatch",
     );
+}
+
+fn shared_pool_rate_limit(limit_source: &str) -> ResponseTemplate {
+    ResponseTemplate::new(429)
+        .insert_header("retry-after", "0")
+        .set_body_json(json!({
+            "error": {
+                "message": "Provider returned error",
+                "code": 429,
+                "metadata": {
+                    "provider_name": "Fireworks",
+                    "limit_source": limit_source,
+                }
+            }
+        }))
+}
+
+fn completed_turn(response_id: &str) -> ResponseTemplate {
+    ResponseTemplate::new(200)
+        .insert_header("content-type", "text/event-stream")
+        .set_body_raw(
+            sse(vec![
+                ev_response_created(response_id),
+                ev_assistant_message(&format!("msg-{response_id}"), "done"),
+                ev_completed(response_id),
+            ]),
+            "text/event-stream",
+        )
+}
+
+/// A gateway 429 that is marked as a temporary limit of a shared upstream pool
+/// is retried with backoff instead of failing the turn on the first response.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transient_shared_pool_rate_limit_is_retried() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    let server = MockServer::start().await;
+    let mock = core_test_support::responses::mount_response_sequence(
+        &server,
+        vec![
+            shared_pool_rate_limit("upstream_provider_shared_pool"),
+            shared_pool_rate_limit("upstream_provider_shared_pool"),
+            completed_turn("resp-1"),
+        ],
+    )
+    .await;
+
+    let mut builder = test_codex();
+    let test = builder.build(&server).await?;
+    test.submit_turn("hello").await?;
+
+    assert_eq!(mock.requests().len(), 3);
+    Ok(())
+}
+
+/// Other 429s, such as the caller's own quota, keep failing without a retry.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn other_rate_limits_are_not_retried() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    let server = MockServer::start().await;
+    let mock = core_test_support::responses::mount_response_sequence(
+        &server,
+        vec![shared_pool_rate_limit("account")],
+    )
+    .await;
+
+    let mut builder = test_codex();
+    let test = builder.build(&server).await?;
+    test.codex
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: "hello".into(),
+                text_elements: Vec::new(),
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: Default::default(),
+        })
+        .await?;
+    wait_for_event(&test.codex, |event| matches!(event, EventMsg::Error(_))).await;
+
+    assert_eq!(mock.requests().len(), 1);
+    Ok(())
 }

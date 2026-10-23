@@ -1,0 +1,13 @@
+
+######## A573 on CAND (corbanu-cand)
+#573: TUI on Z.AI; /providers -> OpenAI · default -> Add another account (methods offered)
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:       glm-5.3-flash medium   /model to change  │
+│ directory:   $S/ws │
+│ permissions: YOLO mode                                │
+╰───────────────────────────────────────────────────────�
+  Add account `second`
+› 1. Sign in with ChatGPT (device code)  Shows a code to enter in your browser; saved to this account only.
+  2. OpenAI API key                      Paste it into masked entry.
+  Press enter to confirm or esc to go back

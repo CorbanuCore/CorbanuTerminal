@@ -1,0 +1,3 @@
+  343 _securityagent Wed Oct 14 01:05:49 2026     /System/Library/Frameworks/Security.framework/Versions/A/MachServices/SecurityAgent.bundle/Contents/MacOS/SecurityAgent
+checks: 12101  SECURITYAGENT-SEEN: 0
+2026-10-14T11:37:50Z clear (baseline login-window SecurityAgent only)

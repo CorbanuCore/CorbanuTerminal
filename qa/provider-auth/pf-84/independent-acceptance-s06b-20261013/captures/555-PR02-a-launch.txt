@@ -1,0 +1,2 @@
+account `x` of provider `openai` is not signed in; sign in with `corbanu login --account x` or pick another with `--account` (see `corbanu account list`)
+EXITED-1

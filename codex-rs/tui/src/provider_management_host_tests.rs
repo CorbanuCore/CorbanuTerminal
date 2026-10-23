@@ -16,7 +16,8 @@ async fn replacement_candidates_are_exact_ready_active_non_current_rows() {
         .build()
         .await
         .unwrap();
-    config.model_providers = codex_model_provider_info::built_in_model_providers(None);
+    config.model_providers =
+        codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None);
     let status_host = ProviderStatusHost::from_config(
         &config,
         crate::provider_status_host::ProviderAccountMetadata::default(),
@@ -26,8 +27,11 @@ async fn replacement_candidates_are_exact_ready_active_non_current_rows() {
         .iter()
         .find(|entry| {
             entry.runtime_provider_ids.first().is_some_and(|runtime| {
-                codex_model_provider_info::resolve_model_for_provider(None, runtime.as_str())
-                    .is_some()
+                codex_model_provider_info::resolve_model_for_provider(
+                    /*model*/ None,
+                    runtime.as_str(),
+                )
+                .is_some()
             })
         })
         .unwrap();
@@ -37,7 +41,8 @@ async fn replacement_candidates_are_exact_ready_active_non_current_rows() {
         status(rejected, ProviderEligibilityState::Inactive),
     ];
 
-    let candidates = replacement_candidates_for(&status_host, &statuses, None);
+    let candidates =
+        replacement_candidates_for(&status_host, &statuses, /*current_model*/ None);
 
     assert_eq!(candidates.len(), 1);
     assert_eq!(candidates[0].provider_id, ready.id);
@@ -73,7 +78,65 @@ async fn current_and_unready_providers_are_never_replacement_candidates() {
     unavailable.availability = ProviderAvailabilityState::Unavailable {
         reason: codex_provider_auth::ProviderUnavailableReason::NotConfigured,
     };
-    assert!(replacement_candidates_for(&status_host, &[current, unavailable], None).is_empty());
+    assert!(
+        replacement_candidates_for(
+            &status_host,
+            &[current, unavailable],
+            /*current_model*/ None
+        )
+        .is_empty()
+    );
+}
+
+/// #665: Z.AI replaces the current provider over the connection that can
+/// sign in: here `zai-anthropic` with the default key, because `zai` runs on
+/// an account that is not enrolled.
+#[tokio::test]
+async fn a_replacement_uses_a_connection_with_its_own_credential() {
+    let home = tempdir().unwrap();
+    let mut config = crate::legacy_core::config::ConfigBuilder::default()
+        .codex_home(home.path().to_path_buf())
+        .build()
+        .await
+        .unwrap();
+    config.model_providers =
+        codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None);
+    let status_host = |config: &crate::legacy_core::config::Config| {
+        ProviderStatusHost::from_config_with_account_registry(
+            config,
+            crate::provider_status_host::ProviderAccountMetadata::default(),
+            |_, _| false,
+        )
+        .with_environment(|env_key| {
+            if env_key == "ZAI_API_KEY" {
+                codex_provider_auth::EnvironmentCredentialMetadata::Present
+            } else {
+                codex_provider_auth::EnvironmentCredentialMetadata::Missing
+            }
+        })
+    };
+    let replacement = |status_host: &ProviderStatusHost| {
+        let entry = status_host.catalog().get("zai").expect("zai entry").clone();
+        replacement_candidates_for(
+            status_host,
+            &[status(&entry, ProviderEligibilityState::Active)],
+            /*current_model*/ None,
+        )
+        .into_iter()
+        .map(|candidate| candidate.runtime_provider_id.as_str().to_string())
+        .collect::<Vec<_>>()
+    };
+    assert_eq!(replacement(&status_host(&config)), ["zai"]);
+
+    config
+        .model_providers
+        .get_mut("zai")
+        .expect("built-in zai provider")
+        .account = Some(codex_model_provider_info::NamedProviderAccount {
+        provider_id: "zai".into(),
+        name: "work".into(),
+    });
+    assert_eq!(replacement(&status_host(&config)), ["zai-anthropic"]);
 }
 
 fn status(

@@ -1,0 +1,19 @@
+# macOS: just test (nextest, developer-accounting) on HEAD 1870dd89e6
+# filter: test(/provider_status_host|startup_provider|provider_manager|onboarding|provider_account|named|default_login|shared_from_config|enforce_login|ruled_out|third_party|hidden_default|login_restrictions|required_chatgpt/)
+Summary [ 732.672s] 259 tests run: 248 passed (1 leaky), 11 failed, 10545 skipped
+# Failures:
+# - a_session_account_that_cannot_load_changes_nothing: stale since S06, fails on origin/main too
+# - canary_tree_scan + tmux_corbanu_env_* (4): macOS socket path too long here; all pass on Linux on this commit:
+#   Error: path must be shorter than SUN_LEN
+# - tmux_*_api_* (6): fail on Linux on this branch and on origin/main 060ce90947 (onboarding-linux-main.txt)
+TRY 2 FAIL codex-tui app::provider_accounts::tests::a_session_account_that_cannot_load_changes_nothing
+TRY 2 FAIL codex-tui::all suite::multi_provider_onboarding::canary_tree_scan_skips_unix_sockets_and_scans_regular_files
+TRY 2 FAIL codex-tui::all suite::multi_provider_onboarding::tmux_corbanu_env_aliases_restart_account_read_and_legacy_daemon_recovery
+TRY 2 FAIL codex-tui::all suite::multi_provider_onboarding::tmux_corbanu_env_legacy_alias_restart_and_account_read
+TRY 2 FAIL codex-tui::all suite::multi_provider_onboarding::tmux_corbanu_env_plan_alias_restart_and_account_read
+TRY 2 FAIL codex-tui::all suite::multi_provider_onboarding::tmux_deferred_corbanu_api_cancel_with_fallback_continues_to_chat
+TRY 2 FAIL codex-tui::all suite::multi_provider_onboarding::tmux_fresh_wallet_api_cancel_without_fallback_returns_to_setup
+TRY 2 FAIL codex-tui::all suite::multi_provider_onboarding::tmux_fresh_wallet_api_handoff_preserves_existing_current_provider
+TRY 2 FAIL codex-tui::all suite::multi_provider_onboarding::tmux_fresh_wallet_api_key_success_activates_without_restart
+TRY 2 FAIL codex-tui::all suite::multi_provider_onboarding::tmux_locked_wallet_api_unlocks_and_cancels
+TRY 2 FAIL codex-tui::all suite::multi_provider_onboarding::tmux_only_corbanu_api_cancel_returns_to_shared_provider_list

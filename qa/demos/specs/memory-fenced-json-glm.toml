@@ -1,0 +1,76 @@
+# Bug fix: GLM 5.2 fences its stage-one JSON; the memory summary now completes.
+id = "memory-fenced-json-glm"
+feature = "Memory summaries complete with GLM 5.2 (fenced JSON accepted)"
+expected = "A session is aged past the idle minimum (visible setup step). In a new chat the memory worker summarises it with GLM 5.2, which wraps its JSON in a code fence; the job now ends 'done / ok' instead of a parse error."
+model = "glm-5.2"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[features]
+memories = true
+
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"notes.txt" = """Meeting notes: ship v2 on Friday.
+"""
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run cat notes.txt and tell me the ship day in one line."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Friday"
+timeout = 240
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+[[steps]]
+type = "/new"
+[[steps]]
+key = "Enter"
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "!sqlite3 {home}/pfterminal_state_5.sqlite 'update threads set updated_at = updated_at - 28800, updated_at_ms = updated_at_ms - 28800000' && echo aged"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "aged"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Say hello in three words."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "!until sqlite3 {home}/pfterminal_memories_1.sqlite \"select status from jobs where kind = 'memory_stage1'\" | grep -qE 'done|error'; do sleep 2; done; sqlite3 {home}/pfterminal_memories_1.sqlite \"select 'stage one: ' || status || ' / ' || coalesce(last_error, 'ok') from jobs where kind = 'memory_stage1'\""
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "stage one: (error|done)"
+timeout = 200
+compress = 3
+[[steps]]
+pause = 5.0

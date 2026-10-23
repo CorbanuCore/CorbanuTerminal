@@ -1,0 +1,79 @@
+[0] › Provider: Z.AI
+[1] › Account: work
+[2] › Model: Z.AI GLM 5.3 Flash
+[3] › Billing: Pay per use
+[4] › Estimated cost: $0.000601 (rounded)
+[5] › Tokens: 4,616 tokens
+[6] › —— Details ——
+[7] › Billed cost: Z.AI doesn't report its charges, so any cost here is an estimate — check Z.AI's bill.
+[8] › Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+[9] › Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+[10] › Snapshot is not current; newer activity is unverified
+[11] › Day covered (UTC): [2026-10-11T00:00:00.000Z, 2026-10-12T00:00:00.000Z)
+[12] › Read at: 2026-10-11T13:31:52.104Z; ledger current to: 2026-10-11T13:28:12.812Z (219292 ms behind)
+[13] › Estimated token cost for recorded attempts: $0.000601 (rounded)
+[14] › Recorded attempts: 1
+[15] › Known estimate exact USD: 0.00060129
+[16] › —— Open ——
+[17] › → Request 4
+[18] › Back
+[19] › Refresh
+[20] › Close
+[21] › Provider: Z.AI
+[22] › Account: work
+[23] › Model: Z.AI GLM 5.3 Flash
+[24] › Billing: Pay per use
+[25] › Estimated cost: $0.000601 (rounded)
+[26] › Tokens: 4,616 tokens
+[27] › —— Details ——
+[28] › Billed cost: Z.AI doesn't report its charges, so any cost here is an estimate — check Z.AI's bill.
+[29] › Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+[30] › Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+[31] › Snapshot is not current; newer activity is unverified
+[32] › Day covered (UTC): [2026-10-11T00:00:00.000Z, 2026-10-12T00:00:00.000Z)
+[33] › Read at: 2026-10-11T13:31:52.104Z; ledger current to: 2026-10-11T13:28:12.812Z (219292 ms behind)
+[34] › Estimated token cost for recorded attempts: $0.000601 (rounded)
+[35] › Recorded attempts: 1
+[36] › Known estimate exact USD: 0.00060129
+[37] › —— Open ——
+[38] › → Request 4
+[39] › Back
+[40] › Refresh
+[41] › Close
+[42] › Provider: Z.AI
+[43] › Account: work
+[44] › Model: Z.AI GLM 5.3 Flash
+[45] › Billing: Pay per use
+[46] › Estimated cost: $0.000601 (rounded)
+[47] › Tokens: 4,616 tokens
+[48] › —— Details ——
+[49] › Billed cost: Z.AI doesn't report its charges, so any cost here is an estimate — check Z.AI's bill.
+[50] › Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+[51] › Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+[52] › Snapshot is not current; newer activity is unverified
+[53] › Day covered (UTC): [2026-10-11T00:00:00.000Z, 2026-10-12T00:00:00.000Z)
+[54] › Read at: 2026-10-11T13:31:52.104Z; ledger current to: 2026-10-11T13:28:12.812Z (219292 ms behind)
+[55] › Estimated token cost for recorded attempts: $0.000601 (rounded)
+[56] › Recorded attempts: 1
+[57] › Known estimate exact USD: 0.00060129
+[58] › —— Open ——
+[59] › → Request 4
+--- final viewport ---
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.3-flash   /model to change          │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s05acc/ws │
+╰──────────────────────────────────────────────────────╯
+  Provider: zai; Account: work; Model: glm-5.3-flash
+  Requested UTC day: 2026-10-11
+  Day covered (UTC): [2026-10-11T00:00:00.000Z, 2026-10-12T00:00:00.000Z)
+  Read at: 2026-10-11T13:31:52.104Z; ledger current to: 2026-10-11T13:28:12.812Z (219292 ms behind)
+  Estimated token cost for recorded attempts: $0.000601 (rounded)
+  Recorded attempts: 1
+  Known estimate exact USD: 0.00060129
+  —— Open ——
+  → Request 4
+› Back
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

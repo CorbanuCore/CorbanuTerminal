@@ -1,0 +1,162 @@
+---
+sprint_id: "PF-60-S05"
+title: "Collection correctness and declared billing basis"
+status: completed
+plan_file: "docs/plans/completed/main-2026-10-10-portfolio-agent-cost-accounting.md"
+plan_feature: "PF-60"
+execution_order: 4
+owner: "Codex accounting lane (acct-s05); Travis Good accepts"
+parallel_lane: "accounting-pf60-s05-collection"
+write_scope: "codex-rs/model-provider-info/src/, codex-rs/config/src/config_toml.rs, codex-rs/config/src/thread_config.rs, codex-rs/config/src/thread_config/remote.rs, codex-rs/login/src/auth_env_telemetry.rs, codex-rs/model-provider/src/provider.rs, codex-rs/app-server/src/request_processors/thread_processor_tests.rs, codex-rs/core/src/config/config_tests.rs, codex-rs/core/src/accounting_basis_tests.rs, codex-rs/core/src/accounting_websocket_tests.rs, codex-rs/core/src/client_tests.rs, codex-rs/core/src/compact_tests.rs, codex-rs/core/src/memory_stage_one_tests.rs, codex-rs/core/src/realtime_conversation_tests.rs, codex-rs/core/tests/responses_headers.rs, codex-rs/core/tests/suite/client.rs, codex-rs/core/tests/suite/client_websockets.rs, codex-rs/core/tests/suite/stream_error_allows_next_turn.rs, codex-rs/core/tests/suite/stream_no_completed.rs, codex-rs/state/src/runtime/accounting_late_import.rs, codex-rs/state/src/runtime/accounting_late_import_tests.rs, codex-rs/state/src/runtime/accounting_compact_values_tests.rs, codex-rs/state/src/runtime/accounting_format_tests.rs, codex-rs/state/tests/accounting_contract_golden.rs, codex-rs/core/config.schema.json, codex-rs/core/src/config/mod.rs, codex-rs/core/src/accounting.rs, codex-rs/core/src/accounting_prices.rs, codex-rs/core/src/accounting_prices_tests.rs, codex-rs/core/src/accounting_policy_tests.rs, codex-rs/core/src/accounting_tests.rs, codex-rs/core/src/accounting_basis.rs, codex-rs/core/src/accounting_transport.rs, codex-rs/core/src/accounting_extensions.rs, codex-rs/core/src/accounting_extensions_tests.rs, codex-rs/core/src/accounting_chat.rs, codex-rs/core/src/accounting_responses.rs, codex-rs/core/src/state/service.rs, codex-rs/core/tests/suite/accounting_responses_ws_recovery.rs, codex-rs/core/src/client.rs, codex-rs/core/src/compact.rs, codex-rs/core/src/compact_remote.rs, codex-rs/core/src/realtime_conversation.rs, codex-rs/core/src/guardian/review_session.rs, codex-rs/core/src/session/, codex-rs/core/tests/suite/accounting_anthropic.rs, codex-rs/core/tests/suite/accounting_chat.rs, codex-rs/core/tests/suite/accounting_responses.rs, codex-rs/ext/web-search/src/tool.rs, codex-rs/ext/image-generation/src/backend.rs, codex-rs/state/accounting_migrations/, codex-rs/state/src/migrations.rs, codex-rs/state/src/runtime/accounting_store.rs, codex-rs/state/src/runtime/accounting_store_tests.rs, codex-rs/state/src/runtime/accounting_pricing.rs, codex-rs/state/src/runtime/accounting_pricing_tests.rs, codex-rs/state/src/runtime/accounting_estimates.rs, codex-rs/state/src/runtime/accounting_estimates_tests.rs, codex-rs/state/src/runtime/accounting_lifecycle.rs, codex-rs/state/src/runtime/accounting_compact_values.rs, codex-rs/state/src/runtime/accounting_format.rs, codex-rs/state/tests/fixtures/accounting/, codex-rs/state/tests/accounting_store.rs, codex-rs/state/BUILD.bazel, codex-rs/app-server/src/request_processors/turn_processor.rs, codex-rs/tui/src/chatwidget/tokens.rs, codex-rs/tui/src/chatwidget/tokens_tests.rs, codex-rs/tui/src/chatwidget/tokens/, codex-rs/tui/src/app/background_requests.rs, qa/portfolio/agent-cost-accounting/pf-60-s05/, qa/demos/specs/pf60s05-subscription-not-spent.toml, qa/demos/specs/pf60s05-basis-not-declared.toml, qa/demos/specs/pf60s05-overflow-note.toml, qa/demos/index/PF-60-S05.md, docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s05-collection-correctness-and-billing-basis.md"
+integration_gate: "Small PRs to main, merged by the lane when green. Each slice: focused tests with and without developer-accounting, Linux clippy -D warnings on the RTX box, one Opus 5.5 High review. Codex management receives; code-blind acceptance then Travis."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf60-s05-20261009"
+branch: "work/pf60-s05-20261009"
+base_commit: "7ac8fcb6cb5eb568a62161ec190d5f04ba1fee2a"
+depends_on: "PF-60-S02"
+created: 2026-10-08
+updated: 2026-10-09
+---
+
+# PF-60-S05 — Collection correctness and declared billing basis
+
+**Status: completed** (accepted by Travis 2026-10-09 with two waivers; see Closure). All slices merged 2026-10-09; the lane's own evidence is below and in [real-provider checks](../../../../qa/portfolio/agent-cost-accounting/pf-60-s05/real-provider-checks-20261009.md). Travis chose option B for "both" behaviour on 2026-10-09 ([options memo](../../../../qa/portfolio/agent-cost-accounting/pf-60-s05/both-behaviour-options.md)). It fixes the Blocker and Majors 2-5 of the [independent review of the 09-20..10-02 work](../../../../qa/portfolio/agent-cost-accounting/pf-60-s03/body-review-20261008/review.md): collection and pricing defects (S02 territory), so it depends on S02. Work landed in slice PRs from branches cut in the recorded worktree (and a second checkout, `worktrees/pf60-s05-s2`, for parallel slices); both checkouts are released.
+
+## Closure — 2026-10-09
+
+Completed. Travis **accepted** PF-60-S05 on 2026-10-09 ("accept S05 with both waivers", in chat with the
+coordinator), after the independent code-blind acceptance (PR #355) and its targeted re-run with real Kimi Code,
+Claude plan and OpenAI API-key credentials (PR #362). Archived by the accounting integration owner.
+
+**Waivers (verbatim, as granted):**
+
+- (a) AC10's "estimate matches the published price to the micro-dollar" for OpenAI API-key routes, until #361 is
+  fixed (fix in progress: PR #369);
+- (b) AC11's OS-enforced isolated execution gate — both acceptance runs ran on the normal hosts under
+  self-discipline (one noted breach: the model read a global skill under ~/.local/share; it found no key and made no
+  request).
+
+Evidence (under `qa/portfolio/agent-cost-accounting/pf-60-s05/independent-acceptance-20261009/`):
+
+- [First run](../../../../qa/portfolio/agent-cost-accounting/pf-60-s05/independent-acceptance-20261009/README.md), PR #355 (merge `3254a302fd`), binary
+  `d7846e29d5`, macOS and Linux; design frozen before results ([FROZEN-DESIGN.md](../../../../qa/portfolio/agent-cost-accounting/pf-60-s05/independent-acceptance-20261009/FROZEN-DESIGN.md)); code-blind Opus 5.5 High
+  [review](../../../../qa/portfolio/agent-cost-accounting/pf-60-s05/independent-acceptance-20261009/REVIEW.md): "Supported, with corrections" (applied). Found #351 and #352.
+- [Re-run](../../../../qa/portfolio/agent-cost-accounting/pf-60-s05/independent-acceptance-20261009/rerun-20261009/README.md), PR #362 (merge `60a4b77a92`), binary `5d283fde18`, real Kimi Code, Claude plan and
+  OpenAI API key; code-blind [review](../../../../qa/portfolio/agent-cost-accounting/pf-60-s05/independent-acceptance-20261009/rerun-20261009/REVIEW.md): "Supported with corrections" (applied). Found #361, #365, #366.
+- Slice PRs: #337 (`6b4b24829b`), #338 (`2ecf6fdbe8`), #342 (`08034c2946`), #344 (`38362eaf57`); lane evidence and
+  demos #346 (`d7846e29d5`); [demo index](../../../../qa/demos/index/PF-60-S05.md).
+
+Known gaps (NOT VERIFIABLE; carried, not discharged): ChatGPT-login paths (AC2, AC4, AC10, AC12, realtime); image
+generation (being added for API-key users in PR #370) and realtime; Kimi Open Platform and BigModel (no keys); the
+AC2 mutation tests (need source edits); AC7's validation-failure mode and the built-in search after the paid response.
+
+Follow-ups (tracked, not blockers):
+
+- #351 fixed by #358 (the first run's AC7 turn-level failures pass on the re-run binary).
+- #352 `/cost` display nits; #359 busy state DB makes metadata writes wait 5 s.
+- #361 OpenAI API-key catalogue rates and unpriced cache writes; fix PR #369 (lifts waiver a).
+- #365 `exec` ignores `OPENAI_API_KEY` on built-in `openai`; #366 TUI flags an environment Claude token.
+- #370 image generation for OpenAI API-key users, priced at published rates.
+- Recommended for S04: `/side` conversations and memory consolidation are unrecorded (named in the log and the
+  coverage audit); a "Price source" line on unpriced (basis-only) requests.
+- Also carried: a user-declared `pay_per_use` route upgrades the ledger to format 2, which older developer builds
+  won't write; real-ledger partial reads (identical on the S03 build) per the first run's AC6 caveats.
+
+### Addendum — 2026-10-10: waiver (a) lifted
+
+Travis lifted waiver (a) on 2026-10-10 (in chat with the coordinator), when he accepted PF-60-S04. After #369
+merged, both the S04 lane run and the S04 independent code-blind acceptance recomputed the OpenAI API-key totals
+exactly at published prices: 13 `gpt-5.4` requests, $0.270659 ([qualification](../../../../qa/portfolio/agent-cost-accounting/qualification.md));
+12 `gpt-5.4` requests plus 5 `gpt-5.6-luna`/`-terra` requests with cache writes, the two models #361 failed on
+([independent acceptance](../../../../qa/portfolio/agent-cost-accounting/pf-60-s04/independent-acceptance-20261010/README.md), PR #397).
+AC10 now passes for OpenAI API-key routes; the record above is unchanged. Waiver (b) still stands; the enforced
+isolation gate is carried to [PF-60-S10](../../../plans/completed/main-2026-10-20-portfolio-agent-cost-accounting-followups.md#sprint-execution-map) (#404).
+
+### Addendum — 2026-10-16: waiver (b) discharged
+
+[PF-60-S10](../portfolio-agent-cost-accounting-followups/pf-60-s10-isolated-code-blind-acceptance.md) ran the
+code-blind acceptance of the follow-ups inside the enforced isolation gate on VM "macOS 3": separate unprivileged
+executor accounts, provider keys only through a relay the executors can't read, 105/105 isolation probes and a key scan
+of 0 ([record](../../../../qa/portfolio/agent-cost-accounting/followups-acceptance-20261016/README.md), PR #909).
+Travis accepted S10 on 2026-10-16 (29 passed, 1 failed, 7 blocked of 37; decision D24). Waiver (b) is discharged for
+the accounting acceptance; the record above is unchanged.
+
+## Execution mandate
+
+- **Goal 1 (Blocker):** Kimi Code membership work is never recorded or shown as money spent.
+- **Goal 2 (Major 2):** subscription work keeps its basis when no catalogue price exists. Today plan-ness lives only on the price record, so priceless plan turns show as "Pay per use".
+- **Goal 3 (Major 3):** the 2026-09-21 change to stored bytes (`5bae03414e`) is checked against real old ledgers and fixtures, and the ledger format is versioned whatever that check finds.
+- **Goal 4 (Major 4):** compaction, web search and image generation are best effort. If accounting fails, the attempt is marked unrecorded and the paid response is still returned.
+- **Goal 5 (Major 5):** guardian review forks are attributed to the parent conversation. Any other uncollected session (for example `exec --ephemeral`) logs a named warning and is listed in the coverage audit.
+- **Also closed, same mechanism:** Minor 10 (any provider with a command-based login is treated as a subscription, Bedrock included).
+- **Excludes:** shipping `/cost` to users; changing prices; extending API-equivalent figures to more providers; reading provider quota APIs; review Minors 6, 7 and 9 and Nits 11-14; S03 acceptance items #286, #287 and #289. Those stay in S03's Remaining list.
+
+## Billing basis design (Travis's requirements a and b)
+
+- **Declared, not guessed.** Every provider has a declared billing basis: `subscription`, `pay_per_use` or `local` (runs on your own machine, no charge). The built-in provider table holds the defaults. Users can override per provider with `model_providers.<id>.billing = "..."` in `config.toml`, for built-in and custom providers alike.
+- **Several credentials, several declarations.** A provider that takes more than one kind of credential declares a basis for each kind explicitly in the table: `openai` is `subscription` when signed in with ChatGPT and `pay_per_use` with an API key. Code never derives a basis from `AuthMode` or from `provider.auth` being set. That predicate in `turn_mode` (`core/src/accounting.rs:420-441`) is removed.
+- **Unknown stays unknown.** A custom provider with no declaration still has its tokens recorded. It is shown as "billing basis not declared" with a next step naming the config key, and it counts as neither spent nor subscription.
+- **Recorded on every attempt.** The basis and where it came from (built-in default or user config) are bound to every attempt at admission, whether or not a price record exists. A subscription attempt is never counted as spent. Its API-price equivalent, where today's rules give one, is shown as "not spent". Pane-bridge and extension paths carry the basis of the provider they used.
+- **Defaults: subscription** for `claude-plan`, `kimi-code`, `zai-anthropic` and `openai` signed in with ChatGPT. **Pay per use** for `openai` with an API key, `anthropic`, `ambient`, `pfterminal-plan` / `pfterminal-plan-anthropic` (Corbanu API balance), `zai`, `openrouter`, `openrouter-anthropic`, `deepseek`, `meta`, `baseten`, `baseten-anthropic`, `vercel`, `vercel-anthropic`, `vercel-anthropic-fast` and `amazon-bedrock`. **Local** for `ollama` and `lmstudio`. Each default, with its official source, is in the [defaults table](../../../../qa/portfolio/agent-cost-accounting/pf-60-s05/billing-basis-defaults.md).
+
+## Decision: "both" behaviour is option B (Travis, 2026-10-09)
+
+- **Route and credential decide.** The built-in table declares a basis per credential and per route (Z.AI coding URL subscription, general URL pay per use; Kimi Code URL subscription, Kimi Open Platform pay per use; ChatGPT login subscription, OpenAI API key pay per use). A route or credential the table doesn't know is "billing basis not declared", with a next step, never a guess.
+- **Overflow is never spent.** Paid overflow beyond a plan (usage credits, Extra Usage, ChatGPT credits) is not counted. Subscription work carries a plain note that overflow isn't visible here and where to check it.
+- **Override stays.** `model_providers.<id>.billing` remains for unusual setups. Option C (an overflow upper bound) is not built; revisit only if a provider signals overflow per request.
+
+## Plan linkage
+
+- Plan: [Unified agent cost and usage accounting](../../../plans/completed/main-2026-10-10-portfolio-agent-cost-accounting.md); feature `PF-60`. Plan acceptance advanced: a missing price, or a denied provider, produces no invented zero and no double charge; unknown and estimated values stay visibly distinct.
+
+## Code boundaries
+
+- Existing: `model-provider-info/src/lib.rs::built_in_model_providers`; `core/src/accounting.rs::turn_mode` and `attach_turn`; `core/src/accounting_prices.rs::plan_original`; `state/src/runtime/accounting_pricing.rs` (`is_plan`); `state/src/runtime/accounting_estimates.rs`; `core/src/client.rs` (`resolve_path`); `core/src/accounting_transport.rs`; `core/src/accounting_extensions.rs`; `ext/web-search/src/tool.rs`; `ext/image-generation/src/backend.rs`; `core/src/guardian/review_session.rs`; `tui/src/chatwidget/tokens.rs` and `tokens/scope.rs`.
+- Planned: the basis declaration and route table (`model-provider-info/src/billing.rs`), the config key and schema, the basis on each attempt (`core/src/accounting_basis.rs`), a ledger format version (`state/accounting_migrations/0002_*`, `state/src/runtime/accounting_format.rs`) with a committed pre-09-21 fixture, the best-effort paths, guardian attribution and `accounting.excluded`. The literal file list is `write_scope`.
+- Evidence: `qa/portfolio/agent-cost-accounting/pf-60-s05/`.
+
+## Preconditions
+
+- [x] 2026-10-09 Travis chose option B and AC12 is written from it; worktree, branch, base and literal write scope are allocated and in the plan.
+- [x] Credentials: Kimi Code membership, Claude subscription, OpenAI API key and Z.AI were in the vault for the runs (values never printed); a ChatGPT login was not, so its items are NOT VERIFIABLE (Closure).
+
+## Done
+
+- [x] 2026-10-08 Sprint specified from review findings 1-5 and 10, Travis's requirements, the cited defaults table and the "both" options memo; 2026-10-09 option B recorded, AC12 written, worktree allocated (PR #334).
+- [x] 2026-10-09 **Ledger format (AC6), PR #337:** Major 3 reproduced with a ledger written at `5bae03414e^` (committed fixture); both stored forms read again; explicit format with upgrade-on-write and `NewerLedgerFormat` refusal; two real 09-23..10-03 ledgers validate ([check](../../../../qa/portfolio/agent-cost-accounting/pf-60-s05/ledger-format-check.md)).
+- [x] 2026-10-09 **Declaration (AC1-3, AC12 table), PR #338:** `model-provider-info/src/billing.rs` declares a basis per built-in provider and credential plus route rows; `billing` config key (alias ids canonicalised, the real id wins); inference from auth mode and `provider.auth` removed; unknown route or credential is "not declared".
+- [x] 2026-10-09 **Basis on every attempt and `/cost` (AC3-4, AC12), PR #342:** every admitted attempt binds its basis and source (a record with no rates when there is no price); subscription, local and undeclared work are never pay per use, "no price" or spend; "Billing basis not declared" with its next step; the overflow note wherever subscription work appears.
+- [x] 2026-10-09 **Sessions and best effort (AC6-9), PR #344:** guardian reviewers (trunk and forks) record in the reviewed conversation's ledger as `review:` turns; a reviewer of an unpersisted conversation and any other ephemeral session log one `accounting.excluded`; a newer-format ledger turns collection off with one warning; compaction, web search and image generation return the provider's answer when the store refuses; [coverage audit](../../../../qa/portfolio/agent-cost-accounting/pf-60-s05/acct-coverage-audit-20261009.md).
+- [x] 2026-10-09 **Lane gate:** tests with/without `developer-accounting` (core accounting/billing/guardian 321/316, state 398, tui tokens/cost 124/123, model-provider-info 74; Linux nextest core 326/321, tui 124); Linux clippy `-D warnings` 0/0 per slice; Opus 5.5 High review rounds per slice, all APPROVE; tmux run on GLM 5.2 with injected store failures and [real-provider checks](../../../../qa/portfolio/agent-cost-accounting/pf-60-s05/real-provider-checks-20261009.md) (AC8, AC9, zai/deepseek recomputes exact); [demo videos](../../../../qa/demos/index/PF-60-S05.md).
+- [x] 2026-10-09 **Independent code-blind acceptance (AC11):** first run PR #355, targeted re-run with real credentials PR #362, each with its own code-blind Opus 5.5 High review; #351 fixed by #358 in between.
+- [x] 2026-10-09 **Travis accepted** with waivers (a) and (b); archived (Closure).
+
+## Remaining
+
+- [x] Code-blind functional design and acceptance (AC11), then Travis: done (#355, #362); accepted 2026-10-09 with waiver (b).
+- [x] **NOT VERIFIABLE items:** Kimi Code and Claude plan were verified in #362; OpenAI API key verified for basis (estimate waived, a). ChatGPT login, image generation, realtime, Kimi Open Platform, BigModel and mutation tests are known gaps (carried, not discharged; Closure).
+- [x] Follow-ups moved to Closure (carried, not discharged): `/side` and memory consolidation unrecorded; format-2 upgrade on user-declared `pay_per_use`; "Price source" line on unpriced requests.
+
+## Verification
+
+Results: first run (#355, `d7846e29d5`) and re-run (#362, `5d283fde18`); M = macOS, L = Linux.
+
+- [x] **AC1** (every AC is checked on one recorded binary, on macOS and Linux)**:** every one of the 21 built-in providers has a declaration matching the defaults table. A test enumerates `built_in_model_providers` and fails on any undeclared provider. — **PASS** (M, L); built-in `openai` via the unit test; one binary per record, not across the two.
+- [x] **AC2:** the basis does not follow the auth type. With a command `auth`, `amazon-bedrock` stays pay per use. `kimi-code` using an environment key is a subscription. `openai` follows its per-credential entries. Mutation tests show each of these fails if inference comes back. — **PASS** for Bedrock, Kimi and OpenAI API-key routes; ChatGPT login and mutation tests NOT VERIFIABLE (known gaps).
+- [x] **AC3:** a `billing` override changes new attempts only, and history is not re-priced. An invalid value is a config error that names the key. A custom provider with no declaration shows "not declared" and its next step. — **PASS** (M, L).
+- [x] **AC4:** a ChatGPT turn on a model with no catalogue price, a priority-tier turn, ChatGPT image and realtime calls, and pane-bridge Claude work all show "Subscription". None shows "Pay per use", "no price available" or "check the bill", and none adds to the pay-per-use "had no price" count. — Claude pane **PASS** (L, #362); ChatGPT parts, image and realtime NOT VERIFIABLE (known gaps); unpriced subscription routes pass as substitute evidence.
+- [x] **AC5 (real):** after a `kimi-code` turn with a real membership key, `/cost` shows Subscription with $0 counted as spent, and the day's spent total is unchanged. — **PASS** (M, L, #362).
+- [x] **AC6:** a pre-`5bae03414e` fixture ledger (committed) validates and reads. A real old ledger does too, or its absence is recorded. A future-format ledger turns collection off with one warning while turns still succeed. — **PASS** with caveats (M, L, #355): no real pre-09-21 ledger exists (recorded); partial reads on real ledgers are identical on the S03 build.
+- [x] **AC7 (real provider, injected store failure):** with the store busy past its budget, failing validation, or read-only, auto-compaction finishes, web search returns results and image generation returns the image. One gap warning appears per turn. — **PASS** for compaction (busy, read-only, refused; read-only and 2-minute lock after #358) and web search (M, #362); validation failure and image generation NOT VERIFIABLE (known gaps).
+- [x] **AC8 (real):** a guardian approval review's requests appear under the parent conversation in `/cost`, and the totals reconcile. — **PASS** (M, L), including parallel reviews.
+- [x] **AC9:** an `exec --ephemeral` run logs exactly one `accounting.excluded` warning, and the new coverage audit lists it. — **PASS** (M, L).
+- [x] **AC10 (real providers):** `claude-plan`, ChatGPT login and `kimi-code` are subscription. `zai` (GLM 5.2) and `deepseek` or `openrouter` are pay per use. Pay-per-use estimates match an independent recomputation at the provider's published prices to the micro-dollar. — **PASS** for `claude-plan`, `kimi-code`, `zai`, `deepseek`, `openrouter` (exact); OpenAI API key basis PASS, estimate FAIL (#361), **waived (a)**; ChatGPT NOT VERIFIABLE.
+- [x] **AC11 (independent, code-blind, like S03's):** an executor who reads only this record, the plan intent, the defaults table and in-product help runs AC1-AC10 and AC12 with real keys under the [isolated execution gate](../../../../qa/code-blind-functional/isolated-execution.md) and records pass or fail for each. A code-blind Opus 5.5 High reviewer then audits that record. — Done (#355, #362, each reviewed); isolated execution gate **waived (b)**.
+- [x] **AC12 (option B, real):** for each built-in provider with more than one route or credential in the table, a real request on each route is recorded with the declared basis; an unknown route shows "not declared"; and the overflow note appears only on subscription work. A route whose credential isn't in the vault is recorded NOT VERIFIABLE and listed for Travis. — **PASS** for Z.AI, Kimi Code and OpenAI API-key routes, the unknown route and the overflow note; Kimi Open Platform, BigModel and ChatGPT NOT VERIFIABLE (known gaps).
+- [x] Gate (`sec-common.md`): `just test` for core, state and tui, with and without `developer-accounting`; Linux clippy; a tmux run on GLM 5.2 (`-c model_provider="zai"`); one Opus 5.5 High code review; demo videos per `qa/demos/README.md`. Every run uses `CORBANU_TEST_NO_NATIVE_KEYRING=1` and a disposable home.
+- [x] `python3 docs/plans/check.py; python3 docs/sprints/check.py`; `git diff --check` — pass at archive.
+
+## Exit evidence
+
+- [x] Merge commits, binary digests and test counts linked from `qa/portfolio/agent-cost-accounting/pf-60-s05/`. — Merge commits in Closure; test counts in Done; binaries recorded by commit in each acceptance record.
+- [x] Code-blind acceptance record and its review linked; every AC has a recorded result. — Closure and Verification.
+- [x] S03's Remaining list cross-referenced for the findings closed here; Travis accepts; record archived and plan backlinks updated. — S03's record links here (Blocker, Majors 2-5, Minor 10); accepted 2026-10-09; archived.

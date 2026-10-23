@@ -1,0 +1,28 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Reply with the single word OK.
+
+
+• OK
+
+
+  Attempt, components and original price
+  Requested UTC day: 2026-10-16
+
+  Model: Z.AI GLM 5.2
+  Billing: Pay per use
+  Estimated cost: $0.006344 (rounded)
+  Tokens: 4,446 tokens
+  —— Details ——
+  Billed cost: Z.AI doesn't report its charges, so any cost here is an estimate — check Z.AI's bill.
+  Request: 5116d46e-f25a-4f8d-97c7-43161de3af45
+› Attempt: 9c8ffdcb-479d-4a24-9659-11b535e260f9
+
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

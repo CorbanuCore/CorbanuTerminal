@@ -1,0 +1,37 @@
+== before shutdown
+2026-10-16T08:06:05Z
+ls: /Users/Shared/agms-canary-ipc.pid: No such file or directory
+ls: /Users/agent/agms: No such file or directory
+ls: /Users/agent/agms-canary: No such file or directory
+ls: /etc/sudoers.d/agms-codeblind: No such file or directory
+ls: /opt/agms: No such file or directory
+ls: /private/tmp/agms-canary-ipc: No such file or directory
+0
+auth.json
+zai_api_key
+0
+config.toml
+1
+/Users/agent/ag-admin
+== verification boot 2026-10-16T08:06:31Z
+2026-10-16T08:06:45Z
+ls: /Users/Shared/agms-canary-ipc.pid: No such file or directory
+ls: /Users/agent/agms: No such file or directory
+ls: /Users/agent/agms-canary: No such file or directory
+ls: /etc/sudoers.d/agms-codeblind: No such file or directory
+ls: /opt/agms: No such file or directory
+ls: /private/tmp/agms-canary-ipc: No such file or directory
+agmx accounts: 0
+auth.json
+zai_api_key
+moonshot hosts lines: 0
+config.toml
+virtiofs: 1
+ls: /Users/agent/ag-admin: No such file or directory
+0
+stop-rc=0
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3
+2026-10-16T08:06:47Z
+lock deleted 2026-10-16T08:06:54Z

@@ -1,0 +1,49 @@
+│  Permissions:          Next turn: Workspace (Ask for approval)                               │
+│  Security:             Requested Permissive; effective protection unverified (/security)     │
+│  Agents.md:            <none>                                                                │
+│  Account:              Z.AI API key configured                                               │
+│  Collaboration mode:   Default                                                               │
+│  Session:              01a12dbd-dfcd-7c30-95fa-399612a23ae4                                  │
+│                                                                                              │
+│  Token usage:          28.1K total  (28K input + 34 output)                                  │
+│  Context window:       100% left (14.3K used / 950K)                                         │
+│  Account usage:        personal · 28,016 input · 576 cached input · 34 output (27 reasoning) │
+│  Limits:               data not available yet                                                │
+╰──────────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: /private/tmp/f545proj            │
+╰─────────────────────────────────────────────╯
+
+Token usage: total=28,050 input=28,016 (+ 576 cached) output=34 (reasoning 27)
+To continue this session, run corbanu resume 01a12dbd-dfcd-7c30-95fa-399612a23ae4
+
+⚠ Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set
+  `suppress_unstable_features_warning = true` in /private/tmp/f545h.dLk7/config.toml.
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Z.AI GLM 5.3 Flash                                                │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account work                │
+│  Directory:            /private/tmp/f545proj                                             │
+│  Permissions:          Next turn: Workspace (Ask for approval)                           │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Z.AI API key configured                                           │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12dec-00e4-7f21-9f7d-ecfcd145a17a                              │
+│                                                                                          │
+│  Token usage:          0 total  (0 input + 0 output)                                     │
+│  Account usage:        work · no usage yet                                               │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+› Implement {feature}
+
+  Z.AI GLM 5.3 Flash via zai default · /private/tmp/f545proj · Corbanu Terminal · TPS: -- tok/s

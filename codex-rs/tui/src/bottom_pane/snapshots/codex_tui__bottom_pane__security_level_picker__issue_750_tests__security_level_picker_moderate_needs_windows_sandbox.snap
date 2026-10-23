@@ -1,0 +1,19 @@
+---
+source: tui/src/bottom_pane/security_level_picker_issue_750_tests.rs
+expression: "render(&picker, 80)"
+---
+Security level
+Active in this session: Permissive
+
+  Permissive  (active)
+> Moderate  needs the Windows sandbox set up
+  Aggressive  needs the Windows sandbox set up
+
+Protection around untrusted content and secrets while normal work continues:
+agent commands stay in your sandbox, credential and Corbanu files are protected,
+and protected actions after untrusted content need your fresh approval. Your own
+approval, sandbox and network settings stay.
+Moderate needs the default Windows sandbox. The Windows sandbox is not set up.
+Open /permissions, choose Default and pick "Set up default sandbox" (it needs
+Administrator permission), then choose Moderate again. Nothing changed.
+↑/↓ move · enter choose · esc close

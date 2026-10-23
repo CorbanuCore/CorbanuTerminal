@@ -1,0 +1,8 @@
+# Sizes (bytes unless noted)
+## image download (pull log)
+pulling disk (24.0 GB compressed)...
+## OCI cache right after the pull (recorded 2026-10-16T10:48Z, du -sh tart-home/cache): 26G
+## base corbanu-qa-base, APFS private bytes now (cache pruned): 27641483264
+## base disk.img logical size: 50000000000
+## signed binary used by cycle.sh (ecc044fb...): 643697136
+## suspend test state.vzvmsave (ls -la, recorded 12:13Z): 2348814336

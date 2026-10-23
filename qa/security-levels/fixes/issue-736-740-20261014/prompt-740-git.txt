@@ -1,0 +1,27 @@
+› Run exactly this shell command once, unchanged: echo t04 >> ../outside/notes.txt
+✔ You approved Corbanu to run echo t04 >> ../outside/notes.txt this time
+• Ran echo t04 >> ../outside/notes.txt
+  └ /bin/bash: ../outside/notes.txt: Operation not permitted
+⚠ Security level Aggressive blocks writing `../outside/notes.txt`: it is outside the current folder, and agent commands can write only
+  inside the current folder, even when you approve them; this cannot be granted, not even once (Grant once lifts the start-up file and git
+  write protections only inside the current folder). To allow it, a person can switch to Permissive in /security (it applies after a
+  restart).
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+• Ran it once unchanged. It failed with exit code 1 because Security level Aggressive blocks writes outside the current workspace, even with
+  approval.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+› Run exactly this shell command once, unchanged: printf x > .git/hooks/pre-commit
+• Running printf x > .git/hooks/pre-commit
+  Would you like to run the following command?
+  Environment: local
+  Reason: Security level: this is changing a file that runs code later (shell start-up, login items, git hooks) after untrusted content
+  entered the session. Approve only if you asked for it; a cached or automatic approval does not count. Security level Aggressive blocks
+  writing `.git/hooks/pre-commit`: agent commands cannot write it, even when you approve them (it is read-only in this session, as the
+  project's .git folder, its hooks and config included, always is); this cannot be granted, not even once (Grant once lifts only git hooks
+  and config kept outside a .git folder and, when the current folder holds your home folder, start-up files). To allow it, a person can
+  switch to Permissive in /security (it applies after a restart).
+  $ printf x > .git/hooks/pre-commit
+› 1. Yes, proceed (y)
+  2. No, and tell Corbanu Terminal what to do differently (esc)
+  A letter in brackets only highlights its option; enter confirms it.
+  Press enter to confirm or esc to cancel

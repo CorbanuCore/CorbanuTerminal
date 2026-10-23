@@ -1,0 +1,23 @@
+2026-10-16T03:10:03Z
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3
+start-rc=0
+ssh: connect to host 192.168.64.3 port 22: Host is down
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 started  macOS 3
+2026-10-16T03:23:34Z attempt 1: no network 13 min after start (guest IP 192.168.64.3 ARP incomplete; display black). Stopping for one restart.
+stop-rc=0
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3
+2026-10-16T03:24:03Z attempt 2 start
+start-rc=0
+ssh open 2026-10-16T03:24:18Z
+up
+2026-10-16T03:24:16Z
+26.2
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 started  macOS 3

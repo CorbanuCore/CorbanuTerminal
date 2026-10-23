@@ -1,0 +1,69 @@
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     loading   /model to change                  │
+│ directory: /Volumes/CorbanuDrive/…/tui-r2-2c/workspace │
+╰────────────────────────────────────────────────────────╯
+
+› Summarize recent commits
+
+  Z.AI GLM 5.2 via zai standard · <run>/workspace · Corbanu Terminal · TPS: -- to…
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     loading   /model to change                  │
+│ directory: /Volumes/CorbanuDrive/…/tui-r2-2c/workspace │
+╰────────────────────────────────────────────────────────╯
+
+› /status
+
+  /status      show current session configuration and token usage
+  /statusline  configure which items appear in the status line
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.2   /model to change                  │
+│ directory: /Volumes/CorbanuDrive/…/tui-r2-2c/workspace │
+╰────────────────────────────────────────────────────────╯
+
+/status
+
+╭─────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                      │
+│                                                                                     │
+│  Model:                Z.AI GLM 5.2                                                 │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4                          │
+│  Directory:            <run>/workspace        │
+│  Permissions:          Next turn: Profile corbanu-aggressive (workspace, untrusted) │
+│  Security:             Aggressive active (/security)                                │
+│  Agents.md:            <none>                                                       │
+│  Account:              Z.AI API key configured                                      │
+│  Collaboration mode:   Default                                                      │
+│  Session:              01a110d7-defa-7db0-a99e-54e32c3c2243                         │
+│                                                                                     │
+│  Token usage:          0 total  (0 input + 0 output)                                │
+│  Limits:               data not available yet                                       │
+╰─────────────────────────────────────────────────────────────────────────────────────╯
+
+› Run the command `corbanu vault list` in the shell and tell me exactly what happened.
+
+• Here's exactly what happened:
+
+  I ran corbanu vault list in the shell, and it was rejected before it could execute. The error returned was:
+
+  > Rejected("/bin/bash -c 'corbanu vault list' rejected: Security level Aggressive: agents cannot use the Corbanu
+  > vault.")
+
+  The command never actually ran — the sandbox/security layer blocked it at launch. The reason: the current security
+  level is set to Aggressive, under which agents are not permitted to invoke the Corbanu vault at all. This is a policy
+  restriction, not a missing binary or a vault error; the corbanu binary was never reached.
+
+  If you need to list vault contents, you'd need to either lower the security level (so agents are permitted to use the
+  vault) or run the corbanu vault list command yourself directly in the terminal rather than through me.
+
+› Summarize recent commits
+
+  Z.AI GLM 5.2 via zai standard · <run>/workspace · Corbanu Terminal · TPS: 41.4 …

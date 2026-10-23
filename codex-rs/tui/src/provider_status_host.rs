@@ -1,10 +1,15 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::RwLock;
 
 use codex_login::OpenAiAuthMetadata;
+use codex_login::ProviderAccountKind;
+use codex_login::ProviderAccountSignIn;
 use codex_model_provider_info::CORBANU_API_KEY_ENV_VARS;
+use codex_model_provider_info::NamedProviderAccount;
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
+use codex_protocol::config_types::ForcedLoginMethod;
 use codex_provider_auth::ApiKeyAuthTarget;
 use codex_provider_auth::ApiKeyCredentialMetadata;
 use codex_provider_auth::ApiKeyStorage;
@@ -31,6 +36,7 @@ use codex_provider_auth::ProviderStatusCatalog;
 use codex_provider_auth::ProviderStatusResolver;
 use codex_provider_auth::ProviderStatusSnapshot;
 
+use crate::chatwidget::claude_code_login::ClaudeCodePlanStatus;
 use crate::legacy_core::config::Config;
 
 type ManagedSnapshot = std::io::Result<codex_login::ProviderApiKeyStorageMetadataSnapshot>;
@@ -55,65 +61,61 @@ impl Default for ProviderAccountMetadata {
 impl ProviderAccountMetadata {
     pub(crate) async fn discover(config: &Config) -> Self {
         let codex_home = config.codex_home.to_path_buf();
-        let auth_manager = codex_login::AuthManager::shared_from_config(
+        let openai = codex_login::openai_auth_metadata_from_config(
             config, /*enable_codex_api_key_env*/ true,
         );
         let claude_status = crate::chatwidget::claude_code_login::current_status_with_timeout(
             codex_home.as_path(),
             std::time::Duration::from_secs(10),
         );
-        let (auth_manager, claude_status) = tokio::join!(auth_manager, claude_status);
-        let openai = auth_manager.openai_auth_metadata();
-        let claude = match claude_status {
-            crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::ManagedToken {
-                stored: true,
-            } => ClaudeCredentialMetadata::Configured {
-                source: codex_provider_auth::ClaudeCredentialSource::Managed,
-            },
-            crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::EnvironmentToken {
-                available: true,
-            } => ClaudeCredentialMetadata::Configured {
-                source: codex_provider_auth::ClaudeCredentialSource::Environment,
-            },
-            crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::SignedIn { .. } => {
-                ClaudeCredentialMetadata::Configured {
-                    source: codex_provider_auth::ClaudeCredentialSource::ClaudeCodeLogin,
-                }
-            }
-            crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::ManagedToken {
-                stored: false,
-            }
-            | crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::EnvironmentToken {
-                available: false,
-            }
-            | crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::InvalidSelection
-            | crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::NeedsReauthorization => {
-                ClaudeCredentialMetadata::RecoveryRequired {
-                    reason: codex_provider_auth::ProviderRecoveryReason::UnhealthyClaudeSelection,
-                }
-            }
-            crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::SelectionRequired {
-                existing_source_detected: true,
-            } => ClaudeCredentialMetadata::RecoveryRequired {
-                reason: codex_provider_auth::ProviderRecoveryReason::AmbiguousClaudeSources,
-            },
-            crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::SelectionRequired {
-                existing_source_detected: false,
-            }
-            | crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::SignedOut => {
-                ClaudeCredentialMetadata::NotConfigured
-            }
-            crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::Checking
-            | crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::Unavailable
-            | crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::Error => {
-                ClaudeCredentialMetadata::Unavailable
-            }
-        };
+        let (openai, claude_status) = tokio::join!(openai, claude_status);
+        let claude = claude_credential_metadata(claude_status);
         Self {
             openai,
             claude,
             corbanu: CorbanuPlanMetadata::NotConfigured,
         }
+    }
+}
+
+/// Maps the `/providers` Claude status to the metadata that gates Claude Plan
+/// models and panes.
+fn claude_credential_metadata(status: ClaudeCodePlanStatus) -> ClaudeCredentialMetadata {
+    match status {
+        ClaudeCodePlanStatus::ManagedToken { stored: true } => {
+            ClaudeCredentialMetadata::Configured {
+                source: codex_provider_auth::ClaudeCredentialSource::Managed,
+            }
+        }
+        ClaudeCodePlanStatus::EnvironmentToken { available: true }
+        | ClaudeCodePlanStatus::EnvironmentTokenWithoutSelection => {
+            ClaudeCredentialMetadata::Configured {
+                source: codex_provider_auth::ClaudeCredentialSource::Environment,
+            }
+        }
+        ClaudeCodePlanStatus::SignedIn { .. } => ClaudeCredentialMetadata::Configured {
+            source: codex_provider_auth::ClaudeCredentialSource::ClaudeCodeLogin,
+        },
+        ClaudeCodePlanStatus::ManagedToken { stored: false }
+        | ClaudeCodePlanStatus::EnvironmentToken { available: false }
+        | ClaudeCodePlanStatus::InvalidSelection
+        | ClaudeCodePlanStatus::NeedsReauthorization => {
+            ClaudeCredentialMetadata::RecoveryRequired {
+                reason: codex_provider_auth::ProviderRecoveryReason::UnhealthyClaudeSelection,
+            }
+        }
+        ClaudeCodePlanStatus::SelectionRequired {
+            existing_source_detected: true,
+        } => ClaudeCredentialMetadata::RecoveryRequired {
+            reason: codex_provider_auth::ProviderRecoveryReason::AmbiguousClaudeSources,
+        },
+        ClaudeCodePlanStatus::SelectionRequired {
+            existing_source_detected: false,
+        }
+        | ClaudeCodePlanStatus::SignedOut => ClaudeCredentialMetadata::NotConfigured,
+        ClaudeCodePlanStatus::Checking
+        | ClaudeCodePlanStatus::Unavailable
+        | ClaudeCodePlanStatus::Error => ClaudeCredentialMetadata::Unavailable,
     }
 }
 
@@ -126,12 +128,292 @@ pub(crate) struct ProviderStatusHost {
     account: Arc<RwLock<ProviderAccountMetadata>>,
     authorizations: ProviderRuntimeAuthorizations,
     health: Arc<RwLock<codex_provider_auth::ProviderCredentialHealth>>,
+    /// PF-84 (#417): catalog entries whose runtime provider runs on a named
+    /// account, and whether the vault holds that account. Such an entry's
+    /// status comes from the account, never from the default credential.
+    named_accounts: Arc<BTreeMap<String, bool>>,
+    /// #609: the name of each of those accounts, by entry id.
+    named_account_names: Arc<BTreeMap<String, String>>,
+    /// #665: for API-key entries served by several connections where one runs
+    /// on a named account, each connection's own credential (by entry id,
+    /// then runtime provider id). Each connection authenticates with its own.
+    connection_credentials: Arc<BTreeMap<String, BTreeMap<String, ConnectionCredential>>>,
+    /// PF-84 (#609): the catalog entry of the session's own provider when it
+    /// runs on a named sign-in account. Startup checked that account before
+    /// the session began (with a remote app server, the server checks it at
+    /// thread start), so it counts as signed in even when this home's vault
+    /// does not hold it. Kept apart from the default login's metadata, which
+    /// a refresh re-reads.
+    session_sign_in_entry: Option<String>,
+    /// #609: by entry id, what the enrolled named sign-in account the entry
+    /// runs on holds (a ChatGPT sign-in or an OpenAI API key), as its vault
+    /// metadata records it; absent when not recorded (shown as a ChatGPT
+    /// sign-in, as before). Never read from the sign-in itself.
+    named_sign_ins: Arc<BTreeMap<String, ProviderAccountSignIn>>,
+    /// #609: the configured `forced_login_method`, which can rule out a
+    /// named sign-in account by what it holds.
+    forced_login_method: Option<ForcedLoginMethod>,
+    /// Reads an API-key environment variable (tests replace it).
+    environment: fn(&str) -> EnvironmentCredentialMetadata,
+}
+
+/// The credential one connection (runtime provider) authenticates with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ConnectionCredential {
+    /// A named account and whether the vault holds it.
+    NamedAccount { enrolled: bool },
+    /// The provider's default key (environment, broker or stored).
+    DefaultKey { env_key: String },
+}
+
+/// The vault account kinds a named account of `provider` can be enrolled as.
+fn named_account_kinds(
+    provider: &codex_model_provider_info::ModelProviderInfo,
+) -> &'static [ProviderAccountKind] {
+    if provider.is_claude_plan() {
+        &[
+            ProviderAccountKind::ClaudeOauthToken,
+            ProviderAccountKind::ClaudeConfigDir,
+        ]
+    } else if provider.auth.is_some() {
+        &[ProviderAccountKind::Command]
+    } else if codex_model_provider::named_sign_in_account(provider).is_some() {
+        // PF-84-S06: an OpenAI ChatGPT or API-key sign-in.
+        &[ProviderAccountKind::ChatgptAuth]
+    } else {
+        &[ProviderAccountKind::ApiKey]
+    }
+}
+
+/// #665: for an API-key entry served by several connections (`zai` and
+/// `zai-anthropic` share `ZAI_API_KEY`) where at least one runs on a named
+/// account, the credential each connection really uses.
+fn connection_credentials(
+    catalog: &ProviderCatalog,
+    config: &Config,
+    holds: impl Fn(&NamedProviderAccount, ProviderAccountKind) -> bool,
+) -> BTreeMap<String, BTreeMap<String, ConnectionCredential>> {
+    let mut by_entry = BTreeMap::new();
+    for entry in catalog.entries() {
+        let Some(ProviderSetupCapability::ApiKey {
+            storage: ApiKeyStorage::EnvironmentVariable { env_key },
+        }) = entry.setup_capabilities.iter().next()
+        else {
+            continue;
+        };
+        let connections = entry
+            .runtime_provider_ids
+            .iter()
+            .filter_map(|id| {
+                config
+                    .model_providers
+                    .get(id.as_str())
+                    .map(|provider| (id.as_str(), provider))
+            })
+            .collect::<Vec<_>>();
+        if connections.len() < 2
+            || connections
+                .iter()
+                .all(|(_, provider)| provider.account.is_none())
+        {
+            continue;
+        }
+        let mut credentials = BTreeMap::new();
+        for (id, provider) in connections {
+            let credential = match &provider.account {
+                Some(account) => ConnectionCredential::NamedAccount {
+                    enrolled: named_account_kinds(provider)
+                        .iter()
+                        .any(|kind| holds(account, *kind)),
+                },
+                None => ConnectionCredential::DefaultKey {
+                    env_key: env_key.clone(),
+                },
+            };
+            credentials.insert(id.to_string(), credential);
+        }
+        by_entry.insert(entry.id.as_str().to_string(), credentials);
+    }
+    by_entry
+}
+
+/// PF-84: for each catalog entry whose runtime provider selects a named
+/// account, whether `holds` reports the account as enrolled (metadata only).
+fn named_account_enrollment(
+    catalog: &ProviderCatalog,
+    config: &Config,
+    holds: impl Fn(&NamedProviderAccount, ProviderAccountKind) -> bool,
+) -> BTreeMap<String, bool> {
+    let mut enrollment = BTreeMap::new();
+    for entry in catalog.entries() {
+        let selected = entry.runtime_provider_ids.iter().find_map(|id| {
+            config
+                .model_providers
+                .get(id.as_str())
+                .and_then(|provider| Some((provider, provider.account.as_ref()?)))
+        });
+        let Some((provider, account)) = selected else {
+            continue;
+        };
+        let enrolled = named_account_kinds(provider)
+            .iter()
+            .any(|kind| holds(account, *kind));
+        enrollment.insert(entry.id.as_str().to_string(), enrolled);
+    }
+    enrollment
+}
+
+/// #609: the named account each catalog entry's status follows (the same
+/// selection as [`named_account_enrollment`]), by entry id.
+fn named_account_names(catalog: &ProviderCatalog, config: &Config) -> BTreeMap<String, String> {
+    catalog
+        .entries()
+        .iter()
+        .filter_map(|entry| {
+            let account = entry.runtime_provider_ids.iter().find_map(|id| {
+                config
+                    .model_providers
+                    .get(id.as_str())
+                    .and_then(|provider| provider.account.as_ref())
+            })?;
+            Some((entry.id.as_str().to_string(), account.name.clone()))
+        })
+        .collect()
 }
 
 impl ProviderStatusHost {
+    /// #609: by entry id, the named account whose enrollment decided the
+    /// entry's status in [`Self::resolve`]. An entry whose connections run on
+    /// different accounts (#665) counts only when an enrolled named account
+    /// set it up; otherwise its default key did. Setup kinds the account does
+    /// not decide never count.
+    pub(crate) fn status_accounts(&self) -> BTreeMap<String, String> {
+        self.named_account_names
+            .iter()
+            .filter(|(entry_id, _)| {
+                self.connection_credentials
+                    .get(entry_id.as_str())
+                    .is_none_or(|connections| {
+                        connections.values().any(|credential| {
+                            *credential == ConnectionCredential::NamedAccount { enrolled: true }
+                        })
+                    })
+            })
+            .filter(|(entry_id, _)| {
+                self.catalog.get(entry_id.as_str()).is_some_and(|entry| {
+                    matches!(
+                        entry.setup_capabilities.iter().next(),
+                        Some(
+                            ProviderSetupCapability::OpenAiAccount
+                                | ProviderSetupCapability::ApiKey { .. }
+                                | ProviderSetupCapability::ClaudeAccount
+                        )
+                    )
+                })
+            })
+            .map(|(entry_id, name)| (entry_id.clone(), name.clone()))
+            .collect()
+    }
+
+    /// #609: by entry id, what the named sign-in account in
+    /// [`Self::status_accounts`] holds, as its metadata records it, and why
+    /// `forced_login_method` rules it out: shown on the `/providers` row.
+    pub(crate) fn status_account_details(&self) -> BTreeMap<String, String> {
+        let status_accounts = self.status_accounts();
+        self.named_sign_ins
+            .iter()
+            .filter(|(entry_id, _)| status_accounts.contains_key(entry_id.as_str()))
+            .map(|(entry_id, sign_in)| {
+                let detail = match (sign_in, self.forced_login_method) {
+                    (ProviderAccountSignIn::ApiKey, Some(ForcedLoginMethod::Chatgpt)) => {
+                        "an OpenAI API key; this configuration requires a ChatGPT sign-in"
+                    }
+                    (ProviderAccountSignIn::Chatgpt, Some(ForcedLoginMethod::Api)) => {
+                        "a ChatGPT sign-in; this configuration requires an API key"
+                    }
+                    (ProviderAccountSignIn::ApiKey, _) => "an OpenAI API key",
+                    (ProviderAccountSignIn::Chatgpt, _) => "a ChatGPT sign-in",
+                };
+                (entry_id.clone(), detail.to_string())
+            })
+            .collect()
+    }
+
     pub(crate) fn from_config(config: &Config, account: ProviderAccountMetadata) -> Self {
+        let codex_home = config.codex_home.to_path_buf();
+        Self::from_config_with_account_registry(config, account, |named, kind| {
+            codex_login::provider_account_holds(&codex_home, &named.provider_id, &named.name, kind)
+                .unwrap_or(false)
+        })
+        .with_named_sign_ins(config, |named| {
+            codex_login::provider_account_sign_in(&codex_home, &named.provider_id, &named.name)
+                .ok()
+                .flatten()
+        })
+    }
+
+    /// #609: records what each enrolled named sign-in account an entry runs
+    /// on holds, as `recorded` reports it from the account registry's
+    /// metadata (the sign-in itself is never read).
+    pub(crate) fn with_named_sign_ins(
+        mut self,
+        config: &Config,
+        recorded: impl Fn(&NamedProviderAccount) -> Option<ProviderAccountSignIn>,
+    ) -> Self {
+        let mut sign_ins = BTreeMap::new();
+        for entry in self.catalog.entries() {
+            if self.named_accounts.get(entry.id.as_str()) != Some(&true) {
+                continue;
+            }
+            let selected = entry.runtime_provider_ids.iter().find_map(|id| {
+                config
+                    .model_providers
+                    .get(id.as_str())
+                    .and_then(|provider| Some((provider, provider.account.as_ref()?)))
+            });
+            if let Some((provider, account)) = selected
+                && codex_model_provider::named_sign_in_account(provider).is_some()
+                && let Some(sign_in) = recorded(account)
+            {
+                sign_ins.insert(entry.id.as_str().to_string(), sign_in);
+            }
+        }
+        self.named_sign_ins = Arc::new(sign_ins);
+        self
+    }
+
+    pub(crate) fn from_config_with_account_registry(
+        config: &Config,
+        account: ProviderAccountMetadata,
+        holds: impl Fn(&NamedProviderAccount, ProviderAccountKind) -> bool,
+    ) -> Self {
+        let catalog = ProviderCatalog::from_runtime_providers(&config.model_providers);
+        let named_accounts = Arc::new(named_account_enrollment(&catalog, config, &holds));
+        let named_account_names = Arc::new(named_account_names(&catalog, config));
+        let connection_credentials = Arc::new(connection_credentials(&catalog, config, &holds));
+        let session_sign_in_entry =
+            codex_model_provider::named_sign_in_account(&config.model_provider)
+                .and_then(|_| {
+                    catalog.entries().iter().find(|entry| {
+                        entry
+                            .runtime_provider_ids
+                            .iter()
+                            .any(|id| id.as_str() == config.model_provider_id)
+                    })
+                })
+                .map(|entry| entry.id.as_str().to_string());
         Self {
-            catalog: ProviderCatalog::from_runtime_providers(&config.model_providers),
+            named_accounts,
+            named_account_names,
+            connection_credentials,
+            session_sign_in_entry,
+            named_sign_ins: Arc::default(),
+            // As the named account's manager checks it: only what the
+            // operator configured, not the API-key onboarding default a
+            // third-party session provider implies (#571).
+            forced_login_method: config.configured_forced_login_method,
+            environment: environment_metadata,
+            catalog,
             codex_home: config.codex_home.to_path_buf(),
             current: Arc::new(RwLock::new(CurrentProviderSelection::runtime_id(
                 config.model_provider_id.clone(),
@@ -140,6 +422,15 @@ impl ProviderStatusHost {
             authorizations: ProviderRuntimeAuthorizations::default(),
             health: Arc::default(),
         }
+    }
+    /// Tests: read API-key environment variables through `environment`.
+    #[cfg(test)]
+    pub(crate) fn with_environment(
+        mut self,
+        environment: fn(&str) -> EnvironmentCredentialMetadata,
+    ) -> Self {
+        self.environment = environment;
+        self
     }
     pub(crate) fn set_runtime_authorizations(&mut self, value: ProviderRuntimeAuthorizations) {
         self.authorizations = value;
@@ -211,7 +502,7 @@ impl ProviderStatusHost {
             match entry.setup_capabilities.iter().next() {
                 Some(ProviderSetupCapability::ApiKey {
                     storage: ApiKeyStorage::EnvironmentVariable { env_key },
-                }) if environment_metadata(env_key) == EnvironmentCredentialMetadata::Missing => {
+                }) if (self.environment)(env_key) == EnvironmentCredentialMetadata::Missing => {
                     Some(env_key.as_str())
                 }
                 _ => None,
@@ -245,7 +536,49 @@ impl ProviderStatusHost {
         statuses
     }
 
+    /// #665: connections, of an entry whose connections run on different
+    /// accounts, whose own credential is missing (`zai-anthropic` on the
+    /// default account with no default Z.AI key while `zai` runs on an
+    /// enrolled named account). They cannot authenticate, even when their
+    /// entry is set up by another connection.
+    pub(crate) fn connections_without_credential(&self) -> std::collections::BTreeSet<String> {
+        self.connection_credentials
+            .values()
+            .flatten()
+            .filter(|(_, credential)| {
+                !self.connection_has_credential(credential, /*managed*/ None)
+            })
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    fn connection_has_credential(
+        &self,
+        credential: &ConnectionCredential,
+        managed: Option<&ManagedSnapshot>,
+    ) -> bool {
+        match credential {
+            ConnectionCredential::NamedAccount { enrolled } => *enrolled,
+            ConnectionCredential::DefaultKey { env_key } => {
+                let metadata = self.environment_api_key_metadata(env_key, managed);
+                metadata.environment == EnvironmentCredentialMetadata::Present
+                    || matches!(metadata.managed, ManagedApiKeyMetadata::Stored { .. })
+            }
+        }
+    }
+
     pub(crate) fn begin_credential_attempt(&self, scope: String, runtime_provider: &str) {
+        self.begin_account_credential_attempt(scope, runtime_provider, /*account*/ None);
+    }
+
+    /// PF-84: an attempt on `account` (a named account of `runtime_provider`),
+    /// or on the default credential when `None`.
+    pub(crate) fn begin_account_credential_attempt(
+        &self,
+        scope: String,
+        runtime_provider: &str,
+        account: Option<codex_provider_auth::NamedCredentialAccount>,
+    ) {
         let Some(entry) = self.catalog.entries().iter().find(|entry| {
             entry
                 .runtime_provider_ids
@@ -258,15 +591,18 @@ impl ProviderStatusHost {
             self.health
                 .write()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .begin(scope, &status);
+                .begin_for_account(scope, &status, account);
         }
     }
 
-    pub(crate) fn reject_credential_attempt(&self, scope: &str) -> Option<String> {
+    pub(crate) fn reject_credential_attempt(
+        &self,
+        scope: &str,
+    ) -> Option<codex_provider_auth::RejectedCredential> {
         self.health
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .reject_provider(scope)
+            .reject_credential(scope)
     }
 
     pub(crate) fn finish_credential_attempt(&self, scope: &str) {
@@ -325,14 +661,87 @@ impl ProviderStatusHost {
         managed: Option<&ManagedSnapshot>,
     ) -> ProviderMetadata {
         let first = entry.setup_capabilities.iter().next();
+        // #665: connections on different accounts. The entry is set up when
+        // any connection has its own credential; the others are refused one
+        // by one (`connections_without_credential`).
+        if let Some(connections) = self.connection_credentials.get(entry.id.as_str())
+            && let Some(ProviderSetupCapability::ApiKey {
+                storage: ApiKeyStorage::EnvironmentVariable { env_key },
+            }) = first
+        {
+            let named_enrolled = connections.values().any(|credential| {
+                *credential == ConnectionCredential::NamedAccount { enrolled: true }
+            });
+            let default_key = connections.values().any(|credential| {
+                matches!(credential, ConnectionCredential::DefaultKey { .. })
+                    && self.connection_has_credential(credential, managed)
+            });
+            return ProviderMetadata::ApiKey(if default_key && !named_enrolled {
+                self.environment_api_key_metadata(env_key, managed)
+            } else {
+                ApiKeyCredentialMetadata {
+                    environment: EnvironmentCredentialMetadata::Missing,
+                    managed: if named_enrolled {
+                        ManagedApiKeyMetadata::Stored {
+                            source: codex_login::ProviderApiKeyStorageSource::EncryptedVault,
+                        }
+                    } else {
+                        ManagedApiKeyMetadata::Missing
+                    },
+                }
+            });
+        }
+        let named = self.named_accounts.get(entry.id.as_str()).copied();
         match first {
+            // PF-84 (#571): OpenAI on a named sign-in account (selected for
+            // this session) is configured by that account, not the default
+            // login, so `/model` offers OpenAI from a session on another
+            // provider with no default OpenAI login.
             Some(ProviderSetupCapability::OpenAiAccount)
             | Some(ProviderSetupCapability::ApiKey {
                 storage: ApiKeyStorage::OpenAiAuth,
-            }) => ProviderMetadata::OpenAi(account.openai),
+            }) => ProviderMetadata::OpenAi(match (named, account.openai) {
+                (Some(true), _) => self.named_sign_in_metadata(entry.id.as_str()),
+                // Startup already vetted the session's own named account;
+                // the local vault may not hold it (a remote app server), so
+                // that answer stands. The default login's state says nothing
+                // about a named account (#609), and a refresh re-reads it.
+                (Some(false), _)
+                    if self.session_sign_in_entry.as_deref() == Some(entry.id.as_str()) =>
+                {
+                    codex_login::OpenAiAuthMetadata::Account
+                }
+                (Some(false), _) => codex_login::OpenAiAuthMetadata::Missing,
+                (None, metadata) => metadata,
+            }),
+            Some(ProviderSetupCapability::ApiKey {
+                storage: ApiKeyStorage::EnvironmentVariable { .. },
+            }) if named.is_some() => {
+                let enrolled = named == Some(true);
+                // A named account ignores the environment and the default key.
+                ProviderMetadata::ApiKey(ApiKeyCredentialMetadata {
+                    environment: EnvironmentCredentialMetadata::Missing,
+                    managed: if enrolled {
+                        ManagedApiKeyMetadata::Stored {
+                            source: codex_login::ProviderApiKeyStorageSource::EncryptedVault,
+                        }
+                    } else {
+                        ManagedApiKeyMetadata::Missing
+                    },
+                })
+            }
             Some(ProviderSetupCapability::ApiKey {
                 storage: ApiKeyStorage::EnvironmentVariable { env_key },
             }) => ProviderMetadata::ApiKey(self.environment_api_key_metadata(env_key, managed)),
+            Some(ProviderSetupCapability::ClaudeAccount) if named.is_some() => {
+                ProviderMetadata::Claude(if named == Some(true) {
+                    ClaudeCredentialMetadata::Configured {
+                        source: codex_provider_auth::ClaudeCredentialSource::Managed,
+                    }
+                } else {
+                    ClaudeCredentialMetadata::NotConfigured
+                })
+            }
             Some(ProviderSetupCapability::ClaudeAccount) => {
                 ProviderMetadata::Claude(account.claude)
             }
@@ -352,12 +761,32 @@ impl ProviderStatusHost {
         }
     }
 
+    /// #609: an enrolled named sign-in account's status, from what its
+    /// metadata records it holds: an OpenAI API key is reported as one, and
+    /// a sign-in `forced_login_method` rules out is not configured (its use
+    /// is refused with the reason). Not recorded: a ChatGPT sign-in, as
+    /// before.
+    fn named_sign_in_metadata(&self, entry_id: &str) -> codex_login::OpenAiAuthMetadata {
+        use codex_login::OpenAiAuthMetadata;
+        match (
+            self.named_sign_ins.get(entry_id).copied(),
+            self.forced_login_method,
+        ) {
+            (Some(ProviderAccountSignIn::ApiKey), Some(ForcedLoginMethod::Chatgpt))
+            | (Some(ProviderAccountSignIn::Chatgpt), Some(ForcedLoginMethod::Api)) => {
+                OpenAiAuthMetadata::Missing
+            }
+            (Some(ProviderAccountSignIn::ApiKey), _) => OpenAiAuthMetadata::ApiKey,
+            (Some(ProviderAccountSignIn::Chatgpt) | None, _) => OpenAiAuthMetadata::Account,
+        }
+    }
+
     fn environment_api_key_metadata(
         &self,
         env_key: &str,
         snapshot: Option<&ManagedSnapshot>,
     ) -> ApiKeyCredentialMetadata {
-        let environment = environment_metadata(env_key);
+        let environment = (self.environment)(env_key);
         prioritized_api_key_metadata(environment, || match snapshot {
             Some(Ok(snapshot)) => snapshot
                 .get(env_key)
@@ -429,9 +858,25 @@ fn corbanu_metadata_with_environment(
 }
 
 fn environment_metadata(env_key: &str) -> EnvironmentCredentialMetadata {
-    match std::env::var(env_key) {
+    environment_metadata_from(
+        std::env::var(env_key),
+        crate::legacy_core::broker_holds_environment_key(env_key),
+    )
+}
+
+/// #625: a key the credential broker took out of this process's environment
+/// (Aggressive's `broker_model_auth`) is still the provider's key: the broker
+/// sends its model requests with it.
+fn environment_metadata_from(
+    value: Result<String, std::env::VarError>,
+    held_by_broker: bool,
+) -> EnvironmentCredentialMetadata {
+    match value {
         Ok(value) if value.trim().is_empty() => EnvironmentCredentialMetadata::Invalid,
         Ok(_) => EnvironmentCredentialMetadata::Present,
+        Err(std::env::VarError::NotPresent) if held_by_broker => {
+            EnvironmentCredentialMetadata::Present
+        }
         Err(std::env::VarError::NotPresent) => EnvironmentCredentialMetadata::Missing,
         Err(std::env::VarError::NotUnicode(_)) => EnvironmentCredentialMetadata::Invalid,
     }

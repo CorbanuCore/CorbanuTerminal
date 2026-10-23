@@ -1,0 +1,45 @@
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                         │
+│                                                       │
+│ model:     corbanu/glm-5.3-flash   /model to change   │
+│ directory: /Volumes/…/worktrees/acct-inspect-20260915 │
+╰───────────────────────────────────────────────────────╯
+
+• Created Solana wallet EpyfSjmd45jBZ8xYfWVkMLuwdX8uQ4xN1o7DJ5PbdL9v. The recovery material is shown only in the secure view.
+
+• Wallet unlocked for 5 minute(s).
+
+• Submitting the wallet-authorized Corbanu API operation…
+
+• Corbanu API key created. Its plaintext is available only in the secure view.
+
+• Model changed to corbanu/glm-5.3-flash via Corbanu API default
+
+
+› Implement {feature}
+
+  corbanu/glm-5.3-flash via pfterminal-plan default · /Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915 · Corbanu Terminal · TP…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

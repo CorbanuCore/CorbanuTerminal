@@ -1,0 +1,7 @@
+# diff -r stage/packet.v5-groups stage/packet after adding tools/replays4.json (Q02b, Q11b at 2026-10-14T11:10Z; Q02c at 12:07Z)
+Only in stage/packet/prompts: Q02b.md
+Only in stage/packet/prompts: Q02c.md
+Only in stage/packet/prompts: Q11b.md
+# frozen files re-checked against design/FROZEN.sha256:
+cebdc554c916cd96e3b46f4893d2c0bc46db6f69bb5b337aa5098e55e566cda4  design-cases.md
+072a8c3fc4910e819fbcf569fd359bfff7521f7b02587f2e272936d311da7523  amendments-and-new-cases.md

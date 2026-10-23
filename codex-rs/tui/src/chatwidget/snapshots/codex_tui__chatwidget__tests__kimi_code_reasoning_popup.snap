@@ -1,6 +1,5 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
-assertion_line: 3410
 expression: reasoning_popup
 ---
   Select Reasoning Level for Kimi Code K3

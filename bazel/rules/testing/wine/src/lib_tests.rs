@@ -367,7 +367,8 @@ async fn pinned_powershell_runs_under_wine_with_a_pty() -> Result<()> {
         /*inherited_fds*/ &[],
     )
     .await?;
-    let command_result = timeout(Duration::from_secs(30), async {
+    // A cold Wine prefix boot can take over 30 s on a loaded CI runner.
+    let command_result = timeout(Duration::from_secs(90), async {
         let stdout = async {
             let mut output = Vec::new();
             while let Some(chunk) = stdout_rx.recv().await {

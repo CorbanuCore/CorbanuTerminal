@@ -1,0 +1,14 @@
+== hf (CAND) ==
+Saved zai account `work` (api_key).
+  account add with the flag off: Error: named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts`
+  exec  -> exit=0 reply=pong; warnings: 
+  exec --account work -> exit=1 reply=; warnings: Error: --account zai:work: named accounts need the `named_accounts` feature (`--enable named_accounts`); `--account default` uses the default credentials 
+  ledger format tables: ; attempts 1; with account field 0
+  throttle keys: env:ZAI_API_KEY:<hash>
+== hf0 (BASE) ==
+Saved zai account `work` (api_key).
+  account add with the flag off: Error: named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts`
+  exec  -> exit=0 reply=pong; warnings: 
+  exec --account work -> exit=1 reply=; warnings: Error: --account zai:work: named accounts need the `named_accounts` feature (`--enable named_accounts`); `--account default` uses the default credentials 
+  ledger format tables: ; attempts 1; with account field 0
+  throttle keys: env:ZAI_API_KEY:<hash>

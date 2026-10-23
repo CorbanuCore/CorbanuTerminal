@@ -1,0 +1,15 @@
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guard-91/target/replay-xeh9ctyl/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-selfcheck-84/check_current_tip.py", line 91, in <module>
+    main()
+    ~~~~^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guard-91/target/replay-xeh9ctyl/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-selfcheck-84/check_current_tip.py", line 87, in main
+    assert_receipt(receipt)
+    ~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guard-91/target/replay-xeh9ctyl/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-selfcheck-84/check_current_tip.py", line 20, in assert_receipt
+    require(receipt["stdout_matches_prior_replay"],
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            "current integration output differs from pinned replay")
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guard-91/target/replay-xeh9ctyl/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-selfcheck-84/check_current_tip.py", line 16, in require
+    raise AssertionError(detail)
+AssertionError: current integration output differs from pinned replay

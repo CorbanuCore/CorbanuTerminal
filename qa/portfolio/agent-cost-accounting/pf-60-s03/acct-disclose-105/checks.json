@@ -1,0 +1,47 @@
+{
+  "witness_sha256": "c2e9572fba45b033dd90ef930ef875f95fcc7c4b3d9332c9b1428dfa5176a705",
+  "runs": [
+    {
+      "case": "normal",
+      "exit": 0,
+      "receipt_written": true
+    },
+    {
+      "case": "normal-optimized",
+      "exit": 0,
+      "receipt_written": true
+    },
+    {
+      "case": "reordered",
+      "exit": 0,
+      "receipt_written": true
+    },
+    {
+      "case": "reordered-optimized",
+      "exit": 0,
+      "receipt_written": true
+    },
+    {
+      "case": "renamed",
+      "exit": 1,
+      "receipt_written": false
+    },
+    {
+      "case": "renamed-optimized",
+      "exit": 1,
+      "receipt_written": false
+    },
+    {
+      "case": "existing-symlink",
+      "exit": 1,
+      "stdout": "STOP: destination already exists; preserve it and choose a new path.\n",
+      "stderr": ""
+    },
+    {
+      "case": "dangling-symlink",
+      "exit": 1,
+      "stdout": "STOP: destination is a symlink; preserve it and choose a new path.\n",
+      "stderr": ""
+    }
+  ]
+}

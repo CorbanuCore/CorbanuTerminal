@@ -71,6 +71,7 @@ pub(crate) enum ToolEventStage<'a> {
 pub(crate) enum ToolEventFailure<'a> {
     Output(ExecToolCallOutput),
     Message(String),
+    Refused(String),
     Rejected {
         message: String,
         applied_patch_delta: Option<&'a AppliedPatchDelta>,
@@ -297,7 +298,9 @@ impl ToolEmitter {
             }
             (
                 Self::ApplyPatch { changes, .. },
-                ToolEventStage::Failure(ToolEventFailure::Message(message)),
+                ToolEventStage::Failure(
+                    ToolEventFailure::Message(message) | ToolEventFailure::Refused(message),
+                ),
             ) => {
                 emit_patch_end(
                     ctx,
@@ -375,12 +378,59 @@ impl ToolEmitter {
         super::format_exec_output_for_model(output, ctx.turn.model_info.truncation_policy.into())
     }
 
+    /// #442: the explanation for a shell command that failed because the
+    /// Aggressive rules denied a protected read it names, and (#826) because
+    /// the Linux rule refused a user namespace. The caller shows it to the
+    /// person after the command's end event and adds it to the model's
+    /// output.
+    async fn explain_protected_read(
+        &self,
+        ctx: ToolEventCtx<'_>,
+        out: &Result<ExecToolCallOutput, ToolError>,
+    ) -> Option<String> {
+        let Self::Shell { command, cwd, .. } = self else {
+            return None;
+        };
+        let cwd = cwd.to_abs_path().ok()?;
+        let output = match out {
+            Ok(output) => output,
+            Err(ToolError::Codex(err)) => match err.details() {
+                CodexErrorDetails::Sandbox(SandboxErr::Denied { output, .. }) => output.as_ref(),
+                _ => return None,
+            },
+            Err(ToolError::Rejected(_) | ToolError::Declined(_)) => return None,
+        };
+        let protected_read = crate::security::protected_reads::denial_explanation(
+            ctx.session,
+            ctx.turn,
+            command,
+            cwd.as_path(),
+            Some(output.exit_code),
+            &output.aggregated_output.text,
+        )
+        .await;
+        // #826 follow-up: a user namespace the Linux rule refused.
+        let user_namespace = crate::security::user_namespaces::denial_explanation(
+            ctx.session,
+            ctx.turn,
+            ctx.call_id,
+            Some(output.exit_code),
+            &output.aggregated_output.text,
+        );
+        match (protected_read, user_namespace) {
+            (Some(read), Some(namespace)) => Some(format!("{read}\n{namespace}")),
+            (read, namespace) => read.or(namespace),
+        }
+    }
+
     pub async fn finish(
         &self,
         ctx: ToolEventCtx<'_>,
         out: Result<ExecToolCallOutput, ToolError>,
         applied_patch_delta: Option<&AppliedPatchDelta>,
     ) -> Result<String, FunctionCallError> {
+        let explanation = self.explain_protected_read(ctx, &out).await;
+        let approval_declined = matches!(&out, Err(ToolError::Declined(_)));
         let (event, result) = match out {
             Ok(output) => {
                 let content = self.format_exec_output_for_model(&output, ctx);
@@ -427,16 +477,8 @@ impl ToolEmitter {
                     (event, result)
                 }
             },
-            Err(ToolError::Rejected(msg)) => {
-                // Normalize common rejection messages for exec tools so tests and
-                // users see a clear, consistent phrase.
-                //
-                // NOTE: ToolError::Rejected is currently used for both user-declined approvals
-                // and some operational/runtime rejection paths (for example setup failures).
-                // We intentionally map all of them through the "rejected" event path for now,
-                // which means a subset of non-user failures may be reported as Declined.
-                //
-                // TODO: We should add a new ToolError variant for user-declined approvals.
+            Err(ToolError::Rejected(msg) | ToolError::Declined(msg)) => {
+                // Preserve the approval result separately from policy/setup refusals.
                 let normalized = if msg == "rejected by user" {
                     match self {
                         Self::Shell { .. } | Self::UnifiedExec { .. } => {
@@ -448,16 +490,32 @@ impl ToolEmitter {
                     msg
                 };
                 let normalized = truncate_rejection_message(&normalized);
-                let event = ToolEventStage::Failure(ToolEventFailure::Rejected {
-                    message: normalized.clone(),
-                    applied_patch_delta,
-                });
+                // Patch rejection/diff semantics are unchanged by this command-label fix.
+                let failure = if approval_declined || matches!(self, Self::ApplyPatch { .. }) {
+                    ToolEventFailure::Rejected {
+                        message: normalized.clone(),
+                        applied_patch_delta,
+                    }
+                } else {
+                    ToolEventFailure::Refused(normalized.clone())
+                };
+                let event = ToolEventStage::Failure(failure);
                 let result = Err(FunctionCallError::RespondToModel(normalized));
                 (event, result)
             }
         };
         self.emit(ctx, event).await;
-        result
+        if let Some(explanation) = &explanation {
+            crate::security::protected_reads::notify(ctx.session, ctx.turn, explanation.clone())
+                .await;
+        }
+        match (explanation, result) {
+            (Some(explanation), Err(FunctionCallError::RespondToModel(content))) => Err(
+                FunctionCallError::RespondToModel(format!("{content}\n{explanation}")),
+            ),
+            (Some(explanation), Ok(content)) => Ok(format!("{content}\n{explanation}")),
+            (_, result) => result,
+        }
     }
 }
 
@@ -542,6 +600,18 @@ async fn emit_exec_stage(
                 duration: Duration::ZERO,
                 formatted_output: text,
                 status: ExecCommandStatus::Failed,
+            };
+            emit_exec_end(ctx, exec_input, exec_result).await;
+        }
+        ToolEventStage::Failure(ToolEventFailure::Refused(message)) => {
+            let exec_result = ExecCommandResult {
+                stdout: String::new(),
+                stderr: message.clone(),
+                aggregated_output: message.clone(),
+                exit_code: -1,
+                duration: Duration::ZERO,
+                formatted_output: message,
+                status: ExecCommandStatus::Refused,
             };
             emit_exec_end(ctx, exec_input, exec_result).await;
         }

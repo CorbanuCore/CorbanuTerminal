@@ -9,6 +9,7 @@ use codex_app_server_protocol::ThreadSettings;
 use codex_app_server_protocol::ThreadSettingsUpdateParams;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::ModeKind;
+use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::PermissionProfile;
 
 impl App {
@@ -41,18 +42,20 @@ impl App {
         app_server: &mut AppServerSession,
         model: String,
         model_provider: Option<String>,
-    ) {
+        confirm: bool,
+    ) -> SettingsUpdateOutcome {
         let Some(thread_id) = self.active_thread_id else {
-            return;
+            return SettingsUpdateOutcome::NotSent;
         };
         let params = ThreadSettingsUpdateParams {
             thread_id: thread_id.to_string(),
+            confirm,
             model: Some(model),
             model_provider,
             collaboration_mode: Some(self.chat_widget.effective_collaboration_mode()),
             ..ThreadSettingsUpdateParams::default()
         };
-        self.send_thread_settings_update(app_server, params).await;
+        self.send_thread_settings_update(app_server, params).await
     }
 
     pub(super) async fn sync_active_thread_reasoning_setting(
@@ -172,20 +175,86 @@ impl App {
         }
     }
 
+    /// Whether core applied the update before replying (`Confirmed`, only
+    /// for `params.confirm` answered `Confirmed { Applied }`), accepted it
+    /// without that (`Accepted`: unconfirmed, uncertain, or a server without
+    /// the method), it failed, or nothing was sent (`NotSent`).
     pub(super) async fn send_thread_settings_update(
         &mut self,
         app_server: &mut AppServerSession,
         params: ThreadSettingsUpdateParams,
-    ) {
+    ) -> SettingsUpdateOutcome {
         if !thread_settings_update_has_changes(&params) {
-            return;
+            return SettingsUpdateOutcome::NotSent;
         }
-        if let Err(err) = app_server.thread_settings_update(params).await {
-            tracing::warn!("failed to update app-server thread settings from TUI: {err}");
-            self.chat_widget
-                .add_error_message(format!("Failed to update thread settings: {err}"));
+        let mut params = params;
+        let mut result = app_server.thread_settings_update(params.clone()).await;
+        match &result {
+            Ok(true) => return SettingsUpdateOutcome::Confirmed,
+            Err(err) if params.confirm => {
+                // PF-84: confirmation needs a live listener; the update itself
+                // must still apply, as it did before it was confirmed.
+                tracing::warn!(
+                    "confirmed thread settings update failed, sending it unconfirmed: {err}"
+                );
+                params.confirm = false;
+                result = app_server.thread_settings_update(params).await;
+            }
+            _ => {}
+        }
+        match result {
+            Ok(_) => SettingsUpdateOutcome::Accepted,
+            Err(err) => {
+                tracing::warn!("failed to update app-server thread settings from TUI: {err}");
+                self.chat_widget
+                    .add_error_message(format!("Failed to update thread settings: {err}"));
+                SettingsUpdateOutcome::Failed
+            }
         }
     }
+}
+
+/// How a thread settings update went (PF-84: an account switch refetches the
+/// model list only once core confirmed it).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum SettingsUpdateOutcome {
+    /// Nothing changed, or there is no active thread.
+    NotSent,
+    /// Core applied it before the reply.
+    Confirmed,
+    /// Accepted for core to apply later (not confirmed).
+    Accepted,
+    Failed,
+}
+
+/// #437: [`ThreadSettings`] carries only the legacy sandbox projection of a
+/// thread's permissions, which drops denied reads (the protected paths of the
+/// Aggressive profile). Rebuilding the profile from it after every turn made
+/// `/security` claim that approved commands leave the sandbox and that the
+/// vault is readable. The profile already known is kept while its projection
+/// and active profile match the update.
+/// `materialized` is `current` with the runtime workspace roots applied, the
+/// form the app server projects.
+pub(crate) fn permission_profile_for_thread_settings(
+    current: &PermissionProfile,
+    materialized: Option<&PermissionProfile>,
+    current_active: Option<&ActivePermissionProfile>,
+    settings: &ThreadSettings,
+) -> PermissionProfile {
+    let sandbox_policy = settings.sandbox_policy.to_core();
+    let active = settings.active_permission_profile.clone().map(Into::into);
+    let unchanged = |profile: &PermissionProfile| {
+        codex_sandboxing::compatibility_sandbox_policy_for_permission_profile(
+            profile,
+            settings.cwd.as_path(),
+        ) == sandbox_policy
+    };
+    if current_active == active.as_ref()
+        && (unchanged(current) || materialized.is_some_and(unchanged))
+    {
+        return current.clone();
+    }
+    PermissionProfile::from_legacy_sandbox_policy_for_cwd(&sandbox_policy, settings.cwd.as_path())
 }
 
 fn apply_thread_settings_to_session(session: &mut ThreadSessionState, settings: &ThreadSettings) {
@@ -197,9 +266,11 @@ fn apply_thread_settings_to_session(session: &mut ThreadSessionState, settings: 
     session.service_tier = settings.service_tier.clone();
     session.approval_policy = settings.approval_policy;
     session.approvals_reviewer = settings.approvals_reviewer.to_core();
-    session.permission_profile = PermissionProfile::from_legacy_sandbox_policy_for_cwd(
-        &settings.sandbox_policy.to_core(),
-        settings.cwd.as_path(),
+    session.permission_profile = permission_profile_for_thread_settings(
+        &session.permission_profile,
+        /*materialized*/ None,
+        session.active_permission_profile.as_ref(),
+        settings,
     );
     session.active_permission_profile = settings.active_permission_profile.clone().map(Into::into);
     session.set_cwd_retargeting_implicit_runtime_workspace_root(settings.cwd.clone());

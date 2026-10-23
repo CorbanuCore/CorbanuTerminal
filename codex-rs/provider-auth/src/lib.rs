@@ -38,7 +38,9 @@ pub use auth_flow::ProviderAuthFailureReason;
 pub use auth_flow::ProviderAuthFlowSnapshot;
 pub use auth_flow::ProviderAuthRejectionReason;
 pub use auth_flow::ProviderAuthTransition;
+pub use credential_health::NamedCredentialAccount;
 pub use credential_health::ProviderCredentialHealth;
+pub use credential_health::RejectedCredential;
 pub use eligibility::ProviderActivationPolicy;
 pub use eligibility::ProviderEligibility;
 pub use eligibility::ProviderEligibilityError;
@@ -414,6 +416,8 @@ enum GroupKey {
 
 struct Candidate<'a> {
     runtime_id: &'a str,
+    /// Speaks Anthropic-style (Messages) requests.
+    anthropic_wire: bool,
     catalog_id: String,
     display_name: String,
     group_key: GroupKey,
@@ -436,6 +440,7 @@ impl<'a> Candidate<'a> {
 
         Some(Self {
             runtime_id,
+            anthropic_wire: provider.wire_api == codex_model_provider_info::WireApi::Anthropic,
             rank: provider_rank(canonical_runtime_id),
             catalog_id,
             display_name,
@@ -461,12 +466,24 @@ struct CatalogEntryWithRank {
 impl CatalogEntryWithRank {
     fn from_candidates(candidates: Vec<Candidate<'_>>) -> Option<Self> {
         let representative = candidates.first()?;
+        // #653 (Travis, 2026-10-13): of the connections sharing one setup,
+        // the OpenAI-style ones come first, so a caller taking the first one
+        // (first launch, `/providers`) gets the default connection.
         let mut runtime_provider_ids = candidates
             .iter()
-            .map(|candidate| ProviderRuntimeId(candidate.runtime_id.to_string()))
+            .map(|candidate| {
+                (
+                    candidate.anthropic_wire,
+                    ProviderRuntimeId(candidate.runtime_id.to_string()),
+                )
+            })
             .collect::<Vec<_>>();
         runtime_provider_ids.sort();
-        runtime_provider_ids.dedup();
+        runtime_provider_ids.dedup_by(|left, right| left.1 == right.1);
+        let runtime_provider_ids = runtime_provider_ids
+            .into_iter()
+            .map(|(_, id)| id)
+            .collect::<Vec<_>>();
 
         Some(Self {
             rank: representative.rank,

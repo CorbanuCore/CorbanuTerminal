@@ -26,8 +26,10 @@
 
 use std::collections::BTreeMap;
 use std::fs::OpenOptions;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 use anyhow::Context;
 use anyhow::Result;
@@ -54,6 +56,7 @@ use zeroize::Zeroizing;
 mod capability;
 mod claude_auth;
 mod credential_panic;
+mod provider_accounts;
 
 pub use capability::ScopedCredentialCallbackError;
 pub use capability::ScopedCredentialError;
@@ -85,7 +88,22 @@ pub use claude_auth::credentials_file_claude_auth_source_id;
 pub use claude_auth::macos_keychain_claude_auth_source_id;
 pub use claude_auth::resolve_claude_auth_source;
 pub use credential_panic::scoped_credential_callback_active;
+pub use provider_accounts::DEFAULT_PROVIDER_ACCOUNT;
+pub use provider_accounts::ProviderAccountError;
+pub use provider_accounts::ProviderAccountKind;
+pub use provider_accounts::ProviderAccountMeta;
+pub use provider_accounts::ProviderAccountName;
+pub use provider_accounts::ProviderAccountSignIn;
+pub use provider_accounts::RecordedSignIn;
+pub use provider_accounts::is_provider_managed_account_label;
+pub use provider_accounts::parse_provider_account_label;
+pub use provider_accounts::parse_provider_account_selection;
+pub use provider_accounts::provider_account_label;
+pub use provider_accounts::validate_aws_profile_name;
+pub use provider_accounts::validate_provider_account_provider_id;
 
+#[cfg(test)]
+mod lock_failure_tests;
 #[cfg(test)]
 mod tests;
 
@@ -118,6 +136,21 @@ pub enum VaultError {
     /// The raw secret value was empty.
     #[error("secret value must not be empty")]
     EmptySecret,
+    /// #855: the value is the text of a vault error message (copied from the
+    /// transcript and pasted in place of the credential), not a credential.
+    #[error(
+        "the value entered is the text of a vault error message, not a credential; nothing was stored (copy the credential again and paste it)"
+    )]
+    ErrorTextAsSecret,
+    /// #855: the vault's storage could not be reached (for example the
+    /// Corbanu home became unreadable). Nothing was read or written.
+    #[error("failed to {operation} {}: {error}", path.display())]
+    StorageUnavailable {
+        operation: &'static str,
+        path: PathBuf,
+        /// Shown in the message, so not also reported as the error's source.
+        error: std::io::Error,
+    },
     /// A provider-managed credential is available only to its scoped integration.
     #[error("credential labeled {label:?} can only be used by its provider integration")]
     ProviderManagedCredential { label: String },
@@ -250,6 +283,17 @@ pub struct VaultCredentialMeta {
     /// Where the credential is physically stored.
     #[serde(default)]
     pub storage_backend: StorageBackend,
+    /// PF-84 (#609): for a named OpenAI sign-in account, whether it holds a
+    /// ChatGPT sign-in or an OpenAI API key (never the value). Recorded when
+    /// the sign-in is saved, or on its next use for one saved before.
+    /// A value this build does not know (from a later one) reads as not
+    /// recorded, so it never makes the index unreadable.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "provider_accounts::lenient_sign_in"
+    )]
+    pub sign_in: Option<ProviderAccountSignIn>,
 }
 
 /// On-disk vault index: a versioned map of label -> metadata.
@@ -290,6 +334,14 @@ pub struct Vault {
     secrets: SecretsManager,
     codex_home: PathBuf,
     uses_default_keyring: bool,
+}
+
+/// See [`Vault::storage_marker`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VaultStorageMarker {
+    len: u64,
+    modified: std::time::SystemTime,
+    inode: u64,
 }
 
 /// Non-secret description of where the encrypted vault passphrase is kept.
@@ -337,6 +389,25 @@ impl Vault {
         }
     }
 
+    /// D171 (#1286): a cheap change marker of the encrypted store (size,
+    /// modification time and, on Unix, inode of `secrets/local.age`), read
+    /// without the vault lock or the passphrase. Every write replaces the
+    /// file, so an unchanged marker means no process changed the vault since
+    /// it was taken. `None` when the store is missing or its metadata cannot
+    /// be read.
+    pub fn storage_marker(&self) -> Option<VaultStorageMarker> {
+        let metadata = std::fs::metadata(self.codex_home.join("secrets").join("local.age")).ok()?;
+        #[cfg(unix)]
+        let inode = std::os::unix::fs::MetadataExt::ino(&metadata);
+        #[cfg(not(unix))]
+        let inode = 0;
+        Some(VaultStorageMarker {
+            len: metadata.len(),
+            modified: metadata.modified().ok()?,
+            inode,
+        })
+    }
+
     /// Report the active passphrase storage mechanism without opening or
     /// exposing the passphrase itself.
     pub fn key_storage(&self) -> VaultKeyStorage {
@@ -364,17 +435,19 @@ impl Vault {
         } = entry;
         let label = normalize_label(&entry_label)?;
         let secret = Zeroizing::new(secret);
-        if label == MANAGED_CLAUDE_TOKEN_LABEL {
+        if label == MANAGED_CLAUDE_TOKEN_LABEL || is_provider_managed_account_label(&label) {
             return Err(VaultError::ProviderManagedCredential { label });
         }
         if secret.trim().is_empty() {
             return Err(VaultError::EmptySecret);
         }
+        ensure_not_error_text(&secret)?;
         self.with_storage_lock(|| {
             let mut index = self.load_index()?;
             if index.credentials.contains_key(&label) {
                 return Err(VaultError::CredentialExists { label });
             }
+            protect_stored(&label, credential_type, &secret)?;
 
             let now = Utc::now().timestamp();
             let meta = VaultCredentialMeta {
@@ -386,6 +459,7 @@ impl Vault {
                 created_at: now,
                 updated_at: now,
                 storage_backend: StorageBackend::EncryptedSecrets,
+                sign_in: None,
             };
 
             index.credentials.insert(label.clone(), meta);
@@ -413,7 +487,7 @@ impl Vault {
         revocation_notes: Option<Option<String>>,
     ) -> Result<VaultCredentialMeta, VaultError> {
         let label = normalize_label(label)?;
-        if label == MANAGED_CLAUDE_TOKEN_LABEL {
+        if label == MANAGED_CLAUDE_TOKEN_LABEL || is_provider_managed_account_label(&label) {
             drop(secret.map(Zeroizing::new));
             return Err(VaultError::ProviderManagedCredential { label });
         }
@@ -431,6 +505,8 @@ impl Vault {
                 if secret.trim().is_empty() {
                     return Err(VaultError::EmptySecret);
                 }
+                ensure_not_error_text(&secret)?;
+                protect_stored(&label, meta.credential_type, &secret)?;
                 Some((
                     VAULT_SCOPE.clone(),
                     secret_name_for(&label)?,
@@ -543,17 +619,28 @@ impl Vault {
     /// explicit user action (`/vault credential reveal` / `/vault credential export`).
     pub fn reveal(&self, label: &str) -> Result<String, VaultError> {
         let normalized = normalize_label(label)?;
-        if normalized == MANAGED_CLAUDE_TOKEN_LABEL {
+        if normalized == MANAGED_CLAUDE_TOKEN_LABEL
+            || is_provider_managed_account_label(&normalized)
+        {
             return Err(VaultError::ProviderManagedCredential { label: normalized });
         }
         self.with_storage_lock(|| {
             // Validate the label exists in the index before attempting decryption.
             let index = self.load_index()?;
-            if !index.credentials.contains_key(&normalized) {
+            let Some(credential_type) = index
+                .credentials
+                .get(&normalized)
+                .map(|meta| meta.credential_type)
+            else {
                 return Err(VaultError::NotFound { label: normalized });
-            }
-            self.read_secret(&normalized)?
-                .ok_or_else(|| VaultError::NotFound { label: normalized })
+            };
+            let secret = self
+                .read_secret(&normalized)?
+                .ok_or_else(|| VaultError::NotFound {
+                    label: normalized.clone(),
+                })?;
+            protect_revealed(&normalized, credential_type, &secret)?;
+            Ok(secret)
         })
     }
 
@@ -573,7 +660,9 @@ impl Vault {
             });
         }
         let normalized = normalize_label(label)?;
-        if normalized == MANAGED_CLAUDE_TOKEN_LABEL {
+        if normalized == MANAGED_CLAUDE_TOKEN_LABEL
+            || is_provider_managed_account_label(&normalized)
+        {
             return Err(VaultError::ProviderManagedCredential { label: normalized });
         }
         self.with_storage_lock(|| {
@@ -590,9 +679,68 @@ impl Vault {
                     credential_type: meta.credential_type,
                 });
             }
-            self.read_secret(&normalized)?
-                .ok_or_else(|| VaultError::NotFound { label: normalized })
+            let credential_type = meta.credential_type;
+            let secret = self
+                .read_secret(&normalized)?
+                .ok_or_else(|| VaultError::NotFound {
+                    label: normalized.clone(),
+                })?;
+            protect_revealed(&normalized, credential_type, &secret)?;
+            Ok(secret)
         })
+    }
+
+    /// #434: registers every stored value with the armed output gate, so a
+    /// value stored before this process started (or by another process) is
+    /// removed from output although this process never revealed it. Custody
+    /// material (seed phrases, private keys, keystores) and the non-secret
+    /// parts of provider accounts are not loaded ([`protected_while_stored`]).
+    /// The vault file is decrypted once. Returns the labels that could not be
+    /// protected (for example a value too short to tell apart from ordinary
+    /// text). Does nothing while the gate is not armed or the vault does not
+    /// exist.
+    pub fn protect_stored_values(&self) -> Result<Vec<String>, VaultError> {
+        if codex_secret_broker::output_gate::active().is_none()
+            || self.key_storage() == VaultKeyStorage::NotInitialized
+        {
+            return Ok(Vec::new());
+        }
+        let values = self.with_storage_lock(|| {
+            let index = self.load_index()?;
+            let wanted = index
+                .credentials
+                .values()
+                .filter(|meta| protected_while_stored(&meta.label, meta.credential_type))
+                .map(|meta| {
+                    Ok((
+                        meta.label.clone(),
+                        meta.credential_type,
+                        secret_name_for(&meta.label)?,
+                    ))
+                })
+                .collect::<Result<Vec<_>, VaultError>>()?;
+            let names = wanted
+                .iter()
+                .map(|(_, _, name)| (VAULT_SCOPE.clone(), name.clone()))
+                .collect::<Vec<_>>();
+            let secrets = self.secrets.get_many(&names)?;
+            Ok(wanted
+                .into_iter()
+                .zip(secrets)
+                .filter_map(|((label, credential_type, _), secret)| {
+                    secret.map(|secret| (label, credential_type, Zeroizing::new(secret)))
+                })
+                .collect::<Vec<_>>())
+        })?;
+        // Registered outside the vault lock. One value the gate cannot admit
+        // does not leave the others unprotected; it is reported by label.
+        Ok(values
+            .iter()
+            .filter(|(label, credential_type, secret)| {
+                register_with_output_gate(label, *credential_type, secret).is_err()
+            })
+            .map(|(label, _, _)| label.clone())
+            .collect())
     }
 
     /// Whether a credential with the given label exists.
@@ -611,19 +759,24 @@ impl Vault {
         operation: impl FnOnce() -> Result<T, VaultError>,
     ) -> Result<T, VaultError> {
         let secrets_dir = self.codex_home.join("secrets");
-        std::fs::create_dir_all(&secrets_dir)
-            .context("failed to create vault secrets directory")?;
+        std::fs::create_dir_all(&secrets_dir).map_err(|source| {
+            storage_unavailable("create vault secrets directory", &secrets_dir, source)
+        })?;
         let lock_path = secrets_dir.join(VAULT_LOCK_FILE_NAME);
-        let lock_file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&lock_path)
-            .with_context(|| format!("failed to open vault lock {}", lock_path.display()))?;
+        let lock_file = match open_lock_file(&lock_path) {
+            // PF-27-S09: the Windows credential broker's token cannot write
+            // the user's files. A read-only handle locks the existing lock
+            // file just as exclusively; writes to the vault itself still fail.
+            #[cfg(windows)]
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                OpenOptions::new().read(true).open(&lock_path)
+            }
+            opened => opened,
+        }
+        .map_err(|source| storage_unavailable("open vault lock", &lock_path, source))?;
         lock_file
             .lock()
-            .with_context(|| format!("failed to lock vault {}", lock_path.display()))?;
+            .map_err(|source| storage_unavailable("lock vault", &lock_path, source))?;
         operation()
     }
 
@@ -654,6 +807,104 @@ impl Vault {
     fn read_secret(&self, label: &str) -> Result<Option<String>, VaultError> {
         let name = secret_name_for(label)?;
         Ok(self.secrets.get(&VAULT_SCOPE, &name)?)
+    }
+}
+
+fn open_lock_file(lock_path: &Path) -> std::io::Result<std::fs::File> {
+    #[cfg(test)]
+    if let Some(errno) = lock_failure_tests::injected_lock_open_errno() {
+        return Err(std::io::Error::from_raw_os_error(errno));
+    }
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(lock_path)
+}
+
+/// Receives a vault storage failure caused by missing permission (EPERM or
+/// EACCES): the operation, the path and the error. Never a credential.
+pub type StorageFailureReporter = fn(operation: &str, path: &Path, error: &std::io::Error);
+
+static STORAGE_FAILURE_REPORTER: OnceLock<StorageFailureReporter> = OnceLock::new();
+
+/// #855: installs the process-wide reporter for vault storage failures caused
+/// by missing permission (the `corbanu` binary records them in the #616
+/// home-access log). Only the first call takes effect; without one, they are
+/// only logged.
+pub fn set_storage_failure_reporter(reporter: StorageFailureReporter) {
+    let _ = STORAGE_FAILURE_REPORTER.set(reporter);
+}
+
+fn storage_unavailable(operation: &'static str, path: &Path, source: std::io::Error) -> VaultError {
+    tracing::warn!(
+        operation,
+        path = %path.display(),
+        errno = source.raw_os_error(),
+        error = %source,
+        "vault storage unavailable"
+    );
+    if source.kind() == std::io::ErrorKind::PermissionDenied
+        && let Some(report) = STORAGE_FAILURE_REPORTER.get()
+    {
+        report(operation, path, &source);
+    }
+    VaultError::StorageUnavailable {
+        operation,
+        path: path.to_path_buf(),
+        error: source,
+    }
+}
+
+/// #855: phrases from the vault's own error messages, as shown in the
+/// transcript. A value containing one is the text of an error that was copied
+/// and pasted in place of the credential (the entry field is masked, so the
+/// person cannot see it); stored, it would fail much later, far from the
+/// cause.
+const ERROR_TEXT_MARKERS: &[&str] = &[
+    "failed to add vault credential",
+    "failed to replace vault credential",
+    "failed to open vault lock",
+    "failed to lock vault",
+    "failed to create vault secrets directory",
+    "vault add task failed",
+    "vault replacement task failed",
+];
+
+/// Whether `value` is (or contains) the text of a vault error message rather
+/// than a credential, ignoring ASCII case and line wrapping. See
+/// [`ERROR_TEXT_MARKERS`].
+pub fn is_vault_error_text(value: &str) -> bool {
+    let value = normalized_for_matching(value);
+    ERROR_TEXT_MARKERS
+        .iter()
+        .any(|marker| value.contains(marker))
+}
+
+/// `value` with ASCII letters lowercased and every run of whitespace (such as
+/// the line breaks of an error copied from a wrapped transcript) made one
+/// space, for matching against error text. A matching helper only: it
+/// neither sanitizes nor redacts. The copy is zeroized when dropped and never
+/// reallocated, since it can hold a credential.
+pub fn normalized_for_matching(value: &str) -> Zeroizing<String> {
+    let mut normalized = Zeroizing::new(String::with_capacity(value.len()));
+    let mut words = value.split_whitespace();
+    if let Some(first) = words.next() {
+        normalized.extend(first.chars().map(|c| c.to_ascii_lowercase()));
+        for word in words {
+            normalized.push(' ');
+            normalized.extend(word.chars().map(|c| c.to_ascii_lowercase()));
+        }
+    }
+    normalized
+}
+
+pub(crate) fn ensure_not_error_text(secret: &str) -> Result<(), VaultError> {
+    if is_vault_error_text(secret) {
+        Err(VaultError::ErrorTextAsSecret)
+    } else {
+        Ok(())
     }
 }
 
@@ -712,6 +963,150 @@ fn index_secret_entry(index: &VaultIndex) -> Result<(SecretScope, SecretName, St
     let name = index_secret_name()?;
     let serialized = serde_json::to_string(index).context("failed to serialize vault index")?;
     Ok((VAULT_SCOPE.clone(), name, serialized))
+}
+
+/// PF-28-S01: once the output gate is armed, every value this process reveals
+/// is registered before it is returned, so no model, tool, transcript or log
+/// sink can carry it. Seed phrases and private keys are withheld whole. If the
+/// gate cannot admit the value, the credential is not released.
+fn protect_revealed(
+    label: &str,
+    credential_type: CredentialType,
+    secret: &str,
+) -> Result<(), VaultError> {
+    register_with_output_gate(label, credential_type, secret).map_err(|err| {
+        VaultError::Storage(anyhow::anyhow!(
+            "vault:{label} was not released because the secret output gate cannot protect it: {err}"
+        ))
+    })
+}
+
+/// #434: a value stored while the output gate is armed is protected at once,
+/// not only after this process reveals it, because the person can put the
+/// same value in a file an agent reads. If the gate cannot admit it, it is not
+/// stored. A value too short to protect is stored unprotected, as before:
+/// it cannot be told apart from ordinary text and is never released while
+/// the gate is armed ([`protect_revealed`]).
+pub(crate) fn protect_stored(
+    label: &str,
+    credential_type: CredentialType,
+    secret: &str,
+) -> Result<(), VaultError> {
+    use codex_secret_broker::output_gate::RegisterError;
+    if !protected_while_stored(label, credential_type) {
+        return Ok(());
+    }
+    match register_with_output_gate(label, credential_type, secret) {
+        // Stored, but never released while the gate is armed
+        // (`protect_revealed`); the next vault read reports it by label.
+        Ok(()) | Err(RegisterError::TooShort | RegisterError::CapacityExhausted { .. }) => Ok(()),
+        Err(err) => Err(VaultError::Storage(anyhow::anyhow!(
+            "vault:{label} was not stored because the secret output gate cannot protect it: {err}"
+        ))),
+    }
+}
+
+/// #434: whether a stored value is protected by the output gate while it is
+/// stored, not only once revealed. Not custody material: seed phrases,
+/// private keys and keystores are never released to agents and are not
+/// registered with the gate (and so held for the session) unless a person
+/// reveals them. Not the non-secret parts of a provider account (a Claude
+/// config folder, an AWS profile name, a command account marker), which would
+/// hide ordinary text.
+fn protected_while_stored(label: &str, credential_type: CredentialType) -> bool {
+    !matches!(
+        credential_type,
+        CredentialType::SeedPhrase
+            | CredentialType::CryptoPrivateKey
+            | CredentialType::KeystoreJson
+    ) && parse_provider_account_label(label).is_none_or(|(_, _, kind)| kind.is_secret())
+}
+
+fn register_with_output_gate(
+    label: &str,
+    credential_type: CredentialType,
+    secret: &str,
+) -> Result<(), codex_secret_broker::output_gate::RegisterError> {
+    use codex_secret_broker::output_gate;
+    use codex_secret_broker::output_gate::SecretClass;
+    let Some(gate) = output_gate::active() else {
+        return Ok(());
+    };
+    let class = match credential_type {
+        CredentialType::SeedPhrase => SecretClass::SeedPhrase,
+        CredentialType::CryptoPrivateKey | CredentialType::KeystoreJson => SecretClass::PrivateKey,
+        _ => SecretClass::Operational,
+    };
+    let label = format!("vault:{label}");
+    let mut parts: Vec<Zeroizing<String>> = vec![Zeroizing::new(secret.to_string())];
+    if credential_type == CredentialType::SeedPhrase {
+        let words: Vec<&str> = secret.split_whitespace().collect();
+        parts.push(Zeroizing::new(words.join(" ")));
+        parts.push(Zeroizing::new(words.join("\n")));
+        parts.extend(
+            words
+                .windows(SEED_WINDOW_WORDS)
+                .map(|window| Zeroizing::new(window.join(" "))),
+        );
+    } else {
+        // A hex key is printed with or without `0x`, in either case.
+        let trimmed = secret.trim();
+        let hex = trimmed
+            .strip_prefix("0x")
+            .or_else(|| trimmed.strip_prefix("0X"))
+            .unwrap_or(trimmed);
+        if credential_type == CredentialType::CryptoPrivateKey
+            && hex.len() >= 32
+            && hex.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            for form in [hex.to_ascii_lowercase(), hex.to_ascii_uppercase()] {
+                parts.push(Zeroizing::new(format!("0x{form}")));
+                parts.push(Zeroizing::new(form));
+            }
+        }
+        if credential_type == CredentialType::BasicAuth
+            && let Some((_, password)) = secret.split_once(':')
+        {
+            parts.push(Zeroizing::new(password.to_string()));
+        }
+        // Multi-part values (key, secret, passphrase on separate lines).
+        parts.extend(
+            secret
+                .lines()
+                .map(str::trim)
+                .filter(|line| has_key_material(line) && *line != secret.trim())
+                .map(|line| Zeroizing::new(line.to_string())),
+        );
+    }
+    let entries: Vec<(&str, SecretClass, &str)> = parts
+        .iter()
+        .enumerate()
+        .filter(|(index, part)| *index == 0 || part.trim().len() >= output_gate::MIN_VALUE_BYTES)
+        .map(|(_, part)| (label.as_str(), class, part.as_str()))
+        .collect();
+    gate.register_all(&entries).map(|_| ())
+}
+
+/// Any run of three consecutive words of a seed phrase, so part of a phrase
+/// is withheld as well as the whole.
+const SEED_WINDOW_WORDS: usize = 3;
+/// Shortest run of key characters for a line of a multi-line value to count
+/// as key material rather than scaffolding (PEM headers, JSON fields).
+const KEY_MATERIAL_RUN: usize = 16;
+
+fn has_key_material(line: &str) -> bool {
+    let mut run = 0;
+    for byte in line.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'=') {
+            run += 1;
+            if run >= KEY_MATERIAL_RUN {
+                return true;
+            }
+        } else {
+            run = 0;
+        }
+    }
+    false
 }
 
 /// Format a Unix-seconds timestamp as an ISO-8601 string for display.

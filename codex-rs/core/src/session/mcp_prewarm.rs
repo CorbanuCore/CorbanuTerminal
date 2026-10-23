@@ -18,11 +18,23 @@ impl Session {
     ) {
         let session = Arc::downgrade(self);
         let shutdown = self.mcp_prewarm_shutdown.clone();
+        let mut account_switches = self.services.active_auth.subscribe_switches();
         let worker = self.services.runtime_handle.spawn(async move {
             loop {
+                // PF-84: on a mid-session switch to another account's sign-in
+                // (checked first: the old manager may be gone by now, which
+                // also ends its auth-change channel), watch the new manager.
+                let mut resubscribe = false;
                 let auth_changed = tokio::select! {
                     biased;
                     _ = shutdown.cancelled() => break,
+                    switch = account_switches.changed() => {
+                        if switch.is_err() {
+                            break;
+                        }
+                        resubscribe = true;
+                        true
+                    },
                     request = requests.recv() => {
                         if request.is_err() {
                             break;
@@ -30,15 +42,17 @@ impl Session {
                         false
                     },
                     auth_change = auth_changes.changed() => {
-                        if auth_change.is_err() {
-                            break;
-                        }
+                        // A dropped manager: the session has moved off it.
+                        resubscribe = auth_change.is_err();
                         true
                     },
                 };
                 let Some(session) = session.upgrade() else {
                     break;
                 };
+                if resubscribe {
+                    auth_changes = session.services.auth_manager().auth_change_receiver();
+                }
                 if auth_changed {
                     session.mark_mcp_runtime_dirty();
                 }

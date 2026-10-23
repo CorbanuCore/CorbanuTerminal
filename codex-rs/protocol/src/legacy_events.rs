@@ -182,6 +182,7 @@ impl CommandExecutionItem {
             CommandExecutionStatus::Completed => ExecCommandStatus::Completed,
             CommandExecutionStatus::Failed => ExecCommandStatus::Failed,
             CommandExecutionStatus::Declined => ExecCommandStatus::Declined,
+            CommandExecutionStatus::Refused => ExecCommandStatus::Refused,
         };
         Some(EventMsg::ExecCommandEnd(ExecCommandEndEvent {
             call_id: self.id.clone(),
@@ -316,6 +317,7 @@ impl CollabAgentToolCallItem {
                     prompt: self.prompt.clone().unwrap_or_default(),
                     model: self.model.clone().unwrap_or_default(),
                     reasoning_effort: self.reasoning_effort.clone().unwrap_or_default(),
+                    provider_account: self.provider_account.clone(),
                     status: receiver_thread_id
                         .map(|thread_id| self.agent_status(thread_id))
                         .unwrap_or(AgentStatus::NotFound),

@@ -86,7 +86,7 @@ impl WriterLockCoordinator {
         })
     }
 
-    fn lock_coordination(&self) -> ThreadStoreResult<File> {
+    fn lock_coordination(&self) -> ThreadStoreResult<CoordinationLock> {
         fs::create_dir_all(&self.directory).map_err(|err| ThreadStoreError::Internal {
             message: format!(
                 "failed to create thread writer lock directory {}: {err}",
@@ -112,7 +112,7 @@ impl WriterLockCoordinator {
                 path.display()
             ),
         })?;
-        Ok(file)
+        Ok(CoordinationLock(file))
     }
 
     fn remove_stale_thread_locks(&self) -> io::Result<()> {
@@ -142,6 +142,8 @@ impl WriterLockCoordinator {
             };
             match file.try_lock() {
                 Ok(()) => {
+                    // Release before close even if another descriptor still exists.
+                    let _ = file.unlock();
                     drop(file);
                     if let Err(err) = fs::remove_file(&path)
                         && err.kind() != io::ErrorKind::NotFound
@@ -165,9 +167,29 @@ impl WriterLockCoordinator {
     }
 }
 
+/// The held coordination lock, unlocked when dropped.
+struct CoordinationLock(File);
+
+impl Drop for CoordinationLock {
+    fn drop(&mut self) {
+        // #928: closing the file releases the lock only once no other copy of
+        // the descriptor is open, and a child another thread forked keeps one
+        // until it starts its program. Unlock now so a waiter waits only for
+        // this holder.
+        let _ = self.0.unlock();
+    }
+}
+
 impl Drop for WriterLockGuard {
     fn drop(&mut self) {
-        let coordination_lock = match self.coordinator.lock_coordination() {
+        let coordination_lock = self.coordinator.lock_coordination();
+        // Closing alone can leave the lock held through an inherited descriptor.
+        // Release it even if coordinating the pathname cleanup failed. On the
+        // successful path, the coordination lock still protects cleanup below.
+        if let Some(file) = self.file.take() {
+            let _ = file.unlock();
+        }
+        let coordination_lock = match coordination_lock {
             Ok(lock) => lock,
             Err(err) => {
                 warn!("failed to coordinate thread writer lock cleanup: {err}");
@@ -175,8 +197,7 @@ impl Drop for WriterLockGuard {
             }
         };
 
-        // Close the writer lock before deleting it so cleanup works on Windows too.
-        drop(self.file.take());
+        // The writer file is closed before deletion so cleanup works on Windows too.
         if let Err(err) = fs::remove_file(&self.path)
             && err.kind() != io::ErrorKind::NotFound
         {

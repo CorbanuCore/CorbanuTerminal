@@ -1,0 +1,44 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/corbanu-rtx/pf60s04-ia/work/ws │
+╰─────────────────────────────────────────────╯
+
+› Use the spawn_agent tool twice: a sub-agent on model k3 (provider kimi-code) with the message 'Reply with the single word KIMI.', and a sub-agent on model
+  claude-opus-5-5-plan (provider claude-plan) with the message 'Reply with the single word CLAUDE.'. Wait for both, then reply with the single word DONE.
+• DONE
+■ Restored a legacy /spawn hierarchy in read-only mode. Existing panes remain inspectable, but Corbanu Terminal will not dispatch or replay work until you
+create a new CrewSpec-backed crew.
+■ 2026-10-12 is after today (2026-10-10, UTC); there is nothing recorded for it yet. Run /cost for today.
+■ Range refused: reversed range: end precedes start. Usage: /cost START END hour|day|week|month
+■ Range refused: future start is unavailable. Usage: /cost START END hour|day|week|month
+■ Usage: /cost [YYYY-MM-DD] (UTC, no future dates). Custom: /cost START END hour|day|week|month; dates or UTC timestamps ending Z; end exclusive.
+  Recorded request range
+› Requested: [2025-01-01T00:00:00.000Z, 2025-02-01T00:00:00.000Z); timezone: UTC; grouping: Month
+  Retention: request detail kept since 2026-07-12T05:58:46.198Z; daily totals kept since 2025-10-11
+  Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns.
+  Snapshot is not current; newer activity is unverified
+  Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+  Ancestry counts cover inspectable slices only; unavailable slices may contain additional unknown ancestry.
+  Other conversations are not included in this view; /cost covers only the open conversation.
+  Range total unavailable — partial or unavailable buckets excluded; no partial total.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Requested: [2025-01-01T00:00:00.000Z, 2025-02-01T00:00:00.000Z); timezone: UTC; grouping: Month
+› Retention: request detail kept since 2026-07-12T05:58:46.198Z; daily totals kept since 2025-10-11
+› Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns.
+› Snapshot is not current; newer activity is unverified
+› Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+› Ancestry counts cover inspectable slices only; unavailable slices may contain additional unknown ancestry.
+› Other conversations are not included in this view; /cost covers only the open conversation.
+› Range total unavailable — partial or unavailable buckets excluded; no partial total.
+› Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2025-01-01T00:00:00.000Z, 2025-02-01T00:00:00.000Z): unavailable
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2025-01-01T00:00:00.000Z, 2025-02-01T00:00:00.000Z): unavailable
+› —— Open ——
+  —— Open ——
+› → Month [2025-01-01T00:00:00.000Z, 2025-02-01T00:00:00.000Z)
+  → Month [2025-01-01T00:00:00.000Z, 2025-02-01T00:00:00.000Z)
+› Refresh
+  Refresh
+› Close

@@ -1,0 +1,21 @@
+---
+source: tui/src/bottom_pane/security_level_picker_issue_816_tests.rs
+assertion_line: 67
+expression: "render(&picker, 80)"
+---
+Security level
+Active in this session: Permissive
+Saved: Aggressive. Core's protections (vault refusal, protected paths) apply
+in this session now; also in force now: approved and allow-listed commands
+stay inside this session's sandbox and network is off for agent commands;
+Aggressive's sandbox, approval, network (web search), environment, model-key and
+child-agent rows take effect when you restart Corbanu Terminal.
+Core's level: Aggressive
+
+> Permissive  (active)
+  Moderate
+  Aggressive
+
+Today's behaviour. Your approval, sandbox, network, vault and agent settings
+apply exactly as configured.
+↑/↓ move · enter choose · r restart now · g grants and kill switch · esc close

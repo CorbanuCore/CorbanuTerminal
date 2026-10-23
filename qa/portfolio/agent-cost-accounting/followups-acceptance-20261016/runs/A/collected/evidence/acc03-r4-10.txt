@@ -1,0 +1,28 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Reply with the single word OK.
+
+
+• OK
+
+
+  Attempt, components and original price
+  Requested UTC day: 2026-10-16
+
+  Tokens: 8,673 tokens
+  —— Details ——
+  Billed cost: Z.AI doesn't report its charges, so any cost here is an estimate — check Z.AI's bill.
+  Request: 37414d79-2f1f-4d9a-bbcb-12569c1f6b71
+  Attempt: 3a2f0825-f92d-42de-bf01-5545ba4e894b
+  Thread: 01a142da-0909-7b61-abef-2540597c60a6
+  Turn: side:01a142e5-f181-7962-b2fc-f5207988a904
+› Provider: zai
+
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

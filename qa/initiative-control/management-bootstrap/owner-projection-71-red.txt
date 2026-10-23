@@ -1,0 +1,102 @@
+test_bound_never_drops_open_or_acknowledged_question_after_closed_history (test_decision_feed.ProjectionRegressionTests.test_bound_never_drops_open_or_acknowledged_question_after_closed_history) ... ERROR
+test_twenty_decisions_fifty_three_revisions_projects_within_bound (test_decision_feed.ProjectionRegressionTests.test_twenty_decisions_fifty_three_revisions_projects_within_bound) ... ERROR
+test_busy_coordinator_returns_partial_status_through_cli (test_owner_daemon.ActivationVisibilityTests.test_busy_coordinator_returns_partial_status_through_cli) ... FAIL
+test_busy_owner_still_reports_coordinator_and_unknown_owner (test_owner_daemon.ActivationVisibilityTests.test_busy_owner_still_reports_coordinator_and_unknown_owner) ... ERROR
+test_cli_status_discloses_manual_deadline_and_help_warns_before_arming (test_owner_daemon.ActivationVisibilityTests.test_cli_status_discloses_manual_deadline_and_help_warns_before_arming) ... ok
+test_complete_status_is_explicit (test_owner_daemon.ActivationVisibilityTests.test_complete_status_is_explicit) ... ERROR
+test_empty_status_still_warns_about_future_shared_state_mutation (test_owner_daemon.ActivationVisibilityTests.test_empty_status_still_warns_about_future_shared_state_mutation) ... ok
+test_manual_overdue_claim_does_not_refuse_arm_and_paused_tick_matches_warning (test_owner_daemon.ActivationVisibilityTests.test_manual_overdue_claim_does_not_refuse_arm_and_paused_tick_matches_warning) ... ok
+test_status_does_not_recover_coordinator_journal (test_owner_daemon.ActivationVisibilityTests.test_status_does_not_recover_coordinator_journal) ... ERROR
+test_status_lists_in_flight_and_overdue_with_exact_watchdog_effects (test_owner_daemon.ActivationVisibilityTests.test_status_lists_in_flight_and_overdue_with_exact_watchdog_effects) ... ok
+
+======================================================================
+ERROR: test_bound_never_drops_open_or_acknowledged_question_after_closed_history (test_decision_feed.ProjectionRegressionTests.test_bound_never_drops_open_or_acknowledged_question_after_closed_history)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_feed.py", line 71, in test_bound_never_drops_open_or_acknowledged_question_after_closed_history
+    result = transport.project_slack(self.state, None, NOW)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_feed.py", line 134, in project_slack
+    result = validate_slack(dict(schema=1, assessed_at=at, feed_digest=d.digest(feed), status=status, decisions=rows), feed, at)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_feed.py", line 24, in validate_slack
+    d.require(len(d.canonical(value)) <= SLACK_LIMIT and not d.SECRET.search(d.canonical(value).decode()))
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 33, in require
+    raise Invalid()
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+======================================================================
+ERROR: test_twenty_decisions_fifty_three_revisions_projects_within_bound (test_decision_feed.ProjectionRegressionTests.test_twenty_decisions_fifty_three_revisions_projects_within_bound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_feed.py", line 53, in test_twenty_decisions_fifty_three_revisions_projects_within_bound
+    result = transport.project_slack(self.state, None, NOW)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_feed.py", line 134, in project_slack
+    result = validate_slack(dict(schema=1, assessed_at=at, feed_digest=d.digest(feed), status=status, decisions=rows), feed, at)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_feed.py", line 24, in validate_slack
+    d.require(len(d.canonical(value)) <= SLACK_LIMIT and not d.SECRET.search(d.canonical(value).decode()))
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 33, in require
+    raise Invalid()
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+======================================================================
+ERROR: test_busy_owner_still_reports_coordinator_and_unknown_owner (test_owner_daemon.ActivationVisibilityTests.test_busy_owner_still_reports_coordinator_and_unknown_owner)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 434, in test_busy_owner_still_reports_coordinator_and_unknown_owner
+    result = owner.activation_status(self.config_path)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/owner_daemon.py", line 237, in activation_status
+    with activation_store(config_path) as (root, _, meta):
+         ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/owner_daemon.py", line 176, in activation_store
+    with locked(root / "owner-daemon.lock"), locked(root / "owner-admission.lock"):
+         ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/owner_daemon.py", line 99, in locked
+    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+BlockingIOError: [Errno 35] Resource temporarily unavailable
+
+======================================================================
+ERROR: test_complete_status_is_explicit (test_owner_daemon.ActivationVisibilityTests.test_complete_status_is_explicit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 444, in test_complete_status_is_explicit
+    self.assertTrue(result["complete"])
+                    ~~~~~~^^^^^^^^^^^^
+KeyError: 'complete'
+
+======================================================================
+ERROR: test_status_does_not_recover_coordinator_journal (test_owner_daemon.ActivationVisibilityTests.test_status_does_not_recover_coordinator_journal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 413, in test_status_does_not_recover_coordinator_journal
+    result = owner.activation_status(self.config_path)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/owner_daemon.py", line 244, in activation_status
+    coordinator=coordinator_activation_impact(root))
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/owner_daemon.py", line 199, in coordinator_activation_impact
+    f.require(not any(Path(str(coordinator.path) + suffix).exists()
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                      for suffix in ("-journal", "-wal", "-shm")), "coordinator_recovery_required")
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/fable_launcher.py", line 58, in require
+    raise LaunchError(code)
+fable_launcher.LaunchError: coordinator_recovery_required
+
+======================================================================
+FAIL: test_busy_coordinator_returns_partial_status_through_cli (test_owner_daemon.ActivationVisibilityTests.test_busy_coordinator_returns_partial_status_through_cli)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 424, in test_busy_coordinator_returns_partial_status_through_cli
+    self.assertEqual(0, result.returncode, result.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 0 != 2 : 
+
+----------------------------------------------------------------------
+Ran 10 tests in 5.568s
+
+FAILED (failures=1, errors=5)

@@ -1,0 +1,78 @@
+# #192: in the MCP tool approval form a number key only highlights its option;
+# Enter confirms it (as the main approval prompt since #187).
+id = "issue192-mcp-number-key-highlights"
+feature = "#192: a number key does not answer an MCP tool approval"
+expected = "In the MCP tool approval, pressing 2 only highlights Cancel and the request stays open; typed text is not sent and Enter is ignored. Then 1 and Enter run the tool."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+code_mode = true
+
+# Point command at your lane's build: cargo build -p codex-rmcp-client --bin test_stdio_server
+[mcp_servers.rmcp]
+command = "/path/to/your/target/debug/test_stdio_server"
+default_tools_approval_mode = "prompt"
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "In code mode, call the rmcp MCP server's echo tool exactly once with message hello-192, then stop."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Run the tool and continue"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 3.0
+
+[[steps]]
+key = "2"
+[[steps]]
+wait = "(?s)Allow the rmcp MCP server to run tool.*› 2\\. Cancel"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "x"
+[[steps]]
+wait = "Typed text is not sent while this request is open"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+pause = 2.0
+[[steps]]
+wait = "(?s)Allow the rmcp MCP server to run tool.*Typed text is not sent while this request is open"
+
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Up"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "1"
+[[steps]]
+wait = "› 1\\. Allow"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Called rmcp\\.echo"
+timeout = 120
+[[steps]]
+pause = 3.0

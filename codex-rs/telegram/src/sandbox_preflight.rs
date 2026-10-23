@@ -1,5 +1,6 @@
 use codex_protocol::protocol::SandboxPolicy;
 
+#[cfg(any(test, target_os = "linux"))]
 const SANDBOX_WARNING_DOCS: &str = "docs/config.md#telegram";
 
 pub(crate) fn warn_if_sandbox_may_fail(sandbox_policy: &SandboxPolicy) {

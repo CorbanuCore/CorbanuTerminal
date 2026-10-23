@@ -1,0 +1,60 @@
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/runs/after-445-3/ws │
+╰────────────────────────────────────────────────────────╯
+
+
+› What is 2+2?
+
+
+■ Not sent: the security kill switch is on, so Corbanu sends nothing to the model, and this message was not kept. To turn it off, open /security, press g,
+choose "Turn the kill switch off" and confirm.
+
+
+› What is 3+3?
+
+
+• 6
+
+
+› Explain this codebase
+
+  Z.AI GLM 5.3 Flash via zai default · <runs>/after-445-3/ws · Corbanu Terminal · TPS: 3.4 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

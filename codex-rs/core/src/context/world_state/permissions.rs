@@ -41,6 +41,15 @@ impl PermissionsState {
             instructions,
         }
     }
+
+    /// Adds what the active security level blocks (#439).
+    pub(crate) fn with_note(self, note: &str) -> Self {
+        let instructions = self.instructions.with_note(note);
+        Self {
+            snapshot: WorldStateHash::from_fragment(&instructions),
+            instructions,
+        }
+    }
 }
 
 impl WorldStateSection for PermissionsState {

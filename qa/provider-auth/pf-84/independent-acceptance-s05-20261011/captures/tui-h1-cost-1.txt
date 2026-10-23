@@ -1,0 +1,53 @@
+
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.3-flash   /model to change          │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s05acc/ws │
+╰──────────────────────────────────────────────────────╯
+
+
+  Cost — this conversation
+  Requested UTC day: 2026-10-11
+
+› Today (UTC) in this conversation:
+  • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 5 requests, 39,488 tokens. Estimated cost: $0.003116 (rounded).
+  • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 1 request, tokens not reported. Estimated cost: not available — usage incomplete.
+  • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 1 request, 4,616 tokens. Estimated cost: $0.000601 (rounded).
+  Other conversations on this day, not included above: 7 requests in 5 conversations.
+  • Kimi Code · account alt · kimi-k3 — Covered by your subscription (not billed per request). 2 requests, 11,357 tokens. Same work at API prices: not available.
+  • Kimi Code · account default · kimi-k3 — Covered by your subscription (not billed per request). 2 requests, 11,421 tokens. Same work at API prices: not available.
+  • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 1 request, 7,425 tokens. Estimated cost: $0.001115 (rounded).
+
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

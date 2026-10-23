@@ -1,0 +1,17 @@
+[restore] lo0: lo0 (skip)
+[restore] anchor matches original: yes
+[restore] per-user rules left: 0
+[restore] accounts left: 0  group: absent
+[restore] sudoers.d:   /opt/agms: absent
+[restore] /Users/neo 750
+[restore] /Users/neo_1 755
+[restore] /opt/homebrew 755
+[restore] /opt/homebrew/bin 775
+[restore] /opt/homebrew/sbin 775
+[restore] virtiofs mounted: 1
+[restore] /etc/codex/config.toml restored: yes
+[restore] /etc/hosts unchanged: yes
+[restore] campaign dirs left:        0
+[restore] processes for removed uids:        0
+[restore] guest clock (left at host UTC): 2026-10-14T08:06:47Z
+[restore] done

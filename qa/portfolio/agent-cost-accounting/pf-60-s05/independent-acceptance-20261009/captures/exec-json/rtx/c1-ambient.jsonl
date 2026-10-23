@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"01a120bd-eb1a-7e90-bf04-364a88650993"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Model metadata for `test-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."}}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 401 Unauthorized: Unauthorized, url: https://api.ambient.xyz/v1/chat/completions"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: Unauthorized, url: https://api.ambient.xyz/v1/chat/completions"}}

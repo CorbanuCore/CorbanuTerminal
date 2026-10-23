@@ -1,0 +1,134 @@
+# Linux gate on ca46cf7ba8
++ cargo test --locked -p codex-model-provider --lib amazon_bedrock
++ g
++ grep -E '^test .*(FAILED|ok)$|test result|^error'
+test amazon_bedrock::auth::tests::bedrock_bearer_auth_uses_aws_default_region_env ... ok
+test amazon_bedrock::auth::tests::bedrock_bearer_auth_uses_aws_region_env ... ok
+test amazon_bedrock::auth::tests::bedrock_bearer_auth_rejects_missing_configured_region ... ok
+test amazon_bedrock::auth::tests::bedrock_bearer_auth_prefers_configured_region_and_uses_header ... ok
+test amazon_bedrock::auth::tests::bedrock_mantle_sigv4_strips_headers_not_preserved_by_mantle ... ok
+test amazon_bedrock::error_tests::signature_errors_with_other_statuses_remain_generic ... ok
+test amazon_bedrock::mantle::tests::base_url_uses_region_endpoint ... ok
+test amazon_bedrock::error_tests::other_unauthorized_errors_remain_generic ... ok
+test amazon_bedrock::error_tests::expired_signature_has_actionable_guidance ... ok
+test amazon_bedrock::mantle::tests::aws_auth_config_uses_configured_region ... ok
+test amazon_bedrock::tests::api_provider_for_bedrock_bearer_token_uses_configured_region_endpoint ... ok
+test amazon_bedrock::tests::capabilities_disable_unsupported_hosted_tools ... ok
+test amazon_bedrock::named_account::tests::default_account_keeps_the_managed_key ... ok
+test amazon_bedrock::named_account::tests::named_account_ignores_the_managed_key_and_uses_its_profile_region ... ok
+test amazon_bedrock::named_account::tests::account_without_a_profile_is_refused ... ok
+test amazon_bedrock::mantle::tests::base_url_rejects_unsupported_region ... ok
+test amazon_bedrock::named_account::tests::unusable_profile_errors_name_the_recovery ... ok
+test amazon_bedrock::mantle::tests::aws_auth_config_uses_profile_and_mantle_service ... ok
+test amazon_bedrock::tests::approval_review_preferred_model_uses_bedrock_gpt_5_4 ... ok
+test amazon_bedrock::tests::command_auth_uses_configured_base_url_without_resolving_aws ... ok
+test amazon_bedrock::tests::managed_auth_takes_precedence_over_aws_auth ... ok
+test amazon_bedrock::tests::openai_auth_is_not_exposed_to_bedrock ... ok
+test provider::tests::create_model_provider_does_not_use_openai_auth_manager_for_amazon_bedrock_provider ... ok
+test provider::tests::create_model_provider_uses_managed_auth_for_amazon_bedrock_provider ... ok
+test provider::tests::amazon_bedrock_provider_returns_bedrock_account_state ... ok
+test amazon_bedrock::catalog::tests::gpt_5_bedrock_models_only_allow_default_service_tier ... ok
+test amazon_bedrock::catalog::tests::gpt_5_6_bedrock_models_use_variant_metadata_and_max_reasoning_effort ... ok
+test amazon_bedrock::catalog::tests::gpt_5_bedrock_models_are_visible ... ok
+test amazon_bedrock::catalog::tests::gpt_5_bedrock_models_use_bedrock_context_window ... ok
+test amazon_bedrock::catalog::tests::catalog_uses_mantle_model_ids_in_priority_order ... ok
+test amazon_bedrock::catalog::tests::gpt_5_bedrock_models_do_not_include_availability_nux_or_upgrade ... ok
+test provider::tests::amazon_bedrock_provider_creates_static_models_manager ... ok
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 61 filtered out; finished in 0.02s
++ cargo test --locked -p codex-core --lib --features developer-accounting model_info_for_provider
++ g
++ grep -E '^test .*(FAILED|ok)$|test result|^error'
+test model_info_for_provider::tests::bedrock_turn_gets_bedrock_metadata_from_another_providers_manager ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2907 filtered out; finished in 0.01s
++ cargo test --locked -p codex-core --lib model_info_for_provider
++ g
++ grep -E '^test .*(FAILED|ok)$|test result|^error'
+test model_info_for_provider::tests::bedrock_turn_gets_bedrock_metadata_from_another_providers_manager ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2902 filtered out; finished in 0.02s
++ cargo test --locked -p codex-tui --lib --features developer-accounting -- provider_account model_catalog provider_management_status
++ g
++ grep -E '^test .*(FAILED|ok)$|test result|^error'
+test app::tests::model_catalog::model_migration_prompt_respects_hide_flag_and_self_target ... ok
+test app::tests::model_catalog::select_model_availability_nux_returns_none_when_all_models_are_exhausted ... ok
+test app::tests::model_catalog::select_model_availability_nux_does_not_fall_back_to_older_announcement ... ok
+test app::tests::model_catalog::model_migration_prompt_skips_hidden_gpt_targets ... ok
+test app::tests::model_catalog::select_model_availability_nux_picks_only_eligible_model ... ok
+test model_catalog::tests::configured_runtime_model_is_added_with_exact_provider_identity ... ok
+test model_catalog::tests::configured_runtime_model_does_not_duplicate_existing_exact_or_inferred_provider ... ok
+test model_catalog::tests::claude_current_does_not_seed_local_or_custom_providers_on_manager_refresh ... ok
+test app::tests::model_catalog::select_model_availability_nux_uses_existing_model_order_as_priority ... ok
+test model_catalog::tests::duplicate_model_slugs_retain_exact_catalog_provider_identity ... ok
+test app::tests::model_catalog::model_migration_prompt_skips_when_target_missing_or_hidden ... ok
+test model_catalog::tests::resumed_session_recovery_is_consumed_once ... ok
+test model_catalog::tests::provider_models_are_added_once_with_exact_identity_and_never_as_default ... ok
+test model_catalog::tests::runtime_refresh_replaces_only_gpu_models ... ok
+test provider_account_auth_host::tests::pending_cancel_actions_are_secret_free_and_distinct ... ok
+test model_catalog::tests::runtime_refresh_does_not_clone_models_into_incompatible_provider_tabs ... ok
+test provider_account_auth_host::tests::pending_cancel_actions_target_the_exact_account_reducer ... ok
+test provider_account_auth_host::tests::submitted_claude_token_does_not_reopen_the_entry_form ... ok
+test app::provider_management_status::tests::manager_open_syncs_configured_runtime_models_before_policy_refresh ... ok
+test model_catalog::tests::runtime_sync_preserves_shared_opaque_custom_routes_but_not_idle_local_runtimes ... ok
+test provider_account_auth_host::tests::claude_recovery_snapshot_presents_the_method_choice ... ok
+test app::tests::model_catalog::accepted_model_migration_persists_target_default_reasoning_effort ... ok
+test app::tests::model_catalog::model_migration_prompt_shows_for_hidden_model ... ok
+test session_resume::tests::recorded_provider_account_is_the_newest_turn_contexts ... ok
+test app::tests::model_catalog::prepare_startup_tooltip_override_suppresses_model_availability_nux ... ok
+test status::tests::status_snapshot_uses_command_backed_provider_account_identity ... ok
+test app::provider_accounts::tests::a_session_account_that_cannot_load_changes_nothing ... FAILED
+test app::provider_accounts::tests::a_default_set_by_a_higher_layer_is_reported ... ok
+test app::provider_accounts::tests::one_session_selection_covers_one_provider ... ok
+test app::provider_accounts::tests::named_bedrock_account_offers_bedrock_models ... ok
+test app::provider_accounts::tests::rename_carries_the_default_along ... ok
+test result: FAILED. 30 passed; 1 failed; 0 ignored; 0 measured; 4435 filtered out; finished in 0.61s
+error: test failed, to rerun pass `-p codex-tui --lib`
++ cargo test --locked -p codex-tui --lib -- provider_account model_catalog provider_management_status
++ g
++ grep -E '^test .*(FAILED|ok)$|test result|^error'
+test app::tests::model_catalog::model_migration_prompt_respects_hide_flag_and_self_target ... ok
+test app::tests::model_catalog::model_migration_prompt_skips_hidden_gpt_targets ... ok
+test app::tests::model_catalog::select_model_availability_nux_returns_none_when_all_models_are_exhausted ... ok
+test app::tests::model_catalog::select_model_availability_nux_does_not_fall_back_to_older_announcement ... ok
+test app::provider_management_status::tests::manager_open_syncs_configured_runtime_models_before_policy_refresh ... ok
+test app::tests::model_catalog::select_model_availability_nux_picks_only_eligible_model ... ok
+test model_catalog::tests::resumed_session_recovery_is_consumed_once ... ok
+test model_catalog::tests::runtime_refresh_does_not_clone_models_into_incompatible_provider_tabs ... ok
+test app::tests::model_catalog::select_model_availability_nux_uses_existing_model_order_as_priority ... ok
+test model_catalog::tests::claude_current_does_not_seed_local_or_custom_providers_on_manager_refresh ... ok
+test model_catalog::tests::configured_runtime_model_does_not_duplicate_existing_exact_or_inferred_provider ... ok
+test model_catalog::tests::duplicate_model_slugs_retain_exact_catalog_provider_identity ... ok
+test model_catalog::tests::provider_models_are_added_once_with_exact_identity_and_never_as_default ... ok
+test app::tests::model_catalog::model_migration_prompt_skips_when_target_missing_or_hidden ... ok
+test model_catalog::tests::configured_runtime_model_is_added_with_exact_provider_identity ... ok
+test app::tests::model_catalog::accepted_model_migration_persists_target_default_reasoning_effort ... ok
+test provider_account_auth_host::tests::pending_cancel_actions_are_secret_free_and_distinct ... ok
+test provider_account_auth_host::tests::claude_recovery_snapshot_presents_the_method_choice ... ok
+test app::tests::model_catalog::model_migration_prompt_shows_for_hidden_model ... ok
+test model_catalog::tests::runtime_refresh_replaces_only_gpu_models ... ok
+test provider_account_auth_host::tests::pending_cancel_actions_target_the_exact_account_reducer ... ok
+test model_catalog::tests::runtime_sync_preserves_shared_opaque_custom_routes_but_not_idle_local_runtimes ... ok
+test provider_account_auth_host::tests::submitted_claude_token_does_not_reopen_the_entry_form ... ok
+test app::tests::model_catalog::prepare_startup_tooltip_override_suppresses_model_availability_nux ... ok
+test session_resume::tests::recorded_provider_account_is_the_newest_turn_contexts ... ok
+test status::tests::status_snapshot_uses_command_backed_provider_account_identity ... ok
+test app::provider_accounts::tests::a_session_account_that_cannot_load_changes_nothing ... FAILED
+test app::provider_accounts::tests::a_default_set_by_a_higher_layer_is_reported ... ok
+test app::provider_accounts::tests::one_session_selection_covers_one_provider ... ok
+test app::provider_accounts::tests::named_bedrock_account_offers_bedrock_models ... ok
+test app::provider_accounts::tests::rename_carries_the_default_along ... ok
+test result: FAILED. 30 passed; 1 failed; 0 ignored; 0 measured; 4435 filtered out; finished in 0.78s
+error: test failed, to rerun pass `-p codex-tui --lib`
++ cargo clippy --locked --tests -p codex-model-provider -p codex-core -p codex-tui --features codex-core/developer-accounting,codex-tui/developer-accounting -- -D warnings
++ tail -n3
+    Checking codex-exec v0.1.48 ($W/codex-rs/exec)
+    Checking codex-cloud-tasks v0.1.48 ($W/codex-rs/cloud-tasks)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2m 19s
++ cargo clippy --locked --tests -p codex-model-provider -p codex-core -p codex-tui -- -D warnings
++ tail -n3
+    Checking codex-cloud-tasks v0.1.48 ($W/codex-rs/cloud-tasks)
+    Checking codex-cli v0.1.48 ($W/codex-rs/cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2m 02s
++ cargo build --locked -p codex-cli --bin corbanu --features codex-core/developer-accounting,codex-tui/developer-accounting
++ tail -n1
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2m 08s
++ cp $W-target/debug/corbanu corbanu-cand572
+EXIT 0

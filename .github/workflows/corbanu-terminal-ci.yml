@@ -23,7 +23,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
 
       - name: Install Linux package prerequisites
         shell: bash
@@ -61,6 +61,14 @@ jobs:
           set -euo pipefail
           python3 -m unittest scripts.test_check_portable_skills
           python3 scripts/check_portable_skills.py
+
+      - name: Check price catalogue calendars
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest scripts.test_check_price_calendars
+          # Warning only here; nightly-ci fails 30 days before a list runs out.
+          python3 scripts/check_price_calendars.py --warn-only
 
       - name: Build Corbanu Terminal binaries
         shell: bash
@@ -158,6 +166,15 @@ jobs:
           test -f "$telegram_resources/dist/AGENTS.md.template"
           test -f "$telegram_resources/dist/corbanu-terminal-telegram.service"
           test -f "$telegram_resources/dist/org.corbanu.terminal.telegram.plist"
+
+      - name: Verify developer accounting cannot be packaged
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --manifest-path codex-rs/Cargo.toml --profile dev-small \
+            --bin corbanu --features codex-core/developer-accounting
+          python3 -B scripts/test_build_codex_package.py \
+            --feature-artifact codex-rs/target/dev-small/corbanu
 
       - name: Upload package smoke artifact
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0

@@ -1292,6 +1292,43 @@ async fn direct_budget_limited_turn_uses_budget_message_snapshot() {
     assert_chatwidget_snapshot!("direct_budget_limited_turn_message", last);
 }
 
+/// #507: a turn the kill switch stopped says so after Core's warning, not
+/// "tell the model what to do differently"; the next interruption is normal.
+#[tokio::test]
+async fn kill_switch_stopped_turn_says_so() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    handle_turn_started(&mut chat, "turn-1");
+    handle_warning(
+        &mut chat,
+        crate::legacy_core::security_revocation::KILL_SWITCH_STOPPED,
+    );
+    handle_turn_interrupted(&mut chat, "turn-1");
+    let history = drain_insert_history(&mut rx)
+        .iter()
+        .map(|cell| lines_to_single_string(cell))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        history.contains("security kill switch was turned on"),
+        "{history}"
+    );
+    assert!(
+        history.contains("Turn stopped by the security kill switch."),
+        "{history}"
+    );
+    assert!(!history.contains("Conversation interrupted"), "{history}");
+
+    handle_turn_started(&mut chat, "turn-2");
+    handle_turn_interrupted(&mut chat, "turn-2");
+    let history = drain_insert_history(&mut rx)
+        .iter()
+        .map(|cell| lines_to_single_string(cell))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(history.contains("Conversation interrupted"), "{history}");
+}
+
 #[tokio::test]
 async fn budget_limited_turn_restores_queued_input_without_submitting() {
     let (mut chat, _rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;

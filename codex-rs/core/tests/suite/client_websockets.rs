@@ -1,4 +1,8 @@
 #![allow(clippy::unwrap_used)]
+#![allow(
+    clippy::disallowed_methods,
+    reason = "#[traced_test] installs tracing-test's in-memory global subscriber"
+)]
 use codex_api::WS_REQUEST_HEADER_TRACEPARENT_CLIENT_METADATA_KEY;
 use codex_api::WS_REQUEST_HEADER_TRACESTATE_CLIENT_METADATA_KEY;
 use codex_core::CodexResponsesMetadata;
@@ -10,6 +14,7 @@ use codex_core::X_RESPONSESAPI_INCLUDE_TIMING_METRICS_HEADER;
 use codex_core::test_support::with_parent_turn;
 use codex_features::Feature;
 use codex_http_client::OutboundProxyPolicy;
+use codex_login::AuthManager;
 use codex_login::CodexAuth;
 use codex_login::auth::AgentIdentityAuthPolicy;
 use codex_model_provider_info::ModelProviderInfo;
@@ -42,7 +47,7 @@ use codex_rollout_trace::RawTraceEventPayload;
 use codex_rollout_trace::TraceWriter;
 use codex_rollout_trace::replay_bundle;
 use core_test_support::TestCodexResponsesRequestKind;
-use core_test_support::load_default_config_for_test;
+use core_test_support::load_default_config_for_test_in;
 use core_test_support::responses::WebSocketConnectionConfig;
 use core_test_support::responses::WebSocketTestServer;
 use core_test_support::responses::ev_assistant_message;
@@ -106,6 +111,7 @@ fn assert_request_trace_matches(body: &serde_json::Value, expected_trace: &W3cTr
 
 struct WebsocketTestHarness {
     _codex_home: TempDir,
+    _cwd: TempDir,
     client: ModelClient,
     outbound_proxy_policy: OutboundProxyPolicy,
     session_id: SessionId,
@@ -720,6 +726,89 @@ async fn responses_websocket_reuses_connection_after_session_drop() {
 
     assert_eq!(server.handshakes().len(), 1);
     assert_eq!(server.single_connection().len(), 2);
+
+    server.shutdown().await;
+}
+
+/// #1311 (D171): a cached connection opened with one sign-in is never reused
+/// once the session's sign-in is replaced by another (here another API key,
+/// as when a named account is removed and signed in again); the same sign-in
+/// keeps reusing it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn responses_websocket_reconnects_when_the_sign_in_is_replaced() {
+    skip_if_no_network!();
+
+    let server = start_websocket_server(vec![
+        vec![
+            vec![ev_response_created("resp-1"), ev_completed("resp-1")],
+            vec![ev_response_created("resp-2"), ev_completed("resp-2")],
+        ],
+        vec![vec![ev_response_created("resp-3"), ev_completed("resp-3")]],
+    ])
+    .await;
+    let auth_home = TempDir::new().unwrap();
+    let sign_in = |api_key: &str| {
+        codex_login::login_with_api_key(
+            auth_home.path(),
+            api_key,
+            codex_login::AuthCredentialsStoreMode::File,
+            codex_login::AuthKeyringBackendKind::default(),
+        )
+        .expect("sign-in");
+    };
+    sign_in("sk-old-sign-in");
+    let auth_manager = Arc::new(
+        AuthManager::new(
+            auth_home.path().to_path_buf(),
+            /*enable_codex_api_key_env*/ false,
+            codex_login::AuthCredentialsStoreMode::File,
+            /*forced_chatgpt_workspace_id*/ None,
+            /*chatgpt_base_url*/ None,
+            codex_login::AuthKeyringBackendKind::default(),
+            codex_login::test_support::transport_default_auth_route_config(),
+        )
+        .await,
+    );
+    let harness = websocket_harness_with_client_auth(
+        websocket_provider(&server),
+        /*runtime_metrics_enabled*/ false,
+        /*concurrent_reasoning_summaries_enabled*/ false,
+        /*enabled_features*/ &[],
+        Some(Arc::clone(&auth_manager)),
+    )
+    .await;
+
+    for input in ["one", "two"] {
+        let mut client_session = harness.client.new_session();
+        let prompt = prompt_with_input(vec![message_item(input)]);
+        stream_until_complete(&mut client_session, &harness, &prompt).await;
+    }
+    assert_eq!(server.handshakes().len(), 1);
+
+    sign_in("sk-new-sign-in");
+    auth_manager.reload().await;
+    assert_eq!(
+        auth_manager
+            .auth_cached()
+            .and_then(|auth| auth.api_key().map(str::to_string)),
+        Some("sk-new-sign-in".to_string())
+    );
+    let mut client_session = harness.client.new_session();
+    let prompt = prompt_with_input(vec![message_item("three")]);
+    stream_until_complete(&mut client_session, &harness, &prompt).await;
+
+    let authorization = server
+        .handshakes()
+        .iter()
+        .map(|handshake| handshake.header("authorization"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        authorization,
+        vec![
+            Some("Bearer sk-old-sign-in".to_string()),
+            Some("Bearer sk-new-sign-in".to_string()),
+        ]
+    );
 
     server.shutdown().await;
 }
@@ -2452,6 +2541,7 @@ fn websocket_provider_with_connect_timeout(
     websocket_connect_timeout_ms: Option<u64>,
 ) -> ModelProviderInfo {
     ModelProviderInfo {
+        account: None,
         name: "mock-ws".into(),
         base_url: Some(format!("{}/v1", server.uri())),
         env_key: None,
@@ -2475,6 +2565,7 @@ fn websocket_provider_with_connect_timeout(
         requires_openai_auth: false,
         supports_websockets: true,
         supports_standalone_web_search: false,
+        billing: None,
     }
 }
 
@@ -2515,8 +2606,27 @@ async fn websocket_harness_with_provider_options(
     concurrent_reasoning_summaries_enabled: bool,
     enabled_features: &[Feature],
 ) -> WebsocketTestHarness {
+    websocket_harness_with_client_auth(
+        provider,
+        runtime_metrics_enabled,
+        concurrent_reasoning_summaries_enabled,
+        enabled_features,
+        /*client_auth_manager*/ None,
+    )
+    .await
+}
+
+async fn websocket_harness_with_client_auth(
+    provider: ModelProviderInfo,
+    runtime_metrics_enabled: bool,
+    concurrent_reasoning_summaries_enabled: bool,
+    enabled_features: &[Feature],
+    client_auth_manager: Option<Arc<AuthManager>>,
+) -> WebsocketTestHarness {
     let codex_home = TempDir::new().unwrap();
-    let mut config = load_default_config_for_test(&codex_home).await;
+    let cwd = TempDir::new().unwrap();
+    let mut config =
+        load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
     config.model = Some(MODEL.to_string());
     if runtime_metrics_enabled {
         config
@@ -2567,7 +2677,7 @@ async fn websocket_harness_with_provider_options(
     let effort = None;
     let summary = ReasoningSummary::Auto;
     let client = ModelClient::new(
-        /*auth_manager*/ None,
+        client_auth_manager,
         AgentIdentityAuthPolicy::JwtOnly,
         thread_id,
         provider.clone(),
@@ -2587,6 +2697,7 @@ async fn websocket_harness_with_provider_options(
 
     WebsocketTestHarness {
         _codex_home: codex_home,
+        _cwd: cwd,
         client,
         outbound_proxy_policy,
         session_id,

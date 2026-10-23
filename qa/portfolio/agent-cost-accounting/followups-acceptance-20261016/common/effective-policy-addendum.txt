@@ -1,0 +1,29 @@
+# Addendum to effective-policy.txt (after evidence check r1; effective-policy.txt is left unchanged because the
+# isolation receipts are bound to its hash)
+
+- Provisioning runs: provision-1 (initial); provision-2 (Moonshot's two addresses added to the guest's 443 allowlist and
+  /etc/hosts); provision-3 (agms-launch restaged after gate attempt 1: profile chmod 600); provision-4 (agms-probe
+  restaged after gate attempt 2: keychain-off switch excluded). Each re-copies the read-only package and packet.
+- The widened :443 rule is the guest's own rule ("pass out ... from (en0) to $inference port 443"), not scoped to one
+  user: with the Moonshot addresses added it applied to every guest account except the executor accounts, which the
+  per-uid rules block first. restore.sh put the original anchor back (restore-end.out: "anchor matches original: yes").
+- vm-state-end.txt: the final unlabelled "0" of the verification boot is the count of "104.18.29" in
+  /etc/pf.anchors/corbanu.pf83 (the Moonshot address gone).
+- Harness fix 1 was installed and checked at about 06:11-06:12Z (its stand-in check request is at 06:11:56Z), while
+  group F's executor was already running (06:10:39-06:32:10Z) but before F's first product start (06:12:46Z), so F's
+  product starts used the fixed script; harness/agms-product.v1-as-used-by-A-to-E was used by A-E only. The fix
+  changes only the corbanu route, which F did not use. The check ran on lane agmx0 concurrently with F's executor,
+  an exception to "lanes run one at a time"; its one stand-in request appears in runs/F/mediator-window.jsonl.
+- Packet v2 was installed at 05:01Z while group D was running (04:58-05:27Z). D's executor had read its prompt at the
+  start (its transcript never contains the v2 note); only the E, F, C2 and D2 prompts and navigation.md were replaced.
+- Gate attempts 1 and 2 each still sent one real Z.AI smoke turn (relay POSTs at 03:26:22Z and 03:28:02Z; AGMS-SMOKE-OK
+  in their smoke files): gate.sh does not stop on a failed probe. Attempt 1 ran no probes (agms-launch exited at the
+  read-only profile); attempt 2 had one failing probe.
+- The guest's pre-existing /Users/agent/.pf83-auth/auth.json also stays on the guest with the Z.AI key file (both
+  predate the campaign).
+- The isolation receipts (runs/*/isolation-*.json) were assembled after the run, from each run's probes.json.
+- tools/make_packet.py differs from the copy in design/FROZEN.sha256: a NAV_NOTE hook was added after the freeze to build
+  packet v2 (and v3). Packet v1 was built before that change, with the frozen script; v2 and v3 differ from v1 only as
+  tools/packet-v2-diff.txt and tools/packet-v3-diff.txt show.
+- Z.AI requests: 1,132 (1,131 GLM 5.3 Flash, 1 GLM 5.2 automatic review). The OpenAI spend estimate excludes the
+  unpriced Codex Auto Review requests.

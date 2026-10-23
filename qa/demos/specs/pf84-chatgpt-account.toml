@@ -1,0 +1,70 @@
+# PF-84-S06 slice B: a named OpenAI account holds its own ChatGPT sign-in. It is signed in
+# off screen with `corbanu login --account work --device-auth` against a local mock issuer;
+# /providers then shows only its kind, email hint, plan and fingerprint, and a session on it
+# sends that account's token, not the default login's. Fake tokens only. The default login
+# is a fake OpenAI API key passed as a file credential. Record with
+#   printf sk-fake-default > /tmp/pf84-fake-openai-key
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-chatgpt-account.toml \
+#     --bin <candidate> --sprint PF-84-S06 \
+#     --credential OPENAI_API_KEY=file:/tmp/pf84-fake-openai-key --publish
+id = "pf84-chatgpt-account"
+feature = "PF-84-S06: a named OpenAI account with its own ChatGPT sign-in"
+expected = "/providers lists 'OpenAI · work' as a ChatGPT sign-in (w…@example.com, Plus) without any token; a session on work is answered as 'work', while the default login is a separate API key."
+model = "gpt-5.4"
+provider = "openai"
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "read-only"
+openai_base_url = "http://127.0.0.1:38462/v1"
+chatgpt_base_url = "http://127.0.0.1:38462/backend-api/"
+cli_auth_credentials_store = "file"
+[features]
+named_accounts = true
+"""
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+run = """(nohup python3 {run}/../../../../provider-auth/pf-84/s06/scripts/mock_openai.py --port 38462 --log {logs}/mock-openai.jsonl > /dev/null 2>&1 &)
+sleep 1
+curl -s -X POST -H 'content-type: application/json' -d '{"user":"work","ttl":3600}' http://127.0.0.1:38462/_next_user > /dev/null
+{bin} login --account work --device-auth --experimental_issuer http://127.0.0.1:38462 2>&1 | tail -1"""
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/providers"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "OpenAI · work +Named account · ChatGPT sign-in · w…@example\\.com · Plus · fp [0-9a-f]{12}"
+[[steps]]
+pause = 2.5
+[[steps]]
+key = "Down"
+[[steps]]
+wait = "› +2\\. OpenAI · work"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Start a new session on this account"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "use account `work`"
+[[steps]]
+type = "Reply with exactly: pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "authorized as work"
+compress = 2
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "account work"
+[[steps]]
+pause = 4.0

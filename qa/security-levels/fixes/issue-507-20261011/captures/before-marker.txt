@@ -1,0 +1,3 @@
+notes.txt
+ran-after-kill-switch.txt
+MARKER: written (the command ran)

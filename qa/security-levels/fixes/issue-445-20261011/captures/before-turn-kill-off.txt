@@ -1,0 +1,60 @@
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     glm-5.3-flash   /model to change             │
+│ directory: /Volumes/CorbanuDrive/…/runs/before-445-1/ws │
+╰─────────────────────────────────────────────────────────╯
+
+
+› What is 2+2?
+
+
+• 4
+
+
+› What is 3+3?
+
+
+• 6
+
+
+› Find and fix a bug in @filename
+
+  Z.AI GLM 5.3 Flash via zai default · <runs>/before-445-1/ws · Corbanu Terminal · TPS: 7.6 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

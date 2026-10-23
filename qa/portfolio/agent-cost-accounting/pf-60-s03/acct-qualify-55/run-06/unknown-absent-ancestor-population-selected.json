@@ -1,0 +1,15 @@
+[
+  "Membership in this root is unknown. These attempts are separate from root and descendant totals; they may belong to other runs.",
+  "Recorded attempts with unresolved ancestry: 1",
+  "Estimated token cost for recorded attempts: $0.000298 (rounded)",
+  "UTC admission interval: [1788220800000, 1788307200000) ms since Unix epoch",
+  "Read at: 1790942400000 ms UTC; store checkpoint: 1790942400000 ms UTC; maintenance lag: 0 ms",
+  "Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.",
+  "Billed cost: unavailable \u2014 no settlement evidence",
+  "Logical requests may have attempts on other days; this UTC day is not their complete lifetime.",
+  "Estimate versus billed difference: unknown \u2014 no settlement evidence",
+  "Request f3b0cc8d-5e7b-41af-b0b3-86fa1f1b5768; attempt 85b396b4-d758-4fef-b74c-5e8605bec766",
+  "Back",
+  "Refresh",
+  "Close"
+]

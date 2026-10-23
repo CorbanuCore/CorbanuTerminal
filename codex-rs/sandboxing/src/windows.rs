@@ -7,6 +7,7 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::protocol::WritableRoot;
 use codex_utils_absolute_path::AbsolutePathBuf;
+use codex_windows_sandbox::DenyReadTargets;
 
 use crate::SandboxType;
 use crate::compatibility_sandbox_policy_for_permission_profile;
@@ -25,9 +26,31 @@ pub struct WindowsSandboxFilesystemOverrides {
     pub read_roots_override: Option<Vec<PathBuf>>,
     pub read_roots_include_platform_defaults: bool,
     pub write_roots_override: Option<Vec<PathBuf>>,
-    pub additional_deny_read_paths: Vec<AbsolutePathBuf>,
+    /// Deny-read rules with their expanded paths. The elevated backend's
+    /// persistent sync removes an entry only once its rule is gone (#304).
+    pub additional_deny_read: DenyReadTargets,
     pub additional_deny_write_paths: Vec<AbsolutePathBuf>,
 }
+
+/// How to switch to the backend that can enforce read restrictions (#300).
+macro_rules! switch_to_elevated {
+    () => {
+        "To run it, switch to the elevated Windows sandbox: run /setup-default-sandbox in the TUI, or set `sandbox = \"elevated\"` under `[windows]` in config.toml (for one run: `-c windows.sandbox=elevated`)."
+    };
+}
+
+/// Refusal for a profile with deny-read entries under the unelevated
+/// restricted-token backend, whose token cannot block those reads (#300).
+pub const UNELEVATED_DENY_READ_REFUSAL: &str = concat!(
+    "the command was not run because this Windows sandbox mode (unelevated) can't block reading the files this permission profile protects. ",
+    switch_to_elevated!()
+);
+
+/// Refusal for a profile that limits which paths are readable at all.
+pub const UNELEVATED_READ_ROOTS_REFUSAL: &str = concat!(
+    "the command was not run because this Windows sandbox mode (unelevated) can't limit which files a command may read, which this permission profile requires. ",
+    switch_to_elevated!()
+);
 
 pub fn windows_sandbox_uses_elevated_backend(
     sandbox_level: WindowsSandboxLevel,
@@ -75,6 +98,30 @@ pub fn unsupported_windows_restricted_token_sandbox_reason(
     }
 }
 
+/// #300: refuses a launch on the unelevated restricted-token backend when its
+/// profile restricts reads: any deny-read entry (an exact path or a glob,
+/// whether or not it matches a file yet), or a limited set of readable roots.
+/// That backend's token cannot block reads. Its spawn rejects exactly these
+/// profiles (`has_full_disk_read_access`) with an unclear error, so this
+/// refuses them first, with a message that says how to switch to the elevated
+/// backend. `Ok` for every other sandbox type.
+pub fn refuse_unenforceable_windows_read_restrictions(
+    sandbox: SandboxType,
+    permission_profile: &PermissionProfile,
+) -> std::result::Result<(), String> {
+    if sandbox != SandboxType::WindowsRestrictedToken {
+        return Ok(());
+    }
+    let (file_system_sandbox_policy, _) = permission_profile.to_runtime_permissions();
+    if file_system_sandbox_policy.has_denied_read_restrictions() {
+        return Err(UNELEVATED_DENY_READ_REFUSAL.to_string());
+    }
+    if !file_system_sandbox_policy.has_full_disk_read_access() {
+        return Err(UNELEVATED_READ_ROOTS_REFUSAL.to_string());
+    }
+    Ok(())
+}
+
 pub fn resolve_windows_restricted_token_filesystem_overrides(
     sandbox: SandboxType,
     permission_profile: &PermissionProfile,
@@ -117,10 +164,7 @@ pub fn resolve_windows_restricted_token_filesystem_overrides(
     // participate in read access checks. Read restrictions therefore require the
     // elevated backend, even when the filesystem root remains readable.
     if !windows_policy_has_root_read_access(&file_system_sandbox_policy, sandbox_policy_cwd) {
-        return Err(
-            "windows unelevated restricted-token sandbox cannot enforce split filesystem read restrictions directly; refusing to run unsandboxed"
-                .to_string(),
-        );
+        return Err(UNELEVATED_READ_ROOTS_REFUSAL.to_string());
     }
 
     let additional_deny_read_paths = codex_windows_sandbox::resolve_windows_deny_read_paths(
@@ -128,10 +172,7 @@ pub fn resolve_windows_restricted_token_filesystem_overrides(
         sandbox_policy_cwd,
     )?;
     if !additional_deny_read_paths.is_empty() {
-        return Err(
-            "windows unelevated restricted-token sandbox cannot enforce deny-read restrictions directly; refusing to run unsandboxed"
-                .to_string(),
-        );
+        return Err(UNELEVATED_DENY_READ_REFUSAL.to_string());
     }
 
     let legacy_projection = compatibility_sandbox_policy_for_permission_profile(
@@ -200,7 +241,7 @@ pub fn resolve_windows_restricted_token_filesystem_overrides(
         }
     }
 
-    if additional_deny_read_paths.is_empty() && additional_deny_write_paths.is_empty() {
+    if additional_deny_write_paths.is_empty() {
         return Ok(None);
     }
 
@@ -208,7 +249,7 @@ pub fn resolve_windows_restricted_token_filesystem_overrides(
         read_roots_override: None,
         read_roots_include_platform_defaults: false,
         write_roots_override: None,
-        additional_deny_read_paths,
+        additional_deny_read: DenyReadTargets::default(),
         additional_deny_write_paths: additional_deny_write_paths
             .into_iter()
             .map(|path| AbsolutePathBuf::from_absolute_path(path).map_err(|err| err.to_string()))
@@ -242,7 +283,7 @@ pub fn resolve_windows_elevated_filesystem_overrides(
     // deny-write sentinels.
     file_system_sandbox_policy.remove_skip_missing_path_entries();
 
-    let additional_deny_read_paths = codex_windows_sandbox::resolve_windows_deny_read_paths(
+    let additional_deny_read = codex_windows_sandbox::resolve_windows_deny_read_targets(
         &file_system_sandbox_policy,
         sandbox_policy_cwd,
     )?;
@@ -347,7 +388,9 @@ pub fn resolve_windows_elevated_filesystem_overrides(
 
     if read_roots_override.is_none()
         && write_roots_override.is_none()
-        && additional_deny_read_paths.is_empty()
+        // A deny-read rule matching nothing now is still passed on, so the
+        // persistent sync keeps its earlier entries (#304).
+        && additional_deny_read.is_empty()
         && additional_deny_write_paths.is_empty()
     {
         return Ok(None);
@@ -358,7 +401,7 @@ pub fn resolve_windows_elevated_filesystem_overrides(
             && file_system_sandbox_policy.include_platform_defaults(),
         read_roots_override,
         write_roots_override,
-        additional_deny_read_paths,
+        additional_deny_read,
         additional_deny_write_paths,
     }))
 }

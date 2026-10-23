@@ -1,0 +1,10 @@
+# Build receipts (re-run, 2026-10-09)
+commit: 5d283fde18b9924127d061f7c4f5b58211a3a50a (origin/main, merge of PR #356)
+macOS 26.6.2 arm64, rustc 1.95.0; Linux 7.0.0-38-generic x86_64 (<rtx-host>), rustc 1.95.0
+build (both): cargo build --locked -p codex-cli --bin corbanu --features codex-core/developer-accounting,codex-tui/developer-accounting
+macOS also: cargo build --locked -p codex-code-mode-host --bin codex-code-mode-host (placed next to corbanu-acct; GPT-5.6/6 models run their tools through it)
+corbanu --version: corbanu 0.1.48
+sha256 macOS developer-accounting: 85a9d3129de1e78eb03a5420d81f56be40fbfebdec8aac23eb4bb3aced1c0069
+sha256 macOS codex-code-mode-host:  c80cfde1562777f253cb2b1613e7c5f428ee46491b700667967be1fc4bd4d95d
+sha256 Linux developer-accounting: e243799cc92a27b4b080501f2c70cdd976cbd1ff7ec7bd0cd145c6cacb4d424e
+Linux Claude Code (pane bridge only): 2.1.295, installed with the official installer into a disposable HOME under <rtx-scratch>

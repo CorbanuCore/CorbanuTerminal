@@ -1,0 +1,46 @@
+# #440 (milestone AGG-15): with secretless_agent_launch on, agent commands
+# get only an allowlist of environment variables, not every variable that is
+# not secret-like. The /security review now says so and how to set others.
+# The milestone's feature flags.
+id = "issue440-review-says-allowlist"
+feature = "#440: the Aggressive review says the agent environment is allowlisted"
+expected = "Reviewing Aggressive in /security, the Vault row says that with secretless_agent_launch on every variable outside an allowlist is removed too, and that others can be set in shell_environment_policy.set."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 40
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)Aggressive: the vault store.*outside\\s+an\\s+allowlist"
+[[steps]]
+pause = 5.0

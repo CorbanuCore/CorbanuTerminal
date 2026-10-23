@@ -88,7 +88,7 @@ Frozen changed-file inventory (added/deleted lines):
 3	3	codex-rs/tui/tests/suite/provider_convergence.rs
 25	13	codex-rs/tui/tests/suite/provider_management.rs
 196	0	codex-rs/tui/tests/suite/provider_reauthentication.rs
-5	2	docs/plans/active/unified-provider-auth.md
+5	2	docs/plans/completed/main-2026-10-14-unified-provider-auth.md
 1	1	docs/sprints/current/unified-provider-auth/index.md
 2	2	docs/sprints/current/unified-provider-auth/pf-58-s01-credential-health-and-reauth.md
 1	1	docs/sprints/index.md

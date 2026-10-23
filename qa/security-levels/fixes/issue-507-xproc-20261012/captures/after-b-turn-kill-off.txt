@@ -1,0 +1,73 @@
+
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     loading   /model to change                │
+│ directory: <repo-root>/…/after4/ws │
+╰──────────────────────────────────────────────────────╯
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.3 Flash via zai default · <run>/ws · Corbanu Terminal · TPS: -- tok/s
+
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.3-flash   /model to change          │
+│ directory: <repo-root>/…/after4/ws │
+╰──────────────────────────────────────────────────────╯
+
+
+› Run exactly this shell command once, unchanged, and wait for it to finish: touch cmd-started.txt && sleep 45 && touch ran-after-kill-switch.txt && echo
+  FINISHED
+
+
+• The security kill switch was turned on in another Corbanu Terminal on this home. Work running here was stopped (Claude panes included), and nothing is sent to
+the model until it is turned off in /security (here or there). Messages and tasks from other agents wait until then.
+
+⚠ Stopped: the security kill switch was turned on, so Corbanu ended this reply and the commands it was running, and sends nothing to the model until the switch
+  is turned off. Turning it off restarts nothing: messages and tasks from other agents wait for the next turn someone starts. To turn it off, open /security,
+  press g, choose "Turn the kill switch off" and confirm.
+
+■ Turn stopped by the security kill switch.
+
+
+› What is 2+2?
+
+
+■ Not sent: the security kill switch is on, so Corbanu sends nothing to the model, and this message was not kept. To turn it off, open /security, press g,
+choose "Turn the kill switch off" and confirm.
+
+• The security kill switch was turned off in another Corbanu Terminal on this home. Turns are sent to the model again. Nothing restarts by itself here: stopped
+replies and commands do not restart, and a task that waited for a Claude pane goes with that pane's next turn.
+
+
+› What is 3+3?
+
+
+• 6
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.3 Flash via zai default · <run>/ws · Corbanu Terminal · TPS: 9.2 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

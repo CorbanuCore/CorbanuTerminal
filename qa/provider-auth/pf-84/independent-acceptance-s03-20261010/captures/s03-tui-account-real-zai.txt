@@ -1,0 +1,65 @@
+Home hS (real Z.AI): main/work = real key, fake = synthetic, default = synthetic invalid canary in env ZAI_API_KEY.
+All runs: env -i, CORBANU_TEST_NO_NATIVE_KEYRING=1, --no-alt-screen, private tmux socket; args after the binary shown per run.
+
+=== t1-main: corbanu --account main
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s03acc/work │
+╰────────────────────────────────────────────────────────╯
+› Reply with exactly the word pong and nothing else.
+• pong
+Token usage: total=7,773 input=7,770 (+ 576 cached) output=3
+To continue this session, run corbanu resume 01a128cd-78ba-7a23-bca2-8307ff3b628f
+TUI_EXITED rc=0
+
+=== t2-fake: corbanu --account fake
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s03acc/work │
+╰────────────────────────────────────────────────────────╯
+› Reply with exactly the word pong and nothing else.
+⚠ Z.AI (zai) account `fake` was rejected. Replace its key with `corbanu account add zai fake` (reads stdin), or choose another account. The default Z.AI
+  credential is unchanged.
+■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id:
+e871648b-d4be-4287-b5e8-e8949537079c
+To continue this session, run corbanu resume 01a128cd-ac37-7e72-9e8e-d72eb3d2f1f5
+TUI_EXITED rc=0
+
+=== t2b-config-fake: corbanu -c provider_accounts.zai="fake"
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s03acc/work │
+╰────────────────────────────────────────────────────────╯
+› Reply with exactly the word pong and nothing else.
+⚠ Z.AI (zai) account `fake` was rejected. Replace its key with `corbanu account add zai fake` (reads stdin), or choose another account. The default Z.AI
+  credential is unchanged.
+■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id:
+3beaf044-e34c-400e-999b-105f12a9d5eb
+To continue this session, run corbanu resume 01a128cd-cfcd-7c42-bc31-dd8676c62956
+TUI_EXITED rc=0
+
+=== t3b-flagoff-fake: corbanu --disable named_accounts --account fake
+Error loading configuration: --account zai:fake: named accounts need the `named_accounts` feature (`--enable named_accounts`); `--account default` uses the defa
+ult credentials
+TUI_EXITED rc=1
+
+=== t4b-resume-fake-as-main: corbanu resume --account main <t2 session>
+e871648b-d4be-4287-b5e8-e8949537079c
+› Reply with exactly the word pong and nothing else.
+■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id:
+91f27afd-0556-4f91-b466-1da6ee75954c
+› Reply with exactly the word pong and nothing else.
+• pong
+Token usage: total=7,795 input=7,792 (+ 576 cached) output=3
+To continue this session, run corbanu resume 01a128cd-ac37-7e72-9e8e-d72eb3d2f1f5
+TUI_EXITED rc=0
+
+=== t4c-resume-main-config-fake: corbanu resume -c provider_accounts.zai="fake" <t1 session>
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s03acc/work │
+╰────────────────────────────────────────────────────────╯
+› Reply with exactly the word pong and nothing else.
+• pong
+› Reply with exactly the word pong and nothing else.
+• pong
+Token usage: total=14,857 input=14,851 (+ 1,856 cached) output=6
+To continue this session, run corbanu resume 01a128cd-78ba-7a23-bca2-8307ff3b628f
+TUI_EXITED rc=0
+
+=== t3-ghost: corbanu --account ghost  -> see s03-tui-missing-account-ghost.txt (key-entry onboarding, never reaches the chat)
+=== t4-resume-fake (corbanu resume <t2 session>) and t4d-resume-ghost are superseded by the canary-attributed p4 runs in s03-tui-proxy.txt (the default here is also invalid, so a 401 does not identify the account).

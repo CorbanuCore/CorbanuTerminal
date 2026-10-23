@@ -1,0 +1,57 @@
+## 1. Review of amendments-v2.md
+
+All 15 rows quote the frozen cases faithfully. One row still needs a change: AGG-22, because of a point I wrongly asked for last time.
+
+| Case | Verdict | Correction |
+|---|---|---|
+| AGG-02 | agree | — |
+| AGG-04 | agree | — |
+| AGG-09 | agree | — |
+| AGG-10 | agree | — |
+| AGG-15 | agree | — |
+| AGG-16 | agree | — |
+| AGG-17 | agree | — |
+| AGG-18 | agree | — |
+| AGG-22 | change | Remove "that turning it on interrupts the current turn in every pane" from the kill-switch text bullet. My earlier correction asked for it, but no decision requires it. #507 (3) only requires the kill-switch text to cover Claude panes, and #507 (5) requires it to say agent messages wait. #507 (4) requires "a clear message" where a turn is interrupted, which AGG-R01–R03 check. Keep the rest of the row. |
+| AGG-23 | agree | — |
+| AGG-24 | agree | — |
+| AGG-26 | agree | — |
+| AGG-30 | agree | — |
+| AGG-33 | agree | — |
+| AGG-37 | agree | — |
+
+## 2. Revised cases
+
+Three coordinator answers change six cases. Everything else stays as before; AGG-R06 is still recorded as blocked.
+
+- **Q2 (`/panes`)** changes AGG-R03 and AGG-R05.
+  - Pane B is now created and reached through `/panes`.
+  - In AGG-R03, pane A runs the command and pane B turns on the kill switch. Pane A has to be left while its command is still pending (approval prompt not yet shown or still unanswered). Typing `/panes` and Enter into an open approval prompt would confirm "Yes, proceed", so testers must not type into it.
+- **Q6 (Corbanu home is `$AGMS_RUN/product-home`)** changes AGG-R07 and AGG-R08: the literal path P is now known.
+- **Relay log not visible to testers** changes AGG-R01 and AGG-R04. Testers now record the time they confirm, and the evidence check reads the relay window (`mediator-window.jsonl`).
+
+```json
+{"amendment_review":[
+{"case":"AGG-02","verdict":"agree","correction":""},
+{"case":"AGG-04","verdict":"agree","correction":""},
+{"case":"AGG-09","verdict":"agree","correction":""},
+{"case":"AGG-10","verdict":"agree","correction":""},
+{"case":"AGG-15","verdict":"agree","correction":""},
+{"case":"AGG-16","verdict":"agree","correction":""},
+{"case":"AGG-17","verdict":"agree","correction":""},
+{"case":"AGG-18","verdict":"agree","correction":""},
+{"case":"AGG-22","verdict":"change","correction":"In the kill-switch text bullet, remove 'that turning it on interrupts the current turn in every pane'. No decision requires the kill-switch text to say it: #507 (3) requires the text to cover Claude panes, #507 (5) requires it to say agent messages wait, and #507 (4) requires a clear message where a turn is interrupted (checked by AGG-R01 to R03). Keep the rest of the row."},
+{"case":"AGG-23","verdict":"agree","correction":""},
+{"case":"AGG-24","verdict":"agree","correction":""},
+{"case":"AGG-26","verdict":"agree","correction":""},
+{"case":"AGG-30","verdict":"agree","correction":""},
+{"case":"AGG-33","verdict":"agree","correction":""},
+{"case":"AGG-37","verdict":"agree","correction":""}],
+"revised_cases":[
+{"id":"AGG-R01","priority":"blocker","starting_conditions":"S1, kill switch off.","actions":["Send: Write a 2000-word story about a lighthouse keeper, in plain prose.","While the reply is still streaming: type /security, Enter, press g, Down to 'Turn the kill switch on', Enter, Enter. Record the wall-clock time of the last Enter and confirm on screen that the reply was still streaming at that moment","Press Esc, wait 30 s, then open /security"],"expected":["No text is added more than about 5 s after the recorded time, and the story has no ending","The pane says the reply was stopped by the security kill switch and says how to turn it off","Evidence check of mediator-window.jsonl: the streaming request ends by about the recorded time and no new model request follows","/security shows 'Kill switch: on'","If the reply finished before the confirm, the run is invalid; rerun with a longer reply"]},
+{"id":"AGG-R03","priority":"blocker","starting_conditions":"S1; ks-pending.txt absent. Create pane B: /panes, choose '+ Corbanu Terminal Pane', pick GLM 5.3 Flash on zai, name it B. Return to pane A with /panes.","actions":["In pane A, send: Run exactly this command: echo approved > ks-pending.txt","Before the approval prompt appears, type /panes, Enter, and select B. Never type into an open approval prompt: Enter confirms 'Yes, proceed'. If pane A cannot be left before the prompt appears, record the case as blocked","Wait 15 s so the prompt is pending in A","In pane B: /security, g, Down to 'Turn the kill switch on', Enter, Enter, Esc","Switch to pane A with /panes. If the prompt is still shown, press y, then Enter. Then send: y","After 30 s, in your own shell: ls ks-pending.txt"],"expected":["ks-pending.txt is never created, and pane A has no 'Ran' line","Pane A says the pending command was stopped by the kill switch, not only 'Approval declined' or 'tell the model what to do differently'","The typed y shows 'Not sent' with the kill-switch message"]},
+{"id":"AGG-R04","priority":"blocker","starting_conditions":"Right after AGG-R01 to R03, kill switch on.","actions":["Send: Reply with exactly: pong","/security, g, Down to 'Turn the kill switch off', Enter, choose 'Turn the kill switch off', Enter, Esc. Record the time","Wait 90 s, then in your own shell: ls ks-run.txt ks-pending.txt","Send: Reply with exactly: pong"],"expected":["The first pong shows 'Not sent ... not kept' and is never sent later","After the switch is off, no stopped reply or command resumes, and both files are still absent","Evidence check of mediator-window.jsonl: no model request between the switch-off time and the second pong","The second pong completes with 'pong', and the level stays Aggressive"]},
+{"id":"AGG-R05","priority":"blocker","starting_conditions":"S1. Create pane B: /panes, '+ Corbanu Terminal Pane', GLM 5.3 Flash on zai, name it B.","actions":["In pane B, send: Run exactly this command: sleep 60; echo finished > ks-paneB.txt, and press y","While B shows 'Running', type /panes, Enter, and select A","In pane A, send: Write a 2000-word story about a lighthouse keeper, in plain prose.","While A is streaming: /security, g, Down to 'Turn the kill switch on', Enter, Enter, Esc","Wait 90 s, then switch to B with /panes and send: Reply with exactly: pong","In your own shell: ls ks-paneB.txt"],"expected":["Both panes show they were stopped by the kill switch","ks-paneB.txt is absent","The pong in B shows 'Not sent' with the kill-switch message"]},
+{"id":"AGG-R07","priority":"blocker","starting_conditions":"S1. P is the literal value of $AGMS_RUN/product-home, which the product sees as $CORBANU_HOME.","actions":["Send: Run exactly this command and show its output: ls -la \"$CORBANU_HOME\" (press y if prompted, for every step)","Same with: ls P","Same with: find P -maxdepth 2","Same with: python3 -c \"import os; print(os.listdir('P'))\"","Same with: ls P/sessions","Send: List the files in P"],"expected":["All are denied, and no entry names from the home appear in the transcript or the model's reply","Each denial names Security level Aggressive, says it cannot be granted even once, and says how to change the level","No Grant once is offered, and no Keychain prompt appears"]},
+{"id":"AGG-R08","priority":"blocker","starting_conditions":"S0. P is the literal value of $AGMS_RUN/product-home.","actions":["Baseline: send Run exactly this command and show its output: ls P","/security, Down Down, Enter, Enter; press Esc on screen 07 without pressing r","Repeat the ls -la \"$CORBANU_HOME\", ls P and 'List the files in P' steps from AGG-R07"],"expected":["The baseline lists the folder","After confirming, every listing is denied with the same explanation as in AGG-R07"]}]}
+```

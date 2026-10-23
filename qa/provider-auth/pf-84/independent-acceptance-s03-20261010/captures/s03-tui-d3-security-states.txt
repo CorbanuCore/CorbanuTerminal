@@ -1,0 +1,24 @@
+D3 vs the security-level state in the TUI (home hS, corbanu --account main, spawn with account "work"; review finding 3).
+Background: an earlier lv1 run with a hand-written security_level.toml left rules/corbanu-security-aggressive.rules, and the toml was then deleted by hand.
+
+== sec1: features security_levels + source_envelopes; state = toml missing, aggressive rules present
+   |   but /Volumes/CorbanuDrive/Corbanu/tmp/pf84s03acc/homes/hS/rules/corbanu-security-aggressive.rules exists). Aggressive is enforced; choose a level in /security
+   | Active in this session: Aggressive
+   D3 account question shown: NO (child spawned on work without approval)
+   core turn_context: security_level=permissive approval_policy=untrusted provider_account=main
+== sec3: + protected_mode_preflight; same state
+   | ⚠ Security level Aggressive is enforced, but the protected boundary is unverified (Aggressive was saved without a preflight; choose it again in /security).
+   D3 account question shown: NO (child spawned on work without approval)
+   core turn_context: security_level=permissive approval_policy=untrusted provider_account=main
+   (/security opened in this state without protected_mode_preflight (run sec2) said: "Core's level stays Permissive: raising it needs the activation preflight (the protected_mode_preflight feature).")
+== sec5: + secretless_agent_launch, isolated_credential_broker, secret_output_gate; /security -> Aggressive -> preflight passed -> "Saved: Aggressive"
+   D3 account question shown: YES
+   core turn_context: security_level=aggressive approval_policy=untrusted provider_account=main
+   answered Cancel
+== sec6: same features; security_level.toml replaced by garbage (unreadable)
+   | ⚠ Stored security level is unreadable or was changed outside /security (/Volumes/CorbanuDrive/Corbanu/tmp/pf84s03acc/homes/hS/security_level.toml: key with no
+   D3 account question shown: YES
+   core turn_context: security_level=aggressive approval_policy=untrusted provider_account=main
+== sec7: same features; security_level.toml deleted, aggressive rules present
+   D3 account question shown: YES
+   core turn_context: security_level=aggressive approval_policy=untrusted provider_account=main

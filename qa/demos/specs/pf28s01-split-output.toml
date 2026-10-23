@@ -1,0 +1,48 @@
+# PF-28-S01 secret output gate. Pass the synthetic canary with
+# --credential PF28_CANARY_API_KEY=file:<canary file>.
+id = "pf28s01-split-output"
+feature = "Secret output gate: a secret split across output chunks is still removed whole"
+expected = "The command prints the canary in two halves two seconds apart. No half ever appears; the result is one [REDACTED:env:PF28_CANARY_API_KEY] marker."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[features]
+secret_output_gate = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"split.sh" = '''
+v="$PF28_CANARY_API_KEY"
+half=$(( ${#v} / 2 ))
+printf 'first half sent: %s' "$(printf %s "$v" | cut -c1-$half)"
+sleep 2
+printf '%s <- second half sent\n' "$(printf %s "$v" | cut -c$((half + 1))-)"
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "!sh split.sh"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "first half sent: \\[REDACTED:env:PF28_CANARY_API_KEY\\] <- second half sent"
+timeout = 60
+
+[[steps]]
+pause = 4.0

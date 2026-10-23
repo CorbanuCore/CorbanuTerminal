@@ -1,0 +1,79 @@
+home hZ accounts (default key only in env ZAI_API_KEY):
+  zai	fake	api_key
+  zai	main	api_key
+  zai	spare	api_key
+== X1 --account main (real key; valid ZAI_API_KEY also in env) (exit 0)
+   args: --account main
+   | pong
+   | session id: 01a128bc-eb7a-7991-8b7a-589588cbe68a
+   session=01a128bc-eb7a-7991-8b7a-589588cbe68a
+== X2 --account fake (env holds a valid key: must not be used) (exit 1)
+   args: --account fake
+   | ERROR: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 5a5fb25f-b943-4f20-a989-7e77ff69b6a1
+   | session id: 01a128bd-0868-7eb2-b7b2-1427062d3080
+   session=01a128bd-0868-7eb2-b7b2-1427062d3080
+== X3 --account ghost (not configured) (exit 1)
+   args: --account ghost
+   | Error: thread/start: thread/start failed: account `ghost` of provider `zai` is not configured; add it with `corbanu account add zai ghost` or pick another with `--account` (see `corbanu account list`) (code -32600)
+== X4 --account zai:main (qualified) (exit 0)
+   args: --account zai:main
+   | pong
+   | session id: 01a128bd-0c82-7c90-8e87-63a916a594b2
+   session=01a128bd-0c82-7c90-8e87-63a916a594b2
+== X5 --account zai:fake (qualified) (exit 1)
+   args: --account zai:fake
+   | ERROR: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: a6fe264c-0b62-4e7b-b7bc-6beaf30a0d26
+   | session id: 01a128bd-1f5e-7ca0-9aab-33a581f14e69
+   session=01a128bd-1f5e-7ca0-9aab-33a581f14e69
+== X6 --account default (exit 0)
+   args: --account default
+   | pong
+   | session id: 01a128bd-221d-7673-811c-2425f561b3ca
+   session=01a128bd-221d-7673-811c-2425f561b3ca
+== X7 precedence: config fake, --account main (exit 0)
+   args: -c provider_accounts.zai="fake" --account main
+   | pong
+   | session id: 01a128bd-38b7-7991-bf7d-883d4e01fc45
+   session=01a128bd-38b7-7991-bf7d-883d4e01fc45
+== X8 precedence: config main, --account fake (exit 1)
+   args: -c provider_accounts.zai="main" --account fake
+   | ERROR: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 054f4b84-103d-436f-98f4-fd0259683817
+   | session id: 01a128bd-4c0f-7781-8aae-e130cefc20a0
+   session=01a128bd-4c0f-7781-8aae-e130cefc20a0
+== X9 config fake, --account default (exit 0)
+   args: -c provider_accounts.zai="fake" --account default
+   | pong
+   | session id: 01a128bd-4eb1-7dd3-ba62-6f2e70449f09
+   session=01a128bd-4eb1-7dd3-ba62-6f2e70449f09
+== X10 config only: provider_accounts.zai=fake (no --account) (exit 1)
+   args: -c provider_accounts.zai="fake"
+   | ERROR: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: d53a4ae5-9aab-438a-9891-7b975f156a29
+   | session id: 01a128bd-613f-79f2-819d-585e510a7fe2
+   session=01a128bd-613f-79f2-819d-585e510a7fe2
+== X11 --account Bad_Name (invalid) (exit 1)
+   args: --account Bad_Name
+   | Error: --account zai:Bad_Name: invalid account name: use 1-32 lowercase letters, digits or '-', starting with a letter or digit
+== X12 --account kimi-code:main (another provider; not configured there) (exit 0)
+   args: --account kimi-code:main
+   | pong
+   | session id: 01a128bd-646f-72a0-a7d3-9dc40ead2733
+   session=01a128bd-646f-72a0-a7d3-9dc40ead2733
+== X13 --account nosuchprov:main (exit 1)
+   args: --account nosuchprov:main
+   | Error: --account nosuchprov:main: unknown provider `nosuchprov`
+== X14 flag OFF: --disable named_accounts --account fake (exit 1)
+   args: --disable named_accounts --account fake
+   | Error: --account zai:fake: named accounts need the `named_accounts` feature (`--enable named_accounts`); `--account default` uses the default credentials
+== X15 flag OFF: --disable named_accounts --account default (exit 0)
+   args: --disable named_accounts --account default
+   | pong
+   | session id: 01a128bd-772d-7570-b9af-8b1a2279f399
+   session=01a128bd-772d-7570-b9af-8b1a2279f399
+== X16 flag OFF: --disable named_accounts, no --account (exit 0)
+   args: --disable named_accounts
+   | pong
+   | session id: 01a128bd-8a13-71c1-b21d-3453542f47c8
+   session=01a128bd-8a13-71c1-b21d-3453542f47c8
+== X17 flag OFF: --disable named_accounts --account main (exit 1)
+   args: --disable named_accounts --account main
+   | Error: --account zai:main: named accounts need the `named_accounts` feature (`--enable named_accounts`); `--account default` uses the default credentials

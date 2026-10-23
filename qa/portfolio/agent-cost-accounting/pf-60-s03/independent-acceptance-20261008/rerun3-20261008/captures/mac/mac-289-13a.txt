@@ -1,0 +1,7 @@
+$ /cost
+  Z.AI GLM 5.2 via zai standard · <scratch>/repos/is-plain-obj · Corbanu Terminal · TPS: -- tok/s
+--- last screen:
+■ Sign in with ChatGPT to view OpenAI account usage.
+• Unrecognized command '/cost'. Type "/" for a list of supported commands.
+› /cost
+  Z.AI GLM 5.2 via zai standard · <scratch>/repos/is-plain-obj · Corbanu Terminal · TPS: -- tok/s

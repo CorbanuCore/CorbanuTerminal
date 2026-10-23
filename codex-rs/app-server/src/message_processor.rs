@@ -88,6 +88,7 @@ use tracing::Instrument;
 use crate::models_refresh_worker::ModelsRefreshWorker;
 
 const CONNECTION_RPC_DRAIN_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 30);
+const CURATED_REPO_SYNC_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 3);
 
 fn deserialize_client_request(request: JSONRPCRequest) -> Result<ClientRequest, JSONRPCErrorError> {
     ClientRequest::try_from(request)
@@ -97,6 +98,7 @@ fn deserialize_client_request(request: JSONRPCRequest) -> Result<ClientRequest, 
 pub(crate) struct MessageProcessor {
     outgoing: Arc<OutgoingMessageSender>,
     models_refresh_worker: ModelsRefreshWorker,
+    plugins_manager: Arc<codex_core_plugins::PluginsManager>,
     skills_watcher: Arc<SkillsWatcher>,
     account_processor: AccountRequestProcessor,
     apps_processor: AppsRequestProcessor,
@@ -306,9 +308,8 @@ impl MessageProcessor {
         let models_manager = thread_manager.get_models_manager();
         let models_refresh_worker =
             crate::models_refresh_worker::spawn(&models_manager, config.http_client_factory());
-        thread_manager
-            .plugins_manager()
-            .set_analytics_events_client(analytics_events_client.clone());
+        let plugins_manager = thread_manager.plugins_manager();
+        plugins_manager.set_analytics_events_client(analytics_events_client.clone());
         let skills_watcher = SkillsWatcher::new(
             thread_manager.skills_service(),
             &config.codex_home,
@@ -489,6 +490,7 @@ impl MessageProcessor {
         Self {
             outgoing,
             models_refresh_worker,
+            plugins_manager,
             skills_watcher,
             account_processor,
             apps_processor,
@@ -513,6 +515,12 @@ impl MessageProcessor {
             windows_sandbox_processor,
             request_serialization_queues,
         }
+    }
+
+    /// #477: stops the plugin sync's `git` without waiting; call first on
+    /// every shutdown path, forced ones included.
+    pub(crate) fn cancel_plugin_sync(&self) {
+        self.plugins_manager.cancel_curated_repo_sync();
     }
 
     pub(crate) fn clear_runtime_references(&self) {
@@ -627,14 +635,15 @@ impl MessageProcessor {
     pub(crate) async fn process_notification(&self, notification: JSONRPCNotification) {
         // Currently, we do not expect to receive any notifications from the
         // client, so we just log them.
-        tracing::info!("<- notification: {:?}", notification);
+        // Params are client-supplied and may carry credentials; log the method only.
+        tracing::info!("<- notification: {}", notification.method);
     }
 
     /// Handles typed notifications from in-process clients.
     pub(crate) async fn process_client_notification(&self, notification: ClientNotification) {
         // Currently, we do not expect to receive any typed notifications from
         // in-process clients, so we just log them.
-        tracing::info!("<- typed notification: {:?}", notification);
+        tracing::info!("<- typed notification: {notification}");
     }
 
     async fn run_request_with_context<F>(
@@ -696,6 +705,10 @@ impl MessageProcessor {
 
     pub(crate) async fn drain_background_tasks(&self) {
         self.models_refresh_worker.shutdown();
+        // #477: no plugin `git` keeps writing to the home after exit.
+        self.plugins_manager
+            .shutdown_curated_repo_sync(CURATED_REPO_SYNC_SHUTDOWN_TIMEOUT)
+            .await;
         self.thread_processor.drain_background_tasks().await;
     }
 
@@ -747,7 +760,8 @@ impl MessageProcessor {
 
     /// Handle a standalone JSON-RPC response originating from the peer.
     pub(crate) async fn process_response(&self, response: JSONRPCResponse) {
-        tracing::info!("<- response: {:?}", response);
+        // Results can hold tokens (e.g. account/chatgptAuthTokens/refresh); log the id only.
+        tracing::info!("<- response: {:?}", response.id);
         let JSONRPCResponse { id, result, .. } = response;
         self.outgoing.notify_client_response(id, result).await
     }
@@ -968,7 +982,7 @@ impl MessageProcessor {
                 .clients_revoke(params)
                 .await
                 .map(|response| Some(response.into())),
-            ClientRequest::ConfigRequirementsRead { params: _, .. } => self
+            ClientRequest::ConfigRequirementsRead { .. } => self
                 .config_processor
                 .config_requirements_read()
                 .await
@@ -1027,7 +1041,7 @@ impl MessageProcessor {
                 .unwatch(connection_id, params)
                 .await
                 .map(|response| Some(response.into())),
-            ClientRequest::ModelProviderCapabilitiesRead { params: _, .. } => self
+            ClientRequest::ModelProviderCapabilitiesRead { .. } => self
                 .config_processor
                 .model_provider_capabilities_read()
                 .await
@@ -1314,6 +1328,11 @@ impl MessageProcessor {
             ClientRequest::ThreadInjectItems { params, .. } => {
                 self.turn_processor.thread_inject_items(params).await
             }
+            ClientRequest::ThreadRecordSentModelRequest { params, .. } => {
+                self.turn_processor
+                    .thread_record_sent_model_request(params)
+                    .await
+            }
             ClientRequest::TurnSteer { params, .. } => {
                 self.turn_processor
                     .turn_steer(&request_id, params, app_server_client_name.as_deref())
@@ -1349,7 +1368,7 @@ impl MessageProcessor {
                     .thread_realtime_stop(&request_id, params)
                     .await
             }
-            ClientRequest::ThreadRealtimeListVoices { params: _, .. } => {
+            ClientRequest::ThreadRealtimeListVoices { .. } => {
                 self.turn_processor.thread_realtime_list_voices().await
             }
             ClientRequest::ReviewStart { params, .. } => {

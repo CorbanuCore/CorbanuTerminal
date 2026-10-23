@@ -1,0 +1,47 @@
+{
+  "kind": "clean sparse Git checkout of proposed QA snapshot, then independent corruption controls",
+  "source_base": "0809790fd80f7bbc85a4a4826ac5fb78e1ed0c0c",
+  "snapshot": "8010eba1bad0750099d9a5bae43ab733ab020481",
+  "run_directory": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-vi5y5xf5",
+  "ignored_package_absent": true,
+  "clean_before_and_after": true,
+  "no_network": true,
+  "no_package_launch": true,
+  "cases": [
+    {
+      "case": "clean-checkout",
+      "exit": 2,
+      "expected_exit": 2,
+      "passed": true,
+      "stdout_sha256": "cd5951e7f00cc4307326ec89d1968ea8c4958aa88d08a9606b9015fc4e7f8807"
+    },
+    {
+      "case": "clean-finalizer",
+      "exit": 2,
+      "expected_exit": 2,
+      "passed": true,
+      "stdout_sha256": "b7ef94ac541215aef275cc38a41eff10065c9998f4a5fecb5d3374b3cfef3654"
+    },
+    {
+      "case": "wrong-claim",
+      "exit": 1,
+      "expected_exit": 1,
+      "passed": true,
+      "stdout_sha256": "46c5234eb0ce2a01e074d62f0a21e974c870e06296e0df5f2e383f95ad04dfdf"
+    },
+    {
+      "case": "corrupt-viewport",
+      "exit": 1,
+      "expected_exit": 1,
+      "passed": true,
+      "stdout_sha256": "35c8bdd8e10b0b833ecc267fd19a265e2dfb9b79d03d71fb0bcd9bb3156fd6eb"
+    },
+    {
+      "case": "missing-log",
+      "exit": 2,
+      "expected_exit": 2,
+      "passed": true,
+      "stdout_sha256": "c40a41cd896396733fee77f5882c694aa355035c6c8817b84dd5fe2af0867b57"
+    }
+  ]
+}

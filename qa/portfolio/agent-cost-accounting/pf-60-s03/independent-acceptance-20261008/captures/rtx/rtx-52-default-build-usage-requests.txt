@@ -1,0 +1,12 @@
+› Spawn two subagents in parallel: one reads src/itsdangerous/serializer.py, the other reads src/itsdangerous/_json.py; each reports the file purpose in one
+  sentence. Wait for both and relay. Do not edit files.
+• Both subagents completed. Here are the relayed one-sentence summaries:
+  src/itsdangerous/serializer.py — Defines the Serializer class that wraps a Signer to serialize arbitrary objects (default JSON) into a signed payload, verify
+  signatures on unsigning, and support key rotation and fallback signers.
+  src/itsdangerous/_json.py — Provides a _CompactJSON wrapper around Python's standard json module that deserializes payloads normally but serializes objects
+  with ASCII disabled and whitespace stripped, so JSON output is compact for use in signed tokens.
+• Unrecognized command '/cost'. Type "/" for a list of supported commands.
+■ Usage: /usage requests [YYYY-MM-DD] (UTC, no future dates). Custom: /usage requests START END hour|day|week|month; dates or UTC timestamps ending Z; end
+exclusive.
+› Improve documentation in @filename
+  Z.AI GLM 5.2 via zai standard · ~/corbanu-rtx/pf60-indep-20261008/repos/itsdangerous · Corbanu Terminal · TPS: -- tok/s

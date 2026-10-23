@@ -1,0 +1,2076 @@
+{
+ "schema_version": 2,
+ "design_sha256": "b4cfb62553e6bb167e332f172d1d4a6fe9827f8d8eb47c65da673a360f5a4d29",
+ "implementer": "PF-60 implementers (S06..S09, #859, #917 /review cost and the later decided fixes on main); integrator for this record: acc-tart1 (adapted the S10 harness to Tart, staged the coordinator's signed build)",
+ "candidate": {
+  "version": "0.1.48 (developer build with developer-accounting)",
+  "source": "origin/main 78dd811d6e, signed developer build installed by the coordinator 2026-10-19T18:45:00Z (candidate/INSTALL.json)",
+  "platform": "macOS arm64 (aarch64-apple-darwin)",
+  "binary_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+  "package_manifest": {
+   "path": "candidate/candidate-manifest.md",
+   "sha256": "8264073d3092d4a530a9b1ea100186cf582fddcb8cf6ba23d31e34a039004af5"
+  }
+ },
+ "dispositions": {
+  "path": "dispositions.md",
+  "sha256": "ea40422f6a074547be4035e1ec440bc9b68c8cd70bfb87e0c5ad93d4b3d8c10a"
+ },
+ "cases": [
+  {
+   "id": "FUP-01",
+   "priority": "blocker",
+   "disposition": "passed",
+   "summary": "Z.AI turn: /cost first page, request page and technical page as expected; component arithmetic 0.0011844 (noncached input) + 0.00001728 (cache read) + 0 (cache write) + 0.0000015 (output) = 0.00120318 matches; three Esc presses step back one level each.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a1570f-20b8-7861-941b-85e0e12932df",
+    "run_id": "acc-Z-agmx1-20261020T020455Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx1",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/Z.md",
+     "sha256": "32a070bbe57602bc8d44f76240618ae13e79566e85fce41b9ac79e8621cb4295"
+    },
+    "access_record": {
+     "path": "runs/Z/executor-events.jsonl.gz",
+     "sha256": "d23a8c4629389f525c3927aa830fd480806aae658b5c33e16b57d334824f9ec4"
+    },
+    "actions": {
+     "path": "runs/Z/collected/evidence/actions.jsonl.gz",
+     "sha256": "c5f19e9c6225cb50787ca673f8195c82d21a04d187e760826a1625ff6c5fbaf7"
+    },
+    "isolation_record": {
+     "path": "runs/Z/isolation-FUP-01.json",
+     "sha256": "3f8096286bb6659bec108e667050dbe777b972bf7689afce7c67d5cc5d6ef4f6"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/Z/collected/evidence/result.md",
+     "sha256": "1386da465154653892da79c4c1f76c80bdfcaf09a566bcd7b1f20313973644ed"
+    },
+    {
+     "path": "runs/Z/collected/evidence/screens.jsonl.gz",
+     "sha256": "93439192c116098ec10cd929397f25ac8a16004fa33c438165f1cc45bf95983f"
+    },
+    {
+     "path": "runs/Z/collected/evidence/fixture.jsonl",
+     "sha256": "da204fa31e06e38b619a3612b723432432f7102aa8bc2e6bbce0187a4a70ff99"
+    },
+    {
+     "path": "runs/Z/collected/evidence/pty.raw.gz",
+     "sha256": "00274fa74b652878584f2d391e7c2a28f75c6f5845554c3b201ed13f81224573"
+    },
+    {
+     "path": "runs/Z/mediator-window.jsonl",
+     "sha256": "6857e93a6212ba89e3acfbed709a107b8ba14bd35adcc686c66a73fd8e41929d"
+    },
+    {
+     "path": "runs/Z/ledger-attempts.txt",
+     "sha256": "5d74e05248cd88daa5ffef426bacfcc4f7d30c399720d5c90284b58ff1860035"
+    },
+    {
+     "path": "runs/Z/guard-after.txt",
+     "sha256": "a1ffb9ed6191eb697f8c9e1182b7ff1ce398ef2a9458884cb29833bac34c4348"
+    },
+    {
+     "path": "runs/Z/executor-start.txt",
+     "sha256": "7234f6a68a2e588c464c9df70bb0d2533cc4e4905c4cfd16cd3dd7cd76602725"
+    },
+    {
+     "path": "runs/Z/executor-end.txt",
+     "sha256": "0616c7ed5b435510b1454fcad9f3e3868e0c9b9c86a1b3ddcdb350b38f51d175"
+    }
+   ]
+  },
+  {
+   "id": "FUP-02",
+   "priority": "advisory",
+   "disposition": "blocked",
+   "summary": "Advisory; the 'no requests recorded' branch was not reached. For 2026-01-01 the product says 'Request detail unavailable for this whole UTC day — day touches expired detail or aggregate history. No total shown.' and names 2026-10-20 as the oldest recorded day: no invented spend, but it does not say no requests were recorded, because it treats the day as outside its request-detail history (the same screen says daily totals are kept since 2025-10-21, yet shows no total) (as S10's ACC-22 branch was not reached). Today's page matches FUP-01; 2026-13-40 gives the usage line, no crash. Raw verdict 'passed'.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a1570f-20b8-7861-941b-85e0e12932df",
+    "run_id": "acc-Z-agmx1-20261020T020455Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx1",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/Z.md",
+     "sha256": "32a070bbe57602bc8d44f76240618ae13e79566e85fce41b9ac79e8621cb4295"
+    },
+    "access_record": {
+     "path": "runs/Z/executor-events.jsonl.gz",
+     "sha256": "d23a8c4629389f525c3927aa830fd480806aae658b5c33e16b57d334824f9ec4"
+    },
+    "actions": {
+     "path": "runs/Z/collected/evidence/actions.jsonl.gz",
+     "sha256": "c5f19e9c6225cb50787ca673f8195c82d21a04d187e760826a1625ff6c5fbaf7"
+    },
+    "isolation_record": {
+     "path": "runs/Z/isolation-FUP-02.json",
+     "sha256": "5d3799466f947644441e44f9925b0945cf062d6bb75e62c46e5c619373c4e23d"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/Z/collected/evidence/result.md",
+     "sha256": "1386da465154653892da79c4c1f76c80bdfcaf09a566bcd7b1f20313973644ed"
+    },
+    {
+     "path": "runs/Z/collected/evidence/screens.jsonl.gz",
+     "sha256": "93439192c116098ec10cd929397f25ac8a16004fa33c438165f1cc45bf95983f"
+    },
+    {
+     "path": "runs/Z/collected/evidence/fixture.jsonl",
+     "sha256": "da204fa31e06e38b619a3612b723432432f7102aa8bc2e6bbce0187a4a70ff99"
+    },
+    {
+     "path": "runs/Z/collected/evidence/pty.raw.gz",
+     "sha256": "00274fa74b652878584f2d391e7c2a28f75c6f5845554c3b201ed13f81224573"
+    },
+    {
+     "path": "runs/Z/mediator-window.jsonl",
+     "sha256": "6857e93a6212ba89e3acfbed709a107b8ba14bd35adcc686c66a73fd8e41929d"
+    },
+    {
+     "path": "runs/Z/ledger-attempts.txt",
+     "sha256": "5d74e05248cd88daa5ffef426bacfcc4f7d30c399720d5c90284b58ff1860035"
+    },
+    {
+     "path": "runs/Z/guard-after.txt",
+     "sha256": "a1ffb9ed6191eb697f8c9e1182b7ff1ce398ef2a9458884cb29833bac34c4348"
+    },
+    {
+     "path": "runs/Z/executor-start.txt",
+     "sha256": "7234f6a68a2e588c464c9df70bb0d2533cc4e4905c4cfd16cd3dd7cd76602725"
+    },
+    {
+     "path": "runs/Z/executor-end.txt",
+     "sha256": "0616c7ed5b435510b1454fcad9f3e3868e0c9b9c86a1b3ddcdb350b38f51d175"
+    }
+   ]
+  },
+  {
+   "id": "FUP-03",
+   "priority": "blocker",
+   "disposition": "passed",
+   "summary": "D25 / ACC-06 re-check: '/review' (uncommitted changes) started and finished; conversation Y rose from 1 to 5 requests, the 4 review requests each with 'Turn: code-review:' under Y's Thread; the exact sum of Y's 5 requests (1 turn + 4 review) is 0.00351237, equal to the product's subtotal (the 4 review requests alone 0.00223062). The S10 failure (#898) is fixed.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a1570f-20b8-7861-941b-85e0e12932df",
+    "run_id": "acc-Z-agmx1-20261020T020455Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx1",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/Z.md",
+     "sha256": "32a070bbe57602bc8d44f76240618ae13e79566e85fce41b9ac79e8621cb4295"
+    },
+    "access_record": {
+     "path": "runs/Z/executor-events.jsonl.gz",
+     "sha256": "d23a8c4629389f525c3927aa830fd480806aae658b5c33e16b57d334824f9ec4"
+    },
+    "actions": {
+     "path": "runs/Z/collected/evidence/actions.jsonl.gz",
+     "sha256": "c5f19e9c6225cb50787ca673f8195c82d21a04d187e760826a1625ff6c5fbaf7"
+    },
+    "isolation_record": {
+     "path": "runs/Z/isolation-FUP-03.json",
+     "sha256": "36631664d93d42688a81bc3348209092990c8d853d50ee90cdfc0056bae53cdc"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/Z/collected/evidence/result.md",
+     "sha256": "1386da465154653892da79c4c1f76c80bdfcaf09a566bcd7b1f20313973644ed"
+    },
+    {
+     "path": "runs/Z/collected/evidence/screens.jsonl.gz",
+     "sha256": "93439192c116098ec10cd929397f25ac8a16004fa33c438165f1cc45bf95983f"
+    },
+    {
+     "path": "runs/Z/collected/evidence/fixture.jsonl",
+     "sha256": "da204fa31e06e38b619a3612b723432432f7102aa8bc2e6bbce0187a4a70ff99"
+    },
+    {
+     "path": "runs/Z/collected/evidence/pty.raw.gz",
+     "sha256": "00274fa74b652878584f2d391e7c2a28f75c6f5845554c3b201ed13f81224573"
+    },
+    {
+     "path": "runs/Z/mediator-window.jsonl",
+     "sha256": "6857e93a6212ba89e3acfbed709a107b8ba14bd35adcc686c66a73fd8e41929d"
+    },
+    {
+     "path": "runs/Z/ledger-attempts.txt",
+     "sha256": "5d74e05248cd88daa5ffef426bacfcc4f7d30c399720d5c90284b58ff1860035"
+    },
+    {
+     "path": "runs/Z/guard-after.txt",
+     "sha256": "a1ffb9ed6191eb697f8c9e1182b7ff1ce398ef2a9458884cb29833bac34c4348"
+    },
+    {
+     "path": "runs/Z/executor-start.txt",
+     "sha256": "7234f6a68a2e588c464c9df70bb0d2533cc4e4905c4cfd16cd3dd7cd76602725"
+    },
+    {
+     "path": "runs/Z/executor-end.txt",
+     "sha256": "0616c7ed5b435510b1454fcad9f3e3868e0c9b9c86a1b3ddcdb350b38f51d175"
+    }
+   ]
+  },
+  {
+   "id": "FUP-04",
+   "priority": "blocker",
+   "disposition": "passed",
+   "summary": "X unchanged after the review in Y (1 request, same Request ID and cost, no review prefix); each conversation lists the other's requests only under 'Other conversations'.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a1570f-20b8-7861-941b-85e0e12932df",
+    "run_id": "acc-Z-agmx1-20261020T020455Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx1",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/Z.md",
+     "sha256": "32a070bbe57602bc8d44f76240618ae13e79566e85fce41b9ac79e8621cb4295"
+    },
+    "access_record": {
+     "path": "runs/Z/executor-events.jsonl.gz",
+     "sha256": "d23a8c4629389f525c3927aa830fd480806aae658b5c33e16b57d334824f9ec4"
+    },
+    "actions": {
+     "path": "runs/Z/collected/evidence/actions.jsonl.gz",
+     "sha256": "c5f19e9c6225cb50787ca673f8195c82d21a04d187e760826a1625ff6c5fbaf7"
+    },
+    "isolation_record": {
+     "path": "runs/Z/isolation-FUP-04.json",
+     "sha256": "0bad2ad2ad8cdce5d16ed00f0a5527ab3e8d8e10bd5ebe47c6a21069a2a6125e"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/Z/collected/evidence/result.md",
+     "sha256": "1386da465154653892da79c4c1f76c80bdfcaf09a566bcd7b1f20313973644ed"
+    },
+    {
+     "path": "runs/Z/collected/evidence/screens.jsonl.gz",
+     "sha256": "93439192c116098ec10cd929397f25ac8a16004fa33c438165f1cc45bf95983f"
+    },
+    {
+     "path": "runs/Z/collected/evidence/fixture.jsonl",
+     "sha256": "da204fa31e06e38b619a3612b723432432f7102aa8bc2e6bbce0187a4a70ff99"
+    },
+    {
+     "path": "runs/Z/collected/evidence/pty.raw.gz",
+     "sha256": "00274fa74b652878584f2d391e7c2a28f75c6f5845554c3b201ed13f81224573"
+    },
+    {
+     "path": "runs/Z/mediator-window.jsonl",
+     "sha256": "6857e93a6212ba89e3acfbed709a107b8ba14bd35adcc686c66a73fd8e41929d"
+    },
+    {
+     "path": "runs/Z/ledger-attempts.txt",
+     "sha256": "5d74e05248cd88daa5ffef426bacfcc4f7d30c399720d5c90284b58ff1860035"
+    },
+    {
+     "path": "runs/Z/guard-after.txt",
+     "sha256": "a1ffb9ed6191eb697f8c9e1182b7ff1ce398ef2a9458884cb29833bac34c4348"
+    },
+    {
+     "path": "runs/Z/executor-start.txt",
+     "sha256": "7234f6a68a2e588c464c9df70bb0d2533cc4e4905c4cfd16cd3dd7cd76602725"
+    },
+    {
+     "path": "runs/Z/executor-end.txt",
+     "sha256": "0616c7ed5b435510b1454fcad9f3e3868e0c9b9c86a1b3ddcdb350b38f51d175"
+    }
+   ]
+  },
+  {
+   "id": "FUP-05",
+   "priority": "blocker",
+   "disposition": "passed",
+   "summary": "D25 / ACC-15 re-check: one /side turn raised X by exactly one request; its technical page, captured in group-Z/fup05-r2-attempt-40.txt (in group-Z.tar.gz; also screens.jsonl from 02:30:16Z), shows Thread X and 'Turn: side:01a15723-...'; exact subtotal 0.00242508.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a1570f-20b8-7861-941b-85e0e12932df",
+    "run_id": "acc-Z-agmx1-20261020T020455Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx1",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/Z.md",
+     "sha256": "32a070bbe57602bc8d44f76240618ae13e79566e85fce41b9ac79e8621cb4295"
+    },
+    "access_record": {
+     "path": "runs/Z/executor-events.jsonl.gz",
+     "sha256": "d23a8c4629389f525c3927aa830fd480806aae658b5c33e16b57d334824f9ec4"
+    },
+    "actions": {
+     "path": "runs/Z/collected/evidence/actions.jsonl.gz",
+     "sha256": "c5f19e9c6225cb50787ca673f8195c82d21a04d187e760826a1625ff6c5fbaf7"
+    },
+    "isolation_record": {
+     "path": "runs/Z/isolation-FUP-05.json",
+     "sha256": "56f80dc4be3cc8ab511451a36af625a79a0328741ba90abdf3d2756cd28b7b54"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/Z/collected/evidence/result.md",
+     "sha256": "1386da465154653892da79c4c1f76c80bdfcaf09a566bcd7b1f20313973644ed"
+    },
+    {
+     "path": "runs/Z/collected/evidence/screens.jsonl.gz",
+     "sha256": "93439192c116098ec10cd929397f25ac8a16004fa33c438165f1cc45bf95983f"
+    },
+    {
+     "path": "runs/Z/collected/evidence/fixture.jsonl",
+     "sha256": "da204fa31e06e38b619a3612b723432432f7102aa8bc2e6bbce0187a4a70ff99"
+    },
+    {
+     "path": "runs/Z/collected/evidence/pty.raw.gz",
+     "sha256": "00274fa74b652878584f2d391e7c2a28f75c6f5845554c3b201ed13f81224573"
+    },
+    {
+     "path": "runs/Z/mediator-window.jsonl",
+     "sha256": "6857e93a6212ba89e3acfbed709a107b8ba14bd35adcc686c66a73fd8e41929d"
+    },
+    {
+     "path": "runs/Z/ledger-attempts.txt",
+     "sha256": "5d74e05248cd88daa5ffef426bacfcc4f7d30c399720d5c90284b58ff1860035"
+    },
+    {
+     "path": "runs/Z/guard-after.txt",
+     "sha256": "a1ffb9ed6191eb697f8c9e1182b7ff1ce398ef2a9458884cb29833bac34c4348"
+    },
+    {
+     "path": "runs/Z/executor-start.txt",
+     "sha256": "7234f6a68a2e588c464c9df70bb0d2533cc4e4905c4cfd16cd3dd7cd76602725"
+    },
+    {
+     "path": "runs/Z/executor-end.txt",
+     "sha256": "0616c7ed5b435510b1454fcad9f3e3868e0c9b9c86a1b3ddcdb350b38f51d175"
+    }
+   ]
+  },
+  {
+   "id": "FUP-06",
+   "priority": "advisory",
+   "disposition": "failed",
+   "summary": "Advisory. '/review' inside /side sent no request (X stayed at 2 requests). The product wrote a refusal ('/review' is unavailable in side conversations...) to the terminal (pty.raw), but the screen was cleared and redrawn at once, and only the glyph remained on screen for 6 minutes, so the user sees no clear refusal. The executor reported 'inconclusive' and marked it failed. Filed as #1039.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a1570f-20b8-7861-941b-85e0e12932df",
+    "run_id": "acc-Z-agmx1-20261020T020455Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx1",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/Z.md",
+     "sha256": "32a070bbe57602bc8d44f76240618ae13e79566e85fce41b9ac79e8621cb4295"
+    },
+    "access_record": {
+     "path": "runs/Z/executor-events.jsonl.gz",
+     "sha256": "d23a8c4629389f525c3927aa830fd480806aae658b5c33e16b57d334824f9ec4"
+    },
+    "actions": {
+     "path": "runs/Z/collected/evidence/actions.jsonl.gz",
+     "sha256": "c5f19e9c6225cb50787ca673f8195c82d21a04d187e760826a1625ff6c5fbaf7"
+    },
+    "isolation_record": {
+     "path": "runs/Z/isolation-FUP-06.json",
+     "sha256": "670b84e9017b6585ed9afe9dd9fae84b15b0cfab78c84d3bf7ba0b46ff2e21e9"
+    },
+    "raw_executor_verdict": "failed"
+   },
+   "evidence": [
+    {
+     "path": "runs/Z/collected/evidence/result.md",
+     "sha256": "1386da465154653892da79c4c1f76c80bdfcaf09a566bcd7b1f20313973644ed"
+    },
+    {
+     "path": "runs/Z/collected/evidence/screens.jsonl.gz",
+     "sha256": "93439192c116098ec10cd929397f25ac8a16004fa33c438165f1cc45bf95983f"
+    },
+    {
+     "path": "runs/Z/collected/evidence/fixture.jsonl",
+     "sha256": "da204fa31e06e38b619a3612b723432432f7102aa8bc2e6bbce0187a4a70ff99"
+    },
+    {
+     "path": "runs/Z/collected/evidence/pty.raw.gz",
+     "sha256": "00274fa74b652878584f2d391e7c2a28f75c6f5845554c3b201ed13f81224573"
+    },
+    {
+     "path": "runs/Z/mediator-window.jsonl",
+     "sha256": "6857e93a6212ba89e3acfbed709a107b8ba14bd35adcc686c66a73fd8e41929d"
+    },
+    {
+     "path": "runs/Z/ledger-attempts.txt",
+     "sha256": "5d74e05248cd88daa5ffef426bacfcc4f7d30c399720d5c90284b58ff1860035"
+    },
+    {
+     "path": "runs/Z/guard-after.txt",
+     "sha256": "a1ffb9ed6191eb697f8c9e1182b7ff1ce398ef2a9458884cb29833bac34c4348"
+    },
+    {
+     "path": "runs/Z/executor-start.txt",
+     "sha256": "7234f6a68a2e588c464c9df70bb0d2533cc4e4905c4cfd16cd3dd7cd76602725"
+    },
+    {
+     "path": "runs/Z/executor-end.txt",
+     "sha256": "0616c7ed5b435510b1454fcad9f3e3868e0c9b9c86a1b3ddcdb350b38f51d175"
+    }
+   ]
+  },
+  {
+   "id": "FUP-07",
+   "priority": "blocker",
+   "disposition": "passed",
+   "summary": "After a restart on X both earlier Request IDs are present once with the same exact costs; one new turn adds exactly one request (Request 3). The executor's first turn attempt did not reach the composer and sent nothing (disclosed).",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a1570f-20b8-7861-941b-85e0e12932df",
+    "run_id": "acc-Z-agmx1-20261020T020455Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx1",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/Z.md",
+     "sha256": "32a070bbe57602bc8d44f76240618ae13e79566e85fce41b9ac79e8621cb4295"
+    },
+    "access_record": {
+     "path": "runs/Z/executor-events.jsonl.gz",
+     "sha256": "d23a8c4629389f525c3927aa830fd480806aae658b5c33e16b57d334824f9ec4"
+    },
+    "actions": {
+     "path": "runs/Z/collected/evidence/actions.jsonl.gz",
+     "sha256": "c5f19e9c6225cb50787ca673f8195c82d21a04d187e760826a1625ff6c5fbaf7"
+    },
+    "isolation_record": {
+     "path": "runs/Z/isolation-FUP-07.json",
+     "sha256": "ac0943db38fc9082daa6bff130afb4797c8e59eb052b3f0837b6f1af6990b4dc"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/Z/collected/evidence/result.md",
+     "sha256": "1386da465154653892da79c4c1f76c80bdfcaf09a566bcd7b1f20313973644ed"
+    },
+    {
+     "path": "runs/Z/collected/evidence/screens.jsonl.gz",
+     "sha256": "93439192c116098ec10cd929397f25ac8a16004fa33c438165f1cc45bf95983f"
+    },
+    {
+     "path": "runs/Z/collected/evidence/fixture.jsonl",
+     "sha256": "da204fa31e06e38b619a3612b723432432f7102aa8bc2e6bbce0187a4a70ff99"
+    },
+    {
+     "path": "runs/Z/collected/evidence/pty.raw.gz",
+     "sha256": "00274fa74b652878584f2d391e7c2a28f75c6f5845554c3b201ed13f81224573"
+    },
+    {
+     "path": "runs/Z/mediator-window.jsonl",
+     "sha256": "6857e93a6212ba89e3acfbed709a107b8ba14bd35adcc686c66a73fd8e41929d"
+    },
+    {
+     "path": "runs/Z/ledger-attempts.txt",
+     "sha256": "5d74e05248cd88daa5ffef426bacfcc4f7d30c399720d5c90284b58ff1860035"
+    },
+    {
+     "path": "runs/Z/guard-after.txt",
+     "sha256": "a1ffb9ed6191eb697f8c9e1182b7ff1ce398ef2a9458884cb29833bac34c4348"
+    },
+    {
+     "path": "runs/Z/executor-start.txt",
+     "sha256": "7234f6a68a2e588c464c9df70bb0d2533cc4e4905c4cfd16cd3dd7cd76602725"
+    },
+    {
+     "path": "runs/Z/executor-end.txt",
+     "sha256": "0616c7ed5b435510b1454fcad9f3e3868e0c9b9c86a1b3ddcdb350b38f51d175"
+    }
+   ]
+  },
+  {
+   "id": "FUP-08",
+   "priority": "advisory",
+   "disposition": "passed",
+   "summary": "Z.AI reopen: no warm-up notice and no 'Reopen warm-up' line before or after the turn.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a1570f-20b8-7861-941b-85e0e12932df",
+    "run_id": "acc-Z-agmx1-20261020T020455Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx1",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/Z.md",
+     "sha256": "32a070bbe57602bc8d44f76240618ae13e79566e85fce41b9ac79e8621cb4295"
+    },
+    "access_record": {
+     "path": "runs/Z/executor-events.jsonl.gz",
+     "sha256": "d23a8c4629389f525c3927aa830fd480806aae658b5c33e16b57d334824f9ec4"
+    },
+    "actions": {
+     "path": "runs/Z/collected/evidence/actions.jsonl.gz",
+     "sha256": "c5f19e9c6225cb50787ca673f8195c82d21a04d187e760826a1625ff6c5fbaf7"
+    },
+    "isolation_record": {
+     "path": "runs/Z/isolation-FUP-08.json",
+     "sha256": "b5c384f4ab79413be7cec4ad3589ef3ff37db3ca3475c7fc00f8f916d7051795"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/Z/collected/evidence/result.md",
+     "sha256": "1386da465154653892da79c4c1f76c80bdfcaf09a566bcd7b1f20313973644ed"
+    },
+    {
+     "path": "runs/Z/collected/evidence/screens.jsonl.gz",
+     "sha256": "93439192c116098ec10cd929397f25ac8a16004fa33c438165f1cc45bf95983f"
+    },
+    {
+     "path": "runs/Z/collected/evidence/fixture.jsonl",
+     "sha256": "da204fa31e06e38b619a3612b723432432f7102aa8bc2e6bbce0187a4a70ff99"
+    },
+    {
+     "path": "runs/Z/collected/evidence/pty.raw.gz",
+     "sha256": "00274fa74b652878584f2d391e7c2a28f75c6f5845554c3b201ed13f81224573"
+    },
+    {
+     "path": "runs/Z/mediator-window.jsonl",
+     "sha256": "6857e93a6212ba89e3acfbed709a107b8ba14bd35adcc686c66a73fd8e41929d"
+    },
+    {
+     "path": "runs/Z/ledger-attempts.txt",
+     "sha256": "5d74e05248cd88daa5ffef426bacfcc4f7d30c399720d5c90284b58ff1860035"
+    },
+    {
+     "path": "runs/Z/guard-after.txt",
+     "sha256": "a1ffb9ed6191eb697f8c9e1182b7ff1ce398ef2a9458884cb29833bac34c4348"
+    },
+    {
+     "path": "runs/Z/executor-start.txt",
+     "sha256": "7234f6a68a2e588c464c9df70bb0d2533cc4e4905c4cfd16cd3dd7cd76602725"
+    },
+    {
+     "path": "runs/Z/executor-end.txt",
+     "sha256": "0616c7ed5b435510b1454fcad9f3e3868e0c9b9c86a1b3ddcdb350b38f51d175"
+    }
+   ]
+  },
+  {
+   "id": "FUP-09",
+   "priority": "blocker",
+   "disposition": "passed",
+   "summary": "OpenAI gpt-6-luna: a new conversation shows no warm-up line or notice; after resume --last the notice names skip_reopen_warmup, /cost shows 'Reopen warm-up: 1 request', and the warm-up request (14,650 input tokens, $0.001465) is labelled on its link, request page and technical page (prewarm:reopen:).",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a15747-0158-7b02-861f-f4f6ce1089ee",
+    "run_id": "acc-O-agmx2-20261020T030557Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx2",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/O.md",
+     "sha256": "19476d8dca04daeebe301508888856813c1016c6762866bfcf1bbf5cc33eefa6"
+    },
+    "access_record": {
+     "path": "runs/O/executor-events.jsonl.gz",
+     "sha256": "99b3f94a559bba21e4c0df0c053656ed17dd2f33525ac3985c8a0e2e474716f5"
+    },
+    "actions": {
+     "path": "runs/O/collected/evidence/actions.jsonl",
+     "sha256": "412fc96034b6693a9cff7a2493c53ce13c9fdc224752a1cc9ee3f2ce286ffee3"
+    },
+    "isolation_record": {
+     "path": "runs/O/isolation-FUP-09.json",
+     "sha256": "aaac030fc4f7d89538d037fc995a6adb17cbe8713f14b942229db7724a216d53"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/O/collected/evidence/result.md",
+     "sha256": "78bbd09b8292551399436268762e665cfbb367c506cfee3e741cc444e1e1c2ed"
+    },
+    {
+     "path": "runs/O/collected/evidence/screens.jsonl",
+     "sha256": "11434d5b81435d015dcc05f596dcadf3a9d820da72f604ab6e7720f256359302"
+    },
+    {
+     "path": "runs/O/collected/evidence/fixture.jsonl",
+     "sha256": "d533e17fcc9f40d4405b327e757798031112f4ff4e231c18b1b37b90f9846c7a"
+    },
+    {
+     "path": "runs/O/collected/evidence/pty.raw.gz",
+     "sha256": "f49b3c2c8b5b85446df67b9ff81b07fcb0bfb3c704ddc8c22ea11bfae4cbaf06"
+    },
+    {
+     "path": "runs/O/mediator-window.jsonl",
+     "sha256": "758a221ae4fb0bc5be96fcae06dd88a70bdd25299d08c460d11131f02c00ae99"
+    },
+    {
+     "path": "runs/O/ledger-attempts.txt",
+     "sha256": "b641271a3355f8a581dd6d624097fcacb16f3ec198fa6247e041f2db79f6c17b"
+    },
+    {
+     "path": "runs/O/guard-after.txt",
+     "sha256": "bc1d4e6dce55783c53b645cb79f5cf4d11246101cd3ed539fa432e4461cdaa59"
+    },
+    {
+     "path": "runs/O/executor-start.txt",
+     "sha256": "ff5349b2fa0a2161e3c7fbf6f34245c4dc3041fb29d62f785fe7ba711be22a9b"
+    },
+    {
+     "path": "runs/O/executor-end.txt",
+     "sha256": "d4e0959acca8dad92d79e0098a52f241f3b72aef8bf62e8974c070c32c69090b"
+    }
+   ]
+  },
+  {
+   "id": "FUP-10",
+   "priority": "blocker",
+   "disposition": "passed",
+   "summary": "D25 / ACC-11/14/18 re-check: the final audit (03:47:30-04:04:09Z) opened all 14 T1 requests, each listed once with no duplicate ID, and 5 warm-ups labelled. Request IDs read before later reopens were re-read unchanged in the audit: R1, R2 and R3 (first read 03:10-03:14Z, before four more reopens) and R10 (03:34Z); screens.jsonl. Costs unchanged from the per-case pages. The executor's 'failed' is its own arithmetic slip: it gave Request 1 as 0.001465 instead of 0.0014646. Request 1's exact cost is on no screen; it follows from screens: its technical page (FUP-09) shows Input: 14646 with every other count 0, the same model's noncached rate is 0.1 USD/M (warm-up technical page, FUP-09-33), and the product's 03:10Z subtotal 0.003695025 (FUP-09-06) minus Request 2's exact 0.002230425 is 0.0014646. With that, the sum is 0.01630897, equal to the product's subtotal. Executor deviation: amendment 12's intermediate audits after FUP-12 and FUP-14 were not done; R4-R9 and R11-R13 IDs were first read in the final audit; R1-R10's link costs before 03:50Z match the audit, and R11-R13 were first seen in it. The executor's recovery restart in FUP-14 added warm-up R11; that is a reopen, so 'new entries only after a turn or a reopen' holds.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a15747-0158-7b02-861f-f4f6ce1089ee",
+    "run_id": "acc-O-agmx2-20261020T030557Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx2",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/O.md",
+     "sha256": "19476d8dca04daeebe301508888856813c1016c6762866bfcf1bbf5cc33eefa6"
+    },
+    "access_record": {
+     "path": "runs/O/executor-events.jsonl.gz",
+     "sha256": "99b3f94a559bba21e4c0df0c053656ed17dd2f33525ac3985c8a0e2e474716f5"
+    },
+    "actions": {
+     "path": "runs/O/collected/evidence/actions.jsonl",
+     "sha256": "412fc96034b6693a9cff7a2493c53ce13c9fdc224752a1cc9ee3f2ce286ffee3"
+    },
+    "isolation_record": {
+     "path": "runs/O/isolation-FUP-10.json",
+     "sha256": "bb6c8cc56ae5f1430427f894e0c7d9fddca29b3b935cb12fdac2346510a34531"
+    },
+    "raw_executor_verdict": "failed"
+   },
+   "evidence": [
+    {
+     "path": "runs/O/collected/evidence/result.md",
+     "sha256": "78bbd09b8292551399436268762e665cfbb367c506cfee3e741cc444e1e1c2ed"
+    },
+    {
+     "path": "runs/O/collected/evidence/screens.jsonl",
+     "sha256": "11434d5b81435d015dcc05f596dcadf3a9d820da72f604ab6e7720f256359302"
+    },
+    {
+     "path": "runs/O/collected/evidence/fixture.jsonl",
+     "sha256": "d533e17fcc9f40d4405b327e757798031112f4ff4e231c18b1b37b90f9846c7a"
+    },
+    {
+     "path": "runs/O/collected/evidence/pty.raw.gz",
+     "sha256": "f49b3c2c8b5b85446df67b9ff81b07fcb0bfb3c704ddc8c22ea11bfae4cbaf06"
+    },
+    {
+     "path": "runs/O/mediator-window.jsonl",
+     "sha256": "758a221ae4fb0bc5be96fcae06dd88a70bdd25299d08c460d11131f02c00ae99"
+    },
+    {
+     "path": "runs/O/ledger-attempts.txt",
+     "sha256": "b641271a3355f8a581dd6d624097fcacb16f3ec198fa6247e041f2db79f6c17b"
+    },
+    {
+     "path": "runs/O/guard-after.txt",
+     "sha256": "bc1d4e6dce55783c53b645cb79f5cf4d11246101cd3ed539fa432e4461cdaa59"
+    },
+    {
+     "path": "runs/O/executor-start.txt",
+     "sha256": "ff5349b2fa0a2161e3c7fbf6f34245c4dc3041fb29d62f785fe7ba711be22a9b"
+    },
+    {
+     "path": "runs/O/executor-end.txt",
+     "sha256": "d4e0959acca8dad92d79e0098a52f241f3b72aef8bf62e8974c070c32c69090b"
+    }
+   ]
+  },
+  {
+   "id": "FUP-11",
+   "priority": "blocker",
+   "disposition": "passed",
+   "summary": "resume <T1>: notice shown, warm-up count 1 -> 2, one turn added; earlier IDs and costs stable (FUP-10 audit). A first /cost read showed '1 attempt had incomplete usage' and was complete on reopening (ledger lag, amendment 1).",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a15747-0158-7b02-861f-f4f6ce1089ee",
+    "run_id": "acc-O-agmx2-20261020T030557Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx2",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/O.md",
+     "sha256": "19476d8dca04daeebe301508888856813c1016c6762866bfcf1bbf5cc33eefa6"
+    },
+    "access_record": {
+     "path": "runs/O/executor-events.jsonl.gz",
+     "sha256": "99b3f94a559bba21e4c0df0c053656ed17dd2f33525ac3985c8a0e2e474716f5"
+    },
+    "actions": {
+     "path": "runs/O/collected/evidence/actions.jsonl",
+     "sha256": "412fc96034b6693a9cff7a2493c53ce13c9fdc224752a1cc9ee3f2ce286ffee3"
+    },
+    "isolation_record": {
+     "path": "runs/O/isolation-FUP-11.json",
+     "sha256": "6cdb618558a94217408715eb6cbc001c3b24ee406d5265e95b87563d921e8e37"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/O/collected/evidence/result.md",
+     "sha256": "78bbd09b8292551399436268762e665cfbb367c506cfee3e741cc444e1e1c2ed"
+    },
+    {
+     "path": "runs/O/collected/evidence/screens.jsonl",
+     "sha256": "11434d5b81435d015dcc05f596dcadf3a9d820da72f604ab6e7720f256359302"
+    },
+    {
+     "path": "runs/O/collected/evidence/fixture.jsonl",
+     "sha256": "d533e17fcc9f40d4405b327e757798031112f4ff4e231c18b1b37b90f9846c7a"
+    },
+    {
+     "path": "runs/O/collected/evidence/pty.raw.gz",
+     "sha256": "f49b3c2c8b5b85446df67b9ff81b07fcb0bfb3c704ddc8c22ea11bfae4cbaf06"
+    },
+    {
+     "path": "runs/O/mediator-window.jsonl",
+     "sha256": "758a221ae4fb0bc5be96fcae06dd88a70bdd25299d08c460d11131f02c00ae99"
+    },
+    {
+     "path": "runs/O/ledger-attempts.txt",
+     "sha256": "b641271a3355f8a581dd6d624097fcacb16f3ec198fa6247e041f2db79f6c17b"
+    },
+    {
+     "path": "runs/O/guard-after.txt",
+     "sha256": "bc1d4e6dce55783c53b645cb79f5cf4d11246101cd3ed539fa432e4461cdaa59"
+    },
+    {
+     "path": "runs/O/executor-start.txt",
+     "sha256": "ff5349b2fa0a2161e3c7fbf6f34245c4dc3041fb29d62f785fe7ba711be22a9b"
+    },
+    {
+     "path": "runs/O/executor-end.txt",
+     "sha256": "d4e0959acca8dad92d79e0098a52f241f3b72aef8bf62e8974c070c32c69090b"
+    }
+   ]
+  },
+  {
+   "id": "FUP-12",
+   "priority": "blocker",
+   "disposition": "passed",
+   "summary": "/new (T2) then /resume back to T1: T1's notice and warm-up count 2 -> 3; T2 holds only its own 2 requests.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a15747-0158-7b02-861f-f4f6ce1089ee",
+    "run_id": "acc-O-agmx2-20261020T030557Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx2",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/O.md",
+     "sha256": "19476d8dca04daeebe301508888856813c1016c6762866bfcf1bbf5cc33eefa6"
+    },
+    "access_record": {
+     "path": "runs/O/executor-events.jsonl.gz",
+     "sha256": "99b3f94a559bba21e4c0df0c053656ed17dd2f33525ac3985c8a0e2e474716f5"
+    },
+    "actions": {
+     "path": "runs/O/collected/evidence/actions.jsonl",
+     "sha256": "412fc96034b6693a9cff7a2493c53ce13c9fdc224752a1cc9ee3f2ce286ffee3"
+    },
+    "isolation_record": {
+     "path": "runs/O/isolation-FUP-12.json",
+     "sha256": "2b2e1a86aa35b3d463d1d5774c6826611d6cecee8dba25592a27662c599c1470"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/O/collected/evidence/result.md",
+     "sha256": "78bbd09b8292551399436268762e665cfbb367c506cfee3e741cc444e1e1c2ed"
+    },
+    {
+     "path": "runs/O/collected/evidence/screens.jsonl",
+     "sha256": "11434d5b81435d015dcc05f596dcadf3a9d820da72f604ab6e7720f256359302"
+    },
+    {
+     "path": "runs/O/collected/evidence/fixture.jsonl",
+     "sha256": "d533e17fcc9f40d4405b327e757798031112f4ff4e231c18b1b37b90f9846c7a"
+    },
+    {
+     "path": "runs/O/collected/evidence/pty.raw.gz",
+     "sha256": "f49b3c2c8b5b85446df67b9ff81b07fcb0bfb3c704ddc8c22ea11bfae4cbaf06"
+    },
+    {
+     "path": "runs/O/mediator-window.jsonl",
+     "sha256": "758a221ae4fb0bc5be96fcae06dd88a70bdd25299d08c460d11131f02c00ae99"
+    },
+    {
+     "path": "runs/O/ledger-attempts.txt",
+     "sha256": "b641271a3355f8a581dd6d624097fcacb16f3ec198fa6247e041f2db79f6c17b"
+    },
+    {
+     "path": "runs/O/guard-after.txt",
+     "sha256": "bc1d4e6dce55783c53b645cb79f5cf4d11246101cd3ed539fa432e4461cdaa59"
+    },
+    {
+     "path": "runs/O/executor-start.txt",
+     "sha256": "ff5349b2fa0a2161e3c7fbf6f34245c4dc3041fb29d62f785fe7ba711be22a9b"
+    },
+    {
+     "path": "runs/O/executor-end.txt",
+     "sha256": "d4e0959acca8dad92d79e0098a52f241f3b72aef8bf62e8974c070c32c69090b"
+    }
+   ]
+  },
+  {
+   "id": "FUP-13",
+   "priority": "blocker",
+   "disposition": "passed",
+   "summary": "/side in T1 adds one labelled warm-up (Reopen warm-up, side:prewarm:reopen: in the ledger) and the side turn with 'Turn: side:01a1575f-...'; both under T1.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a15747-0158-7b02-861f-f4f6ce1089ee",
+    "run_id": "acc-O-agmx2-20261020T030557Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx2",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/O.md",
+     "sha256": "19476d8dca04daeebe301508888856813c1016c6762866bfcf1bbf5cc33eefa6"
+    },
+    "access_record": {
+     "path": "runs/O/executor-events.jsonl.gz",
+     "sha256": "99b3f94a559bba21e4c0df0c053656ed17dd2f33525ac3985c8a0e2e474716f5"
+    },
+    "actions": {
+     "path": "runs/O/collected/evidence/actions.jsonl",
+     "sha256": "412fc96034b6693a9cff7a2493c53ce13c9fdc224752a1cc9ee3f2ce286ffee3"
+    },
+    "isolation_record": {
+     "path": "runs/O/isolation-FUP-13.json",
+     "sha256": "9ec67bc9863244b3ede18b7f942a5bc586b70695b5cfaeebfbb7904b1b5c4155"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/O/collected/evidence/result.md",
+     "sha256": "78bbd09b8292551399436268762e665cfbb367c506cfee3e741cc444e1e1c2ed"
+    },
+    {
+     "path": "runs/O/collected/evidence/screens.jsonl",
+     "sha256": "11434d5b81435d015dcc05f596dcadf3a9d820da72f604ab6e7720f256359302"
+    },
+    {
+     "path": "runs/O/collected/evidence/fixture.jsonl",
+     "sha256": "d533e17fcc9f40d4405b327e757798031112f4ff4e231c18b1b37b90f9846c7a"
+    },
+    {
+     "path": "runs/O/collected/evidence/pty.raw.gz",
+     "sha256": "f49b3c2c8b5b85446df67b9ff81b07fcb0bfb3c704ddc8c22ea11bfae4cbaf06"
+    },
+    {
+     "path": "runs/O/mediator-window.jsonl",
+     "sha256": "758a221ae4fb0bc5be96fcae06dd88a70bdd25299d08c460d11131f02c00ae99"
+    },
+    {
+     "path": "runs/O/ledger-attempts.txt",
+     "sha256": "b641271a3355f8a581dd6d624097fcacb16f3ec198fa6247e041f2db79f6c17b"
+    },
+    {
+     "path": "runs/O/guard-after.txt",
+     "sha256": "bc1d4e6dce55783c53b645cb79f5cf4d11246101cd3ed539fa432e4461cdaa59"
+    },
+    {
+     "path": "runs/O/executor-start.txt",
+     "sha256": "ff5349b2fa0a2161e3c7fbf6f34245c4dc3041fb29d62f785fe7ba711be22a9b"
+    },
+    {
+     "path": "runs/O/executor-end.txt",
+     "sha256": "d4e0959acca8dad92d79e0098a52f241f3b72aef8bf62e8974c070c32c69090b"
+    }
+   ]
+  },
+  {
+   "id": "FUP-14",
+   "priority": "blocker",
+   "disposition": "failed",
+   "summary": "Editing the earliest message continued 'from this point in a new conversation' and the reply arrived; rolled-back T1 requests stayed listed once with the same IDs and costs. But the new conversation's warm-up is an ordinary new-conversation warm-up (ledger 'prewarm:', not 'prewarm:reopen:'): no 'Reopen warm-up' line and no skip_reopen_warmup notice. Filed as #1038; the cause given there (the cut leaves no history, so the product starts a new conversation) is the integrator's reading of the code after the run, not evidence. (Editing a later message passed in S10 ACC-16.) The executor first opened an edit from the end by mistake and recovered with a restart; disclosed.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a15747-0158-7b02-861f-f4f6ce1089ee",
+    "run_id": "acc-O-agmx2-20261020T030557Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx2",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/O.md",
+     "sha256": "19476d8dca04daeebe301508888856813c1016c6762866bfcf1bbf5cc33eefa6"
+    },
+    "access_record": {
+     "path": "runs/O/executor-events.jsonl.gz",
+     "sha256": "99b3f94a559bba21e4c0df0c053656ed17dd2f33525ac3985c8a0e2e474716f5"
+    },
+    "actions": {
+     "path": "runs/O/collected/evidence/actions.jsonl",
+     "sha256": "412fc96034b6693a9cff7a2493c53ce13c9fdc224752a1cc9ee3f2ce286ffee3"
+    },
+    "isolation_record": {
+     "path": "runs/O/isolation-FUP-14.json",
+     "sha256": "596eb063fd61da4f3f47689e4911324e963711148bf111d32746981b4ac3ca69"
+    },
+    "raw_executor_verdict": "failed"
+   },
+   "evidence": [
+    {
+     "path": "runs/O/collected/evidence/result.md",
+     "sha256": "78bbd09b8292551399436268762e665cfbb367c506cfee3e741cc444e1e1c2ed"
+    },
+    {
+     "path": "runs/O/collected/evidence/screens.jsonl",
+     "sha256": "11434d5b81435d015dcc05f596dcadf3a9d820da72f604ab6e7720f256359302"
+    },
+    {
+     "path": "runs/O/collected/evidence/fixture.jsonl",
+     "sha256": "d533e17fcc9f40d4405b327e757798031112f4ff4e231c18b1b37b90f9846c7a"
+    },
+    {
+     "path": "runs/O/collected/evidence/pty.raw.gz",
+     "sha256": "f49b3c2c8b5b85446df67b9ff81b07fcb0bfb3c704ddc8c22ea11bfae4cbaf06"
+    },
+    {
+     "path": "runs/O/mediator-window.jsonl",
+     "sha256": "758a221ae4fb0bc5be96fcae06dd88a70bdd25299d08c460d11131f02c00ae99"
+    },
+    {
+     "path": "runs/O/ledger-attempts.txt",
+     "sha256": "b641271a3355f8a581dd6d624097fcacb16f3ec198fa6247e041f2db79f6c17b"
+    },
+    {
+     "path": "runs/O/guard-after.txt",
+     "sha256": "bc1d4e6dce55783c53b645cb79f5cf4d11246101cd3ed539fa432e4461cdaa59"
+    },
+    {
+     "path": "runs/O/executor-start.txt",
+     "sha256": "ff5349b2fa0a2161e3c7fbf6f34245c4dc3041fb29d62f785fe7ba711be22a9b"
+    },
+    {
+     "path": "runs/O/executor-end.txt",
+     "sha256": "d4e0959acca8dad92d79e0098a52f241f3b72aef8bf62e8974c070c32c69090b"
+    }
+   ]
+  },
+  {
+   "id": "FUP-15",
+   "priority": "advisory",
+   "disposition": "blocked",
+   "summary": "Advisory; not exercised. The executor picked the row it took for T1, but it opened the abandoned fork from FUP-14's mistaken first edit: the screen says 'Thread forked from <T1>', and /cost shows 1 request, a Reopen warm-up (the fork's ID 01a15763-...2395dd and its 03:38:05Z warm-up are the integrator's ledger read) while T1's requests are counted under 'Other conversations ... 15 requests in 3 conversations'. So resuming the open conversation (the 'Already viewing' path) was never tried. Consistent with skip_reopen_warmup=true, which the run started with: no new warm-up at 03:43 (ledger) and no notice.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a15747-0158-7b02-861f-f4f6ce1089ee",
+    "run_id": "acc-O-agmx2-20261020T030557Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx2",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/O.md",
+     "sha256": "19476d8dca04daeebe301508888856813c1016c6762866bfcf1bbf5cc33eefa6"
+    },
+    "access_record": {
+     "path": "runs/O/executor-events.jsonl.gz",
+     "sha256": "99b3f94a559bba21e4c0df0c053656ed17dd2f33525ac3985c8a0e2e474716f5"
+    },
+    "actions": {
+     "path": "runs/O/collected/evidence/actions.jsonl",
+     "sha256": "412fc96034b6693a9cff7a2493c53ce13c9fdc224752a1cc9ee3f2ce286ffee3"
+    },
+    "isolation_record": {
+     "path": "runs/O/isolation-FUP-15.json",
+     "sha256": "4effcd33ae55e97305c766a0b7ab9247ca23e9436a9052685c12d1857301109f"
+    },
+    "raw_executor_verdict": "failed"
+   },
+   "evidence": [
+    {
+     "path": "runs/O/collected/evidence/result.md",
+     "sha256": "78bbd09b8292551399436268762e665cfbb367c506cfee3e741cc444e1e1c2ed"
+    },
+    {
+     "path": "runs/O/collected/evidence/screens.jsonl",
+     "sha256": "11434d5b81435d015dcc05f596dcadf3a9d820da72f604ab6e7720f256359302"
+    },
+    {
+     "path": "runs/O/collected/evidence/fixture.jsonl",
+     "sha256": "d533e17fcc9f40d4405b327e757798031112f4ff4e231c18b1b37b90f9846c7a"
+    },
+    {
+     "path": "runs/O/collected/evidence/pty.raw.gz",
+     "sha256": "f49b3c2c8b5b85446df67b9ff81b07fcb0bfb3c704ddc8c22ea11bfae4cbaf06"
+    },
+    {
+     "path": "runs/O/mediator-window.jsonl",
+     "sha256": "758a221ae4fb0bc5be96fcae06dd88a70bdd25299d08c460d11131f02c00ae99"
+    },
+    {
+     "path": "runs/O/ledger-attempts.txt",
+     "sha256": "b641271a3355f8a581dd6d624097fcacb16f3ec198fa6247e041f2db79f6c17b"
+    },
+    {
+     "path": "runs/O/guard-after.txt",
+     "sha256": "bc1d4e6dce55783c53b645cb79f5cf4d11246101cd3ed539fa432e4461cdaa59"
+    },
+    {
+     "path": "runs/O/executor-start.txt",
+     "sha256": "ff5349b2fa0a2161e3c7fbf6f34245c4dc3041fb29d62f785fe7ba711be22a9b"
+    },
+    {
+     "path": "runs/O/executor-end.txt",
+     "sha256": "d4e0959acca8dad92d79e0098a52f241f3b72aef8bf62e8974c070c32c69090b"
+    }
+   ]
+  },
+  {
+   "id": "FUP-16",
+   "priority": "blocker",
+   "disposition": "passed",
+   "summary": "-c skip_reopen_warmup=true resume <T1>: no notice; warm-up count stays 5; only the main and side turns added (11 -> 13); exact sum through R13 0.01611938 (the executor's 0.01611978 carries the same Request 1 slip as FUP-10).",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a15747-0158-7b02-861f-f4f6ce1089ee",
+    "run_id": "acc-O-agmx2-20261020T030557Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx2",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/O.md",
+     "sha256": "19476d8dca04daeebe301508888856813c1016c6762866bfcf1bbf5cc33eefa6"
+    },
+    "access_record": {
+     "path": "runs/O/executor-events.jsonl.gz",
+     "sha256": "99b3f94a559bba21e4c0df0c053656ed17dd2f33525ac3985c8a0e2e474716f5"
+    },
+    "actions": {
+     "path": "runs/O/collected/evidence/actions.jsonl",
+     "sha256": "412fc96034b6693a9cff7a2493c53ce13c9fdc224752a1cc9ee3f2ce286ffee3"
+    },
+    "isolation_record": {
+     "path": "runs/O/isolation-FUP-16.json",
+     "sha256": "dc01bac2872578eab1a1c0b9d593544f6817cf67d66d81ddc7a90dd09118bde2"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/O/collected/evidence/result.md",
+     "sha256": "78bbd09b8292551399436268762e665cfbb367c506cfee3e741cc444e1e1c2ed"
+    },
+    {
+     "path": "runs/O/collected/evidence/screens.jsonl",
+     "sha256": "11434d5b81435d015dcc05f596dcadf3a9d820da72f604ab6e7720f256359302"
+    },
+    {
+     "path": "runs/O/collected/evidence/fixture.jsonl",
+     "sha256": "d533e17fcc9f40d4405b327e757798031112f4ff4e231c18b1b37b90f9846c7a"
+    },
+    {
+     "path": "runs/O/collected/evidence/pty.raw.gz",
+     "sha256": "f49b3c2c8b5b85446df67b9ff81b07fcb0bfb3c704ddc8c22ea11bfae4cbaf06"
+    },
+    {
+     "path": "runs/O/mediator-window.jsonl",
+     "sha256": "758a221ae4fb0bc5be96fcae06dd88a70bdd25299d08c460d11131f02c00ae99"
+    },
+    {
+     "path": "runs/O/ledger-attempts.txt",
+     "sha256": "b641271a3355f8a581dd6d624097fcacb16f3ec198fa6247e041f2db79f6c17b"
+    },
+    {
+     "path": "runs/O/guard-after.txt",
+     "sha256": "bc1d4e6dce55783c53b645cb79f5cf4d11246101cd3ed539fa432e4461cdaa59"
+    },
+    {
+     "path": "runs/O/executor-start.txt",
+     "sha256": "ff5349b2fa0a2161e3c7fbf6f34245c4dc3041fb29d62f785fe7ba711be22a9b"
+    },
+    {
+     "path": "runs/O/executor-end.txt",
+     "sha256": "d4e0959acca8dad92d79e0098a52f241f3b72aef8bf62e8974c070c32c69090b"
+    }
+   ]
+  },
+  {
+   "id": "FUP-17",
+   "priority": "blocker",
+   "disposition": "blocked",
+   "summary": "Real kimi-k3 turn on provider kimi: the request page shows 'Provider: kimi', 'Model: kimi-k3', 'Billing: Pay per use', $0.036201, and nothing is marked unknown or a lower bound. The executor did not reach the request's technical page: on K3 Request 1 it pressed Down 30, 30, 1 and 10 times (the selection wraps, so it passed the link without a capture), and on K3 Request 2 and both K2.7 request pages it pressed none (actions.jsonl). So the per-request rates (3 / 0.3 / 3 / 15) and components are on no screen. That the link exists ('—— Open —— → Technical details (attempt 1)') is the integrator's read of pty.raw, not a captured screen. The conversation totals on screen reconcile at the published rates: (275x3 + 11,776x0.30 + 11,776x3 + 52x15)/1e6 = 0.0404658, the product's 'Known subtotal exact USD'. Supplementary (integrator, not the basis of the disposition): the relay's log of Moonshot's own reported usage gives per-request counts that reproduce each request page's cost exactly at the published rates (common/mediator-final.jsonl.gz).",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a157a9-082a-7de2-92e2-eaf2aeda73df",
+    "run_id": "acc-M-agmx1-20261020T045301Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx1",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/M.md",
+     "sha256": "3a4d502b698103094c925763b6b7002561c55436b90842218320e08e0e953dba"
+    },
+    "access_record": {
+     "path": "runs/M/executor-events.jsonl",
+     "sha256": "b505e7732813e6363e71c443b12ba8b718f3fa44f35ee10e8ce6d641457d122d"
+    },
+    "actions": {
+     "path": "runs/M/collected/evidence/actions.jsonl",
+     "sha256": "8394e37cf4f370ee2ebf2759f961e59297a9564a874fd7a8fe4e1268e7405ded"
+    },
+    "isolation_record": {
+     "path": "runs/M/isolation-FUP-17.json",
+     "sha256": "8e20eee045c418aed415e4c8d9292876cb502337c04c3d43381a2de480a423ad"
+    },
+    "raw_executor_verdict": "blocked"
+   },
+   "evidence": [
+    {
+     "path": "runs/M/collected/evidence/result.md",
+     "sha256": "d02e48b044a898b9e1c1a3aff5b3beae1024c122e7d4e771b1b012083a28f785"
+    },
+    {
+     "path": "runs/M/collected/evidence/screens.jsonl",
+     "sha256": "495784d09c91011caba52f7b56922d98788f6bcb05fade2279c93b1f02eaf85c"
+    },
+    {
+     "path": "runs/M/collected/evidence/pty.raw.gz",
+     "sha256": "296a3e9eef417c96fff98c750317abbacf46588a1b9b2012ac2925ab705d326c"
+    },
+    {
+     "path": "runs/M/mediator-window.jsonl",
+     "sha256": "068cec2761bfaca3dcbc1d8d0d16840d5e1f3de6ddbc857c4e74ed5551239c4c"
+    },
+    {
+     "path": "runs/M/ledger-attempts.txt",
+     "sha256": "d095a0432687a35753f83010bcba67fc3c46ce96a8e20970add86fab0ce0984c"
+    },
+    {
+     "path": "runs/M/guard-after.txt",
+     "sha256": "2a00d424436959a438a2b7c0beb769b6e93577078d6480ff6b2878191e5d5502"
+    },
+    {
+     "path": "runs/M/executor-start.txt",
+     "sha256": "c6ddf646d5e90cc9cc92dcb3237fe3d833d5c252a1599700d70dd939cbaafbfa"
+    },
+    {
+     "path": "runs/M/executor-end.txt",
+     "sha256": "1835737097a5207f61863c92281c2575a656ec3c35653c96f7e93d056914688c"
+    }
+   ]
+  },
+  {
+   "id": "FUP-18",
+   "priority": "blocker",
+   "disposition": "blocked",
+   "summary": "D3: a real Moonshot cache read happened. The conversation's /cost shows 'Cache read: 11,776', and its exact subtotal reconciles exactly at the published rates, cache read at $0.30/M (see FUP-17). Request 2's page shows $0.004265 and both Request IDs and costs were unchanged when re-read (FUP-20). Blocked, not passed: Request 2's technical page was not opened, so the per-request cache-read count and its cost are on no screen. Supplementary (integrator, not the basis): Moonshot's reported usage in the relay log gives request 2 cached_tokens 11,776, (159x3 + 11,776x0.30 + 17x15)/1e6 = 0.0042648.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a157a9-082a-7de2-92e2-eaf2aeda73df",
+    "run_id": "acc-M-agmx1-20261020T045301Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx1",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/M.md",
+     "sha256": "3a4d502b698103094c925763b6b7002561c55436b90842218320e08e0e953dba"
+    },
+    "access_record": {
+     "path": "runs/M/executor-events.jsonl",
+     "sha256": "b505e7732813e6363e71c443b12ba8b718f3fa44f35ee10e8ce6d641457d122d"
+    },
+    "actions": {
+     "path": "runs/M/collected/evidence/actions.jsonl",
+     "sha256": "8394e37cf4f370ee2ebf2759f961e59297a9564a874fd7a8fe4e1268e7405ded"
+    },
+    "isolation_record": {
+     "path": "runs/M/isolation-FUP-18.json",
+     "sha256": "bfb3c252f150e15063fd0ae27c1412eaa89d0054098fb171e467695d7b59e33d"
+    },
+    "raw_executor_verdict": "blocked"
+   },
+   "evidence": [
+    {
+     "path": "runs/M/collected/evidence/result.md",
+     "sha256": "d02e48b044a898b9e1c1a3aff5b3beae1024c122e7d4e771b1b012083a28f785"
+    },
+    {
+     "path": "runs/M/collected/evidence/screens.jsonl",
+     "sha256": "495784d09c91011caba52f7b56922d98788f6bcb05fade2279c93b1f02eaf85c"
+    },
+    {
+     "path": "runs/M/collected/evidence/pty.raw.gz",
+     "sha256": "296a3e9eef417c96fff98c750317abbacf46588a1b9b2012ac2925ab705d326c"
+    },
+    {
+     "path": "runs/M/mediator-window.jsonl",
+     "sha256": "068cec2761bfaca3dcbc1d8d0d16840d5e1f3de6ddbc857c4e74ed5551239c4c"
+    },
+    {
+     "path": "runs/M/ledger-attempts.txt",
+     "sha256": "d095a0432687a35753f83010bcba67fc3c46ce96a8e20970add86fab0ce0984c"
+    },
+    {
+     "path": "runs/M/guard-after.txt",
+     "sha256": "2a00d424436959a438a2b7c0beb769b6e93577078d6480ff6b2878191e5d5502"
+    },
+    {
+     "path": "runs/M/executor-start.txt",
+     "sha256": "c6ddf646d5e90cc9cc92dcb3237fe3d833d5c252a1599700d70dd939cbaafbfa"
+    },
+    {
+     "path": "runs/M/executor-end.txt",
+     "sha256": "1835737097a5207f61863c92281c2575a656ec3c35653c96f7e93d056914688c"
+    }
+   ]
+  },
+  {
+   "id": "FUP-19",
+   "priority": "blocker",
+   "disposition": "blocked",
+   "summary": "Real kimi-k2.7-code conversation, two turns: the conversation shows 'Cache read: 11,264' > 0 and 'Known subtotal exact USD: 0.01332051' = (11,693x0.95 + 11,264x0.19 + 0x0.95 + 18x4)/1e6 exactly at the published rates. Blocked: neither technical page was opened (no Down presses on either request page; FUP-17), so the rates and Turn 2's own cache read are on no screen. Supplementary (integrator, not the basis): Moonshot's reported usage gives turn 2 cached_tokens 11,264, and both requests' counts reproduce their page costs exactly.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a157a9-082a-7de2-92e2-eaf2aeda73df",
+    "run_id": "acc-M-agmx1-20261020T045301Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx1",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/M.md",
+     "sha256": "3a4d502b698103094c925763b6b7002561c55436b90842218320e08e0e953dba"
+    },
+    "access_record": {
+     "path": "runs/M/executor-events.jsonl",
+     "sha256": "b505e7732813e6363e71c443b12ba8b718f3fa44f35ee10e8ce6d641457d122d"
+    },
+    "actions": {
+     "path": "runs/M/collected/evidence/actions.jsonl",
+     "sha256": "8394e37cf4f370ee2ebf2759f961e59297a9564a874fd7a8fe4e1268e7405ded"
+    },
+    "isolation_record": {
+     "path": "runs/M/isolation-FUP-19.json",
+     "sha256": "2b91f57a768b863bc8a6c3e3a5c1bcc092d40c1ee77c3fa82738f4679a8cc0fe"
+    },
+    "raw_executor_verdict": "blocked"
+   },
+   "evidence": [
+    {
+     "path": "runs/M/collected/evidence/result.md",
+     "sha256": "d02e48b044a898b9e1c1a3aff5b3beae1024c122e7d4e771b1b012083a28f785"
+    },
+    {
+     "path": "runs/M/collected/evidence/screens.jsonl",
+     "sha256": "495784d09c91011caba52f7b56922d98788f6bcb05fade2279c93b1f02eaf85c"
+    },
+    {
+     "path": "runs/M/collected/evidence/pty.raw.gz",
+     "sha256": "296a3e9eef417c96fff98c750317abbacf46588a1b9b2012ac2925ab705d326c"
+    },
+    {
+     "path": "runs/M/mediator-window.jsonl",
+     "sha256": "068cec2761bfaca3dcbc1d8d0d16840d5e1f3de6ddbc857c4e74ed5551239c4c"
+    },
+    {
+     "path": "runs/M/ledger-attempts.txt",
+     "sha256": "d095a0432687a35753f83010bcba67fc3c46ce96a8e20970add86fab0ce0984c"
+    },
+    {
+     "path": "runs/M/guard-after.txt",
+     "sha256": "2a00d424436959a438a2b7c0beb769b6e93577078d6480ff6b2878191e5d5502"
+    },
+    {
+     "path": "runs/M/executor-start.txt",
+     "sha256": "c6ddf646d5e90cc9cc92dcb3237fe3d833d5c252a1599700d70dd939cbaafbfa"
+    },
+    {
+     "path": "runs/M/executor-end.txt",
+     "sha256": "1835737097a5207f61863c92281c2575a656ec3c35653c96f7e93d056914688c"
+    }
+   ]
+  },
+  {
+   "id": "FUP-20",
+   "priority": "blocker",
+   "disposition": "passed",
+   "summary": "Each Kimi conversation lists only its own 2 requests; each shows the other's total ($0.040466 / $0.013321) under 'Other conversations'; no cost field or total is incomplete, unavailable or a lower bound; all four Request IDs and costs re-read unchanged after restarts.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a157a9-082a-7de2-92e2-eaf2aeda73df",
+    "run_id": "acc-M-agmx1-20261020T045301Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx1",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/M.md",
+     "sha256": "3a4d502b698103094c925763b6b7002561c55436b90842218320e08e0e953dba"
+    },
+    "access_record": {
+     "path": "runs/M/executor-events.jsonl",
+     "sha256": "b505e7732813e6363e71c443b12ba8b718f3fa44f35ee10e8ce6d641457d122d"
+    },
+    "actions": {
+     "path": "runs/M/collected/evidence/actions.jsonl",
+     "sha256": "8394e37cf4f370ee2ebf2759f961e59297a9564a874fd7a8fe4e1268e7405ded"
+    },
+    "isolation_record": {
+     "path": "runs/M/isolation-FUP-20.json",
+     "sha256": "5a3a1486c0bcbebc081e16e0cfc776d0253a1e2db54fc85ce7b157a3f4d01277"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/M/collected/evidence/result.md",
+     "sha256": "d02e48b044a898b9e1c1a3aff5b3beae1024c122e7d4e771b1b012083a28f785"
+    },
+    {
+     "path": "runs/M/collected/evidence/screens.jsonl",
+     "sha256": "495784d09c91011caba52f7b56922d98788f6bcb05fade2279c93b1f02eaf85c"
+    },
+    {
+     "path": "runs/M/collected/evidence/pty.raw.gz",
+     "sha256": "296a3e9eef417c96fff98c750317abbacf46588a1b9b2012ac2925ab705d326c"
+    },
+    {
+     "path": "runs/M/mediator-window.jsonl",
+     "sha256": "068cec2761bfaca3dcbc1d8d0d16840d5e1f3de6ddbc857c4e74ed5551239c4c"
+    },
+    {
+     "path": "runs/M/ledger-attempts.txt",
+     "sha256": "d095a0432687a35753f83010bcba67fc3c46ce96a8e20970add86fab0ce0984c"
+    },
+    {
+     "path": "runs/M/guard-after.txt",
+     "sha256": "2a00d424436959a438a2b7c0beb769b6e93577078d6480ff6b2878191e5d5502"
+    },
+    {
+     "path": "runs/M/executor-start.txt",
+     "sha256": "c6ddf646d5e90cc9cc92dcb3237fe3d833d5c252a1599700d70dd939cbaafbfa"
+    },
+    {
+     "path": "runs/M/executor-end.txt",
+     "sha256": "1835737097a5207f61863c92281c2575a656ec3c35653c96f7e93d056914688c"
+    }
+   ]
+  },
+  {
+   "id": "FUP-21",
+   "priority": "blocker",
+   "disposition": "passed",
+   "summary": "D16: one real realtime session (gpt-realtime-1.5, reply OK, 04:24:34-37Z). /cost shows 'Realtime: 1 session; token counts and cost unknown, not zero', the link 'Request 2 · Realtime session · ... · no price available', start and end times inside the window, 'tokens not reported', and the technical page's 'Turn: realtime:ws:' with every amount unknown. The thread's separate warm-up is GPT-6 Sol (the app-server's default model), labelled 'Turn: prewarm:' on its technical page; $0.029290.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a1578b-7b6a-75f3-b12f-2afb800a8f1b",
+    "run_id": "acc-R-agmx3-20261020T042042Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx3",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/R.md",
+     "sha256": "d02f06470e965c53a5a3cc9d78035bfc9de46fc9312bc1fc0638b3071bf5063b"
+    },
+    "access_record": {
+     "path": "runs/R/executor-events.jsonl",
+     "sha256": "7ee47999c006afdeef132fe0b77740d828e79c8cce9007477c90fabc8b47bb31"
+    },
+    "actions": {
+     "path": "runs/R/collected/evidence/actions.jsonl",
+     "sha256": "8c4aa42e449cb72f6c547c9c7a121d0295beac7d767758b2eab3829e3f9a8496"
+    },
+    "isolation_record": {
+     "path": "runs/R/isolation-FUP-21.json",
+     "sha256": "e64b10a24aa1e57e63fb30833f06e33264b77435647d43fa500334624d16c78f"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/R/collected/evidence/result.md",
+     "sha256": "33c4cd1c7f4083363b7897d87a6eb144be8985fe191de95650c48100275c6ea8"
+    },
+    {
+     "path": "runs/R/collected/evidence/screens.jsonl",
+     "sha256": "134f765963ee7c42b6681ec68ce01dc8c138b100538042e9ed79cfac043fe410"
+    },
+    {
+     "path": "runs/R/collected/evidence/fixture.jsonl",
+     "sha256": "9b84a12874a841f56ea938dba50b23eb0f49be74f2afec9dc55dac64b10a82b4"
+    },
+    {
+     "path": "runs/R/collected/evidence/pty.raw.gz",
+     "sha256": "be0be949404fe4f127782d8d193a9a8bccd863488a662ac4a5be33915eaa867a"
+    },
+    {
+     "path": "runs/R/mediator-window.jsonl",
+     "sha256": "6a0081d3f36a50d59a2f6a51dd5dce320fa5b6f4af7ae4e0112ad55a7d6768ce"
+    },
+    {
+     "path": "runs/R/ledger-attempts.txt",
+     "sha256": "7c659096a9ecd824a5e56cb85cc8707af66d770093a5df1f57d27068c6864fdb"
+    },
+    {
+     "path": "runs/R/guard-after.txt",
+     "sha256": "7a077cbd04c29bd4edf3d631709e7316bf077f32979a138fee2edccd6a327f68"
+    },
+    {
+     "path": "runs/R/executor-start.txt",
+     "sha256": "626b7e294291f53c6599d332daeab337f63386c2394b4652b277fd6d5b187527"
+    },
+    {
+     "path": "runs/R/executor-end.txt",
+     "sha256": "d3904ec9ef53e0a8033393107457a590d4e802a5b6bcc1d38979aaa3782bf58a"
+    }
+   ]
+  },
+  {
+   "id": "FUP-22",
+   "priority": "advisory",
+   "disposition": "passed",
+   "summary": "From a new Z.AI conversation, the realtime conversation appears under 'Other conversations' with 'no price available' and 'at least $0.029290 (1 attempt had no price)': no $0 for the session.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a1578b-7b6a-75f3-b12f-2afb800a8f1b",
+    "run_id": "acc-R-agmx3-20261020T042042Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx3",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/R.md",
+     "sha256": "d02f06470e965c53a5a3cc9d78035bfc9de46fc9312bc1fc0638b3071bf5063b"
+    },
+    "access_record": {
+     "path": "runs/R/executor-events.jsonl",
+     "sha256": "7ee47999c006afdeef132fe0b77740d828e79c8cce9007477c90fabc8b47bb31"
+    },
+    "actions": {
+     "path": "runs/R/collected/evidence/actions.jsonl",
+     "sha256": "8c4aa42e449cb72f6c547c9c7a121d0295beac7d767758b2eab3829e3f9a8496"
+    },
+    "isolation_record": {
+     "path": "runs/R/isolation-FUP-22.json",
+     "sha256": "25299c4312342aad74ed4e2273d86edd381b31d0ffa1dec9bc8e0e7651d1812d"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/R/collected/evidence/result.md",
+     "sha256": "33c4cd1c7f4083363b7897d87a6eb144be8985fe191de95650c48100275c6ea8"
+    },
+    {
+     "path": "runs/R/collected/evidence/screens.jsonl",
+     "sha256": "134f765963ee7c42b6681ec68ce01dc8c138b100538042e9ed79cfac043fe410"
+    },
+    {
+     "path": "runs/R/collected/evidence/fixture.jsonl",
+     "sha256": "9b84a12874a841f56ea938dba50b23eb0f49be74f2afec9dc55dac64b10a82b4"
+    },
+    {
+     "path": "runs/R/collected/evidence/pty.raw.gz",
+     "sha256": "be0be949404fe4f127782d8d193a9a8bccd863488a662ac4a5be33915eaa867a"
+    },
+    {
+     "path": "runs/R/mediator-window.jsonl",
+     "sha256": "6a0081d3f36a50d59a2f6a51dd5dce320fa5b6f4af7ae4e0112ad55a7d6768ce"
+    },
+    {
+     "path": "runs/R/ledger-attempts.txt",
+     "sha256": "7c659096a9ecd824a5e56cb85cc8707af66d770093a5df1f57d27068c6864fdb"
+    },
+    {
+     "path": "runs/R/guard-after.txt",
+     "sha256": "7a077cbd04c29bd4edf3d631709e7316bf077f32979a138fee2edccd6a327f68"
+    },
+    {
+     "path": "runs/R/executor-start.txt",
+     "sha256": "626b7e294291f53c6599d332daeab337f63386c2394b4652b277fd6d5b187527"
+    },
+    {
+     "path": "runs/R/executor-end.txt",
+     "sha256": "d3904ec9ef53e0a8033393107457a590d4e802a5b6bcc1d38979aaa3782bf58a"
+    }
+   ]
+  },
+  {
+   "id": "FUP-23",
+   "priority": "advisory",
+   "disposition": "passed",
+   "summary": "After a restart on TR: still 1 session, same Request ID 2dbec071-... and the same start/end times; no second warm-up.",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a1578b-7b6a-75f3-b12f-2afb800a8f1b",
+    "run_id": "acc-R-agmx3-20261020T042042Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx3",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/R.md",
+     "sha256": "d02f06470e965c53a5a3cc9d78035bfc9de46fc9312bc1fc0638b3071bf5063b"
+    },
+    "access_record": {
+     "path": "runs/R/executor-events.jsonl",
+     "sha256": "7ee47999c006afdeef132fe0b77740d828e79c8cce9007477c90fabc8b47bb31"
+    },
+    "actions": {
+     "path": "runs/R/collected/evidence/actions.jsonl",
+     "sha256": "8c4aa42e449cb72f6c547c9c7a121d0295beac7d767758b2eab3829e3f9a8496"
+    },
+    "isolation_record": {
+     "path": "runs/R/isolation-FUP-23.json",
+     "sha256": "5733e02ad7d04f6c8a51248fc6a3e399dcc9efe3751040aa61ee42864b40b6c4"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/R/collected/evidence/result.md",
+     "sha256": "33c4cd1c7f4083363b7897d87a6eb144be8985fe191de95650c48100275c6ea8"
+    },
+    {
+     "path": "runs/R/collected/evidence/screens.jsonl",
+     "sha256": "134f765963ee7c42b6681ec68ce01dc8c138b100538042e9ed79cfac043fe410"
+    },
+    {
+     "path": "runs/R/collected/evidence/fixture.jsonl",
+     "sha256": "9b84a12874a841f56ea938dba50b23eb0f49be74f2afec9dc55dac64b10a82b4"
+    },
+    {
+     "path": "runs/R/collected/evidence/pty.raw.gz",
+     "sha256": "be0be949404fe4f127782d8d193a9a8bccd863488a662ac4a5be33915eaa867a"
+    },
+    {
+     "path": "runs/R/mediator-window.jsonl",
+     "sha256": "6a0081d3f36a50d59a2f6a51dd5dce320fa5b6f4af7ae4e0112ad55a7d6768ce"
+    },
+    {
+     "path": "runs/R/ledger-attempts.txt",
+     "sha256": "7c659096a9ecd824a5e56cb85cc8707af66d770093a5df1f57d27068c6864fdb"
+    },
+    {
+     "path": "runs/R/guard-after.txt",
+     "sha256": "7a077cbd04c29bd4edf3d631709e7316bf077f32979a138fee2edccd6a327f68"
+    },
+    {
+     "path": "runs/R/executor-start.txt",
+     "sha256": "626b7e294291f53c6599d332daeab337f63386c2394b4652b277fd6d5b187527"
+    },
+    {
+     "path": "runs/R/executor-end.txt",
+     "sha256": "d3904ec9ef53e0a8033393107457a590d4e802a5b6bcc1d38979aaa3782bf58a"
+    }
+   ]
+  },
+  {
+   "id": "FUP-24",
+   "priority": "blocker",
+   "disposition": "passed",
+   "summary": "No credential or key material in any group's saved screens or command output: each executor searched its own group (Z, O, R, M) and found only probe names containing 'api_key', SHA-256 digests and the fixture's labelled synthetic .env value (shown by agms-tui fixture, not by the product). Integrator's key scan of the record: the three real keys are in 0 files (keyscan-record.txt).",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a157a9-082a-7de2-92e2-eaf2aeda73df",
+    "run_id": "acc-M-agmx1-20261020T045301Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx1",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/M.md",
+     "sha256": "3a4d502b698103094c925763b6b7002561c55436b90842218320e08e0e953dba"
+    },
+    "access_record": {
+     "path": "runs/M/executor-events.jsonl",
+     "sha256": "b505e7732813e6363e71c443b12ba8b718f3fa44f35ee10e8ce6d641457d122d"
+    },
+    "actions": {
+     "path": "runs/M/collected/evidence/actions.jsonl",
+     "sha256": "8394e37cf4f370ee2ebf2759f961e59297a9564a874fd7a8fe4e1268e7405ded"
+    },
+    "isolation_record": {
+     "path": "runs/M/isolation-FUP-24.json",
+     "sha256": "644a4a16fcb083d9c690a6f62e8b69e939b653de333bc66201df6fe73b5a68b0"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/M/collected/evidence/result.md",
+     "sha256": "d02e48b044a898b9e1c1a3aff5b3beae1024c122e7d4e771b1b012083a28f785"
+    },
+    {
+     "path": "runs/M/collected/evidence/screens.jsonl",
+     "sha256": "495784d09c91011caba52f7b56922d98788f6bcb05fade2279c93b1f02eaf85c"
+    },
+    {
+     "path": "runs/M/collected/evidence/pty.raw.gz",
+     "sha256": "296a3e9eef417c96fff98c750317abbacf46588a1b9b2012ac2925ab705d326c"
+    },
+    {
+     "path": "runs/M/mediator-window.jsonl",
+     "sha256": "068cec2761bfaca3dcbc1d8d0d16840d5e1f3de6ddbc857c4e74ed5551239c4c"
+    },
+    {
+     "path": "runs/M/ledger-attempts.txt",
+     "sha256": "d095a0432687a35753f83010bcba67fc3c46ce96a8e20970add86fab0ce0984c"
+    },
+    {
+     "path": "runs/M/guard-after.txt",
+     "sha256": "2a00d424436959a438a2b7c0beb769b6e93577078d6480ff6b2878191e5d5502"
+    },
+    {
+     "path": "runs/M/executor-start.txt",
+     "sha256": "c6ddf646d5e90cc9cc92dcb3237fe3d833d5c252a1599700d70dd939cbaafbfa"
+    },
+    {
+     "path": "runs/M/executor-end.txt",
+     "sha256": "1835737097a5207f61863c92281c2575a656ec3c35653c96f7e93d056914688c"
+    }
+   ],
+   "other_attempts": [
+    {
+     "label": "Z",
+     "execution": {
+      "agent": "01a1570f-20b8-7861-941b-85e0e12932df",
+      "run_id": "acc-Z-agmx1-20261020T020455Z",
+      "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+      "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx1",
+      "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+      "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+      "fresh_context": true,
+      "code_blind": true,
+      "results_blind": true,
+      "packet": {
+       "path": "executor-packet/prompts/Z.md",
+       "sha256": "32a070bbe57602bc8d44f76240618ae13e79566e85fce41b9ac79e8621cb4295"
+      },
+      "access_record": {
+       "path": "runs/Z/executor-events.jsonl.gz",
+       "sha256": "d23a8c4629389f525c3927aa830fd480806aae658b5c33e16b57d334824f9ec4"
+      },
+      "actions": {
+       "path": "runs/Z/collected/evidence/actions.jsonl.gz",
+       "sha256": "c5f19e9c6225cb50787ca673f8195c82d21a04d187e760826a1625ff6c5fbaf7"
+      },
+      "isolation_record": {
+       "path": "runs/Z/isolation-FUP-24.json",
+       "sha256": "e0d147fb927a873cb77b273af64290acde40d45a357dd3629cf5fced4b6c6cb8"
+      },
+      "raw_executor_verdict": "passed"
+     },
+     "evidence": [
+      {
+       "path": "runs/Z/collected/evidence/result.md",
+       "sha256": "1386da465154653892da79c4c1f76c80bdfcaf09a566bcd7b1f20313973644ed"
+      },
+      {
+       "path": "runs/Z/collected/evidence/screens.jsonl.gz",
+       "sha256": "93439192c116098ec10cd929397f25ac8a16004fa33c438165f1cc45bf95983f"
+      },
+      {
+       "path": "runs/Z/collected/evidence/fixture.jsonl",
+       "sha256": "da204fa31e06e38b619a3612b723432432f7102aa8bc2e6bbce0187a4a70ff99"
+      },
+      {
+       "path": "runs/Z/collected/evidence/pty.raw.gz",
+       "sha256": "00274fa74b652878584f2d391e7c2a28f75c6f5845554c3b201ed13f81224573"
+      },
+      {
+       "path": "runs/Z/mediator-window.jsonl",
+       "sha256": "6857e93a6212ba89e3acfbed709a107b8ba14bd35adcc686c66a73fd8e41929d"
+      },
+      {
+       "path": "runs/Z/ledger-attempts.txt",
+       "sha256": "5d74e05248cd88daa5ffef426bacfcc4f7d30c399720d5c90284b58ff1860035"
+      },
+      {
+       "path": "runs/Z/guard-after.txt",
+       "sha256": "a1ffb9ed6191eb697f8c9e1182b7ff1ce398ef2a9458884cb29833bac34c4348"
+      },
+      {
+       "path": "runs/Z/executor-start.txt",
+       "sha256": "7234f6a68a2e588c464c9df70bb0d2533cc4e4905c4cfd16cd3dd7cd76602725"
+      },
+      {
+       "path": "runs/Z/executor-end.txt",
+       "sha256": "0616c7ed5b435510b1454fcad9f3e3868e0c9b9c86a1b3ddcdb350b38f51d175"
+      }
+     ]
+    },
+    {
+     "label": "O",
+     "execution": {
+      "agent": "01a15747-0158-7b02-861f-f4f6ce1089ee",
+      "run_id": "acc-O-agmx2-20261020T030557Z",
+      "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+      "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx2",
+      "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+      "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+      "fresh_context": true,
+      "code_blind": true,
+      "results_blind": true,
+      "packet": {
+       "path": "executor-packet/prompts/O.md",
+       "sha256": "19476d8dca04daeebe301508888856813c1016c6762866bfcf1bbf5cc33eefa6"
+      },
+      "access_record": {
+       "path": "runs/O/executor-events.jsonl.gz",
+       "sha256": "99b3f94a559bba21e4c0df0c053656ed17dd2f33525ac3985c8a0e2e474716f5"
+      },
+      "actions": {
+       "path": "runs/O/collected/evidence/actions.jsonl",
+       "sha256": "412fc96034b6693a9cff7a2493c53ce13c9fdc224752a1cc9ee3f2ce286ffee3"
+      },
+      "isolation_record": {
+       "path": "runs/O/isolation-FUP-24.json",
+       "sha256": "178e237b1fe5fc714cf864ba1b7514b05fba284111870aeee800d97aab94c966"
+      },
+      "raw_executor_verdict": "passed"
+     },
+     "evidence": [
+      {
+       "path": "runs/O/collected/evidence/result.md",
+       "sha256": "78bbd09b8292551399436268762e665cfbb367c506cfee3e741cc444e1e1c2ed"
+      },
+      {
+       "path": "runs/O/collected/evidence/screens.jsonl",
+       "sha256": "11434d5b81435d015dcc05f596dcadf3a9d820da72f604ab6e7720f256359302"
+      },
+      {
+       "path": "runs/O/collected/evidence/fixture.jsonl",
+       "sha256": "d533e17fcc9f40d4405b327e757798031112f4ff4e231c18b1b37b90f9846c7a"
+      },
+      {
+       "path": "runs/O/collected/evidence/pty.raw.gz",
+       "sha256": "f49b3c2c8b5b85446df67b9ff81b07fcb0bfb3c704ddc8c22ea11bfae4cbaf06"
+      },
+      {
+       "path": "runs/O/mediator-window.jsonl",
+       "sha256": "758a221ae4fb0bc5be96fcae06dd88a70bdd25299d08c460d11131f02c00ae99"
+      },
+      {
+       "path": "runs/O/ledger-attempts.txt",
+       "sha256": "b641271a3355f8a581dd6d624097fcacb16f3ec198fa6247e041f2db79f6c17b"
+      },
+      {
+       "path": "runs/O/guard-after.txt",
+       "sha256": "bc1d4e6dce55783c53b645cb79f5cf4d11246101cd3ed539fa432e4461cdaa59"
+      },
+      {
+       "path": "runs/O/executor-start.txt",
+       "sha256": "ff5349b2fa0a2161e3c7fbf6f34245c4dc3041fb29d62f785fe7ba711be22a9b"
+      },
+      {
+       "path": "runs/O/executor-end.txt",
+       "sha256": "d4e0959acca8dad92d79e0098a52f241f3b72aef8bf62e8974c070c32c69090b"
+      }
+     ]
+    },
+    {
+     "label": "R",
+     "execution": {
+      "agent": "01a1578b-7b6a-75f3-b12f-2afb800a8f1b",
+      "run_id": "acc-R-agmx3-20261020T042042Z",
+      "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+      "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx3",
+      "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+      "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+      "fresh_context": true,
+      "code_blind": true,
+      "results_blind": true,
+      "packet": {
+       "path": "executor-packet/prompts/R.md",
+       "sha256": "d02f06470e965c53a5a3cc9d78035bfc9de46fc9312bc1fc0638b3071bf5063b"
+      },
+      "access_record": {
+       "path": "runs/R/executor-events.jsonl",
+       "sha256": "7ee47999c006afdeef132fe0b77740d828e79c8cce9007477c90fabc8b47bb31"
+      },
+      "actions": {
+       "path": "runs/R/collected/evidence/actions.jsonl",
+       "sha256": "8c4aa42e449cb72f6c547c9c7a121d0295beac7d767758b2eab3829e3f9a8496"
+      },
+      "isolation_record": {
+       "path": "runs/R/isolation-FUP-24.json",
+       "sha256": "d9d710c61c72d5ffb7e002db57c74ffb9ac41327bff044ffed44482c9d6c3e61"
+      },
+      "raw_executor_verdict": "passed"
+     },
+     "evidence": [
+      {
+       "path": "runs/R/collected/evidence/result.md",
+       "sha256": "33c4cd1c7f4083363b7897d87a6eb144be8985fe191de95650c48100275c6ea8"
+      },
+      {
+       "path": "runs/R/collected/evidence/screens.jsonl",
+       "sha256": "134f765963ee7c42b6681ec68ce01dc8c138b100538042e9ed79cfac043fe410"
+      },
+      {
+       "path": "runs/R/collected/evidence/fixture.jsonl",
+       "sha256": "9b84a12874a841f56ea938dba50b23eb0f49be74f2afec9dc55dac64b10a82b4"
+      },
+      {
+       "path": "runs/R/collected/evidence/pty.raw.gz",
+       "sha256": "be0be949404fe4f127782d8d193a9a8bccd863488a662ac4a5be33915eaa867a"
+      },
+      {
+       "path": "runs/R/mediator-window.jsonl",
+       "sha256": "6a0081d3f36a50d59a2f6a51dd5dce320fa5b6f4af7ae4e0112ad55a7d6768ce"
+      },
+      {
+       "path": "runs/R/ledger-attempts.txt",
+       "sha256": "7c659096a9ecd824a5e56cb85cc8707af66d770093a5df1f57d27068c6864fdb"
+      },
+      {
+       "path": "runs/R/guard-after.txt",
+       "sha256": "7a077cbd04c29bd4edf3d631709e7316bf077f32979a138fee2edccd6a327f68"
+      },
+      {
+       "path": "runs/R/executor-start.txt",
+       "sha256": "626b7e294291f53c6599d332daeab337f63386c2394b4652b277fd6d5b187527"
+      },
+      {
+       "path": "runs/R/executor-end.txt",
+       "sha256": "d3904ec9ef53e0a8033393107457a590d4e802a5b6bcc1d38979aaa3782bf58a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "FUP-25",
+   "priority": "advisory",
+   "disposition": "passed",
+   "summary": "skip_reopen_warmup = true in config.toml, restart with resume <T1> and no -c: no notice, warm-up count unchanged, one turn added (13 -> 14).",
+   "candidate_sha256": "e72003067f9316f2805b4344041d111409611c6d0730fe268c46bf95225bdaa3",
+   "method": "tmux",
+   "execution": {
+    "agent": "01a15747-0158-7b02-861f-f4f6ce1089ee",
+    "run_id": "acc-O-agmx2-20261020T030557Z",
+    "model": "executor: candidate corbanu exec, glm-5.3-flash (zai, default effort); product under test: the case's route/model",
+    "machine": "Tart clone acc-tart1-run of corbanu-qa-base (macOS 26.6.2 25G83 arm64, agent@192.168.64.41), executor account agmx2",
+    "profile": "fresh per group: product-home/config.toml = harness/product-config.toml + trust entry for the run's project; fixture ledger-notes",
+    "launcher": "sudo -u LANE /opt/agms/bin/agms-launch executor RUN GROUP -> /opt/agms/pkg/bin/corbanu exec; product via agms-tui -> agms-product -> /opt/agms/pkg/bin/corbanu",
+    "fresh_context": true,
+    "code_blind": true,
+    "results_blind": true,
+    "packet": {
+     "path": "executor-packet/prompts/O.md",
+     "sha256": "19476d8dca04daeebe301508888856813c1016c6762866bfcf1bbf5cc33eefa6"
+    },
+    "access_record": {
+     "path": "runs/O/executor-events.jsonl.gz",
+     "sha256": "99b3f94a559bba21e4c0df0c053656ed17dd2f33525ac3985c8a0e2e474716f5"
+    },
+    "actions": {
+     "path": "runs/O/collected/evidence/actions.jsonl",
+     "sha256": "412fc96034b6693a9cff7a2493c53ce13c9fdc224752a1cc9ee3f2ce286ffee3"
+    },
+    "isolation_record": {
+     "path": "runs/O/isolation-FUP-25.json",
+     "sha256": "f390c7ec96981e84273004e4fe445e4f3061c5147818f9a89ec1ed4c0ca924e8"
+    },
+    "raw_executor_verdict": "passed"
+   },
+   "evidence": [
+    {
+     "path": "runs/O/collected/evidence/result.md",
+     "sha256": "78bbd09b8292551399436268762e665cfbb367c506cfee3e741cc444e1e1c2ed"
+    },
+    {
+     "path": "runs/O/collected/evidence/screens.jsonl",
+     "sha256": "11434d5b81435d015dcc05f596dcadf3a9d820da72f604ab6e7720f256359302"
+    },
+    {
+     "path": "runs/O/collected/evidence/fixture.jsonl",
+     "sha256": "d533e17fcc9f40d4405b327e757798031112f4ff4e231c18b1b37b90f9846c7a"
+    },
+    {
+     "path": "runs/O/collected/evidence/pty.raw.gz",
+     "sha256": "f49b3c2c8b5b85446df67b9ff81b07fcb0bfb3c704ddc8c22ea11bfae4cbaf06"
+    },
+    {
+     "path": "runs/O/mediator-window.jsonl",
+     "sha256": "758a221ae4fb0bc5be96fcae06dd88a70bdd25299d08c460d11131f02c00ae99"
+    },
+    {
+     "path": "runs/O/ledger-attempts.txt",
+     "sha256": "b641271a3355f8a581dd6d624097fcacb16f3ec198fa6247e041f2db79f6c17b"
+    },
+    {
+     "path": "runs/O/guard-after.txt",
+     "sha256": "bc1d4e6dce55783c53b645cb79f5cf4d11246101cd3ed539fa432e4461cdaa59"
+    },
+    {
+     "path": "runs/O/executor-start.txt",
+     "sha256": "ff5349b2fa0a2161e3c7fbf6f34245c4dc3041fb29d62f785fe7ba711be22a9b"
+    },
+    {
+     "path": "runs/O/executor-end.txt",
+     "sha256": "d4e0959acca8dad92d79e0098a52f241f3b72aef8bf62e8974c070c32c69090b"
+    }
+   ]
+  }
+ ],
+ "review_budget": {
+  "used": 5,
+  "limit": 5,
+  "ledger": {
+   "path": "review-ledger.md",
+   "sha256": "7b92d593419620e1ce2d09d762aa9eb43206db2b0a2fdd9d0fb077401943d53d"
+  }
+ },
+ "evidence_check": {
+  "agent": "01a157f5-2b8a-7e23-9a71-35d0f97d6438",
+  "verdict": "pass",
+  "artifact": {
+   "path": "review/evidence-check-r3.md",
+   "sha256": "9827d8544988a393c3a5f9d2ceb7eae57bc87ed0b5f571c7d40cbbb3a9eafbda"
+  }
+ }
+}

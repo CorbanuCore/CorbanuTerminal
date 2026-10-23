@@ -32,6 +32,14 @@ common:macos --test_env=PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr
 common:windows --test_env=SYSTEMROOT
 common:windows --test_env=COMSPEC
 common:windows --test_env=WINDIR
+# Windows-only tests read the profile folder (e.g. the protected-launch tests
+# under core/src/security); strict action env drops it otherwise.
+common:windows --test_env=USERPROFILE
+# Match `just test` (scripts/isolated_rust_tests.py): debug test binaries never
+# call the native keyring and use the profile-local fallback instead. Without it
+# a test that seeds a secret in-process (native keyring on Windows) and a child
+# started with this variable disagree about where the key lives (#631, #636).
+common --test_env=CORBANU_TEST_NO_NATIVE_KEYRING=1
 # Rust's libtest harness runs test bodies on std-spawned threads. The default
 # 2 MiB stack can be too small for large async test futures on Windows CI; see
 # https://github.com/openai/codex/pull/19067 for the motivating failure.
@@ -161,9 +169,17 @@ build:argument-comment-lint --@rules_rust//rust/toolchain/channel=nightly
 common:ci-windows --config=ci-bazel
 common:ci-windows --build_metadata=TAG_os=windows
 common:ci-windows --repo_contents_cache=D:/a/.cache/bazel-repo-contents-cache
+common:ci-windows --config=windows-native-tests
+
+# Test skips for native Windows runners. `ci-windows` includes this, and
+# .github/scripts/run-bazel-ci.sh applies it directly when BuildBuddy is
+# unavailable (the keyless path cannot use `ci-windows`, which needs remote
+# services).
 # The hidden dynamic-tool callback currently times out on Windows, and ConPTY
 # cannot reliably interrupt foreground processes on Windows Bazel runners.
-common:ci-windows --test_env=CODEX_BAZEL_TEST_SKIP_FILTERS=suite::code_mode::code_mode_can_call_hidden_dynamic_tools,tests::windows_tests::conpty_ctrl_c_interrupts_powershell_foreground_child
+# The other ConPTY/PTY tests pass under cargo on the same hosted runner but
+# time out waiting on their child processes in Bazel's Windows test env.
+common:windows-native-tests --test_env=CODEX_BAZEL_TEST_SKIP_FILTERS=suite::code_mode::code_mode_can_call_hidden_dynamic_tools,tests::windows_tests::conpty_ctrl_c_interrupts_powershell_foreground_child,tests::windows_tests::conpty_delivers_input_to_foreground_children,tests::windows_tests::normal_exit_preserves_descendants_for_pipe_and_conpty,tests::pty_python_repl_emits_output_and_exits
 
 # We prefer to run the build actions entirely remotely so we can dial up the concurrency.
 # We have platform-specific tests, so we want to execute the tests on all platforms using the strongest sandboxing available on each platform.

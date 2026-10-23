@@ -3,6 +3,7 @@
 //! Filesystem restrictions are enforced by bubblewrap in `linux_run_main`.
 //! Landlock helpers remain available here as legacy/backup utilities.
 use std::collections::BTreeMap;
+use std::fs::File;
 use std::path::Path;
 
 use codex_protocol::error::CodexErr;
@@ -35,8 +36,11 @@ use seccompiler::apply_filter;
 /// them, not the entire CLI process.
 ///
 /// This function is responsible for:
-/// - enabling `PR_SET_NO_NEW_PRIVS` when restrictions apply, and
-/// - installing the network seccomp filter when network access is disabled.
+/// - enabling `PR_SET_NO_NEW_PRIVS` when restrictions apply,
+/// - installing the network seccomp filter when network access is disabled,
+///   and
+/// - installing the user-namespace seccomp filter when the policy denies
+///   user namespaces (#826).
 ///
 /// Filesystem restrictions are intentionally handled by bubblewrap.
 pub(crate) fn apply_permission_profile_to_current_thread(
@@ -54,11 +58,14 @@ pub(crate) fn apply_permission_profile_to_current_thread(
         proxy_routed_network,
     );
 
+    let deny_user_namespaces = file_system_sandbox_policy.denies_user_namespaces();
+
     // `PR_SET_NO_NEW_PRIVS` is required for seccomp, but it also prevents
     // setuid privilege elevation. Many `bwrap` deployments rely on setuid, so
     // we avoid this unless we need seccomp or we are explicitly using the
     // legacy Landlock filesystem pipeline.
     if network_seccomp_mode.is_some()
+        || deny_user_namespaces
         || (apply_landlock_fs && !file_system_sandbox_policy.has_full_disk_write_access())
     {
         set_no_new_privs()?;
@@ -66,6 +73,10 @@ pub(crate) fn apply_permission_profile_to_current_thread(
 
     if let Some(mode) = network_seccomp_mode {
         install_network_seccomp_filter_on_current_thread(mode)?;
+    }
+
+    if deny_user_namespaces {
+        install_user_namespace_seccomp_filters_on_current_thread()?;
     }
 
     if apply_landlock_fs && !file_system_sandbox_policy.has_full_disk_write_access() {
@@ -76,12 +87,30 @@ pub(crate) fn apply_permission_profile_to_current_thread(
             ));
         }
 
-        let writable_roots = file_system_sandbox_policy
+        let writable_roots: Vec<AbsolutePathBuf> = file_system_sandbox_policy
             .get_writable_roots_with_cwd(cwd)
             .into_iter()
             .map(|writable_root| writable_root.root)
             .collect();
-        install_filesystem_landlock_rules_on_current_thread(writable_roots)?;
+        match crate::pinned::get() {
+            // #536: rules on the folders opened and checked at their pinned
+            // locations (Landlock rules hold the folder, not its path).
+            Some(pinned) => {
+                let checked = crate::pinned::check_held_links(&file_system_sandbox_policy, cwd)?;
+                let folders = writable_roots
+                    .iter()
+                    .filter(|root| root.as_path().exists())
+                    .map(|root| {
+                        let real = crate::pinned::expected_location(pinned, &checked, root);
+                        crate::pinned::open_at(&[root.as_path()], &real)
+                    })
+                    .collect::<Result<Vec<File>>>()?;
+                install_filesystem_landlock_rules_on_current_thread(Vec::new(), folders)?;
+            }
+            None => {
+                install_filesystem_landlock_rules_on_current_thread(writable_roots, Vec::new())?
+            }
+        }
     }
 
     Ok(())
@@ -136,6 +165,7 @@ fn set_no_new_privs() -> Result<()> {
 /// via bubblewrap. It is kept for reference and potential fallback use.
 fn install_filesystem_landlock_rules_on_current_thread(
     writable_roots: Vec<AbsolutePathBuf>,
+    writable_folders: Vec<File>,
 ) -> Result<()> {
     let abi = ABI::V5;
     let access_rw = AccessFs::from_all(abi);
@@ -151,6 +181,9 @@ fn install_filesystem_landlock_rules_on_current_thread(
 
     if !writable_roots.is_empty() {
         ruleset = ruleset.add_rules(landlock::path_beneath_rules(&writable_roots, access_rw))?;
+    }
+    for folder in writable_folders {
+        ruleset = ruleset.add_rule(landlock::PathBeneath::new(folder, access_rw))?;
     }
 
     let status = ruleset.restrict_self()?;
@@ -251,19 +284,103 @@ fn install_network_seccomp_filter_on_current_thread(
         rules,
         SeccompAction::Allow,                     // default – allow
         SeccompAction::Errno(libc::EPERM as u32), // when rule matches – return EPERM
-        if cfg!(target_arch = "x86_64") {
-            TargetArch::x86_64
-        } else if cfg!(target_arch = "aarch64") {
-            TargetArch::aarch64
-        } else {
-            unimplemented!("unsupported architecture for seccomp filter");
-        },
+        seccomp_target_arch(),
     )?;
 
     let prog: BpfProgram = filter.try_into()?;
 
     apply_filter(&prog)?;
 
+    Ok(())
+}
+
+fn seccomp_target_arch() -> TargetArch {
+    if cfg!(target_arch = "x86_64") {
+        TargetArch::x86_64
+    } else if cfg!(target_arch = "aarch64") {
+        TargetArch::aarch64
+    } else {
+        unimplemented!("unsupported architecture for seccomp filter");
+    }
+}
+
+/// The x32 ABI's syscall numbers are the x86_64 ones with this bit set, under
+/// the same audit architecture, so a filter on the x86_64 numbers alone
+/// misses them where the kernel has x32 enabled.
+#[cfg(target_arch = "x86_64")]
+const X32_SYSCALL_BIT: i64 = 0x4000_0000;
+
+/// `nr` and, on x86_64, its x32 alias.
+fn with_x32_alias(nr: i64) -> Vec<i64> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        vec![nr, nr | X32_SYSCALL_BIT]
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        vec![nr]
+    }
+}
+
+/// #826: the seccomp programs that stop a process creating user namespaces,
+/// so a command cannot become root over the files it owns (the placeholders
+/// bubblewrap hides denied files with) or mount over paths in a namespace of
+/// its own:
+///
+/// - `unshare` and `clone` with `CLONE_NEWUSER` fail with `EPERM`;
+/// - `clone3`, whose flags are in memory a filter cannot read, fails with
+///   `ENOSYS`, so the C libraries and language runtimes fall back to `clone`
+///   (as under Docker's and Flatpak's filters).
+///
+/// Bubblewrap applies them to every process in the sandbox, its own PID 1
+/// included (`--add-seccomp-fd`, see `linux_run_main`), and the inner stage
+/// installs them again on the command. They are inherited by every child and
+/// cannot be removed. Joining an existing user namespace (`setns`) needs
+/// `CAP_SYS_ADMIN` in it: inside bubblewrap's namespace a process has that
+/// only in namespaces created below it, which these programs refuse; on the
+/// paths without bubblewrap (legacy Landlock, full write access) the command
+/// could join one its user made elsewhere, where Landlock and seccomp still
+/// apply to it.
+pub(crate) fn user_namespace_seccomp_programs() -> std::result::Result<Vec<BpfProgram>, SandboxErr>
+{
+    let new_user = libc::CLONE_NEWUSER as u64;
+    let with_new_user = SeccompRule::new(vec![SeccompCondition::new(
+        0, // flags, the first argument of both calls on x86_64 and aarch64
+        SeccompCmpArgLen::Dword,
+        SeccompCmpOp::MaskedEq(new_user),
+        new_user,
+    )?])?;
+    let mut denied: BTreeMap<i64, Vec<SeccompRule>> = BTreeMap::new();
+    for nr in [libc::SYS_unshare, libc::SYS_clone]
+        .into_iter()
+        .flat_map(with_x32_alias)
+    {
+        denied.insert(nr, vec![with_new_user.clone()]);
+    }
+    let mut unavailable: BTreeMap<i64, Vec<SeccompRule>> = BTreeMap::new();
+    for nr in with_x32_alias(libc::SYS_clone3) {
+        unavailable.insert(nr, vec![]); // empty rule vec = unconditional match
+    }
+    [(denied, libc::EPERM), (unavailable, libc::ENOSYS)]
+        .into_iter()
+        .map(|(rules, errno)| {
+            let filter = SeccompFilter::new(
+                rules,
+                SeccompAction::Allow,
+                SeccompAction::Errno(errno as u32),
+                seccomp_target_arch(),
+            )?;
+            Ok(filter.try_into()?)
+        })
+        .collect()
+}
+
+/// Installs [`user_namespace_seccomp_programs`] on this thread.
+fn install_user_namespace_seccomp_filters_on_current_thread() -> std::result::Result<(), SandboxErr>
+{
+    for prog in user_namespace_seccomp_programs()? {
+        apply_filter(&prog)?;
+    }
     Ok(())
 }
 

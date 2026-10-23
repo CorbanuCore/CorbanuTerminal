@@ -1,0 +1,50 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     k3   /model to change            │
+│ directory: ~/corbanu-rtx/pf60s04-ia/work/ws │
+╰─────────────────────────────────────────────╯
+
+
+› My favourite colour is teal and I prefer short answers. Reply with the single word NOTED.
+
+
+• NOTED
+Token usage: total=6,116 input=6,085 (+ 1,792 cached) output=31 (reasoning 13)
+To continue this session, run corbanu resume 01a12468-99a5-77b2-8c7e-2cf5ac88a589
+EXITED 0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

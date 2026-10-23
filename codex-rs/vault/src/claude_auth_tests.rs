@@ -35,22 +35,36 @@ fn source(
 fn macos_keychain_identity_matches_claude_code_profiles() {
     let config_dir = std::path::Path::new("/fixture/config");
     assert_eq!(
-        claude_code_macos_keychain_service(config_dir, false, false),
+        claude_code_macos_keychain_service(
+            config_dir, /*config_dir_overridden*/ false, /*custom_oauth*/ false
+        ),
         "Claude Code-credentials"
     );
     assert_eq!(
-        claude_code_macos_keychain_service(config_dir, true, false),
+        claude_code_macos_keychain_service(
+            config_dir, /*config_dir_overridden*/ true, /*custom_oauth*/ false
+        ),
         "Claude Code-credentials-9e67da4d"
     );
-    let custom = claude_code_macos_keychain_service(config_dir, true, true);
+    let custom = claude_code_macos_keychain_service(
+        config_dir, /*config_dir_overridden*/ true, /*custom_oauth*/ true,
+    );
     assert_eq!(custom, "Claude Code-custom-oauth-credentials-9e67da4d");
     assert_eq!(
         macos_keychain_claude_auth_source_id(&custom),
         "claude-login:macos-keychain:Claude Code-custom-oauth-credentials-9e67da4d"
     );
     assert_eq!(
-        claude_code_macos_keychain_service(std::path::Path::new("/fixture/café"), true, false,),
-        claude_code_macos_keychain_service(std::path::Path::new("/fixture/café"), true, false,)
+        claude_code_macos_keychain_service(
+            std::path::Path::new("/fixture/café"),
+            /*config_dir_overridden*/ true,
+            /*custom_oauth*/ false,
+        ),
+        claude_code_macos_keychain_service(
+            std::path::Path::new("/fixture/café"),
+            /*config_dir_overridden*/ true,
+            /*custom_oauth*/ false,
+        )
     );
 }
 
@@ -110,7 +124,7 @@ fn selection_round_trips_in_the_encrypted_store() {
     let selection = ClaudeAuthSelection::new_at(
         ClaudeAuthSource::ManagedSubscriptionToken,
         "corbanu-vault:claude-plan",
-        1_777_777_777,
+        /*selected_at*/ 1_777_777_777,
     )
     .unwrap();
     vault.save_claude_auth_selection(&selection).unwrap();
@@ -130,7 +144,7 @@ fn missing_selection_never_auto_selects_an_available_source() {
         ClaudeAuthHealth::Healthy,
     )];
     assert_eq!(
-        resolve_claude_auth_source(None, &available),
+        resolve_claude_auth_source(/*selection*/ None, &available),
         ClaudeAuthResolution::SelectionRequired { available }
     );
 }
@@ -140,7 +154,7 @@ fn exact_healthy_selection_resolves_without_falling_through() {
     let selection = ClaudeAuthSelection::new_at(
         ClaudeAuthSource::ClaudeCodeLogin,
         "macos-keychain:default",
-        10,
+        /*selected_at*/ 10,
     )
     .unwrap();
     let selected = source(
@@ -166,7 +180,7 @@ fn unhealthy_or_missing_selection_does_not_fall_back() {
     let selection = ClaudeAuthSelection::new_at(
         ClaudeAuthSource::ClaudeCodeLogin,
         "credentials-file:default",
-        10,
+        /*selected_at*/ 10,
     )
     .unwrap();
     let unhealthy = source(
@@ -192,7 +206,7 @@ fn unhealthy_or_missing_selection_does_not_fall_back() {
     let missing = ClaudeAuthSelection::new_at(
         ClaudeAuthSource::EnvironmentToken,
         "environment:CLAUDE_CODE_OAUTH_TOKEN",
-        11,
+        /*selected_at*/ 11,
     )
     .unwrap();
     assert_eq!(
@@ -206,7 +220,7 @@ fn duplicate_selected_identity_fails_as_a_deterministic_conflict() {
     let selection = ClaudeAuthSelection::new_at(
         ClaudeAuthSource::ClaudeCodeLogin,
         "claude-login:default",
-        10,
+        /*selected_at*/ 10,
     )
     .unwrap();
     let file = source(
@@ -236,7 +250,7 @@ fn serialized_selection_contains_metadata_only() {
     let selection = ClaudeAuthSelection::new_at(
         ClaudeAuthSource::ManagedSubscriptionToken,
         "corbanu-vault:claude-plan",
-        10,
+        /*selected_at*/ 10,
     )
     .unwrap();
     let serialized = serde_json::to_string(&selection).unwrap();
@@ -287,16 +301,31 @@ fn claude_login_authority_is_normalized_bound_and_metadata_only() {
     assert!(!debug.contains(&authority));
     assert!(debug.contains("authority_bound: true"));
 
-    let email_only = claude_login_authority_id("user@example.com", None, None).unwrap();
+    let email_only = claude_login_authority_id(
+        "user@example.com",
+        /*organization_id*/ None,
+        /*subscription_type*/ None,
+    )
+    .unwrap();
     assert_eq!(
         email_only,
         claude_login_authority_id(" USER@example.com ", Some(" "), Some("")).unwrap()
     );
     assert_ne!(
         email_only,
-        claude_login_authority_id("user@example.com", Some("org-work"), None).unwrap()
+        claude_login_authority_id(
+            "user@example.com",
+            Some("org-work"),
+            /*subscription_type*/ None
+        )
+        .unwrap()
     );
-    assert!(claude_login_authority_id(" ", None, None).is_err());
+    assert!(
+        claude_login_authority_id(
+            " ", /*organization_id*/ None, /*subscription_type*/ None
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -329,7 +358,12 @@ fn environment_token_authority_is_normalized_bound_and_metadata_only() {
 fn invalid_source_ids_are_rejected() {
     for source_id in ["", "line\nbreak"] {
         assert!(
-            ClaudeAuthSelection::new_at(ClaudeAuthSource::ClaudeCodeLogin, source_id, 10).is_err()
+            ClaudeAuthSelection::new_at(
+                ClaudeAuthSource::ClaudeCodeLogin,
+                source_id,
+                /*selected_at*/ 10
+            )
+            .is_err()
         );
     }
 }
@@ -354,7 +388,7 @@ fn managed_token_round_trip_status_and_replace_are_metadata_only() {
     let selection = ClaudeAuthSelection::new_at(
         ClaudeAuthSource::ManagedSubscriptionToken,
         MANAGED_CLAUDE_AUTH_SOURCE_ID,
-        1_777_777_777,
+        /*selected_at*/ 1_777_777_777,
     )
     .unwrap();
     vault.save_claude_auth_selection(&selection).unwrap();
@@ -419,9 +453,9 @@ fn generic_vault_writes_cannot_create_or_replace_the_managed_token() {
         vault.update(
             MANAGED_CLAUDE_TOKEN_LABEL,
             Some("bypass-managed-token-replacement".to_string()),
-            None,
-            None,
-            None,
+            /*provider*/ None,
+            /*notes*/ None,
+            /*revocation_notes*/ None,
         ),
         Err(VaultError::ProviderManagedCredential { .. })
     ));
@@ -463,7 +497,7 @@ fn assert_managed_enrollment_rollback(failure_point: EnrollmentFailurePoint) {
     let previous_selection = ClaudeAuthSelection::new_at(
         ClaudeAuthSource::ClaudeCodeLogin,
         MACOS_KEYCHAIN_CLAUDE_AUTH_SOURCE_ID,
-        10,
+        /*selected_at*/ 10,
     )
     .unwrap();
     vault
@@ -475,7 +509,7 @@ fn assert_managed_enrollment_rollback(failure_point: EnrollmentFailurePoint) {
     let error = vault
         .enroll_managed_claude_subscription_token_at(
             "replacement-managed-token".to_string(),
-            20,
+            /*selected_at*/ 20,
             failure_point,
         )
         .unwrap_err();
@@ -532,7 +566,7 @@ fn generic_managed_token_removal_invalidates_cache_and_preserves_unrelated_crede
     let selection = ClaudeAuthSelection::new_at(
         ClaudeAuthSource::ManagedSubscriptionToken,
         MANAGED_CLAUDE_AUTH_SOURCE_ID,
-        1_777_777_777,
+        /*selected_at*/ 1_777_777_777,
     )
     .unwrap();
     vault.save_claude_auth_selection(&selection).unwrap();

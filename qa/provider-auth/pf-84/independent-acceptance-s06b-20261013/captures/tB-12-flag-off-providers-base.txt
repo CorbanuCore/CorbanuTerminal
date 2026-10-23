@@ -1,0 +1,46 @@
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4                               │
+│  Directory:            $S/ws              │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Z.AI API key configured                                           │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a1345d-381c-78e3-9432-c0fa6dbb2c6d                              │
+│  Forked from:          01a1345c-f1cb-77c0-8291-6efeba482f3d                              │
+│                                                                                          │
+│  Token usage:          105 total  (77 input + 28 output)                                 │
+│  Context window:       100% left (7.36K used / 950K)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+/status
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Z.AI GLM 5.3 Flash                                                │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4                               │
+│  Directory:            $S/ws              │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Z.AI API key configured                                           │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a1345d-381c-78e3-9432-c0fa6dbb2c6d                              │
+│  Forked from:          01a1345c-f1cb-77c0-8291-6efeba482f3d                              │
+│                                                                                          │
+│  Token usage:          105 total  (77 input + 28 output)                                 │
+│  Context window:       100% left (7.36K used / 950K)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+  Providers
+  Configure providers and control whether they are eligible for use.
+  Configured means credentials are present, not verified by the provider.
+› 1. OpenAI          Not configured · unavailable
+  2. Claude Account  Not configured · unavailable
+  3. Corbanu API     Not configured · unavailable
+  4. Anthropic       Not configured · unavailable
+  5. Ambient         Not configured · unavailable
+  6. Kimi Code       Not configured · unavailable
+  7. Z.AI            Enabled · configured · current
+  8. DeepSeek        Not configured · unavailable
+  r recover credentials · Enter manage · Esc back
+  Press enter to confirm or esc to go back

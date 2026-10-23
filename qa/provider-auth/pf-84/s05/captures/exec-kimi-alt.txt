@@ -1,0 +1,17 @@
+Corbanu Terminal v0.1.48
+--------
+workdir: /Volumes/CorbanuDrive/Corbanu/tmp/pf84s05/work
+model: k3
+provider: kimi-code
+approval: never
+sandbox: danger-full-access
+session id: 01a12ad5-3f9c-76f0-85c1-8cfeb0565699
+--------
+user
+Reply with exactly the word pong and nothing else.
+corbanu
+pong
+tokens used
+124
+pong
+exit=0

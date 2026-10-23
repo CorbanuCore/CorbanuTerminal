@@ -517,7 +517,9 @@ fn corrupt_encrypted_state_fails_closed() {
     let encrypted_path = dir.path().join("secrets").join("local.age");
     let mut bytes = std::fs::read(&encrypted_path).expect("encrypted vault");
     let payload_offset = bytes.len() / 2;
-    bytes[payload_offset] = b'!';
+    // XOR always changes the byte; assigning b'!' was a no-op when the
+    // ciphertext byte already was b'!' (~1 in 256 runs), so the vault stayed valid.
+    bytes[payload_offset] ^= 0xff;
     std::fs::write(&encrypted_path, bytes).expect("corrupt encrypted vault fixture");
 
     let reopened = Vault::new_with_keyring_store(dir.path().to_path_buf(), keyring);
@@ -585,4 +587,184 @@ fn canonical_home_alias_preserves_keyring_identity_and_label_case() {
         reopened.reveal("case").expect("distinct label"),
         "second-value"
     );
+}
+
+#[test]
+fn pf_28_s01_revealed_values_are_registered_with_the_output_gate() {
+    use codex_secret_broker::output_gate;
+    use codex_secret_broker::output_gate::OutputSink;
+    // Process-wide gate: arming here only affects this test binary.
+    output_gate::global().arm().expect("arm");
+    let directory = tempfile::tempdir().expect("tempdir");
+    let vault = Vault::new_with_keyring_store(
+        directory.path().to_path_buf(),
+        Arc::new(MockKeyringStore::default()),
+    );
+    let add = |label: &str, credential_type, secret: &str| {
+        vault
+            .add(AddCredential {
+                label: label.to_string(),
+                credential_type,
+                provider: None,
+                notes: None,
+                revocation_notes: None,
+                secret: secret.to_string(),
+            })
+            .expect("add");
+    };
+    add(
+        "pf28-basic",
+        CredentialType::BasicAuth,
+        "pf28user:pf28-basic-password-9",
+    );
+    add(
+        "pf28-seed",
+        CredentialType::SeedPhrase,
+        "pf28 legal winner thank year wave sausage worth useful legal winner thank yellow",
+    );
+    let scrub = |text: &str| output_gate::scrub_if_armed(OutputSink::ToolResult, text);
+    // #434: storing a value with the gate armed protects it at once, before
+    // any reveal (the person may put the same value in a file).
+    assert_eq!(
+        scrub("pw pf28-basic-password-9").as_deref(),
+        Some("pw [REDACTED:vault:pf28-basic]")
+    );
+    vault
+        .update(
+            "pf28-basic",
+            Some("pf28user:pf28-rotated-password-3".to_string()),
+            /*provider*/ None,
+            /*notes*/ None,
+            /*revocation_notes*/ None,
+        )
+        .expect("update");
+    assert_eq!(
+        scrub("pw pf28-rotated-password-3").as_deref(),
+        Some("pw [REDACTED:vault:pf28-basic]")
+    );
+    vault
+        .reveal_for_programmatic_use("pf28-basic", SecurityLevel::Permissive)
+        .expect("reveal");
+    vault.reveal("pf28-seed").expect("human reveal");
+    let withheld =
+        scrub("pf28 legal winner thank year wave sausage worth useful legal winner thank yellow")
+            .expect("withheld");
+    assert!(withheld.starts_with("[WITHHELD: output contained a protected seed phrase"));
+    // Part of the phrase is withheld too.
+    assert!(
+        scrub("first words: wave sausage worth").is_some_and(|text| text.starts_with("[WITHHELD:"))
+    );
+
+    // A hex key matches with or without `0x`, in either case.
+    let key = "0xA1B2C3D4E5F60718293A4B5C6D7E8F90A1B2C3D4E5F60718293A4B5C6D7E8F90";
+    add("pf28-key", CredentialType::CryptoPrivateKey, key);
+    vault.reveal("pf28-key").expect("key reveal");
+    let bare = key[2..].to_ascii_lowercase();
+    assert!(scrub(&format!("k={bare}")).is_some_and(|text| text.starts_with("[WITHHELD:")));
+
+    // Keystore scaffolding lines are not key material.
+    add(
+        "pf28-keystore",
+        CredentialType::KeystoreJson,
+        "{\n  \"version\": 3,\n  \"kdf\": \"scrypt\",\n  \"ciphertext\": \"pf28c1phert3xtAAAABBBBCCCCDDDD\"\n}",
+    );
+    vault.reveal("pf28-keystore").expect("keystore reveal");
+    assert_eq!(scrub("  \"kdf\": \"scrypt\","), None);
+    assert!(
+        scrub("  \"ciphertext\": \"pf28c1phert3xtAAAABBBBCCCCDDDD\"")
+            .is_some_and(|text| text.starts_with("[WITHHELD:"))
+    );
+}
+
+/// Debug builds with `CORBANU_TEST_NO_NATIVE_KEYRING` set (every test, tmux
+/// and demo run) never reach the OS keyring: the default vault keeps its key
+/// in the profile's `0600` fallback file instead. Runs in a child test process
+/// so this process's environment is not changed.
+#[cfg(debug_assertions)]
+#[test]
+fn isolated_fixture_vault_keeps_its_key_in_the_profile() {
+    const CHILD_ENV: &str = "CODEX_VAULT_KEYRING_ISOLATION_CHILD";
+    const TEST: &str = "tests::isolated_fixture_vault_keeps_its_key_in_the_profile";
+    if std::env::var_os(CHILD_ENV).is_none() {
+        let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args(["--exact", TEST, "--nocapture"])
+            .env(CHILD_ENV, "1")
+            .env("CORBANU_TEST_NO_NATIVE_KEYRING", "1")
+            .output()
+            .expect("run child test");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+    let dir = tempfile::tempdir().expect("tempdir");
+    let vault = Vault::new(dir.path().to_path_buf());
+    vault
+        .add(api_key_entry("isolated", "synthetic-isolated-value"))
+        .expect("add credential without the OS keyring");
+    assert_eq!(
+        vault.reveal("isolated").expect("reveal"),
+        "synthetic-isolated-value"
+    );
+    assert_eq!(vault.key_storage(), VaultKeyStorage::LocalFileFallback);
+    let fallback = std::fs::read_dir(dir.path().join("secrets").join("keyring-fallback"))
+        .expect("fallback dir in the profile")
+        .count();
+    assert_eq!(fallback, 1);
+}
+
+/// #434: with the output gate armed, a stored provider-account secret is
+/// protected at once, but its non-secret parts (a Claude config folder) are
+/// not, and neither is custody material until a person reveals it.
+#[test]
+fn issue_434_only_secrets_are_protected_while_stored() {
+    use codex_secret_broker::output_gate;
+    use codex_secret_broker::output_gate::OutputSink;
+    output_gate::global().arm().expect("arm");
+    let directory = tempfile::tempdir().expect("tempdir");
+    let vault = Vault::new_with_keyring_store(
+        directory.path().to_path_buf(),
+        Arc::new(MockKeyringStore::default()),
+    );
+    let name = ProviderAccountName::parse("issue434").expect("name");
+    vault
+        .write_provider_account(
+            "claude-plan",
+            &name,
+            ProviderAccountKind::ClaudeConfigDir,
+            "/tmp/issue434-claude-config-folder",
+        )
+        .expect("config folder");
+    vault
+        .write_provider_account(
+            "zai",
+            &name,
+            ProviderAccountKind::ApiKey,
+            "issue434-account-key-0001",
+        )
+        .expect("api key");
+    vault
+        .add(AddCredential {
+            label: "issue434-seed".to_string(),
+            credential_type: CredentialType::SeedPhrase,
+            provider: None,
+            notes: None,
+            revocation_notes: None,
+            secret:
+                "i434 legal winner thank year wave sausage worth useful legal winner thank yellow"
+                    .to_string(),
+        })
+        .expect("seed");
+    let scrub = |text: &str| output_gate::scrub_if_armed(OutputSink::ToolResult, text);
+    assert_eq!(scrub("ls /tmp/issue434-claude-config-folder"), None);
+    assert!(scrub("key issue434-account-key-0001").is_some_and(|text| !text.contains("0001")));
+    assert_eq!(scrub("words: wave sausage worth useful"), None);
+    assert_eq!(
+        vault.protect_stored_values().expect("read"),
+        Vec::<String>::new()
+    );
+    assert_eq!(scrub("ls /tmp/issue434-claude-config-folder"), None);
+    assert_eq!(scrub("words: wave sausage worth useful"), None);
 }

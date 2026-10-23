@@ -5,6 +5,7 @@ use codex_app_server_protocol::RequestId as AppServerRequestId;
 use codex_protocol::ThreadId;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
+use crossterm::event::KeyEventKind;
 use crossterm::event::KeyModifiers;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Constraint;
@@ -20,7 +21,11 @@ use textwrap::wrap;
 use url::Url;
 
 use super::CancellationEvent;
+use super::approval_typing_guard::Confirm;
+use super::approval_typing_guard::Notice;
+use super::approval_typing_guard::TypingGuard;
 use super::bottom_pane_view::BottomPaneView;
+use super::bottom_pane_view::next_shown_request_generation;
 use super::scroll_state::ScrollState;
 use super::selection_popup_common::GenericDisplayRow;
 use super::selection_popup_common::measure_rows_height;
@@ -241,6 +246,12 @@ pub(crate) struct AppLinkView {
     selected_action: usize,
     complete: bool,
     list_keymap: ListKeymap,
+    /// #514: for a request (a tool suggestion or a server's link), keys go
+    /// through the approval prompts' guard: a number key only highlights,
+    /// Enter confirms, and typed text never answers.
+    typing_guard: TypingGuard,
+    /// #787: see [`BottomPaneView::shown_request_generation`].
+    shown_generation: u64,
 }
 
 impl AppLinkView {
@@ -286,7 +297,17 @@ impl AppLinkView {
             selected_action: 0,
             complete: false,
             list_keymap,
+            typing_guard: TypingGuard::default(),
+            shown_generation: next_shown_request_generation(),
         }
+    }
+
+    /// #817: the view shows another screen. The bottom pane drops keys until
+    /// it is drawn and for a second after (#787), so a double or held Enter
+    /// answers nothing on it; a later Enter does.
+    fn show_anew(&mut self) {
+        self.shown_generation = next_shown_request_generation();
+        self.typing_guard.on_request_changed();
     }
 
     fn action_labels(&self) -> Vec<&'static str> {
@@ -374,6 +395,8 @@ impl AppLinkView {
         if !self.is_installed || self.is_browser_action_suggestion() {
             self.screen = AppLinkScreen::InstallConfirmation;
             self.selected_action = 0;
+            // #514: a double or held Enter must not answer the next screen.
+            self.show_anew();
         }
     }
 
@@ -396,6 +419,7 @@ impl AppLinkView {
     fn back_to_link_screen(&mut self) {
         self.screen = AppLinkScreen::Link;
         self.selected_action = 0;
+        self.show_anew();
     }
 
     fn toggle_enabled(&mut self) {
@@ -668,7 +692,144 @@ impl AppLinkView {
         measure_rows_height(&rows, &state, rows.len().max(1), width.max(1))
     }
 
+    /// Whether `index` changes a setting beyond this request (enabling or
+    /// disabling the app): chosen only with the arrow keys and Enter (#193).
+    fn action_is_persistent(&self, index: usize) -> bool {
+        self.screen == AppLinkScreen::Link
+            && self.is_installed
+            && !self.is_browser_action_suggestion()
+            && index == 1
+    }
+
+    fn notice(&self) -> Option<&'static str> {
+        if !self.is_tool_suggestion() {
+            return None;
+        }
+        Some(match self.typing_guard.notice()? {
+            Notice::TypedText => super::mcp_server_elicitation::TYPED_TEXT_NOTICE,
+            Notice::NavigateFirst => super::mcp_server_elicitation::CHOOSE_FIRST_NOTICE,
+            Notice::PersistentNeedsArrows => {
+                super::mcp_server_elicitation::PERSISTENT_OPTION_KEY_ERROR
+            }
+            Notice::EarlyKeys => super::mcp_server_elicitation::EARLY_KEYS_NOTICE,
+        })
+    }
+
+    /// Accept keys that cannot be typed text, as in the approval prompts:
+    /// Enter stands in when no such accept key is configured.
+    fn is_accept(&self, key_event: KeyEvent) -> bool {
+        let mut bindings = self
+            .list_keymap
+            .accept
+            .iter()
+            .filter(|binding| !matches!(binding.parts(), (KeyCode::Char(_), _)))
+            .peekable();
+        if bindings.peek().is_none() {
+            return key_event.code == KeyCode::Enter
+                && !key_hint::has_ctrl_or_alt(key_event.modifiers);
+        }
+        bindings.any(|binding| binding.is_press(key_event))
+    }
+
+    /// #514: keys for a request, as in the MCP approval form (#192). A
+    /// number key only highlights its action and Enter confirms it; the
+    /// arrow and Tab keys navigate. Any other input is typed text and never
+    /// answers.
+    fn handle_request_key(&mut self, key_event: KeyEvent) {
+        if self.is_accept(key_event) {
+            // A held Enter repeats; only a fresh press confirms.
+            if key_event.kind == KeyEventKind::Repeat {
+                return;
+            }
+            match self.typing_guard.on_confirm() {
+                Confirm::Option(index) => {
+                    self.selected_action = index;
+                    self.activate_selected_action();
+                }
+                Confirm::Highlighted => self.activate_selected_action(),
+                Confirm::Blocked => {}
+            }
+            return;
+        }
+        let navigation = !key_hint::is_plain_text_key_event(key_event)
+            && !key_hint::has_ctrl_or_alt(key_event.modifiers);
+        // Tab is typed text here, as in the approval prompts: it completes
+        // words in the composer.
+        match key_event.code {
+            KeyCode::Up if navigation => {
+                self.typing_guard.reset();
+                self.move_selection_prev();
+            }
+            KeyCode::Down if navigation => {
+                self.typing_guard.reset();
+                self.move_selection_next();
+            }
+            KeyCode::PageUp | KeyCode::Home if navigation => {
+                self.typing_guard.reset();
+                self.selected_action = 0;
+            }
+            KeyCode::PageDown | KeyCode::End if navigation => {
+                self.typing_guard.reset();
+                self.selected_action = self.action_labels().len().saturating_sub(1);
+            }
+            KeyCode::Tab | KeyCode::BackTab => self.typing_guard.on_typed_input(),
+            _ if navigation && self.list_keymap.move_up.is_pressed(key_event) => {
+                self.typing_guard.reset();
+                self.move_selection_prev();
+            }
+            _ if navigation && self.list_keymap.move_down.is_pressed(key_event) => {
+                self.typing_guard.reset();
+                self.move_selection_next();
+            }
+            _ if navigation && self.list_keymap.move_left.is_pressed(key_event) => {
+                self.typing_guard.reset();
+                self.move_selection_prev();
+            }
+            _ if navigation && self.list_keymap.move_right.is_pressed(key_event) => {
+                self.typing_guard.reset();
+                self.move_selection_next();
+            }
+            KeyCode::Char(c)
+                if key_hint::is_plain_text_key_event(key_event)
+                    && key_event.kind != KeyEventKind::Repeat =>
+            {
+                let option = c
+                    .to_digit(10)
+                    .and_then(|digit| digit.checked_sub(1))
+                    .map(|index| index as usize)
+                    .filter(|index| *index < self.action_labels().len());
+                match option {
+                    Some(index) if self.action_is_persistent(index) => {
+                        self.typing_guard.on_persistent_key();
+                    }
+                    option => {
+                        if let Some(index) = self.typing_guard.on_text_key(option) {
+                            self.selected_action = index;
+                        }
+                    }
+                }
+            }
+            _ => self.typing_guard.on_typed_input(),
+        }
+    }
+
     fn hint_line(&self) -> Line<'static> {
+        if let Some(notice) = self.notice() {
+            return Line::from(notice);
+        }
+        if self.is_tool_suggestion() {
+            return Line::from(vec![
+                "Use ".into(),
+                key_hint::plain(KeyCode::Up).into(),
+                " ".into(),
+                key_hint::plain(KeyCode::Down).into(),
+                " to move, ".into(),
+                key_hint::plain(KeyCode::Enter).into(),
+                " to select, ".into(),
+                key_hint::plain(KeyCode::Esc).into(),
+                " to close".into(),
+            ]);
+        }
         Line::from(vec![
             "Use ".into(),
             key_hint::plain(KeyCode::Tab).into(),
@@ -686,7 +847,18 @@ impl AppLinkView {
 }
 
 impl BottomPaneView for AppLinkView {
+    fn answers_request(&self) -> bool {
+        self.elicitation_target.is_some()
+    }
+
     fn handle_key_event(&mut self, key_event: KeyEvent) {
+        if key_event.kind == KeyEventKind::Release {
+            return;
+        }
+        if self.is_tool_suggestion() && key_event.code != KeyCode::Esc {
+            self.handle_request_key(key_event);
+            return;
+        }
         match key_event {
             KeyEvent {
                 code: KeyCode::Esc, ..
@@ -741,6 +913,30 @@ impl BottomPaneView for AppLinkView {
             } => self.activate_selected_action(),
             _ => {}
         }
+    }
+
+    /// #523: back from under another prompt or view. #817: the bottom pane
+    /// drops keys until it is drawn again and for a second after (#787), so
+    /// a double or held Enter meant for that view answers nothing.
+    fn on_revealed(&mut self) {
+        self.typing_guard.on_request_changed();
+    }
+
+    fn shown_request_generation(&self) -> u64 {
+        self.shown_generation
+    }
+
+    fn on_early_input(&mut self) {
+        self.typing_guard.on_early_input();
+    }
+
+    fn handle_paste(&mut self, _pasted: String) -> bool {
+        if !self.is_tool_suggestion() {
+            return false;
+        }
+        // A paste is typed text; it never answers a request.
+        self.typing_guard.on_typed_input();
+        true
     }
 
     fn on_ctrl_c(&mut self) -> CancellationEvent {
@@ -1217,6 +1413,7 @@ mod tests {
         .expect("expected generic URL app link params");
         let mut view = AppLinkView::new(params, tx);
 
+        let first_screen = view.shown_request_generation();
         view.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         match rx.try_recv() {
             Ok(AppEvent::OpenUrlInBrowser { url }) => {
@@ -1227,6 +1424,12 @@ mod tests {
         }
         assert_eq!(view.screen, AppLinkScreen::InstallConfirmation);
 
+        // #514: the next screen is new to the bottom pane, which drops a
+        // double Enter there (#787, #817: `tests/issue_817.rs`).
+        assert_ne!(view.shown_request_generation(), first_screen);
+        assert!(rx.try_recv().is_err());
+        assert!(!view.is_complete());
+        view.handle_key_event(KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE));
         view.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         match rx.try_recv() {
             Ok(AppEvent::SubmitThreadOp { thread_id, op }) => {
@@ -1366,6 +1569,7 @@ mod tests {
             tx,
         );
 
+        let first_screen = view.shown_request_generation();
         view.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         match rx.try_recv() {
             Ok(AppEvent::OpenUrlInBrowser { url }) => {
@@ -1376,6 +1580,12 @@ mod tests {
         }
         assert_eq!(view.screen, AppLinkScreen::InstallConfirmation);
 
+        // #514: the next screen is new to the bottom pane, which drops a
+        // double Enter there (#787, #817: `tests/issue_817.rs`).
+        assert_ne!(view.shown_request_generation(), first_screen);
+        assert!(rx.try_recv().is_err());
+        assert!(!view.is_complete());
+        view.handle_key_event(KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE));
         view.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         match rx.try_recv() {
             Ok(AppEvent::RefreshConnectors { force_refetch }) => {
@@ -1424,7 +1634,11 @@ mod tests {
             tx,
         );
 
+        // #514: the number key only highlights; Enter confirms.
         view.handle_key_event(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE));
+        assert!(rx.try_recv().is_err());
+        assert_eq!(view.selected_action, 1);
+        view.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
         match rx.try_recv() {
             Ok(AppEvent::SubmitThreadOp { thread_id, op }) => {
@@ -1466,7 +1680,17 @@ mod tests {
             tx,
         );
 
+        // #514: enabling the app lasts beyond this request: its number key
+        // chooses nothing; the arrow keys and Enter do.
         view.handle_key_event(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE));
+        view.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(rx.try_recv().is_err());
+        assert_eq!(
+            view.notice(),
+            Some(super::super::mcp_server_elicitation::PERSISTENT_OPTION_KEY_ERROR)
+        );
+        view.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        view.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
         match rx.try_recv() {
             Ok(AppEvent::SetAppEnabled { id, enabled }) => {
@@ -1494,6 +1718,139 @@ mod tests {
             Err(err) => panic!("missing app event: {err}"),
         }
         assert!(view.is_complete());
+    }
+
+    fn install_suggestion_view(tx: AppEventSender) -> AppLinkView {
+        AppLinkView::new(
+            AppLinkViewParams {
+                app_id: "connector_google_calendar".to_string(),
+                title: "Google Calendar".to_string(),
+                description: None,
+                instructions: "Install this app in your browser, then return here.".to_string(),
+                url: "https://example.test/google-calendar".to_string(),
+                is_installed: false,
+                is_enabled: false,
+                suggest_reason: None,
+                suggestion_type: Some(AppLinkSuggestionType::Install),
+                elicitation_target: Some(suggestion_target()),
+            },
+            tx,
+        )
+    }
+
+    fn press(view: &mut AppLinkView, code: KeyCode) {
+        view.handle_key_event(KeyEvent::new(code, KeyModifiers::NONE));
+    }
+
+    /// Whether the view answered the request or opened its link.
+    fn acted(rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> bool {
+        std::iter::from_fn(|| rx.try_recv().ok()).any(|event| {
+            matches!(
+                event,
+                AppEvent::SubmitThreadOp { .. }
+                    | AppEvent::OpenUrlInBrowser { .. }
+                    | AppEvent::SetAppEnabled { .. }
+            )
+        })
+    }
+
+    /// #514: a number key only highlights an action of a request; Enter
+    /// confirms it.
+    #[test]
+    fn issue_514_number_key_highlights_and_enter_confirms() {
+        let (tx_raw, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = install_suggestion_view(AppEventSender::new(tx_raw));
+
+        press(&mut view, KeyCode::Char('2'));
+        assert!(!acted(&mut rx));
+        assert!(!view.is_complete());
+        assert_eq!(view.selected_action, 1);
+
+        press(&mut view, KeyCode::Enter);
+        assert!(acted(&mut rx));
+        assert!(view.is_complete());
+    }
+
+    /// #514: typed text, pastes, Tab and held keys never answer a request.
+    #[test]
+    fn issue_514_typed_text_never_answers_a_request() {
+        type TypeText = Box<dyn Fn(&mut AppLinkView)>;
+        let typed: Vec<TypeText> = vec![
+            Box::new(|view| press(view, KeyCode::Char('x'))),
+            Box::new(|view| {
+                press(view, KeyCode::Char('1'));
+                press(view, KeyCode::Char('2'));
+            }),
+            Box::new(|view| press(view, KeyCode::Char('j'))),
+            Box::new(|view| press(view, KeyCode::Tab)),
+            Box::new(|view| {
+                view.handle_paste("1".to_string());
+            }),
+            Box::new(|view| {
+                view.handle_key_event(KeyEvent::new_with_kind(
+                    KeyCode::Char('2'),
+                    KeyModifiers::NONE,
+                    KeyEventKind::Repeat,
+                ));
+            }),
+        ];
+        for (case, type_text) in typed.iter().enumerate() {
+            let (tx_raw, mut rx) = unbounded_channel::<AppEvent>();
+            let mut view = install_suggestion_view(AppEventSender::new(tx_raw));
+            type_text(&mut view);
+            press(&mut view, KeyCode::Enter);
+            assert!(!acted(&mut rx), "case {case}");
+            assert_eq!(
+                view.notice(),
+                Some(super::super::mcp_server_elicitation::TYPED_TEXT_NOTICE),
+                "case {case}"
+            );
+            // Navigation, then Enter, answers.
+            press(&mut view, KeyCode::Down);
+            press(&mut view, KeyCode::Up);
+            press(&mut view, KeyCode::Enter);
+            assert!(acted(&mut rx), "case {case}");
+        }
+
+        // A held Enter does not confirm.
+        let (tx_raw, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = install_suggestion_view(AppEventSender::new(tx_raw));
+        view.handle_key_event(KeyEvent::new_with_kind(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+            KeyEventKind::Repeat,
+        ));
+        assert!(!acted(&mut rx));
+    }
+
+    /// #514/#787: after keys were dropped as the request appeared, it takes
+    /// neither Enter nor a number key and Enter until the user navigates.
+    /// #817: revealed with no key dropped, a later Enter answers it (the
+    /// bottom pane drops keys as it reappears).
+    #[test]
+    fn issue_514_dropped_keys_need_navigation() {
+        let (tx_raw, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = install_suggestion_view(AppEventSender::new(tx_raw));
+        view.on_early_input();
+        press(&mut view, KeyCode::Enter);
+        press(&mut view, KeyCode::Char('1'));
+        press(&mut view, KeyCode::Enter);
+        assert!(!acted(&mut rx));
+        assert_eq!(
+            view.notice(),
+            Some(super::super::mcp_server_elicitation::EARLY_KEYS_NOTICE)
+        );
+        press(&mut view, KeyCode::Down);
+        press(&mut view, KeyCode::Up);
+        press(&mut view, KeyCode::Enter);
+        assert!(acted(&mut rx));
+
+        let (tx_raw, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = install_suggestion_view(AppEventSender::new(tx_raw));
+        view.on_revealed();
+        assert_eq!(view.notice(), None);
+        press(&mut view, KeyCode::Enter);
+        assert!(acted(&mut rx));
     }
 
     #[test]

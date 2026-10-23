@@ -1,0 +1,11 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Reply with exactly: pong
+
+  Z.AI GLM 5.3 Flash via zaihttp default · ~/runs/agms-G18-agmx3-20261013T205801Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s

@@ -1,0 +1,5 @@
+# Seal assets that harness-tart/tart-run.sh 'seal' copies at run time (hashed at the freeze).
+81814b547eca6621a2ab4073f6022af2ca8e60cedd911a70f2b6eaa2e02f9799  seal-guest.sh
+be208eacb525d6183fdf6317d0495fd79e8f84d22e2e7d63f020e04c353231c7  dns-refuse.py
+02c365ffc7b2b3870b06f0ece8e847df7a8a60ddb2ae9f7547c1106e5f47d12e  tmux
+9024c18dc946c42d10045e4fee75318e59c8c164e03b09b1c4945f649928f236  libevent_core-2.1.7.dylib

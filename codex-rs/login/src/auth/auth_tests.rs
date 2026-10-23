@@ -51,6 +51,7 @@ async fn refresh_without_id_token() {
     );
     let updated = super::persist_tokens(
         &storage,
+        /*refreshed_from*/ "unused-for-the-default-login",
         /*id_token*/ None,
         Some("new-access-token".to_string()),
         Some("new-refresh-token".to_string()),
@@ -863,6 +864,7 @@ async fn pro_account_with_no_api_key_uses_chatgpt_auth() {
 }
 
 #[tokio::test]
+#[serial(codex_auth_env)]
 async fn product_homes_fall_back_to_legacy_codex_auth() {
     for product_home_name in [".corbanu", ".pfterminal"] {
         let root = tempdir().unwrap();
@@ -1083,6 +1085,176 @@ async fn external_bearer_only_auth_manager_uses_cached_provider_token() {
     assert_eq!(manager.get_api_auth_mode(), Some(AuthMode::ApiKey));
 }
 
+/// PF-84: a named account reaches the provider command only as
+/// `CORBANU_PROVIDER_ACCOUNT`; the default account never inherits one.
+#[cfg(unix)]
+#[tokio::test]
+async fn external_bearer_command_receives_the_named_account() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let config: ModelProviderAuthInfo = serde_json::from_value(json!({
+        "command": "/bin/sh",
+        "args": ["-c", "printf 'account-%s' \"${CORBANU_PROVIDER_ACCOUNT:-none}\""],
+        "timeout_ms": 10_000,
+        "refresh_interval_ms": 60000,
+        "cwd": tempdir.path(),
+    }))
+    .expect("provider auth config should deserialize");
+    let token = |account: Option<&str>| {
+        let manager = AuthManager::external_bearer_only_for_account(
+            config.clone(),
+            ExternalBearerCachePolicy::FreshPerRequest,
+            account.map(|name| crate::auth::ExternalBearerAccount {
+                provider_id: "custom".to_string(),
+                name: name.to_string(),
+                registry_home: None,
+                server: crate::auth::ExternalBearerAccountServer::Command,
+            }),
+        );
+        async move {
+            manager
+                .auth()
+                .await
+                .and_then(|auth| auth.api_key().map(str::to_string))
+        }
+    };
+    assert_eq!(token(Some("work")).await.as_deref(), Some("account-work"));
+    assert_eq!(token(None).await.as_deref(), Some("account-none"));
+}
+
+/// PF-84: an account missing from the registry never runs the command.
+#[cfg(unix)]
+#[tokio::test]
+async fn external_bearer_command_never_runs_for_an_unenrolled_account() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let canary = tempdir.path().join("ran");
+    let config: ModelProviderAuthInfo = serde_json::from_value(json!({
+        "command": "/bin/sh",
+        "args": ["-c", format!("touch {} && printf token", canary.display())],
+        "timeout_ms": 10_000,
+        "refresh_interval_ms": 60000,
+        "cwd": tempdir.path(),
+    }))
+    .expect("provider auth config should deserialize");
+    let empty_home = tempfile::tempdir().unwrap();
+    let manager = AuthManager::external_bearer_only_for_account(
+        config,
+        ExternalBearerCachePolicy::FreshPerRequest,
+        Some(crate::auth::ExternalBearerAccount {
+            provider_id: "custom".to_string(),
+            name: "work".to_string(),
+            registry_home: Some(empty_home.path().to_path_buf()),
+            server: crate::auth::ExternalBearerAccountServer::Command,
+        }),
+    );
+    assert!(manager.auth().await.is_none());
+    assert!(!canary.exists(), "the command must not run");
+}
+
+/// PF-84 (#419): an unenrolled Claude Plan account never spawns the helper.
+#[cfg(unix)]
+#[tokio::test]
+async fn claude_plan_helper_never_runs_for_an_unenrolled_account() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let canary = tempdir.path().join("ran");
+    let config: ModelProviderAuthInfo = serde_json::from_value(json!({
+        "command": "/bin/sh",
+        "args": ["-c", format!("touch {} && printf token", canary.display())],
+        "timeout_ms": 10_000,
+        "refresh_interval_ms": 0,
+        "cwd": tempdir.path(),
+    }))
+    .expect("provider auth config should deserialize");
+    let empty_home = tempfile::tempdir().unwrap();
+    let account = crate::auth::ExternalBearerAccount {
+        provider_id: "claude-plan".to_string(),
+        name: "ghost".to_string(),
+        registry_home: Some(empty_home.path().to_path_buf()),
+        server: crate::auth::ExternalBearerAccountServer::ClaudePlanHelper,
+    };
+    let manager = AuthManager::external_bearer_only_for_account(
+        config.clone(),
+        ExternalBearerCachePolicy::FreshPerRequest,
+        Some(account.clone()),
+    );
+    assert!(manager.auth().await.is_none());
+    let error = account
+        .ensure_enrolled()
+        .expect_err("an unenrolled account must be refused");
+    assert!(error.to_string().contains("--kind claude-token"), "{error}");
+    assert!(!canary.exists(), "the helper must not run");
+}
+
+/// PF-84 (#414): Corbanu's Claude helper gets the account in argv, so a
+/// helper that predates named accounts (and ignores
+/// `CORBANU_PROVIDER_ACCOUNT`) fails instead of serving the default account.
+#[cfg(unix)]
+#[tokio::test]
+async fn claude_plan_helper_that_predates_named_accounts_is_refused() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tempdir = tempfile::tempdir().unwrap();
+    let helper = |name: &str, body: &str| -> ModelProviderAuthInfo {
+        let path = tempdir.path().join(name);
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        serde_json::from_value(json!({
+            "command": path,
+            "args": [crate::auth::CLAUDE_PLAN_TOKEN_HELPER_SUBCOMMAND],
+            "timeout_ms": 10_000,
+            "refresh_interval_ms": 0,
+            "cwd": tempdir.path(),
+        }))
+        .expect("provider auth config should deserialize")
+    };
+    // Like a pre-PF-84 `corbanu internal-claude-oauth-token`: no options, and
+    // always the default account's token.
+    let old_helper = helper(
+        "old-corbanu",
+        "if [ $# -gt 1 ]; then echo \"error: unexpected argument '$2' found\" >&2; exit 2; fi; printf default-account-token",
+    );
+    let current_helper = helper(
+        "corbanu",
+        "[ \"$*\" = \"internal-claude-oauth-token --account $CORBANU_PROVIDER_ACCOUNT --enable named_accounts\" ] && printf \"account-%s\" \"$CORBANU_PROVIDER_ACCOUNT\"",
+    );
+    let token = |config: &ModelProviderAuthInfo, account: Option<&str>| {
+        let manager = AuthManager::external_bearer_only_for_account(
+            config.clone(),
+            ExternalBearerCachePolicy::FreshPerRequest,
+            account.map(|name| crate::auth::ExternalBearerAccount {
+                provider_id: "claude-plan".to_string(),
+                name: name.to_string(),
+                registry_home: None,
+                server: crate::auth::ExternalBearerAccountServer::ClaudePlanHelper,
+            }),
+        );
+        async move {
+            manager
+                .auth()
+                .await
+                .and_then(|auth| auth.api_key().map(str::to_string))
+        }
+    };
+
+    assert_eq!(token(&old_helper, Some("work")).await, None);
+    let error = crate::validate_provider_auth_command_for_account(&old_helper, Some("work"))
+        .await
+        .expect_err("an outdated helper must be refused");
+    assert_eq!(error.kind(), std::io::ErrorKind::Unsupported);
+    assert!(
+        error.to_string().contains("predates named accounts"),
+        "{error}"
+    );
+    assert_eq!(
+        token(&current_helper, Some("work")).await.as_deref(),
+        Some("account-work")
+    );
+    // The default account keeps today's argv.
+    assert_eq!(
+        token(&old_helper, None).await.as_deref(),
+        Some("default-account-token")
+    );
+}
+
 #[tokio::test]
 async fn fresh_per_request_external_bearer_never_reuses_the_previous_token() {
     let script = ProviderAuthScript::new(&["first-source-token", "second-source-token"]).unwrap();
@@ -1242,6 +1414,125 @@ async fn provider_auth_command_validation_preserves_actionable_failures() {
     assert!(error.to_string().contains("exited with status"));
 }
 
+/// Writes `name` in a temp dir: prints `stderr` to stderr and fails.
+#[cfg(unix)]
+fn failing_helper(
+    name: &str,
+    stderr: &str,
+    args: &[&str],
+) -> (tempfile::TempDir, ModelProviderAuthInfo) {
+    use std::os::unix::fs::PermissionsExt;
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let path = tempdir.path().join(name);
+    std::fs::write(&path, format!("#!/bin/sh\necho '{stderr}' >&2\nexit 1\n"))
+        .expect("write helper");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    let config = serde_json::from_value(json!({
+        "command": path,
+        "args": args,
+        "timeout_ms": 10_000,
+        "cwd": tempdir.path(),
+    }))
+    .expect("provider auth config should deserialize");
+    (tempdir, config)
+}
+
+/// The error of a helper written just before: retried while Linux still
+/// reports it busy (another test's fork can hold the write descriptor).
+#[cfg(unix)]
+async fn failing_helper_message(config: &ModelProviderAuthInfo) -> String {
+    for _ in 0..40 {
+        let message = crate::auth::validate_provider_auth_command(config)
+            .await
+            .expect_err("failing helper")
+            .to_string();
+        if !message.contains("Text file busy") {
+            return message;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    panic!("helper stayed busy");
+}
+
+/// #548: another program's stderr may echo anything; it stays out of the
+/// error, which is shown and logged.
+#[cfg(unix)]
+#[tokio::test]
+async fn provider_auth_command_failure_withholds_helper_stderr() {
+    const CANARY: &str = "fake-helper-stderr-canary-548-81d0e4";
+    let (_dir, config) = failing_helper("helper.sh", CANARY, &[]);
+
+    let message = failing_helper_message(&config).await;
+
+    assert!(!message.contains(CANARY), "{message}");
+    assert!(
+        message.contains("exited with status") && message.contains("output is withheld"),
+        "{message}"
+    );
+}
+
+/// Corbanu's own helpers' messages stay actionable, credential-shaped
+/// values redacted.
+#[cfg(unix)]
+#[tokio::test]
+async fn corbanu_internal_helper_failure_keeps_its_message_redacted() {
+    const TOKEN: &str = "fake-internal-token-548-5be0c3";
+    // Any program name (a debug build, `/proc/self/exe`): the subcommand decides.
+    let (_dir, config) = failing_helper(
+        "corbanu-debug",
+        &format!("Claude Plan is not signed in; run corbanu login (access_token={TOKEN})"),
+        &["internal-claude-oauth-token"],
+    );
+
+    let message = failing_helper_message(&config).await;
+
+    assert!(message.contains("run corbanu login"), "{message}");
+    assert!(!message.contains(TOKEN), "{message}");
+}
+
+/// #616: only Corbanu's own helper exiting 75 marks an unreadable home, the
+/// failure `corbanu exec` waits out.
+#[cfg(unix)]
+#[tokio::test]
+async fn internal_helper_exit_75_marks_an_unreadable_home() {
+    use std::os::unix::fs::PermissionsExt;
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let path = tempdir.path().join("corbanu");
+    std::fs::write(
+        &path,
+        "#!/bin/sh\necho 'Corbanu could not read its home (Operation not permitted)' >&2\nexit 75\n",
+    )
+    .expect("write helper");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    let config = |args: &[&str]| -> ModelProviderAuthInfo {
+        serde_json::from_value(json!({
+            "command": path,
+            "args": args,
+            "timeout_ms": 10_000,
+            "cwd": tempdir.path(),
+        }))
+        .expect("provider auth config should deserialize")
+    };
+    let mut marked = Vec::new();
+    for args in [&["internal-claude-oauth-token"][..], &[]] {
+        let mut error = None;
+        for _ in 0..50 {
+            let failure = crate::auth::validate_provider_auth_command(&config(args))
+                .await
+                .expect_err("failing helper");
+            // Linux may still report the just-written helper busy.
+            if !failure.to_string().contains("Text file busy") {
+                error = Some(failure);
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        let error = error.expect("helper stayed busy");
+        marked.push(codex_protocol::home_unreadable::is_home_unreadable(&error));
+    }
+    assert_eq!(marked, vec![true, false]);
+}
+
 #[tokio::test]
 async fn unauthorized_recovery_uses_external_refresh_for_bearer_manager() {
     let script = ProviderAuthScript::new(&["provider-token", "refreshed-provider-token"]).unwrap();
@@ -1286,6 +1577,7 @@ impl ExternalAuth for StaticExternalAuth {
 }
 
 #[tokio::test]
+#[serial(codex_auth_env)]
 async fn external_auth_provider_can_install_headers() {
     let mut headers = http::HeaderMap::new();
     headers.insert(
@@ -1328,6 +1620,16 @@ struct ProviderAuthScript {
     tempdir: TempDir,
     command: String,
     args: Vec<String>,
+    /// #1201: held while the helper may run; see `TEST_CHILD_PROCESSES`.
+    /// One per test: a second read lock on the same thread can deadlock
+    /// while the writer waits.
+    _helper_runs: std::sync::RwLockReadGuard<'static, ()>,
+}
+
+fn helper_runs() -> std::sync::RwLockReadGuard<'static, ()> {
+    crate::TEST_CHILD_PROCESSES
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl ProviderAuthScript {
@@ -1377,7 +1679,10 @@ if not defined first_line exit /b 1
 setlocal EnableDelayedExpansion
 echo(!first_line!
 endlocal
-more +1 tokens.txt > tokens.next
+rem Drop the first line without more.com, which fails in Bazel's batched
+rem Windows test runs and would leave an empty token file behind.
+type nul > tokens.next
+for /f "usebackq skip=1 delims=" %%L in ("tokens.txt") do >>tokens.next echo(%%L
 move /y tokens.next tokens.txt >nul
 "#,
             )?;
@@ -1396,6 +1701,7 @@ move /y tokens.next tokens.txt >nul
             tempdir,
             command,
             args,
+            _helper_runs: helper_runs(),
         })
     }
 
@@ -1435,6 +1741,7 @@ exit 1
             tempdir,
             command,
             args,
+            _helper_runs: helper_runs(),
         })
     }
 
@@ -1864,6 +2171,226 @@ async fn load_auth_reads_ambient_api_key_from_env() {
     assert_eq!(auth.api_key(), Some("ambient-env"));
 }
 
+async fn manager_with_openai_api_key_env(
+    codex_home: &Path,
+    enable_codex_api_key_env: bool,
+) -> AuthManager {
+    AuthManager::new_with_openai_api_key_env(
+        codex_home.to_path_buf(),
+        enable_codex_api_key_env,
+        OpenAiApiKeyEnv::Fallback,
+        AuthCredentialsStoreMode::File,
+        /*forced_chatgpt_workspace_id*/ None,
+        /*chatgpt_base_url*/ None,
+        AuthKeyringBackendKind::Direct,
+        crate::test_support::transport_default_auth_route_config(),
+    )
+    .await
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn openai_api_key_env_is_used_when_nothing_is_stored() {
+    let codex_home = tempdir().unwrap();
+    let _access_token_guard = remove_access_token_env_var();
+    let _codex_api_key_guard = EnvVarGuard::remove(CODEX_API_KEY_ENV_VAR);
+    let _ambient_api_key_guard = EnvVarGuard::remove(AMBIENT_API_KEY_ENV_VAR);
+    let _openai_api_key_guard = EnvVarGuard::set(OPENAI_API_KEY_ENV_VAR, "sk-openai-env");
+
+    // exec (CODEX_API_KEY enabled) and the TUI/app-server (disabled) agree.
+    for enable_codex_api_key_env in [true, false] {
+        let manager =
+            manager_with_openai_api_key_env(codex_home.path(), enable_codex_api_key_env).await;
+        let auth = manager.auth_cached().expect("OPENAI_API_KEY should load");
+
+        assert_eq!(auth.api_key(), Some("sk-openai-env"));
+        assert_eq!(auth.api_key_env_var(), Some(OPENAI_API_KEY_ENV_VAR));
+        assert_eq!(
+            manager.openai_auth_metadata(),
+            OpenAiAuthMetadata::EnvironmentApiKey
+        );
+    }
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn stored_openai_login_takes_precedence_over_openai_api_key_env() {
+    let codex_home = tempdir().unwrap();
+    let _access_token_guard = remove_access_token_env_var();
+    let _codex_api_key_guard = EnvVarGuard::remove(CODEX_API_KEY_ENV_VAR);
+    let _ambient_api_key_guard = EnvVarGuard::remove(AMBIENT_API_KEY_ENV_VAR);
+    let _openai_api_key_guard = EnvVarGuard::set(OPENAI_API_KEY_ENV_VAR, "sk-openai-env");
+    login_with_api_key(
+        codex_home.path(),
+        "sk-stored",
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )
+    .expect("seed api key");
+
+    let manager =
+        manager_with_openai_api_key_env(codex_home.path(), /*enable_codex_api_key_env*/ true).await;
+    let auth = manager.auth_cached().expect("stored auth should load");
+
+    assert_eq!(auth.api_key(), Some("sk-stored"));
+    assert_eq!(auth.api_key_env_var(), None);
+    assert_eq!(manager.openai_auth_metadata(), OpenAiAuthMetadata::ApiKey);
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn codex_api_key_env_takes_precedence_over_openai_api_key_env() {
+    let codex_home = tempdir().unwrap();
+    let _access_token_guard = remove_access_token_env_var();
+    let _ambient_api_key_guard = EnvVarGuard::remove(AMBIENT_API_KEY_ENV_VAR);
+    let _codex_api_key_guard = EnvVarGuard::set(CODEX_API_KEY_ENV_VAR, "sk-codex-env");
+    let _openai_api_key_guard = EnvVarGuard::set(OPENAI_API_KEY_ENV_VAR, "sk-openai-env");
+
+    let manager =
+        manager_with_openai_api_key_env(codex_home.path(), /*enable_codex_api_key_env*/ true).await;
+    let auth = manager.auth_cached().expect("CODEX_API_KEY should load");
+
+    assert_eq!(auth.api_key(), Some("sk-codex-env"));
+    assert_eq!(auth.api_key_env_var(), Some(CODEX_API_KEY_ENV_VAR));
+}
+
+struct TestAuthManagerConfig {
+    codex_home: PathBuf,
+    forced_login_method: Option<ForcedLoginMethod>,
+    auth_credentials_store_mode: AuthCredentialsStoreMode,
+    forced_chatgpt_workspace_id: Option<Vec<String>>,
+    named_session: bool,
+    /// `None`: the same as `forced_login_method`.
+    configured_forced_login_method: Option<Option<ForcedLoginMethod>>,
+}
+
+impl AuthManagerConfig for TestAuthManagerConfig {
+    fn codex_home(&self) -> PathBuf {
+        self.codex_home.clone()
+    }
+
+    fn cli_auth_credentials_store_mode(&self) -> AuthCredentialsStoreMode {
+        self.auth_credentials_store_mode
+    }
+
+    fn auth_keyring_backend_kind(&self) -> AuthKeyringBackendKind {
+        AuthKeyringBackendKind::Direct
+    }
+
+    fn forced_chatgpt_workspace_id(&self) -> Option<Vec<String>> {
+        self.forced_chatgpt_workspace_id.clone()
+    }
+
+    fn chatgpt_base_url(&self) -> String {
+        "https://chatgpt.com/backend-api/".to_string()
+    }
+
+    fn auth_route_config(&self) -> AuthRouteConfig {
+        crate::test_support::transport_default_auth_route_config()
+    }
+
+    fn forced_login_method(&self) -> Option<ForcedLoginMethod> {
+        self.forced_login_method
+    }
+
+    fn runs_on_named_sign_in_account(&self) -> bool {
+        self.named_session
+    }
+
+    fn configured_forced_login_method(&self) -> Option<ForcedLoginMethod> {
+        self.configured_forced_login_method
+            .unwrap_or(self.forced_login_method)
+    }
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn shared_from_config_reads_openai_api_key_env_unless_chatgpt_login_is_required() {
+    let codex_home = tempdir().unwrap();
+    let _access_token_guard = remove_access_token_env_var();
+    let _codex_api_key_guard = EnvVarGuard::remove(CODEX_API_KEY_ENV_VAR);
+    let _ambient_api_key_guard = EnvVarGuard::remove(AMBIENT_API_KEY_ENV_VAR);
+    let _openai_api_key_guard = EnvVarGuard::set(OPENAI_API_KEY_ENV_VAR, "sk-openai-env");
+    let config = |forced_login_method, auth_credentials_store_mode| TestAuthManagerConfig {
+        codex_home: codex_home.path().to_path_buf(),
+        forced_login_method,
+        auth_credentials_store_mode,
+        forced_chatgpt_workspace_id: None,
+        named_session: false,
+        configured_forced_login_method: None,
+    };
+
+    for mode in [
+        AuthCredentialsStoreMode::File,
+        AuthCredentialsStoreMode::Ephemeral,
+    ] {
+        let manager = AuthManager::shared_from_config(
+            &config(None, mode),
+            /*enable_codex_api_key_env*/ false,
+        )
+        .await;
+        assert!(manager.openai_api_key_env_enabled());
+        assert_eq!(
+            manager
+                .auth_cached()
+                .and_then(|auth| auth.api_key_env_var()),
+            Some(OPENAI_API_KEY_ENV_VAR)
+        );
+    }
+
+    let forced = AuthManager::shared_from_config(
+        &config(
+            Some(ForcedLoginMethod::Chatgpt),
+            AuthCredentialsStoreMode::File,
+        ),
+        /*enable_codex_api_key_env*/ true,
+    )
+    .await;
+    assert!(!forced.openai_api_key_env_enabled());
+    assert!(forced.auth_cached().is_none());
+
+    // Plain constructors (cloud tasks, cloud config) don't read it.
+    let plain = AuthManager::new(
+        codex_home.path().to_path_buf(),
+        /*enable_codex_api_key_env*/ false,
+        AuthCredentialsStoreMode::File,
+        /*forced_chatgpt_workspace_id*/ None,
+        /*chatgpt_base_url*/ None,
+        AuthKeyringBackendKind::Direct,
+        crate::test_support::transport_default_auth_route_config(),
+    )
+    .await;
+    assert!(plain.auth_cached().is_none());
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn required_chatgpt_login_ignores_openai_api_key_env() {
+    let codex_home = tempdir().unwrap();
+    let _access_token_guard = remove_access_token_env_var();
+    let _codex_api_key_guard = EnvVarGuard::remove(CODEX_API_KEY_ENV_VAR);
+    let _ambient_api_key_guard = EnvVarGuard::remove(AMBIENT_API_KEY_ENV_VAR);
+    let _openai_api_key_guard = EnvVarGuard::set(OPENAI_API_KEY_ENV_VAR, "sk-openai-env");
+    let config = build_config(
+        codex_home.path(),
+        Some(ForcedLoginMethod::Chatgpt),
+        /*forced_chatgpt_workspace_id*/ None,
+    )
+    .await;
+
+    super::enforce_login_restrictions(&config)
+        .await
+        .expect("an ignored OPENAI_API_KEY is not a login-method violation");
+    assert_eq!(
+        OpenAiApiKeyEnv::for_forced_login_method(Some(ForcedLoginMethod::Chatgpt)),
+        OpenAiApiKeyEnv::Ignore
+    );
+    assert_eq!(
+        OpenAiApiKeyEnv::for_forced_login_method(Some(ForcedLoginMethod::Api)),
+        OpenAiApiKeyEnv::Fallback
+    );
+}
+
 #[tokio::test]
 #[serial(codex_auth_env)]
 async fn enforce_login_restrictions_logs_out_for_method_mismatch() {
@@ -1890,6 +2417,148 @@ async fn enforce_login_restrictions_logs_out_for_method_mismatch() {
     assert!(
         !codex_home.path().join("auth.json").exists(),
         "auth.json should be removed on mismatch"
+    );
+}
+
+/// PF-84-S06 (#570): in a process whose session runs on a named sign-in
+/// account (so startup left the default login alone), the default login's
+/// manager treats a login the restrictions rule out as absent, also after a
+/// reload, and never deletes it. Other processes load it as before.
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn shared_from_config_hides_a_restricted_default_login_only_in_named_sessions() {
+    let codex_home = tempdir().unwrap();
+    let _access_token_guard = remove_access_token_env_var();
+    let _codex_api_key_guard = EnvVarGuard::remove(CODEX_API_KEY_ENV_VAR);
+    let _ambient_api_key_guard = EnvVarGuard::remove(AMBIENT_API_KEY_ENV_VAR);
+    let _openai_api_key_guard = EnvVarGuard::remove(OPENAI_API_KEY_ENV_VAR);
+    let auth_file = codex_home.path().join("auth.json");
+    let _jwt = write_auth_file(
+        AuthFileParams {
+            openai_api_key: None,
+            chatgpt_plan_type: Some("pro".to_string()),
+            chatgpt_account_id: Some(WORKSPACE_ID_DISALLOWED.to_string()),
+        },
+        codex_home.path(),
+    )
+    .expect("failed to write auth file");
+    let before = std::fs::read(&auth_file).unwrap();
+    let config = |forced_login_method, workspace: &str, named_session| TestAuthManagerConfig {
+        codex_home: codex_home.path().to_path_buf(),
+        forced_login_method,
+        auth_credentials_store_mode: AuthCredentialsStoreMode::File,
+        forced_chatgpt_workspace_id: Some(vec![workspace.to_string()]),
+        named_session,
+        configured_forced_login_method: None,
+    };
+
+    for (forced_login_method, workspace) in [
+        (Some(ForcedLoginMethod::Api), WORKSPACE_ID_DISALLOWED),
+        (None, WORKSPACE_ID_ALLOWED),
+    ] {
+        let named = AuthManager::shared_from_config(
+            &config(forced_login_method, workspace, /*named_session*/ true),
+            /*enable_codex_api_key_env*/ false,
+        )
+        .await;
+        assert!(named.auth_cached().is_none());
+        assert!(named.hides_restricted_default_login());
+        assert!(
+            named
+                .hidden_default_login_reason()
+                .is_some_and(|reason| reason.contains("left unchanged"))
+        );
+        named.reload().await;
+        assert!(named.auth().await.is_none());
+        assert!(named.hidden_default_login_reason().is_some());
+
+        let default_session = AuthManager::shared_from_config(
+            &config(forced_login_method, workspace, /*named_session*/ false),
+            /*enable_codex_api_key_env*/ false,
+        )
+        .await;
+        assert!(default_session.auth_cached().is_some());
+        assert_eq!(default_session.hidden_default_login_reason(), None);
+    }
+
+    // An allowed login is used as before.
+    let allowed = AuthManager::shared_from_config(
+        &config(
+            Some(ForcedLoginMethod::Chatgpt),
+            WORKSPACE_ID_DISALLOWED,
+            /*named_session*/ true,
+        ),
+        /*enable_codex_api_key_env*/ false,
+    )
+    .await;
+    assert!(allowed.auth_cached().is_some());
+    assert_eq!(std::fs::read(&auth_file).unwrap(), before);
+}
+
+/// #571: a third-party session provider implies an API-key-only login for
+/// onboarding (`forced_login_method` reads `api`), but a named OpenAI ChatGPT
+/// account is refused only by a configured `forced_login_method = "api"`.
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn named_chatgpt_account_follows_only_the_configured_login_method() {
+    let codex_home = tempdir().unwrap();
+    let scratch = tempdir().unwrap();
+    let _access_token_guard = remove_access_token_env_var();
+    let _jwt = write_auth_file(
+        AuthFileParams {
+            openai_api_key: None,
+            chatgpt_plan_type: Some("plus".to_string()),
+            chatgpt_account_id: Some(WORKSPACE_ID_ALLOWED.to_string()),
+        },
+        scratch.path(),
+    )
+    .expect("failed to write auth file");
+    let sign_in: AuthDotJson =
+        serde_json::from_slice(&std::fs::read(scratch.path().join("auth.json")).unwrap()).unwrap();
+    let work = NamedChatgptAccount {
+        provider_id: "openai".to_string(),
+        name: "work".to_string(),
+    };
+    crate::auth::save_named_account_auth(
+        codex_home.path(),
+        &work,
+        &sign_in,
+        /*must_be_new*/ true,
+    )
+    .expect("named sign-in");
+    let config = |configured| TestAuthManagerConfig {
+        codex_home: codex_home.path().to_path_buf(),
+        forced_login_method: Some(ForcedLoginMethod::Api),
+        auth_credentials_store_mode: AuthCredentialsStoreMode::File,
+        forced_chatgpt_workspace_id: None,
+        named_session: false,
+        configured_forced_login_method: Some(configured),
+    };
+
+    let implied = AuthManager::shared_from_config(
+        &config(/*configured*/ None),
+        /*enable_codex_api_key_env*/ false,
+    )
+    .await;
+    assert!(
+        implied
+            .for_named_account(work.clone())
+            .auth_cached()
+            .is_some_and(|auth| auth.is_chatgpt_auth())
+    );
+    let configured = AuthManager::shared_from_config(
+        &config(Some(ForcedLoginMethod::Api)),
+        /*enable_codex_api_key_env*/ false,
+    )
+    .await;
+    let refused = configured.for_named_account(work);
+    assert!(refused.auth().await.is_none());
+    assert!(
+        refused
+            .named_sign_in_unavailable()
+            .is_some_and(|reason| reason.contains("requires an API key")),
+        "{:?}",
+        refused.named_sign_in_unavailable()
     );
 }
 

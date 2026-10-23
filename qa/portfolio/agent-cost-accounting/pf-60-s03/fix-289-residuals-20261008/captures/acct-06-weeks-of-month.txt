@@ -1,0 +1,49 @@
+$ /cost 2026-10-01 2026-11-01 week
+╭──────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                │
+│                                              │
+│ model:     glm-5.2   /model to change        │
+│ directory: <scratch>/repo │
+╰──────────────────────────────────────────────╯
+› Read README.md and summarize it in one sentence.
+• README.md describes a tiny demo repo used to test cost screens.
+  Recorded request range
+› Requested: [2026-10-01T00:00:00.000Z, 2026-11-01T00:00:00.000Z); timezone: UTC; grouping: Week
+  Retention: request detail kept since 2026-07-10T20:25:47.345Z; daily totals kept since 2025-10-09
+  Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.
+  Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+  Other conversations are not included in this view; /cost covers only the open conversation.
+  Range total unavailable — partial or unavailable buckets excluded; no partial total.
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-09-28T00:00:00.000Z, 2026-10-05T00:00:00.000Z): [2026-10-01T00:00:00.000Z, 2026-10-05T00:00:00.000Z)
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-10-05T00:00:00.000Z, 2026-10-12T00:00:00.000Z): [2026-10-05T00:00:00.000Z, 2026-10-08T19:25:49.324Z)
+  ↑↓ scroll · Enter open · Esc back/close
+=== weeks of October range page (union of popup lines while scrolling)
+╭──────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                │
+│                                              │
+│ model:     glm-5.2   /model to change        │
+│ directory: <scratch>/repo │
+╰──────────────────────────────────────────────╯
+  Read README.md and summarize it in one sentence.
+• README.md describes a tiny demo repo used to test cost screens.
+  Recorded request range
+  Requested: [2026-10-01T00:00:00.000Z, 2026-11-01T00:00:00.000Z); timezone: UTC; grouping: Week
+  Retention: request detail kept since 2026-07-10T20:25:47.345Z; daily totals kept since 2025-10-09
+  Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.
+  Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+  Other conversations are not included in this view; /cost covers only the open conversation.
+  Range total unavailable — partial or unavailable buckets excluded; no partial total.
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-09-28T00:00:00.000Z, 2026-10-05T00:00:00.000Z): [2026-10-01T00:00:00.000Z, 2026-10-05T00:00:00.000Z)
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-10-05T00:00:00.000Z, 2026-10-12T00:00:00.000Z): [2026-10-05T00:00:00.000Z, 2026-10-08T19:25:49.324Z)
+  ↑↓ scroll · Enter open · Esc back/close
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-10-12T00:00:00.000Z, 2026-10-19T00:00:00.000Z): not started
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-10-19T00:00:00.000Z, 2026-10-26T00:00:00.000Z): not started
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-10-26T00:00:00.000Z, 2026-11-02T00:00:00.000Z): not started
+  —— Open ——
+  → Week [2026-09-28T00:00:00.000Z, 2026-10-05T00:00:00.000Z)
+  → Week [2026-10-05T00:00:00.000Z, 2026-10-12T00:00:00.000Z) (in progress)
+  → Week [2026-10-12T00:00:00.000Z, 2026-10-19T00:00:00.000Z) (not started)
+  → Week [2026-10-19T00:00:00.000Z, 2026-10-26T00:00:00.000Z) (not started)
+  → Week [2026-10-26T00:00:00.000Z, 2026-11-02T00:00:00.000Z) (not started)
+  Refresh
+  Close

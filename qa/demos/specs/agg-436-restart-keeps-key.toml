@@ -1,0 +1,91 @@
+# #436 (AGG-26): under Aggressive the broker holds the environment key; restart now would start without it.
+id = "agg-436-restart-keeps-key"
+feature = "#436: back to Permissive never restarts without the provider key"
+expected = "After Aggressive with ZAI_API_KEY from the environment, the downgrade review lists nested agents and protected paths; after saving Permissive, restart now is not offered and the screen says to start again from the shell; r does nothing and the session still answers."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Z.AI GLM 5.3 Flash via zai"
+timeout = 60
+compress = 2
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Aggressive"
+[[steps]]
+key = "Up"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Protected paths:"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Restart now is not available"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "r"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Escape"
+[[steps]]
+type = "Reply with exactly the word: ready"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^• ready"
+timeout = 120
+compress = 2
+[[steps]]
+pause = 3.0

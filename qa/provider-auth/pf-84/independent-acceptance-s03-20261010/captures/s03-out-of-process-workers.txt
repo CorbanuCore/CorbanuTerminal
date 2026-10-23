@@ -1,0 +1,33 @@
+Coordinator TUI: home hP (provider zpx via canary proxy), default account = env ZPX_API_KEY canary 'default';
+  corbanu -s danger-full-access -a never, env CORBANU_LAUNCHER_WORK_DIR/WORKSPACE_DIR = scratch (bin/corbanu -> candidate, activate.sh stand-in: no exports).
+  The agent ran scripts/s03/workers.sh, which starts each worker through the checked-in scripts/dev/corbanu-launcher.sh.
+## TUI screen
+• worker env: CORBANU_HOME=set ZPX_API_KEY=unset
+  W1 exit=0 args=[--account work] -> pong-W1
+  W2 exit=1 args=[--account fake] -> ERROR: unexpected status 401 Unauthorized: canary-proxy: invalid api key, url:
+  http://127.0.0.1:18585/proxy/chat/completions
+  W3 exit=1 args=[--account ghost] -> Error: thread/start: thread/start failed: account `ghost` of provider `zpx` is not configured; add it with `corbanu
+  account add zpx ghost` or pick another with `--account` (see `corbanu account list`)
+  W4 exit=1 args=[resume 01a128e0-7780-7203-b66c-b24172bfb201] -> ERROR: unexpected status 401 Unauthorized: canary-proxy: invalid api key, url:
+  http://127.0.0.1:18585/proxy/chat/completions
+  W5 exit=0 args=[resume --account main 01a128e0-7780-7203-b66c-b24172bfb201] -> pong-W5
+  W6 exit=1 args=[] -> ERROR: Missing environment variable: `ZPX_API_KEY`.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+› Reply with exactly the word pong and nothing else.
+• pong
+› Implement {feature}
+  Z.AI GLM 5.3 Flash via zpx default · /Volumes/CorbanuDrive/Corbanu/tmp/pf84s03acc/work · Corbanu Terminal · TPS: 15.6 tok/s
+## proxy: every request since the coordinator started (bearer = account canary id)
+  bearer=default  status=200  first user message: 'Run this exact shell command once and then reply with its co'  canaries-in-body=none real-key-in-body=False
+  bearer=work     status=200  first user message: 'Reply with exactly the word pong-W1 and nothing else.'  canaries-in-body=none real-key-in-body=False
+  bearer=fake     status=401  first user message: 'Reply with exactly the word pong-W2 and nothing else.'  canaries-in-body=none real-key-in-body=False
+  bearer=fake     status=401  first user message: 'Reply with exactly the word pong-W2 and nothing else.'  canaries-in-body=none real-key-in-body=False
+  bearer=main     status=200  first user message: 'Reply with exactly the word pong-W2 and nothing else.'  canaries-in-body=none real-key-in-body=False
+  bearer=default  status=200  first user message: 'Run this exact shell command once and then reply with its co'  canaries-in-body=none real-key-in-body=False
+  bearer=default  status=200  first user message: 'Run this exact shell command once and then reply with its co'  canaries-in-body=none real-key-in-body=False
+  bearer=default  status=200  first user message: 'Run this exact shell command once and then reply with its co'  canaries-in-body=none real-key-in-body=False
+## executor notes
+  Rows in order: coordinator turn 1 (default) | W1 work 200 | W2 fake 401 (one request, no retry) |
+  W4 = resume of W2's session without --account: fake 401 (the recorded account) | W5 = resume --account main: main 200 |
+  coordinator turns (default). W3 (ghost) and W6 (no --account; the shell policy strips ZPX_API_KEY) sent 0 requests.
+  Resumed threads keep their first user message, so W4/W5 show W2's prompt.

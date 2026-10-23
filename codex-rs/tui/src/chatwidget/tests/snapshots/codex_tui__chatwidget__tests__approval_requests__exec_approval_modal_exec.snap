@@ -3,7 +3,7 @@ source: tui/src/chatwidget/tests/approval_requests.rs
 expression: "format!(\"{buf:?}\")"
 ---
 Buffer {
-    area: Rect { x: 0, y: 0, width: 80, height: 15 },
+    area: Rect { x: 0, y: 0, width: 80, height: 16 },
     content: [
         "                                                                                ",
         "                                                                                ",
@@ -19,6 +19,7 @@ Buffer {
         "› 1. Yes, proceed (y)                                                           ",
         "  2. No, and tell Corbanu Terminal what to do differently (esc)                 ",
         "                                                                                ",
+        "  A letter in brackets only highlights its option; enter confirms it.           ",
         "  Press enter to confirm or esc to cancel                                       ",
     ],
     styles: [
@@ -39,5 +40,7 @@ Buffer {
         x: 59, y: 12, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
         x: 62, y: 12, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
         x: 2, y: 14, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
+        x: 0, y: 15, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+        x: 2, y: 15, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
     ]
 }

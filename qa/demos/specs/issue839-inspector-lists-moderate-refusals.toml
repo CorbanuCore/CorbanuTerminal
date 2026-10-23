@@ -1,0 +1,62 @@
+# Issue #839 (MOD-20): under Moderate the inspector's Recent denials lists the refused reads of Corbanu's own files, and its top line matches what Moderate enforces.
+id = "issue839-inspector-lists-moderate-refusals"
+feature = "Inspector: Moderate refusals listed, top line matches the broker"
+expected = "Under Moderate an agent read of Corbanu's config.toml is refused by the sandbox (secretless agent launch). /security → i: the top line no longer says the credential broker is off next to a Model keys row saying it holds the keys, and Recent denials (counted at the foot of the pane) lists the refusal."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+wait = "model:\\s+glm-5\\.3-flash"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this shell command: cat {home}/config.toml"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "blocked access to(?:(?!Working).)*\\n› "
+timeout = 180
+compress = 3
+[[steps]]
+pause = 1.5
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Moderate"
+[[steps]]
+key = "i"
+[[steps]]
+wait = "Security inspector \\(read only\\)[\\s\\S]*more lines below"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Down"
+repeat = 60
+[[steps]]
+wait = "Recent denials[\\s\\S]*reading Corbanu's own files"
+[[steps]]
+pause = 4.0

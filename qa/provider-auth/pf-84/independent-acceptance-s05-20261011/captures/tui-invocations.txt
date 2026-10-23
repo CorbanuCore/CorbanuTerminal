@@ -1,0 +1,10 @@
++ tui[h2] home=$S/homes/h2 env=ZAI_API_KEY(real default key) : /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s05-indep-acc-20261011/debug/corbanu -C $S/ws 
++ tui[h1] home=$S/homes/h1 env=ZAI_API_KEY(real default key) : /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s05-indep-acc-20261011/debug/corbanu -C $S/ws 
++ tui[t4b] home=$S/homes/h4 via mitm 18463: corbanu -C $S/ws --account b
++ tui[t] home=$S/homes/hf env=ZAI_API_KEY(real default key) : /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s05-indep-acc-20261011/debug/corbanu -C $S/ws 
++ tui[t] home=$S/homes/hf0 env=ZAI_API_KEY(real default key) : /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s05-indep-base-20261011/debug/corbanu -C $S/ws 
++ tui[t] home=$S/homes/hr env=ZAI_API_KEY(real default key) : /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s05-indep-rel-20261011/release/corbanu -C $S/ws --account work 
++ tui[t] home=$S/homes/hc env=ZAI_API_KEY(real default key) : /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s05-indep-acc-20261011/debug/corbanu -C $S/ws 
++ tui[t] home=$S/homes/h1 env=ZAI_API_KEY(real default key) : /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s05-indep-acc-20261011/debug/corbanu -C $S/ws --account work 
++ tui[g] home=$S/homes/h1 env=ZAI_API_KEY(real default key) : /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s05-indep-acc-20261011/debug/corbanu -C $S/ws --account ghost 
++ tui[g2] home=$S/homes/h1 env=ZAI_API_KEY(real default key) : /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s05-indep-acc-20261011/debug/corbanu -C $S/ws 

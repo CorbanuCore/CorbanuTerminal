@@ -1,0 +1,109 @@
+{
+  "reproduced": true,
+  "day": "2026-08-10",
+  "fresh_reader_pid": 75767,
+  "rendered": [
+    "No recorded attempts in this day; collection coverage unknown.",
+    "Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.",
+    "Billed cost: unavailable \u2014 no settlement evidence",
+    "Logical requests may have attempts on other days; this UTC day is not their complete lifetime.",
+    "UTC admission interval: [1786320000000, 1786406400000) ms since Unix epoch",
+    "Read at: 1786363200000 ms UTC; store checkpoint: 1786363200000 ms UTC; maintenance lag: 0 ms",
+    "90-day wall-clock detail cutoff: Some(1778587200000); aggregate day floor at checkpoint: 20311; oldest recorded day: None",
+    "Known subtotal exact USD: 0",
+    "Input: 0 known + unknown in 0 attempts",
+    "Noncached input (derived for inclusive input): 0 known + unknown in 0 attempts",
+    "Cache read: 0 known + unknown in 0 attempts",
+    "Cache write: 0 known + unknown in 0 attempts",
+    "Output: 0 known + unknown in 0 attempts",
+    "Reasoning (subset, not separately billed): 0 known + unknown in 0 attempts",
+    "Total (not separately billed): 0 known + unknown in 0 attempts",
+    "Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.",
+    "Unknown parent population: 0 attempts, excluded from root total",
+    "Estimate versus billed difference: unknown \u2014 no settlement evidence",
+    "Root's own attempts",
+    "Descendant attempts",
+    "Unknown provider/model attribution",
+    "Unknown parent population",
+    "Refresh",
+    "Close"
+  ],
+  "collected_attempts": [
+    {
+      "attempt_id": "cd95c387-e1c2-46ec-99fe-65ad38c17b2c",
+      "request_id": "59f8bca5-7f29-485a-8522-010e3b6c5f44",
+      "thread_id": "019feb8b-4200-76f1-9b4c-60c4ffdd807b",
+      "turn": "019feb8b-4200-76f1-9b4c-60f5e209f949",
+      "retry_of": null,
+      "provider": "openai",
+      "model": "gpt-5.6-sol",
+      "scope": "6aec8769-609f-48bf-ab36-58a64065238d",
+      "dialect": "Inclusive",
+      "dispatched_at_ms": 1786363200000
+    },
+    {
+      "attempt_id": "de749048-449c-49c8-86fc-dc4f478663e7",
+      "request_id": "d74b3265-c673-4999-9d45-27251ba0e3d1",
+      "thread_id": "019feb8b-4200-76f1-9b4c-60c4ffdd807b",
+      "turn": "019feb8b-4200-73c1-b811-cd046aa4adf8",
+      "retry_of": null,
+      "provider": "openai",
+      "model": "gpt-5.6-sol",
+      "scope": "7c9cd1b8-eeb2-4164-8974-a6c020e7c5f7",
+      "dialect": "Inclusive",
+      "dispatched_at_ms": 1786363200000
+    },
+    {
+      "attempt_id": "05a7c6e3-9589-475f-8481-dcc40695f8f2",
+      "request_id": "863e1e33-357b-48aa-8dd5-ea2b33f700f4",
+      "thread_id": "019feb8b-4200-7b50-a9f0-88b2f8955f4e",
+      "turn": "019feb8b-4200-7b50-a9f0-88ee76ab1946",
+      "retry_of": null,
+      "provider": "openai",
+      "model": "gpt-5.6-sol",
+      "scope": "c4605c67-cf07-4a89-aa78-46b52c995def",
+      "dialect": "Inclusive",
+      "dispatched_at_ms": 1786363200000
+    },
+    {
+      "attempt_id": "89ee3e05-2ad8-4b89-b38c-470e72432863",
+      "request_id": "637edffd-c59f-4ce5-a561-ed472fd6abd7",
+      "thread_id": "019feb8b-4200-7790-9681-077c69d95463",
+      "turn": "019feb8b-4200-7790-9681-07acb022d6d0",
+      "retry_of": null,
+      "provider": "openai",
+      "model": "gpt-5.6-sol",
+      "scope": "231fdd15-bfd0-4790-b751-78c18daa6636",
+      "dialect": "Inclusive",
+      "dispatched_at_ms": 1786363200000
+    }
+  ],
+  "attempt_count": 4,
+  "priced_attempt_count": 4,
+  "thread_count": 3,
+  "per_attempt_expected_usd": "0.00071",
+  "store_known_day_usd": "0.00284",
+  "original_store_preserved": true,
+  "root_controls": [
+    {
+      "page": "root-a-control",
+      "thread": "019feb8b-4200-76f1-9b4c-60c4ffdd807b",
+      "attempt_count": 2,
+      "expected_exact_usd": "0.00142"
+    },
+    {
+      "page": "root-b-control",
+      "thread": "019feb8b-4200-7b50-a9f0-88b2f8955f4e",
+      "attempt_count": 1,
+      "expected_exact_usd": "0.00071"
+    },
+    {
+      "page": "root-c-control",
+      "thread": "019feb8b-4200-7790-9681-077c69d95463",
+      "attempt_count": 1,
+      "expected_exact_usd": "0.00071"
+    }
+  ],
+  "verdict": "P2 scope misread: a fresh root shows zero while the same store holds 4 priced attempts that day. This is not a day-wide total.",
+  "proposed_text": "No recorded attempts for this session and its resolved descendants on 2026-08-10. Other sessions are excluded. This is not your total spend for the day. Known subtotal for this session: USD 0; oldest recorded day in this session: none."
+}

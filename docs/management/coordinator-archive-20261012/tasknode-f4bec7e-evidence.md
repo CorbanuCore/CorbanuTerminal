@@ -1,0 +1,11 @@
+https://github.com/postfiatorg/postfiatl1v2/pull/55
+
+Merged into postfiatorg/postfiatl1v2 main on 2026-10-04T09:37:09Z by goodalexander (merge commit b1d1928c091ed66836ce69d49cf8bc192a969281), after this task was created. Authored by IridiumMaster (the GitHub account linked to this Task Node account); branch fix/account-tx-exact-limit-truncation, commit b7a54b95, based on main ce25aaa86f55bf7932f9efddac1c0a1ab89bd7ee. This PR has not been used for any other task.
+
+Bug (RPC/storage): `account_tx` reported `truncated: true` when the matching rows exactly filled the limit, although nothing was omitted, on both read paths in crates/node/src/block_finality.rs: the index/disk-shard path (`account_tx_from_rows`, `>=` instead of `>`) and the scan path (`account_tx_scan`, which set the flag as soon as the count reached the limit). This made the Python client's `account_tx_history` raise "did not complete without truncation" for windows holding exactly `limit_per_window` rows.
+
+Reproduction (unmodified main, postfiat-node CLI): `init --validators 1`; two `mempool-submit-transfer` to pfrecipient…0001 and …0002 (`--amount 10`); `mempool-batch`; `apply-batch`; then `account-tx --address pfrecipient…0002 --from-height 1 --to-height 1 --limit 1` before and after `account-tx-index-build`. Before the fix both paths returned row_count=1 truncated=True; with the fix row_count=1 truncated=False (the recipient has exactly one row).
+
+Fix: minimal (+8/−9 lines): index path `>=` → `>`; scan path only flags truncation when a further matching row exists beyond the limit; one existing assertion in snapshot_deployment.rs that locked in the wrong behaviour now asserts `!truncated`.
+
+Regression test: crates/node/src/tests/account_tx_truncation.rs::account_tx_truncated_only_when_rows_are_omitted covers both paths (exact fit not truncated; 2 rows at limit 1 truncated). It fails on old main ("exact-limit window reported truncated") and passes with the fix. Full `cargo test -p postfiat-node --locked --no-fail-fast` passed on Linux (lib 397, main.rs 173, plus all integration targets, 0 failures); clippy -D warnings and fmt clean. Maintainer review (goodalexander, APPROVED) independently re-ran the regression test and init_then_run_once.

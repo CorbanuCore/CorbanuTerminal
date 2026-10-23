@@ -1,0 +1,88 @@
+# Real-ledger search, 2026-10-09 (tools/find_old_ledgers.py: state DBs with accounting attempts; earliest/latest dispatch day, count, format)
+## macOS: ~/.corbanu ~/.codex ~/.pfterminal <corbanu-root>/{.codex-work,qa,tmp,worktrees} (this run's own scratch homes omitted)
+2026-09-22 2026-10-03 attempts=6994 format=[1] <corbanu-root>/.codex-work/acct64/dbg-A/pfterminal_state_5.sqlite
+2026-09-22 2026-10-03 attempts=6994 format=[1] <corbanu-root>/.codex-work/acct64/new-A/pfterminal_state_5.sqlite
+2026-09-22 2026-10-03 attempts=6994 format=[1] <corbanu-root>/.codex-work/acct64/old-A/pfterminal_state_5.sqlite
+2026-09-22 2026-10-03 attempts=6994 format=[1] <corbanu-root>/.codex-work/acct64/opt-A/pfterminal_state_5.sqlite
+2026-09-22 2026-10-03 attempts=6994 format=[1] <corbanu-root>/.codex-work/acct64/sq-A/pfterminal_state_5.sqlite
+2026-09-22 2026-10-03 attempts=6995 format=[1] <corbanu-root>/.codex-work/acct63/probe7/pfterminal_state_5.sqlite
+2026-09-22 2026-10-03 attempts=6996 format=[1] <corbanu-root>/.codex-work/acct63/home-new/pfterminal_state_5.sqlite
+2026-09-22 2026-10-03 attempts=6997 format=[1] <corbanu-root>/.codex-work/acct63/home-old/pfterminal_state_5.sqlite
+2026-09-22 2026-10-03 attempts=6998 format=[1] <corbanu-root>/.codex-work/acct63/probe1/pfterminal_state_5.sqlite
+2026-09-22 2026-10-03 attempts=6998 format=[1] <corbanu-root>/.codex-work/acct63/probe2/pfterminal_state_5.sqlite
+2026-09-22 2026-10-03 attempts=6998 format=[1] <corbanu-root>/.codex-work/acct63/probe3/pfterminal_state_5.sqlite
+2026-09-22 2026-10-03 attempts=6998 format=[1] <corbanu-root>/.codex-work/acct63/probe4/pfterminal_state_5.sqlite
+2026-09-22 2026-10-03 attempts=6998 format=[1] <corbanu-root>/.codex-work/acct63/probe5/pfterminal_state_5.sqlite
+2026-09-22 2026-10-03 attempts=6998 format=[1] <corbanu-root>/.codex-work/acct63/probe6/pfterminal_state_5.sqlite
+2026-09-22 2026-10-09 attempts=43005 format=[1] <corbanu-root>/.codex-work/corbanu-terminal/home/pfterminal_state_5.sqlite
+2026-09-24 2026-10-03 attempts=5981 format=[1] <corbanu-root>/.codex-work/acct64/dbg-B/pfterminal_state_5.sqlite
+2026-09-24 2026-10-03 attempts=5981 format=[1] <corbanu-root>/.codex-work/acct64/new-B/pfterminal_state_5.sqlite
+2026-09-24 2026-10-03 attempts=5981 format=[1] <corbanu-root>/.codex-work/acct64/old-B/pfterminal_state_5.sqlite
+2026-09-24 2026-10-03 attempts=5981 format=[1] <corbanu-root>/.codex-work/acct64/opt-B/pfterminal_state_5.sqlite
+2026-09-24 2026-10-03 attempts=5981 format=[1] <corbanu-root>/.codex-work/acct64/sq-B/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=1 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round4/attempt-a/x/q4-runs-d23da0/w-g9cqcwvg/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=11 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round3/guest-evidence/x/q3-runs-206d5b/w-2iftx4tn/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=17 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round4/guest-evidence/x/q4b-runs-d23da0/w-1v1uakk4/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=23 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round4/run3/guest-evidence/x/q6m-runs-6ef76a/w-9dfh6icc/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=23 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round5/qual/guest-evidence/x/q7m-runs-5cca15/w-ydgja118/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=23 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round6/qual-1-e1b29b6e/guest-evidence/x/q8m-runs-ec703d/w-m351fdmv/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=23 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round6/qual/guest-evidence/x/q10m-runs-9116df/w-7plw4qcn/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=23 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round7/qual/guest-evidence/x/q11m-runs-db8ba2/w-1_r2583b/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=24 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round4/run2/guest-evidence/x/q5m-runs-fcfd9a/w-o83oir1y/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=24 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round6/qual-2-53689742/guest-evidence/x/q9m-runs-f4e5c6/w-og73fdog/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=3 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round4/run2/guest-evidence/x/q5c-runs-fcfd9a/w-62ju3zij/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=3 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round4/run3/guest-evidence/x/q6c-runs-6ef76a/w-kku_p164/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=3 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round5/qual/guest-evidence/x/q7c-runs-5cca15/w-y9wv5bjz/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=3 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round6/qual-2-53689742/guest-evidence/x/q9c-runs-f4e5c6/w-cnjc_w51/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=3 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round6/qual/guest-evidence/x/q10c-runs-9116df/w-bp16qutc/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=3 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round7/qual/guest-evidence/x/q11c-runs-db8ba2/w-zepdj3fx/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=30 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round4/run2/guest-evidence/x/q5n-runs-fcfd9a/w-zmea3nc_/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=30 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round4/run3/guest-evidence/x/q6n-runs-6ef76a/w-lzwobhxo/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=30 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round5/qual/guest-evidence/x/q7n-runs-5cca15/w-l511cmtv/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=30 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round6/qual-1-e1b29b6e/guest-evidence/x/q8n-runs-ec703d/w-6hdguya9/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=30 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round6/qual-2-53689742/guest-evidence/x/q9n-runs-f4e5c6/w-ionoc1f0/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=30 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round6/qual/guest-evidence/x/q10n-runs-9116df/w-exlxhhy1/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=30 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round7/qual/guest-evidence/x/q11n-runs-db8ba2/w-py4hv6yo/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-03 attempts=4 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round6/qual-1-e1b29b6e/guest-evidence/x/q8c-runs-ec703d/w-k21bck5i/home/pfterminal_state_5.sqlite
+2026-10-03 2026-10-06 attempts=36 format=[1] ~/.corbanu/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=1 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/afterA5/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=1 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/afterD/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=1 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/afterD2/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=1 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/beforeA/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=2 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/afterA/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=2 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/afterA2/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=2 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/afterA3/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=2 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/afterA4/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=2 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/beforeA2/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=2 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/beforeA3/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=2 format=[1] <corbanu-root>/.codex-work/tui-persist-20261006/homes/run2/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=3 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/afterE3/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=3 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/afterE5/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=3 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/afterE7/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=3 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/reproE/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=4 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/afterE/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=4 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/afterE2/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=4 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/afterE4/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=4 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/afterE6/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=4 format=[1] <corbanu-root>/.codex-work/tui-lane-20261006/homes/reproA/pfterminal_state_5.sqlite
+2026-10-06 2026-10-06 attempts=8 format=[1] <corbanu-root>/.codex-work/tui-persist-20261006/homes/run1/pfterminal_state_5.sqlite
+2026-10-08 2026-10-08 attempts=24 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round9/qual/guest-evidence/x/q12m-runs-7f1bb0/w-fdqdl0qh/home/pfterminal_state_5.sqlite
+2026-10-08 2026-10-08 attempts=3 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round9/qual/guest-evidence/x/q12c-runs-7f1bb0/w-gwwfjjuw/home/pfterminal_state_5.sqlite
+2026-10-08 2026-10-08 attempts=30 format=[1] <corbanu-root>/.codex-work/owner-manager-enable-20261002/round9/qual/guest-evidence/x/q12n-runs-7f1bb0/w-9o72zfui/home/pfterminal_state_5.sqlite
+## Linux <rtx-host>: whole home
+2026-10-09 2026-10-09 attempts=1 format=[1, 99] <rtx-scratch>/homes/h-l-c6fut/pfterminal_state_5.sqlite
+2026-10-09 2026-10-09 attempts=2 format=[1] <rtx-scratch>/homes/h-l-c7/pfterminal_state_5.sqlite
+2026-10-09 2026-10-09 attempts=2 format=[1] <rtx-scratch>/homes/h-l-c9/pfterminal_state_5.sqlite
+2026-10-09 2026-10-09 attempts=2 format=[1] <rtx-scratch>/homes/h-old2/pfterminal_state_5.sqlite
+2026-10-09 2026-10-09 attempts=21 format=[1, 2] <rtx-scratch>/homes/h-c1/pfterminal_state_5.sqlite
+2026-10-09 2026-10-09 attempts=3 format=[1, 2] <rtx-scratch>/homes/h-l-c3/pfterminal_state_5.sqlite
+2026-10-09 2026-10-09 attempts=3 format=[1] <rtx-scratch>/homes/h-l-c8/pfterminal_state_5.sqlite
+2026-10-09 2026-10-09 attempts=4 format=[1] <rtx-scratch>/homes/h-l-payonly/pfterminal_state_5.sqlite
+2026-10-09 2026-10-09 attempts=4 format=[1] <rtx-scratch>/homes/h-old-pristine-copy/pfterminal_state_5.sqlite
+2026-10-09 2026-10-09 attempts=4 format=[1] <rtx-scratch>/homes/h-old/pfterminal_state_5.sqlite
+2026-10-09 2026-10-09 attempts=5 format=[1] <rtx-scratch>/homes/h-old-view/pfterminal_state_5.sqlite
+2026-10-09 2026-10-09 attempts=7 format=[1] <rtx-scratch>/homes/h-l-mixed/pfterminal_state_5.sqlite
+## retention checkpoint (completed_as_of_ms) of the ledgers opened in C6
+acct64/old-A 1797848006838
+acct63/home-old 1791066693704
+corbanu-terminal/home 1791553900162

@@ -16,12 +16,21 @@ pub(crate) fn create_env_for_mcp_server(
     env_vars: &[McpServerEnvVar],
 ) -> Result<HashMap<OsString, OsString>> {
     let additional_env_vars = local_stdio_env_var_names(env_vars)?;
+    // PF-27-S02: with secretless agent launch armed, inherited variables
+    // must pass the launch allowlist; literal `env` values from the server's
+    // own config are still applied below.
+    let armed = codex_protocol::secretless_launch::is_armed();
     let env = DEFAULT_ENV_VARS
         .iter()
         .copied()
         .chain(additional_env_vars)
+        .filter(|var| !armed || codex_protocol::secretless_launch::is_launch_env_name_allowed(var))
         .filter_map(|var| env::var_os(var).map(|value| (OsString::from(var), value)))
         .chain(extra_env.unwrap_or_default())
+        .chain(
+            codex_protocol::shell_environment::keyring_isolation_env_var()
+                .map(|(name, value)| (OsString::from(name), OsString::from(value))),
+        )
         .collect();
     Ok(env)
 }
@@ -199,6 +208,17 @@ mod tests {
         let env = create_env_for_mcp_server(/*extra_env*/ None, &[custom_var.into()])
             .expect("local MCP env should build");
         assert_eq!(env.get(OsStr::new(custom_var)), Some(&expected));
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[serial(extra_rmcp_env)]
+    fn create_env_keeps_keyring_isolation() {
+        let name = codex_protocol::shell_environment::NO_NATIVE_KEYRING_ENV_VAR;
+        let _guard = EnvVarGuard::set(name, "1");
+        let env =
+            create_env_for_mcp_server(/*extra_env*/ None, &[]).expect("local MCP env should build");
+        assert_eq!(env.get(OsStr::new(name)), Some(&OsString::from("1")));
     }
 
     #[test]

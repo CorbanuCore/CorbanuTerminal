@@ -1,0 +1,40 @@
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: /private/tmp/f545proj            │
+╰─────────────────────────────────────────────╯
+
+› reply with the single word ping
+
+• ping
+
+⚠ Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set
+  `suppress_unstable_features_warning = true` in /private/tmp/f545h.dLk7/config.toml.
+
+› reply with the single word resumed
+
+• resumed
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                               │
+│                                                                                              │
+│  Model:                Z.AI GLM 5.3 Flash                                                    │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account personal                │
+│  Directory:            /private/tmp/f545proj                                                 │
+│  Permissions:          Next turn: Workspace (Ask for approval)                               │
+│  Security:             Requested Permissive; effective protection unverified (/security)     │
+│  Agents.md:            <none>                                                                │
+│  Collaboration mode:   Default                                                               │
+│  Session:              01a12dbd-dfcd-7c30-95fa-399612a23ae4                                  │
+│                                                                                              │
+│  Token usage:          28.1K total  (28K input + 34 output)                                  │
+│  Context window:       100% left (14.3K used / 950K)                                         │
+│  Account usage:        personal · 28,016 input · 576 cached input · 34 output (27 reasoning) │
+│  Limits:               data not available yet                                                │
+╰──────────────────────────────────────────────────────────────────────────────────────────────╯
+
+› Summarize recent commits
+
+  Z.AI GLM 5.3 Flash via zai default · /private/tmp/f545proj · Corbanu Terminal · TPS: 4.9 tok/s

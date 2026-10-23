@@ -1,0 +1,72 @@
+# PF-84-S04: after Claude Plan is set up in onboarding, it shows as exactly one
+# row (the bug showed "Anthropic Claude Account" and "Claude Account", both
+# configured). Choosing it offers use / add another account / replace; the
+# added account's token is masked. Synthetic tokens only; no model call. Record with
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-no-duplicate-rows.toml \
+#     --bin <candidate> --sprint PF-84-S04 --publish
+id = "pf84-no-duplicate-rows"
+feature = "PF-84-S04: one onboarding row per configured provider; add another account behind it"
+expected = "After a Claude token is saved, the list shows one 'Provider: Claude Account' row; choosing it offers Add another account, which saves account work with a masked token."
+config = """
+model = "gpt-5.4"
+model_provider = "openai"
+suppress_unstable_features_warning = true
+[features]
+named_accounts = true
+"""
+
+[[steps]]
+wait = "Choose a provider account"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Claude Plan authentication"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Save Claude subscription token"
+[[steps]]
+type = "sk-ant-oat01-pf84-s04-demo-fake-0001"
+verify = false
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Anthropic Claude account configured"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Provider: Claude Account"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Use configured credentials"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Name it"
+[[steps]]
+type = "work"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Paste it here"
+[[steps]]
+type = "sk-ant-oat01-pf84-s04-demo-fake-0002"
+verify = false
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved claude-plan account `work`"
+[[steps]]
+pause = 3.0

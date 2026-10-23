@@ -33,6 +33,7 @@ impl SessionTask for CompactTask {
     ) -> SessionTaskResult {
         let session = session.clone_session();
         let _profile_guard = ctx.turn_timing_state.begin_compaction();
+        crate::session::turn::notify_openai_api_key_env_fallback(&session, &ctx).await;
         if ctx.config.features.enabled(Feature::TokenBudget) {
             crate::compact_token_budget::run_manual_compact_task(session, ctx).await?;
             return Ok(None);

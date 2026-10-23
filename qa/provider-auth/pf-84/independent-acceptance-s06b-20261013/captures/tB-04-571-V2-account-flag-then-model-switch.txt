@@ -1,0 +1,73 @@
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       gpt-6-luna medium   /model to change       │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+• Connectors, usage and the model list now use openai account `work`; model list refreshed.
+
+• Model changed to GPT-6 Luna via OpenAI medium
+
+⚠ MCP client for `codex_apps` failed to start: MCP startup failed: handshaking with MCP server failed: Send message error Transport
+  [rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rmcp_client::http_client_adapter::StreamableHttpClie
+  ntAdapter>>] error: unexpected server response: HTTP 404: , when send initialize request
+
+⚠ MCP startup incomplete (failed: codex_apps)
+
+
+› Reply with exactly: pong
+
+
+⚠ Code Mode is unavailable because failed to spawn code-mode host $S/bin/codex-code-mode-host: host executable was not
+  found. Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.
+
+⚠ MCP client for `codex_apps` failed to start: MCP startup failed: handshaking with MCP server failed: Send message error Transport
+  [rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rmcp_client::http_client_adapter::StreamableHttpClie
+  ntAdapter>>] error: unexpected server response: HTTP 404: , when send initialize request
+
+⚠ MCP startup incomplete (failed: codex_apps)
+
+• mock: chatgpt tuiwork gen1
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date                            │
+│ information on rate limits and credits                                                   │
+│                                                                                          │
+│  Model:                GPT-6 Luna (reasoning medium, summaries auto)                     │
+│  Model provider:       OpenAI - http://127.0.0.1:34731/v1 · account work                 │
+│  Directory:            $S/ws              │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              ChatGPT sign-in · t…@example.com · Plus (account work)            │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a1344a-09ba-70b3-b071-459a483845d2                              │
+│                                                                                          │
+│  Token usage:          129 total  (120 input + 9 output)                                 │
+│  Context window:       100% left (129 used / 998K)                                       │
+│  Account usage:        work · 120 input · 9 output                                       │
+│  5h limit:             [██████████░░░░░░░░░░] 51% left                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+  Cost — this conversation
+  Requested UTC day: 2026-10-13
+
+› Today (UTC) in this conversation:
+  • OpenAI · account work · GPT-6 Luna — Billing basis not declared. 1 request, 129 tokens. Counted neither as money spent nor as subscription work.
+  Other conversations on this day, not included above: 1 request in 1 conversation.
+  • Amazon Bedrock · account work · openai.gpt-5.4 — Pay per use. 1 request, 129 tokens. Estimated cost: no price available.
+  Other conversations' estimated cost: no price available.
+  To see those requests, open that conversation with /resume and run /cost there.
+  Billing basis not declared for OpenAI. Next step: set model_providers.openai.billing = "subscription", "pay_per_use" or "local" in config.toml. Until then these
+  requests are counted neither as money spent nor as subscription work.
+
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

@@ -1,0 +1,13 @@
+
+######## V2N on BASE (corbanu-base)
+TUI started on Z.AI with --account openai:work and NO default OpenAI login or OPENAI_API_KEY, then /model -> OpenAI GPT-6 Luna
+pick: /GPT-6 Luna/ not found
+send_line: composer never showed the text
+-- mock lines for this turn:
+╰───────────────────────────────────────────────────────�
+  Select Reasoning Level for Z.AI GLM 5.3 Flash
+› 1. Low              Low. Lightweight reasoning for faster work.
+  2. High             High. Enhanced reasoning for general coding.
+  3. More reasoning…  Max consumes usage limits faster
+  Press enter to confirm or esc to go back
+send_line: composer never showed the text

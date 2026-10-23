@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a120bd-cfe6-7a11-83ba-c1f33fb7a2ac"}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 401 Unauthorized: invalid x-api-key, url: https://api.anthropic.com/v1/messages, cf-ray: a47d8dbb0f11a3b9-SEA"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: invalid x-api-key, url: https://api.anthropic.com/v1/messages, cf-ray: a47d8dbb0f11a3b9-SEA"}}

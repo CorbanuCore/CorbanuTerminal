@@ -1,0 +1,126 @@
+# Issue #613 (#602 review): the kill switch texts name the panes whose tasks don't wait.
+id = "issue613-kill-switch-texts"
+feature = "#613: kill switch texts say which tasks don't wait"
+expected = "The kill-switch-on review, the stop message and the /security picker say that tasks from other agents wait, that a Claude pane keeps only the newest task, and that a task for a Corbanu pane opened in /panes is refused; /orchestrate resume is refused while the switch is on."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Aggressive\\?"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active now in this session"
+[[steps]]
+key = "Escape"
+
+[[steps]]
+type = "Run exactly this shell command once, unchanged, and wait for it: sleep 40 && echo FINISHED"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "sleep 40"
+timeout = 120
+compress = 2
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Security level"
+[[steps]]
+key = "g"
+[[steps]]
+wait = "Grants and kill switch"
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Turn the kill switch on\\?"
+[[steps]]
+wait = "refused instead"
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Kill switch on"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "esc back to the levels"
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "Security level"
+[[steps]]
+key = "Escape"
+[[steps]]
+pause = 0.5
+[[steps]]
+wait = "Turn stopped by the security kill switch"
+timeout = 30
+[[steps]]
+wait = "newest task"
+[[steps]]
+pause = 4.0
+[[steps]]
+type = "/orchestrate resume whip-1"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Not resumed: the security kill switch is on"
+timeout = 30
+[[steps]]
+pause = 3.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Kill switch: on"
+[[steps]]
+wait = "is refused\\)"
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "Escape"
+[[steps]]
+pause = 0.5

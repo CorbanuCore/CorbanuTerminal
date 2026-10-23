@@ -1,0 +1,39 @@
+== hm: existing single-account home (baseline-created, default Z.AI only, flag off) ==
+  hm-base1: BASE exec  -> exit=0 reply=pong 
+  hm-base2: BASE exec  -> exit=0 reply=pong 
+  [after baseline] config.toml 97adc9a10c0cf6be  local.age absent
+  [after baseline] ledger format rows: [] ; attempts 2; with account field 0
+  [after baseline] sha256 of the baseline's original attempt rows (id||payload, ordered): 359efd1bff5dba61
+  hm-cand-off: CAND exec  -> exit=0 reply=pong 
+  [after candidate, flag off] config.toml 97adc9a10c0cf6be  local.age absent
+  [after candidate, flag off] ledger format rows: [] ; attempts 3; with account field 0
+  [after candidate, flag off] sha256 of the baseline's original attempt rows (id||payload, ordered): 359efd1bff5dba61
+  hm-cand-on: CAND exec --enable named_accounts -> exit=0 reply=pong 
+  hm-cand-on-default: CAND exec --enable named_accounts --account default -> exit=0 reply=pong 
+  account list (flag on): No named accounts. Every provider uses its default account. 
+  [after candidate, flag on, default only] config.toml 97adc9a10c0cf6be  local.age absent
+  [after candidate, flag on, default only] ledger format rows: [] ; attempts 5; with account field 0
+  [after candidate, flag on, default only] sha256 of the baseline's original attempt rows (id||payload, ordered): 359efd1bff5dba61
+  hm-base3: BASE exec  -> exit=0 reply=pong 
+  [after baseline again] config.toml 97adc9a10c0cf6be  local.age absent
+  [after baseline again] ledger format rows: [] ; attempts 6; with account field 0
+  [after baseline again] sha256 of the baseline's original attempt rows (id||payload, ordered): 359efd1bff5dba61
+
+== hb: baseline home with named account work (flag on) ==
+  hb-base-default: BASE exec  -> exit=0 reply=pong 
+  hb-base-work: BASE exec --account work -> exit=0 reply=pong 
+  [after baseline (default + work)] config.toml 517d21d579bfc9d0  local.age 9f4824e60babd325
+  [after baseline (default + work)] ledger format rows: [] ; attempts 2; with account field 0
+  [after baseline (default + work)] sha256 of the baseline's original attempt rows (id||payload, ordered): 2ae1bb2414ff9788
+  hb-cand-default: CAND exec  -> exit=0 reply=pong 
+  [after candidate default] config.toml 517d21d579bfc9d0  local.age 9f4824e60babd325
+  [after candidate default] ledger format rows: [] ; attempts 3; with account field 0
+  [after candidate default] sha256 of the baseline's original attempt rows (id||payload, ordered): 2ae1bb2414ff9788
+  hb-cand-work: CAND exec --account work -> exit=0 reply=pong 
+  [after candidate work] config.toml 517d21d579bfc9d0  local.age d3338ecac9320b47
+  [after candidate work] ledger format rows: [2, 3, 4] ; attempts 4; with account field 1
+  [after candidate work] sha256 of the baseline's original attempt rows (id||payload, ordered): 2ae1bb2414ff9788
+  hb-base-after-upgrade: BASE exec  -> exit=0 reply=pong warning: Developer accounting is off for this session: this home's cost ledger was written by a newer Corbanu build. Requests are sent as usual; /cost does not include them. 
+  [after baseline on the format-4 ledger] config.toml 517d21d579bfc9d0  local.age d3338ecac9320b47
+  [after baseline on the format-4 ledger] ledger format rows: [2, 3, 4] ; attempts 4; with account field 1
+  [after baseline on the format-4 ledger] sha256 of the baseline's original attempt rows (id||payload, ordered): 2ae1bb2414ff9788

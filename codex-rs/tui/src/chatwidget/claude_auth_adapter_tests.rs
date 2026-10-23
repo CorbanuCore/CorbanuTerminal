@@ -37,7 +37,7 @@ fn backend_results_collapse_without_retaining_raw_error_text() {
         ClaudeCodeLoginOutcome::TimedOut
     );
     assert_eq!(
-        collapse_backend_result(None),
+        collapse_backend_result(/*result*/ None),
         ClaudeCodeLoginOutcome::Cancelled
     );
     assert!(!format!("{:?}", ClaudeCodeLoginOutcome::Rejected).contains(canary));
@@ -199,7 +199,9 @@ fn status(source: ProviderCredentialSource) -> ProviderStatusSnapshot {
 }
 
 fn target() -> ClaudeAccountTarget {
-    let catalog = ProviderCatalog::from_runtime_providers(&built_in_model_providers(None));
+    let catalog = ProviderCatalog::from_runtime_providers(&built_in_model_providers(
+        /*openai_base_url*/ None,
+    ));
     ClaudeAccountTarget::from_catalog_entry(
         catalog.get("claude-plan").expect("Claude catalog entry"),
     )

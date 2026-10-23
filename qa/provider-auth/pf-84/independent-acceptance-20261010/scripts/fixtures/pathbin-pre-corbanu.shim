@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "$(date +%s) argv=[$*] CORBANU_PROVIDER_ACCOUNT=${CORBANU_PROVIDER_ACCOUNT-<unset>}" >> /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/pathbin-pre/calls.log
+exec /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/bin/corbanu-pre "$@"

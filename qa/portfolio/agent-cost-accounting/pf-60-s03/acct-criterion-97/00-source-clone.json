@@ -1,0 +1,41 @@
+{
+  "label": "00-source-clone",
+  "command": [
+    "bash",
+    "--noprofile",
+    "--norc",
+    "-x",
+    "-c",
+    "set -eu\ngit clone --no-local --no-checkout \"$SOURCE_REPO\" \"$SOURCE_COPY\"\ngit -C \"$SOURCE_COPY\" checkout --detach \"$BASE\"\n"
+  ],
+  "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916",
+  "note_sha256": "713130677d8793009206d19e33274450b7448092f705ce909d8c90efaf2520e9",
+  "script_sha256": "a2c746f3322936e446bdede87e6bdfe9b05b2956aad63bee2f30b95fefeb44b1",
+  "log_sha256": "475ee3b1a14d672776b2a9b2d2cce4e152bcbb5ae0b11572e1eaeaf3bd04e433",
+  "exit": 0,
+  "expected_exit": 0,
+  "elapsed_seconds": 8.63350510597229,
+  "fresh_shell": true,
+  "environment_keys": [
+    "BASE",
+    "CARGO_HOME",
+    "CARGO_TERM_COLOR",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_TERMINAL_PROMPT",
+    "HOME",
+    "LC_ALL",
+    "PATH",
+    "PYTHONDONTWRITEBYTECODE",
+    "RUSTUP_HOME",
+    "SOURCE_COPY",
+    "SOURCE_REPO",
+    "TERM",
+    "TMPDIR"
+  ],
+  "explicit_inputs": {
+    "SOURCE_REPO": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916",
+    "SOURCE_COPY": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-criterion-97/target/source-copy",
+    "BASE": "2903d37c60dff3b8bec469fcf82347729b53f7fd"
+  }
+}

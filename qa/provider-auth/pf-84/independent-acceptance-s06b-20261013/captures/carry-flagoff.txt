@@ -1,0 +1,154 @@
+## home hm made by BASE 82b1b2cf32 (main before #561): default ChatGPT login (mock user legacy), no [features] table
+Successfully logged in
+$ run $S/bin/corbanu-base $S/homes/hm exec --skip-git-repo-check -C $S/ws Reply with exactly: pong
+mock: chatgpt legacy gen1
+mock: chatgpt legacy gen1
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "legacy", "gen": 1, "expired": false}, "model": null}
+## snapshot S0 (sha256 prefixes; excludes log/, sessions/, tmp/, *.sqlite*, *.lock, model caches)
+2d27fbdf4e8ca207  ./.sandbox_migration
+6abdcc1d79c6c8b4  ./auth.json
+8b4c555cb92dcd00  ./config.toml
+af04ff4cef8068b4  ./installation_id
+4c21309c257b8543  ./skills/.system/.codex-system-skills.marker
+4e31685cb81f632a  ./skills/.system/corbanu-terminal-help/SKILL.md
+cd1fb0f6c111896e  ./skills/.system/corbanu-terminal-help/agents/openai.yaml
+666f93368fffcdae  ./skills/.system/frontend-design/SKILL.md
+0ac034f8b76c9056  ./skills/.system/frontend-design/agents/openai.yaml
+4dd13869245e3562  ./skills/.system/imagegen/LICENSE.txt
+59981d23519222bc  ./skills/.system/imagegen/SKILL.md
+9ca574af14580dc7  ./skills/.system/imagegen/agents/openai.yaml
+cff5f34f57ff60b3  ./skills/.system/imagegen/assets/imagegen-small.svg
+95952f644064eb9e  ./skills/.system/imagegen/assets/imagegen.png
+38d92cdbec5f3430  ./skills/.system/imagegen/references/cli.md
+c88298ca4481f611  ./skills/.system/imagegen/references/codex-network.md
+ca5424dfcad5a4c8  ./skills/.system/imagegen/references/image-api.md
+a88c459a03060515  ./skills/.system/imagegen/references/prompting.md
+43307821f1db18e0  ./skills/.system/imagegen/references/sample-prompts.md
+35e8f9fa47deca11  ./skills/.system/imagegen/scripts/image_gen.py
+3f7b9b14ad5c90f3  ./skills/.system/imagegen/scripts/remove_chroma_key.py
+4dd13869245e3562  ./skills/.system/openai-docs/LICENSE.txt
+7cb8fa1b2a0c635b  ./skills/.system/openai-docs/SKILL.md
+44b9efac6be1bae3  ./skills/.system/openai-docs/agents/openai.yaml
+45be1f0757eb1888  ./skills/.system/openai-docs/assets/openai-small.svg
+156cc84d7332bfe9  ./skills/.system/openai-docs/assets/openai.png
+8c8fb00e6e5cb197  ./skills/.system/openai-docs/references/codex-self-knowledge.md
+f25e351e522dd6e3  ./skills/.system/openai-docs/references/latest-model.md
+49bbd2f73df7bbd7  ./skills/.system/openai-docs/references/mcp-diagnostics.md
+5f20c38fbbb10319  ./skills/.system/openai-docs/references/model-migration.md
+ba2d164abbca3043  ./skills/.system/openai-docs/references/model-selection.md
+7962f2dce55089b9  ./skills/.system/openai-docs/references/official-docs.md
+db913884cfe0fabf  ./skills/.system/openai-docs/references/prompting-guide.md
+ed1b75a89b8ec4d6  ./skills/.system/openai-docs/references/upgrade-guide.md
+9a918a0c8dd051d5  ./skills/.system/openai-docs/references/upgrading-to-gpt-5p6-sol.md
+f53eb6d2f286e9ef  ./skills/.system/openai-docs/scripts/fetch-codex-manual.mjs
+7354dbb030ca0736  ./skills/.system/openai-docs/scripts/resolve-latest-model-info
+01ea0da6cd9b88fd  ./skills/.system/openai-docs/scripts/resolve-latest-model-info.cjs
+8fd56316b2c49cbd  ./skills/.system/plugin-creator/SKILL.md
+fecaf35d692bd3d3  ./skills/.system/plugin-creator/agents/openai.yaml
+6591bf8ea9bb9435  ./skills/.system/plugin-creator/assets/plugin-creator-small.svg
+a4024b0306ddb058  ./skills/.system/plugin-creator/assets/plugin-creator.png
+b030517fe05b12dd  ./skills/.system/plugin-creator/references/installing-and-updating.md
+eeb640130f69636a  ./skills/.system/plugin-creator/references/plugin-json-spec.md
+b5aa34f7f9dcec4b  ./skills/.system/plugin-creator/scripts/create_basic_plugin.py
+7659216759152f83  ./skills/.system/plugin-creator/scripts/read_marketplace_name.py
+4fe3c5a49212f6e3  ./skills/.system/plugin-creator/scripts/update_plugin_cachebuster.py
+ebda00d55d7518b1  ./skills/.system/plugin-creator/scripts/validate_plugin.py
+3ee9284eb9742b77  ./skills/.system/postfiat-l1-development/SKILL.md
+885451d908f88031  ./skills/.system/postfiat-l1-development/agents/openai.yaml
+07079efd0dc76f05  ./skills/.system/review-agent/SKILL.md
+4d867a46d15e36ac  ./skills/.system/review-agent/agents/openai.yaml
+da44c88f6b3845a8  ./skills/.system/skill-creator/SKILL.md
+d07d21b93fcf3d4d  ./skills/.system/skill-creator/agents/openai.yaml
+6591bf8ea9bb9435  ./skills/.system/skill-creator/assets/skill-creator-small.svg
+a4024b0306ddb058  ./skills/.system/skill-creator/assets/skill-creator.png
+cfc7749b96f63bd3  ./skills/.system/skill-creator/license.txt
+ffac39318e408108  ./skills/.system/skill-creator/references/openai_yaml.md
+ddaf9abdfb3e762e  ./skills/.system/skill-creator/scripts/generate_openai_yaml.py
+f40cb8fafc34e2d5  ./skills/.system/skill-creator/scripts/init_skill.py
+6cc9dc3199c93591  ./skills/.system/skill-creator/scripts/quick_validate.py
+cfc7749b96f63bd3  ./skills/.system/skill-installer/LICENSE.txt
+d68b77e5bbb34ded  ./skills/.system/skill-installer/SKILL.md
+5ce223d8b1070b82  ./skills/.system/skill-installer/agents/openai.yaml
+3928703ff00dc1a6  ./skills/.system/skill-installer/assets/skill-installer-small.svg
+d0a230b1a79b71b8  ./skills/.system/skill-installer/assets/skill-installer.png
+61c1bbe2ae217433  ./skills/.system/skill-installer/scripts/github_utils.py
+0fbbd36e8ea29444  ./skills/.system/skill-installer/scripts/install-skill-from-github.py
+e4e1f78ca3d04582  ./skills/.system/skill-installer/scripts/list-skills.py
+c216d6e97f07dc05  ./skills/.system/tasknode-usage/SKILL.md
+13abd154e8d1be03  ./skills/.system/tasknode-usage/agents/openai.yaml
+92c30b1955c98dc0  ./skills/.system/tasknode-usage/references/submission-templates.md
+7d2e4ed5c5cddfea  ./skills/.system/tasknode-usage/references/tooling.md
+
+## candidate, flag off (default)
+$ run $S/bin/corbanu-cand $S/homes/hm exec --skip-git-repo-check -C $S/ws Reply with exactly: pong
+mock: chatgpt legacy gen1
+mock: chatgpt legacy gen1
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "legacy", "gen": 1, "expired": false}, "model": null}
+$ run $S/bin/corbanu-cand $S/homes/hm account list
+Error: named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts`
+[exit 1]
+$ run $S/bin/corbanu-cand $S/homes/hm login status
+Logged in using ChatGPT
+[exit 0]
+
+## candidate, --enable named_accounts for single runs: default account
+$ run $S/bin/corbanu-cand $S/homes/hm exec --skip-git-repo-check -C $S/ws --enable named_accounts Reply with exactly: pong
+mock: chatgpt legacy gen1
+mock: chatgpt legacy gen1
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "legacy", "gen": 1, "expired": false}, "model": null}
+$ run $S/bin/corbanu-cand $S/homes/hm exec --skip-git-repo-check -C $S/ws --enable named_accounts --account default Reply with exactly: pong
+mock: chatgpt legacy gen1
+mock: chatgpt legacy gen1
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "legacy", "gen": 1, "expired": false}, "model": null}
+$ run $S/bin/corbanu-cand $S/homes/hm exec --skip-git-repo-check -C $S/ws --enable named_accounts --account openai:default Reply with exactly: pong
+mock: chatgpt legacy gen1
+mock: chatgpt legacy gen1
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "legacy", "gen": 1, "expired": false}, "model": null}
+## snapshot S1 vs S0
+IDENTICAL
+
+## flag-off parity of named-account commands: BASE vs CAND
+--- BASE
+$ run $S/bin/corbanu-base $S/homes/hm login --account work --device-auth --experimental_issuer http://127.0.0.1:34725
+named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts`
+[exit 1]
+named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts`
+[exit 1]
+$ run $S/bin/corbanu-base $S/homes/hm logout --account work
+named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts`
+[exit 1]
+$ run $S/bin/corbanu-base $S/homes/hm login --account work status
+named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts`
+[exit 1]
+$ run $S/bin/corbanu-base $S/homes/hm exec --skip-git-repo-check -C $S/ws --account work Reply with exactly: pong
+Error: --account openai:work: named accounts need the `named_accounts` feature (`--enable named_accounts`); `--account default` uses the default credentials
+[exit 1]
+--- CAND
+$ run $S/bin/corbanu-cand $S/homes/hm login --account work --device-auth --experimental_issuer http://127.0.0.1:34725
+named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts`
+[exit 1]
+named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts`
+[exit 1]
+$ run $S/bin/corbanu-cand $S/homes/hm logout --account work
+named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts`
+[exit 1]
+$ run $S/bin/corbanu-cand $S/homes/hm login --account work status
+named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts`
+[exit 1]
+$ run $S/bin/corbanu-cand $S/homes/hm exec --skip-git-repo-check -C $S/ws --account work Reply with exactly: pong
+Error: --account openai:work: named accounts need the `named_accounts` feature (`--enable named_accounts`); `--account default` uses the default credentials
+[exit 1]
+## snapshot S2 vs S0
+IDENTICAL
+
+## BASE still works on the home afterwards
+$ run $S/bin/corbanu-base $S/homes/hm exec --skip-git-repo-check -C $S/ws Reply with exactly: pong
+mock: chatgpt legacy gen1
+mock: chatgpt legacy gen1
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "legacy", "gen": 1, "expired": false}, "model": null}

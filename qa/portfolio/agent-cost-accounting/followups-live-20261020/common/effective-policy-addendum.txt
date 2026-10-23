@@ -1,0 +1,12 @@
+# Addendum to effective-policy.txt (integrator, after evidence check r1, 2026-10-20)
+
+effective-policy.txt is bound by hash into every isolation receipt, so it stays as written; corrections go here.
+
+1. Shakedown spend (correcting "no OpenAI or Moonshot inference"): no Moonshot request was sent, and the relay refused
+   the shakedown's realtime start (403). About 75 ms after that refusal, the realtime driver's app-server thread still
+   opened one real OpenAI Responses WebSocket (01:54:12Z, about 1 s, 923 response bytes; shakedown/common/mediator-final.jsonl.gz). Group R's
+   billed GPT-6 Sol startup warm-up shows the same pattern (04:24:37Z, 2.1 s, 923 bytes), so this was most likely one
+   billed warm-up of about $0.029. The relay doesn't log WebSocket usage, so the amount is not confirmed. Filed as #1045.
+2. Lock release and UTM end state: `tart-run.sh down` printed "lock released" to its terminal, outside vm-state-end.txt.
+   A host check after the run (host-end-check.txt) shows the Tart lock absent, only corbanu-qa-base in `tart list`, and
+   UTM "macOS 2" and "macOS 3" stopped.

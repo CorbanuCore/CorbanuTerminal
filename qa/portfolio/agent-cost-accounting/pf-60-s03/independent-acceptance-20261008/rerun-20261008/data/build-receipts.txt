@@ -1,0 +1,15 @@
+# build receipts (log tails; binaries: sha256 in README)
+## macOS tools/build-mac.sh (commit b294864916c5e824e0bf5a2c0ee89654ef8ca417)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3m 32s
+exit=0
+## Linux src HEAD b294864916c5e824e0bf5a2c0ee89654ef8ca417
+## tools/build-rtx.sh acct
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 55s
+acct-exit=0
+## tools/build-rtx.sh default
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 58s
+default-exit=0
+ef3b0bc40cd644b708d03d6d73562ba72b191560c8391584cc6ae8be52a44ff9  corbanu-acct
+23d8290c2d5599863a0d3cdbb8dbdc29f490edc1821894ff9ef7fffde1e92e46  corbanu-default
+## PR #306 poll (excerpt of executor terminal)
+15:19:42 OPEN … 15:53:57 OPEN, 15:56:48 MERGED; origin/main then b294864916 'Merge pull request #306'

@@ -334,6 +334,11 @@ impl LiveThread {
             .await
     }
 
+    /// How this thread's history is persisted (decides which items are written).
+    pub fn history_mode(&self) -> ThreadHistoryMode {
+        self.history_mode
+    }
+
     /// Returns the live local rollout path for legacy local-only callers.
     ///
     /// Remote stores do not expose rollout files, so they return `Ok(None)`.

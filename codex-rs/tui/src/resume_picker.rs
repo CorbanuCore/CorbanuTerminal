@@ -112,6 +112,10 @@ pub enum SessionPickerAction {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SessionPickerLaunchContext {
     Startup,
+    /// PF-84 (#555): `corbanu resume` picks the thread before onboarding,
+    /// because a new session would need provider credentials first. Esc
+    /// leaves instead of starting a new session that would open onboarding.
+    StartupBeforeOnboarding,
     ExistingSession,
 }
 
@@ -301,7 +305,7 @@ struct SessionPickerRunOptions {
 /// sessions appear during pagination.
 ///
 /// Filtering happens in two layers:
-/// 1. Provider, source, and eligible working-directory filtering at the backend.
+/// 1. Source and eligible working-directory filtering at the backend.
 /// 2. Typed search filtering over loaded rows in the picker.
 pub async fn run_resume_picker_with_app_server(
     tui: &mut Tui,
@@ -309,14 +313,17 @@ pub async fn run_resume_picker_with_app_server(
     show_all: bool,
     include_non_interactive: bool,
     app_server: AppServerSession,
+    launch_context: SessionPickerLaunchContext,
 ) -> Result<SessionSelection> {
+    let mut tui_events = tui.event_stream();
     run_resume_picker_with_launch_context(
         tui,
         config,
         show_all,
         include_non_interactive,
         app_server,
-        SessionPickerLaunchContext::Startup,
+        launch_context,
+        &mut tui_events,
     )
     .await
 }
@@ -327,6 +334,7 @@ pub async fn run_resume_picker_from_existing_session_with_app_server(
     show_all: bool,
     include_non_interactive: bool,
     app_server: AppServerSession,
+    tui_events: &mut (dyn tokio_stream::Stream<Item = TuiEvent> + Send + Unpin),
 ) -> Result<SessionSelection> {
     run_resume_picker_with_launch_context(
         tui,
@@ -335,6 +343,7 @@ pub async fn run_resume_picker_from_existing_session_with_app_server(
         include_non_interactive,
         app_server,
         SessionPickerLaunchContext::ExistingSession,
+        tui_events,
     )
     .await
 }
@@ -346,6 +355,7 @@ async fn run_resume_picker_with_launch_context(
     include_non_interactive: bool,
     app_server: AppServerSession,
     launch_context: SessionPickerLaunchContext,
+    tui_events: &mut (dyn tokio_stream::Stream<Item = TuiEvent> + Send + Unpin),
 ) -> Result<SessionSelection> {
     let (bg_tx, bg_rx) = mpsc::unbounded_channel();
     let uses_remote_workspace = app_server.uses_remote_workspace();
@@ -356,7 +366,9 @@ async fn run_resume_picker_with_launch_context(
         app_server.remote_cwd_override(),
     );
     let local_filter_cwd = local_picker_cwd_filter(&cwd_filter, uses_remote_workspace);
-    let provider_filter = picker_provider_filter(config, uses_remote_workspace);
+    // A saved chat remains resumable when the current chat uses another provider.
+    // The selected thread's persisted provider is restored by the resume path.
+    let provider_filter = ProviderFilter::Any;
     let runtime_keymap = picker_runtime_keymap(config)?;
     let options = SessionPickerRunOptions {
         show_all,
@@ -383,6 +395,7 @@ async fn run_resume_picker_with_launch_context(
             bg_tx,
         ),
         bg_rx,
+        tui_events,
     )
     .await
 }
@@ -393,6 +406,7 @@ pub async fn run_fork_picker_with_app_server(
     show_all: bool,
     app_server: AppServerSession,
 ) -> Result<SessionSelection> {
+    let mut tui_events = tui.event_stream();
     let (bg_tx, bg_rx) = mpsc::unbounded_channel();
     let uses_remote_workspace = app_server.uses_remote_workspace();
     let cwd_filter = picker_cwd_filter(
@@ -429,6 +443,7 @@ pub async fn run_fork_picker_with_app_server(
             bg_tx,
         ),
         bg_rx,
+        &mut tui_events,
     )
     .await
 }
@@ -438,6 +453,7 @@ async fn run_session_picker_with_loader(
     options: SessionPickerRunOptions,
     picker_loader: PickerLoader,
     bg_rx: mpsc::UnboundedReceiver<BackgroundEvent>,
+    tui_events: &mut (dyn tokio_stream::Stream<Item = TuiEvent> + Send + Unpin),
 ) -> Result<SessionSelection> {
     let alt = AltScreenGuard::enter(tui);
     let mut state = PickerState::new(
@@ -457,7 +473,9 @@ async fn run_session_picker_with_loader(
     state.start_initial_load();
     state.request_frame();
 
-    let mut tui_events = alt.tui.event_stream().fuse();
+    // The caller owns input. In-app pickers must consume the main drainer's
+    // queue, never create a second reader competing for the shared event broker.
+    let mut tui_events = tui_events.fuse();
     let mut background_events = UnboundedReceiverStream::new(bg_rx).fuse();
 
     loop {
@@ -1091,7 +1109,15 @@ impl PickerState {
             }
             _ if self.list_keymap.cancel.is_pressed(key) => {
                 if self.query.is_empty() {
-                    return Ok(Some(SessionSelection::StartFresh));
+                    return Ok(Some(match self.launch_context {
+                        SessionPickerLaunchContext::StartupBeforeOnboarding => {
+                            SessionSelection::Exit
+                        }
+                        SessionPickerLaunchContext::Startup
+                        | SessionPickerLaunchContext::ExistingSession => {
+                            SessionSelection::StartFresh
+                        }
+                    }));
                 }
                 self.clear_query_preserving_selection();
             }
@@ -1851,7 +1877,8 @@ fn thread_list_params(
         sort_key: Some(sort_key),
         sort_direction: None,
         model_providers: match provider_filter {
-            ProviderFilter::Any => None,
+            // Omission means the server's default provider, not all providers.
+            ProviderFilter::Any => Some(Vec::new()),
             ProviderFilter::MatchDefault(default_provider) => Some(vec![default_provider]),
         },
         source_kinds: Some(crate::resume_source_kinds(include_non_interactive)),
@@ -2199,13 +2226,15 @@ fn footer_hint_lines(state: &PickerState, width: u16) -> Vec<Line<'static>> {
     let (esc_label, esc_compact_label) = if state.query.is_empty() {
         match state.launch_context {
             SessionPickerLaunchContext::Startup => ("start new", "new"),
+            SessionPickerLaunchContext::StartupBeforeOnboarding => ("quit", "quit"),
             SessionPickerLaunchContext::ExistingSession => ("exit", "exit"),
         }
     } else {
         ("clear search", "clear")
     };
     let ctrl_c_label = match state.launch_context {
-        SessionPickerLaunchContext::Startup => "quit",
+        SessionPickerLaunchContext::Startup
+        | SessionPickerLaunchContext::StartupBeforeOnboarding => "quit",
         SessionPickerLaunchContext::ExistingSession => "exit",
     };
     let density_label = match state.density {
@@ -3231,6 +3260,18 @@ fn render_empty_state_line(state: &PickerState) -> Line<'static> {
         return vec!["Loading older sessions…".italic().dim()].into();
     }
 
+    // Sessions are recorded against the folder they started in, so a new
+    // working directory (e.g. an SSH login's home) looks empty even when the
+    // user has plenty of sessions elsewhere.
+    if state.filter_mode == SessionFilterMode::Cwd {
+        return vec![
+            "No sessions in this folder. Press ←/→ to show sessions from all folders."
+                .italic()
+                .dim(),
+        ]
+        .into();
+    }
+
     vec!["No sessions yet".italic().dim()].into()
 }
 
@@ -3571,7 +3612,7 @@ mod tests {
     }
 
     #[test]
-    fn remote_thread_list_params_omit_provider_filter() {
+    fn all_provider_thread_list_params_explicitly_disable_provider_filter() {
         let params = thread_list_params(
             Some(String::from("cursor-1")),
             Some(Path::new("repo/on/server")),
@@ -3581,7 +3622,7 @@ mod tests {
         );
 
         assert_eq!(params.cursor, Some(String::from("cursor-1")));
-        assert_eq!(params.model_providers, None);
+        assert_eq!(params.model_providers, Some(Vec::new()));
         assert_eq!(
             params.source_kinds,
             Some(vec![ThreadSourceKind::Cli, ThreadSourceKind::VsCode])
@@ -3603,7 +3644,7 @@ mod tests {
         );
 
         assert_eq!(params.cursor, Some(String::from("cursor-1")));
-        assert_eq!(params.model_providers, None);
+        assert_eq!(params.model_providers, Some(Vec::new()));
         let source_kinds = crate::resume_source_kinds(/*include_non_interactive*/ true);
         assert_eq!(params.source_kinds, Some(source_kinds));
     }
@@ -3647,6 +3688,27 @@ mod tests {
         };
 
         assert!(state.row_matches_filter(&row));
+    }
+
+    #[test]
+    fn empty_cwd_filter_points_to_all_folders() {
+        let loader = page_only_loader(|_| {});
+        let mut state = PickerState::new(
+            FrameRequester::test_dummy(),
+            loader,
+            ProviderFilter::Any,
+            /*show_all*/ false,
+            Some(PathBuf::from("/Users/example")),
+            SessionPickerAction::Resume,
+        );
+        let text = |state: &PickerState| render_empty_state_line(state).to_string();
+
+        assert_eq!(
+            text(&state),
+            "No sessions in this folder. Press ←/→ to show sessions from all folders."
+        );
+        state.filter_mode = SessionFilterMode::All;
+        assert_eq!(text(&state), "No sessions yet");
     }
 
     #[test]
@@ -6378,6 +6440,30 @@ session_picker_view = "dense"
             .expect("handle key");
 
         assert!(matches!(selection, Some(SessionSelection::StartFresh)));
+    }
+
+    /// PF-84 #555: before onboarding, a new session would need a sign-in, so
+    /// Esc quits and the footer says so.
+    #[tokio::test]
+    async fn esc_before_onboarding_quits() {
+        let loader = page_only_loader(|_| {});
+        let mut state = PickerState::new(
+            FrameRequester::test_dummy(),
+            loader,
+            ProviderFilter::MatchDefault(String::from("openai")),
+            /*show_all*/ true,
+            /*filter_cwd*/ None,
+            SessionPickerAction::Resume,
+        );
+        state.launch_context = SessionPickerLaunchContext::StartupBeforeOnboarding;
+        assert!(footer_lines_text(&state, /*width*/ 220).contains("esc quit"));
+
+        let selection = state
+            .handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .await
+            .expect("handle key");
+
+        assert!(matches!(selection, Some(SessionSelection::Exit)));
     }
 
     #[tokio::test]

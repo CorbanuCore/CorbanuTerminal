@@ -129,20 +129,48 @@ fn parent_completion_requires_triggering_collaboration_without_operator_input() 
 
 #[test]
 fn post_sampling_token_estimate_is_disabled_by_always_on_sinks() {
+    use tracing::Metadata;
+    use tracing::callsite::Callsite;
+    use tracing::callsite::Identifier;
+    use tracing::field::FieldSet;
+    use tracing::metadata::Kind;
+    use tracing::subscriber::Interest;
+
+    // Ask the sinks for their callsite interest directly. In production the
+    // estimate is skipped because the only subscriber reports `never` for this
+    // target; `event_enabled!` instead combines the interest of every live
+    // dispatcher in the process, so other tests' subscribers made it pass or
+    // fail depending on which tests ran first.
+    struct EstimateCallsite;
+    static CALLSITE: EstimateCallsite = EstimateCallsite;
+    static METADATA: Metadata<'static> = Metadata::new(
+        "post sampling token estimate",
+        POST_SAMPLING_TOKEN_ESTIMATE_TARGET,
+        tracing::Level::TRACE,
+        None,
+        None,
+        None,
+        FieldSet::new(
+            &["turn_id", "estimated_token_count", "message"],
+            Identifier(&CALLSITE),
+        ),
+        Kind::EVENT,
+    );
+    impl Callsite for EstimateCallsite {
+        fn set_interest(&self, _interest: Interest) {}
+
+        fn metadata(&self) -> &Metadata<'_> {
+            &METADATA
+        }
+    }
+
     let feedback = codex_feedback::CodexFeedback::new();
     let subscriber = tracing_subscriber::registry()
         .with(feedback.logger_layer())
         .with(tracing_subscriber::fmt::layer().with_filter(codex_state::log_db::default_filter()));
+    let dispatch = tracing::Dispatch::new(subscriber);
 
-    tracing::subscriber::with_default(subscriber, || {
-        assert!(!tracing::event_enabled!(
-            target: POST_SAMPLING_TOKEN_ESTIMATE_TARGET,
-            tracing::Level::TRACE,
-            turn_id,
-            estimated_token_count,
-            message
-        ));
-    });
+    assert!(dispatch.register_callsite(&METADATA).is_never());
 }
 
 #[tokio::test]
@@ -172,4 +200,56 @@ async fn plan_mode_uses_contributed_turn_item_for_last_agent_message() {
         last_agent_message.as_deref(),
         Some("plan contributed assistant text")
     );
+}
+
+/// #509: the turn-completion check respects the key's cooldown and records its
+/// own 429.
+#[tokio::test]
+async fn completion_check_respects_and_records_the_provider_request_throttle() {
+    use crate::provider_throttle::tests::RateLimitedSession;
+    use crate::provider_throttle::tests::assert_rate_limited_then_blocked;
+    use crate::session::turn_completion::assess_turn_completion;
+
+    let fixture = RateLimitedSession::start().await;
+    let mut client_session = fixture.session.services.model_client().new_session();
+    let metadata = fixture.metadata();
+    let cancel = CancellationToken::new();
+    let mut assess = async || {
+        assess_turn_completion(
+            &fixture.session,
+            &fixture.turn_context,
+            &mut client_session,
+            &metadata,
+            "say hello",
+            "I will say hello next.",
+            &cancel,
+        )
+        .await
+        .expect_err("the provider refuses every request")
+    };
+    let first = assess().await;
+    let second = assess().await;
+    assert_rate_limited_then_blocked(&first, &second);
+    assert_eq!(fixture.requests().await, 1);
+}
+
+/// #688: the notice names the left-out tools (the first ten, then a count)
+/// and says how to offer them.
+#[test]
+fn omitted_tools_notice_names_the_left_out_tools() {
+    let one = omitted_tools_notice(&["mcp__orders__lookup".to_string()]);
+    assert_eq!(
+        one,
+        "Corbanu sends at most 128 tools per request to providers without tool namespaces, so these are not offered to the model (1): `mcp__orders__lookup`. Turn off MCP servers or tools you don't need, or use a provider with tool namespaces (such as OpenAI), to offer them."
+    );
+    let many: Vec<String> = (0..12)
+        .map(|index| format!("mcp__bulk__t{index}"))
+        .collect();
+    let notice = omitted_tools_notice(&many);
+    assert!(
+        notice.contains("not offered to the model (12): `mcp__bulk__t0`,"),
+        "{notice}"
+    );
+    assert!(notice.contains("`mcp__bulk__t9` and 2 more."), "{notice}");
+    assert!(!notice.contains("mcp__bulk__t10"), "{notice}");
 }

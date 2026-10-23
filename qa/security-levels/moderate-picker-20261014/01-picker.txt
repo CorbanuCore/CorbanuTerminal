@@ -1,0 +1,61 @@
+
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     loading   /model to change                │
+│ directory: /Volumes/CorbanuDrive/…/proj/ledger-notes │
+╰──────────────────────────────────────────────────────╯
+
+
+› Implement {feature}
+
+  Z.AI GLM 5.3 Flash via zai default · <run>/proj/ledger-notes · Corbanu Terminal · TPS: -- tok/s
+
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.3-flash   /model to change          │
+│ directory: /Volumes/CorbanuDrive/…/proj/ledger-notes │
+╰──────────────────────────────────────────────────────╯
+
+Security level
+Active in this session: Permissive
+
+> Permissive  (active)
+  Moderate
+  Aggressive
+
+Today's behaviour. Your approval, sandbox, network, vault and agent settings apply exactly as configured.
+
+↑/↓ move · enter choose · esc close · i inspect
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

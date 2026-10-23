@@ -2,7 +2,7 @@
 sprint_id: "PF-51-S01"
 title: "OpenAI account auth adapter"
 status: completed
-plan_file: "docs/plans/proposed/unified-provider-auth.md"
+plan_file: "docs/plans/completed/main-2026-10-14-unified-provider-auth.md"
 plan_feature: "PF-51"
 execution_order: 10
 owner: "GPT-5.6 Sol high implementation agent"

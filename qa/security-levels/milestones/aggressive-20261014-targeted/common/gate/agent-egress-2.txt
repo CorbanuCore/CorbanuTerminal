@@ -1,0 +1,5 @@
+301
+curl: (6) Could not resolve host: github.com
+rc=6 github.com
+curl: (6) Could not resolve host: example.com
+rc=6 example.com

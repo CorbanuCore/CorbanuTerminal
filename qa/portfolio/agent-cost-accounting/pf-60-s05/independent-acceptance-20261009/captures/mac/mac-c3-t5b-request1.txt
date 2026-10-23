@@ -1,0 +1,29 @@
+$
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     glm-5.2   /model to change                    │
+│ directory: <corbanu-root>/tmp/…/work/repo │
+╰──────────────────────────────────────────────────────────╯
+
+  Reply with exactly: turn five
+• turn five
+  Request
+  Requested UTC day: 2026-10-09
+  Provider: zaiproxy
+  Model: Z.AI GLM 5.2
+  Billing: Pay per use
+  Estimated cost: no price available
+  Next step for requests with no price: check the bill from zaiproxy. No published price covers them, so no cost is shown for them here.
+  Tokens: 9,898 tokens
+  —— Details ——
+  Billed cost: zaiproxy doesn't report its charges, so any cost here is an estimate — check zaiproxy's bill.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Request: d69e524d-cc88-4d8d-b931-53349a27bfab
+  Snapshot is not current; newer activity is unverified
+  —— Open ——
+  → Technical details (attempt 1)
+  Back
+  Refresh
+  Close

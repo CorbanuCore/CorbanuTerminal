@@ -26,10 +26,19 @@ pub(crate) fn finish_driver_spawn(driver: ProcessDriver, stdin_open: bool) -> Sp
     spawned
 }
 
-pub(crate) fn start_runner_pipe_writer(
-    mut pipe_write: File,
-) -> std::sync::mpsc::Sender<FramedMessage> {
+#[cfg(test)]
+pub(crate) fn start_runner_pipe_writer(pipe_write: File) -> std::sync::mpsc::Sender<FramedMessage> {
     let (outbound_tx, outbound_rx) = std::sync::mpsc::channel::<FramedMessage>();
+    start_runner_pipe_writer_from(pipe_write, outbound_rx);
+    outbound_tx
+}
+
+/// Writes the frames sent on `outbound_rx` (they may be queued before the
+/// runner started) to the runner.
+pub(crate) fn start_runner_pipe_writer_from(
+    mut pipe_write: File,
+    outbound_rx: std::sync::mpsc::Receiver<FramedMessage>,
+) {
     tokio::task::spawn_blocking(move || {
         while let Ok(msg) = outbound_rx.recv() {
             if crate::ipc_framed::write_frame(&mut pipe_write, &msg).is_err() {
@@ -37,7 +46,6 @@ pub(crate) fn start_runner_pipe_writer(
             }
         }
     });
-    outbound_tx
 }
 
 pub(crate) fn start_runner_stdin_writer(
@@ -77,13 +85,21 @@ pub(crate) fn start_runner_stdin_writer(
     })
 }
 
+/// `credential_watch` (#442) runs until the command exits; what it found is
+/// reported before the exit.
 pub(crate) fn start_runner_stdout_reader(
     mut pipe_read: File,
     stdout_tx: broadcast::Sender<Vec<u8>>,
     stderr_tx: Option<broadcast::Sender<Vec<u8>>>,
     exit_tx: oneshot::Sender<i32>,
+    credential_watch: Option<crate::credential_watch::CredentialWatch>,
 ) {
     std::thread::spawn(move || {
+        let stopped_by_watch = || {
+            credential_watch
+                .as_ref()
+                .and_then(crate::credential_watch::CredentialWatch::finish)
+        };
         loop {
             let msg = match crate::ipc_framed::read_frame(&mut pipe_read) {
                 Ok(Some(v)) => v,
@@ -125,7 +141,24 @@ pub(crate) fn start_runner_stdout_reader(
                     }
                 }
                 Message::Exit { payload } => {
-                    let _ = exit_tx.send(payload.exit_code);
+                    let mut exit_code = payload.exit_code;
+                    if let Some(found) = stopped_by_watch() {
+                        let message =
+                            format!("\n{}\n", crate::credential_watch::stopped_message(&found))
+                                .into_bytes();
+                        match stderr_tx.as_ref() {
+                            Some(stderr_tx) => {
+                                let _ = stderr_tx.send(message);
+                            }
+                            None => {
+                                let _ = stdout_tx.send(message);
+                            }
+                        }
+                        if exit_code == 0 {
+                            exit_code = 1;
+                        }
+                    }
+                    let _ = exit_tx.send(exit_code);
                     break;
                 }
                 Message::Error { payload } => {

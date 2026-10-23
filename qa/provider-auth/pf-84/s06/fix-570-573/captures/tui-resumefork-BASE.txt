@@ -1,0 +1,34 @@
+######## resume/fork of a named thread on BASE (corbanu-base); forced_login_method=chatgpt added after the first session
+-- 1. first session on account chat (no restriction yet)
+-- mock lines for this turn:
+   {"t": 1791794387.146, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "chat", "gen": 1, "expired": false}, "model": null}
+default login before resume: auth.json a2695992fdf5
+-- 2. corbanu resume --last (no --account)
+  Sign in with ChatGPT to use OpenAI-hosted models
+> 1. Sign in with ChatGPT
+  2. Sign in with Device Code
+     Sign in from another device with a one-time code
+  API key login is disabled by this workspace. Sign in with ChatGPT to continue.
+send_line: composer never showed the text
+-- mock lines for this turn:
+default login after resume: auth.json ABSENT (logged out)
+send_line: composer never showed the text
+send_line: composer never showed the text
+-- 3. corbanu fork --last --account chat
+  Sign in with ChatGPT to use OpenAI-hosted models
+> 1. Sign in with ChatGPT
+  2. Sign in with Device Code
+     Sign in from another device with a one-time code
+  API key login is disabled by this workspace. Sign in with ChatGPT to continue.
+send_line: composer never showed the text
+-- mock lines for this turn:
+default login after fork --account chat: auth.json ABSENT (logged out)
+send_line: composer never showed the text
+-- 4. corbanu fork --last (no --account): documented limit, default sign-in screen expected
+> 1. Sign in with ChatGPT
+     Usage included with Plus, Pro, Business, and Enterprise plans
+  2. Sign in with Device Code
+     Sign in from another device with a one-time code
+  API key login is disabled by this workspace. Sign in with ChatGPT to continue.
+  Use ↑/↓ to choose · Press enter to continue
+default login after fork (no --account): auth.json ABSENT (logged out)

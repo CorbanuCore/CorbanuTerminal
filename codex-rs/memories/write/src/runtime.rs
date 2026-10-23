@@ -5,6 +5,7 @@ use codex_core::StartThreadOptions;
 use codex_core::ThreadManager;
 use codex_core::config::Config;
 use codex_core::detached_memory_responses_metadata;
+use codex_core::memory_stage_one::LabelledStageOneInput;
 use codex_core::memory_stage_one::StageOneMemoryClient;
 use codex_core::memory_stage_one::StageOneMemoryDenial;
 use codex_core::memory_stage_one::StageOneMemoryError;
@@ -282,8 +283,9 @@ impl MemoryStartupContext {
         config: &Config,
         prompt: &Prompt,
         context: &StageOneRequestContext,
+        mut client: StageOneMemoryClient,
+        labelled_input: Option<&LabelledStageOneInput>,
     ) -> anyhow::Result<(String, Option<TokenUsage>, StageOneMemoryClient)> {
-        let mut client = self.stage_one_client(config).await?;
         let installation_id = resolve_installation_id(&config.codex_home).await?;
         let config_snapshot = self.thread.config_snapshot().await;
         let session_source = config_snapshot.session_source;
@@ -309,6 +311,7 @@ impl MemoryStartupContext {
                 reasoning_summary: context.reasoning_summary,
                 service_tier: context.service_tier.clone(),
                 responses_metadata: &responses_metadata,
+                labelled_input,
             })
             .await?;
         Ok((output.text, output.token_usage, client))
@@ -319,18 +322,23 @@ impl MemoryStartupContext {
         config: Config,
         prompt: Vec<UserInput>,
     ) -> anyhow::Result<SpawnedConsolidationAgent> {
+        // Consolidation is paid inference on this conversation's behalf with
+        // no thread of its own: its requests are recorded under this one
+        // (PF-60-S04), like the stage-one requests that fed it.
+        let mut options = StartThreadOptions {
+            session_source: Some(SessionSource::Internal(
+                InternalSessionSource::MemoryConsolidation,
+            )),
+            thread_source: Some(ThreadSource::MemoryConsolidation),
+            ..StartThreadOptions::new(config)
+        };
+        self.thread.record_worker_requests_here(&mut options);
+        // The worker's requests are recorded under this conversation's thread,
+        // so make sure it exists before the worker's first request.
+        self.thread.ensure_rollout_materialized().await;
         let NewThread {
             thread_id, thread, ..
-        } = self
-            .thread_manager
-            .start_thread(StartThreadOptions {
-                session_source: Some(SessionSource::Internal(
-                    InternalSessionSource::MemoryConsolidation,
-                )),
-                thread_source: Some(ThreadSource::MemoryConsolidation),
-                ..StartThreadOptions::new(config)
-            })
-            .await?;
+        } = self.thread_manager.start_thread(options).await?;
 
         let agent = SpawnedConsolidationAgent { thread_id, thread };
         if let Err(err) = agent

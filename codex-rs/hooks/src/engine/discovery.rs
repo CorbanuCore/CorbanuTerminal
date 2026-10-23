@@ -324,6 +324,13 @@ fn load_hooks_json(
         }
     };
 
+    // #603: an empty file adds no hooks. On Linux it can be the sandbox's
+    // placeholder for a missing `hooks.json` while a protected command runs
+    // in the Corbanu home.
+    if contents.trim().is_empty() {
+        return None;
+    }
+
     let parsed: HooksFile = match serde_json::from_str(&contents) {
         Ok(parsed) => parsed,
         Err(err) => {
@@ -1347,5 +1354,20 @@ mod tests {
             ),
             (HookSource::LegacyManagedConfigMdm, true),
         );
+    }
+
+    /// #603: an empty `hooks.json` (on Linux the sandbox's placeholder for a
+    /// missing one while a protected command runs in the Corbanu home) adds
+    /// no hooks and no warning; a malformed one still warns.
+    #[test]
+    fn an_empty_hooks_json_adds_no_hooks() {
+        let folder = tempfile::tempdir().expect("temp folder");
+        let hooks_json = folder.path().join("hooks.json");
+        for (contents, warned) in [("", false), (" \n", false), ("{", true)] {
+            std::fs::write(&hooks_json, contents).expect("write hooks.json");
+            let mut warnings = Vec::new();
+            assert!(super::load_hooks_json(Some(folder.path()), &mut warnings).is_none());
+            assert_eq!(!warnings.is_empty(), warned, "{contents:?}: {warnings:?}");
+        }
     }
 }

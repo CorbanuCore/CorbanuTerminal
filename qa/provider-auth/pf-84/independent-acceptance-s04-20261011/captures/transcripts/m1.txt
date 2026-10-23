@@ -1,0 +1,28 @@
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     loading   /model to change                  │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+
+› Implement {feature}
+
+  Z.AI GLM 5.3 Flash via zai default · $S/work · Corbanu Terminal · TPS: -- tok/s
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+Token usage: total=7,711 input=7,691 (+ 576 cached) output=20 (reasoning 17)
+To continue this session, run corbanu resume 01a12aa3-5b12-7ba0-8c85-0bc0163a16ae
+TUI_EXITED rc=0

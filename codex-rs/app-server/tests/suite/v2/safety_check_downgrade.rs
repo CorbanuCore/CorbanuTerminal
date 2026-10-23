@@ -18,7 +18,9 @@ use codex_app_server_protocol::TurnModerationMetadataNotification;
 use codex_app_server_protocol::TurnStartParams;
 use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::UserInput;
+use codex_app_server_protocol::WarningNotification;
 use codex_features::Feature;
+use codex_login::OPENAI_API_KEY_ENV_FALLBACK_NOTICE;
 use core_test_support::responses;
 use core_test_support::skip_if_no_network;
 use pretty_assertions::assert_eq;
@@ -407,7 +409,18 @@ async fn collect_model_verification_notifications_and_validate_no_warning_item(
                 verification = Some(payload);
             }
             "warning" => {
-                anyhow::bail!("verification-only response must not emit warning");
+                let params = notification
+                    .params
+                    .ok_or_else(|| anyhow::anyhow!("warning notifications must include params"))?;
+                let warning: WarningNotification = serde_json::from_value(params)?;
+                // #394: the one-time notice that the turn is billed to the
+                // test's OPENAI_API_KEY is not about model verification.
+                if warning.message != OPENAI_API_KEY_ENV_FALLBACK_NOTICE {
+                    anyhow::bail!(
+                        "verification-only response must not emit warning: {}",
+                        warning.message
+                    );
+                }
             }
             "model/rerouted" => {
                 anyhow::bail!("verification-only response must not emit model/rerouted");

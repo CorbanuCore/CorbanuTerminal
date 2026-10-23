@@ -9,6 +9,20 @@ use crate::chatwidget::tests::make_chatwidget_manual_with_sender;
 use codex_models_manager::test_support::construct_model_info_offline_for_tests;
 use codex_models_manager::test_support::get_model_offline_for_tests;
 
+pub(super) fn pending_confirmation(
+    thread_id: ThreadId,
+) -> permission_confirmation::PendingPermissionConfirmation {
+    permission_confirmation::PendingPermissionConfirmation {
+        selection_id: uuid::Uuid::new_v4(),
+        thread_id,
+        label: "pending".into(),
+        persist_reviewer: None,
+        requested: Default::default(),
+        observed: false,
+        applied: false,
+    }
+}
+
 pub(super) async fn make_test_app() -> App {
     let (chat_widget, app_event_tx, _rx, _op_rx) = make_chatwidget_manual_with_sender().await;
     let config = chat_widget.config_ref().clone();
@@ -38,6 +52,7 @@ pub(super) async fn make_test_app() -> App {
         cloud_config_bundle: CloudConfigBundleLoader::default(),
         runtime_approval_policy_override: None,
         runtime_permission_profile_override: None,
+        pending_permission_confirmation: None,
         file_search,
         transcript_cells: Vec::new(),
         claude_pane_transcript_cells: HashMap::new(),
@@ -81,6 +96,9 @@ pub(super) async fn make_test_app() -> App {
         spawn_processed_terminal_turns: HashSet::new(),
         spawn_auto_loop_state_by_node: HashMap::new(),
         spawn_operator_input_seen: false,
+        kill_switch_held_claude_tasks: Vec::new(),
+        kill_switch_held_native_tasks: Vec::new(),
+        kill_switch_known_on: false,
         spawn_quarantine_notified_by_node: HashSet::new(),
         spawn_context_left_by_thread: HashMap::new(),
         spawn_last_report_seq_by_node: HashMap::new(),

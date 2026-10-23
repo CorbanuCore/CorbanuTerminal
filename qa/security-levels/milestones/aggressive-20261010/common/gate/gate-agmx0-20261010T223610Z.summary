@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/opt/agms/bin/agms-probe", line 231, in <module>
+    sys.exit(main())
+  File "/opt/agms/bin/agms-probe", line 214, in main
+    positives()
+  File "/opt/agms/bin/agms-probe", line 197, in positives
+    record("positive", "packet readable and frozen", PACKET_SHA, sha("/opt/agms/packet/design-cases.md"),
+  File "/opt/agms/bin/agms-probe", line 81, in sha
+    with open(path, "rb") as stream:
+FileNotFoundError: [Errno 2] No such file or directory: '/opt/agms/packet/design-cases.md'
+{"launcher_ok": false, "tmux_child_ok": false, "pty_input_echoed": true, "failed": [{"group": "package", "probe": "open frozen packet for write", "expect": "EACCES/EPERM", "observed": "ENOENT", "ok": false}], "probe_count": 40, "ok": false}

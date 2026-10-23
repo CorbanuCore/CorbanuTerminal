@@ -5,6 +5,18 @@ use crate::app_event::AppEvent;
 use crate::chatwidget::rate_limits::RATE_LIMIT_SWITCH_PROMPT_VIEW_ID;
 
 impl ChatWidget {
+    pub(crate) fn defer_turn_for_permission_confirmation(&mut self) {
+        if self.input_queue.user_turn_pending_start {
+            self.input_queue.user_turn_pending_start = false;
+            if let Some(prompt) = self.safety_buffering_prompt.take() {
+                self.restore_user_message_to_composer(prompt);
+            }
+            self.update_task_running_state();
+        }
+        // Unlike terminal turn rejection, this must not auto-submit queued input.
+        self.add_error_message("Permission confirmation is pending. Wait for its result, then resubmit this prompt. Stop and approval controls remain available.".into());
+    }
+
     pub(crate) fn replace_gpu_model_providers(
         &mut self,
         runtime_providers: &std::collections::HashMap<
@@ -545,10 +557,14 @@ impl ChatWidget {
         self.set_approvals_reviewer(settings.approvals_reviewer.to_core());
         self.config.personality = settings.personality;
 
-        let permission_profile = PermissionProfile::from_legacy_sandbox_policy_for_cwd(
-            &settings.sandbox_policy.to_core(),
-            settings.cwd.as_path(),
-        );
+        // #437: keep the profile's denied reads while nothing changed.
+        let permission_profile =
+            crate::app::thread_settings::permission_profile_for_thread_settings(
+                self.config.permissions.permission_profile(),
+                Some(&self.config.permissions.effective_permission_profile()),
+                self.config.permissions.active_permission_profile().as_ref(),
+                &settings,
+            );
         let permission_snapshot = PermissionProfileSnapshot::from_session_snapshot(
             permission_profile,
             settings.active_permission_profile.take().map(Into::into),

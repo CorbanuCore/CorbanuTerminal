@@ -1,0 +1,143 @@
+  twenty-four
+  twenty-five
+  twenty-six
+  twenty-seven
+  twenty-eight
+  twenty-nine
+  thirty
+  thirty-one
+  thirty-two
+  thirty-three
+  thirty-four
+  thirty-five
+  thirty-six
+  thirty-seven
+  thirty-eight
+  thirty-nine
+  forty
+  forty-one
+  forty-two
+  forty-three
+  forty-four
+  forty-five
+  forty-six
+  forty-seven
+  forty-eight
+  forty-nine
+  fifty
+  fifty-one
+  fifty-two
+  fifty-three
+  fifty-four
+  fifty-five
+
+■ Conversation interrupted - tell the model what to do differently. Something went wrong? Hit `/feedback` to report the issue.
+  Attempt, components and original price
+  Requested UTC day: 2026-10-10
+› Provider: OpenAI
+  Model: gpt-5.4
+  Billing: Pay per use
+  Estimated cost: not available — usage incomplete
+  Next step for requests with incomplete usage: check the bill from OpenAI. Their provider did not report every token count, so the estimate is missing or
+  only a lower bound.
+  Tokens: tokens not reported
+  —— Details ——
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Provider: OpenAI
+› Model: gpt-5.4
+› Billing: Pay per use
+› Estimated cost: not available — usage incomplete
+› Next step for requests with incomplete usage: check the bill from OpenAI. Their provider did not report every token count, so the estimate is missing or
+› only a lower bound.
+› Tokens: tokens not reported
+› —— Details ——
+› Billed cost: OpenAI doesn't report its charges, so any cost here is an estimate — check OpenAI's bill.
+  Billed cost: OpenAI doesn't report its charges, so any cost here is an estimate — check OpenAI's bill.
+› Request: 0959c907-b4fb-44ad-b018-425856aa3918
+  Request: 0959c907-b4fb-44ad-b018-425856aa3918
+› Attempt: d663282c-3463-4293-96e9-ac32c64c30aa
+  Attempt: d663282c-3463-4293-96e9-ac32c64c30aa
+› Thread: 01a12451-0c3e-78d1-af1e-971bc1e26a14
+  Thread: 01a12451-0c3e-78d1-af1e-971bc1e26a14
+› Turn: 01a12459-575a-7a53-92f2-f7b0350149cd
+  Turn: 01a12459-575a-7a53-92f2-f7b0350149cd
+› Provider: openai
+  Provider: openai
+› Opaque scope: fc124e84-10c9-4705-9a99-0ce4c024090c
+  Opaque scope: fc124e84-10c9-4705-9a99-0ce4c024090c
+› Arithmetic dialect: Inclusive
+  Arithmetic dialect: Inclusive
+› Admission time: 2026-10-10T05:46:37.336Z
+  Admission time: 2026-10-10T05:46:37.336Z
+› Retry predecessor: none
+  Retry predecessor: none
+› Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+› Estimated token cost: unknown
+  Estimated token cost: unknown
+› Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
+  Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
+› Billing basis: pay per use
+  Billing basis: pay per use
+› Input: unknown — no retained numeric evidence
+  Input: unknown — no retained numeric evidence
+› Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+  Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+› Cache read: unknown — no retained numeric evidence
+  Cache read: unknown — no retained numeric evidence
+› Cache write: unknown — no retained numeric evidence
+  Cache write: unknown — no retained numeric evidence
+› Output: unknown — no retained numeric evidence
+  Output: unknown — no retained numeric evidence
+› Reasoning (subset, not separately billed): unknown — no retained numeric evidence
+  Reasoning (subset, not separately billed): unknown — no retained numeric evidence
+› Total (not separately billed): unknown — no retained numeric evidence
+  Total (not separately billed): unknown — no retained numeric evidence
+› Noncached input cost: unknown — no retained numeric evidence
+  Noncached input cost: unknown — no retained numeric evidence
+› Cache read cost: unknown — no retained numeric evidence
+  Cache read cost: unknown — no retained numeric evidence
+› Cache write cost: unknown — no retained numeric evidence
+  Cache write cost: unknown — no retained numeric evidence
+› Output cost: unknown — no retained numeric evidence
+  Output cost: unknown — no retained numeric evidence
+› Known subtotal exact USD: none — usage incomplete for these attempts
+  Known subtotal exact USD: none — usage incomplete for these attempts
+› Price ID: 462355b1-7c6a-4cd6-9648-b7b0aa518b32
+  Price ID: 462355b1-7c6a-4cd6-9648-b7b0aa518b32
+› Price source: NativeCatalog; reference addc1fee-6ac0-5af8-a2b3-5095828a6e82
+  Price source: NativeCatalog; reference addc1fee-6ac0-5af8-a2b3-5095828a6e82
+› Price currency/unit: Usd / PerMillionTokens
+  Price currency/unit: Usd / PerMillionTokens
+› Price observed/approved: 2026-10-10T05:46:37.336Z / 2026-10-10T05:46:37.336Z
+  Price observed/approved: 2026-10-10T05:46:37.336Z / 2026-10-10T05:46:37.336Z
+› Price effective interval: [2026-10-10T05:46:37.336Z, unbounded)
+  Price effective interval: [2026-10-10T05:46:37.336Z, unbounded)
+› Noncached input rate: 2.5 USD per million tokens
+  Noncached input rate: 2.5 USD per million tokens
+› Cache read rate: 0.25 USD per million tokens
+  Cache read rate: 0.25 USD per million tokens
+› Rate unavailable for Cache write
+  Rate unavailable for Cache write
+› Output rate: 15 USD per million tokens
+  Output rate: 15 USD per million tokens
+› Long-context price: above 272000 input tokens, the whole request is priced at:
+  Long-context price: above 272000 input tokens, the whole request is priced at:
+›   Noncached input rate: 5 USD per million tokens
+    Noncached input rate: 5 USD per million tokens
+›   Rate unavailable for Cache read
+    Rate unavailable for Cache read
+›   Rate unavailable for Cache write
+    Rate unavailable for Cache write
+›   Output rate: 22.5 USD per million tokens
+    Output rate: 22.5 USD per million tokens
+› Long-context price: input unknown, so no rate applies
+  Long-context price: input unknown, so no rate applies
+› Snapshot is not current; newer activity is unverified
+  Snapshot is not current; newer activity is unverified
+› Back
+  Back
+› Refresh
+  Refresh
+› Close

@@ -1,0 +1,48 @@
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       glm-5.3-flash   /model to change           │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word ping
+
+
+• ping
+
+
+› Reply with exactly the word prec
+
+
+• prec
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Z.AI GLM 5.3 Flash                                                │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account personal            │
+│  Directory:            $S/ws              │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Z.AI API key configured                                           │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a13442-f9c8-72c0-a277-02a7cdac38ff                              │
+│                                                                                          │
+│  Token usage:          12.3K total  (12.3K input + 19 output)                            │
+│  Context window:       100% left (7.43K used / 950K)                                     │
+│  Account usage:        account            input  cached input  output  reasoning         │
+│                        personal (active)  6,135         1,280      16         13         │
+│                        work               6,124         1,280       3          0         │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Find and fix a bug in @filename
+
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: 3.1 tok/s

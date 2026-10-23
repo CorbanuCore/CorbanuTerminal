@@ -1,0 +1,21 @@
+# appended to <home>/config.toml for criterion 8 / #288 (same setup as the first run)
+# zaiproxy  : pass-through proxy (usage forwarded)      -> tools/usage_proxy.py --port 18471
+# zainousage: proxy strips `usage` from every SSE chunk -> tools/usage_proxy.py --port 18472 --strip-usage
+[model_providers.zaiproxy]
+name = "zaiproxy"
+base_url = "http://127.0.0.1:18471/api/paas/v4"
+env_key = "ZAI_API_KEY"
+wire_api = "chat"
+
+[model_providers.zainousage]
+name = "zainousage"
+base_url = "http://127.0.0.1:18472/api/paas/v4"
+env_key = "ZAI_API_KEY"
+wire_api = "chat"
+
+# rerun2: zaipartial: proxy drops only `completion_tokens` from `usage` -> tools/usage_proxy_partial.py --port 18473 --drop-keys completion_tokens
+[model_providers.zaipartial]
+name = "zaipartial"
+base_url = "http://127.0.0.1:18473/api/paas/v4"
+env_key = "ZAI_API_KEY"
+wire_api = "chat"

@@ -53,7 +53,7 @@ fn runtime_refresh_replaces_only_gpu_models() {
 #[test]
 fn resumed_session_recovery_is_consumed_once() {
     let catalog = ModelCatalog::new(Vec::new());
-    catalog.set_session_recovery_only(true);
+    catalog.set_session_recovery_only(/*session_only*/ true);
 
     assert!(catalog.take_session_recovery_only());
     assert!(!catalog.take_session_recovery_only());
@@ -87,7 +87,7 @@ fn configured_runtime_model_is_added_with_exact_provider_identity() {
 fn configured_runtime_model_does_not_duplicate_existing_exact_or_inferred_provider() {
     let mut models = vec![
         preset("custom-model", Some("custom")),
-        preset("gpt-5.6-sol", None),
+        preset("gpt-5.6-sol", /*provider_id*/ None),
     ];
 
     include_runtime_model(&mut models, "custom-model", "custom");
@@ -186,4 +186,84 @@ fn runtime_refresh_does_not_clone_models_into_incompatible_provider_tabs() {
                 .all(|p| p.model != model || p.provider_id.as_deref() == Some(owner))
         );
     }
+}
+
+#[test]
+fn provider_models_are_added_once_with_exact_identity_and_never_as_default() {
+    let mut listed = preset("openai.gpt-5.5", Some("amazon-bedrock"));
+    listed.display_name = "listed".to_string();
+    let catalog = ModelCatalog::new(vec![listed, preset("glm-5.3-flash", Some("zai"))]);
+    let mut extra = preset("openai.gpt-5.4", /*provider_id*/ None);
+    extra.is_default = true;
+    let added = vec![preset("openai.gpt-5.5", /*provider_id*/ None), extra];
+
+    catalog.set_provider_models("amazon-bedrock", added.clone(), /*current_model*/ None);
+    catalog.set_provider_models("amazon-bedrock", added, /*current_model*/ None);
+
+    let models = catalog.try_list_models().unwrap();
+    assert_eq!(models.len(), 3);
+    assert_eq!(models[0].display_name, "listed");
+    assert_eq!(models[2].id, "amazon-bedrock:openai.gpt-5.4");
+    assert_eq!(models[2].provider_id.as_deref(), Some("amazon-bedrock"));
+    assert!(!models[2].is_default);
+
+    // Setting none removes only the ones added this way, except the model
+    // the session is on.
+    catalog.set_provider_models("amazon-bedrock", Vec::new(), Some("openai.gpt-5.4"));
+    let ids = catalog
+        .try_list_models()
+        .unwrap()
+        .into_iter()
+        .map(|preset| preset.id)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        ids,
+        vec![
+            "openai.gpt-5.5",
+            "glm-5.3-flash",
+            "amazon-bedrock:openai.gpt-5.4"
+        ]
+    );
+    catalog.set_provider_models("amazon-bedrock", Vec::new(), /*current_model*/ None);
+    let ids = catalog
+        .try_list_models()
+        .unwrap()
+        .into_iter()
+        .map(|preset| preset.id)
+        .collect::<Vec<_>>();
+    assert_eq!(ids, vec!["openai.gpt-5.5", "glm-5.3-flash"]);
+}
+
+/// PF-84: a model list fetched for another account replaces the listed
+/// models (one the old account had is gone, a new one appears) and keeps the
+/// models added for runtime and GPU providers.
+#[test]
+fn listed_models_are_replaced_for_another_account() {
+    let listed = vec![
+        preset("shared", /*provider_id*/ None),
+        preset("chatgpt-only", /*provider_id*/ None),
+    ];
+    let mut all = listed.clone();
+    all.push(preset("rental", Some("gpu-a")));
+    let catalog = ModelCatalog::new(all);
+    catalog.mark_listed(&listed);
+    include_runtime_model(
+        &mut catalog.models.write().expect("models"),
+        "custom",
+        "zai",
+    );
+
+    catalog.replace_listed_models(vec![
+        preset("shared", /*provider_id*/ None),
+        preset("api-only", /*provider_id*/ None),
+    ]);
+
+    let models = catalog.try_list_models().expect("infallible catalog read");
+    assert_eq!(
+        models
+            .iter()
+            .map(|preset| preset.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["shared", "api-only", "rental", "zai:custom"]
+    );
 }

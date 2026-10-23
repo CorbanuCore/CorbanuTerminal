@@ -1,0 +1,52 @@
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       gpt-6-luna medium   /model to change       │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+• Connectors, usage and the model list now use openai account `fake`; model list refreshed.
+
+• Model changed to GPT-6 Luna via OpenAI medium
+
+
+› Reply with exactly: pong
+
+
+⚠ Code Mode is unavailable because failed to spawn code-mode host $S/bin/codex-code-mode-host: host executable was not
+  found. Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.
+
+⚠ OpenAI (openai) account `fake` was rejected. Sign it in again with `corbanu login --account fake` (add `--with-api-key` for an API key), or choose another account. The
+  default OpenAI credential is unchanged.
+
+■ unexpected status 401 Unauthorized: Incorrect API key, url: http://127.0.0.1:34731/v1/responses
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date                            │
+│ information on rate limits and credits                                                   │
+│                                                                                          │
+│  Model:                GPT-6 Luna (reasoning medium, summaries auto)                     │
+│  Model provider:       OpenAI - http://127.0.0.1:34731/v1 · account fake                 │
+│  Directory:            $S/ws              │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              OpenAI API key (account fake)                                     │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a1344c-9816-7081-8a4e-6f16b9f701ec                              │
+│                                                                                          │
+│  Token usage:          0 total  (0 input + 0 output)                                     │
+│  Account usage:        fake · no usage yet                                               │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Use /skills to list available skills
+
+  GPT-6 Luna medium · $S/ws · Corbanu Terminal · TPS: -- tok/s

@@ -168,6 +168,10 @@ impl McpHandler {
 }
 
 impl CoreToolRuntime for McpHandler {
+    fn tool_origin(&self) -> crate::security::protected_surface::ToolOrigin {
+        crate::security::protected_surface::ToolOrigin::Mcp
+    }
+
     fn wait_until_ready<'a>(&'a self, session: &'a Arc<Session>) -> Option<BoxFuture<'a, ()>> {
         Some(Box::pin(async move {
             session.refresh_mcp_if_dirty().await;

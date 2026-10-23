@@ -1,0 +1,49 @@
+{
+ "bin": "corbanu-final3",
+ "sessions": 10,
+ "turns": 3,
+ "tool_calls": 4,
+ "wall_seconds": 11.1,
+ "warmup_seconds": 23.8,
+ "execs": 30,
+ "failed_execs": 0,
+ "requests": 150,
+ "client_gap_ms": {
+  "n": 120,
+  "p50": 100.8,
+  "p90": 149.9,
+  "p99": 215.9,
+  "max": 239.4,
+  "mean": 101.6
+ },
+ "lock_wait_ms": {
+  "n": 794,
+  "p50": 0.0,
+  "p90": 21.0,
+  "p99": 101.0,
+  "max": 178.0,
+  "mean": 6.1
+ },
+ "lock_hold_ms": {
+  "n": 794,
+  "p50": 3.0,
+  "p90": 5.0,
+  "p99": 16.0,
+  "max": 90.0,
+  "mean": 2.9
+ },
+ "holds_over_250ms_by_site": {},
+ "bad_stderr_lines": 0,
+ "bad_examples": [],
+ "exec_seconds": {
+  "n": 30,
+  "p50": 3.6,
+  "p90": 4.0,
+  "p99": 4.0,
+  "max": 4.0,
+  "mean": 3.7
+ },
+ "lock_held_by_another_process_s": 0,
+ "ledger_attempts_recorded": 150,
+ "records_still_saved_for_a_later_writer": 0
+}

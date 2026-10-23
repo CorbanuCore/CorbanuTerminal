@@ -1,0 +1,8 @@
+{
+  "method": "exact synthetic SQLite backup restored after stopping TUI",
+  "tables": [
+    [
+      "draft_accounting_estimates"
+    ]
+  ]
+}

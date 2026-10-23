@@ -1,0 +1,24 @@
+$ /usage requests 2026-10-06
+  Cost — this conversation
+  Requested UTC day: 2026-10-06
+  This conversation on 2026-10-06 (UTC): no recorded requests.
+  No other conversation recorded requests on this day.
+  Costs are estimates from published prices; your provider's bill is the final amount.
+  —— Details ——
+  No recorded attempts in this conversation or its subagents; collection coverage unknown.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  ↑↓ scroll · Enter open · Esc back/close
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-06T00:00:00.000Z, 2026-10-07T00:00:00.000Z)
+  Read at: 2026-10-08T11:24:33.581Z; ledger current to: 2026-10-08T11:24:32.708Z (873 ms behind)
+  Retention: request detail kept since 2026-07-10T11:24:33.581Z; daily totals kept since 2025-10-09; oldest recorded day in this conversation 2026-10-08
+  Known subtotal exact USD: none — no recorded attempts in this conversation
+--- last screen:
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-06T00:00:00.000Z, 2026-10-07T00:00:00.000Z)
+  Read at: 2026-10-08T11:24:33.581Z; ledger current to: 2026-10-08T11:24:32.708Z (873 ms behind)
+  Retention: request detail kept since 2026-07-10T11:24:33.581Z; daily totals kept since 2025-10-09; oldest recorded day in this conversation 2026-10-08
+› Known subtotal exact USD: none — no recorded attempts in this conversation
+  ↑↓ scroll · Enter open · Esc back/close

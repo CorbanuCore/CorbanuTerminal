@@ -149,11 +149,16 @@ impl ApprovalReviewer {
     }
 }
 
+/// Who answered an approval.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ApprovalResolutionSource {
+pub(super) enum ApprovalResolutionSource {
     Hook,
     Guardian,
+    /// A person, asked about this request now.
     User,
+    /// Answered without asking anyone: an earlier "don't ask again" answer
+    /// (the approval cache) or a stored permission grant (issue #513).
+    Remembered,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -174,20 +179,33 @@ impl ApprovalResolution {
                     ApprovalResolutionSource::Guardian => {
                         "automatic approval review denied the action"
                     }
-                    ApprovalResolutionSource::User => "rejected by user",
+                    ApprovalResolutionSource::User | ApprovalResolutionSource::Remembered => {
+                        "rejected by user"
+                    }
                 };
-                Err(ToolError::Rejected(rejection.to_string()))
+                Err(ToolError::Declined(rejection.to_string()))
             }
-            ReviewDecision::Denied { rejection } => Err(ToolError::Rejected(rejection)),
-            ReviewDecision::TimedOut => Err(ToolError::Rejected(guardian_timeout_message())),
+            ReviewDecision::Denied { rejection } => Err(ToolError::Declined(rejection)),
+            ReviewDecision::TimedOut => Err(ToolError::Declined(guardian_timeout_message())),
             ReviewDecision::Abort => {
-                Err(ToolError::Rejected("approval request aborted".to_string()))
+                Err(ToolError::Declined("approval request aborted".to_string()))
             }
             decision => Ok(decision),
         }
     }
 }
 
+/// Who lists a refused approval under the inspector's recent denials (#437).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum DeclineRecord {
+    /// This function does.
+    Here,
+    /// The caller records the outcome itself (protected actions after
+    /// untrusted content).
+    ByCaller,
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn resolve_tool_apporval<Rq, Out, T>(
     tool: &mut T,
     req: &Rq,
@@ -196,7 +214,112 @@ pub(super) async fn resolve_tool_apporval<Rq, Out, T>(
     tool_ctx: &ToolCtx,
     reviewer: ApprovalReviewer,
     otel: &codex_otel::SessionTelemetry,
-) -> Result<ReviewDecision, ToolError>
+    decline_record: DeclineRecord,
+    asked_again: bool,
+) -> Result<ApprovalResolutionSource, ToolError>
+where
+    T: ToolRuntime<Rq, Out>,
+{
+    let what = approval_kind(&flat_tool_name(&tool_ctx.tool_name));
+    let thread = tool_ctx.session.thread_id();
+    // An interrupted wait is "declined by you" only when the person was
+    // asked (not a hook or the automatic reviewer).
+    let asks_person = ctx.fresh_human_authority || reviewer == ApprovalReviewer::User;
+    // D50: only a person is told why they are asked again.
+    let ctx = if asked_again && asks_person {
+        asked_again_ctx(tool, req, ctx)
+    } else {
+        ctx
+    };
+    let mut pending = (decline_record == DeclineRecord::Here)
+        .then(|| crate::security::inspection::PendingApproval::new(thread, what, asks_person));
+    let resolution = resolve(
+        tool,
+        req,
+        permission_request_run_id,
+        ctx,
+        tool_ctx,
+        reviewer,
+        otel,
+    )
+    .await;
+    if let Some(pending) = pending.as_mut() {
+        pending.answered();
+        if let Some(outcome) = decline_outcome(&resolution) {
+            crate::security::inspection::record_declined_approval(thread, what, outcome);
+        }
+    }
+    let source = resolution.source;
+    resolution.into_tool_result().map(|_| source)
+}
+
+/// D50 (#1001): the note an approval asked again carries, because the one
+/// shown before a security transition went stale.
+pub(crate) const ASKED_AGAIN_NOTE: &str = "The security level changed while the earlier \
+     prompt was open, so it is asked again under the new level.";
+
+/// D50: `ctx` with [`ASKED_AGAIN_NOTE`] ahead of its reason, or of the
+/// model's justification when it has none.
+fn asked_again_ctx<'a, Rq, Out, T>(tool: &T, req: &Rq, ctx: ApprovalCtx<'a>) -> ApprovalCtx<'a>
+where
+    T: ToolRuntime<Rq, Out>,
+{
+    let why = ctx
+        .retry_reason
+        .clone()
+        .or_else(|| match tool.approval_action(req, &ctx) {
+            Ok(
+                ApprovalAction::Shell { justification, .. }
+                | ApprovalAction::ExecCommand { justification, .. },
+            ) => justification,
+            _ => None,
+        });
+    ApprovalCtx {
+        retry_reason: Some(match why {
+            Some(why) => format!("{ASKED_AGAIN_NOTE} {why}"),
+            None => ASKED_AGAIN_NOTE.to_string(),
+        }),
+        ..ctx
+    }
+}
+
+/// What the inspector says about a refused approval, or `None` when it was
+/// approved.
+fn decline_outcome(resolution: &ApprovalResolution) -> Option<&'static str> {
+    let refused = match &resolution.decision {
+        ReviewDecision::NetworkPolicyAmendment {
+            network_policy_amendment,
+        } => network_policy_amendment.action == NetworkPolicyRuleAction::Deny,
+        ReviewDecision::Denied { .. } | ReviewDecision::Abort => true,
+        ReviewDecision::TimedOut => return Some("not answered in time"),
+        _ => false,
+    };
+    refused.then_some(match resolution.source {
+        ApprovalResolutionSource::User | ApprovalResolutionSource::Remembered => "declined by you",
+        ApprovalResolutionSource::Hook => "declined by a permission hook",
+        ApprovalResolutionSource::Guardian => "declined by the automatic reviewer",
+    })
+}
+
+fn approval_kind(tool_name: &str) -> &'static str {
+    match tool_name {
+        "exec_command" | "shell" | "shell_command" | "local_shell" | "container.exec" => {
+            "command approval"
+        }
+        "apply_patch" => "file edit approval",
+        _ => "tool approval",
+    }
+}
+
+async fn resolve<Rq, Out, T>(
+    tool: &mut T,
+    req: &Rq,
+    permission_request_run_id: &str,
+    ctx: ApprovalCtx<'_>,
+    tool_ctx: &ToolCtx,
+    reviewer: ApprovalReviewer,
+    otel: &codex_otel::SessionTelemetry,
+) -> ApprovalResolution
 where
     T: ToolRuntime<Rq, Out>,
 {
@@ -209,13 +332,16 @@ where
         )
         .await
         {
+            // A hook can still refuse a post-taint action, but only the human
+            // can allow it (PF-30-S03).
+            Some(PermissionRequestDecision::Allow) if ctx.fresh_human_authority => {}
             Some(PermissionRequestDecision::Allow) => {
                 let resolution = ApprovalResolution {
                     decision: ReviewDecision::Approved,
                     source: ApprovalResolutionSource::Hook,
                 };
                 record_resolution(otel, tool_ctx, &resolution);
-                return resolution.into_tool_result();
+                return resolution;
             }
             Some(PermissionRequestDecision::Deny { message }) => {
                 let resolution = ApprovalResolution {
@@ -223,12 +349,17 @@ where
                     source: ApprovalResolutionSource::Hook,
                 };
                 record_resolution(otel, tool_ctx, &resolution);
-                return resolution.into_tool_result();
+                return resolution;
             }
             None => {}
         }
     }
 
+    let reviewer = if ctx.fresh_human_authority {
+        ApprovalReviewer::User
+    } else {
+        reviewer
+    };
     let resolution = match reviewer {
         ApprovalReviewer::Guardian => {
             let review_id = new_guardian_review_id();
@@ -246,7 +377,7 @@ where
                         source: ApprovalResolutionSource::Guardian,
                     };
                     record_resolution(otel, tool_ctx, &resolution);
-                    return resolution.into_tool_result();
+                    return resolution;
                 }
             };
             review_approval_request(
@@ -258,18 +389,30 @@ where
             )
             .await
         }
-        ApprovalReviewer::User => tool.start_approval_async(req, ctx.clone()).await,
+        ApprovalReviewer::User => {
+            let (decision, asked) = crate::tools::sandboxing::asking_person(|| {
+                tool.start_approval_async(req, ctx.clone())
+            })
+            .await;
+            let source = if asked {
+                ApprovalResolutionSource::User
+            } else {
+                ApprovalResolutionSource::Remembered
+            };
+            tool.note_review_decision(&decision, &ctx);
+            let resolution = ApprovalResolution { decision, source };
+            record_resolution(otel, tool_ctx, &resolution);
+            return resolution;
+        }
     };
-    let source = match reviewer {
-        ApprovalReviewer::Guardian => ApprovalResolutionSource::Guardian,
-        ApprovalReviewer::User => ApprovalResolutionSource::User,
-    };
+    tool.note_review_decision(&resolution, &ctx);
+    let source = ApprovalResolutionSource::Guardian;
     let resolution = ApprovalResolution {
         decision: resolution,
         source,
     };
     record_resolution(otel, tool_ctx, &resolution);
-    resolution.into_tool_result()
+    resolution
 }
 
 fn record_resolution(
@@ -280,7 +423,9 @@ fn record_resolution(
     let source = match resolution.source {
         ApprovalResolutionSource::Hook => ToolDecisionSource::Config,
         ApprovalResolutionSource::Guardian => ToolDecisionSource::AutomatedReviewer,
-        ApprovalResolutionSource::User => ToolDecisionSource::User,
+        ApprovalResolutionSource::User | ApprovalResolutionSource::Remembered => {
+            ToolDecisionSource::User
+        }
     };
     let tool_name = flat_tool_name(&tool_ctx.tool_name);
     otel.tool_decision(
@@ -294,3 +439,7 @@ fn record_resolution(
 #[cfg(all(test, unix))]
 #[path = "approvals_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "refusal_diagnostics_tests.rs"]
+mod refusal_diagnostics_tests;

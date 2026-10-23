@@ -740,6 +740,7 @@ fn upsert_managed_token_metadata(
             created_at: now,
             updated_at: now,
             storage_backend: crate::StorageBackend::EncryptedSecrets,
+            sign_in: None,
         };
         index.credentials.insert(label, metadata);
     }

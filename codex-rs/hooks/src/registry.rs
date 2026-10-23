@@ -247,5 +247,19 @@ pub fn command_from_argv(argv: &[String]) -> Option<Command> {
     }
     let mut command = Command::new(program);
     command.args(args);
+    apply_secretless_launch_env(&mut command);
     Some(command)
+}
+
+/// PF-27-S02: once secretless agent launch is armed, hook processes inherit
+/// only the launch allowlist (no provider keys, tokens or helper sockets).
+/// They still run outside the OS sandbox.
+pub(crate) fn apply_secretless_launch_env(command: &mut Command) {
+    if !codex_protocol::secretless_launch::is_armed() {
+        return;
+    }
+    let mut env = std::env::vars().collect::<std::collections::HashMap<_, _>>();
+    codex_protocol::secretless_launch::retain_launch_env(&mut env, |_| false);
+    command.env_clear();
+    command.envs(env);
 }

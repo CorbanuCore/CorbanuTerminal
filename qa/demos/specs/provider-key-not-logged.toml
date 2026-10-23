@@ -1,0 +1,58 @@
+# #196: provider credentials never reach the trace log or the logs database.
+# The Z.AI key comes from the vault (env_key) and is never shown. A copy of the
+# Z.AI provider adds a static header and a query parameter holding fake
+# sentinels; before the fix the "Configuring session" DEBUG line printed the
+# header and every request log printed the query value. The on-screen checks expand
+# both values inside the shell, and the recorder scans every private file for
+# the real key afterwards.
+id = "provider-key-not-logged"
+feature = "#196: provider secrets stay out of the trace log"
+expected = "With RUST_LOG=trace, after a model turn that runs a command, the log shows the header as <redacted> and the query value as REDACTED, and the real Z.AI key and both fake values appear 0 times in codex-tui.log and the logs database."
+model = "glm-5.2"
+provider = "zai-demo"
+config = """
+[model_providers.zai-demo]
+name = "Z.AI (demo header)"
+base_url = "https://api.z.ai/api/paas/v4"
+env_key = "ZAI_API_KEY"
+wire_api = "chat"
+http_headers = { "X-Demo-Secret" = "fake-header-0196-SENTINEL-6b2d" }
+query_params = { "demo_key" = "fake-query-0196-SENTINEL-91fe" }
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run the shell command `ls -a` and reply with only the word done."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^• done\\s*$"
+timeout = 120
+compress = 3
+[[steps]]
+pause = 1.5
+
+[[steps]]
+type = "!grep -o -e 'X-Demo-Secret\": \"[^\"]*\"' -e 'demo_key=[A-Z][A-Za-z]*' ../logs/codex-tui.log | sort | uniq -c"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "demo_key=REDACTED"
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "!sleep 2; S=fake-header-0196-SENTINEL; Q=fake-query-0196-SENTINEL; grep -c -e \"$ZAI_API_KEY\" -e \"$S-6b2d\" -e \"$Q-91fe\" ../logs/codex-tui.log ../home/pfterminal_logs_* | awk -F: '{print; n+=$NF} END {print \"total matches:\", n}'"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "total matches: 0\\b"
+[[steps]]
+pause = 3.5

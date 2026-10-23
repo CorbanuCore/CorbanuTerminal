@@ -150,7 +150,7 @@ impl Session {
         );
         let codex_apps_auth_manager =
             codex_mcp::host_owned_codex_apps_enabled(&mcp_config, auth.as_ref())
-                .then(|| Arc::clone(&self.services.auth_manager));
+                .then(|| self.services.auth_manager());
 
         McpRuntimeInput {
             config: mcp_config,

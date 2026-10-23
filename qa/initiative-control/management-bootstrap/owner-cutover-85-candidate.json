@@ -1,0 +1,58 @@
+{
+  "base_commit": "08f42237c6462a2cb2015a9ee5dd1307858aa479",
+  "package_digest": "b930703e643c59c103e57fa8d43e760f7f060387b47be3aeeba90e857daa5946",
+  "files": {
+    "scripts/initiative_control/owner_daemon.py": {
+      "sha256": "473d7080284b79b886a7d1a333f223aa5535acb0e79c0e4234f305fcf92c2e1f",
+      "lines": 1258
+    },
+    "scripts/initiative_control/owner_tmux.py": {
+      "sha256": "0012b52514dc2dd8bea080c7847dac59a87132d8946c4efd0561dcfda1369537",
+      "lines": 550
+    },
+    "scripts/initiative_control/coordinator.py": {
+      "sha256": "608dacaad066f929e9db16b49430fa59ed7a28d86e777c7cb6e2b6e9e5590320",
+      "lines": 840
+    },
+    "scripts/initiative_control/manager_cycle.py": {
+      "sha256": "77c8835232f5b4eb17a34bdfb3c6245f62d2eb46e568c1a1841c1a8a30ceccdd",
+      "lines": 520
+    },
+    "scripts/initiative_control/fable_launcher.py": {
+      "sha256": "1a4d16ee1b190c59ea956e9692438bda5a44ff822b588689d2506d82df23f336",
+      "lines": 708
+    },
+    "scripts/initiative_control/activate.py": {
+      "sha256": "121b2e2576c0473341907655aafd3fa2177e95dfc6aac2e907feebcdc42f3143",
+      "lines": 237
+    },
+    "scripts/initiative_control/test_owner_daemon.py": {
+      "sha256": "b2580bab94f34bb7c2c7df53a3aa7269760e1ba8a9f32b1a7558646908c20e16",
+      "lines": 2229
+    },
+    "scripts/initiative_control/test_coordinator.py": {
+      "sha256": "dc84e1b7d6d5c56c377dcbdf6f582f0a39b62717c74529b579d5458a7db7f542",
+      "lines": 1193
+    },
+    "scripts/initiative_control/requirements.txt": {
+      "sha256": "22b0e7ddd26fe30884ee02f88add6aa30a21f75e1ad2f3f0f8b059cf05ac26dd",
+      "lines": 3
+    },
+    "qa/initiative-control/management-bootstrap/owner_cutover_85_rehearsal.py": {
+      "sha256": "43d6b5b7b263db44f3f6e631ff0c9a4ffef79b2460992a53bb6e9a4350687c08",
+      "lines": 294
+    },
+    "qa/initiative-control/management-bootstrap/owner_handoff_80_rehearsal.py": {
+      "sha256": "eaeca3f14ee39631e0e7b305e5630be7e6fd1bb4bf19178dce6ad3bf3e376d3a",
+      "lines": 229
+    },
+    "qa/initiative-control/management-bootstrap/owner_handoff_80_promotion_rehearsal.py": {
+      "sha256": "612f1c98f29d498a81fae70610ead34622c6a5be0cd74d9f34308c7d3afa717e",
+      "lines": 110
+    },
+    "qa/initiative-control/management-bootstrap/owner-handoff-80-promotion.md": {
+      "sha256": "3bf65da0106b5429e4c0a3cc629bf1bd6091df6fe318b824aecec32bf0f5591b",
+      "lines": 297
+    }
+  }
+}

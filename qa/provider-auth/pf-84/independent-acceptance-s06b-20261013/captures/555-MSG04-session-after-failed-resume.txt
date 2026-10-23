@@ -1,0 +1,82 @@
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       loading   /model to change                 │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: -- tok/s
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       glm-5.3-flash   /model to change           │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word first
+
+
+• first
+
+/status
+
+╭───────────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                                │
+│                                                                                               │
+│  Model:                Z.AI GLM 5.3 Flash                                                     │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account personal                 │
+│  Directory:            $S/ws                   │
+│  Permissions:          Next turn: Full Access                                                 │
+│  Security:             Requested Permissive; effective protection unverified (/security)      │
+│  Agents.md:            <none>                                                                 │
+│  Account:              Z.AI API key configured                                                │
+│  Collaboration mode:   Default                                                                │
+│  Session:              01a1345a-26a8-7d43-807c-6c91d819408d                                   │
+│                                                                                               │
+│  Token usage:          6.14K total  (6.12K input + 15 output)                                 │
+│  Context window:       100% left (7.42K used / 950K)                                          │
+│  Account usage:        personal · 6,124 input · 1,280 cached input · 15 output (11 reasoning) │
+│  Limits:               data not available yet                                                 │
+╰───────────────────────────────────────────────────────────────────────────────────────────────╯
+
+■ This conversation ran on zai account `work` and resumes on it: account `work` of provider `zai` is not configured; add it or pick another account in `/providers`
+
+
+› Reply with exactly the word after
+
+
+• after
+
+/status
+
+╭───────────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                                │
+│                                                                                               │
+│  Model:                Z.AI GLM 5.3 Flash                                                     │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account personal                 │
+│  Directory:            $S/ws                   │
+│  Permissions:          Next turn: Full Access                                                 │
+│  Security:             Requested Permissive; effective protection unverified (/security)      │
+│  Agents.md:            <none>                                                                 │
+│  Account:              Z.AI API key configured                                                │
+│  Collaboration mode:   Default                                                                │
+│  Session:              01a1345a-26a8-7d43-807c-6c91d819408d                                   │
+│                                                                                               │
+│  Token usage:          6.22K total  (6.19K input + 32 output)                                 │
+│  Context window:       100% left (7.44K used / 950K)                                          │
+│  Account usage:        personal · 6,191 input · 8,640 cached input · 32 output (25 reasoning) │
+│  Limits:               data not available yet                                                 │
+╰───────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: 8.3 tok/s

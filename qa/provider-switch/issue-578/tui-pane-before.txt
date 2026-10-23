@@ -1,0 +1,22 @@
+╭────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                  │
+│                                                │
+│ model:     gpt-5.6-luna low   /model to change │
+│ directory: /tmp/w578qa-before.H1Pe/ws          │
+╰────────────────────────────────────────────────╯
+› Reply with exactly: openai-one
+⚠ Using OPENAI_API_KEY from your environment — billed per use to that API key. Sign in or unset it to change.
+• openai-one
+• Model changed to Z.AI GLM 5.3 Flash via Z.AI low
+› Reply with exactly: glm-two
+• glm-two
+• Model changed to GPT-5.6-Luna via OpenAI low
+› Reply with exactly: openai-three
+⚠ Using OPENAI_API_KEY from your environment — billed per use to that API key. Sign in or unset it to change.
+■ unexpected status 404 Not Found: Item with id 'rs_202610121745470221cd1c1a5c4554' not found. Items are not persisted when `store` is set to false.
+Try again with `store` set to true, or remove this item from your input.
+› Reply with exactly: openai-four
+■ unexpected status 404 Not Found: Item with id 'rs_202610121745470221cd1c1a5c4554' not found. Items are not persisted when `store` is set to false.
+Try again with `store` set to true, or remove this item from your input.
+› Summarize recent commits
+  GPT-5.6-Luna low · /tmp/w578qa-before.H1Pe/ws · Corbanu Terminal · TPS: 5.8 tok/s

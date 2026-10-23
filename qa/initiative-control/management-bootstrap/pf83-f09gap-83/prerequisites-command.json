@@ -1,0 +1,27 @@
+{
+  "argv": [
+    "cargo",
+    "build",
+    "--locked",
+    "--offline",
+    "-p",
+    "codex-cli",
+    "-p",
+    "codex-rmcp-client",
+    "-p",
+    "codex-code-mode-host",
+    "--bins"
+  ],
+  "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/codex-rs",
+  "environment": {
+    "PATH": "/Users/Neo/.rustup/toolchains/1.95.0-aarch64-apple-darwin/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    "HOME": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/build-home",
+    "TMPDIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/tmp",
+    "CARGO_HOME": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/cargo-home",
+    "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/test-target",
+    "XDG_CACHE_HOME": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/cache",
+    "NEXTEST_TEST_THREADS": "4",
+    "INSTA_UPDATE": "no"
+  },
+  "exit_code": 0
+}

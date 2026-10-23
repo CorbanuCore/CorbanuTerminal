@@ -1,0 +1,659 @@
+{
+  "baseline": {
+    "exit": 0,
+    "receipt_written": true,
+    "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+    "stderr": ""
+  },
+  "rejected_count": 38,
+  "previously_accepted": 34,
+  "controls": [
+    {
+      "kind": "dollar",
+      "page": "backend-refresh",
+      "injected": "Known estimated token cost: $9.990000",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'backend-refresh')\n"
+      }
+    },
+    {
+      "kind": "usd-prefix",
+      "page": "backend-refresh",
+      "injected": "Output cost: USD 9.99",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'backend-refresh')\n"
+      }
+    },
+    {
+      "kind": "usd-suffix",
+      "page": "backend-refresh",
+      "injected": "Total: 9.99 USD",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'backend-refresh')\n"
+      }
+    },
+    {
+      "kind": "dollar",
+      "page": "historical-Request-1",
+      "injected": "Known estimated token cost: $9.990000",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'historical-Request-1')\n"
+      }
+    },
+    {
+      "kind": "usd-prefix",
+      "page": "historical-Request-1",
+      "injected": "Output cost: USD 9.99",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'historical-Request-1')\n"
+      }
+    },
+    {
+      "kind": "usd-suffix",
+      "page": "historical-Request-1",
+      "injected": "Total: 9.99 USD",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'historical-Request-1')\n"
+      }
+    },
+    {
+      "kind": "dollar",
+      "page": "missing-price-Request-1",
+      "injected": "Known estimated token cost: $9.990000",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'missing-price-Request-1')\n"
+      }
+    },
+    {
+      "kind": "usd-prefix",
+      "page": "missing-price-Request-1",
+      "injected": "Output cost: USD 9.99",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'missing-price-Request-1')\n"
+      }
+    },
+    {
+      "kind": "usd-suffix",
+      "page": "missing-price-Request-1",
+      "injected": "Total: 9.99 USD",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'missing-price-Request-1')\n"
+      }
+    },
+    {
+      "kind": "dollar",
+      "page": "mixed-provider-Request-1",
+      "injected": "Known estimated token cost: $9.990000",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'mixed-provider-Request-1')\n"
+      }
+    },
+    {
+      "kind": "usd-prefix",
+      "page": "mixed-provider-Request-1",
+      "injected": "Output cost: USD 9.99",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'mixed-provider-Request-1')\n"
+      }
+    },
+    {
+      "kind": "usd-suffix",
+      "page": "mixed-provider-Request-1",
+      "injected": "Total: 9.99 USD",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'mixed-provider-Request-1')\n"
+      }
+    },
+    {
+      "kind": "dollar",
+      "page": "narrow-Request-1",
+      "injected": "Known estimated token cost: $9.990000",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'narrow-Request-1')\n"
+      }
+    },
+    {
+      "kind": "usd-prefix",
+      "page": "narrow-Request-1",
+      "injected": "Output cost: USD 9.99",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'narrow-Request-1')\n"
+      }
+    },
+    {
+      "kind": "usd-suffix",
+      "page": "narrow-Request-1",
+      "injected": "Total: 9.99 USD",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'narrow-Request-1')\n"
+      }
+    },
+    {
+      "kind": "dollar",
+      "page": "no-usage-Request-1",
+      "injected": "Known estimated token cost: $9.990000",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'no-usage-Request-1')\n"
+      }
+    },
+    {
+      "kind": "usd-prefix",
+      "page": "no-usage-Request-1",
+      "injected": "Output cost: USD 9.99",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'no-usage-Request-1')\n"
+      }
+    },
+    {
+      "kind": "usd-suffix",
+      "page": "no-usage-Request-1",
+      "injected": "Total: 9.99 USD",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'no-usage-Request-1')\n"
+      }
+    },
+    {
+      "kind": "dollar",
+      "page": "stale-estimate",
+      "injected": "Known estimated token cost: $9.990000",
+      "previous": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/page-controls-01/pre-revision-audit.py\", line 92, in <module>\n    assert not subtotal and not re.search(r\"\\$[0-9]\",text),name\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: stale-estimate\n"
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'stale-estimate')\n"
+      }
+    },
+    {
+      "kind": "usd-prefix",
+      "page": "stale-estimate",
+      "injected": "Output cost: USD 9.99",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'stale-estimate')\n"
+      }
+    },
+    {
+      "kind": "usd-suffix",
+      "page": "stale-estimate",
+      "injected": "Total: 9.99 USD",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'stale-estimate')\n"
+      }
+    },
+    {
+      "kind": "dollar",
+      "page": "stale-refresh",
+      "injected": "Known estimated token cost: $9.990000",
+      "previous": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/page-controls-01/pre-revision-audit.py\", line 92, in <module>\n    assert not subtotal and not re.search(r\"\\$[0-9]\",text),name\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: stale-refresh\n"
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'stale-refresh')\n"
+      }
+    },
+    {
+      "kind": "usd-prefix",
+      "page": "stale-refresh",
+      "injected": "Output cost: USD 9.99",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'stale-refresh')\n"
+      }
+    },
+    {
+      "kind": "usd-suffix",
+      "page": "stale-refresh",
+      "injected": "Total: 9.99 USD",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'stale-refresh')\n"
+      }
+    },
+    {
+      "kind": "dollar",
+      "page": "unavailable-backend",
+      "injected": "Known estimated token cost: $9.990000",
+      "previous": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/page-controls-01/pre-revision-audit.py\", line 92, in <module>\n    assert not subtotal and not re.search(r\"\\$[0-9]\",text),name\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: unavailable-backend\n"
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'unavailable-backend')\n"
+      }
+    },
+    {
+      "kind": "usd-prefix",
+      "page": "unavailable-backend",
+      "injected": "Output cost: USD 9.99",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'unavailable-backend')\n"
+      }
+    },
+    {
+      "kind": "usd-suffix",
+      "page": "unavailable-backend",
+      "injected": "Total: 9.99 USD",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 62, in <module>\n    assert not re.search(\n           ^^^^^^^^^^^^^^\n    ...<2 lines>...\n    ), (\"unexpected monetary amount on nonmonetary page\", name)\n    ^\nAssertionError: ('unexpected monetary amount on nonmonetary page', 'unavailable-backend')\n"
+      }
+    },
+    {
+      "kind": "missing-page",
+      "page": "backend-refresh",
+      "injected": null,
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 54, in <module>\n    assert set(selected_pages) == expected_pages, (\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: ('page identity coverage mismatch', {'missing': ['backend-refresh'], 'unexpected': []})\n"
+      }
+    },
+    {
+      "kind": "missing-page",
+      "page": "historical-Request-1",
+      "injected": null,
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 54, in <module>\n    assert set(selected_pages) == expected_pages, (\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: ('page identity coverage mismatch', {'missing': ['historical-Request-1'], 'unexpected': []})\n"
+      }
+    },
+    {
+      "kind": "missing-page",
+      "page": "missing-price-Request-1",
+      "injected": null,
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 54, in <module>\n    assert set(selected_pages) == expected_pages, (\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: ('page identity coverage mismatch', {'missing': ['missing-price-Request-1'], 'unexpected': []})\n"
+      }
+    },
+    {
+      "kind": "missing-page",
+      "page": "mixed-provider-Request-1",
+      "injected": null,
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 54, in <module>\n    assert set(selected_pages) == expected_pages, (\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: ('page identity coverage mismatch', {'missing': ['mixed-provider-Request-1'], 'unexpected': []})\n"
+      }
+    },
+    {
+      "kind": "missing-page",
+      "page": "narrow-Request-1",
+      "injected": null,
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 54, in <module>\n    assert set(selected_pages) == expected_pages, (\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: ('page identity coverage mismatch', {'missing': ['narrow-Request-1'], 'unexpected': []})\n"
+      }
+    },
+    {
+      "kind": "missing-page",
+      "page": "no-usage-Request-1",
+      "injected": null,
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 54, in <module>\n    assert set(selected_pages) == expected_pages, (\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: ('page identity coverage mismatch', {'missing': ['no-usage-Request-1'], 'unexpected': []})\n"
+      }
+    },
+    {
+      "kind": "missing-page",
+      "page": "stale-estimate",
+      "injected": null,
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 54, in <module>\n    assert set(selected_pages) == expected_pages, (\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: ('page identity coverage mismatch', {'missing': ['stale-estimate'], 'unexpected': []})\n"
+      }
+    },
+    {
+      "kind": "missing-page",
+      "page": "stale-refresh",
+      "injected": null,
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 54, in <module>\n    assert set(selected_pages) == expected_pages, (\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: ('page identity coverage mismatch', {'missing': ['stale-refresh'], 'unexpected': []})\n"
+      }
+    },
+    {
+      "kind": "missing-page",
+      "page": "unavailable-backend",
+      "injected": null,
+      "previous": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/page-controls-01/pre-revision-audit.py\", line 127, in <module>\n    backend = \" \".join(json.loads((run/\"unavailable-backend-selected.json\").read_text()))\n                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/pathlib/__init__.py\", line 787, in read_text\n    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:\n         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/pathlib/__init__.py\", line 771, in open\n    return io.open(self, mode, buffering, encoding, errors, newline)\n           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: '/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/page-controls-01/missing-page-unavailable-backend/unavailable-backend-selected.json'\n"
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 54, in <module>\n    assert set(selected_pages) == expected_pages, (\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: ('page identity coverage mismatch', {'missing': ['unavailable-backend'], 'unexpected': []})\n"
+      }
+    },
+    {
+      "kind": "extra-page",
+      "page": "unexpected-navigation",
+      "injected": null,
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 54, in <module>\n    assert set(selected_pages) == expected_pages, (\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: ('page identity coverage mismatch', {'missing': [], 'unexpected': ['unexpected-navigation']})\n"
+      }
+    },
+    {
+      "kind": "extra-money-page",
+      "page": "unexpected-amount",
+      "injected": "Total: $9.99",
+      "previous": {
+        "exit": 0,
+        "receipt_written": true,
+        "stdout": "9 priced page reconciliations; 4 unknown-cost pages; 2 zero-recorded pages; exact 15-page subtotal coverage bound\n",
+        "stderr": ""
+      },
+      "revised": {
+        "exit": 1,
+        "receipt_written": false,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 54, in <module>\n    assert set(selected_pages) == expected_pages, (\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: ('page identity coverage mismatch', {'missing': [], 'unexpected': ['unexpected-amount']})\n"
+      }
+    }
+  ],
+  "limitation": "Mutated QA copies test the auditor; they are not new product observations."
+}

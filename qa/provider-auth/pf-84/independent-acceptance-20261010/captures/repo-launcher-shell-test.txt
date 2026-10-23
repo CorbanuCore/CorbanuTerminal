@@ -1,0 +1,6 @@
+ok: no caller home uses the default
+ok: caller CORBANU_HOME is kept
+ok: caller CODEX_HOME is kept
+ok: caller conflict is passed through for the binary to report
+ok: caller PFTERMINAL_HOME is kept
+exit=0

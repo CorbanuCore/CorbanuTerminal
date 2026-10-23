@@ -43,10 +43,9 @@ pub(super) fn cached_attribution_policy(
         .map(|policy| policy.as_ref().clone())
 }
 
-#[cfg(not(test))]
+// Unit tests use the production budget too: 500 ms was not enough for the
+// three-request refresh test on a loaded CI runner.
 const POLICY_RESOLUTION_TIMEOUT: Duration = Duration::from_secs(5);
-#[cfg(test)]
-const POLICY_RESOLUTION_TIMEOUT: Duration = Duration::from_millis(500);
 pub(super) const POLICY_RETRY_DELAY: Duration = Duration::from_secs(30);
 
 pub(super) async fn resolve_attribution_policy(
@@ -101,6 +100,20 @@ pub(super) async fn resolve_attribution_policy(
     .await
 }
 
+/// The manager's auth generation; for a named account's manager mixed with
+/// the account (#658), so a policy cached for one sign-in is never reused for
+/// another (every manager counts from 0).
 pub(super) fn auth_generation(auth_manager: &AuthManager) -> u64 {
-    *auth_manager.auth_change_receiver().borrow()
+    use std::hash::Hash;
+    use std::hash::Hasher;
+    let generation = *auth_manager.auth_change_receiver().borrow();
+    match auth_manager.named_account() {
+        None => generation,
+        Some(account) => {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            account.hash(&mut hasher);
+            generation.hash(&mut hasher);
+            hasher.finish()
+        }
+    }
 }

@@ -105,6 +105,9 @@ fn create_directory_symlink(target: &Path, alias: &Path) -> Result<()> {
     Ok(())
 }
 
+/// A stand-in for a current bubblewrap: it advertises `--argv0`, `--perms`
+/// and `--bind-fd` (#536 binds a command's writable roots with `--bind-fd`
+/// and refuses to run without it), logs its arguments and runs the command.
 #[cfg(target_os = "linux")]
 fn write_fake_bwrap(bin_dir: &Path) -> Result<PathBuf> {
     std::fs::create_dir_all(bin_dir)?;
@@ -116,7 +119,7 @@ set -euo pipefail
 
 for arg in "$@"; do
   if [[ "${arg}" == "--help" ]]; then
-    echo "Usage: bwrap --argv0 --perms"
+    echo "Usage: bwrap --argv0 --perms --bind-fd"
     exit 0
   fi
 done

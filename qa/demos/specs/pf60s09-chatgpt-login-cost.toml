@@ -1,0 +1,33 @@
+# PF-60-S09 AC1 (#402; Travis 2026-10-14: ChatGPT login verified with a mock sign-in server only). The candidate signs in
+# with `login --device-auth` and talks to its built-in ChatGPT routes (auth.openai.com, chatgpt.com/backend-api/codex),
+# but HTTPS_PROXY and CODEX_CA_CERTIFICATE in the recorder's environment send that traffic to a local stand-in
+# (qa/portfolio/agent-cost-accounting/pf-60-s09/drivers/). Fake tokens; no real ChatGPT account.
+id = "pf60s09-chatgpt-login-cost"
+feature = "ChatGPT-login turns are recorded as subscription work, never as spend (#402, sign-in stand-in)"
+expected = "Signed in through the ChatGPT sign-in stand-in, one turn on gpt-5.4 shows in /cost as 'Covered by your subscription (not billed per request)', with no spend and no 'no price'."
+model = "gpt-5.4"
+provider = "openai"
+rows = 46
+cols = 150
+setup = "{bin} login --device-auth"
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with the single word OK."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "openai-mock: authorized as"
+timeout = 60
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "gpt-5\\.4 — Covered by your subscription \\(not billed per request\\)"
+[[steps]]
+pause = 5

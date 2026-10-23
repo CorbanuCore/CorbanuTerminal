@@ -1,0 +1,19 @@
+## z4 config.toml for this run (work = REAL key; personal and default = FAKE keys)
+model = "glm-5.3-flash"
+model_provider = "zai"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+openai_base_url = "http://127.0.0.1:34741/v1"
+chatgpt_base_url = "http://127.0.0.1:34741/backend-api/codex"
+suppress_unstable_features_warning = true
+service_tier = "default"
+[features]
+named_accounts = true
+[provider_accounts]
+zai = "ghost"
+[projects."$S/ws"]
+trust_level = "trusted"
+## account list
+zai	personal	api_key
+zai	work	api_key
+## conversation 01a1347e-b31e-7f10-9248-4b064f96d4c4: its last turn ran on work (FK-05 fork, answered clifork, then pong)

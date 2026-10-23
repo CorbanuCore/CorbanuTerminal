@@ -20,6 +20,7 @@ use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
+use core_test_support::skip_if_wine_exec;
 use core_test_support::streaming_sse::StreamingSseChunk;
 use core_test_support::streaming_sse::start_streaming_sse_server;
 use core_test_support::test_codex::TestCodex;
@@ -152,6 +153,13 @@ async fn read_file_tools_run_in_parallel() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_tools_run_in_parallel() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
+    // A timing check: under Wine-exec every shell command starts through
+    // Wine, which alone takes most of the bound (1.7 s against 1.6 s on
+    // nightly-ci, #636), so it could not tell parallel from serial there.
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell start-up under Wine exceeds the parallel-timing bound"
+    );
 
     let server = start_mock_server().await;
     let mut builder = test_codex().with_model("gpt-5.4");
@@ -187,6 +195,13 @@ async fn shell_tools_run_in_parallel() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn mixed_parallel_tools_run_in_parallel() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
+    // A timing check: under Wine-exec every shell command starts through
+    // Wine, which alone takes most of the bound (1.7 s against 1.6 s on
+    // nightly-ci, #636), so it could not tell parallel from serial there.
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell start-up under Wine exceeds the parallel-timing bound"
+    );
 
     let server = start_mock_server().await;
     let test = build_codex_with_test_tool(&server).await?;

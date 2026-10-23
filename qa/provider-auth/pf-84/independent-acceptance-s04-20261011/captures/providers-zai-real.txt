@@ -1,0 +1,186 @@
+===== z2-providers
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Z.AI GLM 5.3 Flash                                                │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account default             │
+│  Directory:            $S/work                 │
+│  Permissions:          Next turn: Workspace (Ask for approval)                           │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              OpenAI API key configured (run corbanu login to use ChatGPT)      │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12a7a-77e9-7380-9004-bc1fb8d75664                              │
+│                                                                                          │
+│  Token usage:          8.35K total  (8.35K input + 3 output)                             │
+│  Context window:       100% left (8.35K used / 950K)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+  Providers
+  Configure providers and control whether they are eligible for use.
+  Configured means credentials are present, not verified by the provider.
+
+› 1. OpenAI          Not configured · unavailable
+  2. Claude Account  Not configured · unavailable
+  3. Corbanu API     Not configured · unavailable
+  4. Anthropic       Not configured · unavailable
+  5. Ambient         Not configured · unavailable
+  6. Kimi Code       Not configured · unavailable
+  7. Z.AI · default  Enabled · configured · current · this session · default for new sessions
+  8. Z.AI · obfake   Named account · API key · fp 511a22afe776
+
+  r recover credentials · Enter manage · Esc back
+  Press enter to confirm or esc to go back
+
+===== z2-provider-rows
+ 1. OpenAI          Not configured · unavailable
+  2. Claude Account  Not configured · unavailable
+  3. Corbanu API     Not configured · unavailable
+  4. Anthropic       Not configured · unavailable
+  5. Ambient         Not configured · unavailable
+  6. Kimi Code       Not configured · unavailable
+  7. Z.AI · default  Enabled · configured · current · this session · default for new sessions
+  8. Z.AI · obfake   Named account · API key · fp 511a22afe776
+ 9. DeepSeek        Not configured · unavailable
+ 10. OpenRouter     Not configured · unavailable
+ 11. Meta           Not configured · unavailable
+ 12. Baseten        Not configured · unavailable
+ 13. Vercel         Not configured · unavailable
+ 14. Amazon Bedrock  Not configured · unavailable
+ 15. Ollama          Enabled · configured
+ 16. LM Studio       Enabled · configured
+
+===== z2-fake-actions
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+• Saved zai account `fake`. Use it from /providers, `--account fake` or a spawn `account`.
+■ zai already has an account `fake`. Choose another name, or remove it first.
+› Reply with exactly the word pong and nothing else.
+• pong
+  Z.AI · fake
+  API key · fp de063d3d0b35
+› 1. Use for this session  Start a new session whose requests to this provider use this account.
+  2. Make default          New sessions use this account; this session is unchanged.
+  3. Rename                Give this account another name; its credential is unchanged.
+  4. Remove                Delete this account's credential from the vault; other accounts are kept.
+  Press enter to confirm or esc to go back
+
+===== z2-dup-add
+│  Account:              OpenAI API key configured (run corbanu login to use ChatGPT)      │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12a7a-77e9-7380-9004-bc1fb8d75664                              │
+│                                                                                          │
+│  Token usage:          8.35K total  (8.35K input + 3 output)                             │
+│  Context window:       100% left (8.35K used / 950K)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+• Saved zai account `fake`. Use it from /providers, `--account fake` or a spawn `account`.
+■ zai already has an account `fake`. Choose another name, or remove it first.
+▌ Add Z.AI
+▌ API key — masked
+▌
+▌ Paste your ZAI_API_KEY API key. Corbanu stores it in the encrypted vault and never adds it to chat. An existing environment variable takes precedence; unset
+▌ it outside Corbanu to use the saved key.
+Press enter to confirm or esc to go back
+
+===== z2-use-fake
+■ zai already has an account `fake`. Choose another name, or remove it first.
+› Reply with exactly the word pong and nothing else.
+• pong
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+Token usage: total=16,726 input=16,707 output=19 (reasoning 13)
+To continue this session, run corbanu resume 01a12a7a-77e9-7380-9004-bc1fb8d75664
+• New session: requests to zai use account `fake`.
+› Improve documentation in @filename
+  Z.AI GLM 5.3 Flash via zai default · $S/work · Corbanu Terminal · TPS: -- tok/s
+
+===== z2-fake-401
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+› Reply with exactly the word pong and nothing else.
+⚠ Z.AI (zai) account `fake` was rejected. Replace its key with `corbanu account add zai fake` (reads stdin), or choose another account. The default Z.AI
+  credential is unchanged.
+■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id:
+bef6017b-4d70-4c65-8571-79bb5c37869c
+› Improve documentation in @filename
+  Z.AI GLM 5.3 Flash via zai default · $S/work · Corbanu Terminal · TPS: -- tok/s
+
+===== z2-rename-inuse
+bef6017b-4d70-4c65-8571-79bb5c37869c
+• New sessions use zai account `fake`. This session is unchanged.
+■ This session uses zai account `fake`. Use another account for this session first, then rename it.
+  Z.AI · fake
+  API key · fp de063d3d0b35 · this session · default for new sessions
+› 1. Rename  Give this account another name; its credential is unchanged.
+  2. Remove  Delete this account's credential from the vault; other accounts are kept.
+  Press enter to confirm or esc to go back
+
+===== z3-restart-default-fake
+⚠ Z.AI (zai) account `fake` was rejected. Replace its key with `corbanu account add zai fake` (reads stdin), or choose another account. The default Z.AI
+  credential is unchanged.
+■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id:
+a379ef0e-c815-4eeb-a665-000516cf38b2
+› Explain this codebase
+  Z.AI GLM 5.3 Flash via zai default · $S/work · Corbanu Terminal · TPS: -- tok/s
+
+===== z3-rows
+  7. Z.AI · default  Enabled · configured · current
+  8. Z.AI · fake     Named account · API key · fp de063d3d0b35 · this session · default for new sessions
+ 9. Z.AI · obfake   Named account · API key · fp 511a22afe776
+
+===== z3-use-default
+› Reply with exactly the word pong and nothing else.
+• pong
+› Summarize recent commits
+  Z.AI GLM 5.3 Flash via zai default · $S/work · Corbanu Terminal · TPS: 1.9 tok/s
+
+===== z3-rename
+  3. Corbanu API     Not configured · unavailable
+  4. Anthropic       Not configured · unavailable
+  5. Ambient         Not configured · unavailable
+  6. Kimi Code       Not configured · unavailable
+› 7. Z.AI · default  Enabled · configured · current · this session
+  8. Z.AI · obfake   Named account · API key · fp 511a22afe776
+  r recover credentials · Enter manage · Esc back
+  Press enter to confirm or esc to go back
+
+===== z3-rows-after-rename
+ 7. Z.AI · default  Enabled · configured · current · this session
+  8. Z.AI · obfake   Named account · API key · fp 511a22afe776
+ 9. Z.AI · spare    Named account · API key · fp de063d3d0b35 · default for new sessions
+
+===== z3-remove-spare-prompt
+› Reply with exactly the word pong and nothing else.
+• pong
+• Renamed zai account `fake` to `spare`. It stays the default for new sessions.
+  Remove Z.AI account `spare`
+  It is in use. Choose the account that replaces it first; removal follows.
+› 1. Replace with `default`  Takes over this session and new sessions, then the account is removed.
+  2. Replace with `obfake`   Takes over this session and new sessions, then the account is removed.
+  3. Keep it                 Nothing changes.
+  Press enter to confirm or esc to go back
+
+===== z3-rows-after-remove
+ 7. Z.AI · default  Enabled · configured · current · this session
+  8. Z.AI · obfake   Named account · API key · fp 511a22afe776 · default for new sessions
+

@@ -9,6 +9,12 @@ use serde_json::Value;
 use serde_json::json;
 use uuid::Uuid;
 
+/// #641: shown where Campaign Tracker needs the Corbanu API key and only the
+/// credential broker holds it.
+const TRACKER_KEY_HELD_BY_BROKER: &str = "Campaign Tracker can't use the Corbanu API key from \
+the environment: the credential broker holds it (broker_model_auth, on under security level \
+Aggressive), and Campaign Tracker sends the key itself. Store the key with /providers (Corbanu \
+API) to use it; activity remains encrypted locally meanwhile.";
 const VIEW: &str = "campaign-tracker";
 #[cfg(test)]
 #[path = "campaign_tracker_tests.rs"]
@@ -93,6 +99,16 @@ impl ChatWidget {
         .flatten()
         .unwrap_or_default()
     }
+    /// #641: no key Campaign Tracker can send: the Corbanu API key from the
+    /// environment is held by the credential broker (Aggressive's
+    /// `broker_model_auth`), which attaches it to requests as a header, and
+    /// Campaign Tracker sends it in the request body; no key is stored.
+    fn tracker_key_held_by_broker(&self, key: &str) -> bool {
+        key.is_empty()
+            && codex_model_provider_info::CORBANU_API_KEY_ENV_VARS
+                .iter()
+                .any(|name| crate::legacy_core::broker_holds_environment_key(name))
+    }
     pub(crate) fn open_campaign_tracker(&mut self, path: String, mut body: Option<Value>) {
         if self.tracker_local_workflow(&path, body.as_ref()) {
             return;
@@ -113,7 +129,12 @@ impl ChatWidget {
         if enrollment == Some(true)
             && let Some(body) = &mut body
         {
-            body["apiKey"] = json!(self.tracker_api_key());
+            let key = self.tracker_api_key();
+            if self.tracker_key_held_by_broker(&key) {
+                self.add_error_message(TRACKER_KEY_HELD_BY_BROKER.to_string());
+                return;
+            }
+            body["apiKey"] = json!(key);
         }
         self.tracker_selection(SelectionViewParams {
             view_id: Some(VIEW),
@@ -154,7 +175,10 @@ impl ChatWidget {
             || path == "/revoke"
             || path == "/delete"
         {
-            self.add_info_message("Campaign Tracker change saved.".to_string(), None);
+            self.add_info_message(
+                "Campaign Tracker change saved.".to_string(),
+                /*hint*/ None,
+            );
             let next = if data["grantId"].is_string() || path == "/revoke" {
                 "/grants"
             } else if data["campaignId"].is_string() {
@@ -164,16 +188,16 @@ impl ChatWidget {
             } else {
                 "/status"
             };
-            self.open_campaign_tracker(next.to_string(), None);
+            self.open_campaign_tracker(next.to_string(), /*body*/ None);
             return;
         }
         if let Some(enabled) = enrollment {
             match self.tracker_session().and_then(|(_,store,_)|store.enroll(&tracker::workspace_id(self.config.cwd.as_path()),enabled)) {
-                Ok(())=>self.add_info_message(if enabled {"Campaign Tracker recording enabled for this workspace. Prompts are preserved; sharing needs an explicit history grant."}else{"Campaign Tracker recording paused for this workspace."}.to_string(),None),
+                Ok(())=>self.add_info_message(if enabled {"Campaign Tracker recording enabled for this workspace. Prompts are preserved; sharing needs an explicit history grant."}else{"Campaign Tracker recording paused for this workspace."}.to_string(),/*hint*/ None),
                 Err(error)=>self.add_error_message(error),
             }
             self.campaign_tracker_sync();
-            self.open_campaign_tracker("/status".to_string(), None);
+            self.open_campaign_tracker("/status".to_string(), /*body*/ None);
             return;
         }
         let mut items = vec![
@@ -181,38 +205,38 @@ impl ChatWidget {
                 "Activity totals",
                 "Observed prompts, runs, actions and verified task outcomes",
                 "/metrics".to_string(),
-                None,
+                /*body*/ None,
             ),
             item(
                 "My activity",
                 "Preserved prompts, compact summaries and observed actions",
                 "/activity".to_string(),
-                None,
+                /*body*/ None,
             ),
             item(
                 "Access & replay",
                 "View explicit history grants and collaborators",
                 "/grants".to_string(),
-                None,
+                /*body*/ None,
             ),
             item(
                 "Access audit",
                 "See who read, exported or changed your history",
                 "/audit".to_string(),
-                None,
+                /*body*/ None,
             ),
         ];
         items.push(item(
             "Direct reports & collaborators",
             "Choose a Task Node handle to share or inspect activity",
             "/team".to_string(),
-            None,
+            /*body*/ None,
         ));
         items.push(item(
             "Campaigns",
             "Group work around a named objective",
             "/campaigns".to_string(),
-            None,
+            /*body*/ None,
         ));
         let mut subtitle =
             "Prompts + summaries · permissioned history · observed TUI activity".to_string();
@@ -258,7 +282,7 @@ impl ChatWidget {
                 "Sync now",
                 "Retry the encrypted local outbox",
                 "/sync".to_string(),
-                None,
+                /*body*/ None,
             ));
         } else if path.starts_with("/metrics") {
             subtitle = data["coverage"]
@@ -283,7 +307,7 @@ impl ChatWidget {
                         "/activity?accountId={}",
                         urlencoding::encode(member["accountId"].as_str().unwrap_or(""))
                     ),
-                    None,
+                    /*body*/ None,
                 ));
             }
         } else if path == "/campaigns" {
@@ -291,7 +315,7 @@ impl ChatWidget {
                 "Create campaign",
                 "Name the outcome you are working toward",
                 "/_new_campaign".to_string(),
-                None,
+                /*body*/ None,
             ));
             for campaign in data["items"].as_array().into_iter().flatten() {
                 items.push(item(campaign["title"].as_str().unwrap_or("Campaign"),campaign["objective"].as_str().unwrap_or(""),"/_document".to_string(),Some(json!({"text":format!("{}\n\n{}\n\nMembers: {}\nTasks: {}\nMembership does not grant prompt access.",campaign["title"],campaign["objective"],campaign["members"],campaign["taskIds"])}))));
@@ -336,7 +360,7 @@ impl ChatWidget {
                         &format!("Replay @{handle}"),
                         "Only the explicitly granted history and fields are visible",
                         format!("/activity?accountId={}", urlencoding::encode(subject)),
-                        None,
+                        /*body*/ None,
                     ));
                 }
             }
@@ -388,7 +412,7 @@ impl ChatWidget {
                         urlencoding::encode(account),
                         urlencoding::encode(session)
                     ),
-                    None,
+                    /*body*/ None,
                 );
                 entry.selected_description = Some(description.clone());
                 items.push(entry);
@@ -411,7 +435,7 @@ impl ChatWidget {
                             urlencoding::encode(account),
                             urlencoding::encode(record["id"].as_str().unwrap_or(""))
                         ),
-                        None,
+                        /*body*/ None,
                     ));
                     if self
                         .tracker_session()
@@ -435,7 +459,7 @@ impl ChatWidget {
                         urlencoding::encode(cursor["before"].as_str().unwrap_or("")),
                         urlencoding::encode(cursor["beforeId"].as_str().unwrap_or(""))
                     ),
-                    None,
+                    /*body*/ None,
                 ));
             }
         } else if path.starts_with("/annotations") {
@@ -461,14 +485,14 @@ impl ChatWidget {
                 });
             }
         } else {
-            self.open_campaign_tracker("/status".to_string(), None);
+            self.open_campaign_tracker("/status".to_string(), /*body*/ None);
             return;
         }
         items.push(item(
             "Tracker overview",
             "Return to status and recording controls",
             "/status".to_string(),
-            None,
+            /*body*/ None,
         ));
         self.tracker_selection(SelectionViewParams {
             view_id: Some(VIEW),
@@ -514,9 +538,11 @@ impl ChatWidget {
         }
         let key = self.tracker_api_key();
         if key.is_empty() {
-            let _ = store.failure(
-                "Corbanu subscription credential unavailable; activity remains encrypted locally.",
-            );
+            let _ = store.failure(if self.tracker_key_held_by_broker(&key) {
+                TRACKER_KEY_HELD_BY_BROKER
+            } else {
+                "Corbanu subscription credential unavailable; activity remains encrypted locally."
+            });
             return;
         }
         self.campaign_tracker_syncing = true;
@@ -544,7 +570,7 @@ impl ChatWidget {
             if let Err(error) = result {
                 self.add_error_message(format!("Campaign Tracker: {error}"));
             }
-            self.open_campaign_tracker("/status".to_string(), None);
+            self.open_campaign_tracker("/status".to_string(), /*body*/ None);
         }
         if progressed {
             self.campaign_tracker_sync();

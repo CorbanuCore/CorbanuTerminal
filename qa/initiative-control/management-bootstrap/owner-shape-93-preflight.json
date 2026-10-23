@@ -1,0 +1,36 @@
+{
+  "corrected_digest": "53e79a9300d5245520acd4cc29281d65c0d6b2ee5a1b902d643948f0d4c76a14",
+  "corrected_status": "prepared",
+  "final_activation": "off",
+  "fixture_activation_observed": true,
+  "flat_refusal": "recorded_worker_runtime_required",
+  "frozen_runtime": {
+    "effort": "high",
+    "model": "gpt-6-astra",
+    "policy": "--yolo",
+    "provider": "openai",
+    "worktree": "/private/tmp/os93-8m3vaoco/worktree"
+  },
+  "live_access": false,
+  "original_digest": "b634f3278697a2cae904a982a96827e9416fe26761fb5c61b82bec8892f54ab4",
+  "original_input_keys": [
+    "allocation",
+    "base_commit",
+    "brief_file",
+    "brief_sha256",
+    "model",
+    "reasoning_effort",
+    "task",
+    "worktree"
+  ],
+  "original_status": "cancelled",
+  "preserved_cycle_fields": true,
+  "real_acks": 0,
+  "real_launches": 0,
+  "real_promotions": 0,
+  "real_returns": 0,
+  "real_starts": 0,
+  "real_worker": "BLOCKED",
+  "root": "/private/tmp/os93-8m3vaoco",
+  "stop": "before tmux transport validation/promotion/launch: no supplied approved isolated inference profile or non-live binary transport"
+}

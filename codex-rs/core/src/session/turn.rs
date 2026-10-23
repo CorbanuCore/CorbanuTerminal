@@ -39,6 +39,13 @@ use crate::mentions::collect_explicit_app_ids;
 use crate::mentions::collect_explicit_plugin_mentions;
 use crate::mentions::collect_tool_mentions_from_messages;
 use crate::plugins::build_plugin_injections;
+use crate::provider_throttle::format_provider_request_block;
+use crate::provider_throttle::notify_state_db_fallback;
+use crate::provider_throttle::provider_request_key;
+use crate::provider_throttle::provider_request_result_from_error;
+use crate::provider_throttle::provider_request_result_kind;
+use crate::provider_throttle::record_unleased_provider_request_result;
+use crate::provider_throttle::turn_auth;
 use crate::responses_metadata::CodexResponsesMetadata;
 use crate::responses_metadata::CodexResponsesRequestKind;
 use crate::responses_retry::ResponsesStreamRequest;
@@ -127,8 +134,6 @@ use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::TurnDiffEvent;
 use codex_protocol::protocol::WarningEvent;
 use codex_protocol::user_input::UserInput;
-use codex_state::ProviderRequestBlock;
-use codex_state::ProviderRequestBlockReason;
 use codex_state::ProviderRequestKey;
 use codex_state::ProviderRequestLease;
 use codex_state::ProviderRequestLeaseDecision;
@@ -146,8 +151,6 @@ use codex_utils_stream_parser::strip_citations;
 use futures::prelude::*;
 use futures::stream::FuturesOrdered;
 use regex_lite::Regex;
-use sha2::Digest;
-use sha2::Sha256;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::AbortOnDropHandle;
 use tracing::Instrument;
@@ -179,6 +182,21 @@ fn trace_turn_timing(label: &str, start: Instant) {
     }
 }
 
+/// Why a turn is refused before anything of it is recorded: the kill switch
+/// (#445), or (#1331, D171) a named sign-in account removed or signed out
+/// while the session ran on it, whose model request would be refused with
+/// the same error.
+pub(crate) async fn turn_refusal(sess: &Session, turn_context: &TurnContext) -> Option<CodexErr> {
+    if let Err(err) = sess.services.model_client().refuse_under_kill_switch() {
+        return Some(err);
+    }
+    codex_model_provider::named_sign_in_account(turn_context.provider.info())?;
+    if turn_context.provider.auth().await.is_some() {
+        return None;
+    }
+    turn_context.provider.api_auth().await.err()
+}
+
 /// Takes initial turn input and runs a loop where, at each sampling request,
 /// the model replies with either:
 ///
@@ -203,6 +221,18 @@ pub(crate) async fn run_turn(
 ) -> CodexResult<Option<String>> {
     let turn_started_at = Instant::now();
     trace_turn_timing("run_turn_start", turn_started_at);
+    // Issue #445: with the kill switch on, the turn is refused before its
+    // input is recorded, so nothing of it reaches the model later either.
+    // #1331 (D171): so is a turn on a named account that was removed or
+    // signed out meanwhile, so it is not recorded as a turn on that account.
+    if let Some(err) = turn_refusal(sess.as_ref(), turn_context.as_ref()).await {
+        sess.track_turn_codex_error(turn_context.as_ref(), &err);
+        sess.emit_turn_error_lifecycle(turn_context.as_ref(), err.to_codex_protocol_error())
+            .await;
+        let event = EventMsg::Error(err.to_error_event(/*message_prefix*/ None));
+        sess.send_event(&turn_context, event).await;
+        return Ok(None);
+    }
     let provider_info = turn_context.provider.info();
     let mut client_session = prewarmed_client_session
         .filter(|session| ModelClient::session_matches_provider(session, provider_info))
@@ -418,13 +448,10 @@ pub(crate) async fn run_turn(
                 .await?;
 
             // Construct the input that we will send to the model.
-            let mut sampling_request_input: Vec<ResponseItem> = async {
-                sess.clone_history()
-                    .await
-                    .for_prompt(&turn_context.model_info.input_modalities)
-            }
-            .instrument(trace_span!("run_turn.prepare_sampling_request_input"))
-            .await;
+            let mut sampling_request_input: Vec<ResponseItem> =
+                async { sess.clone_history().await.for_turn_prompt(&turn_context) }
+                    .instrument(trace_span!("run_turn.prepare_sampling_request_input"))
+                    .await;
             if std::mem::take(&mut pending_completion_continuation) {
                 sampling_request_input
                     .push(ContextualUserFragment::into(TurnCompletionContinuation));
@@ -609,6 +636,28 @@ pub(crate) async fn run_turn(
                                 .services
                                 .model_client()
                                 .new_session_for_provider(turn_context.provider.info());
+                            // The classifier is a second model request the
+                            // operator paid for, on a session of its own, so it
+                            // is collected like any other - under the turn it
+                            // assesses. Best effort: an assessment that cannot
+                            // be recorded still runs.
+                            let _accounting = match crate::accounting::attach_turn(
+                                &sess,
+                                turn_context.as_ref(),
+                                &assessment_client_session,
+                                crate::accounting::assessment_turn_label(&turn_context.sub_id),
+                            )
+                            .await
+                            {
+                                Ok(scopes) => Some(scopes),
+                                Err(error) => {
+                                    tracing::warn!(
+                                        %error,
+                                        "accounting: completion assessment proceeding unrecorded"
+                                    );
+                                    None
+                                }
+                            };
                             let assessment_started_at = Instant::now();
                             match assess_turn_completion(
                                 sess.as_ref(),
@@ -852,6 +901,10 @@ pub(crate) async fn run_hooks_and_record_inputs(
         let hook_outcome = inspect_pending_input(sess, turn_context, input_item).await;
         if hook_outcome.should_stop {
             blocked_input = true;
+            // A blocked prompt is never recorded: drop any agent mark for it.
+            if let TurnInput::UserInput { content, .. } = input_item {
+                sess.services.model_client().discard_agent_input(content);
+            }
             record_additional_contexts(sess, turn_context, hook_outcome.additional_contexts).await;
         } else {
             if matches!(input_item, TurnInput::UserInput { content, .. } if !content.is_empty()) {
@@ -1608,7 +1661,79 @@ pub(crate) fn build_prompt(
         output_schema_strict: !crate::guardian::is_guardian_reviewer_source(
             &turn_context.session_source,
         ),
+        producer: Some(turn_context.output_producer()),
+        flat_tool_names: router.flat_tool_names().clone(),
     }
+}
+
+/// Tells the user, once per switch, that requests are billed to the
+/// `OPENAI_API_KEY` from their environment. Only providers that use OpenAI
+/// sign-in send that key. Root threads and spawned agents (which may use a
+/// different provider from their parent) announce in their own thread. Review
+/// and compaction sub-sessions and internal sessions stay quiet: the review and
+/// compact tasks announce on the thread that started them.
+pub(crate) async fn notify_openai_api_key_env_fallback(sess: &Session, turn_context: &TurnContext) {
+    use codex_protocol::protocol::SessionSource;
+    use codex_protocol::protocol::SubAgentSource;
+    if matches!(
+        turn_context.session_source,
+        SessionSource::Internal(_)
+            | SessionSource::SubAgent(
+                SubAgentSource::Review
+                    | SubAgentSource::Compact
+                    | SubAgentSource::MemoryConsolidation
+                    | SubAgentSource::Other(_)
+            )
+    ) {
+        return;
+    }
+    let in_use = turn_context.provider.info().uses_first_party_openai_auth()
+        && turn_context
+            .provider
+            .auth()
+            .await
+            .is_some_and(|auth| auth.is_openai_api_key_env_fallback());
+    let newly_in_use = sess
+        .state
+        .lock()
+        .await
+        .note_openai_api_key_env_fallback(in_use);
+    if newly_in_use {
+        sess.send_event(
+            turn_context,
+            EventMsg::Warning(WarningEvent {
+                message: codex_login::OPENAI_API_KEY_ENV_FALLBACK_NOTICE.to_string(),
+            }),
+        )
+        .await;
+    }
+}
+
+/// #578: retries of one request without an item the provider reported
+/// missing.
+const MAX_UNRESOLVABLE_ITEM_RETRIES: usize = 8;
+
+/// #578: whether to send a failed request again without an item a stateless
+/// Responses host reported missing (`Item with id '…' not found`). Each ID is
+/// retried once, at most [`MAX_UNRESOLVABLE_ITEM_RETRIES`] per request; the
+/// client leaves the ID out of its later requests.
+pub(crate) fn retry_without_unresolvable_item(
+    client_session: &ModelClientSession,
+    err: &CodexErr,
+    retries: &mut usize,
+) -> bool {
+    if *retries >= MAX_UNRESOLVABLE_ITEM_RETRIES {
+        return false;
+    }
+    let Some(item_id) = client_session.note_unresolvable_item_reference(err) else {
+        return false;
+    };
+    *retries += 1;
+    warn!(
+        item_id,
+        "the provider could not find an item this request referenced; retrying without it"
+    );
+    true
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1634,6 +1759,24 @@ async fn run_sampling_request(
     let sampling_started_at = Instant::now();
     let turn_context = Arc::clone(&step_context.turn);
     let router = Arc::clone(&step_context.tool_router);
+    notify_openai_api_key_env_fallback(&sess, &turn_context).await;
+
+    // Accounting observes this turn's requests; it never stops one. A turn whose
+    // collection cannot attach, or fails later, runs unrecorded and says so.
+    let scopes = match crate::accounting::attach_turn(
+        &sess,
+        &turn_context,
+        client_session,
+        turn_context.sub_id.clone(),
+    )
+    .await
+    {
+        Ok(scopes) => Some(scopes),
+        Err(error) => {
+            crate::accounting::gap("attach turn", error);
+            None
+        }
+    };
 
     let base_instructions = sess.get_base_instructions().await;
     trace_turn_timing("after_get_base_instructions", sampling_started_at);
@@ -1653,6 +1796,8 @@ async fn run_sampling_request(
     let max_retries = turn_context.provider.info().stream_max_retries();
     let mut retries = 0;
     let mut same_request_idle_failures = 0;
+    let mut unresolvable_item_retries = 0;
+    let mut home_wait = crate::home_access::HomeWait::default();
     let mut initial_input = Some(input);
     let mut original_input = None;
     let mut executed_tool_calls_by_output = HashMap::new();
@@ -1660,9 +1805,7 @@ async fn run_sampling_request(
         let prompt_input = if let Some(input) = initial_input.take() {
             input
         } else {
-            sess.clone_history()
-                .await
-                .for_prompt(&turn_context.model_info.input_modalities)
+            sess.clone_history().await.for_turn_prompt(&turn_context)
         };
         let mut prompt_input = prompt_input;
         if let Some(executed_tool_calls) = sess.services.executed_tool_calls.as_ref()
@@ -1695,6 +1838,13 @@ async fn run_sampling_request(
         )
         .await;
         let attempt_elapsed = attempt_started_at.elapsed();
+        if scopes
+            .as_ref()
+            .is_some_and(crate::accounting::TurnScopes::halted)
+        {
+            return Err(CodexErr::Fatal(crate::accounting::MEMORY_DENIAL.into()));
+        }
+        crate::accounting::warn_if_unrecorded(&sess, &turn_context, scopes.as_ref()).await;
         let err = match attempt_result {
             Ok(output) => {
                 return Ok((output, original_input.unwrap_or(prompt.input)));
@@ -1718,6 +1868,41 @@ async fn run_sampling_request(
         if original_input.is_none() {
             original_input = Some(prompt.input);
         }
+
+        // #578: a stateless Responses host could not find an item this
+        // request referenced. Retry without it (each ID once) rather than
+        // failing this and every later turn.
+        if retry_without_unresolvable_item(client_session, &err, &mut unresolvable_item_retries) {
+            turn_context.turn_timing_state.record_sampling_retry();
+            sess.send_event(
+                &turn_context,
+                EventMsg::Warning(WarningEvent {
+                    message: "The provider could not find an earlier item this request referred \
+                              to (for example after a provider switch); it was left out and the \
+                              request was sent again."
+                        .to_string(),
+                }),
+            )
+            .await;
+            continue;
+        }
+
+        // #616: an unreadable Corbanu home (e.g. the auth helper could not
+        // read it) is waited out within exec's window, without using retries.
+        let err = match crate::home_access::wait_if_home_unreadable(
+            &mut home_wait,
+            &sess,
+            &turn_context,
+            err,
+        )
+        .await
+        {
+            Ok(()) => {
+                turn_context.turn_timing_state.record_sampling_retry();
+                continue;
+            }
+            Err(err) => err,
+        };
 
         if !err.is_retryable() {
             return Err(err);
@@ -1757,7 +1942,7 @@ pub(crate) async fn prepare_tool_recommendations(
         .await;
     let tool_suggest_is_enabled = tool_suggest_enabled(turn_context);
     let auth = if tool_suggest_is_enabled {
-        sess.services.auth_manager.auth().await
+        sess.services.auth_manager().auth().await
     } else {
         None
     };
@@ -1889,7 +2074,76 @@ pub(crate) async fn built_tools(
         step_store,
         tool_suggest_candidates.as_ref(),
     ));
+    notify_omitted_tools(sess, turn_context, tool_router.omitted_tools()).await;
     (all_mcp_tools, tool_router)
+}
+
+/// Most left-out tools named in the #688 notice; the rest are counted.
+const OMITTED_TOOLS_NAMED: usize = 10;
+
+/// #688: tells the person, once per tool per session, which tools a wire
+/// without namespaces could not carry because of its tool-count limit. Review,
+/// compaction and internal sub-sessions stay quiet: their tools are the
+/// parent's, which the parent's own turns report.
+async fn notify_omitted_tools(sess: &Session, turn_context: &TurnContext, omitted: &[ToolName]) {
+    use codex_protocol::protocol::SessionSource;
+    use codex_protocol::protocol::SubAgentSource;
+    if omitted.is_empty()
+        || matches!(
+            turn_context.session_source,
+            SessionSource::Internal(_)
+                | SessionSource::SubAgent(
+                    SubAgentSource::Review
+                        | SubAgentSource::Compact
+                        | SubAgentSource::MemoryConsolidation
+                        | SubAgentSource::Other(_)
+                )
+        )
+    {
+        return;
+    }
+    let newly_omitted = sess.state.lock().await.unreported_omitted_tools(omitted);
+    if newly_omitted.is_empty() {
+        return;
+    }
+    let names: Vec<String> = newly_omitted
+        .iter()
+        .map(codex_tools::code_mode_name_for_tool_name)
+        .collect();
+    warn!(
+        omitted = names.len(),
+        first_omitted = %names[0],
+        "too many tools for a provider without namespace tools; omitting the rest"
+    );
+    sess.send_event(
+        turn_context,
+        EventMsg::Warning(WarningEvent {
+            message: omitted_tools_notice(&names),
+        }),
+    )
+    .await;
+    // Only once shown: an interrupted turn reports them again next time.
+    sess.state
+        .lock()
+        .await
+        .mark_omitted_tools_reported(newly_omitted);
+}
+
+fn omitted_tools_notice(names: &[String]) -> String {
+    let limit = crate::tools::spec_plan::MAX_TOOLS_WITHOUT_NAMESPACES;
+    let mut listed = names
+        .iter()
+        .take(OMITTED_TOOLS_NAMED)
+        .map(|name| format!("`{name}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    if names.len() > OMITTED_TOOLS_NAMED {
+        listed.push_str(&format!(" and {} more", names.len() - OMITTED_TOOLS_NAMED));
+    }
+    let count = names.len();
+    format!(
+        "Corbanu sends at most {limit} tools per request to providers without tool namespaces, so these are not offered to the model ({count}): {listed}. Turn off MCP servers or tools you don't need, or use a provider with tool namespaces (such as OpenAI), to offer them."
+    )
 }
 
 #[derive(Debug)]
@@ -2470,6 +2724,10 @@ async fn drain_in_flight(
     sess: Arc<Session>,
     turn_context: Arc<TurnContext>,
 ) -> CodexResult<()> {
+    // A tool that reports a fatal error (for example the repeated-call or
+    // malformed-call guards) ends the turn once every other in-flight call has
+    // recorded its output.
+    let mut fatal = None;
     while let Some(res) = in_flight.next().await {
         match res {
             Ok(Ok(response_input)) => {
@@ -2483,13 +2741,16 @@ async fn drain_in_flight(
                 )
                 .await;
             }
+            Ok(Err(err)) if matches!(err.details(), CodexErrorDetails::Fatal(_)) => {
+                fatal.get_or_insert(err);
+            }
             Ok(Err(err)) => {
                 error_or_panic(format!("in-flight tool future failed during drain: {err}"));
             }
             Err(err) => error_or_panic(format!("in-flight tool task failed during drain: {err}")),
         }
     }
-    Ok(())
+    fatal.map_or(Ok(()), Err)
 }
 async fn acquire_provider_request_lease(
     sess: &Session,
@@ -2497,14 +2758,29 @@ async fn acquire_provider_request_lease(
     client_session: &ModelClientSession,
     prompt: &Prompt,
     responses_metadata: &CodexResponsesMetadata,
-) -> CodexResult<Option<ProviderRequestLease>> {
+    cancellation_token: &CancellationToken,
+) -> CodexResult<ProviderRequestThrottle> {
     let preflight_started_at = Instant::now();
     trace_turn_timing("provider_preflight_start", preflight_started_at);
     let Some(state_db) = sess.state_db() else {
-        return Ok(None);
+        return Ok(ProviderRequestThrottle::default());
     };
 
-    let key = provider_request_key(sess, turn_context);
+    let (codex_home, auth_mode) = turn_auth(sess, turn_context);
+    let Ok(key) = provider_request_key(
+        &state_db,
+        &codex_home,
+        turn_context.config.model_provider_id.as_str(),
+        turn_context.provider.info(),
+        turn_context.model_info.slug.as_str(),
+        || auth_mode,
+    )
+    .boxed()
+    .or_cancel(cancellation_token)
+    .await
+    else {
+        return Err(CodexErr::TurnAborted);
+    };
     let token_info = sess.token_usage_info().await;
     trace_turn_timing("provider_preflight_after_token_info", preflight_started_at);
     let last_token_usage = token_info
@@ -2533,7 +2809,10 @@ async fn acquire_provider_request_lease(
             turn_context.reasoning_summary,
             turn_context.config.service_tier.clone(),
             responses_metadata,
-            sess.services.auth_manager.auth_mode(),
+            turn_context
+                .auth_manager
+                .as_ref()
+                .and_then(|auth_manager| auth_manager.auth_mode()),
         )
         .map(|bytes| i64::try_from(bytes).unwrap_or(i64::MAX))
         .unwrap_or_else(|err| {
@@ -2568,15 +2847,20 @@ async fn acquire_provider_request_lease(
     trace_turn_timing("provider_preflight_after_warning", preflight_started_at);
     let now_ms = now_unix_timestamp_ms();
     if !provider_request_active_lease_needed(turn_context, &preflight, last_token_usage.as_ref()) {
-        if let Some(block) = state_db
-            .check_provider_request_cooldown(&key, &preflight, now_ms)
+        // A busy state DB is waited for briefly, then the throttle goes on from
+        // this process's own state; an interrupt must not wait with it.
+        // Boxed (type-erased) throughout: the turn's future is otherwise too
+        // deep for rustc's `Send` check.
+        let Ok(cooldown) = state_db
+            .check_provider_request_throttle(&key, &preflight, now_ms)
+            .boxed()
+            .or_cancel(cancellation_token)
             .await
-            .map_err(|err| {
-                CodexErr::Fatal(format!(
-                    "failed to check provider request throttle state: {err:#}"
-                ))
-            })?
-        {
+        else {
+            return Err(CodexErr::TurnAborted);
+        };
+        notify_state_db_fallback(sess, turn_context, cooldown.state_db_fallback).await;
+        if let Some(block) = cooldown.decision {
             warn!(
                 turn_id = %turn_context.sub_id,
                 provider = %key.provider_id,
@@ -2593,7 +2877,10 @@ async fn acquire_provider_request_lease(
             )));
         }
         trace_turn_timing("provider_preflight_no_lease_needed", preflight_started_at);
-        return Ok(None);
+        return Ok(ProviderRequestThrottle {
+            unleased_key: Some(key),
+            lease: None,
+        });
     }
     let owner = format!(
         "pid:{}:thread:{}:turn:{}",
@@ -2601,22 +2888,36 @@ async fn acquire_provider_request_lease(
         sess.thread_id,
         turn_context.sub_id
     );
-    let decision = state_db
-        .try_acquire_provider_request_lease(
+    // An interrupt can land after the lease write committed: dropping this guard
+    // then releases whatever this owner holds. Release matches key and owner
+    // only, so the lease's end time is not needed.
+    let provisional_lease = ProviderRequestLeaseGuard::provisional(
+        sess,
+        ProviderRequestLease {
+            key: key.clone(),
+            owner: owner.clone(),
+            lease_until_ms: now_ms,
+            in_state_db: true,
+        },
+    );
+    let Ok(decision) = state_db
+        .acquire_provider_request_throttle_lease(
             &key,
             &preflight,
             &owner,
             PROVIDER_REQUEST_LEASE_TTL_MS,
             now_ms,
         )
+        .boxed()
+        .or_cancel(cancellation_token)
         .await
-        .map_err(|err| {
-            CodexErr::Fatal(format!(
-                "failed to check provider request throttle state: {err:#}"
-            ))
-        })?;
+    else {
+        return Err(CodexErr::TurnAborted);
+    };
+    provisional_lease.disarm();
+    notify_state_db_fallback(sess, turn_context, decision.state_db_fallback).await;
 
-    match decision {
+    match decision.decision {
         ProviderRequestLeaseDecision::Acquired(lease) => {
             trace_turn_timing("provider_preflight_acquired_lease", preflight_started_at);
             info!(
@@ -2631,7 +2932,10 @@ async fn acquire_provider_request_lease(
                 lease_until_ms = lease.lease_until_ms,
                 "provider request preflight acquired lease"
             );
-            Ok(Some(lease))
+            Ok(ProviderRequestThrottle {
+                unleased_key: None,
+                lease: Some(lease),
+            })
         }
         ProviderRequestLeaseDecision::Blocked(block) => {
             warn!(
@@ -2828,67 +3132,93 @@ async fn record_provider_request_result_for_lease(
         return true;
     };
     let result_kind = provider_request_result_kind(&result);
-    let rows_affected = match state_db
-        .record_provider_request_result(lease, result, now_unix_timestamp_ms())
-        .await
-    {
-        Ok(rows_affected) => rows_affected,
-        Err(err) => {
-            warn!(
-                provider = %lease.key.provider_id,
-                model = %lease.key.model,
-                key_fingerprint = %lease.key.key_fingerprint,
-                owner = %lease.owner,
-                result = result_kind,
-                error = %err,
-                "failed to record provider request result"
-            );
-            return false;
-        }
-    };
-    if rows_affected == 0 {
-        warn!(
-            provider = %lease.key.provider_id,
-            model = %lease.key.model,
-            key_fingerprint = %lease.key.key_fingerprint,
-            owner = %lease.owner,
-            result = result_kind,
-            "provider request result did not match active lease owner"
-        );
-    } else {
-        trace!(
-            provider = %lease.key.provider_id,
-            model = %lease.key.model,
-            key_fingerprint = %lease.key.key_fingerprint,
-            owner = %lease.owner,
-            result = result_kind,
-            rows_affected,
-            "recorded provider request result"
-        );
-    }
-    true
+    let recorded = state_db
+        .record_provider_request_throttle_result(lease, result, now_unix_timestamp_ms())
+        .boxed()
+        .await;
+    trace!(
+        provider = %lease.key.provider_id,
+        model = %lease.key.model,
+        key_fingerprint = %lease.key.key_fingerprint,
+        owner = %lease.owner,
+        result = result_kind,
+        state_db_released = recorded.decision,
+        state_db_fallback = ?recorded.state_db_fallback,
+        "recorded provider request result"
+    );
+    recorded.decision
+}
+
+/// How the throttle let a request go: under a lease, or without one.
+#[derive(Default)]
+struct ProviderRequestThrottle {
+    /// The key whose cooldown records this request's result when it holds
+    /// no lease (#476).
+    unleased_key: Option<ProviderRequestKey>,
+    lease: Option<ProviderRequestLease>,
 }
 
 struct ProviderRequestLeaseGuard {
     state_db: Option<StateDbHandle>,
     runtime_handle: tokio::runtime::Handle,
     lease: Option<ProviderRequestLease>,
+    unleased_key: Option<ProviderRequestKey>,
+    /// The lease may never have been written; releasing nothing is expected.
+    provisional: bool,
 }
 
 impl ProviderRequestLeaseGuard {
-    fn new(sess: &Session, lease: Option<ProviderRequestLease>) -> Self {
+    fn new(sess: &Session, throttle: ProviderRequestThrottle) -> Self {
         Self {
             state_db: sess.state_db(),
             runtime_handle: sess.services.runtime_handle.clone(),
-            lease,
+            lease: throttle.lease,
+            unleased_key: throttle.unleased_key,
+            provisional: false,
         }
     }
 
-    async fn record_result(&mut self, sess: &Session, result: ProviderRequestResult) {
+    fn provisional(sess: &Session, lease: ProviderRequestLease) -> Self {
+        let mut guard = Self::new(
+            sess,
+            ProviderRequestThrottle {
+                unleased_key: None,
+                lease: Some(lease),
+            },
+        );
+        guard.provisional = true;
+        guard
+    }
+
+    /// Forget the lease without releasing it.
+    fn disarm(mut self) {
+        self.lease = None;
+    }
+
+    /// On an interrupt the lease stays here, and dropping the guard releases it.
+    async fn record_result(
+        &mut self,
+        sess: &Session,
+        result: ProviderRequestResult,
+        cancellation_token: &CancellationToken,
+    ) {
+        if let Some(key) = self.unleased_key.take() {
+            if let Some(state_db) = self.state_db.as_ref() {
+                record_unleased_provider_request_result(state_db, &key, result)
+                    .boxed()
+                    .or_cancel(cancellation_token)
+                    .await
+                    .ok();
+            }
+            return;
+        }
         let Some(lease) = self.lease.clone() else {
             return;
         };
-        if record_provider_request_result_for_lease(sess, Some(&lease), result).await {
+        if let Ok(true) = record_provider_request_result_for_lease(sess, Some(&lease), result)
+            .or_cancel(cancellation_token)
+            .await
+        {
             self.lease = None;
         }
     }
@@ -2902,11 +3232,18 @@ impl Drop for ProviderRequestLeaseGuard {
         let Some(state_db) = self.state_db.clone() else {
             return;
         };
+        let provisional = self.provisional;
         std::mem::drop(self.runtime_handle.spawn(async move {
             match state_db
-                .release_provider_request_lease(&lease, now_unix_timestamp_ms())
+                .release_provider_request_throttle_lease(&lease, now_unix_timestamp_ms())
                 .await
             {
+                Ok(0) if provisional => trace!(
+                    provider = %lease.key.provider_id,
+                    model = %lease.key.model,
+                    owner = %lease.owner,
+                    "interrupted before a provider request lease was written"
+                ),
                 Ok(0) => warn!(
                     provider = %lease.key.provider_id,
                     model = %lease.key.model,
@@ -2935,13 +3272,6 @@ impl Drop for ProviderRequestLeaseGuard {
     }
 }
 
-fn provider_request_result_kind(result: &ProviderRequestResult) -> &'static str {
-    match result {
-        ProviderRequestResult::Success { .. } => "success",
-        ProviderRequestResult::Failed { .. } => "failed",
-    }
-}
-
 fn provider_request_result_from_outcome(
     outcome: &CodexResult<SamplingRequestResult>,
 ) -> ProviderRequestResult {
@@ -2957,106 +3287,9 @@ fn provider_request_result_from_outcome(
     }
 }
 
-fn provider_request_result_from_error(err: &CodexErr) -> ProviderRequestResult {
-    ProviderRequestResult::Failed {
-        status: err.http_status_code_value(),
-        request_id: provider_request_error_request_id(err),
-        retry_after_ms: provider_request_error_retry_after_ms(err),
-    }
-}
-
-fn provider_request_error_request_id(err: &CodexErr) -> Option<String> {
-    match err.details() {
-        CodexErrorDetails::RetryLimit(err) => err.request_id.clone(),
-        CodexErrorDetails::UnexpectedStatus(err) => err.request_id.clone(),
-        CodexErrorDetails::ResponseStreamFailed(err) => err.request_id.clone(),
-        _ => None,
-    }
-}
-
-fn provider_request_error_retry_after_ms(err: &CodexErr) -> Option<i64> {
-    match err.details() {
-        CodexErrorDetails::RetryLimit(err) => err.retry_after_ms,
-        _ => None,
-    }
-}
-
-fn provider_request_key(sess: &Session, turn_context: &TurnContext) -> ProviderRequestKey {
-    let provider = turn_context.provider.info();
-    let key_fingerprint = if let Some(env_key) = provider.env_key.as_deref() {
-        match std::env::var(env_key)
-            .ok()
-            .filter(|value| !value.trim().is_empty())
-        {
-            Some(secret) => format!("env:{env_key}:{}", secret_fingerprint(&secret)),
-            // Do not hit the vault on the hot path just to fingerprint throttle state.
-            // The actual request path still resolves the stored key and will fail
-            // normally if it is missing or invalid.
-            None => format!("stored:{env_key}"),
-        }
-    } else if provider.experimental_bearer_token.is_some() {
-        "config:bearer-token".to_string()
-    } else if provider.auth.is_some() {
-        "config:auth-command".to_string()
-    } else if provider.aws.is_some() {
-        "config:aws".to_string()
-    } else {
-        format!("auth-mode:{:?}", sess.services.auth_manager.auth_mode())
-    };
-
-    ProviderRequestKey {
-        provider_id: turn_context.config.model_provider_id.clone(),
-        model: turn_context.model_info.slug.clone(),
-        key_fingerprint,
-    }
-}
-
-fn secret_fingerprint(secret: &str) -> String {
-    let digest = Sha256::digest(secret.as_bytes());
-    digest
-        .iter()
-        .take(8)
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
-}
-
 fn rough_prompt_token_estimate(prompt: &Prompt) -> i64 {
     let input_bytes = serde_json::to_vec(&prompt.input).map_or(0, |bytes| bytes.len());
     i64::try_from(input_bytes / 4).unwrap_or(i64::MAX)
-}
-
-fn format_provider_request_block(key: &ProviderRequestKey, block: &ProviderRequestBlock) -> String {
-    let reason = match block.reason {
-        ProviderRequestBlockReason::Cooldown => "cooldown",
-        ProviderRequestBlockReason::Lease => "active request lease",
-    };
-    let wait_seconds = (block.remaining_ms.max(0) + 999) / 1000;
-    let status = block
-        .last_status
-        .map(|status| status.to_string())
-        .unwrap_or_else(|| "unknown".to_string());
-    let request_id = block
-        .last_request_id
-        .as_deref()
-        .map(|id| format!(", request id: {id}"))
-        .unwrap_or_default();
-    let provider_cache = if block.last_provider_input_tokens > 0 {
-        format!(
-            " Last provider usage: input={} cached_input={}.",
-            block.last_provider_input_tokens, block.last_provider_cached_input_tokens
-        )
-    } else {
-        String::new()
-    };
-    format!(
-        "provider request blocked by local {reason} for {}/{} ({}) for about {wait_seconds}s. Last status: {status}{request_id}. Last preflight: input={} cached_input={} request_bytes={}.{provider_cache} Wait, compact, switch provider/model, or start a fresh thread before retrying.",
-        key.provider_id,
-        key.model,
-        key.key_fingerprint,
-        block.last_input_tokens,
-        block.last_cached_input_tokens,
-        block.last_request_bytes
-    )
 }
 
 fn assign_missing_streamed_response_item_id(
@@ -3101,7 +3334,10 @@ async fn try_run_sampling_request(
         approval_policy = turn_context.approval_policy.value(),
         sandbox_policy = &turn_context.sandbox_policy(),
         effort = turn_context.reasoning_effort,
-        auth_mode = sess.services.auth_manager.auth_mode(),
+        auth_mode = turn_context
+            .auth_manager
+            .as_ref()
+            .and_then(|auth_manager| auth_manager.auth_mode()),
         features = sess.features.enabled_features(),
     );
     let inference_trace = sess.services.rollout_thread_trace.inference_trace_context(
@@ -3109,17 +3345,18 @@ async fn try_run_sampling_request(
         turn_context.model_info.slug.as_str(),
         turn_context.provider.info().name.as_str(),
     );
-    let provider_request_lease = acquire_provider_request_lease(
+    let provider_request_throttle = acquire_provider_request_lease(
         sess.as_ref(),
         turn_context.as_ref(),
         client_session,
         prompt,
         responses_metadata,
+        &cancellation_token,
     )
     .await?;
     trace_turn_timing("after_provider_request_lease", try_started_at);
     let mut provider_request_lease_guard =
-        ProviderRequestLeaseGuard::new(sess.as_ref(), provider_request_lease);
+        ProviderRequestLeaseGuard::new(sess.as_ref(), provider_request_throttle);
     let sampling_timing_guard = turn_context.turn_timing_state.begin_sampling();
     let uses_sequential_cutoff_reasoning_summaries = turn_context
         .config
@@ -3145,18 +3382,29 @@ async fn try_run_sampling_request(
         Ok(Ok(stream)) => stream,
         Ok(Err(err)) => {
             provider_request_lease_guard
-                .record_result(sess.as_ref(), provider_request_result_from_error(&err))
+                .record_result(
+                    sess.as_ref(),
+                    provider_request_result_from_error(&err),
+                    &cancellation_token,
+                )
                 .await;
             return Err(err);
         }
         Err(err) => {
             let err = CodexErr::from(err);
             provider_request_lease_guard
-                .record_result(sess.as_ref(), provider_request_result_from_error(&err))
+                .record_result(
+                    sess.as_ref(),
+                    provider_request_result_from_error(&err),
+                    &cancellation_token,
+                )
                 .await;
             return Err(err);
         }
     };
+    // Tools called from this response that read the context usage wait until
+    // `response.completed` records it (#564).
+    let mut response_usage = Some(sess.begin_response_usage());
     let mut in_flight: FuturesOrdered<AbortOnDropHandle<CodexResult<ResponseInputItem>>> =
         FuturesOrdered::new();
     let mut needs_follow_up = false;
@@ -3225,6 +3473,8 @@ async fn try_run_sampling_request(
             ResponseEvent::Created => {}
             ResponseEvent::OutputItemDone(mut item) => {
                 assign_missing_streamed_response_item_id(&mut item, active_item.as_ref());
+                // #578: later requests to another provider adapt this item.
+                item.set_producer(&turn_context.output_producer());
                 let completed_item_id = item.id().map(|item_id| item_id.as_str().to_string());
                 if let Some((_, mut consumer)) = active_tool_argument_diff_consumer.take()
                     && let Ok(Some(event)) = consumer.finish()
@@ -3510,11 +3760,19 @@ async fn try_run_sampling_request(
                 should_emit_token_count = true;
             }
             ResponseEvent::ModelsEtag(etag) => {
-                // Update internal state with latest models etag
-                sess.services
+                // Update internal state with latest models etag. PF-84: only
+                // a response from the provider and account the process list
+                // follows says anything about that list.
+                if sess
+                    .services
                     .models_manager
-                    .refresh_if_new_etag(etag, turn_context.config.http_client_factory())
-                    .await;
+                    .lists_for_provider(turn_context.provider.info())
+                {
+                    sess.services
+                        .models_manager
+                        .refresh_if_new_etag(etag, turn_context.config.http_client_factory())
+                        .await;
+                }
             }
             ResponseEvent::Completed {
                 response_id,
@@ -3563,6 +3821,7 @@ async fn try_run_sampling_request(
                 let budget_result = sess
                     .record_token_usage_info(&turn_context, token_usage.as_ref())
                     .await;
+                response_usage.take();
                 should_emit_token_count = true;
                 should_emit_turn_diff = true;
                 if let Err(err) = budget_result {
@@ -3781,6 +4040,9 @@ async fn try_run_sampling_request(
         }
     };
     drop(sampling_timing_guard);
+    // No more usage arrives for this response. Tools still running (and waiting
+    // for it) must not wait for the drain below, which waits for them.
+    drop(response_usage);
 
     flush_assistant_text_segments_all(
         &sess,
@@ -3794,6 +4056,7 @@ async fn try_run_sampling_request(
         .record_result(
             sess.as_ref(),
             provider_request_result_from_outcome(&outcome),
+            &cancellation_token,
         )
         .await;
 
@@ -3838,6 +4101,13 @@ pub(crate) fn get_last_assistant_message_from_turn(responses: &[ResponseItem]) -
         }
     }
     None
+}
+
+#[cfg(test)]
+impl Session {
+    pub(crate) async fn lock_state_for_accounting_fixture(&self) -> impl Drop + '_ {
+        self.state.lock().await
+    }
 }
 
 #[cfg(test)]

@@ -1,0 +1,42 @@
+
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     loading   /model to change                │
+│ directory: /Volumes/CorbanuDrive/…/proj/ledger-notes │
+╰──────────────────────────────────────────────────────╯
+
+
+› Implement {feature}
+
+  Z.AI GLM 5.3 Flash via zai default · <run>/proj/ledger-notes · Corbanu Terminal · TPS: -- tok/s
+
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.3-flash   /model to change          │
+│ directory: /Volumes/CorbanuDrive/…/proj/ledger-notes │
+╰──────────────────────────────────────────────────────╯
+
+
+› Run exactly this shell command with sandbox_permissions set to require_escalated (justification: write the notes) and show me its output: echo
+  moderate-check >> ../outside-notes.txt
+
+
+◦ Running echo moderate-check >> ../outside-notes.txt
+
+
+  Would you like to run the following command?
+
+  Environment: local
+
+  Reason: write the notes Approving also lifts the Moderate credential protection for this command. Under security level Moderate it still runs
+  inside the sandbox, even if you approve: writes outside your writable folders and network your sandbox blocks still fail.
+
+  $ echo moderate-check >> ../outside-notes.txt
+
+› 1. Yes, proceed (y)
+  2. No, and tell Corbanu Terminal what to do differently (esc)
+
+  A letter in brackets only highlights its option; enter confirms it.                                                                                 
+  Press enter to confirm or esc to cancel                                                                                                             

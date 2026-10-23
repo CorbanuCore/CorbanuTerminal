@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"01a11b1f-96f1-7fc2-b0d3-759b9a38afe1"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"command_execution","command":"/bin/bash -lc 'cat <scratch>/repos/is-plain-obj/index.js'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"/bin/bash -lc 'cat <scratch>/repos/is-plain-obj/index.js'","aggregated_output":"export default function isPlainObject(value) {\n\tif (typeof value !== 'object' || value === null) {\n\t\treturn false;\n\t}\n\n\tconst prototype = Object.getPrototypeOf(value);\n\treturn (prototype === null || prototype === Object.prototype || Object.getPrototypeOf(prototype) === null) && !(Symbol.toStringTag in value) && !(Symbol.iterator in value);\n}\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"It exports a default function `isPlainObject(value)` that returns whether a value is a plain object."}}
+{"type":"turn.completed","usage":{"input_tokens":25105,"cached_input_tokens":13696,"cache_write_input_tokens":0,"output_tokens":56,"reasoning_output_tokens":10}}

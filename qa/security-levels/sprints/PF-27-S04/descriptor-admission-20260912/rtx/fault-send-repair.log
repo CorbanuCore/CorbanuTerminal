@@ -1,0 +1,44 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-admission-20260912/codex-rs/secret-broker-service)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.00s
+────────────
+ Nextest run ID 042e4faf-3763-4277-8028-824a0376675f with nextest profile: local
+    Starting 7 tests across 7 binaries (62 tests skipped)
+        PASS [   0.003s] (1/7) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_worker_lost_success_receiver
+        FAIL [   0.003s] (2/7) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_kernel_faults_and_pre_delivery_cancellation
+  stdout ───
+
+    running 1 test
+    test launch::manifest::pair::admission::tests::pf_27_s01_admission_kernel_faults_and_pre_delivery_cancellation ... FAILED
+
+    failures:
+
+    failures:
+        launch::manifest::pair::admission::tests::pf_27_s01_admission_kernel_faults_and_pre_delivery_cancellation
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 47 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'launch::manifest::pair::admission::tests::pf_27_s01_admission_kernel_faults_and_pre_delivery_cancellation' (1045842) panicked at secret-broker-service/src/launch/manifest/pair_admission_tests.rs:324:13:
+    assertion failed: `(left == right)`
+
+    Diff < left / right > :
+     Some(
+    <    22,
+    >    24,
+     )
+
+
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.003s] (3/7) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_late_success_and_lost_receiver_close_channels
+        PASS [   0.049s] (4/7) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_uid_mismatch_and_unrelated_process
+        PASS [   0.071s] (5/7) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_roles_reverse_duplicate_parent_old_and_dead
+        PASS [   0.103s] (6/7) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_bounded_queue_cancel_deadline_and_lost_ticket
+        PASS [   0.194s] (7/7) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_peer_eof_death_receipt_drop_and_caller_drop
+────────────
+     Summary [   0.195s] 7 tests run: 6 passed, 1 failed, 62 skipped
+        FAIL [   0.003s] (2/7) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_kernel_faults_and_pre_delivery_cancellation
+error: test run failed
+error: recipe `test` failed on line 82 with exit code 100

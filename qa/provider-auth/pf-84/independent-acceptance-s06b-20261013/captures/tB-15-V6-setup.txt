@@ -1,0 +1,8 @@
+{}ChatGPT login is disabled. Use API key login instead.
+[exit 1]
+Successfully logged in
+[exit 0]
+{}Signed in OpenAI account `work` (ChatGPT sign-in · t…@example.com · Plus).
+[exit 0]
+auth.json: 66888ead26b69004
+auth.json after: 66888ead26b69004

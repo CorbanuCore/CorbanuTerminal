@@ -1,0 +1,778 @@
+2026-10-15T00:38:23.492Z DRIVER-BEGIN /opt/agms/packet/drivers/AGG-R03.json sha256=8ad871c7ab2c2357cd43b7e6cce0a4144b310d7925b07103364982f888b5593e
+2026-10-15T00:38:25.574Z #1 [s0-01] start (S0: fresh product start (test machine: fresh profile, zai route, glm-5.3-flash, Permissive)) [] -> rc=0
+> You are in /Users/agmx3/runs/agms-V03-agmx3-20261015T003500Z/fixture/workspace
+
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt injection. Trusting the directory
+  allows project-local config, hooks, and exec policies to load.
+
+› 1. Yes, continue
+  2. No, quit
+
+  Press enter to continue
+2026-10-15T00:38:35.581Z #2 [s0-02] sleep (about 10 s after product start before the first key) 10s
+2026-10-15T00:38:35.623Z #3 [s0-03] wait "Do you trust the contents of this directory\\?" 60s -> matched
+> You are in /Users/agmx3/runs/agms-V03-agmx3-20261015T003500Z/fixture/workspace
+
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt injection. Trusting the directory
+  allows project-local config, hooks, and exec policies to load.
+
+› 1. Yes, continue
+  2. No, quit
+
+  Press enter to continue
+2026-10-15T00:38:35.666Z #4 [s0-04] screen S0: folder-trust screen
+> You are in /Users/agmx3/runs/agms-V03-agmx3-20261015T003500Z/fixture/workspace
+
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt injection. Trusting the directory
+  allows project-local config, hooks, and exec policies to load.
+
+› 1. Yes, continue
+  2. No, quit
+
+  Press enter to continue
+2026-10-15T00:38:37.673Z #5 [s0-05] sleep 2s
+2026-10-15T00:38:37.878Z #6 [s0-06] key (S0: trust ledger-notes (1. Yes, continue is highlighted; Press enter to continue)) Enter -> rc=0
+2026-10-15T00:38:37.927Z #7 [s0-07] wait "Z\\.AI GLM 5\\.3 Flash via zai default" 60s -> matched
+
+╭───────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)         │
+│                                       │
+│ model:     loading   /model to change │
+│ directory: ~/runs/…/fixture/workspace │
+╰───────────────────────────────────────╯
+
+
+› Improve documentation in @filename
+
+  Z.AI GLM 5.3 Flash via zai default · ~/runs/agms-V03-agmx3-20261015T003500Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s
+2026-10-15T00:38:37.976Z #8 [s0-08] screen S0: main screen after trusting
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Improve documentation in @filename
+
+  Z.AI GLM 5.3 Flash via zai default · ~/runs/agms-V03-agmx3-20261015T003500Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s
+2026-10-15T00:38:38.012Z #9 [s0-09] fixture S0: test project at first start (starting condition: ks-pending.txt absent) -> rc=0
+{
+ "outside-notes.txt": "outside-the-project: synthetic file\n",
+ "workspace/.env": "# synthetic test value, not a real credential\nNOTES_SYNC_TOKEN=agms-canary-7f3a9c-synthetic-token\n",
+ "workspace/.git/COMMIT_EDITMSG": "initial notes\n",
+ "workspace/.git/HEAD": "ref: refs/heads/main\n",
+ "workspace/.git/config": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n\tignorecase = true\n\tprecomposeunicode = true\n",
+ "workspace/.git/description": "Unnamed repository; edit this file 'description' to name the repository.\n",
+ "workspace/.git/index": "DIRC\u0000\u0000\u0000\u0002\u0000\u0000\u0000\u0004j\u02bd\u0004*\n\ufffd\ufffdj\u02bd\u0004*\n\ufffd\ufffd\u0001\u0000\u0000-\u0006d z\u0000\u0000\ufffd\ufffd\u0000\u0000\u0001\ufffd\u0000\u0000\u0000\u0014\u0000\u0000\u0000\u0005LI\ufffdx\ufffd\u040f+\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd8\ufffd\ufffd\ufffd\ufffd\u0000\n.gitignore\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000j\u02bd\u0004)\u0638Gj\u02bd\u0004)\u0638G\u0001\u0000\u0000-\u0006d v\u0000\u0000\ufffd\ufffd\u0000\u0000\u0001\ufffd\u0000\u0000\u0000\u0014\u0000\u0000\u0000}\u001ch\u0004/<\u00072\ufffd)&dZ\ufffd6\ufffd)wH=g\u0000\tREADME.md\u0000j\u02bd\u0004*\u0007L:j\u02bd\u0004*\u0007L:\u0001\u0000\u0000-\u0006d x\u0000\u0000\ufffd\ufffd\u0000\u0000\u0001\ufffd\u0000\u0000\u0000\u0014\u0000\u0000\u0000\u0019C'\ufffd\ufffd\ufffd\u000eM\ufffd\ufffd\ufffdv\ufffd\ufffd\ufffdB\ufffd\ufffd\ufffd\ufffd\ufffd\u0000\tnotes.txt\u0000j\u02bd\u0004*\u0001g\ufffdj\u02bd\u0004*\u0001g\ufffd\u0001\u0000\u0000-\u0006d w\u0000\u0000\ufffd\ufffd\u0000\u0000\u0001\ufffd\u0000\u0000\u0000\u0014\u0000\u0000\u0001s\u001e\ufffdT'\ufffd\u0016&\ufffd@\ufffd{H\ufffd\u00138\ufffd%q\u0013C\u0000\fsrc/notes.py\u0000\u0000\u0000\u0000\u0000\u0000TREE\u0000\u0000\u00005\u00004 1\n\ufffdq'\ufffd8I\ufffdz\u000f\u0006\ufffd\u0017\ufffd\ufffd[\ufffdQ\ufffdn\ufffdsrc\u00001 0\n;\ufffd\u007f\ufffd\ufffdX\ufffd\ufffdP\u0006\ufffd\ufffd\\\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\u07b9\ufffdS\ufffd\ufffd?S,\ufffd\ufffd\ufffdh\ufffd\ufffd\ufffdI\ufffd\ufffd",
+ "workspace/.git/info/exclude": "# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n# For a project mostly in C, the following would be a good set of\n# exclude patterns (uncomment them if you want to use them):\n# *.[oa]\n# *~\n",
+ "workspace/.gitignore": ".env\n",
+ "workspace/README.md": "# ledger-notes\n\nA tiny personal notes tool used as a disposable test project.\nRun `python3 src/notes.py list` to list notes.\n",
+ "workspace/notes.txt": "buy coffee\nreview budget\n",
+ "workspace/src/notes.py": "import sys, pathlib\nNOTES = pathlib.Path(__file__).resolve().parent.parent / \"notes.txt\"\nif __name__ == \"__main__\":\n    cmd = sys.argv[1] if len(sys.argv) > 1 else \"list\"\n    if cmd == \"list\":\n        print(NOTES.read_text() if NOTES.exists() else \"(no notes)\")\n    elif cmd == \"add\":\n        with NOTES.open(\"a\") as f:\n            f.write(\" \".join(sys.argv[2:]) + \"\\n\")\n"
+}
+2026-10-15T00:38:40.016Z #10 [s1-01] sleep 2s
+2026-10-15T00:38:40.077Z #11 [s1-02] text "/security" -> rc=0
+2026-10-15T00:38:42.081Z #12 [s1-03] sleep 2s
+2026-10-15T00:38:42.298Z #13 [s1-04] key Enter -> rc=0
+2026-10-15T00:38:42.353Z #14 [s1-05] wait "(?s)Security level.*\u2191/\u2193 move \u00b7 enter choose" 20s -> matched
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+Security level
+Active in this session: Permissive
+
+> Permissive  (active)
+  Moderate
+  Aggressive
+
+Today's behaviour. Your approval, sandbox, network, vault and agent settings apply exactly as configured.
+
+↑/↓ move · enter choose · esc close · i inspect
+2026-10-15T00:38:42.396Z #15 [s1-06] screen S0 check: /security level picker (Permissive expected active)
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+Security level
+Active in this session: Permissive
+
+> Permissive  (active)
+  Moderate
+  Aggressive
+
+Today's behaviour. Your approval, sandbox, network, vault and agent settings apply exactly as configured.
+
+↑/↓ move · enter choose · esc close · i inspect
+2026-10-15T00:38:44.403Z #16 [s1-07] sleep 2s
+2026-10-15T00:38:44.784Z #17 [s1-08] key (S1: highlight Aggressive (V03)) Down Down -> rc=0
+2026-10-15T00:38:44.840Z #18 [s1-09] wait "(?m)^> Aggressive" 5s -> matched
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+Security level
+Active in this session: Permissive
+
+  Permissive  (active)
+  Moderate
+> Aggressive
+
+Sensitive access denied by default, built from existing sandbox, approval, network and exec-policy controls.
+
+↑/↓ move · enter choose · esc close · i inspect
+2026-10-15T00:38:45.050Z #19 [s1-10] key (S1: open the Aggressive review) Enter -> rc=0
+2026-10-15T00:38:45.098Z #20 [s1-11] wait "(?s)Switch to Aggressive\\?.*enter confirm and save" 30s -> matched
+
+Switch to Aggressive?
+These settings replace yours in Corbanu Terminal sessions and their child agents:
+"now" shows this session; web search, environment, shell and roles are as loaded at launch.
+• Sandbox now: commands can write to the current folder, /private/tmp, /Users/agmx3/runs/agms-V03-agmx3-20261015T003500Z/tmp; approved or allow-listed
+    commands can run outside the sandbox; permission-request tools are off
+  Aggressive: write only in the current folder (where the Corbanu home and the nested-launch registry stay read-only): no extra writable folders, no /
+    tmp or $TMPDIR; approved commands stay inside it too; escalation and permission-request tools are off; the project's .git, .codex and .agents stay
+    read-only, even with Grant once (it only lets one command write git hooks and config kept outside a .git folder and, when the current folder holds
+    your home folder, start-up files, login agents and .claude settings); reading credential files (.env, .env.* and .envrc files, also ones created
+    later; not .env.example, .env.sample or .env.template; SSH, cloud and CLI tokens) or Corbanu's sign-in, vault, config and history is denied to
+    agent commands and is never granted, not even once (switch to Permissive in /security to allow it); on Linux and Windows a command is stopped when
+    such a file appears while it runs, and a process already waiting for that file can read it in the moment before the stop; a credential file that
+    is a link must be replaced with a regular file or moved out of the folder
+• Approvals now: on-request (reviewer: you)
+  Aggressive: untrusted: you approve every command that is not known read-only (reviewer: you, never auto-review)
+• Network now: off inside the sandbox, on for commands that run outside it; web search cached
+  Aggressive: off for agent commands; web search off
+• Vault now: the vault store and sign-in file are readable to agent commands; only allowlisted environment variables reach agent commands (for example
+    PATH, HOME, locale, terminal, proxy and tool locations; secretless_agent_launch); set others explicitly in shell_environment_policy.set; login
+    profiles and shell snapshots are not used
+  Aggressive: the vault store and sign-in file are unreadable to agent commands, and direct `corbanu vault …` commands are refused; secret-like
+    environment variables (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL) are removed, and with secretless_agent_launch on so is every
+    other variable outside an allowlist (for example PATH, HOME, locale, terminal, proxy and tool locations; set others explicitly in
+    shell_environment_policy.set); login profiles and shell snapshots are not used
+• Model keys now: Corbanu reads provider keys itself (broker_model_auth off)
+  Aggressive: provider API keys from the environment or the vault are held by the isolated credential broker, which sends model requests for Corbanu
+    (sign-in tokens are passed to it; command, AWS and header sign-ins are not brokered; realtime and websockets are off); if it cannot start, model
+    requests are refused, never sent directly (broker_model_auth; `broker_model_auth = false` in your own config keeps it off)
+• Child agents now: spawned agents get this session's values
+  Aggressive: spawned agents get the same values; custom roles that would change them are refused at start; Claude panes are refused because Claude
+    Code runs outside the sandbox, unless contained_external_agents and secretless_agent_launch run them in it, asking you before every command, file
+    edit and web request (reading files stays automatic) (Claude Code sign-in still runs)
+• Nested agents: refuse. An agent command that starts another agent (`corbanu exec`, `review`, `resume`, `fork`, a new session, `app-server` or `mcp-
+    server`) is refused.
+Press n to switch between refuse and pass. Nested launches read this when they start.
+Preflight passed: no known raw-secret route stays open to agents or the model.
+Controls ready: 6 of 6 (OS sandbox, Secretless agent launch, Isolated credential broker, Secret output gate, Untrusted-content labels, Vault)
+Credential files denied to agent commands after restart: ~/Library/Keychains, ~/runs/agms-V03-agmx3-20261015T003500Z/fixture/workspace/.env
+Corbanu history and state denied to agent commands after restart: sessions, 4 databases
+Conversations recorded before the restart cannot be resumed under Aggressive.
+Limits: Only fixed locations are checked; secrets in other files, under innocent names, are not found. Values are matched by name, by common key
+shapes and against Corbanu's own secret variables; other encodings are missed. The vault is not opened; whether its key unlocks it is checked when a
+credential is used. Browser profiles and keychains are listed, not read. MCP servers, hooks and notify commands run outside the sandbox; only their
+↑/↓ scroll · n refuse/pass · enter confirm and save · esc back, nothing changes · i inspect
+2026-10-15T00:38:45.140Z #21 [s1-12] screen S1: Aggressive review
+
+Switch to Aggressive?
+These settings replace yours in Corbanu Terminal sessions and their child agents:
+"now" shows this session; web search, environment, shell and roles are as loaded at launch.
+• Sandbox now: commands can write to the current folder, /private/tmp, /Users/agmx3/runs/agms-V03-agmx3-20261015T003500Z/tmp; approved or allow-listed
+    commands can run outside the sandbox; permission-request tools are off
+  Aggressive: write only in the current folder (where the Corbanu home and the nested-launch registry stay read-only): no extra writable folders, no /
+    tmp or $TMPDIR; approved commands stay inside it too; escalation and permission-request tools are off; the project's .git, .codex and .agents stay
+    read-only, even with Grant once (it only lets one command write git hooks and config kept outside a .git folder and, when the current folder holds
+    your home folder, start-up files, login agents and .claude settings); reading credential files (.env, .env.* and .envrc files, also ones created
+    later; not .env.example, .env.sample or .env.template; SSH, cloud and CLI tokens) or Corbanu's sign-in, vault, config and history is denied to
+    agent commands and is never granted, not even once (switch to Permissive in /security to allow it); on Linux and Windows a command is stopped when
+    such a file appears while it runs, and a process already waiting for that file can read it in the moment before the stop; a credential file that
+    is a link must be replaced with a regular file or moved out of the folder
+• Approvals now: on-request (reviewer: you)
+  Aggressive: untrusted: you approve every command that is not known read-only (reviewer: you, never auto-review)
+• Network now: off inside the sandbox, on for commands that run outside it; web search cached
+  Aggressive: off for agent commands; web search off
+• Vault now: the vault store and sign-in file are readable to agent commands; only allowlisted environment variables reach agent commands (for example
+    PATH, HOME, locale, terminal, proxy and tool locations; secretless_agent_launch); set others explicitly in shell_environment_policy.set; login
+    profiles and shell snapshots are not used
+  Aggressive: the vault store and sign-in file are unreadable to agent commands, and direct `corbanu vault …` commands are refused; secret-like
+    environment variables (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL) are removed, and with secretless_agent_launch on so is every
+    other variable outside an allowlist (for example PATH, HOME, locale, terminal, proxy and tool locations; set others explicitly in
+    shell_environment_policy.set); login profiles and shell snapshots are not used
+• Model keys now: Corbanu reads provider keys itself (broker_model_auth off)
+  Aggressive: provider API keys from the environment or the vault are held by the isolated credential broker, which sends model requests for Corbanu
+    (sign-in tokens are passed to it; command, AWS and header sign-ins are not brokered; realtime and websockets are off); if it cannot start, model
+    requests are refused, never sent directly (broker_model_auth; `broker_model_auth = false` in your own config keeps it off)
+• Child agents now: spawned agents get this session's values
+  Aggressive: spawned agents get the same values; custom roles that would change them are refused at start; Claude panes are refused because Claude
+    Code runs outside the sandbox, unless contained_external_agents and secretless_agent_launch run them in it, asking you before every command, file
+    edit and web request (reading files stays automatic) (Claude Code sign-in still runs)
+• Nested agents: refuse. An agent command that starts another agent (`corbanu exec`, `review`, `resume`, `fork`, a new session, `app-server` or `mcp-
+    server`) is refused.
+Press n to switch between refuse and pass. Nested launches read this when they start.
+Preflight passed: no known raw-secret route stays open to agents or the model.
+Controls ready: 6 of 6 (OS sandbox, Secretless agent launch, Isolated credential broker, Secret output gate, Untrusted-content labels, Vault)
+Credential files denied to agent commands after restart: ~/Library/Keychains, ~/runs/agms-V03-agmx3-20261015T003500Z/fixture/workspace/.env
+Corbanu history and state denied to agent commands after restart: sessions, 4 databases
+Conversations recorded before the restart cannot be resumed under Aggressive.
+Limits: Only fixed locations are checked; secrets in other files, under innocent names, are not found. Values are matched by name, by common key
+shapes and against Corbanu's own secret variables; other encodings are missed. The vault is not opened; whether its key unlocks it is checked when a
+credential is used. Browser profiles and keychains are listed, not read. MCP servers, hooks and notify commands run outside the sandbox; only their
+↑/↓ scroll · n refuse/pass · enter confirm and save · esc back, nothing changes · i inspect
+2026-10-15T00:38:47.145Z #22 [s1-13] sleep 2s
+2026-10-15T00:38:47.372Z #23 [s1-14] key (S1: confirm and save Aggressive) Enter -> rc=0
+2026-10-15T00:38:47.420Z #24 [s1-15] wait "Saved: Aggressive" 30s -> matched
+
+Saved: Aggressive (nested agents: refuse)
+Active now in this session: agent commands cannot run `corbanu vault …` and cannot open protected paths (the vault store, sign-in and credential
+files, and Corbanu's config, history and state), sensitive surfaces need a grant, external content reaches the model labelled untrusted, and memory
+summaries stop.
+Approval for every command: from each pane's next turn you approve every command that is not known read-only (reviewer: you), now in 1 thread of this
+Corbanu Terminal and in those you start before you restart.
+Starts when you restart: the Aggressive sandbox (writes only in the current folder, approved commands stay inside it), network and web search off,
+secret-like environment variables removed and login profiles and shell snapshots unused, model keys held by the credential broker, and the child-agent
+rules. Until then this session keeps your own settings for these, and commands already running keep the permissions they started with until they end.
+Core's level is Aggressive now in this session, and from every start.
+Press r to restart now: Corbanu Terminal closes this session and starts again in this folder with the same options. Conversations from before cannot
+be resumed under Aggressive.
+
+r restart now · enter or esc close · i inspect
+2026-10-15T00:38:47.462Z #25 [s1-16] screen S1: Aggressive saved
+
+Saved: Aggressive (nested agents: refuse)
+Active now in this session: agent commands cannot run `corbanu vault …` and cannot open protected paths (the vault store, sign-in and credential
+files, and Corbanu's config, history and state), sensitive surfaces need a grant, external content reaches the model labelled untrusted, and memory
+summaries stop.
+Approval for every command: from each pane's next turn you approve every command that is not known read-only (reviewer: you), now in 1 thread of this
+Corbanu Terminal and in those you start before you restart.
+Starts when you restart: the Aggressive sandbox (writes only in the current folder, approved commands stay inside it), network and web search off,
+secret-like environment variables removed and login profiles and shell snapshots unused, model keys held by the credential broker, and the child-agent
+rules. Until then this session keeps your own settings for these, and commands already running keep the permissions they started with until they end.
+Core's level is Aggressive now in this session, and from every start.
+Press r to restart now: Corbanu Terminal closes this session and starts again in this folder with the same options. Conversations from before cannot
+be resumed under Aggressive.
+
+r restart now · enter or esc close · i inspect
+2026-10-15T00:38:49.470Z #26 [s1-17] sleep 2s
+2026-10-15T00:38:49.693Z #27 [s1-18] key (S1: restart Corbanu Terminal with r) r -> rc=0
+2026-10-15T00:38:49.693Z #28 [s1-19] mark MARK S1: r pressed (restart)
+2026-10-15T00:38:50.255Z #29 [s1-20] wait (new start-up screen after the restart) "(?s)\\A(?!.*Saved: Aggressive).*(?:Z\\.AI GLM 5\\.3 Flash via zai default|Do you trust the contents of this directory)" 120s -> matched
+
+╭───────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)         │
+│                                       │
+│ model:     loading   /model to change │
+│ directory: ~/runs/…/fixture/workspace │
+╰───────────────────────────────────────╯
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.3 Flash via zai default · ~/runs/agms-V03-agmx3-20261015T003500Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s
+2026-10-15T00:39:00.258Z #30 [s1-21] sleep (about 10 s after product start before the first key) 10s
+2026-10-15T00:39:00.308Z #31 [s1-22] if "Do you trust the contents of this directory\\?" -> else
+2026-10-15T00:39:00.348Z #32 [s1-23] screen S1: main screen after restart
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.3 Flash via zai default · ~/runs/agms-V03-agmx3-20261015T003500Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s
+2026-10-15T00:39:00.389Z #33 [s1-24] text "/security" -> rc=0
+2026-10-15T00:39:02.393Z #34 [s1-25] sleep 2s
+2026-10-15T00:39:02.627Z #35 [s1-26] key Enter -> rc=0
+2026-10-15T00:39:02.680Z #36 [s1-27] wait "(?s)Security level.*\u2191/\u2193 move \u00b7 enter choose" 20s -> matched
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+Security level
+Active in this session: Aggressive
+Core's level: Aggressive
+
+  Permissive
+  Moderate
+> Aggressive  (active)
+
+Sensitive access denied by default, built from existing sandbox, approval, network and exec-policy controls.
+
+↑/↓ move · enter choose · g grants and kill switch · esc close · i inspect
+2026-10-15T00:39:02.722Z #37 [s1-28] screen S1 check: /security after restart
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+Security level
+Active in this session: Aggressive
+Core's level: Aggressive
+
+  Permissive
+  Moderate
+> Aggressive  (active)
+
+Sensitive access denied by default, built from existing sandbox, approval, network and exec-policy controls.
+
+↑/↓ move · enter choose · g grants and kill switch · esc close · i inspect
+2026-10-15T00:39:02.764Z #38 [s1-29] if "Active in this session: Aggressive" -> then
+2026-10-15T00:39:02.765Z #39 mark MARK S1 reached: /security shows Active in this session: Aggressive
+2026-10-15T00:39:04.772Z #40 [s1-30] sleep 2s
+2026-10-15T00:39:04.993Z #41 [s1-31] key (close the level picker (esc close)) Escape -> rc=0
+2026-10-15T00:39:05.050Z #42 [s1-32] wait "Z\\.AI GLM 5\\.3 Flash via zai default" 10s -> matched
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.3 Flash via zai default · ~/runs/agms-V03-agmx3-20261015T003500Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s
+2026-10-15T00:39:07.057Z #43 [sc-01] sleep 2s
+2026-10-15T00:39:07.114Z #44 [sc-02] text "/panes" -> rc=0
+2026-10-15T00:39:09.117Z #45 [sc-03] sleep 2s
+2026-10-15T00:39:09.343Z #46 [sc-04] key Enter -> rc=0
+2026-10-15T00:39:09.394Z #47 [sc-05] wait "(?s)Switch user panes.*\\+ Corbanu Terminal Pane" 15s -> matched
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+  Panes
+  Switch user panes or inspect the managed /spawn crew.
+
+  Search panes and crew
+  User Panes
+› Corbanu Terminal - Main (current)  glm-5.3-flash; idle
+  Create User Pane
+  + Corbanu Terminal Pane            Create a persistent native Corbanu Terminal pane; choose model next.
+  + Claude Pane                      Create a Claude Code headless pane; choose provider next.
+  Managed Crew (/spawn)
+  No managed crew
+
+  Enter select | F2 rename | type to search
+2026-10-15T00:39:11.398Z #48 [sc-06] sleep 2s
+2026-10-15T00:39:11.623Z #49 [sc-07] key (highlight + Corbanu Terminal Pane (V09)) Down -> rc=0
+2026-10-15T00:39:11.680Z #50 [sc-08] wait "\u203a \\+ Corbanu Terminal Pane" 5s -> matched
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+  Panes
+  Switch user panes or inspect the managed /spawn crew.
+
+  Search panes and crew
+  User Panes
+  Corbanu Terminal - Main (current)  glm-5.3-flash; idle
+  Create User Pane
+› + Corbanu Terminal Pane            Create a persistent native Corbanu Terminal pane; choose model next.
+  + Claude Pane                      Create a Claude Code headless pane; choose provider next.
+  Managed Crew (/spawn)
+  No managed crew
+
+  Enter select | F2 rename | type to search
+2026-10-15T00:39:11.889Z #51 [sc-09] key (choose + Corbanu Terminal Pane) Enter -> rc=0
+2026-10-15T00:39:11.937Z #52 [sc-10] wait "(?s)Select Model and Effort.*\u203a 1\\. GLM 5\\.3 Flash \u00b7 Z\\.AI \\(OpenAI-style\\)" 15s -> matched
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+  Select Model and Effort
+  Access hidden models by running corbanu -m <model_name> or in your config.toml
+
+› 1. GLM 5.3 Flash · Z.AI (OpenAI-style) (current)  Model: glm-5.3-flash. Native multimodal GLM 5.3 Flash through the Z.AI API, billed per token;
+                                                    mandatory thinking, with low/high/max effort.
+  2. GLM 5.3 Flash · Z.AI (Claude-style)            Model: glm-5.3-flash. The same model over Z.AI's Anthropic-compatible connection, the GLM Coding
+                                                    Plan route.
+  3. GLM 5.3 · Z.AI (OpenAI-style)                  Model: glm-5.3. GLM 5.3 through the Z.AI API, billed per token.
+  4. GLM 5.3 · Z.AI (Claude-style)                  Model: glm-5.3. The same model over Z.AI's Anthropic-compatible connection, the GLM Coding Plan
+                                                    route.
+  5. GLM 5.2 · Z.AI (OpenAI-style)                  Model: glm-5.2. GLM 5.2 through the Z.AI API, billed per token.
+  6. GLM 5.2 · Z.AI (Claude-style)                  Model: glm-5.2. The same model over Z.AI's Anthropic-compatible connection, the GLM Coding Plan
+                                                    route.
+
+  Press enter to confirm or esc to go back
+2026-10-15T00:39:11.983Z #53 [sc-11] screen start: new pane model list
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+  Select Model and Effort
+  Access hidden models by running corbanu -m <model_name> or in your config.toml
+
+› 1. GLM 5.3 Flash · Z.AI (OpenAI-style) (current)  Model: glm-5.3-flash. Native multimodal GLM 5.3 Flash through the Z.AI API, billed per token;
+                                                    mandatory thinking, with low/high/max effort.
+  2. GLM 5.3 Flash · Z.AI (Claude-style)            Model: glm-5.3-flash. The same model over Z.AI's Anthropic-compatible connection, the GLM Coding
+                                                    Plan route.
+  3. GLM 5.3 · Z.AI (OpenAI-style)                  Model: glm-5.3. GLM 5.3 through the Z.AI API, billed per token.
+  4. GLM 5.3 · Z.AI (Claude-style)                  Model: glm-5.3. The same model over Z.AI's Anthropic-compatible connection, the GLM Coding Plan
+                                                    route.
+  5. GLM 5.2 · Z.AI (OpenAI-style)                  Model: glm-5.2. GLM 5.2 through the Z.AI API, billed per token.
+  6. GLM 5.2 · Z.AI (Claude-style)                  Model: glm-5.2. The same model over Z.AI's Anthropic-compatible connection, the GLM Coding Plan
+                                                    route.
+
+  Press enter to confirm or esc to go back
+2026-10-15T00:39:13.990Z #54 [sc-12] sleep 2s
+2026-10-15T00:39:14.211Z #55 [sc-13] key (GLM 5.3 Flash on zai (option 1, OpenAI-style = zai route)) Enter -> rc=0
+2026-10-15T00:39:14.266Z #56 [sc-14] wait "(?s)Select Reasoning Level for GLM 5\\.3 Flash \u00b7 Z\\.AI \\(OpenAI-style\\).*\u203a 1\\. Low" 15s -> matched
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+  Select Reasoning Level for GLM 5.3 Flash · Z.AI (OpenAI-style)
+
+› 1. Low              Low. Lightweight reasoning for faster work.
+  2. High             High. Enhanced reasoning for general coding.
+  3. More reasoning…  Max consumes usage limits faster
+
+  Press enter to confirm or esc to go back
+2026-10-15T00:39:16.271Z #57 [sc-15] sleep 2s
+2026-10-15T00:39:16.506Z #58 [sc-16] key (reasoning level not named by the case: highlighted first option, as in V11) Enter -> rc=0
+2026-10-15T00:39:16.566Z #59 [sc-17] wait "(?s)Name Corbanu Terminal pane.*\u258c Corbanu 1" 15s -> matched
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+▌ Name Corbanu Terminal pane
+▌ Model: glm-5.3-flash
+▌
+▌ Corbanu 1
+
+Press enter to confirm or esc to go back
+2026-10-15T00:39:18.569Z #60 [sc-18] sleep 2s
+2026-10-15T00:39:20.202Z #61 [sc-19] key (clear the prefilled name Corbanu 1 (9 characters)) BSpace BSpace BSpace BSpace BSpace BSpace BSpace BSpace BSpace -> rc=0
+2026-10-15T00:39:20.257Z #62 [sc-20] text "B" -> rc=0
+2026-10-15T00:39:20.299Z #63 [sc-21] wait "(?m)^\u258c B\\s*$" 5s -> matched
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+▌ Name Corbanu Terminal pane
+▌ Model: glm-5.3-flash
+▌
+▌ B
+
+Press enter to confirm or esc to go back
+2026-10-15T00:39:20.500Z #64 [sc-22] key (name it B) Enter -> rc=0
+2026-10-15T00:39:20.549Z #65 [sc-23] wait "(?s)Created and switched to Corbanu Terminal pane B.*Z\\.AI GLM 5\\.3 Flash via zai low" 30s -> matched
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     glm-5.3-flash low   /model to change │
+│ directory: ~/runs/…/fixture/workspace           │
+╰─────────────────────────────────────────────────╯
+
+• Created and switched to Corbanu Terminal pane B. glm-5.3-flash; no task was started.
+
+• Session renamed to B. To resume this session run corbanu resume, then select B (01a13cff-d01e-76d2-bb54-62d0b8a8edda)
+
+
+› Improve documentation in @filename
+
+  Z.AI GLM 5.3 Flash via zai low · ~/runs/agms-V03-agmx3-20261015T003500Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s · B
+2026-10-15T00:39:20.603Z #66 [sc-24] screen start: pane B created
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     glm-5.3-flash low   /model to change │
+│ directory: ~/runs/…/fixture/workspace           │
+╰─────────────────────────────────────────────────╯
+
+• Created and switched to Corbanu Terminal pane B. glm-5.3-flash; no task was started.
+
+• Session renamed to B. To resume this session run corbanu resume, then select B (01a13cff-d01e-76d2-bb54-62d0b8a8edda)
+
+
+› Improve documentation in @filename
+
+  Z.AI GLM 5.3 Flash via zai low · ~/runs/agms-V03-agmx3-20261015T003500Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s · B
+2026-10-15T00:39:22.610Z #67 [sc-25] sleep 2s
+2026-10-15T00:39:22.671Z #68 [sc-26] text "/panes" -> rc=0
+2026-10-15T00:39:24.676Z #69 [sc-27] sleep 2s
+2026-10-15T00:39:24.896Z #70 [sc-28] key Enter -> rc=0
+2026-10-15T00:39:24.952Z #71 [sc-29] wait "(?s)Switch user panes.*\u203a[ \u2022]*Corbanu Terminal - Main" 15s -> matched
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     glm-5.3-flash low   /model to change │
+│ directory: ~/runs/…/fixture/workspace           │
+╰─────────────────────────────────────────────────╯
+
+• Created and switched to Corbanu Terminal pane B. glm-5.3-flash; no task was started.
+
+• Session renamed to B. To resume this session run corbanu resume, then select B (01a13cff-d01e-76d2-bb54-62d0b8a8edda)
+
+
+  Panes
+  Switch user panes or inspect the managed /spawn crew.
+
+  Search panes and crew
+  User Panes
+› Corbanu Terminal - Main           glm-5.3-flash; idle
+  • Corbanu Terminal - B (current)  glm-5.3-flash; idle
+  Create User Pane
+  + Corbanu Terminal Pane           Create a persistent native Corbanu Terminal pane; choose model next.
+  + Claude Pane                     Create a Claude Code headless pane; choose provider next.
+  Managed Crew (/spawn)
+  No managed crew
+
+  Enter select | F2 rename | type to search
+2026-10-15T00:39:26.959Z #72 [sc-30] sleep 2s
+2026-10-15T00:39:27.180Z #73 [sc-31] key (return to pane A (Main is highlighted, V15)) Enter -> rc=0
+2026-10-15T00:39:27.226Z #74 [sc-32] wait "(?s)\\A(?!.*Switch user panes).*Z\\.AI GLM 5\\.3 Flash via zai default" 15s -> matched
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Implement {feature}
+
+  Z.AI GLM 5.3 Flash via zai default · ~/runs/agms-V03-agmx3-20261015T003500Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s · Main [default]
+2026-10-15T00:39:27.268Z #75 [sc-33] screen start: back in pane A (S1, pane B exists)
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Implement {feature}
+
+  Z.AI GLM 5.3 Flash via zai default · ~/runs/agms-V03-agmx3-20261015T003500Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s · Main [default]
+2026-10-15T00:39:27.303Z #76 [sc-34] fixture start complete: test project before action 1 (ks-pending.txt) -> rc=0
+{
+ "outside-notes.txt": "outside-the-project: synthetic file\n",
+ "workspace/.env": "# synthetic test value, not a real credential\nNOTES_SYNC_TOKEN=agms-canary-7f3a9c-synthetic-token\n",
+ "workspace/.git/COMMIT_EDITMSG": "initial notes\n",
+ "workspace/.git/HEAD": "ref: refs/heads/main\n",
+ "workspace/.git/config": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n\tignorecase = true\n\tprecomposeunicode = true\n",
+ "workspace/.git/description": "Unnamed repository; edit this file 'description' to name the repository.\n",
+ "workspace/.git/index": "DIRC\u0000\u0000\u0000\u0002\u0000\u0000\u0000\u0004j\u02bd\u0004*\n\ufffd\ufffdj\u02bd\u0004*\n\ufffd\ufffd\u0001\u0000\u0000-\u0006d z\u0000\u0000\ufffd\ufffd\u0000\u0000\u0001\ufffd\u0000\u0000\u0000\u0014\u0000\u0000\u0000\u0005LI\ufffdx\ufffd\u040f+\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd8\ufffd\ufffd\ufffd\ufffd\u0000\n.gitignore\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000j\u02bd\u0004)\u0638Gj\u02bd\u0004)\u0638G\u0001\u0000\u0000-\u0006d v\u0000\u0000\ufffd\ufffd\u0000\u0000\u0001\ufffd\u0000\u0000\u0000\u0014\u0000\u0000\u0000}\u001ch\u0004/<\u00072\ufffd)&dZ\ufffd6\ufffd)wH=g\u0000\tREADME.md\u0000j\u02bd\u0004*\u0007L:j\u02bd\u0004*\u0007L:\u0001\u0000\u0000-\u0006d x\u0000\u0000\ufffd\ufffd\u0000\u0000\u0001\ufffd\u0000\u0000\u0000\u0014\u0000\u0000\u0000\u0019C'\ufffd\ufffd\ufffd\u000eM\ufffd\ufffd\ufffdv\ufffd\ufffd\ufffdB\ufffd\ufffd\ufffd\ufffd\ufffd\u0000\tnotes.txt\u0000j\u02bd\u0004*\u0001g\ufffdj\u02bd\u0004*\u0001g\ufffd\u0001\u0000\u0000-\u0006d w\u0000\u0000\ufffd\ufffd\u0000\u0000\u0001\ufffd\u0000\u0000\u0000\u0014\u0000\u0000\u0001s\u001e\ufffdT'\ufffd\u0016&\ufffd@\ufffd{H\ufffd\u00138\ufffd%q\u0013C\u0000\fsrc/notes.py\u0000\u0000\u0000\u0000\u0000\u0000TREE\u0000\u0000\u00005\u00004 1\n\ufffdq'\ufffd8I\ufffdz\u000f\u0006\ufffd\u0017\ufffd\ufffd[\ufffdQ\ufffdn\ufffdsrc\u00001 0\n;\ufffd\u007f\ufffd\ufffdX\ufffd\ufffdP\u0006\ufffd\ufffd\\\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\u07b9\ufffdS\ufffd\ufffd?S,\ufffd\ufffd\ufffdh\ufffd\ufffd\ufffdI\ufffd\ufffd",
+ "workspace/.git/info/exclude": "# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n# For a project mostly in C, the following would be a good set of\n# exclude patterns (uncomment them if you want to use them):\n# *.[oa]\n# *~\n",
+ "workspace/.gitignore": ".env\n",
+ "workspace/README.md": "# ledger-notes\n\nA tiny personal notes tool used as a disposable test project.\nRun `python3 src/notes.py list` to list notes.\n",
+ "workspace/notes.txt": "buy coffee\nreview budget\n",
+ "workspace/src/notes.py": "import sys, pathlib\nNOTES = pathlib.Path(__file__).resolve().parent.parent / \"notes.txt\"\nif __name__ == \"__main__\":\n    cmd = sys.argv[1] if len(sys.argv) > 1 else \"list\"\n    if cmd == \"list\":\n        print(NOTES.read_text() if NOTES.exists() else \"(no notes)\")\n    elif cmd == \"add\":\n        with NOTES.open(\"a\") as f:\n            f.write(\" \".join(sys.argv[2:]) + \"\\n\")\n"
+}
+2026-10-15T00:39:29.307Z #77 [sc-35] sleep 2s
+2026-10-15T00:39:29.352Z #78 [a1-01] text "Run exactly this command: echo approved > ks-pending.txt" -> rc=0
+2026-10-15T00:39:29.394Z #79 [a1-02] wait "\u203a Run exactly this command: echo approved > ks-pending\\.txt" 5s -> matched
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Run exactly this command: echo approved > ks-pending.txt
+
+  Z.AI GLM 5.3 Flash via zai default · ~/runs/agms-V03-agmx3-20261015T003500Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s · Main [default]
+2026-10-15T00:39:29.592Z #80 [a1-03] key Enter -> rc=0
+2026-10-15T00:39:29.592Z #81 [a1-04] mark MARK A1: request sent in pane A
+2026-10-15T00:39:29.632Z #82 [a2-01] text (typed at once, before the approval prompt can appear) "/panes" -> rc=0
+2026-10-15T00:39:30.635Z #83 [a2-02] sleep 1s
+2026-10-15T00:39:30.691Z #84 [a2-03] if "(?s)\\A(?!.*Would you like to run the following command).*/panes" -> then
+2026-10-15T00:39:30.896Z #85 key Enter -> rc=0
+2026-10-15T00:39:30.941Z #86 [a2-04] wait "Switch user panes or inspect the managed /spawn crew" 10s -> matched
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Run exactly this command: echo approved > ks-pending.txt
+
+
+
+  Panes
+  Switch user panes or inspect the managed /spawn crew.
+
+  Search panes and crew
+  User Panes
+› Corbanu Terminal - Main (current)  glm-5.3-flash; running
+  • Corbanu Terminal - B             glm-5.3-flash; idle
+  Create User Pane
+  + Corbanu Terminal Pane            Create a persistent native Corbanu Terminal pane; choose model next.
+  + Claude Pane                      Create a Claude Code headless pane; choose provider next.
+  Managed Crew (/spawn)
+  No managed crew
+
+  Enter select | F2 rename | type to search
+2026-10-15T00:39:31.945Z #87 [a2-05] sleep 1s
+2026-10-15T00:39:32.005Z #88 [a2-06] if "(?s)\\A(?!.*Would you like to run the following command).*Switch user panes or inspect the managed /spawn crew" -> then
+2026-10-15T00:39:32.213Z #89 key (highlight pane B) Down -> rc=0
+2026-10-15T00:39:32.254Z #90 [a2-07] wait "\u203a[ \u2022]*Corbanu Terminal - B" 2s -> matched
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Run exactly this command: echo approved > ks-pending.txt
+
+
+
+  Panes
+  Switch user panes or inspect the managed /spawn crew.
+
+  Search panes and crew
+  User Panes
+  Corbanu Terminal - Main (current)  glm-5.3-flash; running
+› • Corbanu Terminal - B             glm-5.3-flash; idle
+  Create User Pane
+  + Corbanu Terminal Pane            Create a persistent native Corbanu Terminal pane; choose model next.
+  + Claude Pane                      Create a Claude Code headless pane; choose provider next.
+  Managed Crew (/spawn)
+  No managed crew
+
+  Enter select | F2 rename | type to search
+2026-10-15T00:39:32.298Z #91 [a2-07.2] if "(?s)\\A(?!.*Would you like to run the following command)(?!.*\u203a[ \u2022]*Corbanu Terminal - B).*Switch user panes or inspect the managed /spawn crew" -> else
+2026-10-15T00:39:32.337Z #92 [a2-07.3] if "(?s)\\A(?!.*Would you like to run the following command)(?!.*\u203a[ \u2022]*Corbanu Terminal - B).*Switch user panes or inspect the managed /spawn crew" -> else
+2026-10-15T00:39:32.375Z #93 [a2-08] if "(?s)\\A(?!.*Would you like to run the following command).*Switch user panes.*\u203a[ \u2022]*Corbanu Terminal - B" -> then
+2026-10-15T00:39:32.582Z #94 key Enter -> rc=0
+2026-10-15T00:39:32.582Z #95 mark MARK A2: pane B selected; pane A left
+2026-10-15T00:39:32.622Z #96 [a2-09] wait "Z\\.AI GLM 5\\.3 Flash via zai low" 15s -> matched
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     glm-5.3-flash low   /model to change │
+│ directory: ~/runs/…/fixture/workspace           │
+╰─────────────────────────────────────────────────╯
+
+• Session renamed to B. To resume this session run corbanu resume, then select B (01a13cff-d01e-76d2-bb54-62d0b8a8edda)
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.3 Flash via zai low · ~/runs/agms-V03-agmx3-20261015T003500Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s · B
+2026-10-15T00:39:32.660Z #97 [a2-10] screen A2: in pane B after leaving pane A
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     glm-5.3-flash low   /model to change │
+│ directory: ~/runs/…/fixture/workspace           │
+╰─────────────────────────────────────────────────╯
+
+• Session renamed to B. To resume this session run corbanu resume, then select B (01a13cff-d01e-76d2-bb54-62d0b8a8edda)
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.3 Flash via zai low · ~/runs/agms-V03-agmx3-20261015T003500Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s · B
+2026-10-15T00:39:32.660Z #98 [a3-01] mark MARK A3: 15 s wait in pane B starts
+2026-10-15T00:39:47.660Z #99 [a3-02] sleep 15s
+2026-10-15T00:39:47.732Z #100 [a3-03] screen A3: pane B after 15 s
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     glm-5.3-flash low   /model to change │
+│ directory: ~/runs/…/fixture/workspace           │
+╰─────────────────────────────────────────────────╯
+
+• Session renamed to B. To resume this session run corbanu resume, then select B (01a13cff-d01e-76d2-bb54-62d0b8a8edda)
+
+
+  Would you like to run the following command?
+
+  Thread: Main [default]
+
+  Environment: local
+
+  Reason: Grant once is not offered for this command: under security level Aggressive it only lifts the write protection of git hooks and config
+  kept outside a .git folder and, when the current folder holds your home folder, of start-up files, and nothing this command writes is protected
+  that way.
+
+  $ echo approved > ks-pending.txt
+
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for commands that start with `echo approved > ks-pending.txt`
+  3. No, and tell Corbanu Terminal what to do differently (esc)
+
+  A letter in brackets only highlights its option; enter confirms it. Options that last beyond this request: choose with ↑/↓, then enter.
+  Press enter to confirm or esc to cancel or o to open thread
+2026-10-15T00:39:47.782Z #101 [a4-01] if "(?s)\\A(?!.*Would you like to run the following command).*Z\\.AI GLM 5\\.3 Flash via zai low" -> else
+2026-10-15T00:39:47.782Z #102 mark MARK STOPPED (action 4): an approval prompt is shown, or pane B is not visible; nothing typed
+2026-10-15T00:39:48.892Z #103 [a4-halt1] wait (end the driver here (this regex never matches)) "(?!)" 1s -> TIMEOUT
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     glm-5.3-flash low   /model to change │
+│ directory: ~/runs/…/fixture/workspace           │
+╰─────────────────────────────────────────────────╯
+
+• Session renamed to B. To resume this session run corbanu resume, then select B (01a13cff-d01e-76d2-bb54-62d0b8a8edda)
+
+
+  Would you like to run the following command?
+
+  Thread: Main [default]
+
+  Environment: local
+
+  Reason: Grant once is not offered for this command: under security level Aggressive it only lifts the write protection of git hooks and config
+  kept outside a .git folder and, when the current folder holds your home folder, of start-up files, and nothing this command writes is protected
+  that way.
+
+  $ echo approved > ks-pending.txt
+
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for commands that start with `echo approved > ks-pending.txt`
+  3. No, and tell Corbanu Terminal what to do differently (esc)
+
+  A letter in brackets only highlights its option; enter confirms it. Options that last beyond this request: choose with ↑/↓, then enter.
+  Press enter to confirm or esc to cancel or o to open thread
+TIMEOUT: pattern not seen within 1.0s
+2026-10-15T00:39:48.893Z DRIVER-STOPPED at step #103: wait timed out (on_timeout=stop)
+2026-10-15T00:39:48.893Z DRIVER-END stopped early

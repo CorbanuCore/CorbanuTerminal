@@ -1,0 +1,107 @@
+............................................................................................................................................Refresh complete; live writeback disabled
+Verified export activated; private server refreshed; timer activation unchanged
+.....................................................................Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+....................../opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 429: 'Too Many Requests'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+.....................................................................................................................................................................................usage: python -m unittest [-h]
+
+Fixed guest runtime. Requires parent-enforced containment; provides no host
+isolation.
+
+options:
+  -h, --help  show this help message and exit
+Synthetic retained evidence: /private/tmp/isolated-transport-tests-0iy6q5y4
+..................................................................................F....F.................................................................................................FF.......................................................................................{"reason":"TimeoutExpired","state":"ERROR"}
+{"reason":"TimeoutExpired","state":"ERROR"}
+{"fixture_only":true,"manager":"empty","routing":"deferred","state":"ACTIVE","states":["RECOVERING","READY","ACTIVE"]}
+Refresh complete; live writeback disabled
+...................../opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 500: 'Internal Server Error'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+............/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 429: 'Too Many Requests'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+..................................................................
+======================================================================
+FAIL: test_cli_status_discloses_manual_deadline_and_help_warns_before_arming (test_owner_daemon.ActivationVisibilityTests.test_cli_status_discloses_manual_deadline_and_help_warns_before_arming)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 406, in test_cli_status_discloses_manual_deadline_and_help_warns_before_arming
+    self.assertIn("not read-only", help_text)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'not read-only' not found in 'usage: owner_daemon.py [-h] [--run | --arm | --disarm | --activation-status]\n                       [--authority AUTHORITY] [--generation GENERATION]\n                       [--config CONFIG] [--schedule SCHEDULE]\n                       [--recover RECOVER] [--observe] [--label LABEL]\n                       [--publish-state PUBLISH_STATE]\n\nDefault-OFF one-tick owner; admitted, journaled TMUX worker lifecycle.\n\noptions:\n  -h, --help            show this help message and exit\n  --run\n  --arm                 arm shared coordinator mutation; fixture-only is not\n                        read-only; inspect --activation-status before arming\n  --disarm\n  --activation-status   inspect in-flight/overdue deadlines and watchdog\n                        effects without arming\n  --authority AUTHORITY\n  --generation GENERATION\n  --config CONFIG\n  --schedule SCHEDULE\n  --recover RECOVER\n  --observe\n  --label LABEL\n  --publish-state PUBLISH_STATE\n'
+
+======================================================================
+FAIL: test_arm_tick_disarm_rearm_uses_real_entry_point (test_owner_daemon.ArmingTests.test_arm_tick_disarm_rearm_uses_real_entry_point)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 530, in test_arm_tick_disarm_rearm_uses_real_entry_point
+    self.assertEqual(dict(state="ARMED", generation=1,
+                          activation_digest=digest(self.authority)),
+AssertionError: {'sta[113 chars]d553'} != {'sta[113 chars]d553', 'coordinator': {'observed_at': 17896441[594 chars]k.'}}
+Diff is 1219 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_ack_start_return_resume_and_clean_shutdown (test_owner_tmux.TmuxTests.test_ack_start_return_resume_and_clean_shutdown)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_tmux.py", line 592, in test_ack_start_return_resume_and_clean_shutdown
+    self.ack()
+    ~~~~~~~~^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_tmux.py", line 166, in ack
+    self.launch()
+    ~~~~~~~~~~~^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_tmux.py", line 141, in launch
+    self.wait(lambda: "READY" in self.worker.tmux(
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "capture-pane", "-p", "-t", self.worker.meta["session"]).stdout)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_tmux.py", line 136, in wait
+    self.fail("fixture timed out: " + repr(self.worker.tmux(
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "capture-pane", "-p", "-t", self.worker.meta["session"]).stdout))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: fixture timed out: '\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n'
+
+======================================================================
+FAIL: test_bracketed_paste_echo_is_not_ack_and_start_is_denied (test_owner_tmux.TmuxTests.test_bracketed_paste_echo_is_not_ack_and_start_is_denied)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_tmux.py", line 578, in test_bracketed_paste_echo_is_not_ack_and_start_is_denied
+    self.launch()
+    ~~~~~~~~~~~^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_tmux.py", line 141, in launch
+    self.wait(lambda: "READY" in self.worker.tmux(
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "capture-pane", "-p", "-t", self.worker.meta["session"]).stdout)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_tmux.py", line 136, in wait
+    self.fail("fixture timed out: " + repr(self.worker.tmux(
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "capture-pane", "-p", "-t", self.worker.meta["session"]).stdout))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: fixture timed out: '\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n'
+
+----------------------------------------------------------------------
+Ran 785 tests in 448.230s
+
+FAILED (failures=4)
+Verified publication: manager @ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa · bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb · 2026-09-17T11:24:28+00:00
+Verified publication: manager @ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa · bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb · 2026-09-17T11:24:28+00:00

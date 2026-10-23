@@ -1,0 +1,16 @@
+diff --git a/scripts/initiative_control/attention.py b/scripts/initiative_control/attention.py
+--- a/scripts/initiative_control/attention.py
++++ b/scripts/initiative_control/attention.py
+@@ -124,6 +124,12 @@ def render_decisions(raw, now, sprints, documents, *, slack=None, slack_health=None,
+                   '; assessed ' + str(health.get("assessed_at") or "unknown") +
+                   '; last verified ' + str(health.get("last_verified") or "never") +
+                   '. This is a saved observation, not a live connection or work authorization. If held or stale, answer in the manager task.')
++        intake = (health.get("supervisor_health") or {}).get("quarantine", {})
++        if intake.get("count"):
++            age = intake.get("age_seconds")
++            notice += (' Quarantined intake: ' + str(intake["count"]) +
++                       '; awaiting thread binding: ' + str(intake["held"]) +
++                       '; oldest age (seconds): ' + (str(age) if age is not None else 'unknown') + '.')
+         body = '<section id="decisions"><h2>Needs your decision</h2><p>' + html.escape(notice) + '</p>'
+     elif slack_health and slack_health.get("state") == "unknown":
+         body += '<p>Slack status unavailable. Valid decision context remains available below.</p>'

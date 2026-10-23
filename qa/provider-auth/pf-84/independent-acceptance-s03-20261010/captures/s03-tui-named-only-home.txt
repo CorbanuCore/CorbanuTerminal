@@ -1,0 +1,10 @@
+-- n1-account-main (corbanu --account main; no default key anywhere):
+   | │ model:     loading   /model to change                  │
+   | │ model:     glm-5.3-flash   /model to change            │
+   | › Reply with exactly the word pong and nothing else.
+   | • pong
+-- n2-config-main (corbanu -c provider_accounts.zai="main"; no default key anywhere):
+   | │ model:     loading   /model to change                  │
+   | │ model:     glm-5.3-flash   /model to change            │
+   | › Reply with exactly the word pong and nothing else.
+   | • pong

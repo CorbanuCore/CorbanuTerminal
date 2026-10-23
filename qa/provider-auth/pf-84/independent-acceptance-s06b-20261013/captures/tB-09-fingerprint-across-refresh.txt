@@ -1,0 +1,9 @@
+## fingerprint of a named ChatGPT sign-in before and after a refresh (account fpy, access token expired at sign-in)
+before (no refresh yet):
+  4. OpenAI · fpy      Named account · ChatGPT sign-in · f…@example.com · Plus · fp 4934a2521a5b
+mock refresh events for fpy so far: 0
+exec --account fpy (refreshes):
+mock: chatgpt fpy gen2
+mock refresh events for fpy now: 1
+after:
+  4. OpenAI · fpy      Named account · ChatGPT sign-in · f…@example.com · Plus · fp 4934a2521a5b

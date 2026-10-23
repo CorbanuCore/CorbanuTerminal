@@ -10,7 +10,10 @@ impl LiveBrowserAuthority for Authority {
 
 #[tokio::test]
 async fn permissive_and_pre_cancelled_requests_never_discover_or_install_engines() {
-    let epoch = AuthorityEpoch::new([1; 16], 0, 0).unwrap();
+    let epoch = AuthorityEpoch::new(
+        [1; 16], /*policy_revision*/ 0, /*revocation_generation*/ 0,
+    )
+    .unwrap();
     let cancel = CancellationToken::new();
     assert!(matches!(
         BrowserRuntime::prepare(

@@ -187,42 +187,6 @@ fn receipt_from_status(
     }
 }
 
-pub(super) fn latest_plan_receipt(
-    status: &WalletPlanStatus,
-    balances: Option<WalletBalances>,
-    prices: &std::collections::BTreeMap<String, String>,
-) -> WalletPlanReceipt {
-    let (transaction, plan_id, starts_at, ends_at) = status
-        .queued_periods
-        .last()
-        .map(|period| {
-            (
-                &period.transaction,
-                &period.plan_id,
-                &period.starts_at,
-                &period.ends_at,
-            )
-        })
-        .unwrap_or((
-            &status.period.transaction,
-            &status.period.plan_id,
-            &status.period.starts_at,
-            &status.period.ends_at,
-        ));
-    WalletPlanReceipt {
-        plan_id: plan_id.clone(),
-        price_usdc: prices.get(plan_id).cloned(),
-        transaction: Some(transaction.clone()),
-        starts_at: Some(starts_at.clone()),
-        ends_at: Some(ends_at.clone()),
-        active_plan_id: Some(status.period.plan_id.clone()),
-        active_ends_at: Some(status.period.ends_at.clone()),
-        remaining_usdc_atomic: balances.map(|value| value.usdc_atomic),
-        reconciliation_error: None,
-        credential_error: None,
-    }
-}
-
 impl ChatWidget {
     pub(crate) fn on_wallet_plan_receipt_ready(
         &mut self,

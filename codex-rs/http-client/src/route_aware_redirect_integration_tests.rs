@@ -98,6 +98,8 @@ fn spawn_response(
                 Err(error) => panic!("HTTP listener should accept: {error}"),
             }
         };
+        // Windows sockets inherit the listener's nonblocking mode.
+        stream.set_nonblocking(false).expect("set blocking");
         stream
             .set_read_timeout(Some(Duration::from_secs(2)))
             .expect("read timeout");

@@ -1,0 +1,9 @@
+$ /usage requests 2026-10-09
+  Z.AI GLM 5.2 via zaiproxy standard · <scratch>/repos/ansi-regex · Corbanu Terminal · TPS: -- tok/s
+--- last screen:
+• ansi-regex is an npm package that exports a regular expression for matching ANSI escape codes, with an option to match only the first occurrence and a note
+  that ReDoS is not considered a valid vulnerability for untrusted server input.
+■ Usage: /usage requests [YYYY-MM-DD] (UTC, no future dates). Custom: /usage requests START END hour|day|week|month; dates or UTC timestamps ending Z; end
+exclusive.
+› Find and fix a bug in @filename
+  Z.AI GLM 5.2 via zaiproxy standard · <scratch>/repos/ansi-regex · Corbanu Terminal · TPS: -- tok/s

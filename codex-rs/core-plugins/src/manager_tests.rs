@@ -163,6 +163,28 @@ fn curated_repo_sync_stays_deferred_for_remote_chatgpt_catalog() {
     assert!(!CURATED_REPO_SYNC_STARTED.load(std::sync::atomic::Ordering::SeqCst));
 }
 
+/// #477: after shutdown a manager starts no curated repo sync.
+#[test]
+fn curated_repo_sync_does_not_start_after_shutdown() {
+    let tmp = TempDir::new().unwrap();
+    let config = PluginsConfigInput::new(
+        unrestricted_config_layer_stack(),
+        "openai".to_string(),
+        /*plugins_enabled*/ true,
+        /*remote_plugin_enabled*/ false,
+        "https://chatgpt.com".to_string(),
+        test_http_client_factory(),
+    );
+    let manager = Arc::new(PluginsManager::new(tmp.path().to_path_buf()));
+
+    manager.cancel_curated_repo_sync();
+    manager.maybe_start_curated_repo_sync_for_config(
+        &config, /*on_effective_plugins_changed*/ None,
+    );
+
+    assert!(manager.curated_repo_sync.lock().unwrap().is_none());
+}
+
 #[test]
 fn marketplace_source_refresh_notifies_only_after_installed_cache_changes() {
     let tmp = TempDir::new().unwrap();
@@ -2850,6 +2872,9 @@ async fn plugin_cache_ignores_unrelated_session_overrides() {
 
 #[tokio::test]
 async fn skill_snapshots_resolve_remote_plugin_identity_from_authoritative_source() {
+    // #981: the snapshot below would also list the developer's own
+    // `$HOME/.agents/skills`. Skip that root, as the core test harness does (#888).
+    codex_core_skills::loader::ignore_user_home_skills_for_tests(/*ignore*/ true);
     let mut duplicate_plugin = remote_installed_plugin("sample");
     duplicate_plugin.id = "plugins~Plugin_duplicate".to_string();
 

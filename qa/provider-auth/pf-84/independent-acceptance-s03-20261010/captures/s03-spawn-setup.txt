@@ -1,0 +1,6 @@
+home hS accounts:
+  kimi-code	kimionly	api_key
+  zai	fake	api_key
+  zai	main	api_key
+  zai	work	api_key
+default account: env ZAI_API_KEY = synthetic invalid canary (default => 401)

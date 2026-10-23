@@ -31,7 +31,7 @@ pub fn resolve_scoped(
         requested_origin,
         |client, path| {
             client
-                .request_blocking(Method::GET, path, None)
+                .request_blocking(Method::GET, path, /*body*/ None)
                 .map_err(|error| error.to_string())
         },
     )
@@ -123,6 +123,16 @@ fn resolve_from_store<S: SessionStore + ?Sized>(
         }
         _ => Err(response.message()),
     }
+}
+
+#[cfg(test)]
+pub(crate) fn resolve_fixture<S: SessionStore + ?Sized>(
+    store: &S,
+    scope: &SessionScope,
+    requested_origin: Option<&str>,
+    request: impl Fn(&Client, &str) -> Result<Response, String>,
+) -> Result<ActiveSession, String> {
+    resolve_from_store(store, scope, requested_origin, request)
 }
 
 #[cfg(test)]

@@ -1,0 +1,49 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-utils-absolute-path v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/utils/absolute-path)
+   Compiling codex-utils-rustls-provider v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/utils/rustls-provider)
+   Compiling codex-security-policy v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/security-policy)
+   Compiling codex-utils-cache v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/utils/cache)
+   Compiling codex-http-client v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/http-client)
+   Compiling codex-utils-home-dir v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/utils/home-dir)
+   Compiling codex-utils-path-uri v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/utils/path-uri)
+   Compiling codex-utils-string v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/utils/string)
+   Compiling codex-execpolicy v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/execpolicy)
+   Compiling codex-utils-image v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/utils/image)
+   Compiling codex-extension-items v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/ext/items)
+   Compiling codex-network-proxy v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/network-proxy)
+   Compiling codex-async-utils v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/async-utils)
+   Compiling codex-client v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/codex-client)
+   Compiling codex-websocket-client v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/websocket-client)
+   Compiling codex-security-audit v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/security-audit)
+   Compiling codex-product-brand v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/product-brand)
+   Compiling codex-keyring-store v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/keyring-store)
+   Compiling codex-utils-path v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/utils/path-utils)
+   Compiling codex-linux-pidfd-spawn v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/linux-pidfd-spawn)
+   Compiling codex-secret-broker v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/secret-broker)
+   Compiling codex-utils-cargo-bin v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/utils/cargo-bin)
+   Compiling codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/protocol)
+   Compiling codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/file-system)
+   Compiling codex-api v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/codex-api)
+   Compiling codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/git-utils)
+   Compiling codex-secrets v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/secrets)
+   Compiling codex-vault v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/vault)
+   Compiling codex-otel v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/otel)
+   Compiling codex-model-provider-info v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/model-provider-info)
+   Compiling codex-features v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/features)
+   Compiling codex-config v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/config)
+   Compiling codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/protected-state)
+   Compiling codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/secret-broker-service)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 23.87s
+────────────
+ Nextest run ID 0bedc848-fa11-4a64-8a1c-bf1652301345 with nextest profile: local
+    Starting 8 tests across 7 binaries (48 tests skipped)
+        PASS [   0.002s] (1/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_reservation_precedes_image_and_rejects_second_launch
+        PASS [   0.002s] (2/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_worker_failure_returns_image_without_spawn
+        PASS [   0.003s] (3/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_cancel_before_worker_starts_never_launches
+        PASS [   0.003s] (4/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_panic_is_not_cleanup_receipt_or_relaunch_permission
+        PASS [   0.003s] (5/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_late_spawn_drop_keeps_permit_until_reaping
+        PASS [   0.005s] (6/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_early_exit_and_rejected_spawn_release_only_after_cleanup
+        PASS [   0.023s] (7/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_signal_wait_failure_quarantines_until_same_owner_recovers
+        PASS [   0.104s] (8/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_deadline_while_spawn_blocked_is_not_cleanup
+────────────
+     Summary [   0.105s] 8 tests run: 8 passed, 48 skipped

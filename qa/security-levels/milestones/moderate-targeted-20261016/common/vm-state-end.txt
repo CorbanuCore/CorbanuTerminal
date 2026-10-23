@@ -1,0 +1,47 @@
+2026-10-16T13:02:42Z verification boot: utmctl start
+2026-10-16T13:10:41Z ssh reachable: no
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+2026-10-16T13:11:32Z guest network never came up (ARP incomplete, ping 'Host is down') 8.5 min after the verification start; power-cycle with utmctl stop (forced power-off) and start, as in earlier runs
+stop-rc=0
+2026-10-16T13:11:33Z status: stopped
+start-rc=0
+2026-10-16T13:11:47Z ssh reachable: yes
+ls: /Users/agent/agms: No such file or directory
+ls: /Users/agent/agms-canary: No such file or directory
+ls: /etc/sudoers.d/agms-codeblind: No such file or directory
+ls: /opt/agms: No such file or directory
+agmx accounts: 0
+-rw-r--r--  1 root  wheel  82 Sep 17 22:00 /etc/codex/config.toml
+AGMS pf lines: 0
+10:set skip on lo0
+virtiofs mounts: 1
+agadmin-1792155721-84450.sh
+agadmin-1792155725-84469.sh
+agadmin-1792155728-84499.sh
+agadmin-1792155741-84550.sh
+su.exp
+agms in /private/tmp: 0
+agms in /Users/Shared: 0
+2026-10-16T13:11:50Z
+2026-10-16T13:11:58Z clean shutdown from inside with h/guest-shutdown-clean.sh (removes ~agent/ag-admin first)
+
+System shutdown time has arrived
+Connection to 192.168.64.3 closed by remote host.
+2026-10-16T13:12:09Z status: stopped
+2026-10-16T13:12:16Z second verification boot (check ~agent/ag-admin removal): utmctl start
+2026-10-16T13:12:29Z ssh reachable: yes
+ls: /Users/agent/ag-admin: No such file or directory
+ls: /Users/agent/agms: No such file or directory
+ls: /opt/agms: No such file or directory
+agmx accounts: 0
+virtiofs mounts: 1
+2026-10-16T13:12:37Z
+2026-10-16T13:12:40Z utmctl stop --request
+2026-10-16T13:14:44Z status: started
+2026-10-16T13:14:51Z shutdown request not answered; guest data already verified erased and no admin helper present, so utmctl stop (power-off)
+synced
+stop-rc=0
+2026-10-16T13:14:52Z status: stopped
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3

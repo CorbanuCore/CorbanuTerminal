@@ -1,0 +1,176 @@
+## home b3; default login = API key (fake canary) via login --with-api-key
+$ run $CAND $S/homes/b3 login --with-api-key
+Reading API key from stdin...
+Successfully logged in
+[exit 0]
+auth.json: 387fd2904b223899
+$ run $CAND $S/homes/b3 login --account r1 --device-auth --experimental_issuer http://127.0.0.1:34622
+Signed in OpenAI account `r1` (ChatGPT sign-in · r…@example.com · Plus).
+[exit 0]
+$ run $CAND $S/homes/b3 login --account r2 --device-auth --experimental_issuer http://127.0.0.1:34622
+Signed in OpenAI account `r2` (ChatGPT sign-in · r…@example.com · Plus).
+[exit 0]
+$ run $CAND $S/homes/b3 login --account key --with-api-key
+Reading API key from stdin...
+Signed in OpenAI account `key` (OpenAI API key).
+[exit 0]
+
+## one process: exactly one refresh, saved back
+$ run $CAND $S/homes/b3 exec --skip-git-repo-check -C $S/ws --account r1 Reply with exactly: pong
+Corbanu Terminal v0.1.48
+mock: chatgpt r1 gen2
+mock: chatgpt r1 gen2
+[exit 0]
+-- mock events (MCP/plugin noise without credentials omitted):
+    {"ev": "refresh", "user": "r1", "frm": 1, "to": 2}
+    {"ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "r1", "gen": 2, "expired": false}}
+    {"ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "r1", "gen": 2, "expired": false}}
+    {"ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "r1", "gen": 2, "expired": false}}
+    {"ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "r1", "gen": 2, "expired": false}}
+    {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "r1", "gen": 2, "expired": false}, "model": null}
+## a new process: no refresh (reads the refreshed token from the vault)
+$ run $CAND $S/homes/b3 exec --skip-git-repo-check -C $S/ws --account r1 Reply with exactly: pong
+Corbanu Terminal v0.1.48
+mock: chatgpt r1 gen2
+mock: chatgpt r1 gen2
+[exit 0]
+-- mock events (MCP/plugin noise without credentials omitted):
+    {"ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "r1", "gen": 2, "expired": false}}
+    {"ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "r1", "gen": 2, "expired": false}}
+    {"ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "r1", "gen": 2, "expired": false}}
+    {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "r1", "gen": 2, "expired": false}, "model": null}
+
+## same account (r2, expired) in two processes at once
+process A:
+[exit 0]
+mock: chatgpt r2 gen2
+process B:
+[exit 0]
+mock: chatgpt r2 gen3
+    {"ev": "refresh", "user": "r2", "frm": 1, "to": 2}
+    {"ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "r2", "gen": 2, "expired": false}}
+    {"ev": "refresh", "user": "r2", "frm": 2, "to": 3}
+    {"ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "r2", "gen": 2, "expired": false}}
+    {"ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "r2", "gen": 2, "expired": false}}
+    {"ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "r2", "gen": 2, "expired": false}}
+    {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "r2", "gen": 2, "expired": false}, "model": null}
+    {"ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "r2", "gen": 3, "expired": false}}
+    {"ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "r2", "gen": 3, "expired": false}}
+    {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "r2", "gen": 3, "expired": false}, "model": null}
+## r2 again afterwards
+$ run $CAND $S/homes/b3 exec --skip-git-repo-check -C $S/ws --account r2 Reply with exactly: pong
+Corbanu Terminal v0.1.48
+mock: chatgpt r2 gen3
+mock: chatgpt r2 gen3
+[exit 0]
+-- mock events (MCP/plugin noise without credentials omitted):
+    {"ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "r2", "gen": 3, "expired": false}}
+    {"ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "r2", "gen": 3, "expired": false}}
+    {"ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "r2", "gen": 3, "expired": false}}
+    {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "r2", "gen": 3, "expired": false}, "model": null}
+
+## re-login r1 as ANOTHER ChatGPT user (r1b): old r1 tokens revoked?
+$ run $CAND $S/homes/b3 login --account r1 --device-auth --experimental_issuer http://127.0.0.1:34622
+Signed in OpenAI account `r1` (ChatGPT sign-in · r…@example.com · Plus).
+[exit 0]
+    {"ev": "device-usercode"}
+    {"ev": "sign-in", "user": "r1b"}
+    {"ev": "revoke", "user": "r1", "kind": "refresh_token"}
+$ run $CAND $S/homes/b3 login --account r1 status
+OpenAI account `r1`: ChatGPT sign-in · r…@example.com · Plus
+[exit 0]
+$ run $CAND $S/homes/b3 exec --skip-git-repo-check -C $S/ws --account r1 Reply with exactly: pong
+Corbanu Terminal v0.1.48
+mock: chatgpt r1b gen3
+mock: chatgpt r1b gen3
+[exit 0]
+-- mock events (MCP/plugin noise without credentials omitted):
+    {"ev": "refresh", "user": "r1b", "frm": 1, "to": 2}
+    {"ev": "refresh", "user": "r1b", "frm": 2, "to": 3}
+    {"ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "r1b", "gen": 2, "expired": false}}
+    {"ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "r1b", "gen": 3, "expired": false}}
+    {"ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "r1b", "gen": 3, "expired": false}}
+    {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "r1b", "gen": 3, "expired": false}, "model": null}
+## re-login r1 as the SAME user (r1b~2 = same person as r1b)
+$ run $CAND $S/homes/b3 login --account r1 --device-auth --experimental_issuer http://127.0.0.1:34622
+Signed in OpenAI account `r1` (ChatGPT sign-in · r…@example.com · Plus).
+[exit 0]
+    {"ev": "device-usercode"}
+    {"ev": "sign-in", "user": "r1b~2"}
+auth.json: 387fd2904b223899
+
+## forced_login_method=chatgpt with the API-key account
+$ run $CAND $S/homes/b3 account list openai
+openai	key	chatgpt_auth	OpenAI API key
+openai	r1	chatgpt_auth	ChatGPT sign-in · r…@example.com · Plus
+openai	r2	chatgpt_auth	ChatGPT sign-in · r…@example.com · Plus
+[exit 0]
+$ run $CAND $S/homes/b3 exec --skip-git-repo-check -C $S/ws --account key -c forced_login_method="chatgpt" Reply with exactly: pong
+Error: thread/start: thread/start failed: account `key` holds an OpenAI API key, but this configuration requires a ChatGPT sign-in; sign in with `corbanu login --account key` (code -32600)
+[exit 1]
+-- mock events (MCP/plugin noise without credentials omitted):
+after:
+$ run $CAND $S/homes/b3 account list openai
+openai	key	chatgpt_auth	OpenAI API key
+openai	r1	chatgpt_auth	ChatGPT sign-in · r…@example.com · Plus
+openai	r2	chatgpt_auth	ChatGPT sign-in · r…@example.com · Plus
+[exit 0]
+auth.json: absent
+$ run $CAND $S/homes/b3 login status
+Not logged in
+[exit 1]
+## the same with the TUI-less app-server path is not exercised; default under forced chatgpt:
+$ run $CAND $S/homes/b3 exec --skip-git-repo-check -C $S/ws -c forced_login_method="chatgpt" Reply with exactly: pong
+Corbanu Terminal v0.1.48
+mock: none 
+mock: none 
+[exit 0]
+-- mock events (MCP/plugin noise without credentials omitted):
+    {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "none"}, "model": "gpt-5.4"}
+auth.json: absent
+$ run $CAND $S/homes/b3 login status
+Not logged in
+[exit 1]
+
+## default precedence with env decoys: candidate vs pre-S06 baseline (copy of the home)
+auth.json: 387fd2904b223899
+$ run $CAND $S/homes/b3 exec --skip-git-repo-check -C $S/ws Reply with exactly: pong
+Corbanu Terminal v0.1.48
+mock: bearer defkey
+mock: bearer defkey
+[exit 0]
+-- mock events (MCP/plugin noise without credentials omitted):
+    {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "defkey"}, "model": "gpt-5.4"}
+$ run $BASE $S/homes/b3-base exec --skip-git-repo-check -C $S/ws Reply with exactly: pong
+Corbanu Terminal v0.1.48
+mock: bearer defkey
+mock: bearer defkey
+[exit 0]
+-- mock events (MCP/plugin noise without credentials omitted):
+    {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "defkey"}, "model": "gpt-5.4"}
+$ run $CAND $S/homes/b3 exec --skip-git-repo-check -C $S/ws Reply with exactly: pong
+Corbanu Terminal v0.1.48
+mock: bearer codexenv
+mock: bearer codexenv
+[exit 0]
+-- mock events (MCP/plugin noise without credentials omitted):
+    {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "codexenv"}, "model": "gpt-5.4"}
+$ run $BASE $S/homes/b3-base exec --skip-git-repo-check -C $S/ws Reply with exactly: pong
+Corbanu Terminal v0.1.48
+mock: bearer codexenv
+mock: bearer codexenv
+[exit 0]
+-- mock events (MCP/plugin noise without credentials omitted):
+    {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "codexenv"}, "model": "gpt-5.4"}
+named account with the same env decoys:
+$ run $CAND $S/homes/b3 exec --skip-git-repo-check -C $S/ws --account r1 Reply with exactly: pong
+Corbanu Terminal v0.1.48
+mock: chatgpt r1b~2 gen2
+mock: chatgpt r1b~2 gen2
+[exit 0]
+-- mock events (MCP/plugin noise without credentials omitted):
+    {"ev": "refresh", "user": "r1b~2", "frm": 1, "to": 2}
+    {"ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "r1b~2", "gen": 2, "expired": false}}
+    {"ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "r1b~2", "gen": 2, "expired": false}}
+    {"ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "r1b~2", "gen": 2, "expired": false}}
+    {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "r1b~2", "gen": 2, "expired": false}, "model": null}

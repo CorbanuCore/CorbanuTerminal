@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/qa/initiative-control/management-bootstrap/owner_handoff_80_promotion_rehearsal.py", line 115, in <module>
+    main()
+    ~~~~^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/qa/initiative-control/management-bootstrap/owner_handoff_80_promotion_rehearsal.py", line 96, in main
+    assert status["scope"] == "tmux-workers" and status["generation"] == 3
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

@@ -1,0 +1,19 @@
+home hP accounts:
+  claude-plan	cfgacct	claude_config_dir
+  claude-plan	faketok	claude_oauth_token
+  claude-plan	missingcfg	claude_config_dir
+  claude-plan	relcfg	claude_config_dir
+expected: faketok token sha12=sha12=457fa02eee15; cfgacct (.credentials.json in config dir) sha12=sha12=33c45f49fc76
+-- flag ON (config.toml named_accounts = true)
+--account faketok: exit=0 stdout=sha12=457fa02eee15 stderr=
+--account cfgacct: exit=0 stdout=sha12=33c45f49fc76 stderr=
+--account ghost: exit=1 stdout=EMPTY stderr=Error: Claude account `ghost` is not configured; add it with `corbanu account add claude-plan ghost --kind claude-token` or choose another account 
+CORBANU_PROVIDER_ACCOUNT=faketok: exit=0 stdout=sha12=457fa02eee15 stderr=
+-- flag OFF (config.toml named_accounts = false)  [issue #415]
+--account faketok: exit=0 stdout=sha12=457fa02eee15 stderr=
+CORBANU_PROVIDER_ACCOUNT=faketok: exit=0 stdout=sha12=457fa02eee15 stderr=
+-- env exception stays default-only (CLAUDE_CODE_OAUTH_TOKEN=envtok canary sha12=sha12=7fcb940c063a)
+no account + env token: exit=0 stdout=sha12=7fcb940c063a stderr=
+CORBANU_PROVIDER_ACCOUNT=faketok + env token (candidate): exit=0 stdout=sha12=457fa02eee15 stderr=
+CORBANU_PROVIDER_ACCOUNT=faketok + env token (pre-PF-84 build) [issue #414]: exit=0 stdout=sha12=7fcb940c063a stderr=
+security(1) CLI shim calls: 0

@@ -1,0 +1,44 @@
+  Attempt, components and original price
+  Requested UTC day: 2026-10-06
+  Provider: Z.AI
+  Model: Z.AI GLM 5.2
+  Billing: Pay per use
+  Estimated cost: $0.001771 (rounded)
+  Tokens: 4,527 tokens
+  —— Details ——
+  Request: 1dc485b8-a929-4748-9b41-f3f584d7efbe
+  Attempt: 6634f222-5669-4adf-bdc6-a34843c90fc7
+  ↑↓ scroll · Enter open · Esc back/close
+  Thread: 01a113a8-bafa-75d1-bf24-4721b639284d
+  Turn: 01a113a8-bb18-7680-855e-b2d1b8736b7c
+  Provider: zai
+  Model: glm-5.2
+  Opaque scope: 74562839-06f9-4539-91cc-dd0a6ea600ca
+  Arithmetic dialect: Inclusive
+  Admission time: 2026-10-06T23:59:59.686Z
+  Retry predecessor: none
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Estimated token cost for recorded attempts: $0.001771 (rounded)
+  Input: 4444
+  Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+  Cache read: 4224
+  Cache write: unknown — no retained numeric evidence
+  Output: 83
+  Reasoning (subset, not separately billed): 25
+  Total (not separately billed): 4527
+  Noncached input cost: $0.000308; exact USD 0.000308
+  Cache read cost: $0.001098 (rounded); exact USD 0.00109824
+  Cache write cost: $0.000000; exact USD 0
+  Output cost: $0.000365 (rounded); exact USD 0.0003652
+  Known subtotal exact USD: 0.00177144
+  Price ID: 46f333ae-4b8b-4395-8c31-329c445897d6
+  Price source: NativeCatalog; reference 29354527-a0e0-59c7-934b-8d0170caf339
+  Price currency/unit: Usd / PerMillionTokens
+  Price observed/approved: 2026-10-06T23:59:59.686Z / 2026-10-06T23:59:59.686Z
+  Price effective interval: [2026-10-06T23:59:59.686Z, unbounded)
+  Noncached input rate: 1.4 USD per million tokens
+  Cache read rate: 0.26 USD per million tokens
+  Cache write rate: 0 USD per million tokens
+  Output rate: 4.4 USD per million tokens
+  Evidence revision 17; source e54027e2-25e8-4522-8167-c41973f7a951; sequence 17; presence patch
+  {"input":4444,"read":4224,"output":83,"reasoning":25,"total":4527}

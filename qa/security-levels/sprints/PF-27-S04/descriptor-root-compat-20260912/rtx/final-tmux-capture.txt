@@ -1,0 +1,54 @@
+bash /home/travis/security-round5/evidence/pf27-root-compat-20260912/run-pf27-root-compat-d776e938d.shbash-5.3$ bash /home/travis/security-round5/evidence/pf27-
+root-compat-20260912/run-pf27-root-compat-d776e938d.sh
+        PASS [   0.015s] ( 6/18) codex-protected-state store::tests::pf20_s03_successor_overflow_and_generation_regression_deny
+        PASS [   0.015s] ( 7/18) codex-protected-state native::tests::pf20_s03_saturated_native_backlog_fails_without_waiting
+        PASS [   0.022s] ( 8/18) codex-protected-state store::tests::pf20_s03_non_regular_root_record_never_blocks_before_rejection
+        PASS [   0.022s] ( 9/18) codex-protected-state store::tests::pf20_s03_torn_pending_and_symlink_replacements_latch_unavailable
+        PASS [   0.023s] (10/18) codex-protected-state store::tests::pf20_s03_real_second_process_cannot_acquire_controller_lock
+        PASS [   0.026s] (11/18) codex-protected-state store::tests::pf20_s03_foreign_binding_generation_and_sequence_never_commit
+        PASS [   0.028s] (12/18) codex-protected-state store::tests::pf20_s03_enrollment_cas_restart_and_wrong_namespace
+        PASS [   0.029s] (13/18) codex-protected-state store::tests::pf20_s03_open_directory_permission_drift_latches_unavailable
+        PASS [   0.030s] (14/18) codex-protected-state native::tests::pf20_s03_partial_frame_obeys_one_total_deadline
+        PASS [   0.032s] (15/18) codex-protected-state store::tests::pf20_s03_policy_anchor_retains_exact_existing_payload
+        PASS [   0.048s] (16/18) codex-protected-state store::tests::pf20_s03_every_failed_durability_boundary_withholds_and_latches
+        PASS [   0.060s] (17/18) codex-protected-state store::tests::pf20_s03_lost_corrupt_key_registry_head_and_partial_enrollment_deny
+        PASS [   2.010s] (18/18) codex-protected-state native::tests::pf20_s03_inherited_socketpair_does_not_prove_child_identity
+────────────
+     Summary [   2.010s] 18 tests run: 18 passed, 6 skipped
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.25s
+────────────
+ Nextest run ID 3cb8f55a-c150-450a-a385-2e36edb6ade7 with nextest profile: local
+    Starting 4 tests across 1 binary (20 tests skipped)
+        PASS [   0.023s] (1/4) codex-protected-state native::tests::pf27_root_compat_both_entries_lost_reply_is_ambiguous
+        PASS [   0.023s] (2/4) codex-protected-state native::tests::pf27_root_compat_both_entries_cas_and_death
+        PASS [   0.071s] (3/4) codex-protected-state native::tests::pf27_root_compat_both_entries_reject_malformed_and_replay
+        PASS [   0.100s] (4/4) codex-protected-state native::tests::pf27_root_compat_rejected_identity_never_receives_key
+────────────
+     Summary [   0.100s] 4 tests run: 4 passed, 20 skipped
+    Checking codex-utils-rustls-provider v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/rustls-provider)
+    Checking codex-security-policy v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/security-policy)
+    Checking codex-utils-cache v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/cache)
+    Checking codex-utils-path-uri v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/path-uri)
+    Checking codex-http-client v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/http-client)
+    Checking codex-utils-image v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/image)
+    Checking codex-execpolicy v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/execpolicy)
+    Checking codex-utils-path v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/path-utils)
+    Checking codex-linux-pidfd-spawn v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/linux-pidfd-spawn)
+    Checking codex-client v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/codex-client)
+    Checking codex-websocket-client v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/websocket-client)
+    Checking codex-network-proxy v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/network-proxy)
+    Checking codex-security-audit v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/security-audit)
+    Checking codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/protocol)
+    Checking codex-api v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/codex-api)
+    Checking codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/file-system)
+    Checking codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/git-utils)
+    Checking codex-otel v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/otel)
+    Checking codex-model-provider-info v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/model-provider-info)
+    Checking codex-features v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/features)
+    Checking codex-config v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/config)
+    Checking codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/protected-state)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.27s
+PF27_ROOT_COMPAT_TMUX_COMPLETE
+PF27_ROOT_COMPAT_D776E938D_COMPLETE
+bash-5.3$

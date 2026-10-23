@@ -1,0 +1,8 @@
+model = "gpt-5.4-mini"
+model_provider = "openai"
+model_reasoning_effort = "low"
+web_search = "live"
+service_tier = "default"
+
+[projects."<scratch>/work/repo"]
+trust_level = "trusted"

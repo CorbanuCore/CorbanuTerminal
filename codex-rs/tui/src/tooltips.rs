@@ -16,13 +16,6 @@ const APP_TOOLTIP: &str = "Try the **Desktop app**. Run 'codex app' or visit htt
 #[cfg(test)]
 const FAST_TOOLTIP: &str =
     "*New* Use **/fast** to enable our fastest inference with increased plan usage.";
-#[cfg(test)]
-const OTHER_TOOLTIP: &str = "*New* Build faster with the **Desktop app**. Run 'codex app' or visit https://chatgpt.com/codex?app-landing-page=true";
-#[cfg(test)]
-const OTHER_TOOLTIP_NON_MAC: &str = "*New* Build faster with Codex.";
-#[cfg(test)]
-const FREE_GO_TOOLTIP: &str =
-    "*New* For a limited time, Codex is included in your plan for free – let’s build together.";
 
 #[cfg(test)]
 const RAW_TOOLTIPS: &str = include_str!("../tooltips.txt");

@@ -1,0 +1,13 @@
+# cand: /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s05-indep-acc-20261011/debug/corbanu home=$S/homes/h5; account a's reply is held 12 s by the mock
+--- provider_request_state at +4s (a1 in flight) ---
+key_fingerprint|lease|lease_until
+account:a|-|-
+d1 exit=0 done_at=+4.3s
+b1 exit=0 done_at=+5.6s
+a1 exit=0 done_at=+13.3s
+a2 exit=0 done_at=+17.5s
+--- mock arrivals (seconds after start; label, status) ---
+  +  4.3s default  200
+  +  5.6s b        200
+  +  1.2s a        200
+  +  5.5s a        200

@@ -1,0 +1,31 @@
+{
+  "format_version": 2,
+  "checksum": "302ff8d3fe0e4a00bc7b09a73a3d024ab3a80dbc52a365b82a26ae940458d3c3",
+  "layout": {
+    "version": 2,
+    "codex_thread_id": "01a12fd5-865e-7e82-a538-701a033902c5",
+    "codex_user_pane_ids": [
+      "01a12fd6-1786-7411-b5dc-6335782ca35f"
+    ],
+    "active_user_pane_id": "codex-main",
+    "spawn_nazgul_pane_id": null,
+    "spawn_nazgul_rebind_required": false,
+    "claude_pane_ids": [],
+    "spawn_parent_by_node": {
+      "thread:01a12fd6-1786-7411-b5dc-6335782ca35f": "thread:01a12fd5-865e-7e82-a538-701a033902c5"
+    },
+    "spawn_native_runtime_by_node": {},
+    "spawn_native_endpoint_by_node": {
+      "thread:01a12fd5-865e-7e82-a538-701a033902c5": "01a12fd5-865e-7e82-a538-701a033902c5",
+      "thread:01a12fd6-1786-7411-b5dc-6335782ca35f": "01a12fd6-1786-7411-b5dc-6335782ca35f"
+    },
+    "spawn_crew": null,
+    "orchestrate_whips": {},
+    "orchestrate_next_whip_seq": 0,
+    "spawn_pending_dispatches": {},
+    "spawn_next_dispatch_seq": 1,
+    "spawn_processed_dispatch_seq_ids": [],
+    "spawn_processed_dispatch_origin_ids": [],
+    "spawn_accepted_delivery_ids": []
+  }
+}

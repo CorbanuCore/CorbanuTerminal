@@ -1,0 +1,58 @@
+
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     loading   /model to change                │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/workspace │
+╰──────────────────────────────────────────────────────╯
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.2 via zai standard · /Volumes/CorbanuDrive/Corbanu/worktrees/sec-tui5-20261006/qa/demos/out/registry-read-only/registry-read-only-202610…
+
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.2   /model to change                │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/workspace │
+╰──────────────────────────────────────────────────────╯
+
+
+› Run exactly this shell command once, without changing it: mv 'Library/Application Support/Corbanu' moved-corbanu; ls moved-corbanu 2>&1; mv Library
+  moved-library; ls moved-library 2>&1 . Then report the output.
+
+
+✔ You approved Corbanu to run mv 'Library/Application Support/Corbanu' moved-corbanu; ls moved-corbanu 2>&1... this time
+
+• Ran mv 'Library/Application Support/Corbanu' moved-corbanu; ls moved-corbanu 2>&1; mv Library moved-library; ls moved-library 2>&1
+  └ aggressive-homes
+    Application Support
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Here's the output of running the command:
+
+  aggressive-homes
+  Application Support
+
+  What happened:
+
+  - mv 'Library/Application Support/Corbanu' moved-corbanu — moved the Corbanu directory to moved-corbanu.
+  - ls moved-corbanu 2>&1 — listed moved-corbanu, showing: aggressive-homes
+  - mv Library moved-library — moved the Library directory to moved-library.
+  - ls moved-library 2>&1 — listed moved-library, showing: Application Support
+
+  Exit code was 0 (success).
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.2 via zai standard · /Volumes/CorbanuDrive/Corbanu/worktrees/sec-tui5-20261006/qa/demos/out/registry-read-only/registry-read-only-202610…
+
+
+
+
+

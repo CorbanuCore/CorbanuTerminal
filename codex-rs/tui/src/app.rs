@@ -222,19 +222,23 @@ pub(crate) mod app_server_requests;
 mod background_child;
 mod background_requests;
 mod config_persistence;
+pub(crate) use config_persistence::resume_model_settings_for_overrides;
 mod event_dispatch;
 mod history_ui;
 mod input;
 mod loaded_threads;
 mod pending_interactive_replay;
+mod permission_confirmation;
 mod pets;
 mod platform_actions;
 mod plugin_mentions;
+mod provider_accounts;
 mod provider_management;
 mod provider_management_auth;
 mod provider_management_status;
 mod replay_filter;
 mod resize_reflow;
+mod resume_defaults;
 mod safety_buffering;
 mod session_lifecycle;
 mod side;
@@ -243,7 +247,7 @@ mod thread_events;
 mod thread_goal_actions;
 mod thread_routing;
 mod thread_session_state;
-mod thread_settings;
+pub(crate) mod thread_settings;
 
 use self::agent_navigation::AgentNavigationDirection;
 use self::agent_navigation::AgentNavigationState;
@@ -304,7 +308,7 @@ impl TuiInputDrainWatchdog {
 
     fn note_drainer_send_failed(&self) {
         self.pending_events
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |pending| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |pending| {
                 pending.checked_sub(1)
             })
             .ok();
@@ -314,7 +318,7 @@ impl TuiInputDrainWatchdog {
         self.last_handled_ms
             .store(self.elapsed_ms(), Ordering::Relaxed);
         self.pending_events
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |pending| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |pending| {
                 pending.checked_sub(1)
             })
             .ok();
@@ -336,6 +340,36 @@ fn spawn_tui_event_drainer(mut tui_events: BoxedTuiEventStream) -> DrainedTuiEve
     });
 
     DrainedTuiEvents { rx, watchdog }
+}
+
+/// Lend the single input queue to a modal without losing watchdog accounting.
+fn modal_tui_events<'a>(
+    rx: &'a mut mpsc::UnboundedReceiver<TuiEvent>,
+    watchdog: &'a TuiInputDrainWatchdog,
+) -> impl Stream<Item = TuiEvent> + Send + Unpin + 'a {
+    ModalTuiEvents { rx, watchdog }
+}
+
+struct ModalTuiEvents<'a> {
+    rx: &'a mut mpsc::UnboundedReceiver<TuiEvent>,
+    watchdog: &'a TuiInputDrainWatchdog,
+}
+
+impl Stream for ModalTuiEvents<'_> {
+    type Item = TuiEvent;
+
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        this.rx.poll_recv(cx).map(|event| {
+            if event.is_some() {
+                this.watchdog.note_handled();
+            }
+            event
+        })
+    }
 }
 
 fn spawn_tui_input_watchdog(
@@ -612,6 +646,9 @@ pub(crate) enum AppRunControl {
 pub enum ExitReason {
     UserRequested,
     Fatal(String),
+    /// `/security` "restart now" (PF-24-S02): start again with the same
+    /// options so a saved level takes effect.
+    Restart,
 }
 
 fn session_summary(
@@ -728,6 +765,7 @@ pub(crate) struct App {
     cloud_config_bundle: CloudConfigBundleLoader,
     runtime_approval_policy_override: Option<AskForApproval>,
     runtime_permission_profile_override: Option<RuntimePermissionProfileOverride>,
+    pending_permission_confirmation: Option<permission_confirmation::PendingPermissionConfirmation>,
 
     pub(crate) file_search: FileSearchManager,
 
@@ -812,6 +850,17 @@ pub(crate) struct App {
         HashMap<String, crate::spawn_orchestration::SpawnAutoLoopState>,
     /// False after resume until a live operator/non-auto turn proves current intent.
     pub(crate) spawn_operator_input_seen: bool,
+    /// #507: the task another agent last sent to each Claude pane while the
+    /// kill switch was on (one per pane); it goes with that pane's next turn
+    /// after the switch is off (turning it off sends nothing).
+    pub(crate) kill_switch_held_claude_tasks: Vec<(String, String)>,
+    /// #660 follow-up: the managed Codex panes whose mailbox holds a task
+    /// another agent sent while the kill switch was on, until that pane's
+    /// next turn starts (it goes with that turn).
+    pub(crate) kill_switch_held_native_tasks: Vec<codex_protocol::ThreadId>,
+    /// #507: whether this app last saw the kill switch on, so a change
+    /// reported twice (here and by the home's watch) is handled once.
+    pub(crate) kill_switch_known_on: bool,
     pub(crate) spawn_quarantine_notified_by_node: HashSet<String>,
     pub(crate) spawn_context_left_by_thread: HashMap<ThreadId, i64>,
     pub(crate) spawn_last_report_seq_by_node: HashMap<String, u64>,
@@ -984,17 +1033,69 @@ fn active_turn_steer_race(error: &TypedRequestError) -> Option<ActiveTurnSteerRa
     Some(ActiveTurnSteerRace::ExpectedTurnMismatch { actual_turn_id })
 }
 
-fn session_start_error(
+/// [`session_start_failure`]; for a refusal the screen is cleared and the app
+/// server shut down, as on the other early exits.
+async fn end_session_start(
+    tui: &mut tui::Tui,
+    app_server: AppServerSession,
     action: &str,
     target_session: &SessionTarget,
     err: color_eyre::eyre::Report,
-) -> color_eyre::eyre::Report {
+) -> Result<AppExitInfo> {
+    let result = session_start_failure(action, target_session, err);
+    if result.is_ok() {
+        // As for a missing session: the message prints on a clean screen.
+        let _ = tui.terminal.clear();
+        app_server
+            .shutdown()
+            .await
+            .inspect_err(|err| tracing::warn!("app-server shutdown failed: {err}"))
+            .ok();
+    }
+    result
+}
+
+/// A resume/fork the app server refused (archived thread, account rules, ...)
+/// ends the launch with a plain `ERROR:` line like other launch refusals (#656).
+/// Anything else (transport failure, bad response) stays an error report.
+fn session_start_failure(
+    action: &str,
+    target_session: &SessionTarget,
+    err: color_eyre::eyre::Report,
+) -> Result<AppExitInfo> {
     if let Some(message) = archived_session_guidance(&err) {
-        return color_eyre::eyre::eyre!("{message}");
+        return Ok(AppExitInfo::fatal(message));
+    }
+    if let Some(message) = session_start_refusal(action, &err) {
+        let thread_id = target_session.thread_id;
+        return Ok(AppExitInfo::fatal(format!(
+            "Could not {action} session {thread_id}: {message}"
+        )));
     }
 
     let target_label = target_session.display_label();
-    color_eyre::eyre::eyre!("Failed to {action} session from {target_label}: {err}")
+    Err(color_eyre::eyre::eyre!(
+        "Failed to {action} session from {target_label}: {err}"
+    ))
+}
+
+/// The server's own message when `thread/{action}` was answered with a
+/// JSON-RPC error, without the bootstrap context and error code.
+fn session_start_refusal(action: &str, err: &color_eyre::eyre::Report) -> Option<String> {
+    let err = err.to_string();
+    let server_prefix = format!("thread/{action} failed: ");
+    let message = &err[err.find(&server_prefix)? + server_prefix.len()..];
+    // `{message} (code {code})`, then `, data: {data}` when the error has data;
+    // either part may itself contain ` (code `.
+    let (end, _) = message.match_indices(" (code ").find(|(start, marker)| {
+        message[start + marker.len()..]
+            .split_once(')')
+            .is_some_and(|(code, rest)| {
+                code.parse::<i64>().is_ok() && (rest.is_empty() || rest.starts_with(", data: "))
+            })
+    })?;
+    let message = message[..end].trim();
+    (!message.is_empty()).then(|| message.to_string())
 }
 
 fn archived_session_guidance(err: &color_eyre::eyre::Report) -> Option<String> {
@@ -1119,6 +1220,7 @@ impl App {
         crate::chatwidget::campaign_tracker::start(&app_event_tx);
         emit_project_config_warnings(&app_event_tx, &config);
         emit_system_bwrap_warning(&app_event_tx, &config);
+        emit_legacy_windows_sandbox_warning(&app_event_tx, &config);
         tui.set_notification_settings(
             config.tui_notifications.method,
             config.tui_notifications.condition,
@@ -1172,6 +1274,7 @@ impl App {
         }
         let mut model = config.model.clone().unwrap_or(bootstrap.default_model);
         let mut available_models = bootstrap.available_models;
+        let listed_models = available_models.clone();
         if let Some(state_db) = state_db.as_ref() {
             match state_db.list_gpu_runtime_providers().await {
                 Ok(providers) => {
@@ -1218,7 +1321,16 @@ impl App {
         ) && matches!(&session_selection, SessionSelection::Resume(_));
         let shared_provider_status_host = Some(provider_runtime.policy.host());
         let model_catalog = Arc::new(ModelCatalog::new(available_models.clone()));
+        model_catalog.mark_listed(&listed_models);
         model_catalog.set_provider_policy(provider_runtime.policy);
+        // #572: Bedrock models for a session that may switch to a named Bedrock account.
+        provider_management_status::check_named_bedrock_account(
+            &model_catalog,
+            &config,
+            &app_event_tx,
+        );
+        // D86/#1193: which providers have named accounts, for `/status`.
+        crate::provider_named_accounts::check_named_account_providers(&model_catalog, &config);
         model_catalog.set_session_recovery_only(session_recovery_only);
         let feedback_audience = bootstrap.feedback_audience;
         let auth_mode = bootstrap.auth_mode;
@@ -1331,7 +1443,7 @@ impl App {
                         &config,
                         &harness_overrides,
                     );
-                let resumed = app_server
+                let resumed = match app_server
                     .resume_thread(
                         config.clone(),
                         target_session.thread_id,
@@ -1339,7 +1451,35 @@ impl App {
                         permission_settings,
                     )
                     .await
-                    .map_err(|err| session_start_error("resume", &target_session, err))?;
+                {
+                    Ok(resumed) => resumed,
+                    Err(err) => {
+                        return end_session_start(tui, app_server, "resume", &target_session, err)
+                            .await;
+                    }
+                };
+                apply_persisted_resume_runtime(
+                    &mut config,
+                    Some(&resumed.session.model),
+                    &resumed.session.model_provider_id,
+                    resumed.session.reasoning_effort.clone(),
+                );
+                config.service_tier = resumed.session.service_tier.clone();
+                if !resumed.blocks_direct_input
+                    && let Err(error) = resume_defaults::remember_resumed_model(
+                        &app_server,
+                        &config,
+                        model_settings,
+                        &resumed.session,
+                    )
+                    .await
+                {
+                    app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
+                        history_cell::new_error_event(format!(
+                            "Session restored, but failed to save its startup model: {error}"
+                        )),
+                    )));
+                }
                 let init = crate::chatwidget::ChatWidgetInit {
                     config: config.clone(),
                     frame_requester: tui.frame_requester(),
@@ -1375,10 +1515,16 @@ impl App {
                     /*inc*/ 1,
                     &[("source", "cli_subcommand")],
                 );
-                let forked = app_server
+                let forked = match app_server
                     .fork_thread(config.clone(), target_session.thread_id)
                     .await
-                    .map_err(|err| session_start_error("fork", &target_session, err))?;
+                {
+                    Ok(forked) => forked,
+                    Err(err) => {
+                        return end_session_start(tui, app_server, "fork", &target_session, err)
+                            .await;
+                    }
+                };
                 let init = crate::chatwidget::ChatWidgetInit {
                     config: config.clone(),
                     frame_requester: tui.frame_requester(),
@@ -1478,13 +1624,9 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
         let restored_spawn_nazgul_rebind_required = restored_pane_layout
             .as_ref()
             .is_some_and(|layout| layout.spawn_nazgul_rebind_required);
-        let restored_spawn_legacy_read_only = restored_pane_layout.as_ref().is_some_and(|layout| {
-            !layout.spawn_pending_dispatches.is_empty()
-                || layout.spawn_crew.is_none()
-                    && (layout.spawn_nazgul_pane_id.is_some()
-                        || !layout.spawn_parent_by_node.is_empty()
-                        || !layout.claude_pane_ids.is_empty())
-        });
+        let restored_spawn_legacy_read_only = restored_pane_layout
+            .as_ref()
+            .is_some_and(crate::spawn_orchestration::pane_layout_has_legacy_spawn_hierarchy);
         let mut restored_orchestrate_whips: HashMap<_, _> = restored_pane_layout
             .as_ref()
             .map(|layout| {
@@ -1578,6 +1720,7 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
             cloud_config_bundle,
             runtime_approval_policy_override: None,
             runtime_permission_profile_override: None,
+            pending_permission_confirmation: None,
             file_search,
             enhanced_keys_supported,
             keymap: runtime_keymap,
@@ -1645,6 +1788,10 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
             spawn_processed_terminal_turns: HashSet::new(),
             spawn_auto_loop_state_by_node: HashMap::new(),
             spawn_operator_input_seen: false,
+            kill_switch_held_claude_tasks: Vec::new(),
+            kill_switch_held_native_tasks: Vec::new(),
+            // Set from the home's watch at start (`watch_kill_switch_elsewhere`).
+            kill_switch_known_on: false,
             spawn_quarantine_notified_by_node: HashSet::new(),
             spawn_context_left_by_thread: HashMap::new(),
             spawn_last_report_seq_by_node: HashMap::new(),
@@ -1689,6 +1836,8 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
         // every startup; its process lock deduplicates concurrent Corbanu Terminal processes and it
         // exits immediately when there is no potentially billable work.
         app.start_gpu_controller();
+        app.watch_kill_switch_elsewhere();
+        app.watch_level_raised_elsewhere();
         let telegram_home = app.config.codex_home.clone().to_path_buf();
         tokio::spawn(async move {
             let result = tokio::task::spawn_blocking(move || {
@@ -1839,7 +1988,15 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
                             .await;
                             AppRunControl::Continue
                         } else {
-                            match Box::pin(app.handle_event(tui, &mut app_server, event)).await {
+                            let result = if matches!(event, AppEvent::OpenResumePicker) {
+                                // Keep a single reader of the terminal. Lend its queue to
+                                // the modal, including watchdog accounting, until it closes.
+                                let mut events = modal_tui_events(&mut tui_event_rx, &tui_input_watchdog_state);
+                                app.handle_resume_picker_event(tui, &mut app_server, &mut events).await
+                            } else {
+                                Box::pin(app.handle_event(tui, &mut app_server, event)).await
+                            };
+                            match result {
                                 Ok(control) => control,
                                 Err(err) => {
                                     tracing::error!(error = ?err, "contained app event handler failure");

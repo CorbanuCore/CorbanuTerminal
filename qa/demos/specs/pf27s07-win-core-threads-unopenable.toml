@@ -1,0 +1,264 @@
+# PF-27-S07 Windows gate: Core's threads, including ones created during the session, cannot be opened
+# by a same-user process without privileges (the user's ! command, a background watcher) or by an agent
+# command (the elevated sandbox's user). Normal (medium-integrity) session. The probe only opens handles.
+id = "pf27s07-win-core-threads-unopenable"
+feature = "Windows: Core and its threads, including threads created after start, cannot be opened by the user's other processes or the sandbox"
+expected = "Same-user probe and watcher: only QUERY_LIMITED/SYNCHRONIZE on Core, 0 threads opened (new ones included); sandbox user: nothing; the control (own child) opens."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[windows]
+sandbox = "elevated"
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+isolated_credential_broker = true
+secretless_agent_launch = true
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"threadprobe.cs" = '''
+// PF-27-S07 Windows gate probe: tries to open Corbanu Core, its threads and the credential
+// broker from the calling process, with a same-user control. Opens only; reads and changes nothing.
+//   threadprobe find            locate Core (first corbanu.exe ancestor) and the broker, write pids.txt
+//   threadprobe core|broker     open tests against the processes in pids.txt (find first if missing)
+//   threadprobe watch <secs>    poll for new Core/broker threads and try to open each one at once
+//   threadprobe report          print the watcher's result file
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+using System.Threading;
+
+static class P {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct PE { public uint dwSize, cntUsage, pid; public IntPtr heap; public uint mod, threads, ppid; public int pri; public uint flags; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string exe; }
+    [StructLayout(LayoutKind.Sequential)]
+    struct TE { public uint dwSize, cntUsage, tid, pid; public int basePri, deltaPri; public uint flags; }
+    [DllImport("kernel32", SetLastError = true)] static extern IntPtr CreateToolhelp32Snapshot(uint f, uint p);
+    [DllImport("kernel32", CharSet = CharSet.Unicode)] static extern bool Process32FirstW(IntPtr s, ref PE e);
+    [DllImport("kernel32", CharSet = CharSet.Unicode)] static extern bool Process32NextW(IntPtr s, ref PE e);
+    [DllImport("kernel32")] static extern bool Thread32First(IntPtr s, ref TE e);
+    [DllImport("kernel32")] static extern bool Thread32Next(IntPtr s, ref TE e);
+    [DllImport("kernel32", SetLastError = true)] static extern IntPtr OpenProcess(uint a, bool i, uint p);
+    [DllImport("kernel32", SetLastError = true)] static extern IntPtr OpenThread(uint a, bool i, uint t);
+    [DllImport("kernel32")] static extern bool CloseHandle(IntPtr h);
+    [DllImport("kernel32")] static extern IntPtr GetCurrentProcess();
+    [DllImport("advapi32", SetLastError = true)] static extern bool OpenProcessToken(IntPtr p, uint a, out IntPtr t);
+    [DllImport("advapi32", SetLastError = true)] static extern bool GetTokenInformation(IntPtr t, int c, IntPtr b, int l, out int r);
+    [DllImport("advapi32", CharSet = CharSet.Unicode)] static extern bool LookupPrivilegeNameW(string s, IntPtr luid, System.Text.StringBuilder n, ref int l);
+    [DllImport("advapi32")] static extern IntPtr GetSidSubAuthority(IntPtr sid, uint i);
+    [DllImport("advapi32")] static extern IntPtr GetSidSubAuthorityCount(IntPtr sid);
+    [DllImport("ntdll")] static extern int NtQueryInformationThread(IntPtr h, int c, out IntPtr b, int l, IntPtr r);
+
+    static readonly string[] PN = { "TERMINATE", "CREATE_THREAD", "VM_OPERATION", "VM_READ", "VM_WRITE", "DUP_HANDLE", "SET_INFORMATION", "QUERY_INFORMATION", "SUSPEND_RESUME", "QUERY_LIMITED", "SYNCHRONIZE" };
+    static readonly uint[] PR = { 0x1, 0x2, 0x8, 0x10, 0x20, 0x40, 0x200, 0x400, 0x800, 0x1000, 0x100000 };
+    // Thread rights: GET_CONTEXT, SET_CONTEXT, SUSPEND_RESUME, TERMINATE, QUERY_INFORMATION.
+    static readonly uint[] TR = { 0x8, 0x10, 0x2, 0x1, 0x40 };
+    const uint THREAD_QUERY_LIMITED = 0x800;
+
+    static List<PE> Procs() {
+        var l = new List<PE>(); IntPtr s = CreateToolhelp32Snapshot(2, 0);
+        var e = new PE(); e.dwSize = (uint)Marshal.SizeOf(typeof(PE));
+        for (bool ok = Process32FirstW(s, ref e); ok; ok = Process32NextW(s, ref e)) l.Add(e);
+        CloseHandle(s); return l;
+    }
+    static List<uint> Threads(uint pid) {
+        var l = new List<uint>(); IntPtr s = CreateToolhelp32Snapshot(4, 0);
+        var e = new TE(); e.dwSize = (uint)Marshal.SizeOf(typeof(TE));
+        for (bool ok = Thread32First(s, ref e); ok; ok = Thread32Next(s, ref e)) if (e.pid == pid) l.Add(e.tid);
+        CloseHandle(s); return l;
+    }
+    static bool CanThread(uint tid, uint right) {
+        IntPtr h = OpenThread(right, false, tid); if (h == IntPtr.Zero) return false; CloseHandle(h); return true;
+    }
+    static bool CanProc(uint pid, uint right) {
+        IntPtr h = OpenProcess(right, false, pid); if (h == IntPtr.Zero) return false; CloseHandle(h); return true;
+    }
+
+    static string Integrity() {
+        IntPtr tok; OpenProcessToken(GetCurrentProcess(), 8, out tok); int n;
+        GetTokenInformation(tok, 25, IntPtr.Zero, 0, out n); IntPtr b = Marshal.AllocHGlobal(n);
+        GetTokenInformation(tok, 25, b, n, out n); IntPtr sid = Marshal.ReadIntPtr(b);
+        int rid = Marshal.ReadInt32(GetSidSubAuthority(sid, (uint)(Marshal.ReadByte(GetSidSubAuthorityCount(sid)) - 1)));
+        string lvl = rid >= 0x4000 ? "System" : rid >= 0x3000 ? "High" : rid >= 0x2000 ? "Medium" : rid >= 0x1000 ? "Low" : "Untrusted";
+        GetTokenInformation(tok, 3, IntPtr.Zero, 0, out n); IntPtr p = Marshal.AllocHGlobal(n);
+        GetTokenInformation(tok, 3, p, n, out n); int count = Marshal.ReadInt32(p); string dbg = "not held";
+        for (int i = 0; i < count; i++) {
+            IntPtr luid = new IntPtr(p.ToInt64() + 4 + i * 12); var sb = new System.Text.StringBuilder(64); int len = 64;
+            LookupPrivilegeNameW(null, luid, sb, ref len);
+            if (sb.ToString() == "SeDebugPrivilege") dbg = (Marshal.ReadInt32(new IntPtr(luid.ToInt64() + 8)) & 2) != 0 ? "ENABLED" : "held, disabled";
+        }
+        return lvl + " integrity, SeDebugPrivilege " + dbg;
+    }
+
+    static Dictionary<string, List<uint>> Find() {
+        var all = Procs(); var byPid = new Dictionary<uint, PE>(); foreach (var p in all) byPid[p.pid] = p;
+        uint cur = (uint)Process.GetCurrentProcess().Id, core = 0; var chain = new HashSet<uint>();
+        for (int i = 0; i < 32 && byPid.ContainsKey(cur); i++) {
+            chain.Add(cur); var pe = byPid[cur];
+            if (i > 0 && pe.exe.Equals("corbanu.exe", StringComparison.OrdinalIgnoreCase)) { core = cur; break; }
+            cur = pe.ppid;
+        }
+        if (core == 0) throw new Exception("not started under corbanu.exe and no pids.txt");
+        var brokers = all.Where(p => p.ppid == core && !chain.Contains(p.pid) && p.exe.Equals("corbanu.exe", StringComparison.OrdinalIgnoreCase)).Select(p => p.pid).ToList();
+        var r = new Dictionary<string, List<uint>>(); r["core"] = new List<uint> { core }; r["broker"] = brokers;
+        File.WriteAllText("pids.txt", "core " + core + "\nbroker " + string.Join(" ", brokers) + "\n");
+        return r;
+    }
+    static Dictionary<string, List<uint>> Load() {
+        if (!File.Exists("pids.txt")) return Find();
+        var r = new Dictionary<string, List<uint>>();
+        foreach (var line in File.ReadAllLines("pids.txt")) {
+            var f = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries); if (f.Length == 0) continue;
+            r[f[0]] = f.Skip(1).Select(uint.Parse).ToList();
+        }
+        return r;
+    }
+
+    // One line per target: process rights granted, and threads opened with any of the tried rights.
+    static int Test(string label, uint pid) {
+        var granted = new List<string>();
+        for (int i = 0; i < PR.Length; i++) if (CanProc(pid, PR[i])) granted.Add(PN[i]);
+        var ts = Threads(pid); int opened = 0, tries = 0;
+        foreach (var t in ts) for (int i = 0; i < TR.Length; i++) { tries++; if (CanThread(t, TR[i])) opened++; }
+        string g = granted.Count == 0 ? "none" : string.Join(" ", granted);
+        Console.WriteLine(label + " pid " + pid + ": rights granted " + g + " (" + PR.Length + " tried); thread opens " + opened + "/" + tries + " (" + ts.Count + " threads)");
+        // The protected DACL keeps query-limited and synchronize for the user (PF-27-S06); anything else counts.
+        return granted.Count(n => n != "QUERY_LIMITED" && n != "SYNCHRONIZE") + opened;
+    }
+
+    // Same-user control: a child this probe starts is fully openable.
+    static string Control() {
+        var psi = new ProcessStartInfo(Environment.GetEnvironmentVariable("ComSpec"), "/c ping -n 6 127.0.0.1 >nul");
+        psi.UseShellExecute = false; psi.CreateNoWindow = true;
+        var c = Process.Start(psi); Thread.Sleep(300);
+        var ts = Threads((uint)c.Id);
+        bool vm = CanProc((uint)c.Id, 0x10), ctx = ts.Count > 0 && CanThread(ts[0], 0x8);
+        try { c.Kill(); } catch { }
+        return "control, own child: VM_READ " + (vm ? "granted" : "denied") + ", GET_CONTEXT " + (ctx ? "granted" : "denied");
+    }
+
+    static int Main(string[] a) {
+        try {
+            string mode = a.Length > 0 ? a[0] : "core";
+            if (mode == "report") { Console.WriteLine(File.Exists("watch.txt") ? File.ReadAllText("watch.txt").TrimEnd() : "no watch.txt"); return 0; }
+            Console.WriteLine("probe: " + WindowsIdentity.GetCurrent().Name + ", " + Integrity());
+            var pids = mode == "find" ? Find() : Load();
+            if (mode == "find") { Console.WriteLine("core pid " + pids["core"][0] + ", broker pid " + string.Join(" ", pids["broker"])); return 0; }
+            if (mode == "watch") return Watch(pids, int.Parse(a[1]));
+            int bad = 0;
+            if (mode == "core") bad += Test("core", pids["core"][0]);
+            if (mode == "broker") {
+                if (pids["broker"].Count == 0) { Console.WriteLine("broker: none found"); return 2; }
+                foreach (var b in pids["broker"]) bad += Test("broker", b);
+            }
+            Console.WriteLine("summary: " + mode + " " + (bad == 0 ? "nothing opened" : bad + " OPENED") + " | " + Control());
+            return bad == 0 ? 0 : 1;
+        } catch (Exception e) { Console.WriteLine("probe error: " + e.Message); return 3; }
+    }
+
+    // Polls the thread list and tries every new thread as soon as it is seen.
+    static int Watch(Dictionary<string, List<uint>> pids, int secs) {
+        var targets = new List<KeyValuePair<string, uint>>();
+        targets.Add(new KeyValuePair<string, uint>("core", pids["core"][0]));
+        foreach (var b in pids["broker"]) targets.Add(new KeyValuePair<string, uint>("broker", b));
+        var seen = new Dictionary<uint, HashSet<uint>>(); var fresh = new Dictionary<string, int>(); var open = new Dictionary<string, int>();
+        foreach (var t in targets) { seen[t.Value] = new HashSet<uint>(Threads(t.Value)); fresh[t.Key] = 0; open[t.Key] = 0; }
+        var sw = Stopwatch.StartNew(); var last = -1L;
+        while (sw.Elapsed.TotalSeconds < secs) {
+            foreach (var t in targets) foreach (var tid in Threads(t.Value)) {
+                if (!seen[t.Value].Add(tid)) continue;
+                fresh[t.Key]++;
+                // Any of the rights PF-27-S07 denies; query-limited is not denied.
+                if (CanThread(tid, 0x8) || CanThread(tid, 0x10) || CanThread(tid, 0x2)) open[t.Key]++;
+            }
+            if (sw.ElapsedMilliseconds / 1000 != last) {
+                last = sw.ElapsedMilliseconds / 1000;
+                File.WriteAllText("watch.txt", "watcher (" + WindowsIdentity.GetCurrent().Name + ", " + Integrity() + ", " + last + " s):\n" +
+                    string.Join("\n", fresh.Keys.Select(k => "  new " + k + " threads seen: " + fresh[k] + ", opened: " + open[k])) + "\n");
+            }
+        }
+        return 0;
+    }
+}
+'''
+
+[[steps]]
+wait = "Do you trust the contents of this directory"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+run = "/c/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe -nologo -out:threadprobe.exe threadprobe.cs"
+timeout = 60
+
+[[steps]]
+type = "!./threadprobe.exe core | Out-String"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "summary: core"
+timeout = 60
+
+[[steps]]
+type = "!Start-Process -WindowStyle Hidden ./threadprobe.exe -ArgumentList 'watch','60'; 'watcher started'"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "└ watcher started"
+
+[[steps]]
+type = "Run this exact command once and show me its raw output, then stop: ./threadprobe.exe core | Out-String"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "(?s)CodexSandboxOffline.*summary: core"
+timeout = 240
+compress = 3
+
+[[steps]]
+wait = "\\A(?![\\s\\S]*esc to interrupt)"
+timeout = 120
+compress = 2
+
+[[steps]]
+type = "!./threadprobe.exe report | Out-String"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "new broker threads seen"
+
+[[steps]]
+pause = 6.0

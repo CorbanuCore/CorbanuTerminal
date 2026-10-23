@@ -131,13 +131,13 @@ impl BridgeRuntime {
         }
 
         self.sessions
-            .set_model(chat_id, resolution.model.clone(), choice.provider.clone())
+            .set_model(chat_id, choice.model.clone(), choice.provider.clone())
             .await?;
         let applied_to_thread = self
             .apply_thread_settings_update_if_thread_loaded(
                 chat_id,
                 ThreadSettingsUpdateParams {
-                    model: Some(resolution.model.clone()),
+                    model: Some(choice.model.clone()),
                     model_provider: Some(choice.provider.clone()),
                     ..ThreadSettingsUpdateParams::default()
                 },
@@ -153,12 +153,12 @@ impl BridgeRuntime {
         let headline = if choice.changed {
             format!(
                 "Model changed: {old_model} ({old_provider}) -> {} ({}).",
-                resolution.model, choice.provider
+                choice.model, choice.provider
             )
         } else {
             format!(
                 "Model changed: {old_model} -> {}.\nProvider unchanged: {}.",
-                resolution.model, choice.provider
+                choice.model, choice.provider
             )
         };
         self.notify_after_effect(
@@ -391,11 +391,16 @@ impl BridgeRuntime {
             .model_provider(chat_id)
             .await
             .unwrap_or_else(|| self.config.model_provider_id.clone());
-        let provider = model
-            .as_deref()
-            .map(|model| provider_for_model(model, &provider).provider)
-            .unwrap_or(provider);
-        (model, provider)
+        // Read through the same choice `/model` writes, so a bare Claude slug
+        // stored by an older build (or inherited from config) on the
+        // subscription starts threads as its plan slug too.
+        match model {
+            Some(model) => {
+                let choice = provider_for_model(&model, &provider);
+                (Some(choice.model), choice.provider)
+            }
+            None => (None, provider),
+        }
     }
 
     pub(super) async fn active_approval_policy(&self, chat_id: ConversationKey) -> AskForApproval {

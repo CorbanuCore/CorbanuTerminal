@@ -1,0 +1,1 @@
+{"id":"chatcmpl-6ad1490662a67331d007b37e","object":"chat.completion.chunk","created":1792100616,"model":"kimi-k2.7-code","choices":[],"usage":{"prompt_tokens":11561,"completion_tokens":11,"total_tokens":11572,"completion_tokens_details":{"reasoning_tokens":8}}}

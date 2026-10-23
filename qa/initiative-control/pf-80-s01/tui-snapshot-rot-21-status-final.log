@@ -1,0 +1,1799 @@
+python3 ../scripts/isolated_rust_tests.py "$@"
+Test isolation: disposable profile; native keyring disabled (debug lane)
+warning: enum `Checkpoint` is never used
+  --> protected-state/src/checkpoint.rs:24:17
+   |
+24 | pub(crate) enum Checkpoint {
+   |                 ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: enum `Binding` is never used
+  --> protected-state/src/checkpoint.rs:31:17
+   |
+31 | pub(crate) enum Binding {
+   |                 ^^^^^^^
+
+warning: function `hash_valid` is never used
+  --> protected-state/src/checkpoint.rs:42:15
+   |
+42 | pub(crate) fn hash_valid(hash: &str) -> bool {
+   |               ^^^^^^^^^^
+
+warning: methods `validate_successor`, `validate`, and `sequence` are never used
+   --> protected-state/src/checkpoint.rs:50:19
+    |
+ 49 | impl Checkpoint {
+    | --------------- methods in this implementation
+ 50 |     pub(crate) fn validate_successor(
+    |                   ^^^^^^^^^^^^^^^^^^
+...
+ 77 |     pub(crate) fn validate(&self, binding: &Binding) -> Result<(), RootError> {
+    |                   ^^^^^^^^
+...
+113 |     pub(crate) fn sequence(&self) -> u64 {
+    |                   ^^^^^^^^
+
+warning: `codex-protected-state` (lib) generated 4 warnings
+warning: field `runtime` is never read
+  --> state/src/runtime/accounting.rs:27:5
+   |
+26 | struct Journal<'a> {
+   |        ------- field in this struct
+27 |     runtime: &'a StateRuntime,
+   |     ^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: methods `begin_attempt`, `append_observation`, and `read_observations` are never used
+   --> state/src/runtime/accounting.rs:49:14
+    |
+ 30 | impl<'a> Journal<'a> {
+    | -------------------- methods in this implementation
+...
+ 49 |     async fn begin_attempt(&self, attempt: &Attempt) -> anyhow::Result<()> {
+    |              ^^^^^^^^^^^^^
+...
+ 54 |     async fn append_observation(
+    |              ^^^^^^^^^^^^^^^^^^
+...
+162 |     async fn read_observations(
+    |              ^^^^^^^^^^^^^^^^^
+
+warning: field `journal` is never read
+  --> state/src/runtime/accounting_estimates.rs:27:5
+   |
+26 | struct EstimateStore<'a> {
+   |        ------------- field in this struct
+27 |     journal: Journal<'a>,
+   |     ^^^^^^^
+
+warning: methods `persist_current` and `read_estimate` are never used
+  --> state/src/runtime/accounting_estimates.rs:50:14
+   |
+30 | impl<'a> EstimateStore<'a> {
+   | -------------------------- methods in this implementation
+...
+50 |     async fn persist_current(
+   |              ^^^^^^^^^^^^^^^
+...
+99 |     async fn read_estimate(
+   |              ^^^^^^^^^^^^^
+
+warning: method `full` is never used
+  --> state/src/runtime/accounting_lifecycle.rs:25:8
+   |
+24 | impl Metric {
+   | ----------- method in this implementation
+25 |     fn full(&self) -> Option<i64> {
+   |        ^^^^
+
+warning: method `full_usd` is never used
+  --> state/src/runtime/accounting_lifecycle.rs:63:8
+   |
+51 | impl DayTotals {
+   | -------------- method in this implementation
+...
+63 |     fn full_usd(&self) -> Option<Decimal> {
+   |        ^^^^^^^^
+
+warning: struct `Lifecycle` is never constructed
+  --> state/src/runtime/accounting_lifecycle.rs:93:8
+   |
+93 | struct Lifecycle<'a> {
+   |        ^^^^^^^^^
+
+warning: methods `refresh_current`, `read_day`, and `delete_recorded_thread` are never used
+   --> state/src/runtime/accounting_lifecycle.rs:114:14
+    |
+ 97 | impl<'a> Lifecycle<'a> {
+    | ---------------------- methods in this implementation
+...
+114 |     async fn refresh_current(&self, id: Uuid) -> anyhow::Result<Current<()>> {
+    |              ^^^^^^^^^^^^^^^
+...
+135 |     async fn read_day(&self, thread: ThreadId, day: i64) -> anyhow::Result<Current<DayTotals>> {
+    |              ^^^^^^^^
+...
+178 |     async fn delete_recorded_thread(&self, thread: ThreadId, as_of_ms: i64) -> anyhow::Result<()> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `maintain_retention` and `read_retained_day` are never used
+  --> state/src/runtime/accounting_retention_atomic.rs:55:14
+   |
+54 | impl Lifecycle<'_> {
+   | ------------------ methods in this implementation
+55 |     async fn maintain_retention(&self, as_of_ms: i64) -> anyhow::Result<()> {
+   |              ^^^^^^^^^^^^^^^^^^
+...
+73 |     pub(in crate::runtime::accounting::pricing::storage::lifecycle) async fn read_retained_day(
+   |                                                                              ^^^^^^^^^^^^^^^^^
+
+warning: method `append_native` is never used
+  --> state/src/runtime/accounting_native.rs:53:49
+   |
+ 8 | impl Journal<'_> {
+   | ---------------- method in this implementation
+...
+53 |     pub(in crate::runtime::accounting) async fn append_native(
+   |                                                 ^^^^^^^^^^^^^
+
+warning: `codex-state` (lib) generated 10 warnings
+warning: constant `STATUS_PATH` is never used
+  --> tasknode-session/src/session_validity.rs:13:7
+   |
+13 | const STATUS_PATH: &str = "/api/terminal/tasknode/status";
+   |       ^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `RESPONSE_LIMIT` is never used
+  --> tasknode-session/src/session_validity.rs:14:7
+   |
+14 | const RESPONSE_LIMIT: usize = 16 * 1024 * 1024;
+   |       ^^^^^^^^^^^^^^
+
+warning: enum `ObservationControl` is never used
+  --> tasknode-session/src/session_validity.rs:17:17
+   |
+17 | pub(crate) enum ObservationControl {
+   |                 ^^^^^^^^^^^^^^^^^^
+
+warning: struct `ValidityCurrent` is never constructed
+  --> tasknode-session/src/session_validity.rs:26:19
+   |
+26 | pub(crate) struct ValidityCurrent {
+   |                   ^^^^^^^^^^^^^^^
+
+warning: struct `ValidityBinding` is never constructed
+  --> tasknode-session/src/session_validity.rs:36:19
+   |
+36 | pub(crate) struct ValidityBinding {
+   |                   ^^^^^^^^^^^^^^^
+
+warning: enum `ValidityHold` is never used
+  --> tasknode-session/src/session_validity.rs:48:17
+   |
+48 | pub(crate) enum ValidityHold {
+   |                 ^^^^^^^^^^^^
+
+warning: associated items `new` and `fence` are never used
+  --> tasknode-session/src/session_validity.rs:72:19
+   |
+71 | impl ValidityBinding {
+   | -------------------- associated items in this implementation
+72 |     pub(crate) fn new(current: &ValidityCurrent) -> Result<Self, ValidityHold> {
+   |                   ^^^
+...
+90 |     fn fence(
+   |        ^^^^^
+
+warning: function `current_client` is never used
+   --> tasknode-session/src/session_validity.rs:113:4
+    |
+113 | fn current_client(current: &ValidityCurrent) -> Result<Client, ValidityHold> {
+    |    ^^^^^^^^^^^^^^
+
+warning: struct `CheckedIdentity` is never constructed
+   --> tasknode-session/src/session_validity.rs:145:19
+    |
+145 | pub(crate) struct CheckedIdentity {
+    |                   ^^^^^^^^^^^^^^^
+
+warning: struct `IdentityAtCheck` is never constructed
+   --> tasknode-session/src/session_validity.rs:152:19
+    |
+152 | pub(crate) struct IdentityAtCheck {
+    |                   ^^^^^^^^^^^^^^^
+
+warning: method `consume_for_observation` is never used
+   --> tasknode-session/src/session_validity.rs:158:19
+    |
+157 | impl CheckedIdentity {
+    | -------------------- method in this implementation
+158 |     pub(crate) fn consume_for_observation(
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `check_identity` is never used
+   --> tasknode-session/src/session_validity.rs:170:21
+    |
+170 | pub(crate) async fn check_identity(
+    |                     ^^^^^^^^^^^^^^
+
+warning: function `check_identity_with` is never used
+   --> tasknode-session/src/session_validity.rs:184:10
+    |
+184 | async fn check_identity_with<F: Future<Output = Result<(u16, Vec<u8>), ClientError>>>(
+    |          ^^^^^^^^^^^^^^^^^^^
+
+warning: struct `IdentityStatus` is never constructed
+   --> tasknode-session/src/session_validity.rs:213:8
+    |
+213 | struct IdentityStatus {
+    |        ^^^^^^^^^^^^^^
+
+warning: struct `Github` is never constructed
+   --> tasknode-session/src/session_validity.rs:222:8
+    |
+222 | struct Github {
+    |        ^^^^^^
+
+warning: function `object` is never used
+   --> tasknode-session/src/session_validity.rs:230:4
+    |
+230 | fn object<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(de: D) -> Result<T, D::Error> {
+    |    ^^^^^^
+
+warning: function `decode_identity_status` is never used
+   --> tasknode-session/src/session_validity.rs:244:4
+    |
+244 | fn decode_identity_status(status: u16, bytes: &[u8]) -> Result<IdentityStatus, ValidityHold> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `codex-tasknode-session` (lib) generated 17 warnings
+warning: variant `OpenPlans` is never constructed
+   --> tui/src/app_event.rs:318:5
+    |
+313 | pub(crate) enum WalletUnlockContinuation {
+    |                 ------------------------ variant in this enum
+...
+318 |     OpenPlans {
+    |     ^^^^^^^^^
+    |
+    = note: `WalletUnlockContinuation` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variants `ProviderCredentialStatusesReady`, `OpenWalletPlanReceipt`, `WalletRecoverPlanRequested`, and `UpdateActivePermissionProfile` are never constructed
+    --> tui/src/app_event.rs:1790:5
+     |
+ 395 | pub(crate) enum AppEvent {
+     |                 -------- variants in this enum
+...
+1790 |     ProviderCredentialStatusesReady {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1956 |     OpenWalletPlanReceipt {
+     |     ^^^^^^^^^^^^^^^^^^^^^
+...
+1960 |     WalletRecoverPlanRequested,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+2104 |     UpdateActivePermissionProfile(ActivePermissionProfile),
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `AppEvent` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: variant `Checking` is never constructed
+   --> tui/src/chatwidget/claude_code_login.rs:186:5
+    |
+185 | pub(crate) enum ClaudeCodePlanStatus {
+    |                 -------------------- variant in this enum
+186 |     Checking,
+    |     ^^^^^^^^
+    |
+    = note: `ClaudeCodePlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: variants `Checking`, `Active`, `WalletOnly`, `ConnectedStatusUnavailable`, `NotConnected`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:7:5
+   |
+ 6 | pub(crate) enum PfTerminalPlanStatus {
+   |                 -------------------- variants in this enum
+ 7 |     Checking,
+   |     ^^^^^^^^
+ 8 |     Active {
+   |     ^^^^^^
+...
+12 |     WalletOnly {
+   |     ^^^^^^^^^^
+...
+15 |     ConnectedStatusUnavailable {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+18 |     NotConnected,
+   |     ^^^^^^^^^^^^
+19 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `PfTerminalPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `load` is never used
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:22:21
+   |
+22 | pub(crate) async fn load(
+   |                     ^^^^
+
+warning: constant `PROVIDER_STATUS_TIMEOUT` is never used
+  --> tui/src/chatwidget/provider_credentials.rs:33:7
+   |
+33 | const PROVIDER_STATUS_TIMEOUT: Duration = Duration::from_secs(10);
+   |       ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variants `AvailableFromEnvironment`, `Stored`, `NotConfigured`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/provider_credentials.rs:38:5
+   |
+36 | pub(crate) enum ProviderApiKeyStatus {
+   |                 -------------------- variants in this enum
+37 |     Checking,
+38 |     AvailableFromEnvironment,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+39 |     Stored,
+   |     ^^^^^^
+40 |     NotConfigured,
+   |     ^^^^^^^^^^^^^
+41 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `ProviderApiKeyStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: methods `open_provider_credentials_menu` and `refresh_provider_credentials_status_in_background` are never used
+   --> tui/src/chatwidget/provider_credentials.rs:108:19
+    |
+107 | impl ChatWidget {
+    | --------------- methods in this implementation
+108 |     pub(crate) fn open_provider_credentials_menu(&mut self) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+137 |     fn refresh_provider_credentials_status_in_background(&self) {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `provider_api_key_statuses` is never used
+   --> tui/src/chatwidget/provider_credentials.rs:380:4
+    |
+380 | fn provider_api_key_statuses(codex_home: &Path) -> Vec<(String, ProviderApiKeyStatus)> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `provider_api_key_unavailable_statuses` is never used
+   --> tui/src/chatwidget/provider_credentials.rs:409:4
+    |
+409 | fn provider_api_key_unavailable_statuses() -> Vec<(String, ProviderApiKeyStatus)> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variants `New`, `Onboarding`, and `Upgrade` are never constructed
+  --> tui/src/chatwidget/wallet_menu.rs:55:5
+   |
+54 | pub(crate) enum WalletPlanPurchaseMode {
+   |                 ---------------------- variants in this enum
+55 |     New,
+   |     ^^^
+56 |     Onboarding {
+   |     ^^^^^^^^^^
+...
+59 |     Upgrade {
+   |     ^^^^^^^
+   |
+   = note: `WalletPlanPurchaseMode` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `wallet_address` is never read
+   --> tui/src/chatwidget/wallet_menu.rs:114:16
+    |
+113 | pub(crate) struct WalletPlanStatus {
+    |                   ---------------- field in this struct
+114 |     pub(crate) wallet_address: String,
+    |                ^^^^^^^^^^^^^^
+    |
+    = note: `WalletPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `latest_plan_receipt` is never used
+   --> tui/src/chatwidget/wallet_receipt.rs:190:15
+    |
+190 | pub(super) fn latest_plan_receipt(
+    |               ^^^^^^^^^^^^^^^^^^^
+
+warning: `codex-tui` (lib) generated 13 warnings
+warning: static `LINUX_SANDBOX_SKIP_REASON` is never used
+  --> core/tests/common/lib.rs:52:8
+   |
+52 | static LINUX_SANDBOX_SKIP_REASON: OnceLock<Option<String>> = OnceLock::new();
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `core_test_support` (lib) generated 1 warning
+warning: constant `SANDBOX_WARNING_DOCS` is never used
+ --> telegram/src/sandbox_preflight.rs:3:7
+  |
+3 | const SANDBOX_WARNING_DOCS: &str = "docs/config.md#telegram";
+  |       ^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `codex-telegram` (lib) generated 1 warning
+warning: variable does not need to be mutable
+  --> tui/src/app/resume_defaults_tests.rs:17:9
+   |
+17 |     let mut server = crate::start_embedded_app_server_for_picker(&config).await?;
+   |         ----^^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variants `ProviderCredentialStatusesReady`, `OpenWalletPlanReceipt`, `WalletRecoverPlanRequested`, and `UpdateActivePermissionProfile` are never constructed
+    --> tui/src/app_event.rs:1790:5
+     |
+ 395 | pub(crate) enum AppEvent {
+     |                 -------- variants in this enum
+...
+1790 |     ProviderCredentialStatusesReady {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1956 |     OpenWalletPlanReceipt {
+     |     ^^^^^^^^^^^^^^^^^^^^^
+...
+1960 |     WalletRecoverPlanRequested,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+2104 |     UpdateActivePermissionProfile(ActivePermissionProfile),
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `AppEvent` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variants `Checking`, `ConnectedStatusUnavailable`, `NotConnected`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:7:5
+   |
+ 6 | pub(crate) enum PfTerminalPlanStatus {
+   |                 -------------------- variants in this enum
+ 7 |     Checking,
+   |     ^^^^^^^^
+...
+15 |     ConnectedStatusUnavailable {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+18 |     NotConnected,
+   |     ^^^^^^^^^^^^
+19 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `PfTerminalPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: variants `Onboarding` and `Upgrade` are never constructed
+  --> tui/src/chatwidget/wallet_menu.rs:56:5
+   |
+54 | pub(crate) enum WalletPlanPurchaseMode {
+   |                 ---------------------- variants in this enum
+55 |     New,
+56 |     Onboarding {
+   |     ^^^^^^^^^^
+...
+59 |     Upgrade {
+   |     ^^^^^^^
+   |
+   = note: `WalletPlanPurchaseMode` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: constant `OTHER_TOOLTIP` is never used
+  --> tui/src/tooltips.rs:20:7
+   |
+20 | const OTHER_TOOLTIP: &str = "*New* Build faster with the **Desktop app**. Run 'codex app' or visit https://chatgpt.com/codex?app-lan...
+   |       ^^^^^^^^^^^^^
+
+warning: constant `OTHER_TOOLTIP_NON_MAC` is never used
+  --> tui/src/tooltips.rs:22:7
+   |
+22 | const OTHER_TOOLTIP_NON_MAC: &str = "*New* Build faster with Codex.";
+   |       ^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `FREE_GO_TOOLTIP` is never used
+  --> tui/src/tooltips.rs:24:7
+   |
+24 | const FREE_GO_TOOLTIP: &str =
+   |       ^^^^^^^^^^^^^^^
+
+warning: function `get_update_action` is never used
+  --> tui/src/update_action.rs:59:8
+   |
+59 | pub fn get_update_action() -> Option<UpdateAction> {
+   |        ^^^^^^^^^^^^^^^^^
+
+warning: function `get_upgrade_version` is never used
+  --> tui/src/updates.rs:23:8
+   |
+23 | pub fn get_upgrade_version(config: &Config) -> Option<String> {
+   |        ^^^^^^^^^^^^^^^^^^^
+
+warning: constant `CORBANU_LATEST_RELEASE_URL` is never used
+  --> tui/src/updates.rs:56:7
+   |
+56 | const CORBANU_LATEST_RELEASE_URL: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `CORBANU_RELEASE_BY_TAG_URL` is never used
+  --> tui/src/updates.rs:58:7
+   |
+58 | const CORBANU_RELEASE_BY_TAG_URL: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `LEGACY_PFTERMINAL_LATEST_RELEASE_URL` is never used
+  --> tui/src/updates.rs:60:7
+   |
+60 | const LEGACY_PFTERMINAL_LATEST_RELEASE_URL: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `LEGACY_PFTERMINAL_RELEASE_BY_TAG_URL` is never used
+  --> tui/src/updates.rs:62:7
+   |
+62 | const LEGACY_PFTERMINAL_RELEASE_BY_TAG_URL: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `RELEASE_VALIDATION_TIMEOUT` is never used
+  --> tui/src/updates.rs:64:7
+   |
+64 | const RELEASE_VALIDATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `check_for_update` is never used
+  --> tui/src/updates.rs:71:10
+   |
+71 | async fn check_for_update(
+   |          ^^^^^^^^^^^^^^^^
+
+warning: function `get_upgrade_version_for_popup` is never used
+   --> tui/src/updates.rs:161:14
+    |
+161 | pub async fn get_upgrade_version_for_popup(config: &Config) -> Option<String> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `codex-tui` (lib test) generated 25 warnings (9 duplicates) (run `cargo fix --lib -p codex-tui --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.80s
+────────────
+ Nextest run ID 429e0c86-f2fc-4b01-9529-a811b8b2d956 with nextest profile: local
+    Starting 386 tests across 6 binaries (3779 tests skipped)
+        PASS [   0.057s] (  1/386) codex-tui bottom_pane::effort_status_line::tests::palette_status_line_colors_survive_the_fade
+        PASS [   0.059s] (  2/386) codex-tui app_server_session::tests::status_account_display_from_auth_mode_uses_remapped_plan_labels
+        PASS [   0.118s] (  3/386) codex-tui bottom_pane::effort_status_line::tests::clock_waits_for_the_first_visible_frame
+        PASS [   0.119s] (  4/386) codex-tui bottom_pane::effort_status_line::tests::outgoing_status_line_moves_right_and_clips_at_the_edge
+        PASS [   0.130s] (  5/386) codex-tui bottom_pane::effort_status_line::tests::label_and_refreshed_line_appear_in_order
+        PASS [   0.134s] (  6/386) codex-tui app::tests::provider_manager_claude_intent_uses_typed_status_and_recovery_source
+        PASS [   0.205s] (  7/386) codex-tui bottom_pane::chat_composer::effort_tests::effort_transition_does_not_queue_a_missing_outgoing_status_line
+        PASS [   0.206s] (  8/386) codex-tui bottom_pane::chat_composer::tests::status_line_hyperlink_marks_pr_number_cells
+        PASS [   0.207s] (  9/386) codex-tui app::agent_status_feed::tests::agent_status_uses_reasoning_summaries_only
+        PASS [   0.207s] ( 10/386) codex-tui app::agent_status_feed::tests::agent_status_uses_bounded_buffered_activity
+        PASS [   0.067s] ( 11/386) codex-tui bottom_pane::status_line_setup::tests::context_used_accepts_context_usage_legacy_id
+        PASS [   0.067s] ( 12/386) codex-tui bottom_pane::status_line_setup::tests::git_summary_items_are_selectable_ids
+        PASS [   0.139s] ( 13/386) codex-tui bottom_pane::status_line_setup::tests::context_remaining_is_selectable_id
+        PASS [   0.143s] ( 14/386) codex-tui bottom_pane::status_line_setup::tests::brand_is_selectable_id
+        PASS [   0.067s] ( 15/386) codex-tui bottom_pane::status_line_setup::tests::model_is_canonical_and_accepts_model_name_legacy_id
+        PASS [   0.070s] ( 16/386) codex-tui bottom_pane::status_line_setup::tests::parse_status_line_items_accepts_title_only_variants
+        PASS [   0.218s] ( 17/386) codex-tui bottom_pane::effort_status_line::tests::ultra_letters_start_wide_at_the_edges_and_converge_to_the_center
+        PASS [   0.162s] ( 18/386) codex-tui bottom_pane::effort_status_line::tests::unicode_and_span_boundaries_are_safe_on_narrow_rows
+        PASS [   0.226s] ( 19/386) codex-tui bottom_pane::effort_status_line::tests::transition_frames_snapshot
+        PASS [   0.170s] ( 20/386) codex-tui bottom_pane::footer::tests::footer_status_line_truncates_to_keep_mode_indicator
+        PASS [   0.034s] ( 21/386) codex-tui bottom_pane::status_line_setup::tests::run_state_is_canonical_and_accepts_status_legacy_id
+        PASS [   0.037s] ( 22/386) codex-tui bottom_pane::status_line_setup::tests::project_name_is_canonical_and_accepts_legacy_ids
+        PASS [   0.031s] ( 23/386) codex-tui bottom_pane::status_line_style::tests::pull_request_number_uses_link_style
+        PASS [   0.028s] ( 24/386) codex-tui bottom_pane::status_line_style::tests::status_line_segments_dim_separators_and_use_theme_styles_first
+        PASS [   0.035s] ( 25/386) codex-tui bottom_pane::status_line_style::tests::status_line_segments_can_disable_theme_colors
+        PASS [   0.046s] ( 26/386) codex-tui bottom_pane::status_line_setup::tests::reasoning_is_selectable_id
+        PASS [   0.067s] ( 27/386) codex-tui bottom_pane::status_line_setup::tests::preview_includes_thread_title
+        PASS [   0.067s] ( 28/386) codex-tui bottom_pane::status_line_setup::tests::preview_uses_runtime_values
+        PASS [   0.067s] ( 29/386) codex-tui bottom_pane::status_line_setup::tests::preview_uses_placeholders_when_runtime_values_are_missing
+        PASS [   0.036s] ( 30/386) codex-tui bottom_pane::status_line_style::tests::status_line_segments_return_none_when_empty
+        PASS [   0.071s] ( 31/386) codex-tui bottom_pane::status_line_setup::tests::setup_view_snapshot_uses_runtime_preview_values
+        PASS [   0.037s] ( 32/386) codex-tui bottom_pane::status_line_style::tests::status_line_segments_preserve_order_and_plain_text
+        PASS [   0.036s] ( 33/386) codex-tui bottom_pane::status_line_style::tests::status_line_segments_soften_rgb_theme_styles_without_dimming_text
+        PASS [   0.040s] ( 34/386) codex-tui bottom_pane::tests::status_and_composer_fill_height_without_bottom_padding
+        PASS [   0.044s] ( 35/386) codex-tui bottom_pane::tests::queued_messages_visible_when_status_hidden_snapshot
+        PASS [   0.041s] ( 36/386) codex-tui bottom_pane::tests::status_and_queued_messages_snapshot
+        PASS [   0.032s] ( 37/386) codex-tui bottom_pane::tests::unified_exec_summary_does_not_increase_height_when_status_visible
+        PASS [   0.037s] ( 38/386) codex-tui branch_summary::tests::status_line_pr_view_parser_requires_open_pr
+        PASS [   0.039s] ( 39/386) codex-tui branch_summary::tests::status_line_pr_fallback_searches_parent_repo_first
+        PASS [   0.050s] ( 40/386) codex-tui bottom_pane::tests::status_only_snapshot
+        PASS [   0.037s] ( 41/386) codex-tui chatwidget::claude_code_login::tests::account_authority_accepts_optional_status_metadata_but_requires_email
+        PASS [   0.426s] ( 42/386) codex-tui app::tests::provider_status_jobs_do_not_block_the_app_task
+        PASS [   0.080s] ( 43/386) codex-tui bottom_pane::title_setup::tests::run_state_is_canonical_and_accepts_status_legacy_id
+        PASS [   0.089s] ( 44/386) codex-tui bottom_pane::tests::status_indicator_visible_during_command_execution
+        PASS [   0.094s] ( 45/386) codex-tui bottom_pane::tests::status_with_details_and_queued_messages_snapshot
+        PASS [   0.065s] ( 46/386) codex-tui chatwidget::claude_code_login::tests::claude_status_timeout_resolves_to_error
+        PASS [   0.059s] ( 47/386) codex-tui chatwidget::claude_code_login::tests::post_login_status_timeout_does_not_persist_a_selection
+        PASS [   0.057s] ( 48/386) codex-tui chatwidget::claude_code_login::tests::provider_status_timeout_includes_vault_lock_contention
+        PASS [   0.045s] ( 49/386) codex-tui chatwidget::claude_code_login::tests::selected_environment_token_status_requires_the_bound_token
+        PASS [   0.028s] ( 50/386) codex-tui chatwidget::goal_status::tests::active_goal_usage_prefers_token_budget
+        PASS [   0.043s] ( 51/386) codex-tui chatwidget::goal_status::tests::active_goal_status_does_not_count_idle_time_before_turn_start
+        PASS [   0.032s] ( 52/386) codex-tui chatwidget::goal_status::tests::active_goal_status_includes_current_turn_elapsed_time
+        PASS [   0.053s] ( 53/386) codex-tui chatwidget::goal_status::tests::active_goal_usage_reports_time_without_budget
+        PASS [   0.027s] ( 54/386) codex-tui chatwidget::goal_status::tests::stopped_goal_budget_usage_reports_budgeted_tokens
+        PASS [   0.028s] ( 55/386) codex-tui chatwidget::goal_status::tests::completed_goal_usage_reports_tokens_when_budgeted
+        PASS [   0.028s] ( 56/386) codex-tui chatwidget::goal_status::tests::stopped_goal_budget_usage_omits_unbudgeted_usage
+        PASS [   0.507s] ( 57/386) codex-tui app::provider_management_status::tests::manager_open_syncs_configured_runtime_models_before_policy_refresh
+        PASS [   0.037s] ( 58/386) codex-tui chatwidget::goal_status::tests::completed_goal_usage_reports_time_without_token_budget
+        PASS [   0.545s] ( 59/386) codex-tui app::tests::spawn_status_preserves_orc_activity_when_name_arrives_later
+        PASS [   0.545s] ( 60/386) codex-tui app::tests::side_parent_status_tracks_parent_turn_lifecycle
+        PASS [   0.183s] ( 61/386) codex-tui chatwidget::claude_code_login::tests::claude_status_preserves_custom_oauth_profile_identity
+        PASS [   0.545s] ( 62/386) codex-tui app::tests::spawn_status_shows_orc_task_preview_from_troll_activity
+        PASS [   0.546s] ( 63/386) codex-tui app::tests::enqueued_native_spawn_turn_completion_updates_status_before_replay
+        PASS [   0.546s] ( 64/386) codex-tui app::tests::side_parent_status_prioritizes_input_over_approval
+        PASS [   0.545s] ( 65/386) codex-tui app::tests::token_usage_update_refreshes_status_line_with_runtime_context_window
+        PASS [   0.546s] ( 66/386) codex-tui app::tests::idle_claude_pane_selection_clears_previous_live_status_panel
+        PASS [   0.546s] ( 67/386) codex-tui app::tests::native_spawn_turn_interrupt_updates_status_without_closing_app
+        PASS [   0.557s] ( 68/386) codex-tui app::tests::native_spawn_turn_completion_updates_status_and_result_preview
+        PASS [   0.562s] ( 69/386) codex-tui app::tests::stale_receiver_running_status_does_not_hide_completed_orc_report
+        PASS [   0.572s] ( 70/386) codex-tui app::tests::clear_ui_header_shows_fast_status_for_fast_capable_models
+        PASS [   0.073s] ( 71/386) codex-tui chatwidget::provider_credentials::tests::provider_status_rows_snapshot
+        PASS [   0.070s] ( 72/386) codex-tui chatwidget::status_state::tests::retry_status_header_is_taken_once
+        PASS [   0.080s] ( 73/386) codex-tui chatwidget::status_state::tests::guardian_status_aggregates_parallel_reviews
+        PASS [   0.086s] ( 74/386) codex-tui chatwidget::provider_credentials::tests::provider_status_descriptions_are_explicit
+        PASS [   0.080s] ( 75/386) codex-tui chatwidget::tests::exec_flow::unified_exec_empty_poll_for_finished_process_does_not_show_waiting_status
+        PASS [   0.123s] ( 76/386) codex-tui chatwidget::provider_manager::tests::provider_manager_uses_shared_status_copy_snapshot
+        PASS [   0.085s] ( 77/386) codex-tui chatwidget::tests::exec_flow::unified_exec_wait_status_header_updates_on_late_command_display
+        PASS [   0.071s] ( 78/386) codex-tui chatwidget::tests::goal_menu::goal_edit_prompt_submits_preserved_status_and_budget
+        PASS [   0.087s] ( 79/386) codex-tui chatwidget::tests::goal_menu::goal_edit_prompt_preserves_resumable_stopped_statuses
+        PASS [   0.124s] ( 80/386) codex-tui chatwidget::tests::app_server::live_app_server_stream_recovery_restores_previous_status_header
+        PASS [   0.081s] ( 81/386) codex-tui chatwidget::tests::goal_menu::goal_edit_prompt_resets_terminal_status_to_active
+        PASS [   0.097s] ( 82/386) codex-tui chatwidget::tests::app_server::live_app_server_turn_completed_clears_working_status_after_answer_item
+        PASS [   0.099s] ( 83/386) codex-tui chatwidget::tests::exec_flow::unified_exec_begin_restores_status_indicator_after_preamble
+        PASS [   0.065s] ( 84/386) codex-tui chatwidget::tests::history_replay::replayed_stream_error_does_not_set_retry_status_or_status_indicator
+        PASS [   0.084s] ( 85/386) codex-tui chatwidget::tests::guardian::app_server_guardian_review_started_sets_review_status
+        PASS [   0.098s] ( 86/386) codex-tui chatwidget::tests::history_replay::stream_recovery_restores_previous_status_header
+        PASS [   0.081s] ( 87/386) codex-tui chatwidget::tests::mcp_startup::mcp_startup_complete_preserves_review_status
+        PASS [   0.087s] ( 88/386) codex-tui chatwidget::tests::history_replay::thread_snapshot_replayed_stream_recovery_restores_previous_status_header
+        PASS [   0.082s] ( 89/386) codex-tui chatwidget::tests::mcp_startup::mcp_startup_ignores_status_for_other_thread
+        PASS [   0.083s] ( 90/386) codex-tui chatwidget::tests::plan_mode::plan_completion_restores_status_indicator_after_streaming_plan_output
+        PASS [   0.075s] ( 91/386) codex-tui chatwidget::tests::side::side_context_label_preserves_status_line_snapshot
+        PASS [   0.093s] ( 92/386) codex-tui chatwidget::tests::mcp_startup::app_server_mcp_startup_next_round_keeps_terminal_statuses_after_starting
+        PASS [   0.088s] ( 93/386) codex-tui chatwidget::tests::mcp_startup::mcp_startup_failure_restores_running_status_header
+        PASS [   0.077s] ( 94/386) codex-tui chatwidget::tests::slash_commands::slash_spawn_status_opens_status_picker
+        PASS [   0.094s] ( 95/386) codex-tui chatwidget::tests::popups_and_settings::apps_popup_shows_disabled_status_for_installed_but_disabled_apps
+        PASS [   0.092s] ( 96/386) codex-tui chatwidget::tests::popups_and_settings::plugin_detail_popup_shows_admin_disabled_status_snapshot
+        PASS [   0.084s] ( 97/386) codex-tui chatwidget::tests::side::side_context_label_shows_parent_status_snapshot
+        PASS [   0.380s] ( 98/386) codex-tui chatwidget::claude_code_login::tests::invalid_persisted_source_id_surfaces_recovery_status
+        PASS [   0.377s] ( 99/386) codex-tui chatwidget::claude_code_login::tests::providers_status_reports_health_probe_timeout_as_error
+        PASS [   0.073s] (100/386) codex-tui chatwidget::tests::status_and_layout::blocked_and_failed_hooks_render_feedback_and_errors
+        PASS [   0.133s] (101/386) codex-tui chatwidget::tests::status_and_layout::app_server_model_verification_renders_warning
+        PASS [   0.137s] (102/386) codex-tui chatwidget::tests::status_and_layout::app_server_cyber_policy_error_renders_dedicated_notice
+        PASS [   0.153s] (103/386) codex-tui chatwidget::tests::status_and_layout::ambient_pet_draw_uses_terminal_screen_area_not_short_inline_viewport
+        PASS [   0.149s] (104/386) codex-tui chatwidget::tests::status_and_layout::ambient_pet_reserves_history_wrap_width
+        PASS [   0.140s] (105/386) codex-tui chatwidget::tests::status_and_layout::ambient_pet_screen_bottom_anchor_uses_terminal_bottom
+        PASS [   0.515s] (106/386) codex-tui chatwidget::claude_code_login::tests::providers_status_preserves_unavailable_claude_after_a_healthy_probe
+        PASS [   0.200s] (107/386) codex-tui chatwidget::tests::status_and_layout::account_update_discards_stale_workspace_headline_results
+        PASS [   0.119s] (108/386) codex-tui chatwidget::tests::status_and_layout::chatwidget_exec_and_status_layout_vt100_snapshot
+        PASS [   0.257s] (109/386) codex-tui chatwidget::tests::status_and_layout::ambient_pet_can_be_disabled
+        PASS [   0.288s] (110/386) codex-tui chatwidget::tests::status_and_layout::account_update_clears_derived_usage_limit_state_and_prompt
+        PASS [   0.113s] (111/386) codex-tui chatwidget::tests::status_and_layout::completed_hook_output_precedes_following_assistant_message
+        PASS [   0.066s] (112/386) codex-tui chatwidget::tests::status_and_layout::completed_turn_clears_visible_running_hook
+        PASS [   0.632s] (113/386) codex-tui chatwidget::claude_code_login::tests::claude_cli_owns_token_exchange_and_status_verification
+        PASS [   0.081s] (114/386) codex-tui chatwidget::tests::status_and_layout::completed_same_id_hook_output_survives_restart
+        PASS [   0.196s] (115/386) codex-tui chatwidget::tests::status_and_layout::chatwidget_markdown_code_blocks_vt100_snapshot
+        PASS [   0.168s] (116/386) codex-tui chatwidget::tests::status_and_layout::completed_hook_with_output_flushes_immediately
+        PASS [   0.330s] (117/386) codex-tui chatwidget::tests::status_and_layout::account_update_clears_workspace_headline_state
+        PASS [   0.323s] (118/386) codex-tui chatwidget::tests::status_and_layout::ambient_pet_hides_notification_text_overlay
+        PASS [   0.133s] (119/386) codex-tui chatwidget::tests::status_and_layout::completed_plan_table_tail_skips_provisional_history_insert
+        PASS [   0.328s] (120/386) codex-tui chatwidget::tests::status_and_layout::ambient_pet_reduces_stream_width_and_composer_text_width
+        PASS [   0.621s] (121/386) codex-tui chatwidget::claude_code_login::tests::providers_status_reports_selected_login_reauthorization_need
+        PASS [   0.182s] (122/386) codex-tui chatwidget::tests::status_and_layout::commentary_completion_restores_status_indicator_before_exec_begin
+        PASS [   0.183s] (123/386) codex-tui chatwidget::tests::status_and_layout::completed_hook_with_no_entries_stays_out_of_history
+        PASS [   0.092s] (124/386) codex-tui chatwidget::tests::status_and_layout::ctrl_c_interrupt_pauses_active_goal_turn
+        PASS [   0.113s] (125/386) codex-tui chatwidget::tests::status_and_layout::context_indicator_shows_used_tokens_when_window_unknown
+        PASS [   0.069s] (126/386) codex-tui chatwidget::tests::status_and_layout::fast_status_indicator_is_hidden_when_fast_mode_is_off
+        PASS [   0.067s] (127/386) codex-tui chatwidget::tests::status_and_layout::final_reasoning_then_message_without_deltas_are_rendered
+        PASS [   0.086s] (128/386) codex-tui chatwidget::tests::status_and_layout::fast_status_indicator_is_hidden_for_models_without_fast_support
+        PASS [   0.132s] (129/386) codex-tui chatwidget::tests::status_and_layout::deltas_then_same_final_message_are_rendered_snapshot
+        PASS [   0.075s] (130/386) codex-tui chatwidget::tests::status_and_layout::gpu_spend_indicator_is_visible_when_status_line_has_no_configured_items
+        PASS [   0.167s] (131/386) codex-tui chatwidget::tests::status_and_layout::default_status_line_includes_product_brand
+        PASS [   0.118s] (132/386) codex-tui chatwidget::tests::status_and_layout::fast_status_indicator_requires_chatgpt_auth
+        PASS [   0.189s] (133/386) codex-tui chatwidget::tests::status_and_layout::ctrl_c_interrupts_agent_turn_even_if_bottom_pane_running_state_is_stale
+        PASS [   0.125s] (134/386) codex-tui chatwidget::tests::status_and_layout::flush_answer_stream_requests_scrollback_reflow_for_live_table_tail
+        PASS [   0.129s] (135/386) codex-tui chatwidget::tests::status_and_layout::flush_answer_stream_keeps_default_reflow_for_plain_text_tail
+        PASS [   0.133s] (136/386) codex-tui chatwidget::tests::status_and_layout::goal_status_indicator_formats_statuses_and_budgets
+        PASS [   0.167s] (137/386) codex-tui chatwidget::tests::status_and_layout::final_answer_completion_restores_status_indicator_for_pending_steer
+        PASS [   0.180s] (138/386) codex-tui chatwidget::tests::status_and_layout::esc_interrupt_pauses_active_goal_turn
+        PASS [   0.101s] (139/386) codex-tui chatwidget::tests::status_and_layout::idle_commit_ticks_do_not_restore_status_without_commentary_completion
+        PASS [   0.160s] (140/386) codex-tui chatwidget::tests::status_and_layout::goal_status_indicator_line_formats_goal_text
+  TRY 1 FAIL [   0.669s] (───────) codex-tui chatwidget::tests::guardian::guardian_parallel_reviews_render_aggregate_status_snapshot
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_parallel_reviews_render_aggregate_status.snap
+    Snapshot: codex_tui__chatwidget__tests__guardian_parallel_reviews_render_aggregate_status
+    Source: tui/src/chatwidget/tests/guardian.rs:581
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalize_snapshot_paths(rendered)
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        4     4 │ 
+        5     5 │ 
+        6     6 │ › Ask Corbanu Terminal to do anything
+        7     7 │ 
+        8       │-  Ambient GLM 5.2 standard · /tmp/project · Corbanu Terminal · TPS: -…
+              8 │+  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Termina…
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::guardian::guardian_parallel_reviews_render_aggregate_status_snapshot ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::guardian::guardian_parallel_reviews_render_aggregate_status_snapshot
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.64s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_parallel_reviews_render_aggregate_status.snap.new
+
+    thread 'chatwidget::tests::guardian::guardian_parallel_reviews_render_aggregate_status_snapshot' (29720554) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__guardian_parallel_reviews_render_aggregate_status' failed in line 581
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  TRY 1 FAIL [   0.701s] (───────) codex-tui chatwidget::tests::exec_flow::unified_exec_begin_restores_working_status_snapshot
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__unified_exec_begin_restores_working_status.snap
+    Snapshot: codex_tui__chatwidget__tests__unified_exec_begin_restores_working_status
+    Source: tui/src/chatwidget/tests/exec_flow.rs:287
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalized_backend_snapshot(terminal.backend())
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        3     3 │ "                                                                                "
+        4     4 │ "                                                                                "
+        5     5 │ "› Ask Corbanu Terminal to do anything                                           "
+        6     6 │ "                                                                                "
+        7       │-"  Ambient GLM 5.2 standard · /tmp/project · Corbanu Terminal · TPS: -- tok/s  "
+              7 │+"  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Terminal · TPS:…"
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::exec_flow::unified_exec_begin_restores_working_status_snapshot ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::exec_flow::unified_exec_begin_restores_working_status_snapshot
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.66s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__unified_exec_begin_restores_working_status.snap.new
+
+    thread 'chatwidget::tests::exec_flow::unified_exec_begin_restores_working_status_snapshot' (29720354) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__unified_exec_begin_restores_working_status' failed in line 287
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  TRY 1 FAIL [   0.701s] (───────) codex-tui chatwidget::tests::exec_flow::preamble_keeps_working_status_snapshot
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__preamble_keeps_working_status.snap
+    Snapshot: codex_tui__chatwidget__tests__preamble_keeps_working_status
+    Source: tui/src/chatwidget/tests/exec_flow.rs:246
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalized_backend_snapshot(terminal.backend())
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        3     3 │ "                                                                                "
+        4     4 │ "                                                                                "
+        5     5 │ "› Ask Corbanu Terminal to do anything                                           "
+        6     6 │ "                                                                                "
+        7       │-"  Ambient GLM 5.2 standard · /tmp/project · Corbanu Terminal · TPS: -- tok/s  "
+              7 │+"  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Terminal · TPS:…"
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::exec_flow::preamble_keeps_working_status_snapshot ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::exec_flow::preamble_keeps_working_status_snapshot
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.66s
+
+  stderr ───
+    WARNING: proceeding, even though we could not create PATH aliases: operation would block
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__preamble_keeps_working_status.snap.new
+
+    thread 'chatwidget::tests::exec_flow::preamble_keeps_working_status_snapshot' (29720340) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__preamble_keeps_working_status' failed in line 246
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  TRY 1 FAIL [   0.700s] (───────) codex-tui chatwidget::tests::exec_flow::unified_exec_wait_status_renders_command_in_single_details_row_snapshot
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__unified_exec_wait_status_renders_command_in_single_details_row.snap
+    Snapshot: codex_tui__chatwidget__tests__unified_exec_wait_status_renders_command_in_single_details_row
+    Source: tui/src/chatwidget/tests/exec_flow.rs:788
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalize_snapshot_paths(rendered)
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        3     3 │ 
+        4     4 │ 
+        5     5 │ › Ask Corbanu Terminal to do anything
+        6     6 │ 
+        7       │-  Ambient GLM 5.2 standard · /tmp/project · Pos…
+              7 │+  Ambient GLM 5.2 via ambient standard · /tmp/p…
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::exec_flow::unified_exec_wait_status_renders_command_in_single_details_row_snapshot ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::exec_flow::unified_exec_wait_status_renders_command_in_single_details_row_snapshot
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.66s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__unified_exec_wait_status_renders_command_in_single_details_row.snap.new
+
+    thread 'chatwidget::tests::exec_flow::unified_exec_wait_status_renders_command_in_single_details_row_snapshot' (29720341) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__unified_exec_wait_status_renders_command_in_single_details_row' failed in line 788
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  TRY 1 FAIL [   0.702s] (───────) codex-tui chatwidget::tests::exec_flow::image_generation_begin_restores_working_status_after_single_line_preamble
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__image_generation_begin_restores_working_status.snap
+    Snapshot: codex_tui__chatwidget__tests__image_generation_begin_restores_working_status
+    Source: tui/src/chatwidget/tests/exec_flow.rs:900
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalized_backend_snapshot(terminal.backend())
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        3     3 │ "                                                                                "
+        4     4 │ "                                                                                "
+        5     5 │ "› Ask Corbanu Terminal to do anything                                           "
+        6     6 │ "                                                                                "
+        7       │-"  Ambient GLM 5.2 standard · /tmp/project · Corbanu Terminal · TPS: -- tok/s  "
+              7 │+"  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Terminal · TPS:…"
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::exec_flow::image_generation_begin_restores_working_status_after_single_line_preamble ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::exec_flow::image_generation_begin_restores_working_status_after_single_line_preamble
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.67s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__image_generation_begin_restores_working_status.snap.new
+
+    thread 'chatwidget::tests::exec_flow::image_generation_begin_restores_working_status_after_single_line_preamble' (29720307) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__image_generation_begin_restores_working_status' failed in line 900
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  TRY 1 FAIL [   0.670s] (───────) codex-tui chatwidget::tests::guardian::guardian_cleanup_drops_stale_reviews_and_restores_mcp_status
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_goal_continuation_drops_stale_reviews.snap
+    Snapshot: codex_tui__chatwidget__tests__guardian_goal_continuation_drops_stale_reviews
+    Source: tui/src/chatwidget/tests/guardian.rs:657
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalize_snapshot_paths(rendered)
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        3     3 │ 
+        4     4 │ 
+        5     5 │ › Ask Corbanu Terminal to do anything
+        6     6 │ 
+        7       │-  Ambient GLM 5.2 standard · /tmp/project · Corbanu Terminal · TPS: -…
+              7 │+  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Termina…
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::guardian::guardian_cleanup_drops_stale_reviews_and_restores_mcp_status ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::guardian::guardian_cleanup_drops_stale_reviews_and_restores_mcp_status
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.64s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_goal_continuation_drops_stale_reviews.snap.new
+
+    thread 'chatwidget::tests::guardian::guardian_cleanup_drops_stale_reviews_and_restores_mcp_status' (29720536) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__guardian_goal_continuation_drops_stale_reviews' failed in line 657
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  TRY 1 FAIL [   0.380s] (───────) codex-tui chatwidget::tests::status_and_layout::chatwidget_tall
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__chatwidget_tall.snap
+    Snapshot: codex_tui__chatwidget__tests__chatwidget_tall
+    Source: tui/src/chatwidget/tests/status_and_layout.rs:5057
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalize_snapshot_paths(term.backend().vt100().screen().contents())
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+       20    20 │   ↳ Hello, world! 15
+       21    21 │ 
+       22    22 │ › Ask Corbanu Terminal to do anything
+       23    23 │ 
+       24       │-  Ambient GLM 5.2 standard · /tmp/project · Corbanu Terminal · TPS: -- tok/s
+             24 │+  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Terminal · TPS:…
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::status_and_layout::chatwidget_tall ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::status_and_layout::chatwidget_tall
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.30s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__chatwidget_tall.snap.new
+
+    thread 'chatwidget::tests::status_and_layout::chatwidget_tall' (29721490) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__chatwidget_tall' failed in line 5057
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.082s] (141/386) codex-tui chatwidget::tests::status_and_layout::overlapping_hook_live_cell_tracks_parallel_quiet_hooks
+        PASS [   0.102s] (142/386) codex-tui chatwidget::tests::status_and_layout::newline_plan_delta_redraws_stream_tail_after_noop_catch_up
+        PASS [   0.125s] (143/386) codex-tui chatwidget::tests::status_and_layout::long_hook_context_is_truncated_with_transcript_hint_snapshot
+        PASS [   0.126s] (144/386) codex-tui chatwidget::tests::status_and_layout::missing_rate_limit_reached_type_does_not_prompt_or_refresh
+        PASS [   0.113s] (145/386) codex-tui chatwidget::tests::status_and_layout::multiple_agent_messages_in_single_turn_emit_multiple_headers
+        PASS [   0.112s] (146/386) codex-tui chatwidget::tests::status_and_layout::newline_agent_delta_redraws_stream_tail_after_noop_catch_up
+        PASS [   0.177s] (147/386) codex-tui chatwidget::tests::status_and_layout::hook_completed_before_reveal_renders_completed_without_running_flash
+        PASS [   0.081s] (148/386) codex-tui chatwidget::tests::status_and_layout::post_tool_use_hook_events_render_snapshot
+        PASS [   0.131s] (149/386) codex-tui chatwidget::tests::status_and_layout::interrupted_turn_clears_visible_running_hook
+        PASS [   0.027s] (150/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_duration_labels_only_render_supported_windows
+        PASS [   0.171s] (151/386) codex-tui chatwidget::tests::status_and_layout::identical_parallel_running_hooks_collapse_to_count
+        PASS [   0.083s] (152/386) codex-tui chatwidget::tests::status_and_layout::quiet_hook_linger_starts_when_delayed_redraw_reveals_hook
+        PASS [   0.110s] (153/386) codex-tui chatwidget::tests::status_and_layout::pre_tool_use_hook_events_render_snapshot
+        PASS [   0.097s] (154/386) codex-tui chatwidget::tests::status_and_layout::prefetch_rate_limits_is_gated_on_chatgpt_auth_provider
+        PASS [   0.231s] (155/386) codex-tui chatwidget::tests::status_and_layout::hidden_active_hook_does_not_add_transcript_separator
+        PASS [   0.080s] (156/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_snapshot_keeps_prior_credits_when_missing_from_headers
+        PASS [   0.073s] (157/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_switch_prompt_clears_pending_when_workspace_credits_become_usable
+        PASS [   0.079s] (158/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_snapshots_keep_separate_entries_per_limit_id
+        PASS [   0.085s] (159/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_snapshot_updates_and_retains_plan_type
+        PASS [   0.080s] (160/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_switch_prompt_does_not_open_hidden_nudge_popup
+        PASS [   0.081s] (161/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_switch_prompt_respects_hidden_notice
+        PASS [   0.084s] (162/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_switch_prompt_does_not_defer_without_visible_nudge_model
+        PASS [   0.087s] (163/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_switch_prompt_dismisses_shown_when_workspace_credits_become_usable
+        PASS [   0.082s] (164/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_switch_prompt_shows_once_per_session
+        PASS [   0.086s] (165/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_switch_prompt_skips_non_codex_limit
+  TRY 2 FAIL [   0.153s] (166/386) codex-tui chatwidget::tests::exec_flow::image_generation_begin_restores_working_status_after_single_line_preamble
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__image_generation_begin_restores_working_status.snap
+    Snapshot: codex_tui__chatwidget__tests__image_generation_begin_restores_working_status
+    Source: tui/src/chatwidget/tests/exec_flow.rs:900
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalized_backend_snapshot(terminal.backend())
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        3     3 │ "                                                                                "
+        4     4 │ "                                                                                "
+        5     5 │ "› Ask Corbanu Terminal to do anything                                           "
+        6     6 │ "                                                                                "
+        7       │-"  Ambient GLM 5.2 standard · /tmp/project · Corbanu Terminal · TPS: -- tok/s  "
+              7 │+"  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Terminal · TPS:…"
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::exec_flow::image_generation_begin_restores_working_status_after_single_line_preamble ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::exec_flow::image_generation_begin_restores_working_status_after_single_line_preamble
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.12s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__image_generation_begin_restores_working_status.snap.new
+
+    thread 'chatwidget::tests::exec_flow::image_generation_begin_restores_working_status_after_single_line_preamble' (29722477) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__image_generation_begin_restores_working_status' failed in line 900
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  TRY 2 FAIL [   0.157s] (167/386) codex-tui chatwidget::tests::exec_flow::preamble_keeps_working_status_snapshot
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__preamble_keeps_working_status.snap
+    Snapshot: codex_tui__chatwidget__tests__preamble_keeps_working_status
+    Source: tui/src/chatwidget/tests/exec_flow.rs:246
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalized_backend_snapshot(terminal.backend())
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        3     3 │ "                                                                                "
+        4     4 │ "                                                                                "
+        5     5 │ "› Ask Corbanu Terminal to do anything                                           "
+        6     6 │ "                                                                                "
+        7       │-"  Ambient GLM 5.2 standard · /tmp/project · Corbanu Terminal · TPS: -- tok/s  "
+              7 │+"  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Terminal · TPS:…"
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::exec_flow::preamble_keeps_working_status_snapshot ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::exec_flow::preamble_keeps_working_status_snapshot
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.13s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__preamble_keeps_working_status.snap.new
+
+    thread 'chatwidget::tests::exec_flow::preamble_keeps_working_status_snapshot' (29722479) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__preamble_keeps_working_status' failed in line 246
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  TRY 2 FAIL [   0.157s] (168/386) codex-tui chatwidget::tests::exec_flow::unified_exec_wait_status_renders_command_in_single_details_row_snapshot
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__unified_exec_wait_status_renders_command_in_single_details_row.snap
+    Snapshot: codex_tui__chatwidget__tests__unified_exec_wait_status_renders_command_in_single_details_row
+    Source: tui/src/chatwidget/tests/exec_flow.rs:788
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalize_snapshot_paths(rendered)
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        3     3 │ 
+        4     4 │ 
+        5     5 │ › Ask Corbanu Terminal to do anything
+        6     6 │ 
+        7       │-  Ambient GLM 5.2 standard · /tmp/project · Pos…
+              7 │+  Ambient GLM 5.2 via ambient standard · /tmp/p…
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::exec_flow::unified_exec_wait_status_renders_command_in_single_details_row_snapshot ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::exec_flow::unified_exec_wait_status_renders_command_in_single_details_row_snapshot
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.13s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__unified_exec_wait_status_renders_command_in_single_details_row.snap.new
+
+    thread 'chatwidget::tests::exec_flow::unified_exec_wait_status_renders_command_in_single_details_row_snapshot' (29722470) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__unified_exec_wait_status_renders_command_in_single_details_row' failed in line 788
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  TRY 2 FAIL [   0.157s] (169/386) codex-tui chatwidget::tests::status_and_layout::chatwidget_tall
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__chatwidget_tall.snap
+    Snapshot: codex_tui__chatwidget__tests__chatwidget_tall
+    Source: tui/src/chatwidget/tests/status_and_layout.rs:5057
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalize_snapshot_paths(term.backend().vt100().screen().contents())
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+       20    20 │   ↳ Hello, world! 15
+       21    21 │ 
+       22    22 │ › Ask Corbanu Terminal to do anything
+       23    23 │ 
+       24       │-  Ambient GLM 5.2 standard · /tmp/project · Corbanu Terminal · TPS: -- tok/s
+             24 │+  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Terminal · TPS:…
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::status_and_layout::chatwidget_tall ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::status_and_layout::chatwidget_tall
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.12s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__chatwidget_tall.snap.new
+
+    thread 'chatwidget::tests::status_and_layout::chatwidget_tall' (29722506) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__chatwidget_tall' failed in line 5057
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  TRY 2 FAIL [   0.161s] (170/386) codex-tui chatwidget::tests::exec_flow::unified_exec_begin_restores_working_status_snapshot
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__unified_exec_begin_restores_working_status.snap
+    Snapshot: codex_tui__chatwidget__tests__unified_exec_begin_restores_working_status
+    Source: tui/src/chatwidget/tests/exec_flow.rs:287
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalized_backend_snapshot(terminal.backend())
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        3     3 │ "                                                                                "
+        4     4 │ "                                                                                "
+        5     5 │ "› Ask Corbanu Terminal to do anything                                           "
+        6     6 │ "                                                                                "
+        7       │-"  Ambient GLM 5.2 standard · /tmp/project · Corbanu Terminal · TPS: -- tok/s  "
+              7 │+"  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Terminal · TPS:…"
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::exec_flow::unified_exec_begin_restores_working_status_snapshot ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::exec_flow::unified_exec_begin_restores_working_status_snapshot
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.13s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__unified_exec_begin_restores_working_status.snap.new
+
+    thread 'chatwidget::tests::exec_flow::unified_exec_begin_restores_working_status_snapshot' (29722462) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__unified_exec_begin_restores_working_status' failed in line 287
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.039s] (171/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_warnings_emit_thresholds
+        PASS [   0.094s] (172/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_clear_workspace_limit_from_authoritative_snapshot
+        PASS [   0.098s] (173/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_switch_prompt_skips_when_on_lower_cost_model
+  TRY 2 FAIL [   0.179s] (174/386) codex-tui chatwidget::tests::guardian::guardian_cleanup_drops_stale_reviews_and_restores_mcp_status
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_goal_continuation_drops_stale_reviews.snap
+    Snapshot: codex_tui__chatwidget__tests__guardian_goal_continuation_drops_stale_reviews
+    Source: tui/src/chatwidget/tests/guardian.rs:657
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalize_snapshot_paths(rendered)
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        3     3 │ 
+        4     4 │ 
+        5     5 │ › Ask Corbanu Terminal to do anything
+        6     6 │ 
+        7       │-  Ambient GLM 5.2 standard · /tmp/project · Corbanu Terminal · TPS: -…
+              7 │+  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Termina…
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::guardian::guardian_cleanup_drops_stale_reviews_and_restores_mcp_status ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::guardian::guardian_cleanup_drops_stale_reviews_and_restores_mcp_status
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.15s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_goal_continuation_drops_stale_reviews.snap.new
+
+    thread 'chatwidget::tests::guardian::guardian_cleanup_drops_stale_reviews_and_restores_mcp_status' (29722484) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__guardian_goal_continuation_drops_stale_reviews' failed in line 657
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.076s] (175/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_preserve_and_clear_spend_control_state
+  TRY 2 FAIL [   0.193s] (176/386) codex-tui chatwidget::tests::guardian::guardian_parallel_reviews_render_aggregate_status_snapshot
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_parallel_reviews_render_aggregate_status.snap
+    Snapshot: codex_tui__chatwidget__tests__guardian_parallel_reviews_render_aggregate_status
+    Source: tui/src/chatwidget/tests/guardian.rs:581
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalize_snapshot_paths(rendered)
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        4     4 │ 
+        5     5 │ 
+        6     6 │ › Ask Corbanu Terminal to do anything
+        7     7 │ 
+        8       │-  Ambient GLM 5.2 standard · /tmp/project · Corbanu Terminal · TPS: -…
+              8 │+  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Termina…
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::guardian::guardian_parallel_reviews_render_aggregate_status_snapshot ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::guardian::guardian_parallel_reviews_render_aggregate_status_snapshot
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.16s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_parallel_reviews_render_aggregate_status.snap.new
+
+    thread 'chatwidget::tests::guardian::guardian_parallel_reviews_render_aggregate_status_snapshot' (29722480) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__guardian_parallel_reviews_render_aggregate_status' failed in line 581
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.080s] (177/386) codex-tui chatwidget::tests::status_and_layout::raw_output_mode_can_change_without_inserting_notice
+        PASS [   0.095s] (178/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_newly_reached_workspace_limit
+        PASS [   0.080s] (179/386) codex-tui chatwidget::tests::status_and_layout::reasoning_delta_does_not_double_schedule_visible_status_redraw
+        PASS [   0.077s] (180/386) codex-tui chatwidget::tests::status_and_layout::reasoning_delta_redraws_only_when_header_becomes_visible
+        PASS [   0.136s] (181/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_follow_workspace_credit_flags
+        PASS [   0.090s] (182/386) codex-tui chatwidget::tests::status_and_layout::raw_output_status_line_value_only_shows_when_enabled
+        PASS [   0.097s] (183/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_show_when_authoritative_snapshot_clears_credits
+        PASS [   0.128s] (184/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_explicit_rolling_workspace_limit
+        PASS [   0.109s] (185/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_preserve_workspace_limit_for_sparse_snapshots
+        PASS [   0.079s] (186/386) codex-tui chatwidget::tests::status_and_layout::repeated_generic_warning_is_not_hidden
+        PASS [   0.080s] (187/386) codex-tui chatwidget::tests::status_and_layout::repeated_model_metadata_warning_is_hidden_for_same_slug
+        PASS [   0.086s] (188/386) codex-tui chatwidget::tests::status_and_layout::renamed_thread_footer_title_snapshot
+        PASS [   0.087s] (189/386) codex-tui chatwidget::tests::status_and_layout::regular_commit_tick_clears_orphaned_plan_stream_tail
+        PASS [   0.081s] (190/386) codex-tui chatwidget::tests::status_and_layout::request_user_input_interrupt_pauses_active_goal_turn
+        PASS [   0.083s] (191/386) codex-tui chatwidget::tests::status_and_layout::rolling_credits_preserve_depleted_workspace_error_routing
+        PASS [   0.084s] (192/386) codex-tui chatwidget::tests::status_and_layout::runtime_metrics_websocket_timing_logs_and_final_separator_sums_totals
+        PASS [   0.088s] (193/386) codex-tui chatwidget::tests::status_and_layout::session_start_hook_events_render_snapshot
+        PASS [   0.084s] (194/386) codex-tui chatwidget::tests::status_and_layout::sparse_rate_limit_snapshot_preserves_member_limit_type_for_error_prompt
+        PASS [   0.083s] (195/386) codex-tui chatwidget::tests::status_and_layout::stale_status_line_git_summary_update_is_ignored
+        PASS [   0.080s] (196/386) codex-tui chatwidget::tests::status_and_layout::status_line_branch_refreshes_after_interrupt
+        PASS [   0.092s] (197/386) codex-tui chatwidget::tests::status_and_layout::single_line_final_answer_hides_working_status_snapshot
+        PASS [   0.087s] (198/386) codex-tui chatwidget::tests::status_and_layout::status_line_branch_changes_render_no_changes
+        PASS [   0.085s] (199/386) codex-tui chatwidget::tests::status_and_layout::status_line_branch_refreshes_after_turn_complete
+        PASS [   0.130s] (200/386) codex-tui chatwidget::tests::status_and_layout::running_hook_does_not_displace_active_exec_cell
+        PASS [   0.067s] (201/386) codex-tui chatwidget::tests::status_and_layout::status_line_five_hour_item_omits_weekly_only_limit
+        PASS [   0.072s] (202/386) codex-tui chatwidget::tests::status_and_layout::status_line_context_remaining_renders_labeled_percent
+        PASS [   0.103s] (203/386) codex-tui chatwidget::tests::status_and_layout::status_line_and_terminal_title_reasoning_render_only_effort
+        PASS [   0.085s] (204/386) codex-tui chatwidget::tests::status_and_layout::status_line_branch_state_resets_when_git_branch_disabled
+        PASS [   0.073s] (205/386) codex-tui chatwidget::tests::status_and_layout::status_line_fast_mode_footer_snapshot
+        PASS [   0.076s] (206/386) codex-tui chatwidget::tests::status_and_layout::status_line_context_used_renders_labeled_percent
+  TRY 1 FAIL [   0.167s] (───────) codex-tui chatwidget::tests::status_and_layout::reasoning_delta_restores_recreated_status_indicator_header
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__reasoning_delta_restores_recreated_status_indicator.snap
+    Snapshot: codex_tui__chatwidget__tests__reasoning_delta_restores_recreated_status_indicator
+    Source: tui/src/chatwidget/tests/status_and_layout.rs:4159
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalized_backend_snapshot(terminal.backend())
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        3     3 │ "                                                                                "
+        4     4 │ "                                                                                "
+        5     5 │ "› Ask Corbanu Terminal to do anything                                           "
+        6     6 │ "                                                                                "
+        7       │-"  Ambient GLM 5.2 standard · /tmp/project · Corbanu Terminal · TPS: -- tok/s    "
+              7 │+"  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Terminal · TPS:…"
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::status_and_layout::reasoning_delta_restores_recreated_status_indicator_header ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::status_and_layout::reasoning_delta_restores_recreated_status_indicator_header
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.14s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__reasoning_delta_restores_recreated_status_indicator.snap.new
+
+    thread 'chatwidget::tests::status_and_layout::reasoning_delta_restores_recreated_status_indicator_header' (29723457) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__reasoning_delta_restores_recreated_status_indicator' failed in line 4159
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.082s] (207/386) codex-tui chatwidget::tests::status_and_layout::status_line_fast_mode_renders_on_and_off
+        PASS [   0.076s] (208/386) codex-tui chatwidget::tests::status_and_layout::status_line_git_summary_items_render_values
+        PASS [   0.084s] (209/386) codex-tui chatwidget::tests::status_and_layout::status_line_goal_active_token_budget_footer_snapshot
+        PASS [   0.080s] (210/386) codex-tui chatwidget::tests::status_and_layout::status_line_invalid_items_warn_once
+        PASS [   0.077s] (211/386) codex-tui chatwidget::tests::status_and_layout::status_line_legacy_limit_items_prefer_matching_windows
+        PASS [   0.086s] (212/386) codex-tui chatwidget::tests::status_and_layout::status_line_goal_complete_elapsed_footer_snapshot
+        PASS [   0.087s] (213/386) codex-tui chatwidget::tests::status_and_layout::status_line_identifies_custom_provider_with_shared_model_slug
+        PASS [   0.079s] (214/386) codex-tui chatwidget::tests::status_and_layout::status_line_model_uses_active_external_pane_model
+        PASS [   0.079s] (215/386) codex-tui chatwidget::tests::status_and_layout::status_line_model_with_reasoning_includes_fast_for_fast_capable_models
+        PASS [   0.081s] (216/386) codex-tui chatwidget::tests::status_and_layout::status_line_model_with_reasoning_fast_footer_snapshot
+        PASS [   0.080s] (217/386) codex-tui chatwidget::tests::status_and_layout::status_line_model_with_reasoning_plan_mode_footer_snapshot
+        PASS [   0.076s] (218/386) codex-tui chatwidget::tests::status_and_layout::status_line_reasoning_updates_on_mode_switch_without_manual_refresh
+        PASS [   0.096s] (219/386) codex-tui chatwidget::tests::status_and_layout::status_line_legacy_context_usage_renders_context_used_percent
+        PASS [   0.225s] (220/386) codex-tui chatwidget::tests::status_and_layout::rolling_rate_limit_snapshot_preserves_prior_individual_limit
+        PASS [   0.081s] (221/386) codex-tui chatwidget::tests::status_and_layout::status_line_model_with_reasoning_updates_on_mode_switch_without_manual_refresh
+        PASS [   0.094s] (222/386) codex-tui chatwidget::tests::status_and_layout::status_line_model_with_reasoning_context_remaining_footer_snapshot
+        PASS [   0.078s] (223/386) codex-tui chatwidget::tests::status_and_layout::status_line_single_monthly_primary_omits_weekly_limit_item
+        PASS [   0.087s] (224/386) codex-tui chatwidget::tests::status_and_layout::status_line_shows_secondary_non_weekly_when_primary_is_weekly
+        PASS [   0.075s] (225/386) codex-tui chatwidget::tests::status_and_layout::status_line_tps_updates_during_active_streaming
+        PASS [   0.089s] (226/386) codex-tui chatwidget::tests::status_and_layout::status_line_secondary_only_non_weekly_limit_omits_primary_limit_item
+        PASS [   0.026s] (227/386) codex-tui chatwidget::tests::status_and_layout::test_rate_limit_warnings_monthly
+        PASS [   0.312s] (228/386) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_workspace_limit_after_rolling_credits
+        PASS [   0.035s] (229/386) codex-tui chatwidget::tests::status_and_layout::test_rate_limit_warnings_use_secondary_fallback_for_unsupported_window
+        PASS [   0.038s] (230/386) codex-tui chatwidget::tests::status_and_layout::test_rate_limit_warnings_use_generic_fallback_labels
+        PASS [   0.083s] (231/386) codex-tui chatwidget::tests::status_and_layout::status_line_tps_updates_from_completed_turn_average
+        PASS [   0.081s] (232/386) codex-tui chatwidget::tests::status_and_layout::status_line_uses_secondary_fallback_for_unsupported_window
+        PASS [   0.088s] (233/386) codex-tui chatwidget::tests::status_and_layout::status_line_tps_updates_when_usage_arrives_after_completion
+        PASS [   0.087s] (234/386) codex-tui chatwidget::tests::status_and_layout::status_line_tps_uses_streamed_text_when_usage_is_missing
+        PASS [   1.715s] (235/386) codex-tui app::tests::embedded_provider_key_save_is_visible_to_one_bulk_status_refresh
+        PASS [   0.078s] (236/386) codex-tui chatwidget::tests::status_and_layout::stream_error_restores_hidden_status_indicator
+        PASS [   0.088s] (237/386) codex-tui chatwidget::tests::status_and_layout::status_line_workspace_headline_omits_when_unavailable
+        PASS [   0.088s] (238/386) codex-tui chatwidget::tests::status_and_layout::status_line_workspace_headline_renders_cached_value
+        PASS [   0.279s] (239/386) codex-tui chatwidget::tests::status_and_layout::session_configured_clears_goal_status_footer
+        PASS [   0.080s] (240/386) codex-tui chatwidget::tests::status_and_layout::terminal_title_model_updates_on_model_change_without_manual_refresh
+        PASS [   0.085s] (241/386) codex-tui chatwidget::tests::status_and_layout::stream_error_updates_status_indicator
+        PASS [   0.084s] (242/386) codex-tui chatwidget::tests::status_and_layout::streaming_final_answer_keeps_task_running_state
+  TRY 2 FAIL [   0.161s] (243/386) codex-tui chatwidget::tests::status_and_layout::reasoning_delta_restores_recreated_status_indicator_header
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__reasoning_delta_restores_recreated_status_indicator.snap
+    Snapshot: codex_tui__chatwidget__tests__reasoning_delta_restores_recreated_status_indicator
+    Source: tui/src/chatwidget/tests/status_and_layout.rs:4159
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalized_backend_snapshot(terminal.backend())
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        3     3 │ "                                                                                "
+        4     4 │ "                                                                                "
+        5     5 │ "› Ask Corbanu Terminal to do anything                                           "
+        6     6 │ "                                                                                "
+        7       │-"  Ambient GLM 5.2 standard · /tmp/project · Corbanu Terminal · TPS: -- tok/s    "
+              7 │+"  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Terminal · TPS:…"
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::status_and_layout::reasoning_delta_restores_recreated_status_indicator_header ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::status_and_layout::reasoning_delta_restores_recreated_status_indicator_header
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.13s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__reasoning_delta_restores_recreated_status_indicator.snap.new
+
+    thread 'chatwidget::tests::status_and_layout::reasoning_delta_restores_recreated_status_indicator_header' (29724394) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__reasoning_delta_restores_recreated_status_indicator' failed in line 4159
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.083s] (244/386) codex-tui chatwidget::tests::status_and_layout::token_count_none_resets_context_indicator
+        PASS [   0.089s] (245/386) codex-tui chatwidget::tests::status_and_layout::token_usage_update_uses_runtime_context_window
+        PASS [   0.102s] (246/386) codex-tui chatwidget::tests::status_and_layout::thread_goal_update_for_other_thread_is_ignored
+        PASS [   0.077s] (247/386) codex-tui chatwidget::tests::status_and_layout::unterminated_agent_delta_does_not_redraw_unchanged_stream_tail
+        PASS [   0.079s] (248/386) codex-tui chatwidget::tests::status_and_layout::unsupported_code_mode_warning_renders_as_warning_history_cell
+        PASS [   0.094s] (249/386) codex-tui chatwidget::tests::status_and_layout::ui_snapshots_small_heights_task_running
+        PASS [   0.102s] (250/386) codex-tui chatwidget::tests::status_and_layout::ui_snapshots_small_heights_idle
+        PASS [   0.136s] (251/386) codex-tui chatwidget::tests::status_and_layout::status_widget_and_approval_modal_snapshot
+        PASS [   0.091s] (252/386) codex-tui chatwidget::tests::status_and_layout::usage_limit_error_remaps_stale_member_credits_state_to_usage_limit_prompt
+        PASS [   0.074s] (253/386) codex-tui chatwidget::tests::status_and_layout::workspace_headline_update_applies_feature_disabled_result
+        PASS [   0.083s] (254/386) codex-tui chatwidget::tests::status_and_layout::workspace_headline_fetch_allows_backend_auth_without_chatgpt_account
+        PASS [   0.086s] (255/386) codex-tui chatwidget::tests::status_and_layout::user_prompt_submit_app_server_hook_notifications_render_snapshot
+  TRY 1 FAIL [   0.161s] (───────) codex-tui chatwidget::tests::status_and_layout::status_widget_active_snapshot
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_widget_active.snap
+    Snapshot: codex_tui__chatwidget__tests__status_widget_active
+    Source: tui/src/chatwidget/tests/status_and_layout.rs:2610
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalized_backend_snapshot(terminal.backend())
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        3     3 │ "                                                                                "
+        4     4 │ "                                                                                "
+        5     5 │ "› Ask Corbanu Terminal to do anything                                           "
+        6     6 │ "                                                                                "
+        7       │-"  Ambient GLM 5.2 standard · /tmp/project · Corbanu Terminal · TPS: -- tok/s    "
+              7 │+"  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Terminal · TPS:…"
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::status_and_layout::status_widget_active_snapshot ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::status_and_layout::status_widget_active_snapshot
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.13s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_widget_active.snap.new
+
+    thread 'chatwidget::tests::status_and_layout::status_widget_active_snapshot' (29724791) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__status_widget_active' failed in line 2610
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.087s] (256/386) codex-tui chatwidget::tests::status_and_layout::warning_event_adds_warning_history_cell
+        PASS [   0.080s] (257/386) codex-tui chatwidget::tests::status_and_layout::workspace_owner_limit_states_render_state_specific_messages
+        PASS [   0.094s] (258/386) codex-tui chatwidget::tests::status_and_layout::workspace_headline_update_applies_available_headline
+        PASS [   0.090s] (259/386) codex-tui chatwidget::tests::status_and_layout::workspace_member_credits_depleted_prompts_and_sends_credits
+        PASS [   0.090s] (260/386) codex-tui chatwidget::tests::status_and_layout::workspace_member_usage_limit_prompts_and_sends_usage_limit
+        PASS [   0.073s] (261/386) codex-tui chatwidget::tests::status_command_tests::account_update_rejects_stale_status_rate_limit_snapshots
+        PASS [   0.095s] (262/386) codex-tui chatwidget::tests::status_and_layout::workspace_owner_nudge_default_no_dismisses_without_sending
+        PASS [   0.102s] (263/386) codex-tui chatwidget::tests::status_and_layout::workspace_owner_credits_nudge_completion_renders_feedback
+        PASS [   0.102s] (264/386) codex-tui chatwidget::tests::status_and_layout::workspace_owner_limit_states_do_not_prompt_for_owner_nudge
+        PASS [   0.101s] (265/386) codex-tui chatwidget::tests::status_and_layout::workspace_owner_nudge_reappears_after_dismissing_no
+        PASS [   0.103s] (266/386) codex-tui chatwidget::tests::status_and_layout::workspace_owner_usage_limit_nudge_completion_renders_feedback
+        PASS [   0.086s] (267/386) codex-tui chatwidget::tests::status_command_tests::status_command_overlapping_refreshes_update_matching_cells_only
+        PASS [   0.077s] (268/386) codex-tui chatwidget::tests::status_command_tests::status_command_renders_immediately_and_refreshes_rate_limits_for_chatgpt_auth
+        PASS [   0.075s] (269/386) codex-tui chatwidget::tests::status_command_tests::status_command_uses_catalog_default_reasoning_when_config_empty
+        PASS [   0.084s] (270/386) codex-tui chatwidget::tests::status_command_tests::status_command_renders_immediately_without_rate_limit_refresh
+        PASS [   0.087s] (271/386) codex-tui chatwidget::tests::status_command_tests::status_command_refresh_updates_cached_limits_for_future_status_outputs
+        PASS [   0.086s] (272/386) codex-tui chatwidget::tests::status_command_tests::status_command_renders_native_and_foreign_instruction_sources
+        PASS [   0.087s] (273/386) codex-tui chatwidget::tests::status_surface_previews::missing_project_root_uses_different_status_and_title_preview_sources
+        PASS [   0.080s] (274/386) codex-tui chatwidget::tests::status_surface_previews::status_line_setup_popup_hardcoded_only_snapshot
+        PASS [   0.023s] (275/386) codex-tui chatwidget::wallet_menu::tests::wallet_counts_format_for_status_and_allowance_copy
+        PASS [   0.083s] (276/386) codex-tui chatwidget::tests::status_surface_previews::status_line_setup_popup_mixed_snapshot
+        PASS [   0.086s] (277/386) codex-tui chatwidget::tests::status_surface_previews::status_line_setup_popup_live_only_snapshot
+        PASS [   0.077s] (278/386) codex-tui chatwidget::tests::status_surface_previews::status_surface_preview_lines_live_only_snapshot
+        PASS [   0.030s] (279/386) codex-tui claude_panes::tests::live_status_panel_does_not_slice_assistant_notes_mid_sentence
+        PASS [   0.096s] (280/386) codex-tui chatwidget::tests::status_surface_previews::status_line_setup_popup_rate_limits_snapshot
+        PASS [   0.074s] (281/386) codex-tui chatwidget::tests::status_surface_previews::status_surface_preview_omits_unavailable_rate_limit_items
+        PASS [   0.029s] (282/386) codex-tui claude_panes::tests::live_status_panel_tracks_assistant_commentary_without_dispatch_payload
+        PASS [   0.084s] (283/386) codex-tui chatwidget::tests::status_surface_previews::status_surface_preview_lines_rate_limits_snapshot
+        PASS [   0.095s] (284/386) codex-tui chatwidget::tests::status_surface_previews::status_line_setup_popup_workspace_headline_snapshot
+        PASS [   0.031s] (285/386) codex-tui claude_panes::tests::live_status_panel_shows_thinking_tokens_and_marks_prior_tool_done
+        PASS [   0.029s] (286/386) codex-tui claude_panes::tests::live_status_panel_tracks_reasoning_without_artifact_log_spam
+        PASS [   0.082s] (287/386) codex-tui chatwidget::tests::status_surface_previews::terminal_title_app_name_uses_corbanu_identity
+        PASS [   0.079s] (288/386) codex-tui chatwidget::tests::status_surface_previews::terminal_title_setup_popup_hardcoded_only_snapshot
+        PASS [   0.088s] (289/386) codex-tui chatwidget::tests::status_surface_previews::terminal_title_preview_uses_title_truncation_for_live_values
+        PASS [   0.037s] (290/386) codex-tui external_agent_config_migration::flow::tests::external_agent_config_migration_status_lines_use_semantic_colors
+        PASS [   0.041s] (291/386) codex-tui claude_panes::tests::live_status_panel_tracks_tools_without_artifact_log_spam
+        PASS [   0.035s] (292/386) codex-tui get_git_diff::tests::get_git_diff_rejects_unexpected_git_diff_status
+        PASS [   0.036s] (293/386) codex-tui history_cell::tests::mcp_tools_output_from_statuses_renders_status_only_servers
+        PASS [   0.077s] (294/386) codex-tui chatwidget::tests::status_surface_previews::thread_title_falls_back_to_thread_id_when_unnamed
+        PASS [   0.088s] (295/386) codex-tui chatwidget::tests::status_surface_previews::terminal_title_setup_popup_mixed_snapshot
+        PASS [   0.085s] (296/386) codex-tui chatwidget::tests::status_surface_previews::terminal_title_setup_popup_rate_limits_snapshot
+        PASS [   0.090s] (297/386) codex-tui chatwidget::tests::status_surface_previews::terminal_title_setup_popup_live_only_snapshot
+        PASS [   0.034s] (298/386) codex-tui history_cell::tests::mcp_tools_output_from_statuses_renders_verbose_inventory
+        PASS [   0.028s] (299/386) codex-tui onboarding::provider_setup::tests::late_status_is_stale_during_an_authentication_attempt
+        PASS [   0.081s] (300/386) codex-tui chatwidget::wallet_menu::tests::stale_wallet_status_cannot_overwrite_a_newer_refresh
+        PASS [   0.023s] (301/386) codex-tui provider_status_host::tests::environment_precedence_skips_managed_reads_until_environment_is_missing
+        PASS [   0.048s] (302/386) codex-tui history_cell::tests::session_header_hides_fast_status_when_disabled
+        PASS [   0.026s] (303/386) codex-tui provider_status_host::tests::every_corbanu_environment_alias_is_ready_and_precedes_stored_account_status
+        PASS [   0.047s] (304/386) codex-tui onboarding::provider_setup::tests::late_qualified_claude_status_preserves_existing_current_before_new_setup
+        PASS [   0.056s] (305/386) codex-tui provider_status_host::tests::blank_or_missing_corbanu_aliases_allow_the_managed_credential_fallback
+        PASS [   0.025s] (306/386) codex-tui status::helpers::tests::plan_type_display_name_remaps_display_labels
+        PASS [   0.029s] (307/386) codex-tui status::helpers::tests::format_directory_display_truncates_halfwidth_sound_marks
+  TRY 1 FAIL [   0.166s] (───────) codex-tui chatwidget::tests::status_surface_previews::status_surface_preview_lines_hardcoded_only_snapshot
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_surface_previews_hardcoded_only.snap
+    Snapshot: codex_tui__chatwidget__tests__status_surface_previews_hardcoded_only
+    Source: tui/src/chatwidget/tests/status_surface_previews.rs:160
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: snapshot
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        1       │-status line: tmp · feat/awesome-feature · thread title · Read Only · Ask for approval
+              1 │+status line: my-project · feat/awesome-feature · thread title · Read Only · Ask for approval
+        2     2 │ terminal title: thread title | feat/awesome-feature | Tasks 0/0
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::status_surface_previews::status_surface_preview_lines_hardcoded_only_snapshot ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::status_surface_previews::status_surface_preview_lines_hardcoded_only_snapshot
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.14s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_surface_previews_hardcoded_only.snap.new
+
+    thread 'chatwidget::tests::status_surface_previews::status_surface_preview_lines_hardcoded_only_snapshot' (29725777) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__status_surface_previews_hardcoded_only' failed in line 160
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.027s] (308/386) codex-tui status::rate_limits::tests::non_codex_multi_limit_keeps_group_row
+  TRY 1 FAIL [   0.164s] (───────) codex-tui chatwidget::tests::status_surface_previews::status_surface_preview_lines_mixed_snapshot
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_surface_previews_mixed.snap
+    Snapshot: codex_tui__chatwidget__tests__status_surface_previews_mixed
+    Source: tui/src/chatwidget/tests/status_surface_previews.rs:228
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: snapshot
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        1       │-status line: tmp · feature/mixed-preview · Mixed preview thread
+        2       │-terminal title: tmp | Mixed preview thread | Tasks 0/0
+              1 │+status line: my-project · feature/mixed-preview · Mixed preview thread
+              2 │+terminal title: project | Mixed preview thread | Tasks 0/0
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::status_surface_previews::status_surface_preview_lines_mixed_snapshot ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::status_surface_previews::status_surface_preview_lines_mixed_snapshot
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.13s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_surface_previews_mixed.snap.new
+
+    thread 'chatwidget::tests::status_surface_previews::status_surface_preview_lines_mixed_snapshot' (29725817) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__status_surface_previews_mixed' failed in line 228
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  TRY 2 FAIL [   0.177s] (309/386) codex-tui chatwidget::tests::status_and_layout::status_widget_active_snapshot
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_widget_active.snap
+    Snapshot: codex_tui__chatwidget__tests__status_widget_active
+    Source: tui/src/chatwidget/tests/status_and_layout.rs:2610
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: normalized_backend_snapshot(terminal.backend())
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        3     3 │ "                                                                                "
+        4     4 │ "                                                                                "
+        5     5 │ "› Ask Corbanu Terminal to do anything                                           "
+        6     6 │ "                                                                                "
+        7       │-"  Ambient GLM 5.2 standard · /tmp/project · Corbanu Terminal · TPS: -- tok/s    "
+              7 │+"  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Terminal · TPS:…"
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::status_and_layout::status_widget_active_snapshot ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::status_and_layout::status_widget_active_snapshot
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.15s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_widget_active.snap.new
+
+    thread 'chatwidget::tests::status_and_layout::status_widget_active_snapshot' (29725720) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__status_widget_active' failed in line 2610
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.029s] (310/386) codex-tui status::rate_limits::tests::non_codex_single_limit_renders_combined_row
+        PASS [   0.031s] (311/386) codex-tui status::remote_connection::tests::remote_connection_status_value_formats_display_value
+        PASS [   0.024s] (312/386) codex-tui status::snapshot_helpers::tests::status_header_version_normalization_preserves_frame_across_releases
+        PASS [   0.028s] (313/386) codex-tui status::snapshot_helpers::tests::status_header_version_normalization_only_masks_the_compiled_version
+        PASS [   0.026s] (314/386) codex-tui status::tests::stale_monthly_limit_marks_fresh_rolling_snapshot_stale
+        PASS [   0.033s] (315/386) codex-tui status::snapshot_helpers::tests::status_header_version_normalization_preserves_invalid_or_missing_headers
+        PASS [   0.040s] (316/386) codex-tui status::tests::status_card_token_usage_excludes_cached_tokens
+        PASS [   0.035s] (317/386) codex-tui status::tests::status_context_window_uses_last_usage
+        PASS [   0.035s] (318/386) codex-tui status::tests::status_permissions_full_disk_managed_with_network_is_danger_full_access
+        PASS [   0.038s] (319/386) codex-tui status::tests::status_permissions_broadened_workspace_profile_shows_builtin_label
+        PASS [   0.041s] (320/386) codex-tui status::tests::status_model_provider_uses_bedrock_runtime_base_url_and_gates_usage_link
+        PASS [   0.034s] (321/386) codex-tui status::tests::status_permissions_full_disk_managed_without_network_is_external_sandbox
+        PASS [   0.038s] (322/386) codex-tui status::tests::status_permissions_named_profile_shows_additional_writable_roots
+        PASS [   0.033s] (323/386) codex-tui status::tests::status_permissions_named_read_only_profile_shows_builtin_label
+        PASS [   0.035s] (324/386) codex-tui status::tests::status_permissions_non_default_workspace_write_uses_workspace_label
+        PASS [   0.036s] (325/386) codex-tui status::tests::status_permissions_read_only_profile_shows_additional_writable_roots
+        PASS [   0.039s] (326/386) codex-tui status::tests::status_permissions_named_workspace_profile_shows_builtin_label
+        PASS [   0.035s] (327/386) codex-tui status::tests::status_permissions_user_defined_profile_shows_name
+        PASS [   0.036s] (328/386) codex-tui status::tests::status_permissions_workspace_roots_include_profile_defined_directories
+        PASS [   0.040s] (329/386) codex-tui status::tests::status_permissions_workspace_auto_review_shows_reviewer_label
+  TRY 2 FAIL [   0.134s] (330/386) codex-tui chatwidget::tests::status_surface_previews::status_surface_preview_lines_mixed_snapshot
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_surface_previews_mixed.snap
+    Snapshot: codex_tui__chatwidget__tests__status_surface_previews_mixed
+    Source: tui/src/chatwidget/tests/status_surface_previews.rs:228
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: snapshot
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        1       │-status line: tmp · feature/mixed-preview · Mixed preview thread
+        2       │-terminal title: tmp | Mixed preview thread | Tasks 0/0
+              1 │+status line: my-project · feature/mixed-preview · Mixed preview thread
+              2 │+terminal title: project | Mixed preview thread | Tasks 0/0
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::status_surface_previews::status_surface_preview_lines_mixed_snapshot ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::status_surface_previews::status_surface_preview_lines_mixed_snapshot
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.10s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_surface_previews_mixed.snap.new
+
+    thread 'chatwidget::tests::status_surface_previews::status_surface_preview_lines_mixed_snapshot' (29726425) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__status_surface_previews_mixed' failed in line 228
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  TRY 2 FAIL [   0.135s] (331/386) codex-tui chatwidget::tests::status_surface_previews::status_surface_preview_lines_hardcoded_only_snapshot
+  stdout ───
+
+    running 1 test
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Snapshot file: tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_surface_previews_hardcoded_only.snap
+    Snapshot: codex_tui__chatwidget__tests__status_surface_previews_hardcoded_only
+    Source: tui/src/chatwidget/tests/status_surface_previews.rs:160
+    ────────────────────────────────────────────────────────────────────────────────
+    Expression: snapshot
+    ────────────────────────────────────────────────────────────────────────────────
+    -old snapshot
+    +new results
+    ────────────┬───────────────────────────────────────────────────────────────────
+        1       │-status line: tmp · feat/awesome-feature · thread title · Read Only · Ask for approval
+              1 │+status line: my-project · feat/awesome-feature · thread title · Read Only · Ask for approval
+        2     2 │ terminal title: thread title | feat/awesome-feature | Tasks 0/0
+    ────────────┴───────────────────────────────────────────────────────────────────
+    To update snapshots run `cargo insta review`
+    Stopped on the first failure. Run `cargo insta test` to run all snapshots.
+    test chatwidget::tests::status_surface_previews::status_surface_preview_lines_hardcoded_only_snapshot ... FAILED
+
+    failures:
+
+    failures:
+        chatwidget::tests::status_surface_previews::status_surface_preview_lines_hardcoded_only_snapshot
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4073 filtered out; finished in 0.11s
+
+  stderr ───
+    stored new snapshot /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_surface_previews_hardcoded_only.snap.new
+
+    thread 'chatwidget::tests::status_surface_previews::status_surface_preview_lines_hardcoded_only_snapshot' (29726426) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    snapshot assertion for 'codex_tui__chatwidget__tests__status_surface_previews_hardcoded_only' failed in line 160
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.039s] (332/386) codex-tui status::tests::status_permissions_workspace_roots_show_additional_directories
+        PASS [   0.039s] (333/386) codex-tui status::tests::status_snapshot_cached_limits_hide_credits_without_flag
+        PASS [   0.039s] (334/386) codex-tui status::tests::status_snapshot_includes_credits_and_limits
+        PASS [   0.039s] (335/386) codex-tui status::tests::status_snapshot_includes_forked_from
+        PASS [   0.041s] (336/386) codex-tui status::tests::status_snapshot_includes_monthly_limit
+        PASS [   0.034s] (337/386) codex-tui status::tests::status_snapshot_shows_auto_review_permissions
+        PASS [   0.038s] (338/386) codex-tui status::tests::status_snapshot_includes_reasoning_details
+        PASS [   0.036s] (339/386) codex-tui status::tests::status_snapshot_shows_active_user_defined_profile
+        PASS [   0.038s] (340/386) codex-tui status::tests::status_snapshot_respects_unlimited_without_has_credits_flag
+        PASS [   0.036s] (341/386) codex-tui status::tests::status_snapshot_shows_available_credits_without_display_balance
+        PASS [   0.041s] (342/386) codex-tui status::tests::status_snapshot_shows_missing_limits_message
+        PASS [   0.036s] (343/386) codex-tui status::tests::status_snapshot_shows_positive_credits
+        PASS [   0.037s] (344/386) codex-tui status::tests::status_snapshot_shows_refreshing_limits_notice
+        PASS [   0.035s] (345/386) codex-tui status::tests::status_snapshot_shows_unlimited_credits
+        PASS [   0.040s] (346/386) codex-tui status::tests::status_snapshot_shows_stale_limits_message
+        PASS [   0.039s] (347/386) codex-tui status::tests::status_snapshot_shows_unavailable_limits_message
+        PASS [   0.043s] (348/386) codex-tui status::tests::status_snapshot_treats_refreshing_empty_limits_as_unavailable
+        PASS [   0.036s] (349/386) codex-tui status::tests::status_snapshot_uses_command_backed_provider_account_identity
+        PASS [   0.038s] (350/386) codex-tui status::tests::status_snapshot_truncates_halfwidth_kana_in_narrow_terminal
+        PASS [   0.037s] (351/386) codex-tui status::tests::status_snapshot_truncates_in_narrow_terminal
+        PASS [   0.034s] (352/386) codex-tui status::tests::status_snapshot_uses_default_reasoning_when_config_empty
+        PASS [   0.037s] (353/386) codex-tui status::tests::status_snapshot_uses_generic_limit_labels_for_unsupported_windows
+        PASS [   0.029s] (354/386) codex-tui status_indicator_widget::tests::fmt_elapsed_compact_formats_seconds_minutes_hours
+        PASS [   0.029s] (355/386) codex-tui status_indicator_widget::tests::details_overflow_adds_ellipsis
+        PASS [   0.030s] (356/386) codex-tui status_indicator_widget::tests::details_args_can_disable_capitalization_and_limit_lines
+        PASS [   0.031s] (357/386) codex-tui status_indicator_widget::tests::renders_remapped_interrupt_hint
+        PASS [   0.035s] (358/386) codex-tui status_indicator_widget::tests::renders_truncated
+        PASS [   0.051s] (359/386) codex-tui status::tests::transcript_overlay_remeasures_status_after_rate_limit_refresh
+        PASS [   0.034s] (360/386) codex-tui status_indicator_widget::tests::timer_pauses_when_requested
+        PASS [   0.037s] (361/386) codex-tui status_indicator_widget::tests::renders_without_spinner_when_animations_disabled
+        PASS [   0.038s] (362/386) codex-tui status_indicator_widget::tests::renders_with_working_header
+        PASS [   0.038s] (363/386) codex-tui status_indicator_widget::tests::renders_wrapped_details_panama_two_lines
+        PASS [   0.028s] (364/386) codex-tui vault_command::tests::status_reports_uninitialized_default_storage_truthfully
+        PASS [   0.023s] (365/386) codex-tui::all suite::status_indicator::ansi_escape_line_strips_escape_sequences
+        PASS [   0.182s] (366/386) codex-tui vault_command::tests::empty_args_defaults_to_status
+        PASS [   0.179s] (367/386) codex-tui vault_command::tests::status_reports_unlocked_and_count
+        PASS [   1.043s] (368/386) codex-tui provider_status_host::tests::command_authorization_rejection_is_exact_and_debug_output_is_secret_free
+        PASS [   1.192s] (369/386) codex-tui provider_status_host::tests::current_selection_changes_status_without_persisting_policy
+        PASS [   1.209s] (370/386) codex-tui provider_status_host::tests::local_and_no_auth_custom_providers_are_ready_without_enrollment
+        PASS [   1.214s] (371/386) codex-tui provider_status_host::tests::unchecked_command_is_configured_but_a_rejected_authorization_is_status_only
+        PASS [   1.223s] (372/386) codex-tui provider_status_host::tests::eligibility_survives_restart_without_touching_credentials
+        PASS [   1.219s] (373/386) codex-tui status::helpers::tests::compose_agents_summary_names_global_agents_override
+        PASS [   1.248s] (374/386) codex-tui provider_status_host::tests::authorized_command_runtime_converges_to_configured_ready
+        PASS [   1.217s] (375/386) codex-tui status::helpers::tests::compose_agents_summary_shows_relative_native_and_full_foreign_paths
+        PASS [   1.221s] (376/386) codex-tui status::helpers::tests::compose_agents_summary_orders_global_before_project_agents
+        PASS [   1.245s] (377/386) codex-tui provider_status_host::tests::custom_storage_metadata_is_secret_free_and_missing_file_is_active
+        PASS [   1.233s] (378/386) codex-tui status::helpers::tests::compose_agents_summary_includes_global_agents_path
+        PASS [   1.258s] (379/386) codex-tui provider_status_host::tests::correlated_corbanu_metadata_resolves_without_credential_reread
+        PASS [   1.094s] (380/386) codex-tui status::tests::status_snapshot_includes_enterprise_monthly_credit_limit
+        PASS [   1.139s] (381/386) codex-tui status::tests::status_snapshot_shows_chatgpt_plan_without_email
+        PASS [   1.488s] (382/386) codex-tui provider_status_host::tests::saved_managed_custom_key_resolves_configured_ready_without_secret_leakage
+        PASS [   1.992s] (383/386) codex-tui startup_provider::tests::login_status_metadata_is_scoped_to_the_exact_openai_runtime
+        PASS [   3.774s] (384/386) codex-tui chatwidget::tests::status_and_layout::ambient_pet_stays_hidden_until_a_pet_is_selected
+        PASS [   3.668s] (385/386) codex-tui chatwidget::tests::status_and_layout::configured_pet_load_is_deferred_until_after_construction
+        PASS [  30.670s] (386/386) codex-tui::all suite::provider_management::tmux_shared_and_custom_catalog_have_management_status_parity
+────────────
+     Summary [  32.983s] 386 tests run: 375 passed, 11 failed, 3779 skipped
+  TRY 2 FAIL [   0.153s] (166/386) codex-tui chatwidget::tests::exec_flow::image_generation_begin_restores_working_status_after_single_line_preamble
+  TRY 2 FAIL [   0.157s] (167/386) codex-tui chatwidget::tests::exec_flow::preamble_keeps_working_status_snapshot
+  TRY 2 FAIL [   0.157s] (168/386) codex-tui chatwidget::tests::exec_flow::unified_exec_wait_status_renders_command_in_single_details_row_snapshot
+  TRY 2 FAIL [   0.157s] (169/386) codex-tui chatwidget::tests::status_and_layout::chatwidget_tall
+  TRY 2 FAIL [   0.161s] (170/386) codex-tui chatwidget::tests::exec_flow::unified_exec_begin_restores_working_status_snapshot
+  TRY 2 FAIL [   0.179s] (174/386) codex-tui chatwidget::tests::guardian::guardian_cleanup_drops_stale_reviews_and_restores_mcp_status
+  TRY 2 FAIL [   0.193s] (176/386) codex-tui chatwidget::tests::guardian::guardian_parallel_reviews_render_aggregate_status_snapshot
+  TRY 2 FAIL [   0.161s] (243/386) codex-tui chatwidget::tests::status_and_layout::reasoning_delta_restores_recreated_status_indicator_header
+  TRY 2 FAIL [   0.177s] (309/386) codex-tui chatwidget::tests::status_and_layout::status_widget_active_snapshot
+  TRY 2 FAIL [   0.134s] (330/386) codex-tui chatwidget::tests::status_surface_previews::status_surface_preview_lines_mixed_snapshot
+  TRY 2 FAIL [   0.135s] (331/386) codex-tui chatwidget::tests::status_surface_previews::status_surface_preview_lines_hardcoded_only_snapshot
+error: test run failed
+error: recipe `test` failed on line 82 with exit code 100

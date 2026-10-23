@@ -1,0 +1,72 @@
+# Issue #749: under Moderate the inspector's rows match what is enforced.
+id = "issue749-moderate-inspector"
+feature = "The inspector under Moderate"
+expected = "After Moderate is chosen and Corbanu restarted, the inspector says Active this run: Moderate beside Moderate in force, the vault store is unreadable, approved commands stay inside the sandbox, and the nested-agents row describes Moderate."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+# The session has started (its policy runs in this process) once the model shows.
+[[steps]]
+wait = "model:\\s+glm-5\\.3-flash"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "enter confirm and save"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "r restart now"
+[[steps]]
+key = "r"
+[[steps]]
+wait = "^(?![\\s\\S]*Saved: Moderate)[\\s\\S]*Corbanu Terminal \\(v[\\s\\S]*› "
+timeout = 60
+[[steps]]
+wait = "model:\\s+glm-5\\.3-flash"
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Moderate"
+[[steps]]
+key = "i"
+[[steps]]
+wait = "Active this run: Moderate"
+[[steps]]
+pause = 5.0
+[[steps]]
+key = "Down"
+repeat = 30
+[[steps]]
+wait = "Nested agents: not refused"
+[[steps]]
+pause = 4.0

@@ -1,0 +1,15 @@
+Saved zai account `work` (api_key).
+Saved zai account `personal` (api_key).
+Saved zai account `work` (api_key).
+Successfully logged in
+Successfully logged in
+Saved zai account `work` (api_key).
+--- z1
+zai	personal	api_key
+zai	work	api_key
+--- o1
+zai	work	api_key
+--- o2
+No named accounts. Every provider uses its default account.
+--- n1
+zai	work	api_key

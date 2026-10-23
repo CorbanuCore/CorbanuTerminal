@@ -1,0 +1,2 @@
+2026-10-15T05:15:10Z clear (baseline login-window SecurityAgent only)
+0

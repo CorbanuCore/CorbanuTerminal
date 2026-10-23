@@ -414,13 +414,18 @@ async fn run_command_under_sandbox(
                 .codex_linux_sandbox_exe
                 .expect("codex-linux-sandbox executable not found");
             let network_sandbox_policy = runtime_permission_profile.network_sandbox_policy();
-            let args = create_linux_sandbox_command_args_for_permission_profile(
+            let mut args = create_linux_sandbox_command_args_for_permission_profile(
                 command,
                 cwd.as_path(),
                 &runtime_permission_profile,
                 sandbox_policy_cwd.as_path(),
                 use_legacy_landlock,
                 allow_network_for_proxy(enforce_managed_network),
+            );
+            // #348: where the helper records the placeholders it makes.
+            codex_sandboxing::landlock::insert_placeholder_record_dir_arg(
+                &mut args,
+                config.codex_home.as_path(),
             );
             spawn_debug_sandbox_child(
                 codex_linux_sandbox_exe,
@@ -480,7 +485,37 @@ async fn run_command_under_windows_session(
     use codex_windows_sandbox::WindowsSandboxSessionRequest;
     use codex_windows_sandbox::spawn_windows_sandbox_session_for_level;
 
+    let windows_sandbox_level = WindowsSandboxLevel::from_config(config);
+    // Every non-elevated level runs on the legacy restricted-token backend here.
+    let backend_level = match windows_sandbox_level {
+        WindowsSandboxLevel::Elevated => WindowsSandboxLevel::Elevated,
+        WindowsSandboxLevel::RestrictedToken | WindowsSandboxLevel::Disabled => {
+            WindowsSandboxLevel::RestrictedToken
+        }
+    };
+    if let Some(warning) =
+        codex_core::config::legacy_windows_sandbox_warning(backend_level, permission_profile)
+    {
+        eprintln!("warning: {warning}");
+    }
+
     let empty_paths: &[AbsolutePathBuf] = &[];
+    // #304: the elevated backend's deny-read sync removes the entries of
+    // rules a launch does not list, so this launch lists (and enforces) the
+    // profile's rules. The legacy backend refuses deny-read profiles itself.
+    let deny_read = if backend_level == WindowsSandboxLevel::Elevated {
+        let (mut file_system, _) = permission_profile.to_runtime_permissions();
+        file_system.remove_skip_missing_path_entries();
+        match codex_windows_sandbox::resolve_windows_deny_read_targets(&file_system, &cwd) {
+            Ok(deny_read) => deny_read,
+            Err(err) => {
+                eprintln!("windows sandbox failed: {err}");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        codex_windows_sandbox::DenyReadTargets::default()
+    };
     let spawned = spawn_windows_sandbox_session_for_level(WindowsSandboxSessionRequest {
         permission_profile,
         workspace_roots: workspace_roots.as_slice(),
@@ -488,7 +523,7 @@ async fn run_command_under_windows_session(
         command,
         cwd: cwd.as_path(),
         env_map: env,
-        windows_sandbox_level: WindowsSandboxLevel::from_config(config),
+        windows_sandbox_level,
         proxy_settings_mode: WindowsSandboxProxySettingsMode::Reconcile,
         proxy_enforced: false,
         network_proxy_restricting_sid: None,
@@ -496,7 +531,7 @@ async fn run_command_under_windows_session(
         read_roots_override: None,
         read_roots_include_platform_defaults: false,
         write_roots_override: None,
-        deny_read_paths_override: empty_paths,
+        deny_read_override: &deny_read,
         deny_write_paths_override: empty_paths,
         tty: false,
         stdin_open: true,

@@ -1,0 +1,5 @@
+{"t": 1791780378.43, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDOTHERPROFILE", "region": "eu-central-1", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780379.109, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780380.413, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDALTFILEWORK", "region": "sa-east-1", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780381.064, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDOTHERPROFILE", "region": "eu-central-1", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780382.022, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}

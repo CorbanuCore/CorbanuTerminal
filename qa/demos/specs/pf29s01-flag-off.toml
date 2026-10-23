@@ -1,0 +1,117 @@
+# PF-29-S01. Record with
+#   PF29_CANDIDATE=<corbanu> --bin qa/security-levels/sprints/PF-29-S01/demos/restart-once.sh
+id = "pf29s01-flag-off"
+feature = "Preflight flag off: Aggressive behaves exactly as before"
+expected = "With protected_mode_preflight off the review has no preflight, nothing extra is denied, and after restart the probe can still read ~/.ssh/id_ed25519 (the PF-27-S02 limit PF-29 closes)."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"seed.sh" = '''
+mkdir -p "$HOME/.ssh" && printf 'synthetic demo key pf29\n' > "$HOME/.ssh/id_ed25519" && printf 'ssh-ed25519 AAAAsyntheticpublic pf29\n' > "$HOME/.ssh/id_ed25519.pub" && printf 'ordinary notes\n' > "$HOME/notes.txt" && echo seeded fake ssh key pair
+'''
+"probe.sh" = '''
+probe() { if eval "$2" >/dev/null 2>&1; then echo "$1: ALLOWED"; else echo "$1: denied"; fi; }
+probe "read ~/.ssh/id_ed25519 (private key)" 'cat "$HOME/.ssh/id_ed25519"'
+probe "read ~/.ssh/id_ed25519.pub (public key)" 'cat "$HOME/.ssh/id_ed25519.pub"'
+probe "read ~/notes.txt (ordinary file)" 'cat "$HOME/notes.txt"'
+echo probes done
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+type = "!sh seed.sh"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "seeded fake ssh key pair"
+
+[[steps]]
+type = "/security"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Active in this session: Permissive"
+
+[[steps]]
+key = "Up"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Switch to Aggressive\\?"
+
+[[steps]]
+key = "Down"
+repeat = 20
+
+[[steps]]
+wait = "config\\.toml is\\s+not modified"
+
+[[steps]]
+pause = 4.0
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Saved: Aggressive"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+type = "/exit"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "restarting Corbanu Terminal.*model: +glm-5\\.2"
+timeout = 60
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run exactly this command once and nothing else: sh probe.sh  Then show its raw output and stop."
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Would you like to run the following command"
+timeout = 180
+compress = 3
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "ordinary file\\): (denied|ALLOWED)[\\s\\S]*probes done[\\s\\S]*probes done"
+timeout = 180
+compress = 3
+
+[[steps]]
+pause = 4.0

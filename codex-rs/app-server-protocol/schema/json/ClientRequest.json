@@ -4546,6 +4546,39 @@
         }
       ]
     },
+    "ThreadRecordSentModelRequestParams": {
+      "description": "One model request a client sent itself, reported so the operator's ledger can record spend this process never saw.\n\nThe Claude panes bridge is the caller: it posts to a provider from inside the TUI, which does not run the model client. Only routes the server recognises are recorded.",
+      "properties": {
+        "baseUrl": {
+          "description": "The base URL the request went to, and the endpoint underneath it.",
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "providerId": {
+          "description": "The account the client believes it billed. Recorded only when the server knows this provider and the route below is its own.",
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "usage": {
+          "description": "The `usage` object the provider's response carried, if it carried one."
+        }
+      },
+      "required": [
+        "baseUrl",
+        "model",
+        "path",
+        "providerId",
+        "threadId"
+      ],
+      "type": "object"
+    },
     "ThreadResumeInitialTurnsPageParams": {
       "properties": {
         "itemsView": {
@@ -5938,6 +5971,31 @@
         "params"
       ],
       "title": "Thread/injectItemsRequest",
+      "type": "object"
+    },
+    {
+      "description": "Report a model request the client sent itself, so it reaches the ledger.",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/RequestId"
+        },
+        "method": {
+          "enum": [
+            "thread/recordSentModelRequest"
+          ],
+          "title": "Thread/recordSentModelRequestRequestMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/ThreadRecordSentModelRequestParams"
+        }
+      },
+      "required": [
+        "id",
+        "method",
+        "params"
+      ],
+      "title": "Thread/recordSentModelRequestRequest",
       "type": "object"
     },
     {

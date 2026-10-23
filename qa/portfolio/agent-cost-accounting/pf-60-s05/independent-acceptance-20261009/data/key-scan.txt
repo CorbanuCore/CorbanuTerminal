@@ -1,0 +1,4 @@
+# Key scan, 2026-10-09T14:24:16Z (final tree)
+For each vault label used (provider/zai_api_key, deepseek_api_key, openrouter_api_key, ambient_api_key, ai_gateway_api_key), the value was substituted into `grep -rF -c` on this directory without being printed: 0 hits for every label.
+Regex scan for key-shaped strings (sk-…, sk-or-v1-…, AKIA…, Z.AI id.secret form): 0 hits.
+Paths and hosts redacted: <scratch>, <rtx-scratch>, <corbanu-root>, <rtx-home>, <rtx-host>, ~.

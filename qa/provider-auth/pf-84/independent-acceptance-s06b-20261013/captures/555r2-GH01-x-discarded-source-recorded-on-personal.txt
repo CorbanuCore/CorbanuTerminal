@@ -1,0 +1,63 @@
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       glm-5.3-flash   /model to change           │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word ping
+
+
+• ping
+
+
+› Reply with exactly the word resumed
+
+
+• resumed
+
+
+› Reply with exactly the word prec
+
+
+■ unexpected status 401 Unauthorized: Authentication Failed, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 2cd8c310-1603-4088-b5aa-b576607d2ff3
+
+
+› Reply with exactly the word pong
+
+
+⚠ Z.AI (zai) account `personal` was rejected. Replace its key with `corbanu account add zai personal` (reads stdin), or choose another account. The default Z.AI
+  credential is unchanged.
+
+■ unexpected status 401 Unauthorized: Authentication Failed, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 8cdc85b6-9d37-401e-a942-44f076107f9b
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Z.AI GLM 5.3 Flash                                                │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account personal            │
+│  Directory:            $S/ws              │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Z.AI API key configured                                           │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a1347c-2525-71e3-be20-156b4cbc9bd0                              │
+│                                                                                          │
+│  Token usage:          7.48K total  (7.46K input + 24 output)                            │
+│  Context window:       100% left (7.44K used / 950K)                                     │
+│  Account usage:        account            input  cached input  output  reasoning         │
+│                        personal (active)      0             0       0          0         │
+│                        work               7,459         7,360      24         17         │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Explain this codebase
+
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: -- tok/s

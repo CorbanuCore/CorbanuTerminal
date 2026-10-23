@@ -9,7 +9,7 @@ use tempfile::tempdir;
 
 #[test]
 fn corbanu_environment_precedence_and_blank_fallback_match_both_wire_providers() {
-    let providers = built_in_model_providers(None);
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
     for provider in [
         PFTERMINAL_PLAN_PROVIDER_ID,
         PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
@@ -42,6 +42,7 @@ name = "Ollama"
 base_url = "http://localhost:11434/v1"
         "#;
     let expected_provider = ModelProviderInfo {
+        account: None,
         name: "Ollama".into(),
         base_url: Some("http://localhost:11434/v1".into()),
         env_key: None,
@@ -65,6 +66,7 @@ base_url = "http://localhost:11434/v1"
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
+        billing: None,
     };
 
     let provider: ModelProviderInfo = toml::from_str(azure_provider_toml).unwrap();
@@ -80,6 +82,7 @@ env_key = "AZURE_OPENAI_API_KEY"
 query_params = { api-version = "2025-04-01-preview" }
         "#;
     let expected_provider = ModelProviderInfo {
+        account: None,
         name: "Azure".into(),
         base_url: Some("https://xxxxx.openai.azure.com/openai".into()),
         env_key: Some("AZURE_OPENAI_API_KEY".into()),
@@ -105,6 +108,7 @@ query_params = { api-version = "2025-04-01-preview" }
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
+        billing: None,
     };
 
     let provider: ModelProviderInfo = toml::from_str(azure_provider_toml).unwrap();
@@ -122,6 +126,7 @@ env_http_headers = { "X-Example-Env-Header" = "EXAMPLE_ENV_VAR" }
 supports_standalone_web_search = true
         "#;
     let expected_provider = ModelProviderInfo {
+        account: None,
         name: "Example".into(),
         base_url: Some("https://example.com".into()),
         env_key: Some("API_KEY".into()),
@@ -149,6 +154,7 @@ supports_standalone_web_search = true
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: true,
+        billing: None,
     };
 
     let provider: ModelProviderInfo = toml::from_str(azure_provider_toml).unwrap();
@@ -288,6 +294,7 @@ fn test_header_auth_uses_chatgpt_codex_base_url() {
 #[test]
 fn test_supports_remote_compaction_for_azure_name() {
     let provider = ModelProviderInfo {
+        account: None,
         name: "Azure".into(),
         base_url: Some("https://example.com/openai".into()),
         env_key: Some("AZURE_OPENAI_API_KEY".into()),
@@ -311,6 +318,7 @@ fn test_supports_remote_compaction_for_azure_name() {
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
+        billing: None,
     };
 
     assert!(provider.supports_remote_compaction());
@@ -319,6 +327,7 @@ fn test_supports_remote_compaction_for_azure_name() {
 #[test]
 fn test_supports_remote_compaction_for_non_openai_non_azure_provider() {
     let provider = ModelProviderInfo {
+        account: None,
         name: "Example".into(),
         base_url: Some("https://example.com/v1".into()),
         env_key: Some("API_KEY".into()),
@@ -342,6 +351,7 @@ fn test_supports_remote_compaction_for_non_openai_non_azure_provider() {
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
+        billing: None,
     };
 
     assert!(!provider.supports_remote_compaction());
@@ -427,6 +437,7 @@ fn test_create_amazon_bedrock_provider() {
     assert_eq!(
         ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None),
         ModelProviderInfo {
+            account: None,
             name: "Amazon Bedrock".to_string(),
             base_url: None,
             env_key: None,
@@ -456,6 +467,7 @@ fn test_create_amazon_bedrock_provider() {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     );
 }
@@ -478,6 +490,7 @@ fn test_create_ambient_provider() {
     assert_eq!(
         ModelProviderInfo::create_ambient_provider(),
         ModelProviderInfo {
+            account: None,
             name: "Ambient".to_string(),
             base_url: Some(AMBIENT_BASE_URL.to_string()),
             env_key: Some(AMBIENT_API_KEY_ENV_VAR.to_string()),
@@ -501,6 +514,7 @@ fn test_create_ambient_provider() {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     );
     assert_eq!(AMBIENT_DEFAULT_MODEL, "z-ai/glm-5.2");
@@ -571,6 +585,7 @@ fn test_create_zai_provider() {
     assert_eq!(
         ModelProviderInfo::create_zai_provider(),
         ModelProviderInfo {
+            account: None,
             name: "Z.AI".to_string(),
             base_url: Some(ZAI_BASE_URL.to_string()),
             env_key: Some(ZAI_API_KEY_ENV_VAR.to_string()),
@@ -594,6 +609,7 @@ fn test_create_zai_provider() {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     );
     assert_eq!(ZAI_DEFAULT_MODEL, "glm-5.2");
@@ -604,6 +620,7 @@ fn test_create_anthropic_provider() {
     assert_eq!(
         ModelProviderInfo::create_anthropic_provider(),
         ModelProviderInfo {
+            account: None,
             name: "Anthropic".to_string(),
             base_url: Some(ANTHROPIC_BASE_URL.to_string()),
             env_key: Some(ANTHROPIC_API_KEY_ENV_VAR.to_string()),
@@ -627,6 +644,7 @@ fn test_create_anthropic_provider() {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     );
     assert_eq!(ANTHROPIC_DEFAULT_MODEL, "claude-opus-5");
@@ -643,6 +661,7 @@ fn test_create_claude_plan_provider() {
     assert_eq!(
         ModelProviderInfo::create_claude_plan_provider(),
         ModelProviderInfo {
+            account: None,
             name: "Claude Plan".to_string(),
             base_url: Some(ANTHROPIC_BASE_URL.to_string()),
             env_key: None,
@@ -674,6 +693,7 @@ fn test_create_claude_plan_provider() {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     );
     assert_eq!(CLAUDE_PLAN_MODEL, "claude-opus-5-plan");
@@ -922,6 +942,7 @@ fn test_built_in_model_providers_include_deepseek_flash_responses() {
         resolve_model_for_provider(/*model*/ None, DEEPSEEK_PROVIDER_ID).as_deref(),
         Some(DEEPSEEK_DEFAULT_MODEL)
     );
+    assert_eq!(DEEPSEEK_DEFAULT_MODEL, "deepseek-flash");
     assert_eq!(
         resolve_model_for_provider(
             Some(DEEPSEEK_DEFAULT_MODEL.to_string()),
@@ -935,6 +956,15 @@ fn test_built_in_model_providers_include_deepseek_flash_responses() {
             .as_deref(),
         Some(DEEPSEEK_PRO_MODEL),
         "DeepSeek Pro should remain on the authenticated direct provider"
+    );
+    assert_eq!(
+        resolve_model_for_provider(
+            Some(DEEPSEEK_LEGACY_FLASH_MODEL.to_string()),
+            DEEPSEEK_PROVIDER_ID,
+        )
+        .as_deref(),
+        Some(DEEPSEEK_LEGACY_FLASH_MODEL),
+        "the legacy Flash name is still accepted verbatim; DeepSeek serves V4.1 Flash on it"
     );
 }
 
@@ -1337,7 +1367,7 @@ fn test_merge_configured_model_providers_rejects_amazon_bedrock_non_default_fiel
             configured_model_providers,
         ),
         Err(
-            "model_providers.amazon-bedrock only supports changing `base_url`, `auth`, `http_headers`, `aws.profile`, and `aws.region`; other non-default provider fields are not supported"
+            "model_providers.amazon-bedrock only supports changing `base_url`, `auth`, `http_headers`, `aws.profile`, `aws.region`, and `billing`; other non-default provider fields are not supported"
                 .to_string()
         )
     );
@@ -1446,8 +1476,9 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         corrected_catalog_provider(CLAUDE_FABLE_5_MODEL, AMBIENT_PROVIDER_ID),
         Some(CLAUDE_PLAN_PROVIDER_ID)
     );
-    // A bare API row retains its owner for impossible pairs, while an
-    // explicitly selected Plan route now has an exact Opus 5.5 translation.
+    // Bare Opus 5.5 off both of its routes is corrected onto the provider its
+    // row states. On the subscription it is left alone: `claude-plan`
+    // translates it exactly, and moving it would turn plan work into spend.
     assert_eq!(
         corrected_catalog_provider(ANTHROPIC_OPUS_5_5_MODEL, AMBIENT_PROVIDER_ID),
         Some(ANTHROPIC_PROVIDER_ID)
@@ -1459,6 +1490,33 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
     assert_eq!(
         corrected_catalog_provider(ANTHROPIC_OPUS_5_5_MODEL, ANTHROPIC_PROVIDER_ID),
         None
+    );
+    // The plan slug is the plan route's, and survives being read anywhere else.
+    assert_eq!(
+        corrected_catalog_provider(CLAUDE_OPUS_5_5_PLAN_MODEL, AMBIENT_PROVIDER_ID),
+        Some(CLAUDE_PLAN_PROVIDER_ID)
+    );
+    // Only the plan slug's own arm moves it off metered Anthropic; the generic
+    // `claude-*` correction exempts that provider.
+    assert_eq!(
+        corrected_catalog_provider(CLAUDE_OPUS_5_5_PLAN_MODEL, ANTHROPIC_PROVIDER_ID),
+        Some(CLAUDE_PLAN_PROVIDER_ID)
+    );
+    // Selecting bare Opus 5.5 on the plan provider resolves to the plan row
+    // rather than falling through to Opus 5, which is a different model.
+    assert_eq!(
+        resolve_model_for_provider(
+            Some(ANTHROPIC_OPUS_5_5_MODEL.to_string()),
+            CLAUDE_PLAN_PROVIDER_ID
+        ),
+        Some(CLAUDE_OPUS_5_5_PLAN_MODEL.to_string())
+    );
+    assert_eq!(
+        resolve_model_for_provider(
+            Some(CLAUDE_OPUS_5_5_PLAN_MODEL.to_string()),
+            CLAUDE_PLAN_PROVIDER_ID
+        ),
+        Some(CLAUDE_OPUS_5_5_PLAN_MODEL.to_string())
     );
     assert_eq!(
         corrected_catalog_provider(CLAUDE_FABLE_5_MODEL, ANTHROPIC_PROVIDER_ID),
@@ -1546,6 +1604,14 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         corrected_catalog_provider(DEEPSEEK_PRO_MODEL, OPENROUTER_PROVIDER_ID),
         Some(DEEPSEEK_PROVIDER_ID)
     );
+    assert_eq!(
+        corrected_catalog_provider(DEEPSEEK_LEGACY_FLASH_MODEL, OPENAI_PROVIDER_ID),
+        Some(DEEPSEEK_PROVIDER_ID)
+    );
+    assert_eq!(
+        corrected_catalog_provider(DEEPSEEK_LEGACY_FLASH_MODEL, DEEPSEEK_PROVIDER_ID),
+        None
+    );
 
     // Servable cross-provider pairs, unknown models, user-defined providers: untouched.
     assert_eq!(
@@ -1577,6 +1643,7 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         (ZAI_DEFAULT_MODEL, ZAI_PROVIDER_ID),
         ("glm-5.3", ZAI_PROVIDER_ID),
         (CLAUDE_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
+        (CLAUDE_OPUS_5_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (CLAUDE_FABLE_5_1_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (ANTHROPIC_DEFAULT_MODEL, CLAUDE_PLAN_PROVIDER_ID),
@@ -1594,6 +1661,7 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         ("x-ai/grok-4.5", OPENROUTER_PROVIDER_ID),
         ("moonshotai/kimi-k3", OPENROUTER_PROVIDER_ID),
         (DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PROVIDER_ID),
+        (DEEPSEEK_LEGACY_FLASH_MODEL, DEEPSEEK_PROVIDER_ID),
         (DEEPSEEK_PRO_MODEL, DEEPSEEK_PROVIDER_ID),
         (
             OPENROUTER_DEEPSEEK_V4_PRO_0813_MODEL,
@@ -1678,7 +1746,8 @@ fn corbanu_api_kimi_uses_the_gateway_messages_provider() {
         Some(CORBANU_API_KIMI_K3_MODEL)
     );
     assert_eq!(
-        resolve_model_for_provider(None, PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID).as_deref(),
+        resolve_model_for_provider(/*model*/ None, PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID)
+            .as_deref(),
         Some(CLAUDE_FABLE_5_MODEL),
         "the established bare-provider default remains compatible with pre-0.1.37 sessions",
     );
@@ -1726,4 +1795,221 @@ fn zai_glm_5_3_resolves_only_on_the_direct_zai_route() {
         resolve_model_for_provider(Some("glm-5.3".to_string()), AMBIENT_PROVIDER_ID).as_deref(),
         Some(AMBIENT_DEFAULT_MODEL)
     );
+}
+
+/// Provider definitions are logged when a session is configured; credentials
+/// in them must not reach the log (#196).
+#[test]
+fn debug_redacts_credentials_and_keeps_names() {
+    let provider = ModelProviderInfo {
+        name: "Example".to_string(),
+        base_url: Some(
+            "https://user:fake-userinfo-sentinel@example.com/v1?key=fake-url-sentinel".to_string(),
+        ),
+        experimental_bearer_token: Some("fake-bearer-sentinel".to_string()),
+        http_headers: Some(maplit::hashmap! {
+            "X-Version".to_string() => "fake-version-sentinel".to_string(),
+            "Authorization".to_string() => "Bearer fake-header-sentinel".to_string(),
+        }),
+        query_params: Some(maplit::hashmap! {
+            "key".to_string() => "fake-query-sentinel".to_string(),
+        }),
+        env_http_headers: Some(maplit::hashmap! {
+            "X-Project".to_string() => "PROJECT_ENV".to_string(),
+        }),
+        ..Default::default()
+    };
+    assert_eq!(
+        format!("{provider:?}"),
+        "ModelProviderInfo { name: \"Example\", base_url: Some(\"https://<redacted>@example.com/v1?<redacted>\"), env_key: None, env_key_instructions: None, experimental_bearer_token: Some(\"<redacted>\"), auth: None, aws: None, wire_api: Responses, query_params: Some({\"key\": \"<redacted>\"}), http_headers: Some({\"Authorization\": \"<redacted>\", \"X-Version\": \"<redacted>\"}), env_http_headers: Some({\"X-Project\": \"PROJECT_ENV\"}), chat_completions_provider: None, request_max_retries: None, stream_max_retries: None, stream_idle_timeout_ms: None, stream_actionable_timeout_ms: None, stream_long_failure_retry_threshold_ms: None, stream_long_failure_max_retries: None, runtime_policy: ProviderRuntimePolicy { request_body_max_bytes: 30000000, retry_request_body_max_bytes: 15000000, web_search_max_uses: None }, websocket_connect_timeout_ms: None, requires_openai_auth: false, supports_websockets: false, supports_standalone_web_search: false, billing: None, account: None }"
+    );
+}
+
+#[test]
+fn named_account_never_falls_back_to_the_environment_key() {
+    let mut provider = ModelProviderInfo::create_zai_provider();
+    provider.account = Some(NamedProviderAccount {
+        provider_id: "zai".to_string(),
+        name: "work".to_string(),
+    });
+    let error = provider
+        .api_key()
+        .expect_err("named account has no env fallback");
+    assert_eq!(
+        error.to_string(),
+        "Fatal error: account `work` of provider `zai` has no stored API key; add it with \
+         `corbanu account add zai work` or choose another account"
+    );
+}
+
+#[test]
+fn named_account_follows_a_correction_only_to_a_route_with_the_same_key() {
+    let account = NamedProviderAccount {
+        provider_id: "zai".to_string(),
+        name: "work".to_string(),
+    };
+    let mut original = ModelProviderInfo::create_zai_provider();
+    original.account = Some(account.clone());
+    let sibling = ModelProviderInfo::create_zai_provider()
+        .with_account_from(&original)
+        .expect("same key");
+    assert_eq!(sibling.account, Some(account));
+    let error = ModelProviderInfo::create_anthropic_provider()
+        .with_account_from(&original)
+        .expect_err("different key");
+    assert!(error.starts_with("account `work` of provider `zai` cannot follow"));
+    assert_eq!(
+        ModelProviderInfo::create_anthropic_provider()
+            .with_account_from(&ModelProviderInfo::create_zai_provider())
+            .expect("no account")
+            .account,
+        None
+    );
+}
+
+#[test]
+fn a_correction_keeps_the_target_providers_own_account() {
+    let own = NamedProviderAccount {
+        provider_id: "anthropic".to_string(),
+        name: "work".to_string(),
+    };
+    let mut original = ModelProviderInfo::create_zai_provider();
+    original.account = Some(NamedProviderAccount {
+        provider_id: "zai".to_string(),
+        name: "work".to_string(),
+    });
+    let mut target = ModelProviderInfo::create_anthropic_provider();
+    target.account = Some(own.clone());
+    assert_eq!(
+        target
+            .with_account_from(&original)
+            .expect("own account")
+            .account,
+        Some(own)
+    );
+}
+
+/// PF-84-S06: a rejected named sign-in or AWS profile account names its own
+/// recovery, not `corbanu account add`.
+#[test]
+fn named_account_rejections_name_the_recovery_for_their_kind() {
+    let openai = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+    let bedrock = ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None);
+    assert_eq!(
+        [
+            named_account_rejection_message("OpenAI", "openai", "work", Some(&openai)),
+            named_account_rejection_message(
+                "Amazon Bedrock",
+                "amazon-bedrock",
+                "prod",
+                Some(&bedrock)
+            ),
+        ],
+        [
+            "OpenAI (openai) account `work` was rejected. Sign it in again with `corbanu login \
+             --account work` (add `--with-api-key` for an API key), or choose another account. \
+             The default OpenAI credential is unchanged."
+                .to_string(),
+            "Amazon Bedrock (amazon-bedrock) account `prod` was rejected. Check account `prod`'s \
+             AWS profile and its credentials (`corbanu account list amazon-bedrock`), or choose \
+             another account. The default Amazon Bedrock credential is unchanged."
+                .to_string(),
+        ]
+    );
+}
+
+/// #616: building the provider table (which happens on request and
+/// accounting paths, on Tokio workers) must not panic when the working
+/// directory can't be resolved. Runs in a child process because it removes
+/// the process working directory.
+#[cfg(unix)]
+#[test]
+fn claude_plan_provider_builds_when_current_dir_is_unresolvable() {
+    let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+        .args([
+            "tests::claude_plan_provider_with_unresolvable_cwd_child",
+            "--ignored",
+            "--exact",
+            "--nocapture",
+        ])
+        .env("CODEX_616_UNRESOLVABLE_CWD_CHILD", "1")
+        .output()
+        .expect("run child test");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "child failed\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(stdout.contains("1 passed"), "child did not run:\n{stdout}");
+}
+
+#[cfg(unix)]
+#[test]
+#[ignore = "run by claude_plan_provider_builds_when_current_dir_is_unresolvable"]
+fn claude_plan_provider_with_unresolvable_cwd_child() {
+    if std::env::var_os("CODEX_616_UNRESOLVABLE_CWD_CHILD").is_none() {
+        return;
+    }
+    let temp_dir = tempdir().expect("temp dir");
+    let removed_cwd = temp_dir.path().join("removed");
+    std::fs::create_dir(&removed_cwd).expect("create cwd");
+    std::env::set_current_dir(&removed_cwd).expect("enter cwd");
+    std::fs::remove_dir(&removed_cwd).expect("remove cwd");
+    std::env::current_dir().expect_err("current dir should be unresolvable");
+
+    // Both the single provider and the whole table (as config reloads,
+    // accounting and request paths build it) complete without a panic.
+    let provider = ModelProviderInfo::create_claude_plan_provider();
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+
+    let auth = provider.auth.expect("Claude Plan runs its auth helper");
+    assert!(auth.cwd.as_path().is_absolute());
+    assert_eq!(
+        providers[CLAUDE_PLAN_PROVIDER_ID]
+            .auth
+            .as_ref()
+            .map(|auth| auth.cwd.clone()),
+        Some(auth.cwd)
+    );
+}
+
+/// #81: Opus 4.8 left the bundled catalogues, so a pin on it (plan or bare
+/// slug) resolves to the provider's current default instead of being kept and
+/// failing every request. Providers with their own catalogues keep it.
+#[test]
+fn retired_opus_4_8_resolves_to_the_provider_default() {
+    for model in [
+        CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL,
+        ANTHROPIC_LEGACY_OPUS_4_8_MODEL,
+    ] {
+        assert!(is_retired_model(model));
+        assert_eq!(
+            resolve_model_for_provider(Some(model.to_string()), CLAUDE_PLAN_PROVIDER_ID).as_deref(),
+            Some(CLAUDE_PLAN_MODEL),
+            "{model}"
+        );
+        assert_eq!(
+            resolve_model_for_provider(Some(model.to_string()), ANTHROPIC_PROVIDER_ID).as_deref(),
+            Some(ANTHROPIC_DEFAULT_MODEL),
+            "{model}"
+        );
+        assert_eq!(
+            retired_model_replacement(model, OPENROUTER_PROVIDER_ID),
+            None,
+            "{model}"
+        );
+    }
+    for current in [
+        CLAUDE_PLAN_MODEL,
+        CLAUDE_OPUS_5_5_PLAN_MODEL,
+        CLAUDE_FABLE_5_PLAN_MODEL,
+    ] {
+        assert!(!is_retired_model(current));
+        assert_eq!(
+            resolve_model_for_provider(Some(current.to_string()), CLAUDE_PLAN_PROVIDER_ID)
+                .as_deref(),
+            Some(current)
+        );
+    }
 }

@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a120bd-cb43-76c3-bcdc-99053fc28f61"}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 401 Unauthorized: Incorrect API key provided: placehol**************-key. You can find your API key at https://platform.openai.com/account/api-keys., url: wss://api.openai.com/v1/responses, cf-ray: a47d8db72f8bd8d8-SEA"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: Incorrect API key provided: placehol**************-key. You can find your API key at https://platform.openai.com/account/api-keys., url: wss://api.openai.com/v1/responses, cf-ray: a47d8db72f8bd8d8-SEA"}}

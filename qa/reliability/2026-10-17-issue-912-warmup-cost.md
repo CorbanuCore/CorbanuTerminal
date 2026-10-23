@@ -1,0 +1,6 @@
+# 2026-10-17: billed warm-up with no saved turns (#912)
+
+- Class: bounded presentation fix for the developer-only `/cost` flow, following #912 and the #403 reopen warm-up display. No pricing, settlement, routing, schema, persistence or resume change.
+- Behaviour: when the other-conversations section includes a reopen warm-up, it says that a conversation with only a reopen warm-up and no saved turns cannot be opened with `/resume`, that the warm-up is still billed and counted, and qualifies the resume step ("For conversations with saved turns, ..."). The current-conversation view is unchanged: that conversation is already open, and the #403 line names the charge. The wording stays conditional because one day's records cannot prove a conversation has no older turns.
+- Evidence: `codex-tui` tests `issue_912_*` in `chatwidget/tokens/warmup_resume_tests.rs`. The page-text tests run with and without `developer-accounting`; the 100- and 40-column snapshot test (`issue_912_warmup_resume_explanation_snapshots`) runs only with `developer-accounting`. Component tests only; no real-terminal acceptance run.
+- #1000: the other-conversations section now also says how many of its requests are reopen warm-ups ("Of these, 1 request is a reopen warm-up."), so the note has something visible to refer to.

@@ -1,0 +1,8 @@
+# run 2 core: account switches
+2026-10-12T05:46:34.480822 account=openai:work
+2026-10-12T05:47:07.722888 account=default
+# run 2 model/list requests
+2026-10-12T05:45:51.281820 rpc.request_id=4
+2026-10-12T05:46:16.992226 rpc.request_id=9
+2026-10-12T05:46:34.579933 rpc.request_id=12
+2026-10-12T05:47:07.775955 rpc.request_id=18

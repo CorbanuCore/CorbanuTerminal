@@ -1,0 +1,7 @@
+  OpenAI · work
+  ChatGPT sign-in · t…@example.com · Plus · fp 03c266ec0285
+› 1. Use for this session  Start a new session whose requests to this provider use this account.
+  2. Make default          New sessions use this account; this session is unchanged.
+  3. Rename                Give this account another name; its credential is unchanged.
+  4. Remove                Delete this account's credential from the vault; other accounts are kept.
+  Press enter to confirm or esc to go back

@@ -1,0 +1,40 @@
+  1. OpenAI · default  Enabled · configured · this session · default for new sessions
+  2. OpenAI · fake     Named account · OpenAI API key · fp 6feffd03f6f9
+  3. OpenAI · work     Named account · ChatGPT sign-in · t…@example.com · Plus · fp 03c266ec0285
+  4. Claude Account    Not configured · unavailable
+  5. Corbanu API       Not configured · unavailable
+  6. Anthropic         Not configured · unavailable
+  7. Ambient           Not configured · unavailable
+  8. Kimi Code         Not configured · unavailable
+  2. OpenAI · fake   Named account · OpenAI API key · fp 6feffd03f6f9
+  3. OpenAI · work   Named account · ChatGPT sign-in · t…@example.com · Plus · fp 03c266ec0285
+  4. Claude Account  Not configured · unavailable
+  5. Corbanu API     Not configured · unavailable
+  6. Anthropic       Not configured · unavailable
+  7. Ambient         Not configured · unavailable
+  8. Kimi Code       Not configured · unavailable
+  9. Z.AI            Enabled · configured · current
+  10. DeepSeek       Not configured · unavailable
+  11. OpenRouter     Not configured · unavailable
+  5. Corbanu API  Not configured · unavailable
+  6. Anthropic    Not configured · unavailable
+  7. Ambient      Not configured · unavailable
+  8. Kimi Code    Not configured · unavailable
+  9. Z.AI         Enabled · configured · current
+  10. DeepSeek    Not configured · unavailable
+  11. OpenRouter  Not configured · unavailable
+  12. Meta        Not configured · unavailable
+  13. Baseten     Not configured · unavailable
+  14. Vercel      Not configured · unavailable
+  8. Kimi Code                  Not configured · unavailable
+  9. Z.AI                       Enabled · configured · current
+  10. DeepSeek                  Not configured · unavailable
+  11. OpenRouter                Not configured · unavailable
+  12. Meta                      Not configured · unavailable
+  13. Baseten                   Not configured · unavailable
+  14. Vercel                    Not configured · unavailable
+  15. Amazon Bedrock · default  Not configured · unavailable · default for new sessions
+  16. Amazon Bedrock · gone     Named account · AWS profile `nosuchprofile` · fp 2afdc8b3cb68
+  17. Amazon Bedrock · work     Named account · AWS profile `work` · fp fb59c4409c03 · this session
+  18. Ollama                    Enabled · configured
+  19. LM Studio                 Enabled · configured

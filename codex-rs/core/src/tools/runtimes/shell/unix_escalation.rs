@@ -20,7 +20,7 @@ use crate::tools::sandboxing::SandboxAttempt;
 use crate::tools::sandboxing::ToolCtx;
 use crate::tools::sandboxing::ToolError;
 use crate::tools::sandboxing::managed_network_for_sandbox_permissions;
-use crate::tools::sandboxing::sandbox_permissions_preserving_denied_reads;
+use crate::tools::sandboxing::sandbox_permissions_for_session;
 use crate::tools::sandboxing::unsandboxed_execution_allowed;
 use codex_execpolicy::Decision;
 use codex_execpolicy::Evaluation;
@@ -120,9 +120,10 @@ pub(super) async fn try_run_zsh_fork(
     }
 
     let (attempt_file_system_sandbox_policy, _) = attempt.permissions.to_runtime_permissions();
-    let sandbox_permissions = sandbox_permissions_preserving_denied_reads(
+    let sandbox_permissions = sandbox_permissions_for_session(
         req.sandbox_permissions,
         &attempt_file_system_sandbox_policy,
+        &ctx.session,
     );
     let req = &ShellRequest {
         sandbox_permissions,
@@ -171,8 +172,18 @@ pub(super) async fn try_run_zsh_fork(
         req.timeout_ms
             .unwrap_or(crate::exec::DEFAULT_EXEC_COMMAND_TIMEOUT_MS),
     );
+    let live_aggressive = ctx
+        .session
+        .services
+        .model_client()
+        .live_level_is_aggressive();
     let exec_policy = Arc::new(RwLock::new(
-        ctx.session.services.exec_policy.current().as_ref().clone(),
+        ctx.session
+            .services
+            .exec_policy
+            .current_for(live_aggressive)
+            .as_ref()
+            .clone(),
     ));
     // TODO(anp): Keep PathUri through the shell escalation boundary.
     let sandbox_cwd = sandbox_cwd
@@ -228,6 +239,12 @@ pub(super) async fn try_run_zsh_fork(
     );
     let escalation_policy = CoreShellActionProvider {
         policy: Arc::clone(&exec_policy),
+        live_aggressive,
+        strict_rules: ctx
+            .session
+            .services
+            .exec_policy
+            .strict_rules_for(live_aggressive),
         session: Arc::clone(&ctx.session),
         turn: Arc::clone(&ctx.turn),
         call_id: ctx.call_id.clone(),
@@ -279,8 +296,18 @@ pub(crate) async fn prepare_unified_exec_zsh_fork(
         return Ok(None);
     }
 
+    let live_aggressive = ctx
+        .session
+        .services
+        .model_client()
+        .live_level_is_aggressive();
     let exec_policy = Arc::new(RwLock::new(
-        ctx.session.services.exec_policy.current().as_ref().clone(),
+        ctx.session
+            .services
+            .exec_policy
+            .current_for(live_aggressive)
+            .as_ref()
+            .clone(),
     ));
     // TODO(anp): Keep PathUri through the zsh-fork executor boundary.
     let cwd = exec_request
@@ -309,6 +336,12 @@ pub(crate) async fn prepare_unified_exec_zsh_fork(
     };
     let escalation_policy = CoreShellActionProvider {
         policy: Arc::clone(&exec_policy),
+        live_aggressive,
+        strict_rules: ctx
+            .session
+            .services
+            .exec_policy
+            .strict_rules_for(live_aggressive),
         session: Arc::clone(&ctx.session),
         turn: Arc::clone(&ctx.turn),
         call_id: ctx.call_id.clone(),
@@ -343,6 +376,11 @@ pub(crate) async fn prepare_unified_exec_zsh_fork(
 
 struct CoreShellActionProvider {
     policy: Arc<RwLock<Policy>>,
+    /// Whether `policy` is the Aggressive one (#626: remembered approvals
+    /// suspended), so a prompt says which were not applied.
+    live_aggressive: bool,
+    /// See `ExecPolicyManager::load`.
+    strict_rules: bool,
     session: Arc<crate::session::session::Session>,
     turn: Arc<crate::session::turn_context::TurnContext>,
     call_id: String,
@@ -428,6 +466,7 @@ impl CoreShellActionProvider {
         workdir: &AbsolutePathBuf,
         stopwatch: &Stopwatch,
         additional_permissions: Option<AdditionalPermissionProfile>,
+        reason: Option<String>,
     ) -> anyhow::Result<ReviewDecision> {
         let command = join_program_and_argv(program, argv);
         let workdir = workdir.clone();
@@ -491,7 +530,7 @@ impl CoreShellActionProvider {
                         environment_id,
                         command,
                         workdir.clone(),
-                        /*reason*/ None,
+                        reason,
                         /*network_approval_context*/ None,
                         /*proposed_execpolicy_amendment*/ None,
                         additional_permissions,
@@ -514,6 +553,8 @@ impl CoreShellActionProvider {
         prompt_permissions: Option<AdditionalPermissionProfile>,
         escalation_execution: EscalationExecution,
         decision_source: DecisionSource,
+        suspended_note: Option<String>,
+        asked_again: bool,
     ) -> anyhow::Result<EscalationDecision> {
         let action = match decision {
             Decision::Forbidden => {
@@ -523,10 +564,31 @@ impl CoreShellActionProvider {
                 if execve_prompt_is_rejected_by_policy(self.approval_policy, &decision_source)
                     .is_some()
                 {
-                    EscalationDecision::deny(Some("Execution forbidden by policy".to_string()))
+                    EscalationDecision::deny(Some(match suspended_note {
+                        Some(note) => format!("Execution forbidden by policy. {note}"),
+                        None => "Execution forbidden by policy".to_string(),
+                    }))
                 } else {
+                    // D50: a prompt asked again says why.
+                    let reason = if asked_again {
+                        Some(match suspended_note {
+                            Some(note) => {
+                                format!("{} {note}", crate::tools::approvals::ASKED_AGAIN_NOTE)
+                            }
+                            None => crate::tools::approvals::ASKED_AGAIN_NOTE.to_string(),
+                        })
+                    } else {
+                        suspended_note
+                    };
                     let decision = self
-                        .prompt(program, argv, workdir, &self.stopwatch, prompt_permissions)
+                        .prompt(
+                            program,
+                            argv,
+                            workdir,
+                            &self.stopwatch,
+                            prompt_permissions,
+                            reason,
+                        )
                         .await?;
                     match decision {
                         ReviewDecision::Approved
@@ -579,6 +641,10 @@ impl CoreShellActionProvider {
     }
 }
 
+/// D50 (#1001): how often an intercepted exec whose approval went stale is
+/// decided again.
+const MAX_STALE_EXEC_APPROVAL_ROUNDS: usize = 3;
+
 // Shell-wrapper parsing is weaker than direct exec interception because it can
 // only see the script text, not the final resolved executable path. Keep it
 // disabled by default so path-sensitive rules rely on the later authoritative
@@ -586,38 +652,129 @@ impl CoreShellActionProvider {
 const ENABLE_INTERCEPTED_EXEC_POLICY_SHELL_WRAPPER_PARSING: bool = false;
 
 impl CoreShellActionProvider {
-    async fn determine_action(
+    /// D50 (#1001): an exec approved (or decided) before a security
+    /// transition was committed is decided again, the person asked again, and
+    /// refused when that keeps happening, or at once when the transition
+    /// switched Aggressive on (this shell's rules are for its start level).
+    async fn determine_fresh_action(
         &self,
         program: &AbsolutePathBuf,
         argv: &[String],
         workdir: &AbsolutePathBuf,
     ) -> anyhow::Result<EscalationDecision> {
+        for round in 1..=MAX_STALE_EXEC_APPROVAL_ROUNDS {
+            let decided_under = self.session.services.authority_marker();
+            let action = self
+                .determine_action(program, argv, workdir, /*asked_again*/ round > 1)
+                .await?;
+            if matches!(action, EscalationDecision::Deny { .. })
+                || !self.session.services.transition_since(decided_under)
+            {
+                return Ok(action);
+            }
+            tracing::info!(
+                target: "codex_core::security::transition",
+                "intercepted exec approved before a security transition; not used"
+            );
+            // The rules this shell checks execs against were chosen for the
+            // level when it started; under Aggressive they are stale.
+            if self
+                .session
+                .services
+                .model_client()
+                .live_level_is_aggressive()
+                != self.live_aggressive
+            {
+                return Ok(EscalationDecision::deny(Some(
+                    crate::tools::orchestrator::STALE_AGGRESSIVE_REFUSAL.to_string(),
+                )));
+            }
+            // D51: nor with permissions read before it (grants end there).
+            if self.prompt_permissions.is_some() {
+                return Ok(EscalationDecision::deny(Some(
+                    crate::tools::orchestrator::STALE_PERMISSIONS_REFUSAL.to_string(),
+                )));
+            }
+        }
+        Ok(EscalationDecision::deny(Some(
+            crate::tools::orchestrator::STALE_APPROVAL_REFUSAL.to_string(),
+        )))
+    }
+
+    async fn determine_action(
+        &self,
+        program: &AbsolutePathBuf,
+        argv: &[String],
+        workdir: &AbsolutePathBuf,
+        asked_again: bool,
+    ) -> anyhow::Result<EscalationDecision> {
         tracing::debug!(
             "Determining escalation action for command {program:?} with args {argv:?} in {workdir:?}"
         );
+        // #623: under Aggressive, no program a script starts may create a
+        // link to the project's `.codex` or `.agents` (or Corbanu's files).
+        if let Some(refusal) = crate::security::protected_links::refusal(
+            &self.session,
+            &self.turn,
+            &join_program_and_argv(program, argv),
+            workdir.as_path(),
+        )
+        .await
+        {
+            return Ok(EscalationDecision::deny(Some(refusal)));
+        }
 
+        let policy_context = || InterceptedExecPolicyContext {
+            approval_policy: self.approval_policy,
+            permission_profile: self.permission_profile.clone(),
+            windows_sandbox_level: self.turn.windows_sandbox_level,
+            sandbox_permissions: self.approval_sandbox_permissions,
+            enable_shell_wrapper_parsing: ENABLE_INTERCEPTED_EXEC_POLICY_SHELL_WRAPPER_PARSING,
+        };
         let evaluation = {
             let policy = self.policy.read().await;
-            evaluate_intercepted_exec_policy(
-                &policy,
-                program,
-                argv,
-                InterceptedExecPolicyContext {
-                    approval_policy: self.approval_policy,
-                    permission_profile: self.permission_profile.clone(),
-                    windows_sandbox_level: self.turn.windows_sandbox_level,
-                    sandbox_permissions: self.approval_sandbox_permissions,
-                    enable_shell_wrapper_parsing:
-                        ENABLE_INTERCEPTED_EXEC_POLICY_SHELL_WRAPPER_PARSING,
-                },
-            )
+            let mut evaluation =
+                evaluate_intercepted_exec_policy(&policy, program, argv, policy_context());
+            if self.strict_rules {
+                crate::exec_policy::apply_strict_forbidden_matches(
+                    &mut evaluation,
+                    &policy,
+                    &join_program_and_argv(program, argv),
+                );
+            }
+            evaluation
         };
+        // #626: as for a shell command, a prompt under Aggressive names the
+        // remembered approvals that would have run this program unasked.
+        let suspended_note = (self.live_aggressive && evaluation.decision == Decision::Prompt)
+            .then(|| {
+                self.session
+                    .services
+                    .exec_policy
+                    .aggressive_suspended_note(|policy| {
+                        evaluate_intercepted_exec_policy(policy, program, argv, policy_context())
+                    })
+            })
+            .flatten();
         // When true, means the Evaluation was due to *.rules, not the
         // fallback function.
         let decision_driven_by_policy =
             Self::decision_driven_by_policy(&evaluation.matched_rules, evaluation.decision);
+        // Issue #540: where the protected-path rules apply, an intercepted
+        // exec leaves the sandbox only within a request a person approved to
+        // run outside it, never through an allow rule (as in the
+        // orchestrator). #747: under Moderate, never; #739: nor under
+        // Permissive with protected launch armed, which refuses such a run
+        // (unlike the orchestrator, no note says so: zsh-fork is off by
+        // default).
+        let always_sandboxed =
+            crate::security::protected_additional::keeps_sandbox_always(&self.session);
         let unsandboxed_allowed =
-            unsandboxed_execution_allowed(&self.permission_profile.file_system_sandbox_policy());
+            unsandboxed_execution_allowed(&self.permission_profile.file_system_sandbox_policy())
+                && !always_sandboxed
+                && (self.sandbox_permissions == SandboxPermissions::RequireEscalated
+                    || crate::security::protected_additional::protected_level(&self.session)
+                        .is_none());
         let needs_escalation = match self.sandbox_permissions {
             SandboxPermissions::UseDefault => unsandboxed_allowed && decision_driven_by_policy,
             SandboxPermissions::RequireEscalated => unsandboxed_allowed,
@@ -633,7 +790,13 @@ impl CoreShellActionProvider {
             DecisionSource::PrefixRule if unsandboxed_allowed => EscalationExecution::Unsandboxed,
             DecisionSource::PrefixRule => EscalationExecution::TurnDefault,
             DecisionSource::UnmatchedCommandFallback => Self::shell_request_escalation_execution(
-                self.sandbox_permissions,
+                if always_sandboxed
+                    && self.sandbox_permissions == SandboxPermissions::RequireEscalated
+                {
+                    SandboxPermissions::UseDefault
+                } else {
+                    self.sandbox_permissions
+                },
                 &self.permission_profile,
                 self.prompt_permissions.as_ref(),
             ),
@@ -647,6 +810,8 @@ impl CoreShellActionProvider {
             self.prompt_permissions.clone(),
             escalation_execution,
             decision_source,
+            suspended_note,
+            asked_again,
         )
         .await
     }
@@ -659,7 +824,7 @@ impl EscalationPolicy for CoreShellActionProvider {
         argv: &'a [String],
         workdir: &'a AbsolutePathBuf,
     ) -> EscalationPolicyFuture<'a> {
-        Box::pin(CoreShellActionProvider::determine_action(
+        Box::pin(CoreShellActionProvider::determine_fresh_action(
             self, program, argv, workdir,
         ))
     }
@@ -886,6 +1051,13 @@ impl CoreShellCommandExecutor {
             ));
         };
 
+        if matches!(execution, EscalationExecution::Unsandboxed)
+            && crate::security::launch_contract::active().is_some()
+        {
+            return Err(anyhow::anyhow!(
+                crate::security::launch_contract::LaunchDenied::Unsandboxed
+            ));
+        }
         let prepared = match execution {
             EscalationExecution::Unsandboxed => PreparedExec {
                 command,
@@ -955,7 +1127,7 @@ impl CoreShellCommandExecutor {
         );
         let cwd = PathUri::from_abs_path(workdir);
         let sandbox_policy_cwd = PathUri::from_abs_path(&self.sandbox_policy_cwd);
-        let command = SandboxCommand {
+        let mut command = SandboxCommand {
             program: program.clone().into(),
             args: args.to_vec(),
             cwd,
@@ -963,6 +1135,20 @@ impl CoreShellCommandExecutor {
             managed_network: None,
             additional_permissions,
         };
+        // PF-27-S02: intercepted execs get the same protected launch contract.
+        let protected = match crate::security::launch_contract::active() {
+            Some(contract) => Some(contract.protect_launch(
+                sandbox,
+                sandbox != SandboxType::None,
+                /*exec_server*/ false,
+                /*windows_elevated*/ false,
+                &mut command,
+                permission_profile,
+                self.sandbox_policy_cwd.as_path(),
+            )?),
+            None => None,
+        };
+        let permission_profile = protected.as_ref().unwrap_or(permission_profile);
         let options = ExecOptions {
             expiration: ExecExpiration::DefaultTimeout,
             capture_policy: ExecCapturePolicy::ShellTool,

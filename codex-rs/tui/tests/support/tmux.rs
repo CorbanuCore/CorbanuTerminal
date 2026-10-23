@@ -1,8 +1,12 @@
 use std::ffi::OsStr;
+use std::fs::OpenOptions;
+use std::os::fd::AsRawFd;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 use std::process::Output;
+use std::sync::Mutex;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::thread::sleep;
@@ -25,6 +29,16 @@ use super::tmux_process::wait_for_exit as wait_for_process_exit;
 static NEXT_SERVER_ID: AtomicU64 = AtomicU64::new(1);
 static NEXT_SESSION_ID: AtomicU64 = AtomicU64::new(1);
 const STABLE_CAPTURE_INTERVAL: Duration = Duration::from_millis(100);
+/// How often to recheck whether the pane's program has read its pending input.
+const INPUT_DRAIN_INTERVAL: Duration = Duration::from_millis(10);
+/// Minimum gap between a bare Esc and the next input. If the TUI reads Esc
+/// together with what follows, crossterm parses the pair as Alt+<next key>:
+/// Esc then `/exit` types `exit`, and Esc then Enter is Alt+Enter.
+const ESCAPE_SETTLE_MIN: Duration = Duration::from_millis(300);
+/// Upper bound on waiting for the Esc to be read and the viewport to settle.
+/// Busy screens (a running turn) may never settle; input then proceeds after
+/// this.
+const ESCAPE_SETTLE_MAX: Duration = Duration::from_secs(3);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct TerminalSize {
@@ -44,6 +58,7 @@ pub(crate) enum TmuxKey {
     Right,
     Enter,
     Escape,
+    CtrlC,
 }
 
 impl TmuxKey {
@@ -53,6 +68,7 @@ impl TmuxKey {
             Self::Right => "Right",
             Self::Enter => "Enter",
             Self::Escape => "Escape",
+            Self::CtrlC => "C-c",
         }
     }
 }
@@ -182,11 +198,7 @@ impl TmuxServer {
         Ok(TmuxSession {
             server: self,
             name: session_name,
-            primary_pane: TmuxPane {
-                server: self,
-                id: pane_id,
-                pid: pane_pid,
-            },
+            primary_pane: TmuxPane::new(self, pane_id, pane_pid),
         })
     }
 
@@ -372,10 +384,93 @@ pub(crate) struct TmuxPane<'a> {
     pub(super) server: &'a TmuxServer,
     pub(super) id: String,
     pub(super) pid: u32,
+    /// When a bare Esc was sent and no input has followed it yet.
+    escape_sent_at: Mutex<Option<Instant>>,
 }
 
-impl TmuxPane<'_> {
+impl<'a> TmuxPane<'a> {
+    pub(super) fn new(server: &'a TmuxServer, id: String, pid: u32) -> Self {
+        Self {
+            server,
+            id,
+            pid,
+            escape_sent_at: Mutex::new(None),
+        }
+    }
+
+    /// Keeps a bare Esc from reaching the TUI in the same read as the next
+    /// input (see [`ESCAPE_SETTLE_MIN`]). After the minimum gap, waits until
+    /// the pane's program has read the Esc from its terminal, so a reader that
+    /// was descheduled for longer than the gap (a loaded CI runner) still reads
+    /// it alone. Two equal captures afterwards are a heuristic that it has also
+    /// finished reacting to the Esc.
+    fn settle_after_escape(&self) -> Result<()> {
+        let sent_at = self
+            .escape_sent_at
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        let Some(sent_at) = sent_at else {
+            return Ok(());
+        };
+        sleep(ESCAPE_SETTLE_MIN.saturating_sub(sent_at.elapsed()));
+        let deadline = Instant::now() + ESCAPE_SETTLE_MAX;
+        self.wait_for_input_drained(deadline)?;
+        let mut previous = self.capture_viewport()?;
+        while Instant::now() < deadline {
+            sleep(STABLE_CAPTURE_INTERVAL);
+            let current = self.capture_viewport()?;
+            if current == previous {
+                break;
+            }
+            previous = current;
+        }
+        Ok(())
+    }
+
+    /// Waits until the pane's terminal has no unread input, or `deadline`.
+    /// In canonical mode the kernel only counts complete lines, so a lone Esc
+    /// reads as drained, which is the old behavior.
+    fn wait_for_input_drained(&self, deadline: Instant) -> Result<()> {
+        let mut command = self.server.command();
+        let output = self.server.checked_output(
+            command
+                .arg("display-message")
+                .arg("-p")
+                .arg("-t")
+                .arg(&self.id)
+                .arg("#{pane_tty}"),
+            Some(self.id.as_str()),
+        )?;
+        let tty = stdout_text(&output).trim().to_string();
+        if tty.is_empty() {
+            return Ok(());
+        }
+        // Opening the pane's terminal never reads from it, and O_NOCTTY keeps
+        // it from becoming this process's controlling terminal.
+        let terminal = OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOCTTY | libc::O_NONBLOCK)
+            .open(&tty)
+            .with_context(|| format!("failed to open pane terminal {tty}"))?;
+        loop {
+            let mut pending: libc::c_int = 0;
+            // SAFETY: FIONREAD writes one c_int to `pending`, which outlives
+            // the call, and `terminal` keeps the descriptor open.
+            let result = unsafe { libc::ioctl(terminal.as_raw_fd(), libc::FIONREAD, &mut pending) };
+            if result == -1 {
+                return Err(std::io::Error::last_os_error())
+                    .with_context(|| format!("failed to query unread input on {tty}"));
+            }
+            if pending == 0 || Instant::now() >= deadline {
+                return Ok(());
+            }
+            sleep(INPUT_DRAIN_INTERVAL);
+        }
+    }
+
     pub(crate) fn send_literal(&self, text: &str) -> Result<()> {
+        self.settle_after_escape()?;
         self.server
             .artifacts
             .record_input(format!("literal bytes={}", text.len()));
@@ -396,6 +491,7 @@ impl TmuxPane<'_> {
     /// Send a secret-bearing literal without recording its value in the
     /// command log or failure reason. The pane still receives real key input.
     pub(crate) fn send_secret_literal(&self, text: &str) -> Result<()> {
+        self.settle_after_escape()?;
         self.server.artifacts.record_input(format!(
             "secret literal bytes={} value=<redacted>",
             text.len()
@@ -426,6 +522,7 @@ impl TmuxPane<'_> {
     }
 
     pub(crate) fn send_key(&self, key: TmuxKey) -> Result<()> {
+        self.settle_after_escape()?;
         self.server
             .artifacts
             .record_input(format!("key {}", key.name()));
@@ -438,6 +535,12 @@ impl TmuxPane<'_> {
                 .arg(key.name()),
             Some(self.id.as_str()),
         )?;
+        if key == TmuxKey::Escape {
+            *self
+                .escape_sent_at
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Instant::now());
+        }
         Ok(())
     }
 

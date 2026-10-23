@@ -1,0 +1,13 @@
+
+######## A573 on BASE (corbanu-base)
+#573: TUI on Z.AI; /providers -> OpenAI · default -> Add another account (methods offered)
+│                                                       │
+│ model:       glm-5.3-flash medium   /model to change  │
+│ directory:   $S/ws │
+│ permissions: YOLO mode                                │
+╰───────────────────────────────────────────────────────�
+▌ OpenAI account `second`
+▌ OpenAI API key — masked
+▌
+▌ Paste the value and press Enter. It is saved to the vault and never shown.
+Press enter to confirm or esc to go back

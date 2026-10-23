@@ -1,0 +1,58 @@
+{
+  "boundaries": {
+    "api": "Preparation has no transport and cannot load credentials. Inherited batch adapter requires literal enablement and workspace enrollment.",
+    "commands": "prepare/preview select one immutable ID and reject live/report arguments; inherited batch flush refuses --event-id.",
+    "discovery": "No native runtime menu, slash-command or tool registration changed; scope audit pins read-only native baseline.",
+    "jobs": "No new scheduler; existing tick only invokes live adapter on literal enabled true. This worker does not install services.",
+    "migrations": "No live source or queue migration. PF-76 historical records held without rewriting IDs, payloads or delivery metadata.",
+    "resume": "Disabled restart retains queue and does not load credentials or send; previews preserve status/attempt/backoff metadata.",
+    "tools": "Internal standalone Python tooling only; no agent tool registration or execution API added."
+  },
+  "candidate_files": [
+    "scripts/initiative_control/README.md",
+    "scripts/initiative_control/activate.py",
+    "scripts/initiative_control/control.py",
+    "scripts/initiative_control/delivery.example.json",
+    "scripts/initiative_control/delivery.py",
+    "scripts/initiative_control/export.py",
+    "scripts/initiative_control/fixtures/recovery-old-state.json",
+    "scripts/initiative_control/requirements.txt",
+    "scripts/initiative_control/status.js",
+    "scripts/initiative_control/style.css",
+    "scripts/initiative_control/tasknode.py",
+    "scripts/initiative_control/test_control.py",
+    "scripts/initiative_control/test_preparation.py",
+    "scripts/initiative_control/tick.py"
+  ],
+  "candidate_tree_sha256": "7e8efa2a2407101bdb4e1741771b5db4105f399e8da5dcca659e7673835b00f0",
+  "enablement_decision": null,
+  "feature": "PF-80",
+  "human_acceptance": {
+    "result": "pending"
+  },
+  "independent_review": "initial_review_two_parent_verified_P2s; post_fix_review_pending_parent",
+  "internal_boundary": "Explicit internal Python commands; no runtime registration or native UI changes. Preparation never sends. Inherited live adapter requires explicit enablement and enrollment; operator authority remains separate.",
+  "mode": "internal-only",
+  "sprint": "PF-80-S01",
+  "status": "in_progress_awaiting_manager_review",
+  "tests": {
+    "compatibility": {
+      "artifact": "qa/initiative-control/pf-80-s01/focused.log",
+      "artifact_sha256": "b38546303922052b8886ec49a7d68ca342d8686c3e1caa75ca8831e9d19b5785",
+      "candidate_tree_sha256": "7e8efa2a2407101bdb4e1741771b5db4105f399e8da5dcca659e7673835b00f0",
+      "result": "pass"
+    },
+    "off_execution": {
+      "artifact": "qa/initiative-control/pf-80-s01/focused.log",
+      "artifact_sha256": "b38546303922052b8886ec49a7d68ca342d8686c3e1caa75ca8831e9d19b5785",
+      "candidate_tree_sha256": "7e8efa2a2407101bdb4e1741771b5db4105f399e8da5dcca659e7673835b00f0",
+      "result": "pass"
+    },
+    "off_visibility": {
+      "artifact": "qa/initiative-control/pf-80-s01/scope.log",
+      "artifact_sha256": "b578fc10377d1a3ad49b1a0711f1dadf199b51df36848165be3100d1f6a364db",
+      "candidate_tree_sha256": "7e8efa2a2407101bdb4e1741771b5db4105f399e8da5dcca659e7673835b00f0",
+      "result": "pass"
+    }
+  }
+}

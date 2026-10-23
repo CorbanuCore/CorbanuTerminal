@@ -313,11 +313,31 @@ async fn request_user_input_interrupt_emits_deferred_token_count() -> anyhow::Re
         })
         .await?;
 
-    let request = wait_for_event_match(&codex, |event| match event {
-        EventMsg::RequestUserInput(request) => Some(request.clone()),
-        _ => None,
-    })
-    .await;
+    // The tool call starts before the stream reaches `response.completed`, so
+    // the question can arrive before the turn has recorded the usage (reliably
+    // with developer-accounting, which writes each usage report to the ledger
+    // before forwarding it). Interrupt only once the turn has both asked and
+    // recorded the completed response; neither order is guaranteed. The token
+    // count must still be held back while the question is pending.
+    let mut request = None;
+    let mut response_completed = false;
+    while request.is_none() || !response_completed {
+        match wait_for_event(&codex, |event| {
+            matches!(
+                event,
+                EventMsg::RequestUserInput(_)
+                    | EventMsg::RawResponseCompleted(_)
+                    | EventMsg::TokenCount(_)
+            )
+        })
+        .await
+        {
+            EventMsg::RequestUserInput(event) => request = Some(event),
+            EventMsg::RawResponseCompleted(_) => response_completed = true,
+            other => panic!("token count sent while the question was pending: {other:?}"),
+        }
+    }
+    let request = request.expect("request_user_input event");
 
     codex.submit(Op::Interrupt).await?;
 

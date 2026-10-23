@@ -1,0 +1,28 @@
+TUI worker preflight (/spawn troll, native Corbanu harness) on home hW: provider zcmd whose credential comes from auth.command
+(mock scripts/s03/authcmd.sh logs CORBANU_PROVIDER_ACCOUNT). TUI: corbanu --account work, inside the private tmux server (TMUX passed).
+## /spawn nazgul (bind Main), then /spawn troll -> Corbanu Terminal -> glm-5.3-flash -> Low
+■ Custom crew root was not created.
+• Bound Corbanu Terminal - Main as Nazgul root. No worker was spawned.
+■ Spawned the pane, but could not persist its crew identity: Cannot add Troll: parent node pane:codex-main is not a crew member.
+## auth.command calls during the troll spawn:
+  account=work argv=[]
+  account=work argv=[]
+## then, in another shell: corbanu account remove zcmd work; /spawn troll again:
+■ Cannot run a native Corbanu Terminal worker on provider `zcmd`: account `work` of provider `zcmd` is not configured; add it with `corbanu account add zcmd
+work` or pick another with `--account` (see `corbanu account list`)
+## auth.command calls during the second spawn: 0
+(The 'could not persist its crew identity' error is /spawn hierarchy bookkeeping, not PF-84.)
+
+### TUI /spawn worker inherits the session account (home hW, corbanu --account work; accounts work, other)
+/spawn nazgul (bind Main) -> /spawn troll (Corbanu Terminal, glm-5.3-flash, Low) -> /agent -> /root/troll_burzum -> pong prompt
+╰────────────────────────────────────────────────────────╯
+› Reply with exactly the word pong and nothing else.
+• pong
+## proxy (zcmd credential comes from auth.command; bearer = account canary id):
+  bearer=work status=200 first_user='' canaries-in-body=none
+  bearer=work status=200 first_user='Reply with exactly the word pong and nothing else.' canaries-in-body=none
+## auth.command calls (CORBANU_PROVIDER_ACCOUNT):
+   4   account=work argv=[]
+## troll thread rollout:
+thread 01a128f1-7f21 provider=zcmd role=troll
+  turn_context provider=zcmd provider_account=work

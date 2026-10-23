@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"01a120d3-fcdb-7183-93b6-28f01bad81aa"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Developer accounting is off for this session: this home's cost ledger was written by a newer Corbanu build. Requests are sent as usual; /cost does not include them."}}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/bash -lc ls","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/bash -lc ls","aggregated_output":"a.txt\nb.txt\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"2"}}
+{"type":"turn.completed","usage":{"input_tokens":25342,"cached_input_tokens":17856,"cache_write_input_tokens":0,"output_tokens":31,"reasoning_output_tokens":20}}

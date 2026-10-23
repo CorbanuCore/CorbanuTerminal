@@ -15,6 +15,7 @@ use core_test_support::responses::ev_function_call;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
+use core_test_support::skip_if_wine_exec;
 use core_test_support::test_codex::TestCodexHarness;
 use core_test_support::test_codex::local_selections;
 use core_test_support::test_codex::test_codex;
@@ -541,6 +542,12 @@ async fn linux_unified_exec_snapshot_preserves_shell_environment_policy_set() ->
 #[cfg_attr(target_os = "windows", ignore)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_command_snapshot_still_intercepts_apply_patch() -> Result<()> {
+    // It pins the turn to the local environment at a host path; under
+    // Wine-exec the turn never reaches the model (nightly-ci, #636).
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command routing requires a host-native cwd under Wine-exec"
+    );
     let builder = test_codex().with_config(|config| {
         config
             .features

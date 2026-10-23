@@ -309,6 +309,57 @@ async fn readiness_selects_exact_tool_and_forwards_exposure_overrides() {
     );
 }
 
+/// Records the owner of brokered auth its handler would resolve (#878).
+struct OwnerRecordingHandler {
+    tool_name: codex_tools::ToolName,
+    owner: Arc<std::sync::Mutex<Option<Option<codex_protocol::ThreadId>>>>,
+}
+
+impl ToolExecutor<ToolInvocation> for OwnerRecordingHandler {
+    fn tool_name(&self) -> codex_tools::ToolName {
+        self.tool_name.clone()
+    }
+
+    fn spec(&self) -> codex_tools::ToolSpec {
+        test_spec(&self.tool_name)
+    }
+
+    fn handle(&self, _invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+        Box::pin(async {
+            *self.owner.lock().expect("owner") =
+                Some(crate::model_broker_auth::refusals::current_owner());
+            Ok(
+                Box::new(crate::tools::context::FunctionToolOutput::from_text(
+                    "ok".to_string(),
+                    Some(true),
+                )) as Box<dyn crate::tools::context::ToolOutput>,
+            )
+        })
+    }
+}
+
+impl CoreToolRuntime for OwnerRecordingHandler {}
+
+/// #878: brokered auth a tool resolves (web search, image generation) is
+/// owned by the session that runs the tool, so a refusal shows in that
+/// session's inspector only.
+#[tokio::test]
+async fn issue_878_tools_resolve_brokered_auth_for_their_session() {
+    let (session, turn) = crate::session::tests::make_session_and_context().await;
+    let thread_id = session.thread_id;
+    let tool_name = codex_tools::ToolName::namespaced("web.", "run");
+    let handler = OwnerRecordingHandler {
+        tool_name: tool_name.clone(),
+        owner: Arc::default(),
+    };
+    let invocation = test_invocation(Arc::new(session), Arc::new(turn), "call-878", tool_name);
+    assert_eq!(crate::model_broker_auth::refusals::current_owner(), None);
+    handle_any_tool(&handler, invocation)
+        .await
+        .expect("tool runs");
+    assert_eq!(*handler.owner.lock().expect("owner"), Some(Some(thread_id)));
+}
+
 #[tokio::test]
 async fn function_tools_expose_default_hook_payloads_and_rewrites() -> anyhow::Result<()> {
     let (session, turn) = crate::session::tests::make_session_and_context().await;

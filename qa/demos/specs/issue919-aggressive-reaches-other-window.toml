@@ -1,0 +1,87 @@
+# Issue #919 (D20, Travis 2026-10-16): Aggressive confirmed in one Corbanu Terminal reaches another running on the same home.
+# The recorded pane is window B. Window A is a second `corbanu` on the same disposable home, started and driven off screen
+# by the `run` steps (its own tmux server); the person confirms Aggressive there without restarting.
+id = "issue919-aggressive-reaches-other-window"
+feature = "Aggressive confirmed in another window applies here too"
+expected = "Two Corbanu Terminals share one home, both Permissive with approvals off. Aggressive is confirmed in the other one; this one says so within about a second, its /security shows Core's level Aggressive, and the agent's next write command waits for your approval."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+wait = "model:\\s+glm-5\\.3-flash"
+[[steps]]
+pause = 1.0
+
+# Window A: another Corbanu Terminal on this home, off screen.
+[[steps]]
+run = """
+tmux -L demo919x-other -f /dev/null new-session -d -s a -x 160 -y 50 "{bin} -C {workspace} -m glm-5.3-flash -c model_provider=zai; sleep 600"
+for i in $(seq 1 60); do tmux -L demo919x-other capture-pane -p -t a | grep -Eq 'model:[[:space:]]+glm-5.3-flash' && exit 0; sleep 1; done
+exit 1
+"""
+timeout = 70
+
+# In window A: /security, Aggressive, confirm (no restart).
+[[steps]]
+run = """
+t() { tmux -L demo919x-other "$@"; }
+w() { for i in $(seq 1 40); do t capture-pane -p -J -S - -t a | grep -Eq -- "$1" && return 0; sleep 0.5; done; return 1; }
+s() { t send-keys -t a -l "$1"; sleep 0.5; t send-keys -t a Enter; }
+s /security; w 'Active in this session: Permissive' || exit 1
+t send-keys -t a Down; sleep 0.3; t send-keys -t a Down; sleep 0.3; t send-keys -t a Enter
+w 'Switch to Aggressive' || exit 1; sleep 0.5; t send-keys -t a Enter
+w 'Saved: Aggressive' || exit 1
+t capture-pane -p -J -S - -t a > {logs}/window-a-saved.txt
+echo "Aggressive was confirmed in the other Corbanu Terminal"
+"""
+timeout = 60
+
+[[steps]]
+wait = "Aggressive was confirmed in another Corbanu Terminal on this home"
+timeout = 10
+[[steps]]
+pause = 5.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Core's level: Aggressive"
+[[steps]]
+pause = 2.5
+[[steps]]
+key = "Escape"
+
+[[steps]]
+type = "Without reading anything first, run exactly this shell command once: printf ok > issue919.txt"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Would you like to run the following command\\?"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 4.0
+[[steps]]
+run = "tmux -L demo919x-other kill-server; test ! -e {workspace}/issue919.txt && echo 'issue919.txt was not written: it waits for your approval'"
+[[steps]]
+pause = 3.0

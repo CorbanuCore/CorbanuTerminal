@@ -1,0 +1,67 @@
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:       loading   /model to change                │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06acc/ws │
+│ permissions: YOLO mode                                 │
+╰────────────────────────────────────────────────────────╯
+› Find and fix a bug in @filename
+  GPT-5.4 via amazon-bedrock default · /Volumes/CorbanuDrive/Corbanu/.codex-work/s06acc/ws · Corbanu Terminal · TPS: -- tok/s
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:       openai.gpt-5.4   /model to change         │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06acc/ws │
+│ permissions: YOLO mode                                 │
+╰────────────────────────────────────────────────────────╯
+/status
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                GPT-5.4 (reasoning medium, summaries auto)                        │
+│  Model provider:       Amazon Bedrock - http://127.0.0.1:34631/openai/v1 · account work  │
+│  Directory:            /Volumes/CorbanuDrive/Corbanu/.codex-work/s06acc/ws               │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Amazon Bedrock AWS credentials                                    │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12e80-fe34-75a3-ae65-6b5305124bff                              │
+│                                                                                          │
+│  Token usage:          0 total  (0 input + 0 output)                                     │
+│  Account usage:        work · no usage yet                                               │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+› Reply with exactly: pong
+• mock: sigv4 AKIDWORKPROFILE us-west-2
+/status
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                GPT-5.4 (reasoning medium, summaries auto)                        │
+│  Model provider:       Amazon Bedrock - http://127.0.0.1:34631/openai/v1 · account work  │
+│  Directory:            /Volumes/CorbanuDrive/Corbanu/.codex-work/s06acc/ws               │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Amazon Bedrock AWS credentials                                    │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12e80-fe34-75a3-ae65-6b5305124bff                              │
+│                                                                                          │
+│  Token usage:          129 total  (120 input + 9 output)                                 │
+│  Context window:       100% left (129 used / 258K)                                       │
+│  Account usage:        work · 120 input · 9 output                                       │
+│  5h limit:             [███████████████████░] 93% left                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+  Cost — this conversation
+  Requested UTC day: 2026-10-12
+› Today (UTC) in this conversation:
+  • Amazon Bedrock · account work · openai.gpt-5.4 — Pay per use. 1 request, 129 tokens. Estimated cost: no price available.
+  Other conversations on this day, not included above: 7 requests in 4 conversations.
+  • Amazon Bedrock · account work · openai.gpt-5.4 — Pay per use. 1 request, 129 tokens. Estimated cost: no price available.
+  • OpenAI · account fake · gpt-5.4 — Billing basis not declared. 1 request, 0 tokens. Counted neither as money spent nor as subscription work. 1 attempt
+  refused by the provider (HTTP 401) — no charge.
+  • OpenAI · account work · gpt-5.4 — Billing basis not declared. 1 request, 129 tokens. Counted neither as money spent nor as subscription work.
+  • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 4 requests, 33,441 tokens. Estimated cost: $0.003558 (rounded).
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

@@ -21,7 +21,9 @@ pub const CODEX_WINDOWS_SANDBOX_ARG1: &str = "--run-as-windows-sandbox";
 
 const COMMAND_CWD_FLAG: &str = "--command-cwd";
 const CODEX_HOME_FLAG: &str = "--codex-home";
-const DENY_READ_PATHS_JSON_FLAG: &str = "--deny-read-paths-json";
+/// The launch's deny-read rules with their expanded paths
+/// ([`crate::DenyReadTargets`]).
+const DENY_READ_JSON_FLAG: &str = "--deny-read-json";
 const DENY_WRITE_PATHS_JSON_FLAG: &str = "--deny-write-paths-json";
 const ENV_JSON_FLAG: &str = "--env-json";
 const NETWORK_PROXY_RESTRICTING_SID_FLAG: &str = "--network-proxy-restricting-sid";
@@ -50,7 +52,7 @@ pub fn create_windows_sandbox_command_args_for_permission_profile(
     read_roots_override: Option<&[PathBuf]>,
     read_roots_include_platform_defaults: bool,
     write_roots_override: Option<&[PathBuf]>,
-    deny_read_paths_override: &[AbsolutePathBuf],
+    deny_read_override: &crate::DenyReadTargets,
     deny_write_paths_override: &[AbsolutePathBuf],
     codex_home: &Path,
 ) -> Vec<String> {
@@ -102,12 +104,9 @@ pub fn create_windows_sandbox_command_args_for_permission_profile(
     if let Some(write_roots_override) = write_roots_override {
         push_json_arg(&mut args, WRITE_ROOTS_JSON_FLAG, &write_roots_override);
     }
-    if !deny_read_paths_override.is_empty() {
-        push_json_arg(
-            &mut args,
-            DENY_READ_PATHS_JSON_FLAG,
-            &deny_read_paths_override,
-        );
+    // A rule that matches nothing is still passed: its earlier entries stay.
+    if !deny_read_override.is_empty() {
+        push_json_arg(&mut args, DENY_READ_JSON_FLAG, deny_read_override);
     }
     if !deny_write_paths_override.is_empty() {
         push_json_arg(
@@ -170,7 +169,7 @@ struct WindowsSandboxWrapperRequest {
     read_roots_override: Option<Vec<PathBuf>>,
     read_roots_include_platform_defaults: bool,
     write_roots_override: Option<Vec<PathBuf>>,
-    deny_read_paths_override: Vec<AbsolutePathBuf>,
+    deny_read_override: crate::DenyReadTargets,
     deny_write_paths_override: Vec<AbsolutePathBuf>,
     command: Vec<String>,
 }
@@ -195,7 +194,7 @@ async fn run_windows_sandbox_wrapper_request(request: WindowsSandboxWrapperReque
             read_roots_override: request.read_roots_override.as_deref(),
             read_roots_include_platform_defaults: request.read_roots_include_platform_defaults,
             write_roots_override: request.write_roots_override.as_deref(),
-            deny_read_paths_override: request.deny_read_paths_override.as_slice(),
+            deny_read_override: &request.deny_read_override,
             deny_write_paths_override: request.deny_write_paths_override.as_slice(),
             tty: false,
             stdin_open: true,
@@ -221,7 +220,7 @@ fn parse_windows_sandbox_wrapper_args(args: Vec<String>) -> Result<WindowsSandbo
     let mut read_roots_override = None;
     let mut read_roots_include_platform_defaults = false;
     let mut write_roots_override = None;
-    let mut deny_read_paths_override = Vec::new();
+    let mut deny_read_override = crate::DenyReadTargets::default();
     let mut deny_write_paths_override = Vec::new();
     let mut command = None;
 
@@ -238,9 +237,8 @@ fn parse_windows_sandbox_wrapper_args(args: Vec<String>) -> Result<WindowsSandbo
                 let value = next_flag_value(&mut args, &arg)?;
                 env_map = Some(serde_json::from_str(&value).context("failed to parse env json")?);
             }
-            DENY_READ_PATHS_JSON_FLAG => {
-                deny_read_paths_override =
-                    json_flag_value(next_flag_value(&mut args, &arg)?, &arg)?;
+            DENY_READ_JSON_FLAG => {
+                deny_read_override = json_flag_value(next_flag_value(&mut args, &arg)?, &arg)?;
             }
             DENY_WRITE_PATHS_JSON_FLAG => {
                 deny_write_paths_override =
@@ -310,7 +308,7 @@ fn parse_windows_sandbox_wrapper_args(args: Vec<String>) -> Result<WindowsSandbo
         read_roots_override,
         read_roots_include_platform_defaults,
         write_roots_override,
-        deny_read_paths_override,
+        deny_read_override,
         deny_write_paths_override,
         command: command.ok_or_else(|| anyhow!("missing sandboxed command separator --"))?,
     })

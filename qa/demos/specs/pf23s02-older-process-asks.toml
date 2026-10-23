@@ -1,0 +1,58 @@
+# PF-23-S02: typing into a shell started before untrusted content needs the human once.
+id = "pf23s02-older-process-asks"
+feature = "Typing into a shell started before untrusted content asks once"
+expected = "Moderate. A shell started before untrusted content keeps a sandbox without the protected rules; typing into it afterwards asks 'typing into a process started before...'; after Allow once the line runs."
+model = "glm-5.2"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+use_experimental_unified_exec_tool = true
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+source_envelopes = true
+unified_exec = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Use exec_command with tty true to start /bin/bash --noprofile --norc -i and leave it running. Do nothing else."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 2
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Use write_stdin to type the line echo typed-ok (with a newline) into that bash session and show the output."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "process started before"
+timeout = 240
+compress = 3
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "typed-ok"
+timeout = 240
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+[[steps]]
+pause = 4.0

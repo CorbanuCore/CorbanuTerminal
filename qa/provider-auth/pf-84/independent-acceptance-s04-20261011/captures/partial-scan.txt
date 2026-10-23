@@ -1,0 +1,6 @@
+scanned 93763 files; window=16; keys=4
+REAL_CLAUDE: 0 file(s)
+REAL_KIMI: 0 file(s)
+REAL_OPENAI: 1 file(s)
+    $S/homes/hC2/auth.json (149 windows)
+REAL_ZAI: 0 file(s)

@@ -1,0 +1,11 @@
+# ISSUE-555-RESUME demo videos
+
+Recorded with `scripts/demo_video.py`; see [the demo SOP](../README.md).
+Videos are assets on the [`demos` prerelease](https://github.com/CorbanuCore/CorbanuTerminal/releases/tag/demos).
+
+| Date | Demo | Feature | Commit | Model | Length | Video |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 | `pf84-555-cross-provider-resume` | PF-84 #555: resume a Z.AI conversation in a home configured for OpenAI | `935283eec8ec` | glm-5.3-flash (set by the wrapper) | 30s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-555-resume-pf84-555-cross-provider-resume-935283eec8ec-2026-10-11.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-555-resume-pf84-555-cross-provider-resume-935283eec8ec-2026-10-11.cast) |
+| 2026-10-11 | `pf84-555-in-app-resume-providers` | PF-84 #555: in-app /resume names a missing account with the /providers recovery | `935283eec8ec` | glm-5.3-flash | 30s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-555-resume-pf84-555-in-app-resume-providers-935283eec8ec-2026-10-11.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-555-resume-pf84-555-in-app-resume-providers-935283eec8ec-2026-10-11.cast) |
+| 2026-10-11 | `pf84-555-provider-accounts-ghost` | PF-84 #555: resume works when [provider_accounts] names a missing account | `935283eec8ec` | glm-5.3-flash | 27s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-555-resume-pf84-555-provider-accounts-ghost-935283eec8ec-2026-10-11.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-555-resume-pf84-555-provider-accounts-ghost-935283eec8ec-2026-10-11.cast) |
+| 2026-10-11 | `pf84-555-resume-picker-esc` | PF-84 #555: Esc in the corbanu resume picker quits, with no sign-in screen | `935283eec8ec` | glm-5.3-flash | 23s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-555-resume-pf84-555-resume-picker-esc-935283eec8ec-2026-10-11.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-555-resume-pf84-555-resume-picker-esc-935283eec8ec-2026-10-11.cast) |

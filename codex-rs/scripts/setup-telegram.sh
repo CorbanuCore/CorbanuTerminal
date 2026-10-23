@@ -91,7 +91,7 @@ add_chat_ids() {
     local -a parts
     IFS=',' read -r -a parts <<< "$value"
     IFS=$old_ifs
-    for raw in "${parts[@]}"; do
+    for raw in ${parts[@]+"${parts[@]}"}; do
         id="${raw//[[:space:]]/}"
         [[ -z "$id" ]] && continue
         [[ "$id" =~ ^-?[0-9]+$ ]] || die "invalid Telegram chat ID: $raw"
@@ -105,7 +105,7 @@ add_user_ids() {
     local -a parts
     IFS=',' read -r -a parts <<< "$value"
     IFS=$old_ifs
-    for raw in "${parts[@]}"; do
+    for raw in ${parts[@]+"${parts[@]}"}; do
         id="${raw//[[:space:]]/}"
         [[ -z "$id" ]] && continue
         [[ "$id" =~ ^[0-9]+$ ]] || die "invalid Telegram user ID: $raw"
@@ -641,7 +641,8 @@ EXPLICIT_CONFIG_KEYS=""
 [[ $APPROVAL_POLICY_EXPLICIT -eq 1 ]] && EXPLICIT_CONFIG_KEYS="${EXPLICIT_CONFIG_KEYS},approval_policy"
 EXPLICIT_CONFIG_KEYS="${EXPLICIT_CONFIG_KEYS#,}"
 CHAT_IDS_CSV="$(IFS=,; printf '%s' "${CHAT_IDS[*]}")"
-USER_IDS_CSV="$(IFS=,; printf '%s' "${USER_IDS[*]}")"
+# `-`: macOS bash 3.2 treats an empty array as unset under `set -u` (#530).
+USER_IDS_CSV="$(IFS=,; printf '%s' "${USER_IDS[*]-}")"
 merge_config "$CONFIG_PATH" "$WORKSPACE" "$SANDBOX_MODE_TO_SET" "$APPROVAL_POLICY" "$EXPLICIT_CONFIG_KEYS" "$CHAT_IDS_CSV" "$USER_IDS_CSV"
 printf 'Configured Telegram connector in %s\n' "$CONFIG_PATH"
 seed_agents_md "$WORKSPACE"

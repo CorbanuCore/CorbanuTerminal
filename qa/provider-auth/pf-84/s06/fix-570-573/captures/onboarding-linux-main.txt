@@ -1,0 +1,31 @@
+# glitch, origin/main source (060ce90947): the multi_provider_onboarding tmux tests that fail on the branch fail on main too
+?? codex-rs/core/src/model_info_for_provider.rs
+?? codex-rs/exec/tests/suite/named_account_login_restrictions.rs
+?? qa/demos/specs/pf84-named-chatgpt-from-zai.toml
+test suite::multi_provider_onboarding::tmux_fresh_wallet_api_cancel_without_fallback_returns_to_setup ... FAILED
+test suite::multi_provider_onboarding::tmux_deferred_corbanu_api_cancel_with_fallback_continues_to_chat ... FAILED
+test suite::multi_provider_onboarding::tmux_fresh_wallet_api_key_success_activates_without_restart ... FAILED
+test suite::multi_provider_onboarding::tmux_fresh_wallet_api_handoff_preserves_existing_current_provider ... FAILED
+test suite::multi_provider_onboarding::tmux_only_corbanu_api_cancel_returns_to_shared_provider_list ... FAILED
+test suite::multi_provider_onboarding::tmux_locked_wallet_api_unlocks_and_cancels ... FAILED
+test result: FAILED. 0 passed; 6 failed; 0 ignored; 0 measured; 95 filtered out; finished in 166.44s
+
+# glitch, branch 1870dd89e6:
+test suite::multi_provider_onboarding::canary_tree_scan_skips_unix_sockets_and_scans_regular_files ... ok
+test suite::multi_provider_onboarding::selected_title_match_allows_only_exact_or_inline_column_metadata ... ok
+test suite::multi_provider_onboarding::selected_title_strips_only_the_cursor_and_numeric_prefix ... ok
+test suite::multi_provider_onboarding::selected_row_accepts_provider_and_plan_cursors_but_rejects_header_marker ... ok
+test suite::multi_provider_onboarding::tmux_corbanu_env_aliases_restart_account_read_and_legacy_daemon_recovery ... ok
+test suite::multi_provider_onboarding::tmux_corbanu_env_legacy_alias_restart_and_account_read ... ok
+test suite::multi_provider_onboarding::tmux_configure_many_preserves_first_default_restart_and_request ... ok
+test suite::multi_provider_onboarding::tmux_corbanu_env_plan_alias_restart_and_account_read ... ok
+test suite::multi_provider_onboarding::tmux_fresh_wallet_api_cancel_without_fallback_returns_to_setup ... FAILED
+test suite::multi_provider_onboarding::tmux_deferred_corbanu_api_cancel_with_fallback_continues_to_chat ... FAILED
+test suite::multi_provider_onboarding::tmux_fresh_wallet_api_key_success_activates_without_restart ... FAILED
+test suite::multi_provider_onboarding::tmux_fresh_wallet_api_handoff_preserves_existing_current_provider ... FAILED
+test suite::multi_provider_onboarding::tmux_onboarding_text_fields_type_q_without_quitting ... ok
+test suite::multi_provider_onboarding::tmux_locked_wallet_api_unlocks_and_cancels has been running for over 60 seconds
+test suite::multi_provider_onboarding::tmux_locked_wallet_api_unlocks_and_cancels ... FAILED
+test suite::multi_provider_onboarding::tmux_preset_provider_key_entry_continues_to_chat ... ok
+test suite::multi_provider_onboarding::tmux_only_corbanu_api_cancel_returns_to_shared_provider_list ... FAILED
+test result: FAILED. 10 passed; 6 failed; 0 ignored; 0 measured; 85 filtered out; finished in 212.94s

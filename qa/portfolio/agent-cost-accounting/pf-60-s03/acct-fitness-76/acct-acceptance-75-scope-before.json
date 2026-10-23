@@ -1,0 +1,115 @@
+{
+  "base": "49e7d1b8cf6d762c433360e54efccd50a0840f83",
+  "scope": "qa/portfolio/agent-cost-accounting/pf-60-s03/",
+  "files": [
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/RETURN.md",
+      "bytes": 4553,
+      "sha256": "a1c5a34ee0fb5023791150dc77692f17ee8026887c7f5a04db4b332c1fe907e5",
+      "lines": 73
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md",
+      "bytes": 6252,
+      "sha256": "a901ced9deebb402025031ac621b53f0e017a8ca63a2e11ea92dce1ccc675251",
+      "lines": 57
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/commit-message.txt",
+      "bytes": 1176,
+      "sha256": "f9344ccd3265170d89c394efa2c0eb36e7d994caf2842ef6749b4b583dd00fe2",
+      "lines": 19
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/finalize.py",
+      "bytes": 2506,
+      "sha256": "bf4be1b3bd3a18ca80dd27682fe67621bb2e81b3b6c3b355bc9a8982441bb571",
+      "lines": 48
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gate.py",
+      "bytes": 3323,
+      "sha256": "867439fb4de5a404ac071c846d14cc99d4ad72991c6388eb4cc60c8ea3a2692f",
+      "lines": 72
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gates-01/core-default.json",
+      "bytes": 1380,
+      "sha256": "4c213d4b39bde93a36a443aa65cf8cb9997e8c3a52c7b04b3a9fcdac3a8169a0",
+      "lines": 41
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gates-01/core-default.log.gz",
+      "bytes": 4983,
+      "sha256": "7bd0d1705971b4da2ff964ccbda7389c758d0b5230806f4030b57fb0f9c08762",
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gates-01/core-feature.json",
+      "bytes": 1437,
+      "sha256": "ecc9ab78f53f1dc0bcbe680b358c7ba55de6675b8b35875c647e13478a1dd419",
+      "lines": 43
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gates-01/core-feature.log.gz",
+      "bytes": 5066,
+      "sha256": "38434394efa5a98a9c8f478a3b4bf025ddb177f67c5ad1a14e1e7a8eb488632c",
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gates-01/prerequisites.json",
+      "bytes": 962,
+      "sha256": "00fc363d80351266618d5e38494a25dcef99c279be79ced73549eec1c3646eeb",
+      "lines": 33
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gates-01/prerequisites.log.gz",
+      "bytes": 3132,
+      "sha256": "94a0413637d1894ac9ddfec8d4a7d13c61113e79f00a67d6324032d1b11b65de",
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gates-01/tui.json",
+      "bytes": 1004,
+      "sha256": "74395163427846b188f7db558999617f951e50a08989315c5f5534e4468c8414",
+      "lines": 38
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gates-01/tui.log.gz",
+      "bytes": 6536,
+      "sha256": "27753737688e0143fb2065a09c93ce106f3fbb065fb4eef8e46b70311ab7424f",
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/summary-recheck.json",
+      "bytes": 437,
+      "sha256": "cbdc49f06188370331eb1c90ed209f9cc4348cd81fc5543560b9a5ad53f848c4",
+      "lines": 16
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/test-results.json",
+      "bytes": 5569,
+      "sha256": "5142dc7afededb8cb969ef99ebc51d438e55f21bddb5953cb8fa060f2c93d550",
+      "lines": 163
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/RETURN.md",
+      "bytes": 6251,
+      "sha256": "55c761960422d9abcb9f900f2f911b5b5d90a593721547a1dbb30d8c8511c103",
+      "lines": 102
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/acceptance-gap.md",
+      "bytes": 6357,
+      "sha256": "21ce106cc0f1d4267a56d672981e8a6279fe8427bf21de45870b8a4e3f6c650a",
+      "lines": 43
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/summarize.py",
+      "bytes": 4105,
+      "sha256": "420e4a31be49b7f182bb0228006d9ec5f085f368921b4b5c66562da20b179616",
+      "lines": 85
+    }
+  ],
+  "self_excluded": true
+}

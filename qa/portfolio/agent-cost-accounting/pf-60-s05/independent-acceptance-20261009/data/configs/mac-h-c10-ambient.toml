@@ -1,0 +1,6 @@
+model = "ambient/large"
+model_provider = "ambient"
+service_tier = "default"
+
+[projects."<scratch>/work/repo"]
+trust_level = "trusted"

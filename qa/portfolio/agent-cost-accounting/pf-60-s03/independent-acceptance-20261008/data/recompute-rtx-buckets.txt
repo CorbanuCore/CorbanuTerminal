@@ -1,0 +1,33 @@
+b-month.err 202610081910171447ece74e264baa  AMBIGUOUS sent=2026-09-30T23:59:57.967 usage=2026-10-01T00:00:00.419 (2026-09-30T23:00Z vs 2026-10-01T00:00Z) usd=0.00226984
+b-week.err 202610081911598ebf6b82daea4967  AMBIGUOUS sent=2026-10-04T23:59:56.931 usage=2026-10-05T00:00:12.001 (2026-10-04T23:00Z vs 2026-10-05T00:00Z) usd=0.002659
+b-day.err 202610081912306124ead531b34954  AMBIGUOUS sent=2026-10-06T23:59:59.681 usage=2026-10-07T00:00:02.644 (2026-10-06T23:00Z vs 2026-10-07T00:00Z) usd=0.00177144
+grain=hour (bucketed by request start)
+  2026-09-30T23:00Z: 4 requests, 27258 tokens, exact USD 0.01496616
+  2026-10-01T00:00Z: 34 requests, 220862 tokens, exact USD 0.08292244
+  2026-10-04T23:00Z: 3 requests, 20617 tokens, exact USD 0.00968756
+  2026-10-06T23:00Z: 7 requests, 34359 tokens, exact USD 0.01268184
+  2026-10-07T00:00Z: 8 requests, 43805 tokens, exact USD 0.01665244
+  2026-10-07T10:00Z: 10 requests, 71732 tokens, exact USD 0.02381056
+  2026-10-08T11:00Z: 41 requests, 411988 tokens, exact USD 0.21412760
+  ALL: 107 requests, 830621 tokens, exact USD 0.37484860
+b-month.err 202610081910171447ece74e264baa  AMBIGUOUS sent=2026-09-30T23:59:57.967 usage=2026-10-01T00:00:00.419 (2026-09-30 vs 2026-10-01) usd=0.00226984
+b-week.err 202610081911598ebf6b82daea4967  AMBIGUOUS sent=2026-10-04T23:59:56.931 usage=2026-10-05T00:00:12.001 (2026-10-04 vs 2026-10-05) usd=0.002659
+b-day.err 202610081912306124ead531b34954  AMBIGUOUS sent=2026-10-06T23:59:59.681 usage=2026-10-07T00:00:02.644 (2026-10-06 vs 2026-10-07) usd=0.00177144
+grain=day (bucketed by request start)
+  2026-09-30: 4 requests, 27258 tokens, exact USD 0.01496616
+  2026-10-01: 34 requests, 220862 tokens, exact USD 0.08292244
+  2026-10-04: 3 requests, 20617 tokens, exact USD 0.00968756
+  2026-10-06: 7 requests, 34359 tokens, exact USD 0.01268184
+  2026-10-07: 18 requests, 115537 tokens, exact USD 0.04046300
+  2026-10-08: 41 requests, 411988 tokens, exact USD 0.21412760
+  ALL: 107 requests, 830621 tokens, exact USD 0.37484860
+b-week.err 202610081911598ebf6b82daea4967  AMBIGUOUS sent=2026-10-04T23:59:56.931 usage=2026-10-05T00:00:12.001 (2026-W40 vs 2026-W41) usd=0.002659
+grain=week (bucketed by request start)
+  2026-W40: 41 requests, 268737 tokens, exact USD 0.10757616
+  2026-W41: 66 requests, 561884 tokens, exact USD 0.26727244
+  ALL: 107 requests, 830621 tokens, exact USD 0.37484860
+b-month.err 202610081910171447ece74e264baa  AMBIGUOUS sent=2026-09-30T23:59:57.967 usage=2026-10-01T00:00:00.419 (2026-09 vs 2026-10) usd=0.00226984
+grain=month (bucketed by request start)
+  2026-09: 4 requests, 27258 tokens, exact USD 0.01496616
+  2026-10: 103 requests, 803363 tokens, exact USD 0.35988244
+  ALL: 107 requests, 830621 tokens, exact USD 0.37484860

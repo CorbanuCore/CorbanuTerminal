@@ -1,0 +1,24 @@
+argv: ['/opt/agms/bin/agms-product', '--exec', 'zai', 'glm-5.3-flash', '--ephemeral', 'Reply with the single word EPHEMERAL.']
+exit: 0
+--- stdout
+EPHEMERAL
+
+--- stderr
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: /Users/agmx2/runs/acc-A-agmx2-20261016T035204Z/fixture/workspace
+model: glm-5.3-flash
+provider: zai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+session id: 01a142f6-4649-7c92-b723-5b0323f45439
+--------
+user
+Reply with the single word EPHEMERAL.
+{"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":30021,"ms_to_response_headers":5074,"ms_to_first_sse_byte":5075,"ms_to_first_parsed_data_event":5076,"ms_to_first_actionable_event":5076,"total_stream_ms":5077,"comment_frame_count":0,"parsed_event_count":24,"x_request_id":"e2844ba9-e63c-4e12-a3b8-52ac3434a4ce","generation_id":"20261016122641a8d0eda0fa934152","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+corbanu
+EPHEMERAL
+tokens used
+5,672
+

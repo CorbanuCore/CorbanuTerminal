@@ -1,0 +1,26 @@
+› Run exactly this shell command once, unchanged: echo t04 >> ../outside/notes.txt
+✔ You approved Corbanu to run echo t04 >> ../outside/notes.txt this time
+• Ran echo t04 >> ../outside/notes.txt
+  └ /bin/bash: ../outside/notes.txt: Operation not permitted
+⚠ Security level Aggressive blocks writing `../outside/notes.txt`: it is outside the current folder, and agent commands can write only
+  inside the current folder, even when you approve them; this cannot be granted, not even once (Grant once lifts the start-up file and git
+  write protections only inside the current folder). To allow it, a person can switch to Permissive in /security (it applies after a
+  restart).
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+• Ran it once unchanged. It failed with exit code 1 because Security level Aggressive blocks writes outside the current workspace, even with
+  approval.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+› Run exactly this shell command once, unchanged: printf x > .git/hooks/pre-commit
+✔ You approved Corbanu to run printf x > .git/hooks/pre-commit this time
+• Ran printf x > .git/hooks/pre-commit
+  └ /bin/bash: .git/hooks/pre-commit: Operation not permitted
+⚠ Security level Aggressive blocks writing `.git/hooks/pre-commit`: agent commands cannot write it, even when you approve them (it is read-
+  only in this session, as the project's .git folder, its hooks and config included, always is); this cannot be granted, not even once
+  (Grant once lifts only git hooks and config kept outside a .git folder and, when the current folder holds your home folder, start-up
+  files). To allow it, a person can switch to Permissive in /security (it applies after a restart).
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+• Ran it once unchanged. It failed with exit code 1 because Security level Aggressive blocks writes into the project .git folder, including
+  hooks.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+› Summarize recent commits
+  Z.AI GLM 5.3 Flash via zai default · qa/demos/out/issue-740/issue740-no-grant-where-usel…

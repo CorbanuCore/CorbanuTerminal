@@ -1,0 +1,86 @@
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     deepseek-v4-flash   /model to change │
+│ directory: ~/corbanu-rtx/pf60s04-qual/work/ws   │
+╰─────────────────────────────────────────────────╯
+
+› Reply with the single word RETRIED.
+• RETRIED
+  Attempt, components and original price
+  Requested UTC day: 2026-10-10
+› Provider: deepseek-retry
+  Model: DeepSeek V4 Flash 0731 (Direct)
+  Billing: Pay per use
+  Estimated cost: no price available
+  Next step for requests with no price: check the bill from deepseek-retry. No published price covers them, so no cost is shown for them here.
+  Tokens: tokens not reported
+  —— Details ——
+  Billed cost: deepseek-retry doesn't report its charges, so any cost here is an estimate — check deepseek-retry's bill.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Provider: deepseek-retry
+› Model: DeepSeek V4 Flash 0731 (Direct)
+› Billing: Pay per use
+› Estimated cost: no price available
+› Next step for requests with no price: check the bill from deepseek-retry. No published price covers them, so no cost is shown for them here.
+› Tokens: tokens not reported
+› —— Details ——
+› Billed cost: deepseek-retry doesn't report its charges, so any cost here is an estimate — check deepseek-retry's bill.
+› Request: 2afdeb17-9aef-4b90-a9e5-c2544f622367
+  Request: 2afdeb17-9aef-4b90-a9e5-c2544f622367
+› Attempt: 8f767154-e0c8-4621-90f3-485a76668b57
+  Attempt: 8f767154-e0c8-4621-90f3-485a76668b57
+› Thread: 01a123fc-74b8-7ca2-9ffb-1020c4d0636b
+  Thread: 01a123fc-74b8-7ca2-9ffb-1020c4d0636b
+› Turn: 01a123fc-97d8-7382-b9d8-03c444903cbb
+  Turn: 01a123fc-97d8-7382-b9d8-03c444903cbb
+› Model: deepseek-v4-flash
+  Model: deepseek-v4-flash
+› Opaque scope: 2efdedc0-5783-4da5-b84c-73cc3c4b008f
+  Opaque scope: 2efdedc0-5783-4da5-b84c-73cc3c4b008f
+› Arithmetic dialect: Inclusive
+  Arithmetic dialect: Inclusive
+› Admission time: 2026-10-10T04:05:19.016Z
+  Admission time: 2026-10-10T04:05:19.016Z
+› Retry predecessor: none
+  Retry predecessor: none
+› Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+› Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.
+  Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.
+› Billing basis: pay per use (set in your config)
+  Billing basis: pay per use (set in your config)
+› Input: unknown — no retained numeric evidence
+  Input: unknown — no retained numeric evidence
+› Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+  Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+› Cache read: unknown — no retained numeric evidence
+  Cache read: unknown — no retained numeric evidence
+› Cache write: unknown — no retained numeric evidence
+  Cache write: unknown — no retained numeric evidence
+› Output: unknown — no retained numeric evidence
+  Output: unknown — no retained numeric evidence
+› Reasoning (subset, not separately billed): unknown — no retained numeric evidence
+  Reasoning (subset, not separately billed): unknown — no retained numeric evidence
+› Total (not separately billed): unknown — no retained numeric evidence
+  Total (not separately billed): unknown — no retained numeric evidence
+› Noncached input cost: unknown — no retained numeric evidence
+  Noncached input cost: unknown — no retained numeric evidence
+› Cache read cost: unknown — no retained numeric evidence
+  Cache read cost: unknown — no retained numeric evidence
+› Cache write cost: unknown — no retained numeric evidence
+  Cache write cost: unknown — no retained numeric evidence
+› Output cost: unknown — no retained numeric evidence
+  Output cost: unknown — no retained numeric evidence
+› Known subtotal exact USD: none — no price for these attempts
+  Known subtotal exact USD: none — no price for these attempts
+› Price: none recorded — this request records only its billing basis (pay per use (set in your config))
+  Price: none recorded — this request records only its billing basis (pay per use (set in your config))
+› Snapshot is not current; newer activity is unverified
+  Snapshot is not current; newer activity is unverified
+› Back
+  Back
+› Refresh
+  Refresh
+› Close

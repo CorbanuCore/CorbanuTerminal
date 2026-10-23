@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a120be-0142-72a1-b67e-6d54a4fb7a47"}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 401 Unauthorized: Unauthorized, url: https://api.meta.ai/v1/responses, request id: f019bbb5-aebf-467a-afd0-126320b6700c"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: Unauthorized, url: https://api.meta.ai/v1/responses, request id: f019bbb5-aebf-467a-afd0-126320b6700c"}}

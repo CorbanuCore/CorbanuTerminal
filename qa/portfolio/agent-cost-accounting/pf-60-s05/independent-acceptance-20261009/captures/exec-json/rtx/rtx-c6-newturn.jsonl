@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a120d5-853b-7fa3-aadb-10cdf84e5f64"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"new build turn"}}
+{"type":"turn.completed","usage":{"input_tokens":6424,"cached_input_tokens":5248,"cache_write_input_tokens":0,"output_tokens":4,"reasoning_output_tokens":1}}

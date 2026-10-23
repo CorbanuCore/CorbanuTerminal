@@ -1,0 +1,46 @@
+ledger format rows: [2, 3, 4]
+
+LEDGER per thread: attempts input cached output total | (provider, account, fingerprint)
+  01a12b4b-43f1-7053-9219-aa9946767b02   1    7422       0      3    7425 | [('zai', '(none)', '')]
+  01a12b4b-58a4-7b80-9575-aed747a33c90   1    7422     576      3    7425 | [('zai', 'work', '96829868dc8d')]
+  01a12b4b-6fba-7ad3-897b-1183b140478f   1       0       0      0       0 | [('zai', 'fake', 'f8c1d2a7de8d')]
+  01a12b4b-db4c-7392-8b99-790a180e4f99   6   39439   24064    323   39762 | [('zai', '(none)', '')]
+  01a12b4c-4c75-78d3-b5aa-ef4a2eab172d   1    4613     576      9    4622 | [('zai', 'work', '96829868dc8d')]
+  01a12b4c-6897-7d62-a76a-d08091e513ac   1       0       0      0       0 | [('zai', 'fake', 'f8c1d2a7de8d')]
+  01a12b4d-fb47-7cc1-82c1-db830fb0c915   4   26514    1728    719   27233 | [('zai', 'work', '96829868dc8d')]
+  01a12b50-4aad-7fa1-98ee-0390a2735e2f   1    7611       0      3    7614 | [('zai', '(none)', '')]
+  01a12b50-fbab-7401-b9c3-7605a81f6e18   1    7611     576     38    7649 | [('zai', 'work', '96829868dc8d')]
+
+LEDGER per (provider, account): attempts input cached output total no-usage-attempts
+  zai        (none)     8   54472   24064    329   54801 1
+  zai        fake       2       0       0      0       0 2
+  zai        work       7   46160    3456    769   46929 0
+  (/cost 'tokens' = input + output, input including cached)
+  /cost-equivalent zai (none): 54,801 tokens
+  /cost-equivalent zai fake: 0 tokens
+  /cost-equivalent zai work: 46,929 tokens
+
+PROXY (provider-reported) per thread: requests status-counts prompt cached completion total | bearer-hash
+  01a12b4b-43f1-7053-9219-aa9946767b02   1 {'200': 1}    7422       0      3    7425 | ['c6529731c8'] | ledger MATCH
+  01a12b4b-58a4-7b80-9575-aed747a33c90   1 {'200': 1}    7422     576      3    7425 | ['c6529731c8'] | ledger MATCH
+  01a12b4b-6fba-7ad3-897b-1183b140478f   1 {'401': 1}       0       0      0       0 | ['7eb42d5a3c'] | ledger MATCH
+  01a12b4b-db4c-7392-8b99-790a180e4f99   6 {'200': 5, '200/client-aborted': 1}   39439   24064    323   39762 | ['c6529731c8'] | ledger MATCH
+  01a12b4c-4c75-78d3-b5aa-ef4a2eab172d   1 {'200': 1}    4613     576      9    4622 | ['c6529731c8'] | ledger MATCH
+  01a12b4c-6897-7d62-a76a-d08091e513ac   1 {'401': 1}       0       0      0       0 | ['7eb42d5a3c'] | ledger MATCH
+  01a12b4d-fb47-7cc1-82c1-db830fb0c915   4 {'200': 4}   26514    1728    719   27233 | ['c6529731c8'] | ledger MATCH
+  01a12b50-4aad-7fa1-98ee-0390a2735e2f   1 {'200': 1}    7611       0      3    7614 | ['c6529731c8'] | ledger MATCH
+  01a12b50-fbab-7401-b9c3-7605a81f6e18   1 {'200': 1}    7611     576     38    7649 | ['c6529731c8'] | ledger MATCH
+  ledger threads with no proxied request: none
+PROXY vs LEDGER exact per thread: ALL MATCH
+
+ROLLOUT (provider-reported usage as recorded per thread: last cumulative token_count) vs LEDGER
+  01a12b4b-43f1-7053-9219-aa9946767b02 rollout in=7422 cached=0 out=3 total=7425 | ledger attempts=1 [('zai', '(none)', '')] MATCH
+  01a12b4b-58a4-7b80-9575-aed747a33c90 rollout in=7422 cached=576 out=3 total=7425 | ledger attempts=1 [('zai', 'work', '96829868dc8d')] MATCH
+  01a12b4b-6fba-7ad3-897b-1183b140478f rollout in=0 cached=0 out=0 total=0 | ledger attempts=1 [('zai', 'fake', 'f8c1d2a7de8d')] MATCH
+  01a12b4b-db4c-7392-8b99-790a180e4f99 rollout in=39439 cached=24064 out=323 total=39762 | ledger attempts=6 [('zai', '(none)', '')] MATCH
+  01a12b4c-4c75-78d3-b5aa-ef4a2eab172d rollout in=4613 cached=576 out=9 total=4622 | ledger attempts=1 [('zai', 'work', '96829868dc8d')] MATCH
+  01a12b4c-6897-7d62-a76a-d08091e513ac rollout in=0 cached=0 out=0 total=0 | ledger attempts=1 [('zai', 'fake', 'f8c1d2a7de8d')] MATCH
+  01a12b4d-fb47-7cc1-82c1-db830fb0c915 rollout in=26514 cached=1728 out=719 total=27233 | ledger attempts=4 [('zai', 'work', '96829868dc8d')] MATCH
+  01a12b50-4aad-7fa1-98ee-0390a2735e2f rollout in=7611 cached=0 out=3 total=7614 | ledger attempts=1 [('zai', '(none)', '')] MATCH
+  01a12b50-fbab-7401-b9c3-7605a81f6e18 rollout in=7611 cached=576 out=38 total=7649 | ledger attempts=1 [('zai', 'work', '96829868dc8d')] MATCH
+ROLLOUT vs LEDGER exact per thread: ALL MATCH

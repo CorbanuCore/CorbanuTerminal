@@ -1,0 +1,16 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/secret-broker-service)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.52s
+────────────
+ Nextest run ID 8dc2642b-aa18-48e5-afe3-85ef0fb83a0a with nextest profile: local
+    Starting 8 tests across 7 binaries (48 tests skipped)
+        PASS [   0.003s] (1/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_worker_failure_returns_image_without_spawn
+        PASS [   0.003s] (2/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_reservation_precedes_image_and_rejects_second_launch
+        PASS [   0.004s] (3/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_panic_is_not_cleanup_receipt_or_relaunch_permission
+        PASS [   0.004s] (4/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_late_spawn_drop_keeps_permit_until_reaping
+        PASS [   0.004s] (5/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_cancel_before_worker_starts_never_launches
+        PASS [   0.005s] (6/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_early_exit_and_rejected_spawn_release_only_after_cleanup
+        PASS [   0.023s] (7/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_signal_wait_failure_quarantines_until_same_owner_recovers
+        PASS [   0.106s] (8/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_deadline_while_spawn_blocked_is_not_cleanup
+────────────
+     Summary [   0.106s] 8 tests run: 8 passed, 48 skipped

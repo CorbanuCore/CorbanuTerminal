@@ -3,4 +3,13 @@ load("//:defs.bzl", "codex_rust_crate")
 codex_rust_crate(
     name = "telegram",
     crate_name = "codex_telegram",
+    # tests/all.rs includes these unit-test modules with #[path = "../src/..."].
+    integration_compile_data_extra = [
+        "src/approvals_tests.rs",
+        "src/auth_tests.rs",
+        "src/commands_tests.rs",
+        "src/config_tests.rs",
+        "src/error_tests.rs",
+        "src/render_tests.rs",
+    ],
 )

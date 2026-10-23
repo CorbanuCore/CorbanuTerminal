@@ -1,0 +1,82 @@
+# Issue #816 (AGG-04): before the restart, the Aggressive review, screen 07 and the level list say what holds from confirmation.
+id = "issue816-aggressive-before-restart-says-what-holds"
+feature = "#816: what Aggressive enforces before the restart"
+expected = "Under Permissive, the Aggressive review says that from confirmation approved commands stay inside this session's sandbox and network is off; screen 07 and the level list say so too and no longer list them for the restart; the inspector's rows agree."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 160
+rows = 50
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 8.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+key = "Down"
+repeat = 80
+[[steps]]
+wait = "From then until\\s+the restart"
+[[steps]]
+run = "tmux -L \"$(ls -t \"${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)\" | grep '^demo-issue816-aggressive-before-restart-says-what-holds-' | head -1)\" capture-pane -p -t demo > {run}/816-review-bottom.txt"
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Also in\\s+force now in"
+timeout = 60
+[[steps]]
+run = "tmux -L \"$(ls -t \"${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)\" | grep '^demo-issue816-aggressive-before-restart-says-what-holds-' | head -1)\" capture-pane -p -t demo > {run}/816-screen07.txt"
+[[steps]]
+pause = 5.0
+[[steps]]
+key = "Escape"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "also in\\s+force now"
+[[steps]]
+run = "tmux -L \"$(ls -t \"${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)\" | grep '^demo-issue816-aggressive-before-restart-says-what-holds-' | head -1)\" capture-pane -p -t demo > {run}/816-picker.txt"
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "i"
+[[steps]]
+wait = "(?s)This session.*Network: off for agent commands"
+[[steps]]
+run = "tmux -L \"$(ls -t \"${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)\" | grep '^demo-issue816-aggressive-before-restart-says-what-holds-' | head -1)\" capture-pane -p -t demo > {run}/816-inspector.txt"
+[[steps]]
+pause = 5.0

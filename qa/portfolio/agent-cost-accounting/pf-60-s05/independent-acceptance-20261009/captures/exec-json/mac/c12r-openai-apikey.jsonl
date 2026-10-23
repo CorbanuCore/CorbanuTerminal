@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"01a120e1-cda9-78d0-910e-0cb945ea08b7"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Skill descriptions were shortened to fit the 2% skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest."}}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 401 Unauthorized: Incorrect API key provided: placehol**************-key. You can find your API key at https://platform.openai.com/account/api-keys., url: https://api.openai.com/v1/chat/completions, cf-ray: a47dc7564d9ef78b-DFW, request id: req_a74bf8d8fa104da1a4d3ebfc372b40e3"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: Incorrect API key provided: placehol**************-key. You can find your API key at https://platform.openai.com/account/api-keys., url: https://api.openai.com/v1/chat/completions, cf-ray: a47dc7564d9ef78b-DFW, request id: req_a74bf8d8fa104da1a4d3ebfc372b40e3"}}

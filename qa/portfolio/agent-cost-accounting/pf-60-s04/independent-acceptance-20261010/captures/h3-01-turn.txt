@@ -1,0 +1,50 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/corbanu-rtx/pf60s04-ia/work/ws │
+╰─────────────────────────────────────────────╯
+
+
+› Reply with the single word RETRIED.
+
+
+• RETRIED
+
+
+› Explain this codebase
+
+  Z.AI GLM 5.3 Flash via zai-retry default · ~/corbanu-rtx/pf60s04-ia/work/ws · Corbanu Terminal · TPS: 6.7 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

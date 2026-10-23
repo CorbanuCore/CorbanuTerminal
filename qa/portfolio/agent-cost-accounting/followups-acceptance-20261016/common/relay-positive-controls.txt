@@ -1,0 +1,12 @@
+chatgpt: 1 windows (created Thu Oct 15 20:24:52 2026)
+guard: 1 windows (created Thu Oct 15 20:24:52 2026)
+mediator: 1 windows (created Thu Oct 15 20:24:52 2026)
+standin: 1 windows (created Thu Oct 15 20:24:52 2026)
+https://api.moonshot.ai/v1/models 200
+https://api.openai.com/v1/models 200
+https://openrouter.ai/api/v1/x 404
+https://chatgpt.com/backend-api/x 404
+{"conn": "1792121161313661000-49152", "event": "forwarded", "host": "api.moonshot.ai", "method": "GET", "path": "/v1/models", "real": true, "request_bytes": 0, "response_bytes": 2541, "seconds": 0.994, "status": "200", "
+{"conn": "1792121162337027000-49154", "event": "forwarded", "host": "api.openai.com", "method": "GET", "path": "/v1/models", "real": true, "request_bytes": 0, "response_bytes": 22203, "seconds": 0.88, "status": "200", "t
+{"conn": "1792121163241113000-49156", "event": "forwarded", "host": "openrouter.ai", "method": "GET", "path": "/api/v1/x", "real": false, "request_bytes": 0, "response_bytes": 215, "seconds": 0.003, "status": "404", "tim
+{"conn": "1792121163260827000-49158", "event": "forwarded", "host": "chatgpt.com", "method": "GET", "path": "/backend-api/x", "real": false, "request_bytes": 0, "response_bytes": 149, "seconds": 0.001, "status": "404", "

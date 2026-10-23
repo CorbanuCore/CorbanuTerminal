@@ -1,0 +1,57 @@
+# #515 / #227: without code mode, GLM 5.3 Flash on the Z.AI Chat Completions wire sees the
+# MCP server's tools under flat names, calls one directly, and the MCP approval prompt asks first.
+# The MCP fixture is the rmcp test_stdio_server built in the lane target (machine-specific path):
+# cargo build -p codex-rmcp-client --bin test_stdio_server
+id = "issue515-mcp-tools-on-chat-wire"
+feature = "#515: MCP tools reach Chat Completions models directly"
+expected = "With code mode off, GLM 5.3 Flash (Z.AI, Chat Completions) calls the rmcp server's echo tool by its flat name mcp__rmcp__echo; the MCP approval prompt appears, and after Allow the call runs as rmcp.echo."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[features]
+code_mode = false
+code_mode_only = false
+
+[mcp_servers.rmcp]
+command = "/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/fix-515-mcp-chat-wires/debug/test_stdio_server"
+default_tools_approval_mode = "prompt"
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Call the mcp__rmcp__echo tool directly (not through any script) exactly once with message hello-515, then stop."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Run the tool and continue"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 3.0
+
+[[steps]]
+key = "1"
+[[steps]]
+wait = "› 1\\. Allow"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Called rmcp\\.echo"
+timeout = 120
+compress = 2
+[[steps]]
+pause = 3.0

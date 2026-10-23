@@ -1,0 +1,17 @@
+Corbanu Terminal v0.1.48
+--------
+workdir: /Volumes/CorbanuDrive/Corbanu/tmp/pf84s05/work
+model: glm-5.3-flash
+provider: zai
+approval: never
+sandbox: danger-full-access
+session id: 01a12ad4-f7ab-76a3-8fb0-8e8fe368527d
+--------
+user
+Reply with exactly the word pong and nothing else.
+corbanu
+pong
+tokens used
+7,173
+pong
+exit=0

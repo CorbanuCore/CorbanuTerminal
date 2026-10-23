@@ -1,0 +1,17 @@
+== saved level Aggressive (security_level.toml written by /security picker)
+-- account add (fake key via stdin):
+Saved zai account `aggr` (api_key).
+exit=0
+-- account remove main:
+Removed zai account `main`.
+exit=0
+-- account list:
+zai	aggr	api_key
+exit=0
+== saved Aggressive + protected_mode_preflight enabled
+Saved zai account `aggr2` (api_key).
+exit=0
+Removed zai account `aggr`.
+exit=0
+zai	aggr2	api_key
+exit=0

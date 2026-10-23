@@ -322,6 +322,25 @@ fn insert_mcp_server(
     transport: McpServerTransportConfig,
     options: TestMcpServerOptions,
 ) {
+    // The executor launcher rejects remote stdio servers without an explicit
+    // cwd. Tests that don't care about the cwd use /tmp, which always exists
+    // in the remote test container.
+    let transport = match transport {
+        McpServerTransportConfig::Stdio {
+            command,
+            args,
+            env,
+            env_vars,
+            cwd: None,
+        } if options.environment_id == REMOTE_MCP_ENVIRONMENT => McpServerTransportConfig::Stdio {
+            command,
+            args,
+            env,
+            env_vars,
+            cwd: Some(LegacyAppPathString::from_path(Path::new("/tmp"))),
+        },
+        transport => transport,
+    };
     let mut servers = config.mcp_servers.get().clone();
     servers.insert(
         server_name.to_string(),

@@ -1,0 +1,1776 @@
+{
+ "feature": "PF-60-S10: isolated code-blind acceptance of PF-60-S06 to S09 (accounting follow-ups)",
+ "designer": "01a1428c-9592-7652-8620-53768ab043ba",
+ "design_reviewer": "01a14298-8fd0-7381-aa6f-d4a5ee26429d",
+ "fresh_context": true,
+ "code_blind": true,
+ "results_blind": true,
+ "isolation": "instruction-only",
+ "brief": {
+  "path": "design/packet/intent.md",
+  "sha256": "66eed433302a496585de0b6e077480613e8724a26acd10595c45a61f8803099a"
+ },
+ "screenshots": [
+  {
+   "path": "design/packet/screens/s06-01-side-review-technical.txt",
+   "sha256": "19d14658228d9dee99402d98066523eb3e3870a46c4aad330a17d029e4d5a513"
+  },
+  {
+   "path": "design/packet/screens/s07-corbanu-api-first-screen.txt",
+   "sha256": "09abdec3a80d5087279827d0c12c9a88962fb462c0ea0faadab7aa9f1f483a23"
+  },
+  {
+   "path": "design/packet/screens/s07-corbanu-api-other-conversations.txt",
+   "sha256": "237c925e5094a86ada6eff7595ce58732a7772ff4cd4312c3bf8243dcb159a9b"
+  },
+  {
+   "path": "design/packet/screens/s07-corbanu-api-request.txt",
+   "sha256": "5f9b8aa70263143c638ae571db9d7f9ff1b0bd678d5ecee702c603ce2b5efe04"
+  },
+  {
+   "path": "design/packet/screens/s07-corbanu-api-technical.txt",
+   "sha256": "db6a0d211c020c1e011c1ed419c4ac114ca8c1cc8d60a99a8955a9327dc0add2"
+  },
+  {
+   "path": "design/packet/screens/s07-moonshot-k2-first-screen.txt",
+   "sha256": "0c91c646bd9861d8aeb83a34b832987bf162fa5a5c55f889fc97cf78b760ee60"
+  },
+  {
+   "path": "design/packet/screens/s07-moonshot-k2-technical.txt",
+   "sha256": "489f32bf3cb6b774febb2e020427c28c347e8177372ed6cce98031ab31d13abc"
+  },
+  {
+   "path": "design/packet/screens/s07-moonshot-k3-first-screen.txt",
+   "sha256": "e79a97c5dfac9a83c1c3649c7bedaaa5c9577cab3c2f734ea863ded829f90c7e"
+  },
+  {
+   "path": "design/packet/screens/s07-moonshot-k3-request.txt",
+   "sha256": "88ac3f4a3cde8ff7e5215ec39a510e9c71a5b85e8bbc2eb30c936ba11721ce43"
+  },
+  {
+   "path": "design/packet/screens/s07-moonshot-k3-technical.txt",
+   "sha256": "e79347baebbb1d41a26ec01222e9cf3065ad100216e49fa2e5e4f17aa250ca31"
+  },
+  {
+   "path": "design/packet/screens/s07-vercel-first-screen.txt",
+   "sha256": "2336bb753e7fffe25a37c5e89e3f473e9abe80b210cb34791e63b595f2895345"
+  },
+  {
+   "path": "design/packet/screens/s07-vercel-request.txt",
+   "sha256": "c1133a5dfcc67f4818767c560546495a5640ac41caa80f585094b074cfe17ac7"
+  },
+  {
+   "path": "design/packet/screens/s07-vercel-technical-attempt2.txt",
+   "sha256": "32bbbd80f05356f93950a75d81b8ad2c6e81b59726b5e7845af0eedba3de079b"
+  },
+  {
+   "path": "design/packet/screens/s08-declared-basis-technical.txt",
+   "sha256": "07d822d4dfbcd4786ed139e28a9c5fed0dfb74739b19751b206fe9c148c4a463"
+  },
+  {
+   "path": "design/packet/screens/s08-fast-tier-first-screen.txt",
+   "sha256": "e38701bab04beb5b0918f07cb844120fe4ee61b9808138a3772f251b366a2c04"
+  },
+  {
+   "path": "design/packet/screens/s08-fast-tier-technical.txt",
+   "sha256": "f11c7ab702c1db9857404af2aba157c8185b8d9eaac66c7651f89b4a63d58f1a"
+  },
+  {
+   "path": "design/packet/screens/s08-restart-first-screen.txt",
+   "sha256": "91fb58392a1a96391f62673bd4decff16c9d0a09fa2ff56a7b933366b8b16a1f"
+  },
+  {
+   "path": "design/packet/screens/s08-restart-notice.txt",
+   "sha256": "a1dea5f233ac8dae71131d36298444d9e2b6e9aab041c2f71ae6faf8847584a5"
+  },
+  {
+   "path": "design/packet/screens/s08-restart-reopen-warmup-request.txt",
+   "sha256": "864e98fb1670339d5885d49c5c0ee8d567390e68944388b72ebd9aa679455acd"
+  },
+  {
+   "path": "design/packet/screens/s08-resume-same-conversation.txt",
+   "sha256": "e2bdc80970820987097d0d749c94ba5540807b8d181242f8de64501ea960c630"
+  },
+  {
+   "path": "design/packet/screens/s08-skip-first-screen.txt",
+   "sha256": "9ac6bf50018e5accad17087fdb0111519be54a53164dad75aa0552146528e5e8"
+  },
+  {
+   "path": "design/packet/screens/s08-skip-reopen-screen.txt",
+   "sha256": "941e95556f5b8038ca9fcaff513bd190b2316fb0fd4ed2cdd6afb42121e3c8b6"
+  },
+  {
+   "path": "design/packet/screens/s09-chatgpt-catalogued-first-screen.txt",
+   "sha256": "d1ed0c0469bd1a66ce6e039b5207ba0eb8363d0a3200ec6887cf19169f93c6a7"
+  },
+  {
+   "path": "design/packet/screens/s09-chatgpt-image-first-screen.txt",
+   "sha256": "6284c0cac9b93df86ba1aabfe2dcf4311f04a7c2573e1d4dff4f33f95cbf1621"
+  },
+  {
+   "path": "design/packet/screens/s09-chatgpt-priority-tier-first-screen.txt",
+   "sha256": "e5cf160a2524d8a26b03237e70e64a1e6c597f66e664c0e9ff8166b304473e52"
+  },
+  {
+   "path": "design/packet/screens/s09-chatgpt-uncatalogued-first-screen.txt",
+   "sha256": "49ec4ab3c5fa8efbfe511eeac251259c8a6106472c4dd78b90e0a02bd36015df"
+  },
+  {
+   "path": "design/packet/screens/s09-image-first-screen.txt",
+   "sha256": "c611929fc643d339f685bb4475df64fb8c24fa11bab4a5761453ee95074ff279"
+  },
+  {
+   "path": "design/packet/screens/s09-image-technical.txt",
+   "sha256": "7f5c02841a345cc1064ba14c390486c2af04e9d123057227b677c7180700a778"
+  }
+ ],
+ "proposal": {
+  "path": "design/designer-output.md",
+  "sha256": "f750b006046cb5036f92fd6f4f8d910ccd8aa33f88b33c72ffefd0f6cc01bfd6"
+ },
+ "access_record": {
+  "path": "design/designer-session.md",
+  "sha256": "90a9cd5139e87fbe353df028a0195b5e1ba82ed3c1113a856da3d679726bcd65"
+ },
+ "review": {
+  "path": "design/review-output.md",
+  "sha256": "74665d2a52a92eb9a4a18a2566885e4c6795e58398516a4609263a7f30bf6ee1"
+ },
+ "amendments_applied": {
+  "path": "design/amendments-final.md",
+  "sha256": "2a73b6503429dc5a6d989b313e996a9041f5dc60b2c130e329dd39e1d71f105e"
+ },
+ "environment_answers": {
+  "path": "design/answers-final.md",
+  "sha256": "dc4044d36ac3868205ff2dc71cee36805969c6896c683852a6f9d705dc2d7c0c"
+ },
+ "frozen": {
+  "path": "design/FROZEN.sha256",
+  "sha256": "74ecc13f93ecacc3bbe2297c0bc07b37e65c792d64c06e970146ff87b6de82c6"
+ },
+ "named_limits": [
+  "fork: — no client creates one (answer 3).",
+  "Moonshot unlisted model → no price, and kimi-k2.7-code-highspeed / kimi-k2.6 rates — the route and spend limit allow only two first turns.",
+  "The 5-minute cache-write lifetime is not shown on screen.",
+  "Same-conversation /resume (Q8) — no expected result.",
+  "Label of a brand-new conversation's warm-up — only non-suppression is checked (ACC-13).",
+  "Realtime #824, DeepSeek calendar, BigModel, TensorCash, older records, Windows/Linux."
+ ],
+ "questions": [
+  "How is /side exited back to the saved conversation? Assumption: Esc (or harness-documented key) returns to the parent, where /cost is run.",
+  "Which -c settings route approvals to the auto-review reviewer and make a command require approval? Assumption: harness supplies them; a write like `touch side-review-check.txt` under a read-only sandbox triggers one.",
+  "What action in the text UI or exec creates a non-/side temporary fork (labelled fork:)? Assumption: none available here; fork: stays untested, only 'never side: outside /side' is checked.",
+  "Can any stand-in omit the reported charge so the 'catalogue estimate, else no price' fallback can be exercised? Assumption: no; fallback untested.",
+  "Can one profile be started on different routes in sequence? Assumption: yes (groups E and F rely on it).",
+  "Can the Moonshot provider be configured under another name to test 'whatever the person named it'? Assumption: no; only `kimi` is tested.",
+  "Can the tester write config.toml in the profile? Assumption: no; only -c skip_reopen_warmup=true is tested.",
+  "Is /resume of the already-open conversation meant to send a warm-up (s08-resume-same-conversation shows one with 'Already viewing')? Assumption: unspecified; tests use /resume to a different conversation.",
+  "s08-skip-first-screen shows a reopen warm-up with skip on: was it from an earlier unskipped reopen? Assumption: yes; tests check the count does not increase.",
+  "How does a brand-new conversation's warm-up appear in /cost? Assumption: an ordinary request, never labelled Reopen warm-up, no notice.",
+  "How are sub-agents from the main conversation labelled (agent: vs descendant of own thread)? Assumption: listed once, never side: or reopen; agent: only if no conversation of their own.",
+  "How are sub-cent charges like 0.0007125 shown? Assumption: $0.000713 (rounded) or $0.0007125, exact USD 0.0007125 on the technical page.",
+  "Is priority tier on an OpenAI API key meant to be 'no price'? Assumption: yes per screen evidence only; advisory.",
+  "Will gpt-6-luna reliably call the image tool when asked? Assumption: yes, at most one retry.",
+  "What credential patterns should the leak scan use? Assumption: sk-, Bearer, Authorization, api_key, token= plus any harness-supplied stand-in tokens."
+ ],
+ "cases": [
+  {
+   "id": "ACC-01",
+   "priority": "blocker",
+   "group": "A zai-s06",
+   "starting_conditions": "Fresh profile; route zai; model glm-5.3-flash; new conversation.",
+   "actions": [
+    "Type `/cost`, Enter; Esc",
+    "Type `Reply with the single word OK.` Enter; wait for OK",
+    "`/cost`; ↓ to `→ Request 1`, Enter; ↓ to `→ Technical details (attempt 1)`, Enter; Esc, Esc, Esc",
+    "`/cost 2026-10-01`"
+   ],
+   "expected": [
+    "Before any turn: no recorded requests, no $0",
+    "First screen lists Z.AI · GLM 5.3 Flash, N≥1 requests, estimate; request costs sum to provider total",
+    "Pages in order Cost — this conversation → Request → Attempt, components and original price",
+    "Turn: has no side:/fork:/agent:/code-review: prefix",
+    "Each Esc goes back one level; last closes to composer",
+    "2026-10-01 shows no requests and no money"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    }
+   ]
+  },
+  {
+   "id": "ACC-02",
+   "priority": "blocker",
+   "group": "A zai-s06",
+   "starting_conditions": "ACC-01 conversation; note request count R0, total, per-request costs, other-conversations count O0.",
+   "actions": [
+    "`/side` Enter",
+    "`Reply with the single word SIDE.` Enter; wait for SIDE",
+    "Leave side",
+    "`/cost`; open each new request's technical page"
+   ],
+   "expected": [
+    "Request count > R0",
+    "New requests' Turn: starts with side:",
+    "O0 unchanged; side not a separate conversation",
+    "Earlier costs unchanged; each Request ID once"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 2,
+     "case": "ACC-02, ACC-03, ACC-04, ACC-15",
+     "field": "actions",
+     "change": "replace",
+     "text": "Replace 'Leave the side conversation (see Q1)' with: Press Ctrl+C once (`agms-tui key C-c`) and wait for the product's confirmation that you are back in the saved conversation.",
+     "why": "Answer 1; the Esc assumption is wrong."
+    }
+   ]
+  },
+  {
+   "id": "ACC-03",
+   "priority": "blocker",
+   "group": "A zai-s06",
+   "starting_conditions": "Same profile, restarted with resume --last, approvals routed to auto-review and commands needing approval (see questions); counts noted.",
+   "actions": [
+    "`/side`",
+    "``Run the shell command `touch side-review-check.txt` in the workspace.`` Enter",
+    "Wait for reviewer decision and reply; leave side",
+    "`/cost`; open new technical pages"
+   ],
+   "expected": [
+    "Exactly one new request with Turn: side:review:, provider Z.AI",
+    "Other new requests are side:",
+    "No reviewer request repeated, unprefixed or in other conversations; other-conversations count unchanged",
+    "Workspace file presence matches reviewer decision"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 2,
+     "case": "ACC-02, ACC-03, ACC-04, ACC-15",
+     "field": "actions",
+     "change": "replace",
+     "text": "Replace 'Leave the side conversation (see Q1)' with: Press Ctrl+C once (`agms-tui key C-c`) and wait for the product's confirmation that you are back in the saved conversation.",
+     "why": "Answer 1; the Esc assumption is wrong."
+    },
+    {
+     "n": 3,
+     "case": "ACC-03",
+     "field": "starting conditions; expected",
+     "change": "replace",
+     "text": {
+      "starting_conditions": "Same profile. Stop, then start with `resume --last -c 'approvals_reviewer=\"auto_review\"' -c 'approval_policy=\"on-request\"' -c 'sandbox_mode=\"read-only\"'`. Confirm the restored transcript is the ACC-01 conversation (else pick it with /resume). Run /cost; note every Request ID, the request count and the other-conversations count.",
+      "expected": [
+       "The session shows at least one automatic review of the touch command; if none after one retry of the prompt, record BLOCKED.",
+       "The number of new requests whose Turn: starts with side:review: equals the number of automatic reviews shown (normally 1); each is on Z.AI.",
+       "Every new request since the noted list has a Turn: starting with side: (including side:review:); none is unprefixed.",
+       "Each Request ID appears once; the other-conversations count is unchanged.",
+       "Observation only: the reviewer's decision and whether side-review-check.txt exists."
+      ]
+     },
+     "why": "Answer 2 gives the flags; 'exactly one' false-fails on a retried command; requiring all-side: prefixes detects a duplicate; file presence is not accounting behaviour."
+    }
+   ]
+  },
+  {
+   "id": "ACC-04",
+   "priority": "advisory",
+   "group": "A zai-s06",
+   "starting_conditions": "Same conversation.",
+   "actions": [
+    "`/side`",
+    "`Start one sub-agent that replies with the single word AGENT, then tell me its answer.`",
+    "Leave side; `/cost`"
+   ],
+   "expected": [
+    "If model declines: not exercised (not a failure)",
+    "If a sub-agent ran: its requests are listed once under this conversation with Turn: side:agent:, none in other conversations"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 2,
+     "case": "ACC-02, ACC-03, ACC-04, ACC-15",
+     "field": "actions",
+     "change": "replace",
+     "text": "Replace 'Leave the side conversation (see Q1)' with: Press Ctrl+C once (`agms-tui key C-c`) and wait for the product's confirmation that you are back in the saved conversation.",
+     "why": "Answer 1; the Esc assumption is wrong."
+    }
+   ]
+  },
+  {
+   "id": "ACC-05",
+   "priority": "advisory",
+   "group": "A zai-s06",
+   "starting_conditions": "Same conversation, not in /side.",
+   "actions": [
+    "`Start one sub-agent that replies with the single word AGENT, then tell me its answer.`",
+    "`/cost`"
+   ],
+   "expected": [
+    "Sub-agent requests listed once",
+    "None starts with side:",
+    "Turn: starts with agent: if the sub-agent has no conversation of its own"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    }
+   ]
+  },
+  {
+   "id": "ACC-06",
+   "priority": "blocker",
+   "group": "A zai-s06",
+   "starting_conditions": "Same conversation; append `// review me` to a tracked workspace file, uncommitted.",
+   "actions": [
+    "`/review` Enter; choose uncommitted changes",
+    "Wait for review",
+    "`/cost`"
+   ],
+   "expected": [
+    "New requests' Turn: starts with code-review:",
+    "Listed once under this conversation",
+    "Other-conversations count and earlier costs unchanged"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    }
+   ]
+  },
+  {
+   "id": "ACC-07",
+   "priority": "blocker",
+   "group": "A zai-s06",
+   "starting_conditions": "Same profile; note other-conversations count and cost from /cost; stop product.",
+   "actions": [
+    "`corbanu exec --ephemeral \"Reply with the single word OK.\"`",
+    "Start with resume --last; `/cost`",
+    "Stop; `corbanu exec \"Reply with the single word OK.\"`",
+    "Start with resume --last; `/cost`"
+   ],
+   "expected": [
+    "Both exec runs print OK",
+    "After ephemeral: other-conversations count/cost and this conversation unchanged",
+    "After the non-ephemeral control: one more other conversation with ≥1 Z.AI request"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 4,
+     "case": "ACC-07",
+     "field": "actions; expected",
+     "change": "replace",
+     "text": {
+      "actions": [
+       "`agms-tui exec --ephemeral 'Reply with the single word EPHEMERAL.'`",
+       "Start with `resume --last`; confirm the transcript is the group-A conversation, not the EPHEMERAL prompt; run /cost.",
+       "Stop. `agms-tui exec 'Reply with the single word CONTROL.'`",
+       "Start with `resume --last`; note which conversation opened; run /cost."
+      ],
+      "expected": [
+       "Each exec output contains its word.",
+       "After step 2: resume --last opened the group-A conversation; its totals, Request IDs, other-conversations count and cost are unchanged.",
+       "After step 4: conversations with recorded requests (this one plus others) number exactly one more than after step 2, and the new one has at least 1 Z.AI request.",
+       "The group-A total is unchanged (seen directly or under other conversations)."
+      ]
+     },
+     "why": "Harness exec syntax; resume --last after the control likely opens the exec conversation; distinct prompts make transcripts identifiable and step 2 also proves the ephemeral run wasn't saved."
+    }
+   ]
+  },
+  {
+   "id": "ACC-08",
+   "priority": "blocker",
+   "group": "B moonshot",
+   "starting_conditions": "Fresh profile; route moonshot (provider kimi); model kimi-k3; new conversation; one turn only.",
+   "actions": [
+    "`Reply with the single word OK.`",
+    "`/cost`; open each request and technical page"
+   ],
+   "expected": [
+    "`kimi · kimi-k3 — Pay per use … Estimated cost: $…`, not no price",
+    "Rates 3 / 0.3 / 3 (cache write) / 15 per M",
+    "Noncached = input − cache read − cache write",
+    "Component cost = tokens × rate; known subtotal = headline",
+    "Cache read/write numeric (0 allowed), never unknown/not reported",
+    "No 'at least', 'lower bound' or '+ unknown'"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 5,
+     "case": "ACC-08",
+     "field": "starting conditions; actions",
+     "change": "replace",
+     "text": {
+      "starting_conditions": "Fresh profile; `--route moonshot --model kimi-k3` (default provider name kimi); new conversation; exactly one turn, never retried.",
+      "actions_add": "Note the time the reply appears. Immediately capture the raw text of /cost, each request page and each technical page; do the arithmetic afterwards so ACC-35a (if granted) can start within 4 minutes."
+     },
+     "why": "5-minute cache-write lifetime; the owner's under-$0.01 limit needs a cache hit."
+    }
+   ]
+  },
+  {
+   "id": "ACC-09",
+   "priority": "blocker",
+   "group": "B moonshot",
+   "starting_conditions": "Same profile; new conversation on kimi-k2.7-code; one turn only.",
+   "actions": [
+    "`Reply with the single word OK.`",
+    "`/cost`; open technical pages"
+   ],
+   "expected": [
+    "Rates 0.95 / 0.19 / 0.95 (write priced as input) / 4",
+    "Same arithmetic and completeness checks as ACC-08, even if Moonshot left out zero cache counts",
+    "Other conversations lists the kimi-k3 conversation once at exactly the ACC-08 cost"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 6,
+     "case": "ACC-09",
+     "field": "starting conditions; expected",
+     "change": "replace",
+     "text": {
+      "starting_conditions": "Same profile; stop; start `--route moonshot --provider-name moonlab --model kimi-k2.7-code`; new conversation; one turn only, never retried; capture screens immediately as in ACC-08.",
+      "expected": [
+       "The first-screen line names provider moonlab and model kimi-k2.7-code, Pay per use, with an estimated $ cost, not 'no price'.",
+       "Technical page rates: noncached input 0.95, cache read 0.19, cache write 0.95, output 4 USD per million.",
+       "The ACC-08 arithmetic and completeness checks hold, whether or not cache counts are marked (reported).",
+       "Other conversations lists `kimi · kimi-k3` once, at exactly the k3 conversation's last observed total (ACC-08, or ACC-35a if run)."
+      ]
+     },
+     "why": "Answer 6 makes name-independence testable at no extra spend; the tester can't know whether Moonshot omitted a count."
+    }
+   ]
+  },
+  {
+   "id": "ACC-10",
+   "priority": "blocker",
+   "group": "C openai-warmup",
+   "starting_conditions": "Fresh profile; route openai; model gpt-6-luna; new conversation.",
+   "actions": [
+    "`Reply with the single word OK.`",
+    "`/cost`"
+   ],
+   "expected": [
+    "No `Reopen warm-up:` line; no request labelled Reopen warm-up",
+    "No warm-up notice in session",
+    "Record per-request costs C1..Cn and total T"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 8,
+     "case": "ACC-10",
+     "field": "actions; expected",
+     "change": "replace",
+     "text": {
+      "actions": [
+       "Before typing, wait 15 s, run /cost, Refresh once; record the request count P10 and each request's input tokens; Esc.",
+       "Type `Reply with the single word ALPHA.` and wait.",
+       "/cost"
+      ],
+      "expected_add": "Record P10, the total request count N10, C1…Cn and T."
+     },
+     "why": "Baseline for 'a brand-new conversation still warms up'; ALPHA makes the conversation identifiable in /resume."
+    }
+   ]
+  },
+  {
+   "id": "ACC-11",
+   "priority": "blocker",
+   "group": "C openai-warmup",
+   "starting_conditions": "Stop; start with resume --last, skip off.",
+   "actions": [
+    "Wait for text `skip_reopen_warmup`",
+    "`/cost` without typing a turn",
+    "Open the warm-up's request page and technical page"
+   ],
+   "expected": [
+    "⚠ notice names skip_reopen_warmup and says the warm-up is billed",
+    "`Reopen warm-up: 1 request, estimated $…`",
+    "Exactly one link `Request k · Reopen warm-up · OpenAI · GPT-6 Luna`",
+    "Request page shows `Kind: Reopen warm-up`",
+    "Technical page: input roughly 10k–15k tokens; rates × tokens = cost",
+    "New total = T + warm-up cost, counted once inside the provider total",
+    "C1..Cn unchanged"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 9,
+     "case": "ACC-11",
+     "field": "expected",
+     "change": "replace",
+     "text": [
+      "Within 60 s of start, without typing, a ⚠ notice appears naming skip_reopen_warmup and saying the warm-up is billed; a reopen with no warm-up, or a warm-up with no notice, is a FAIL.",
+      "The /cost first screen has a `Reopen warm-up:` line counting 1 request, with a cost.",
+      "Exactly one request link contains `Reopen warm-up`; its request page contains `Reopen warm-up`.",
+      "On its technical page each component cost = tokens × rate and the known subtotal = its cost. Observation only: the input token count.",
+      "The new total = T + the warm-up cost, counted once.",
+      "C1…Cn and their Request IDs are unchanged."
+     ],
+     "why": "'Typically 10–15k' is not a requirement; the exact link and Kind: formats come from screens; 'only after sent' restated observably."
+    }
+   ]
+  },
+  {
+   "id": "ACC-12",
+   "priority": "blocker",
+   "group": "C openai-warmup",
+   "starting_conditions": "In the ACC-11 session type `Reply with the single word OK.`; stop; start with `resume --last -c skip_reopen_warmup=true`.",
+   "actions": [
+    "Read the restored transcript",
+    "`/cost` before typing",
+    "`Reply with the single word OK.`; `/cost`"
+   ],
+   "expected": [
+    "Restored transcript shows earlier OK turns but not the earlier ⚠ notice; no new notice",
+    "Reopen warm-up count still 1; total unchanged before the turn",
+    "After the turn, only the turn's requests are added"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 10,
+     "case": "ACC-12",
+     "field": "starting conditions; expected",
+     "change": "replace",
+     "text": {
+      "starting_conditions": "In the ACC-11 session type `Reply with the single word OK.`, wait, run /cost and record T12, the request list and the warm-up count. Stop; start with `resume --last -c skip_reopen_warmup=true`.",
+      "expected": [
+       "The restored transcript shows the earlier turns but not ACC-11's ⚠ notice; no new notice within 60 s.",
+       "Before the new turn: warm-up count still 1, total = T12, request list unchanged.",
+       "After the turn only the turn's requests are added; none is labelled Reopen warm-up."
+      ]
+     },
+     "why": "The baseline was undefined; the start condition itself adds a turn."
+    }
+   ]
+  },
+  {
+   "id": "ACC-13",
+   "priority": "blocker",
+   "group": "C openai-warmup",
+   "starting_conditions": "Stop; start a new conversation (no resume) with -c skip_reopen_warmup=true.",
+   "actions": [
+    "`Reply with the single word OK.`",
+    "`/cost`"
+   ],
+   "expected": [
+    "Request pattern matches ACC-10, including the initial warm-up request",
+    "No Reopen warm-up line; no notice"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 11,
+     "case": "ACC-13",
+     "field": "actions; expected",
+     "change": "replace",
+     "text": {
+      "actions": [
+       "Before typing, wait 15 s, run /cost, Refresh once; record P13; Esc.",
+       "Type `Reply with the single word BRAVO.` and wait.",
+       "/cost"
+      ],
+      "expected": [
+       "No notice, no `Reopen warm-up` line, no link containing `Reopen warm-up`.",
+       "P13 = P10 and the request count after the turn = N10; if they differ, compare per-request input tokens, and a missing large first request that ACC-10 had is a FAIL."
+      ]
+     },
+     "why": "'Matches ACC-10' was not measurable; Q10 was not answered."
+    }
+   ]
+  },
+  {
+   "id": "ACC-14",
+   "priority": "blocker",
+   "group": "C openai-warmup",
+   "starting_conditions": "Stop; start a new conversation, skip off.",
+   "actions": [
+    "`/resume`; select the ACC-10 conversation; Enter",
+    "`/cost`"
+   ],
+   "expected": [
+    "Notice appears",
+    "`Reopen warm-up: 2 requests`",
+    "Earlier request costs unchanged; each Request ID once"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 12,
+     "case": "ACC-14",
+     "field": "starting conditions; actions; expected",
+     "change": "replace",
+     "text": {
+      "starting_conditions": "Stop; start a new conversation (no resume, skip off); type `Reply with the single word CHARLIE.` and wait.",
+      "actions": [
+       "/resume; select the conversation whose first message is `Reply with the single word ALPHA.`; Enter.",
+       "/cost"
+      ],
+      "expected": [
+       "A ⚠ notice appears.",
+       "The Reopen warm-up line counts 2.",
+       "Earlier request costs and IDs are unchanged; each ID appears once."
+      ]
+     },
+     "why": "Otherwise the start conversation has no message and can't be identified or reopened in ACC-18; ALPHA makes the picker choice unambiguous."
+    }
+   ]
+  },
+  {
+   "id": "ACC-15",
+   "priority": "blocker",
+   "group": "C openai-warmup",
+   "starting_conditions": "ACC-14 conversation.",
+   "actions": [
+    "`/side`; `Reply with the single word SIDE.`",
+    "Leave side; `/cost`"
+   ],
+   "expected": [
+    "Notice shown once",
+    "Warm-up count +1; its request page says Reopen warm-up",
+    "Side turn requests labelled side:, under this conversation",
+    "Nothing added to other conversations by this step"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 2,
+     "case": "ACC-02, ACC-03, ACC-04, ACC-15",
+     "field": "actions",
+     "change": "replace",
+     "text": "Replace 'Leave the side conversation (see Q1)' with: Press Ctrl+C once (`agms-tui key C-c`) and wait for the product's confirmation that you are back in the saved conversation.",
+     "why": "Answer 1; the Esc assumption is wrong."
+    }
+   ]
+  },
+  {
+   "id": "ACC-16",
+   "priority": "blocker",
+   "group": "C openai-warmup",
+   "starting_conditions": "Same conversation.",
+   "actions": [
+    "Esc Esc to step back; select the last `Reply with the single word OK.` message",
+    "Replace with `Reply with the single word EDITED.` Enter; wait for EDITED",
+    "`/cost`"
+   ],
+   "expected": [
+    "Notice appears",
+    "Warm-up count +1",
+    "Abandoned-branch requests still listed with costs unchanged; nothing hidden or counted twice"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 13,
+     "case": "ACC-16",
+     "field": "actions",
+     "change": "replace",
+     "text": [
+      "Record the warm-up count and the request list.",
+      "Press Esc twice in the empty composer to step back to an earlier message (follow on-screen hints); if the product offers no way to edit an earlier message, record BLOCKED.",
+      "Select the most recent message you typed, replace it with `Reply with the single word EDITED.`, press Enter and wait for EDITED.",
+      "/cost"
+     ],
+     "why": "The edit control is undocumented; two identical OK messages were ambiguous."
+    }
+   ]
+  },
+  {
+   "id": "ACC-17",
+   "priority": "advisory",
+   "group": "C openai-warmup",
+   "starting_conditions": "Same conversation; optionally restarted with auto-review approvals.",
+   "actions": [
+    "`Start one sub-agent that replies with the single word AGENT, then tell me its answer.`",
+    "Optionally ``Run `touch warmup-review.txt`.`` to trigger the reviewer",
+    "`/cost`"
+   ],
+   "expected": [
+    "Reopen warm-up count unchanged; no notice",
+    "Sub-agent and reviewer requests listed once",
+    "If the model declines: not exercised"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 14,
+     "case": "ACC-17",
+     "field": "priority; starting conditions; actions; expected",
+     "change": "replace",
+     "text": {
+      "priority": "blocker (reviewer part); sub-agent part advisory",
+      "starting_conditions": "Stop; start with `resume --last -c 'approvals_reviewer=\"auto_review\"' -c 'approval_policy=\"on-request\"' -c 'sandbox_mode=\"read-only\"'` (skip off). This restart is a reopen: wait for its notice, then run /cost and record the warm-up count W0 and the request list.",
+      "actions": [
+       "Type ``Run the shell command `touch warmup-review.txt` in the workspace.`` and wait for the review and the reply.",
+       "Type `Start one sub-agent that replies with the single word AGENT, then tell me its answer.` and wait.",
+       "/cost"
+      ],
+      "expected": [
+       "No new ⚠ notice; the warm-up count is still W0.",
+       "The reviewer and sub-agent requests are each listed once; none is labelled Reopen warm-up.",
+       "No review after one retry: reviewer part BLOCKED. Sub-agent declined: not exercised."
+      ]
+     },
+     "why": "The optional restart changed the checked count; the answers make the reviewer reliably reachable."
+    }
+   ]
+  },
+  {
+   "id": "ACC-18",
+   "priority": "blocker",
+   "group": "C openai-warmup",
+   "starting_conditions": "End of group C.",
+   "actions": [
+    "Open `/cost` in each conversation of the profile via /resume with -c skip_reopen_warmup=true (no new spend)"
+   ],
+   "expected": [
+    "Every request cost noted in ACC-10 to ACC-16 is identical",
+    "Each conversation's request costs sum to its total",
+    "A conversation's total seen from others equals its own total",
+    "No Request ID appears twice"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 16,
+     "case": "ACC-18",
+     "field": "starting conditions; actions; expected",
+     "change": "replace",
+     "text": {
+      "starting_conditions": "After ACC-36 (skip on through config.toml).",
+      "actions": [
+       "Start with `resume --last`. Open each conversation (ALPHA, BRAVO, CHARLIE and any others in /resume) with /resume; run /cost; record its own exact total, request IDs and costs, and its other-conversations count and cost."
+      ],
+      "expected": [
+       "No notice; no warm-up count rises.",
+       "Every cost and Request ID noted in ACC-10–ACC-17 and ACC-36 is identical.",
+       "Each conversation's request costs sum to its total.",
+       "On each first screen, this conversation's total + the other-conversations cost = the sum of all own totals (within display rounding), and the other-conversations count = the sum of the others' request counts; a conversation that can't be opened is recorded as a residual, not a FAIL.",
+       "No Request ID appears in two conversations."
+      ]
+     },
+     "why": "Other conversations are aggregated by provider/model; a single conversation's total isn't visible from another."
+    }
+   ]
+  },
+  {
+   "id": "ACC-19",
+   "priority": "blocker",
+   "group": "D openai-pricing",
+   "starting_conditions": "Fresh profile; route openai; model gpt-6.1-sol; new conversation.",
+   "actions": [
+    "`Reply with the single word OK.`",
+    "`/cost`; open technical pages"
+   ],
+   "expected": [
+    "Rates $2 input / $0.10 cached / $2.50 cache write / $10 output per M",
+    "No 'Rate unavailable for Cache write'",
+    "Component costs recompute exactly"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    }
+   ]
+  },
+  {
+   "id": "ACC-20",
+   "priority": "blocker",
+   "group": "D openai-pricing",
+   "starting_conditions": "Same profile; new conversation on gpt-5.6-sol.",
+   "actions": [
+    "`Reply with the single word OK.`",
+    "`/cost`; open technical pages"
+   ],
+   "expected": [
+    "Rates $4 / $0.40 / $5 / $20 per M",
+    "Costs recompute exactly"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    }
+   ]
+  },
+  {
+   "id": "ACC-21",
+   "priority": "blocker",
+   "group": "D openai-pricing",
+   "starting_conditions": "Same profile; new conversation on gpt-6-luna.",
+   "actions": [
+    "`Use the image generation tool to create a small image of a plain red square, then reply DONE.`",
+    "`/cost`; open the gpt-image-2 request's technical page"
+   ],
+   "expected": [
+    "Separate `OpenAI · gpt-image-2 — Pay per use` line, 1 request",
+    "Turn: starts with image:; input rate 5, output rate 30 per M",
+    "Cost = input×5/M + output×30/M exactly",
+    "Component with no rate and 0 tokens reads `none — 0 tokens`; component with a rate and 0 tokens keeps `$0.000000`",
+    "Image request counted once"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 17,
+     "case": "ACC-21",
+     "field": "expected",
+     "change": "replace",
+     "text": [
+      "A separate gpt-image-2 Pay-per-use line with 1 request.",
+      "Rates on the technical page: input 5 and output 30 USD per million; cost = input×5/M + output×30/M exactly (if cache read > 0, flag it and recompute).",
+      "Observation only: the Turn: prefix.",
+      "No rate and 0 tokens reads `none — 0 tokens`; a rate and 0 tokens keeps its $0 figure; tokens with no rate show no money.",
+      "One gpt-image-2 Request ID."
+     ],
+     "why": "`image:` and the cache-write rate status come from screens, not the intent."
+    }
+   ]
+  },
+  {
+   "id": "ACC-22",
+   "priority": "advisory",
+   "group": "D openai-pricing",
+   "starting_conditions": "Same profile; new conversation on gpt-6-luna with -c service_tier=\"priority\".",
+   "actions": [
+    "`Reply with the single word OK.`",
+    "`/cost`; open technical pages"
+   ],
+   "expected": [
+    "If no published priority price: `no price available` plus next-step text",
+    "Components with tokens read `unknown — rate unavailable`; 0-token components read `none — 0 tokens`",
+    "No `$0.000000` on any unpriced component; `Known subtotal exact USD: none`",
+    "Other conversations keep their prices"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    }
+   ]
+  },
+  {
+   "id": "ACC-23",
+   "priority": "blocker",
+   "group": "E stand-in-charges",
+   "starting_conditions": "Fresh profile; route openrouter; model z-ai/glm-5.3-flash; new conversation.",
+   "actions": [
+    "`Reply with the single word OK.`",
+    "`/cost`; open each request and technical page"
+   ],
+   "expected": [
+    "Each request `Cost: $0.000520, charged by OpenRouter`",
+    "Price basis names `cost`",
+    "Tokens: input 2,000; cache read 500; noncached 1,500; output 40; reasoning 12; total 2,040",
+    "Conversation total = N × 0.00052 exactly",
+    "Any catalogue figure labelled as an estimate not used"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 18,
+     "case": "ACC-23, ACC-24, ACC-25, ACC-26",
+     "field": "starting conditions; expected",
+     "change": "replace",
+     "text": [
+      "ACC-23 start, add: Run `agms-tui standin no-charge off` first.",
+      "ACC-23/25: Noncached input reads 1,500 (ACC-25: 2,000) or unknown/not reported, never another number.",
+      "ACC-23–26: Known subtotal exact USD = N × the charge.",
+      "ACC-24–26: Any published-price figure is labelled as an estimate that was not used.",
+      "ACC-23/24: the Price-basis field name is `cost` or ends in `.cost`."
+     ],
+     "why": "The stand-ins don't report cache writes, so rule 1 allows 'unknown'; the no-charge state must be set explicitly."
+    }
+   ]
+  },
+  {
+   "id": "ACC-24",
+   "priority": "blocker",
+   "group": "E stand-in-charges",
+   "starting_conditions": "Same profile; route openrouter; new conversation on deepseek/deepseek-v4.1-flash.",
+   "actions": [
+    "`Reply with the single word OK.`",
+    "`/cost`; open each request and technical page"
+   ],
+   "expected": [
+    "Every request present, none dropped",
+    "Reasoning not reported/unknown (neither 60 nor 0)",
+    "Input 1,000; output 40",
+    "`Cost: $0.000310, charged by OpenRouter`; total = N × 0.00031"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 18,
+     "case": "ACC-23, ACC-24, ACC-25, ACC-26",
+     "field": "starting conditions; expected",
+     "change": "replace",
+     "text": [
+      "ACC-23 start, add: Run `agms-tui standin no-charge off` first.",
+      "ACC-23/25: Noncached input reads 1,500 (ACC-25: 2,000) or unknown/not reported, never another number.",
+      "ACC-23–26: Known subtotal exact USD = N × the charge.",
+      "ACC-24–26: Any published-price figure is labelled as an estimate that was not used.",
+      "ACC-23/24: the Price-basis field name is `cost` or ends in `.cost`."
+     ],
+     "why": "The stand-ins don't report cache writes, so rule 1 allows 'unknown'; the no-charge state must be set explicitly."
+    }
+   ]
+  },
+  {
+   "id": "ACC-25",
+   "priority": "blocker",
+   "group": "E stand-in-charges",
+   "starting_conditions": "Same profile; route vercel; model zai/glm-5.3-flash; new conversation.",
+   "actions": [
+    "`Reply with the single word OK.`",
+    "`/cost`; open each request and technical page"
+   ],
+   "expected": [
+    "Each request charge $0.0007125 'charged by Vercel'",
+    "Price basis names gatewayCost",
+    "Tokens: input 3,000; cache read 1,000; noncached 2,000; output 25; total 3,025",
+    "Total = N × 0.0007125"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 18,
+     "case": "ACC-23, ACC-24, ACC-25, ACC-26",
+     "field": "starting conditions; expected",
+     "change": "replace",
+     "text": [
+      "ACC-23 start, add: Run `agms-tui standin no-charge off` first.",
+      "ACC-23/25: Noncached input reads 1,500 (ACC-25: 2,000) or unknown/not reported, never another number.",
+      "ACC-23–26: Known subtotal exact USD = N × the charge.",
+      "ACC-24–26: Any published-price figure is labelled as an estimate that was not used.",
+      "ACC-23/24: the Price-basis field name is `cost` or ends in `.cost`."
+     ],
+     "why": "The stand-ins don't report cache writes, so rule 1 allows 'unknown'; the no-charge state must be set explicitly."
+    }
+   ]
+  },
+  {
+   "id": "ACC-26",
+   "priority": "blocker",
+   "group": "E stand-in-charges",
+   "starting_conditions": "Same profile; route corbanu; model corbanu/deepseek-v4.1-flash; new conversation.",
+   "actions": [
+    "`Reply with the single word OK.`",
+    "`/cost`; open each request and technical page"
+   ],
+   "expected": [
+    "Each request `Cost: $0.001850, charged by Corbanu API`",
+    "Price basis names usage.corbanu_charge_usd",
+    "Input 1,500; output 30; total 1,530",
+    "Total = N × 0.00185"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 18,
+     "case": "ACC-23, ACC-24, ACC-25, ACC-26",
+     "field": "starting conditions; expected",
+     "change": "replace",
+     "text": [
+      "ACC-23 start, add: Run `agms-tui standin no-charge off` first.",
+      "ACC-23/25: Noncached input reads 1,500 (ACC-25: 2,000) or unknown/not reported, never another number.",
+      "ACC-23–26: Known subtotal exact USD = N × the charge.",
+      "ACC-24–26: Any published-price figure is labelled as an estimate that was not used.",
+      "ACC-23/24: the Price-basis field name is `cost` or ends in `.cost`."
+     ],
+     "why": "The stand-ins don't report cache writes, so rule 1 allows 'unknown'; the no-charge state must be set explicitly."
+    }
+   ]
+  },
+  {
+   "id": "ACC-27",
+   "priority": "blocker",
+   "group": "E stand-in-charges",
+   "starting_conditions": "Same profile; route custom (mylab); model lab-model-1; new conversation.",
+   "actions": [
+    "`Reply with the single word OK.`",
+    "`/cost`; open each request and technical page"
+   ],
+   "expected": [
+    "First screen: `no price available` and next step to check mylab's bill",
+    "`Billing basis: pay per use (set in your config)`",
+    "`Price: none recorded — this request records only its billing basis: pay per use; set in your config` — no nested parentheses",
+    "Input 800; output 20",
+    "Every cost component reads unknown or `none — 0 tokens`; no $ figure on any component",
+    "`Known subtotal exact USD: none`"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    }
+   ]
+  },
+  {
+   "id": "ACC-28",
+   "priority": "blocker",
+   "group": "E stand-in-charges",
+   "starting_conditions": "ACC-27 conversation.",
+   "actions": [
+    "Read the `/cost` first screen"
+   ],
+   "expected": [
+    "Other conversations: 4 conversations, each provider/model with its own 'charged by OpenRouter / Vercel / Corbanu API'",
+    "Explanatory lines name each charging provider",
+    "Other-conversations cost = sum of the ACC-23 to ACC-26 charges",
+    "mylab never counted as $0; any total including it is marked incomplete"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    }
+   ]
+  },
+  {
+   "id": "ACC-29",
+   "priority": "advisory",
+   "group": "E stand-in-charges",
+   "starting_conditions": "Stop; start with resume --last (custom route).",
+   "actions": [
+    "`/cost` before typing"
+   ],
+   "expected": [
+    "No notice; no Reopen warm-up line",
+    "Totals identical to before"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    }
+   ]
+  },
+  {
+   "id": "ACC-30",
+   "priority": "blocker",
+   "group": "F chatgpt",
+   "starting_conditions": "Fresh profile; route chatgpt (stand-in sign-in); model gpt-5.4; new conversation.",
+   "actions": [
+    "`Reply with the single word OK.`",
+    "`/cost`; open request and technical pages"
+   ],
+   "expected": [
+    "Every level reads `Covered by your subscription (not billed per request)`",
+    "No `Estimated cost: $`, `Cost: $` or `no price available`",
+    "Known subtotal reads `none — subscription work…`",
+    "Any API-price figure labelled 'Same work at API prices', not as cost"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 20,
+     "case": "ACC-30, ACC-31, ACC-32, ACC-33",
+     "field": "expected",
+     "change": "replace",
+     "text": [
+      "The first-screen line and the request page contain `Covered by your subscription (not billed per request)`.",
+      "Nowhere: `Estimated cost: $`, `Cost: $`, `charged by`, or the phrase `no price available`.",
+      "Known subtotal shows no dollar amount.",
+      "Any dollar figure is labelled as what the same work would cost at API prices; 'Same work at API prices: not available' is allowed and is not 'no price'.",
+      "ACC-31: ACC-30's conversation appears under other conversations as covered. ACC-33: one gpt-image-2 request, covered."
+     ],
+     "why": "Avoids screen-label dependence and false FAILs on 'not available'."
+    }
+   ]
+  },
+  {
+   "id": "ACC-31",
+   "priority": "blocker",
+   "group": "F chatgpt",
+   "starting_conditions": "Same profile; new conversation on gpt-mock-unlisted.",
+   "actions": [
+    "`Reply with the single word OK.`",
+    "`/cost`; open request and technical pages"
+   ],
+   "expected": [
+    "Same as ACC-30",
+    "ACC-30 conversation appears under other conversations as covered, never as spend"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 20,
+     "case": "ACC-30, ACC-31, ACC-32, ACC-33",
+     "field": "expected",
+     "change": "replace",
+     "text": [
+      "The first-screen line and the request page contain `Covered by your subscription (not billed per request)`.",
+      "Nowhere: `Estimated cost: $`, `Cost: $`, `charged by`, or the phrase `no price available`.",
+      "Known subtotal shows no dollar amount.",
+      "Any dollar figure is labelled as what the same work would cost at API prices; 'Same work at API prices: not available' is allowed and is not 'no price'.",
+      "ACC-31: ACC-30's conversation appears under other conversations as covered. ACC-33: one gpt-image-2 request, covered."
+     ],
+     "why": "Avoids screen-label dependence and false FAILs on 'not available'."
+    }
+   ]
+  },
+  {
+   "id": "ACC-32",
+   "priority": "blocker",
+   "group": "F chatgpt",
+   "starting_conditions": "Same profile; new conversation on gpt-5.4 with -c service_tier=\"priority\".",
+   "actions": [
+    "`Reply with the single word OK.`",
+    "`/cost`; open request and technical pages"
+   ],
+   "expected": [
+    "Same as ACC-30, with no 'no price'"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 20,
+     "case": "ACC-30, ACC-31, ACC-32, ACC-33",
+     "field": "expected",
+     "change": "replace",
+     "text": [
+      "The first-screen line and the request page contain `Covered by your subscription (not billed per request)`.",
+      "Nowhere: `Estimated cost: $`, `Cost: $`, `charged by`, or the phrase `no price available`.",
+      "Known subtotal shows no dollar amount.",
+      "Any dollar figure is labelled as what the same work would cost at API prices; 'Same work at API prices: not available' is allowed and is not 'no price'.",
+      "ACC-31: ACC-30's conversation appears under other conversations as covered. ACC-33: one gpt-image-2 request, covered."
+     ],
+     "why": "Avoids screen-label dependence and false FAILs on 'not available'."
+    }
+   ]
+  },
+  {
+   "id": "ACC-33",
+   "priority": "blocker",
+   "group": "F chatgpt",
+   "starting_conditions": "Same profile; new conversation on gpt-5.4; stand-in set so its next answer uses the image tool.",
+   "actions": [
+    "`Make an image of a red square.`",
+    "`/cost`"
+   ],
+   "expected": [
+    "`OpenAI · gpt-image-2 — Covered by your subscription (not billed per request)`, 1 request",
+    "No spend; no 'no price'",
+    "Image request counted once"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 20,
+     "case": "ACC-30, ACC-31, ACC-32, ACC-33",
+     "field": "expected",
+     "change": "replace",
+     "text": [
+      "The first-screen line and the request page contain `Covered by your subscription (not billed per request)`.",
+      "Nowhere: `Estimated cost: $`, `Cost: $`, `charged by`, or the phrase `no price available`.",
+      "Known subtotal shows no dollar amount.",
+      "Any dollar figure is labelled as what the same work would cost at API prices; 'Same work at API prices: not available' is allowed and is not 'no price'.",
+      "ACC-31: ACC-30's conversation appears under other conversations as covered. ACC-33: one gpt-image-2 request, covered."
+     ],
+     "why": "Avoids screen-label dependence and false FAILs on 'not available'."
+    }
+   ]
+  },
+  {
+   "id": "ACC-34",
+   "priority": "blocker",
+   "group": "cross-cutting",
+   "starting_conditions": "All screens captured in groups A–F, plus exec output.",
+   "actions": [
+    "Pattern-scan for sk-, Bearer, Authorization, api_key, token= and any harness-supplied stand-in tokens"
+   ],
+   "expected": [
+    "No API key, bearer token, sign-in token or Authorization header text appears anywhere"
+   ],
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    },
+    {
+     "n": 21,
+     "case": "ACC-34",
+     "field": "priority; actions; expected",
+     "change": "replace",
+     "text": {
+      "priority": "advisory",
+      "actions": [
+       "Pattern-scan every captured screen, all exec output and the workspace files for `agms-synthetic`, `sk-`, `Bearer `, `Authorization`, `api_key`, `token=`."
+      ],
+      "expected": [
+       "No hit; report any hit with its location (the integrator's real-key scan is binding)."
+      ]
+     },
+     "why": "Answer 15."
+    }
+   ]
+  },
+  {
+   "id": "ACC-35",
+   "priority": "advisory",
+   "priority_as_written": "optional — run only with owner grant D3",
+   "group": "B moonshot",
+   "starting_conditions": "Run only if the run brief records the owner's grant of D3 (one second turn per Kimi model); otherwise do not run and record 'not checked live; covered by test'. Part a: the ACC-08 conversation, still open, within 4 minutes of ACC-08's reply (run before ACC-09). Part b: the ACC-09 conversation, still open, within 4 minutes of ACC-09's reply. If the window has passed, do not send; record 'not checked live (cache window missed)'.",
+   "actions": [
+    "Close /cost (Esc). Type `Reply with the single word OK again.` and wait.",
+    "/cost; open the new request(s) and their technical pages.",
+    "Repeat for part b."
+   ],
+   "expected": [
+    "If every new request shows Cache read 0, record 'cache read not observed live' (not a FAIL); the other checks still apply.",
+    "Where cache read > 0: cache read rate 0.3 (kimi-k3) or 0.19 (kimi-k2.7-code) USD per million, and cache read cost = cache read tokens × rate exactly.",
+    "Noncached input = input − cache read − cache write; each component cost = tokens × rate; known subtotal = headline; no 'at least', 'lower bound', '+ unknown', and no component cost 'unknown'.",
+    "The first turn's request costs and IDs are unchanged and appear once; the provider name stays kimi (a) / moonlab (b)."
+   ],
+   "added_by_amendment": 7,
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    }
+   ]
+  },
+  {
+   "id": "ACC-36",
+   "priority": "blocker",
+   "priority_as_written": "blocker",
+   "group": "C openai-warmup (after ACC-17, before ACC-18)",
+   "starting_conditions": "Stop. Run `agms-tui config 'skip_reopen_warmup = true'`. Note ALPHA's warm-up count W and its total.",
+   "actions": [
+    "Start with `resume --last` and no -c; confirm the conversation is ALPHA.",
+    "Wait 60 s; /cost."
+   ],
+   "expected": [
+    "No warm-up notice.",
+    "The warm-up count is still W; the total and request list are unchanged."
+   ],
+   "added_by_amendment": 15,
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    }
+   ]
+  },
+  {
+   "id": "ACC-37",
+   "priority": "blocker",
+   "priority_as_written": "blocker",
+   "group": "E stand-in-charges (after ACC-29)",
+   "starting_conditions": "Record the ACC-28 other-conversations figures. Run `agms-tui standin no-charge on`.",
+   "actions": [
+    "For each of openrouter xiaomi/mimo-v2.6-pro, openrouter standin/uncatalogued, openrouter z-ai/glm-5.3-flash, vercel zai/glm-5.3-flash, corbanu corbanu/deepseek-v4.1-flash: stop, start a new conversation on it, type `Reply with the single word OK.`, run /cost, open each request and technical page.",
+    "Run `agms-tui standin no-charge off`."
+   ],
+   "expected": [
+    "No request in these five conversations reads 'charged by' or has a reported-charge price basis.",
+    "Each request shows exactly one of: (a) a cost labelled as an estimate from published prices whose technical-page rates × tokens equal it (exact USD); (b) such an estimate marked as a lower bound ('at least …') with the missing counts named; (c) 'no price available' with no money figure and a stated reason.",
+    "standin/uncatalogued shows (c).",
+    "Tokens are as the stand-in reports (mimo 1,200/30; uncatalogued 900/15; others as in ACC-23/25/26).",
+    "No $0 figure stands in for a missing price; any total including a (b) or (c) request is marked incomplete.",
+    "The ACC-23–26 charged amounts are unchanged.",
+    "If none of the five shows (a) or (b), record 'catalogue-estimate branch not observed' as a limit, not a FAIL."
+   ],
+   "added_by_amendment": 19,
+   "amendments": [
+    {
+     "n": 1,
+     "case": "ALL",
+     "field": "starting conditions",
+     "change": "add",
+     "text": [
+      "After each turn wait for the reply; if /cost doesn't yet list the expected new requests, choose Refresh (or reopen /cost) up to 3 times, 5 s apart, before judging.",
+      "Compare money using exact USD lines (Known subtotal exact USD / exact USD), not rounded displays.",
+      "Note UTC time at start and end of each group; if a group crosses 00:00 UTC, compare earlier requests with `/cost <earlier UTC date>` and don't fail a case only because earlier requests left today's view.",
+      "To leave /side press Ctrl+C once (`agms-tui key C-c`) and wait for the on-screen confirmation; Esc does not leave /side.",
+      "Match provider/model names regardless of display formatting.",
+      "If the Moonshot relay answers `test harness: Moonshot request limit reached`, record BLOCKED; never retry."
+     ],
+     "why": "Timing lag, side exit and relay limit come from answers.md; midnight crossings and rounding otherwise cause false FAILs."
+    }
+   ]
+  }
+ ]
+}

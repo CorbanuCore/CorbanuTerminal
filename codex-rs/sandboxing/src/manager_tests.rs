@@ -571,7 +571,7 @@ fn transform_for_direct_spawn_windows_materializes_inner_helper() {
         exec_request
             .command
             .iter()
-            .any(|arg| arg == "--deny-read-paths-json")
+            .any(|arg| arg == "--deny-read-json")
     );
     assert_eq!(
         exec_request.command[separator_index + 2],

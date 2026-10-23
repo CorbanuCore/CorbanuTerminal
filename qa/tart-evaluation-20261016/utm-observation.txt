@@ -1,0 +1,15 @@
+# UTM "macOS 3", observed read-only from the host at 2026-10-16T12:27:27Z while qual-mod2 ran it (nothing in the VM or its config changed)
+## utmctl list
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 started  macOS 3
+## du -sh (allocated) and image size
+ 96G	/Users/Neo/Library/Containers/com.utmapp.UTM/Data/Documents/macOS 3.utm
+102722699264 92CDB3C1-AED1-4B77-B3B8-6331ECC730C6.img
+33579164 AuxiliaryStorage
+## config (CPU, memory)
+    "CPUCount" => 8
+    "MemorySize" => 16384
+## Virtualization VM processes (only this guest runs): pid rss_kb %cpu elapsed
+ 5544 19233696  31.3 02:03:49
+%cpu samples (2 s apart):  31.6  24.2  30.3  10.9  19.8 

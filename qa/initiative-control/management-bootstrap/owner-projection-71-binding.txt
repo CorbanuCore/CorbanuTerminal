@@ -1,0 +1,6 @@
+test_missing_binding_keeps_old_alert_unknown_instead_of_omitting_it (test_decision_feed.SlackProjectionTests.test_missing_binding_keeps_old_alert_unknown_instead_of_omitting_it) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 1.535s
+
+OK

@@ -1,0 +1,56 @@
+[
+  {
+    "argv": [
+      "git",
+      "clone",
+      "--shared",
+      "--no-checkout",
+      "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916",
+      "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/source"
+    ],
+    "shell_command": "git clone --shared --no-checkout /Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916 /Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/source",
+    "exit_code": 0
+  },
+  {
+    "argv": [
+      "git",
+      "-C",
+      "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/source",
+      "checkout",
+      "--detach",
+      "ae5981d2d7d762dfd6d54e0ac0967729bf88f082"
+    ],
+    "shell_command": "git -C /Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/source checkout --detach ae5981d2d7d762dfd6d54e0ac0967729bf88f082",
+    "exit_code": 0
+  },
+  {
+    "argv": [
+      "/bin/cp",
+      "-cR",
+      "/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/increment-27/build/cargo-home/registry",
+      "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/cargo-home/registry"
+    ],
+    "shell_command": "/bin/cp -cR /Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/increment-27/build/cargo-home/registry /Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/cargo-home/registry",
+    "exit_code": 0
+  },
+  {
+    "argv": [
+      "/bin/cp",
+      "-cR",
+      "/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/increment-27/build/cargo-home/git",
+      "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/cargo-home/git"
+    ],
+    "shell_command": "/bin/cp -cR /Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/increment-27/build/cargo-home/git /Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/cargo-home/git",
+    "exit_code": 0
+  },
+  {
+    "argv": [
+      "/bin/cp",
+      "-cR",
+      "/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/increment-27/build/target",
+      "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/target"
+    ],
+    "shell_command": "/bin/cp -cR /Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/increment-27/build/target /Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/target",
+    "exit_code": 0
+  }
+]

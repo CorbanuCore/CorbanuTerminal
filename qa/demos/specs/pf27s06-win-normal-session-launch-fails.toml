@@ -1,0 +1,54 @@
+# PF-27-S06 Windows gate defect: in a normal (medium-integrity) session the contract makes every
+# elevated-sandbox command fail before logon.
+id = "pf27s06-win-normal-session-launch-fails"
+feature = "Defect: Windows secretless launch in a normal (unelevated) user session"
+expected = "Expected the command to run as CodexSandboxOffline. Measured: every agent command fails with CreateProcessWithLogonW failed: 5 when secretless_agent_launch is on."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[windows]
+sandbox = "elevated"
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+isolated_credential_broker = true
+secretless_agent_launch = true
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Do you trust the contents of this directory"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+type = "Run the shell command: whoami. Run it exactly once and show me its raw output, then stop."
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "CreateProcessWithLogonW failed"
+timeout = 240
+compress = 3
+
+[[steps]]
+pause = 4.0

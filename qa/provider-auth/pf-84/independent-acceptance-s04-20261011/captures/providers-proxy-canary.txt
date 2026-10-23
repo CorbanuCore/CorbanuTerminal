@@ -1,0 +1,86 @@
+===== p1-rows-initial
+ 1. OpenAI          Not configured · unavailable
+  2. Claude Account  Not configured · unavailable
+  3. Corbanu API     Not configured · unavailable
+  4. Anthropic       Not configured · unavailable
+  5. Ambient         Not configured · unavailable
+  6. Kimi Code       Not configured · unavailable
+  7. Z.AI            Not configured · unavailable
+  8. DeepSeek        Not configured · unavailable
+ 9. OpenRouter      Not configured · unavailable
+ 10. Meta        Not configured · unavailable
+ 11. Baseten    Not configured · unavailable
+ 12. Vercel     Not configured · unavailable
+ 13. Amazon Bedrock  Not configured · unavailable
+ 14. Ollama          Enabled · configured
+ 15. LM Studio       Enabled · configured
+ 16. Z.AI via canary proxy  Enabled · configured · current
+
+===== p1-rows
+ 16. Z.AI via canary proxy · default  Enabled · configured · current · this session · default for new sessions
+ 17. Z.AI via canary proxy · main     Named account · API key · fp 27f1c1496097
+ 18. Z.AI via canary proxy · work     Named account · API key · fp 39d6304ba956
+
+===== p2-fake-401
+› Reply with exactly the word pong and nothing else.
+⚠ Z.AI via canary proxy (zpx) account `fake` was rejected. Replace its key with `corbanu account add zpx fake` (reads stdin), or choose another account. The
+  default Z.AI via canary proxy credential is unchanged.
+■ unexpected status 401 Unauthorized: canary-proxy: invalid api key, url: http://127.0.0.1:18686/proxy/chat/completions
+› Explain this codebase
+  Z.AI GLM 5.3 Flash via zpx default · $S/work · Corbanu Terminal · TPS: -- tok/s
+
+===== p2-rows-after-rename
+ 16. Z.AI via canary proxy · default  Enabled · configured · current
+ 17. Z.AI via canary proxy · fake     Named account · API key · fp e96177acd2c1
+ 18. Z.AI via canary proxy · spare    Named account · API key · fp 27f1c1496097 · this session
+ 19. Z.AI via canary proxy · work     Named account · API key · fp 39d6304ba956 · default for new sessions
+
+===== p2-remove-inuse
+  Remove Z.AI via canary proxy account `spare`
+  It is in use. Choose the account that replaces it first; removal follows.
+› 1. Replace with `default`  Takes over this session and new sessions, then the account is removed.
+  2. Replace with `fake`     Takes over this session and new sessions, then the account is removed.
+  3. Replace with `work`     Takes over this session and new sessions, then the account is removed.
+  4. Keep it                 Nothing changes.
+  Press enter to confirm or esc to go back
+
+===== p3-rows-restart
+ 16. Z.AI via canary proxy · default  Enabled · configured · current
+ 17. Z.AI via canary proxy · work     Named account · API key · fp 39d6304ba956 · this session · default for new sessions
+
+===== p3-stale-temp
+  12. Vercel                           Not configured · unavailable
+  13. Amazon Bedrock                   Not configured · unavailable
+  14. Ollama                           Enabled · configured
+  15. LM Studio                        Enabled · configured
+  16. Z.AI via canary proxy · default  Enabled · configured · current
+› 17. Z.AI via canary proxy · temp     Named account · API key · fp c3c9e8d87ada
+  r recover credentials · Enter manage · Esc back
+  Press enter to confirm or esc to go back
+
+===== p4-removed-default-account
+account `work` of provider `zpx` is not configured; add it with `corbanu account add zpx work` or pick another with `--account` (see `corbanu account list`)
+TUI_EXITED rc=1
+
+===== hP-config-before-ghost.toml
+model = "glm-5.3-flash"
+model_provider = "zpx"
+suppress_unstable_features_warning = true
+
+[features]
+named_accounts = true
+
+[model_providers.zpx]
+name = "Z.AI via canary proxy"
+base_url = "http://127.0.0.1:18686/proxy"
+env_key = "ZPX_API_KEY"
+wire_api = "chat"
+request_max_retries = 0
+stream_max_retries = 0
+
+[projects."$S/work"]
+trust_level = "trusted"
+
+[provider_accounts]
+zpx = "work"
+

@@ -1,0 +1,17 @@
+› Run exactly this shell command once, unchanged: security find-generic-password -s probe
+✔ You approved Corbanu to run security find-generic-password -s probe this time
+• Ran security find-generic-password -s probe
+  └ security: SecKeychainSearchCreateFromAttributes: One or more parameters passed to a function were not valid.
+    security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain.
+⚠ Security level Aggressive kept the macOS keychain out of reach of this command: agent commands cannot reach the keychain service, so
+  `security` could not read, add or change keychain items (an error such as "could not be found" comes from that, not from what your
+  keychain holds), and this cannot be granted, not even once. To allow it, a person can switch to Permissive in /security (it applies after
+  a restart).
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+• Ran it once unchanged. Exit code 44:
+  security find-generic-password -s probe
+  It was blocked by Security level Aggressive, so the command could not reach the macOS keychain. The “item could not be found” result
+  reflects keychain isolation, not the actual contents. You can switch to Permissive with /security, then restart for it to apply.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+› Summarize recent commits
+  Z.AI GLM 5.3 Flash via zai default · qa/demos/out/issue-736/issue736-keychain-explained-…

@@ -1,0 +1,7 @@
+Security level Aggressive could not be fully applied:
+  Vault: an exec-policy rules file does not parse, so sessions would drop every rule, including the vault rule: /Volumes
+/CorbanuDrive/Corbanu/tmp/tui-r2-2c/workspace/.codex/rules/broken.rules:2: starlark error: error: Parse error: unexpecte
+d new line, expected expression (problem is on or around line 2)
+Fix the setting, or choose Permissive by editing <run>/home/security_level.toml.
+[exited] 1
+

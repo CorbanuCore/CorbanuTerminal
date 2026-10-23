@@ -1,0 +1,17 @@
+Repeat full-lane runs of the codex-core accounting lane with the developer
+feature and retries disabled, after the classifier test was made to identify its
+own subject and the fixture idle timeout was raised. Before that change the same
+lane failed `accounting_chat_completion_assessment_collects` in 2 of roughly 8
+runs, with the message `no assessment recorded; turns: [<one turn id>]; request
+sizes: [38070, 1232]`.
+
+=== repeat 1
+     Summary [  26.039s] 146 tests run: 146 passed, 3525 skipped
+=== repeat 2
+     Summary [  25.972s] 146 tests run: 146 passed, 3525 skipped
+=== repeat 3
+     Summary [  26.051s] 146 tests run: 146 passed, 3525 skipped
+=== repeat 4
+     Summary [  26.051s] 146 tests run: 146 passed, 3525 skipped
+=== repeat 5
+     Summary [  26.165s] 146 tests run: 146 passed, 3525 skipped

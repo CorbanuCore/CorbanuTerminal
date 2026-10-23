@@ -1,0 +1,3 @@
+--- own final hashes ---
+2026-10-21T18:52:20Z
+d1dbe90b0861e5e51ddd1c718964f8b0b7050864ad86b90cbbe7513845aaf541  /Users/agmx1/runs/agms-T18-utm2-agmx1-20261021T184010Z/fixture/outside-notes.txt

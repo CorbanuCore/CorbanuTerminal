@@ -1,0 +1,6 @@
+**/fixture/
+*.dylib
+__pycache__/
+**/*.log
+**/*.raw
+**/*.txt

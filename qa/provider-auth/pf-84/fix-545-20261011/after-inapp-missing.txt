@@ -1,0 +1,25 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: /private/tmp/f545proj            │
+╰─────────────────────────────────────────────╯
+
+› reply with the single word ping
+
+• ping
+
+› reply with the single word resumed
+
+• resumed
+
+⚠ Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set
+  `suppress_unstable_features_warning = true` in /private/tmp/f545h.dLk7/config.toml.
+
+■ This conversation ran on zai account `work` and resumes on it: account `work` of provider `zai` is not configured; add it with `corbanu account add zai work`
+or pick another with `--account` (see `corbanu account list`)
+
+› Uses/skills to list available skills
+
+  Z.AI GLM 5.3 Flash via zai default · /private/tmp/f545proj · Corbanu Terminal · TPS: -- tok/s
+

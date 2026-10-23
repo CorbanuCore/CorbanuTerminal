@@ -1,0 +1,11 @@
+== K1 kimi-code named main (real key) (exit 0)
+   args: -c provider_accounts.kimi-code="main"
+   | pong
+   | tokens used
+== K2 kimi-code named fake (exit 1)
+   args: -c provider_accounts.kimi-code="fake"
+   | ERROR: unexpected status 401 Unauthorized: The API Key appears to be invalid or may have expired. Please verify your credentials and try again., url: https://api.kimi.com/coding/v1/chat/completions, cf-ray: a48515cb08c81b4b-PHX
+   | {"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":28933,"ms_to_response_headers":577,"ms_to_first_sse_byte":null,"ms_to_first_parsed_data_event":null,"ms_to_first_actionable_event":null,"total_stream_ms":577,"comment_frame_count":0,"parsed_event_count":0,"x_request_id":null,"generation_id":null,"provider":null,"finish_reason":"error: http 401 Unauthorized: Some(\"{\\\"error\\\":{\\\"message\\\":\\\"The API Key appears to be invalid or may have expired. Please verify your credentials and try again.\\\",\\\"type\\\":\\\"invalid_authentication_error\\\"}}\")","retry_linkage":{"same_turn_attempt_index":1}}
+== K3 kimi-code named ghost (exit 1)
+   args: -c provider_accounts.kimi-code="ghost"
+   | ERROR: Fatal error: account `ghost` of provider `kimi-code` has no stored API key; add it with `corbanu account add kimi-code ghost` or choose another account

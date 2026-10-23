@@ -1,0 +1,7 @@
+**/fixture/
+**/*.log
+**/*.raw
+**/*.txt
+__pycache__/
+coverage-run-*/exact-*/
+coverage-run-*/displayed-*/

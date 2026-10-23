@@ -1,0 +1,13 @@
+Saved amazon-bedrock account `work` (aws_profile).
+Saved amazon-bedrock account `gone` (aws_profile).
+{}(with model_provider = zai the CLI refuses a ChatGPT sign-in; sign in with -c model_provider=openai -c model=gpt-5.4)
+ChatGPT login is disabled. Use API key login instead.
+Signed in OpenAI account `work` (ChatGPT sign-in · t…@example.com · Plus).
+Continue only if you started this login in Codex. If a website or another person gave you this code, cancel.
+
+Reading API key from stdin...
+Signed in OpenAI account `fake` (OpenAI API key).
+amazon-bedrock	gone	aws_profile	profile nosuchprofile
+amazon-bedrock	work	aws_profile	profile work
+openai	fake	chatgpt_auth	OpenAI API key
+openai	work	chatgpt_auth	ChatGPT sign-in · t…@example.com · Plus

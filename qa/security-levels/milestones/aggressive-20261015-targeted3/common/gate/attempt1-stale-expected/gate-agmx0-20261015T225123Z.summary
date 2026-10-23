@@ -1,0 +1,1 @@
+{"launcher_ok": false, "tmux_child_ok": true, "pty_input_echoed": true, "failed": [{"group": "positive", "probe": "package binary digest", "expect": "0deeb58c7882cc9bb246fe2b423b6f258d2eb39561917b3884221cab7e1049b3", "observed": "d8fc95094766e489ab319a110dc8b943d16a9fd6467c4f27a3f6ec739251fdf4", "ok": false}], "probe_count": 85, "ok": false}

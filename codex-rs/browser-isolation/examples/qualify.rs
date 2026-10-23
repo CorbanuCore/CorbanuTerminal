@@ -22,7 +22,11 @@ impl LiveBrowserAuthority for Authority {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let authority = Authority(AuthorityEpoch::new(*uuid::Uuid::new_v4().as_bytes(), 0, 0)?);
+    let authority = Authority(AuthorityEpoch::new(
+        *uuid::Uuid::new_v4().as_bytes(),
+        /*policy_revision*/ 0,
+        /*revocation_generation*/ 0,
+    )?);
     let cancel = CancellationToken::new();
     let runtime = BrowserRuntime::prepare(EnginePreference::Discover, &authority, &cancel).await?;
     let config = NetworkProxyConfig {

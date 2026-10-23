@@ -1,0 +1,40 @@
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                GPT-5.4 (reasoning medium, summaries auto)                        │
+│  Model provider:       Amazon Bedrock - http://127.0.0.1:34300/openai/v1 · account work  │
+│  Directory:            /tmp/tmp.SnRbCLioJY/ws                                            │
+│  Permissions:          Next turn: Workspace (Ask for approval)                           │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Amazon Bedrock AWS credentials                                    │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12dc7-4520-7bd1-9306-a9f314c7e938                              │
+│                                                                                          │
+│  Token usage:          0 total  (0 input + 0 output)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly: pong
+
+
+• bedrock-mock: signed by AKIDWORKPROFILE
+
+
+  Providers
+  Configure providers and control whether they are eligible for use.
+  Configured means credentials are present, not verified by the provider.
+
+  6. Kimi Code                  Not configured · unavailable
+  7. Z.AI                       Not configured · unavailable
+  8. DeepSeek                   Not configured · unavailable
+  9. OpenRouter                 Not configured · unavailable
+  10. Meta                      Not configured · unavailable
+  11. Baseten                   Not configured · unavailable
+  12. Vercel                    Not configured · unavailable
+› 13. Amazon Bedrock · default  Not configured · current · unavailable · default for new sessions
+
+  r recover credentials · Enter manage · Esc back
+  Press enter to confirm or esc to go back

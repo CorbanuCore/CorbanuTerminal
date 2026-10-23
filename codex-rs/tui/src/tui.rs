@@ -368,6 +368,11 @@ pub(super) fn reapply_raw_mode_after_resume() -> Result<()> {
 pub fn restore_after_exit() -> Result<()> {
     let mut first_error =
         restore_common(RawModeRestore::Disable, KeyboardRestore::ResetAfterExit).err();
+    // Discard keystrokes the TUI never read, such as the rest of a typed or
+    // non-bracketed pasted secret, so they never reach the parent shell (#461).
+    if stdin().is_terminal() {
+        flush_terminal_input_buffer();
+    }
     if let Err(err) = terminal_stderr::finish() {
         first_error.get_or_insert(err);
     }

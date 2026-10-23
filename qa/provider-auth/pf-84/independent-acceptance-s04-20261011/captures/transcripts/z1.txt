@@ -1,0 +1,71 @@
+                                      
+                 /**;                 
+                 |+_|`                
+                 = ;|`                
+                 |-`*|                
+                 |  ~|                
+                 | -"|                
+                ^|~ _|                
+                 |-""|                
+                /\  _|                
+                ||.:~|                
+                 |  _|                
+                 |=+=|                
+                 |=*||                
+                 *__/|                
+                 ~ .+|                
+                                      
+
+  Welcome to Corbanu Terminal, your crypto-native AI terminal
+
+  Choose a provider account for Corbanu Terminal
+
+  9. Provider: DeepSeek API Key
+     Use a key stored as DEEPSEEK_API_KEY
+
+  10. Provider: OpenRouter API Key
+     Use a key stored as OPENROUTER_API_KEY
+
+  11. Provider: Meta API Key
+     Use a key stored as MODEL_API_KEY
+
+  12. Provider: Baseten API Key
+     Use a key stored as BASETEN_API_KEY
+
+  13. Provider: Vercel API Key
+     Use a key stored as AI_GATEWAY_API_KEY
+
+  14. Provider: Amazon Bedrock
+     Use this provider without an enrollment step
+
+  15. Provider: Ollama
+     Configured · unavailable
+
+  16. Provider: LM Studio
+     Configured · unavailable
+
+> 17. Done
+     Finish provider setup
+
+  Use ↑/↓ to choose · Press enter to continue
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     loading   /model to change                  │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+
+› Use /skills to list available skills
+
+  Z.AI GLM 5.2 via zai standard · $S/work · Corbanu Terminal · TPS: -- tok/s
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.2   /model to change                  │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+To continue this session, run corbanu resume 01a12a7a-1d94-7021-a2fd-92454181ad15
+TUI_EXITED rc=0

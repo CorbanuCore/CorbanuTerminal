@@ -1,0 +1,73 @@
+# Issue #505: confirming Aggressive requires a person's approval for every command from the next turn, before any restart.
+id = "issue505-approvals-at-confirmation"
+feature = "Confirming Aggressive requires approval for every command from the next turn"
+expected = "The session starts with approvals off (never). After Aggressive is confirmed, screen 07 says approval for every command applies from each pane's next turn and the rest at the restart; without restarting, the agent's next write command waits for your approval."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Aggressive\\?"
+[[steps]]
+wait = "enter confirm and save"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "now in \\d+ threads? of this Corbanu Terminal"
+[[steps]]
+pause = 5.0
+[[steps]]
+key = "Escape"
+
+[[steps]]
+type = "Without reading anything first, run exactly this shell command once: printf ok > issue505.txt"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Would you like to run the following command\\?"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "(?m)^› "
+timeout = 120
+compress = 2
+[[steps]]
+pause = 3.0

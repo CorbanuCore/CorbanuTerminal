@@ -1,0 +1,159 @@
+# PF-29-S02. Record with
+#   PF29_CANDIDATE=<corbanu> --bin qa/security-levels/sprints/PF-29-S02/demos/fail-once-then-restart.sh
+id = "pf29s02-failure-recovery-restart"
+feature = "Interrupted migration locks Aggressive; after restart, recovery finishes it"
+expected = "A failure injected after the file rewrite stops the migration: the level stays Permissive and Aggressive is locked. After a real restart, r in /security rolls the migration forward, the re-audit passes and Aggressive saves."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"seed.sh" = '''
+printf "alias ll='ls -l'\nexport OPENAI_API_KEY=fake-key-0001-pf29-demo\n" > "$HOME/.zshrc" && echo seeded fake profile export
+'''
+"check.sh" = '''
+printf 'plain-text values left: '; grep -c 'fake-key-0001' "$HOME/.zshrc"; ls -l "$HOME/.zshrc" | cut -c1-10; grep OPENAI "$HOME/.zshrc"
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+type = "!sh seed.sh"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "seeded fake profile export"
+
+[[steps]]
+type = "/security"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Active in this session: Permissive"
+
+[[steps]]
+key = "Up"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Switch to Aggressive\\?"
+
+[[steps]]
+key = "Down"
+repeat = 20
+
+[[steps]]
+wait = "m move credentials to the vault"
+
+[[steps]]
+key = "m"
+
+[[steps]]
+wait = "Move 1 credential into the vault"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Migration stopped"
+
+[[steps]]
+pause = 3.0
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "a credential migration did not finish"
+
+[[steps]]
+pause = 2.0
+
+[[steps]]
+key = "Escape"
+
+[[steps]]
+key = "Escape"
+
+[[steps]]
+type = "/exit"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "restarting Corbanu Terminal[\\s\\S]*model: +glm-5\\.2"
+timeout = 60
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Active in this session: Permissive"
+
+[[steps]]
+key = "Up"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Switch to Aggressive\\?"
+
+[[steps]]
+key = "Down"
+repeat = 20
+
+[[steps]]
+wait = "r finish the migration"
+
+[[steps]]
+pause = 2.0
+
+[[steps]]
+key = "r"
+
+[[steps]]
+wait = "Moved 1 credential into the vault"
+
+[[steps]]
+pause = 2.5
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Preflight passed"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Saved: Aggressive"
+
+[[steps]]
+pause = 3.0

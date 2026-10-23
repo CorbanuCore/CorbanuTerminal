@@ -1,0 +1,41 @@
+2026-10-14T07:37:18Z
+start-rc=0
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 started  macOS 3
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+2026-10-14T08:03:40Z guest unreachable since start (ARP incomplete); utmctl stop --request
+rc=0
+started
+2026-10-14T08:05:23Z guest did not answer the shutdown request; utmctl stop (force power-off), then start again
+stop-rc=0
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3
+start-rc=0
+2026-10-14T08:05:44Z
+ssh open 2026-10-14T08:05:57Z
+up
+2026-10-14T08:05:56Z
+26.2
+ 1:05  up 12 secs, 0 users, load averages: 8.20 1.83 0.65

@@ -1,0 +1,40 @@
+test_clock_rollback_cannot_prune_current_and_abandoned_builds_expire (test_control.ControlTests.test_clock_rollback_cannot_prune_current_and_abandoned_builds_expire) ... ok
+test_extra_fields_never_become_raw_log_uploads (test_control.ControlTests.test_extra_fields_never_become_raw_log_uploads) ... ok
+test_failed_publication_retains_old_generation (test_control.ControlTests.test_failed_publication_retains_old_generation) ... ok
+test_future_report_and_bad_identity_rejected (test_control.ControlTests.test_future_report_and_bad_identity_rejected) ... ok
+test_markdown_tables_and_relative_document_links (test_control.ControlTests.test_markdown_tables_and_relative_document_links) ... ok
+test_no_path_escape_or_symlink_read (test_control.ControlTests.test_no_path_escape_or_symlink_read) ... ok
+test_oversized_source_is_rejected (test_control.ControlTests.test_oversized_source_is_rejected) ... ok
+test_partial_render_is_removed_without_touching_last_good (test_control.ControlTests.test_partial_render_is_removed_without_touching_last_good) ... ok
+test_run_retry_is_idempotent_and_private (test_control.ControlTests.test_run_retry_is_idempotent_and_private) ... ok
+test_sensitive_summaries_are_rejected (test_control.ControlTests.test_sensitive_summaries_are_rejected) ... ok
+test_status_js_checks_source_age_not_just_publish_age (test_control.ControlTests.test_status_js_checks_source_age_not_just_publish_age) ... ok
+test_unsafe_markdown_does_not_execute_or_load_images (test_control.ControlTests.test_unsafe_markdown_does_not_execute_or_load_images) ... ok
+test_writeback_panel_reports_real_state_and_missing_state (test_control.ControlTests.test_writeback_panel_reports_real_state_and_missing_state) ... ok
+test_all_recovery_cases_required_for_enable (test_control.DeliveryTests.test_all_recovery_cases_required_for_enable) ... ok
+test_default_on_or_public_stage_cannot_merge (test_control.DeliveryTests.test_default_on_or_public_stage_cannot_merge) ... ok
+test_merge_pass_does_not_imply_enablement (test_control.DeliveryTests.test_merge_pass_does_not_imply_enablement) ... ok
+test_stale_candidate_and_artifact_rejected (test_control.DeliveryTests.test_stale_candidate_and_artifact_rejected) ... ok
+test_changed_mapping_cannot_retarget_queued_event (test_control.OutboxTests.test_changed_mapping_cannot_retarget_queued_event) ... ok
+test_delivered_records_do_not_starve_later_pending_work (test_control.OutboxTests.test_delivered_records_do_not_starve_later_pending_work) ... ok
+test_enrollment_is_local_and_workspace_bound (test_control.OutboxTests.test_enrollment_is_local_and_workspace_bound) ... ok
+test_exact_payload_survives_timeout_and_retry (test_control.OutboxTests.test_exact_payload_survives_timeout_and_retry) ... ok
+test_live_delivery_requires_explicit_switch (test_control.OutboxTests.test_live_delivery_requires_explicit_switch) ... ok
+test_multibyte_limit_is_enforced (test_control.OutboxTests.test_multibyte_limit_is_enforced) ... ok
+test_non_object_http_response_is_a_retryable_failure (test_control.OutboxTests.test_non_object_http_response_is_a_retryable_failure) ... ok
+test_only_goal_metadata_not_paid_output_or_completion (test_control.OutboxTests.test_only_goal_metadata_not_paid_output_or_completion) ... ok
+test_redirect_is_not_followed (test_control.OutboxTests.test_redirect_is_not_followed) ... ok
+test_unauthorized_conflict_and_wrong_response_id_block (test_control.OutboxTests.test_unauthorized_conflict_and_wrong_response_id_block) ... ok
+test_unmapped_report_cannot_be_enqueued (test_control.OutboxTests.test_unmapped_report_cannot_be_enqueued) ... ok
+test_invalid_import_cannot_replace_source_manifest_or_config (test_control.RefreshTests.test_invalid_import_cannot_replace_source_manifest_or_config) ... ok
+test_real_http_server_is_read_only_and_rejects_untrusted_hosts_and_paths (test_control.RefreshTests.test_real_http_server_is_read_only_and_rejects_untrusted_hosts_and_paths) ... ok
+test_rejected_report_does_not_starve_next_run_and_status_is_published (test_control.RefreshTests.test_rejected_report_does_not_starve_next_run_and_status_is_published) ... ok
+test_sync_preserves_enrollment_and_prunes_old_partial_uploads (test_control.RefreshTests.test_sync_preserves_enrollment_and_prunes_old_partial_uploads) ... ok
+test_unexpected_tick_failure_marks_health_failed (test_control.RefreshTests.test_unexpected_tick_failure_marks_health_failed) ... ok
+
+----------------------------------------------------------------------
+Ran 33 tests in 0.202s
+
+OK
+Refresh complete; live writeback disabled
+Verified export activated; private server and half-hour timer started

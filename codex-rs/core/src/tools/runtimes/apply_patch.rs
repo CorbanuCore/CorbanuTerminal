@@ -34,6 +34,7 @@ use codex_sandboxing::policy_transforms::effective_permission_profile;
 use codex_sandboxing::record_filesystem_sandbox_violation;
 use codex_utils_path_uri::PathUri;
 use futures::future::BoxFuture;
+use std::path::Path;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -88,14 +89,39 @@ impl ApplyPatchRuntime {
         req: &ApplyPatchRequest,
         attempt: &SandboxAttempt<'_>,
     ) -> Option<FileSystemSandboxContext> {
-        if attempt.sandbox == SandboxType::None {
+        let contract = crate::security::launch_contract::active();
+        if attempt.sandbox == SandboxType::None && contract.is_none() {
             return None;
         }
 
-        let permissions = effective_permission_profile(
+        let mut permissions = effective_permission_profile(
             attempt.exec_server_permissions,
             req.additional_permissions.as_ref(),
         );
+        // PF-27-S02: patches get the protected profile; an unsandboxed or
+        // unprotectable attempt gets no file access at all.
+        if let Some(contract) = contract {
+            let cwd = attempt.sandbox_cwd.to_abs_path().ok();
+            permissions = match cwd {
+                Some(cwd) => contract.file_tool_permissions(
+                    &permissions,
+                    // PF-27-S06: on Windows only the elevated sandbox can
+                    // deny reads (patches never go through the proxy).
+                    attempt.sandbox != SandboxType::None
+                        && (!cfg!(windows)
+                            || (codex_sandboxing::windows_sandbox_uses_elevated_backend(
+                                attempt.windows_sandbox_level,
+                                /*proxy_enforced*/ false,
+                            ) && windows_new_files_protected(contract))),
+                    cwd.as_path(),
+                ),
+                None => contract.file_tool_permissions(
+                    &permissions,
+                    /*sandboxed*/ false,
+                    Path::new("/"),
+                ),
+            };
+        }
         Some(FileSystemSandboxContext {
             permissions: permissions.into(),
             cwd: Some(attempt.sandbox_cwd.clone()),
@@ -120,6 +146,13 @@ impl Sandboxable for ApplyPatchRuntime {
 impl Approvable<ApplyPatchRequest> for ApplyPatchRuntime {
     type ApprovalKey = ApplyPatchApprovalKey;
 
+    fn additional_permissions<'r>(
+        &self,
+        req: &'r ApplyPatchRequest,
+    ) -> Option<&'r AdditionalPermissionProfile> {
+        req.additional_permissions.as_ref()
+    }
+
     fn approval_keys(&self, req: &ApplyPatchRequest) -> Vec<Self::ApprovalKey> {
         req.file_paths
             .iter()
@@ -142,12 +175,14 @@ impl Approvable<ApplyPatchRequest> for ApplyPatchRuntime {
         let retry_reason = ctx.retry_reason.clone();
         let approval_keys = self.approval_keys(req);
         let changes = req.changes.clone();
+        let fresh = ctx.fresh_human_authority;
         Box::pin(async move {
-            if req.permissions_preapproved && retry_reason.is_none() {
+            if req.permissions_preapproved && retry_reason.is_none() && !fresh {
                 return ReviewDecision::Approved;
             }
             if let Some(reason) = retry_reason {
-                return session
+                crate::tools::sandboxing::note_person_asked();
+                let decision = session
                     .request_patch_approval(
                         turn,
                         call_id,
@@ -156,12 +191,17 @@ impl Approvable<ApplyPatchRequest> for ApplyPatchRuntime {
                         /*grant_root*/ None,
                     )
                     .await;
+                return match decision {
+                    ReviewDecision::ApprovedForSession if fresh => ReviewDecision::Approved,
+                    decision => decision,
+                };
             }
 
             with_cached_approval(
                 &session.services,
                 "apply_patch",
                 approval_keys,
+                fresh,
                 || async move {
                     session
                         .request_patch_approval(
@@ -276,3 +316,19 @@ impl ToolRuntime<ApplyPatchRequest, ApplyPatchRuntimeOutput> for ApplyPatchRunti
 #[cfg(test)]
 #[path = "apply_patch_tests.rs"]
 mod tests;
+
+/// PF-27-S06: on Windows a patch may run with the protected profile only once
+/// new files in `CODEX_HOME` are denied to the sandbox too.
+fn windows_new_files_protected(
+    contract: &crate::security::launch_contract::LaunchContract,
+) -> bool {
+    #[cfg(windows)]
+    {
+        contract.protect_new_codex_home_files().is_ok()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = contract;
+        true
+    }
+}

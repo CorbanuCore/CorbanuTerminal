@@ -1,0 +1,15 @@
+2026-09-26 requests=2 tokens=28930 usd=0.0408965
+2026-09-27 requests=2 tokens=28435 usd=0.04019732
+2026-09-28 requests=3 tokens=49440 usd=0.161997
+2026-09-29 requests=2 tokens=27445 usd=0.03879782
+2026-09-30 requests=2 tokens=26950 usd=0.0380975
+2026-10-01 requests=3 tokens=47955 usd=0.15989832
+2026-10-02 requests=2 tokens=25960 usd=0.036698
+2026-10-03 requests=2 tokens=25465 usd=0.03599882
+2026-10-04 requests=3 tokens=46470 usd=0.1577985
+2026-10-05 requests=2 tokens=24475 usd=0.03459932
+2026-10-06 requests=2 tokens=23980 usd=0.033899
+2026-10-07 requests=3 tokens=44985 usd=0.15569982
+2026-10-08 requests=2 tokens=22990 usd=0.0324995
+2026-10-09 requests=2 tokens=22495 usd=0.03180032
+seeded 14-day total usd= 0.99887774

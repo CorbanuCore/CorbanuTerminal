@@ -292,7 +292,7 @@ where
                 handle.session_slot,
                 permit,
                 BrokerAuditResolution::Cancelled,
-                None,
+                /*receipt*/ None,
             );
         }
 
@@ -316,19 +316,19 @@ where
                 handle.session_slot,
                 permit,
                 BrokerAuditResolution::Cancelled,
-                None,
+                /*receipt*/ None,
             ),
             Err(BackendDispatchError::Failed) => self.finish_audit(
                 handle.session_slot,
                 permit,
                 BrokerAuditResolution::Failed,
-                None,
+                /*receipt*/ None,
             ),
             Err(BackendDispatchError::OutcomeUnknown) => self.finish_audit(
                 handle.session_slot,
                 permit,
                 BrokerAuditResolution::Unknown,
-                None,
+                /*receipt*/ None,
             ),
         }
     }

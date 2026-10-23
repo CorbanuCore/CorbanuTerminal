@@ -7,6 +7,11 @@ mod certs;
 mod config;
 mod connect_policy;
 mod credential_broker;
+mod destination;
+// PF-33-S03 contract. Parts are used only by its standalone test target
+// (tests/destination_contract.rs compiles the same file).
+#[allow(dead_code)]
+mod destination_contract;
 mod http_proxy;
 mod mitm;
 mod mitm_hook;
@@ -39,6 +44,8 @@ pub use config::NetworkUnixSocketPermission;
 pub use config::NetworkUnixSocketPermissions;
 pub use config::host_and_port_from_network_addr;
 pub use config::managed_proxy_ports;
+#[cfg(any(unix, windows))]
+pub use credential_broker::CODEX_CREDENTIAL_BROKER_ARG1;
 pub use credential_broker::CREDENTIAL_BROKER_ACTIVE_ENV_KEY;
 pub use credential_broker::IsolatedCredentialDispatchError;
 pub use credential_broker::IsolatedCredentialDispatcher;
@@ -52,8 +59,19 @@ pub use credential_broker::ScopedCredentialResolverError;
 pub use credential_broker::ScopedCredentialRoute;
 pub use credential_broker::ScopedCredentialRouteError;
 pub use credential_broker::ScopedCredentialUse;
+#[cfg(any(unix, windows))]
+pub use credential_broker::StoredKeyAccount;
+pub use credential_broker::StoredKeyResolver;
 pub use credential_broker::brokered_credential_dummy_env_keys;
 pub use credential_broker::brokered_credential_env_keys;
+pub use credential_broker::credential_broker_env_var_names;
+pub use credential_broker::credential_broker_user_runtime_dir;
+#[cfg(any(unix, windows))]
+pub use credential_broker::model_auth;
+#[cfg(any(unix, windows))]
+pub use credential_broker::run_credential_broker_main;
+#[cfg(any(unix, windows))]
+pub use credential_broker::run_credential_broker_main_with;
 pub use mitm_hook::InjectedHeaderConfig;
 pub use mitm_hook::MitmHookActionsConfig;
 pub use mitm_hook::MitmHookBodyConfig;

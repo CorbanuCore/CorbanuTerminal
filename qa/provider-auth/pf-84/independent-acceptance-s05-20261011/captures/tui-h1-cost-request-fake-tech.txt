@@ -1,0 +1,59 @@
+[0] › Provider: Z.AI
+[1] › Account: fake
+[2] › Model: Z.AI GLM 5.3 Flash
+[3] › Billing: Pay per use
+[4] › Estimated cost: not available — usage incomplete
+[5] › Next step for requests with incomplete usage: check the bill from Z.AI. Their provider did not report every token count, so the estimate is missing or only a lower
+[6] › bound.
+[7] › Tokens: tokens not reported
+[8] › —— Details ——
+[9] › Billed cost: Z.AI doesn't report its charges, so any cost here is an estimate — check Z.AI's bill.
+[10] › Request: fe77ce61-9df1-4149-9691-8d4ed4f16b7a
+[11] › Attempt: 7b837dc4-461c-4253-a8b4-2a4a62495458
+[12] › Thread: 01a12b26-2500-7291-8d42-d30ca21452a4
+[13] › Turn: 01a12b26-2520-7963-9df2-d944811ecc81
+[14] › Provider: zai
+[15] › Account: fake (fingerprint c18cc965da52)
+[16] › Model: glm-5.3-flash
+[17] › Opaque scope: 7fc95165-61ca-4e43-ae25-c0862a58d2f7
+[18] › Arithmetic dialect: Inclusive
+[19] › Admission time: 2026-10-11T13:28:02.709Z
+[20] › Retry predecessor: none
+[21] › Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+[22] › Estimated token cost: unknown
+[23] › Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
+[24] › Billing basis: pay per use
+[25] › Input: unknown — no retained numeric evidence
+[26] › Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+[27] › Cache read: unknown — no retained numeric evidence
+[28] › Cache write: not reported — this price charges nothing for cache writes
+[29] › Output: unknown — no retained numeric evidence
+[30] › Reasoning (subset, not separately billed): unknown — no retained numeric evidence
+[31] › Total (not separately billed): unknown — no retained numeric evidence
+[32] › Noncached input cost: unknown — no retained numeric evidence
+[33] › Cache read cost: unknown — no retained numeric evidence
+[34] › Cache write cost: $0.000000; exact USD 0
+[35] › Output cost: unknown — no retained numeric evidence
+[36] › Known subtotal exact USD: none — usage incomplete for these attempts
+[37] › Price ID: fe90cf02-23e7-4eb0-91c1-22526d16e764
+[38] › Price source: NativeCatalog; reference aba2fe65-51b4-5b06-be1a-3886c76a169d
+[39] › Price currency/unit: Usd / PerMillionTokens
+--- final viewport ---
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.3-flash   /model to change          │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s05acc/ws │
+╰──────────────────────────────────────────────────────╯
+  Attempt, components and original price
+  Requested UTC day: 2026-10-11
+  Cache read cost: unknown — no retained numeric evidence
+  Cache write cost: $0.000000; exact USD 0
+  Output cost: unknown — no retained numeric evidence
+  Known subtotal exact USD: none — usage incomplete for these attempts
+  Price ID: fe90cf02-23e7-4eb0-91c1-22526d16e764
+  Price source: NativeCatalog; reference aba2fe65-51b4-5b06-be1a-3886c76a169d
+  Price currency/unit: Usd / PerMillionTokens
+› Price observed/approved: 2026-10-11T13:28:02.709Z / 2026-10-11T13:28:02.709Z
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

@@ -1,0 +1,2 @@
+be1c1136f5c80bbf033290586040d2719240a8e11825f23959f56a44a8c5165d  codex-rs/Cargo.lock
+c8d7e3f8c8bec8f8e71cc3d1d39fcb952eec0f07a41cdac48401a6f64a60d979  MODULE.bazel.lock

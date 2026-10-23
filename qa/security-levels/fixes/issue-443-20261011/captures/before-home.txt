@@ -1,0 +1,60 @@
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     glm-5.3-flash   /model to change             │
+│ directory: /Volumes/CorbanuDrive/…/runs/before-443-1/ws │
+╰─────────────────────────────────────────────────────────╯
+
+
+› Run exactly this command and show its output: corbanu vault list
+
+
+• WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)
+  error: unrecognized subcommand 'list'
+
+  Usage: corbanu vault [OPTIONS] <COMMAND>
+
+  For more information, try '--help'.
+
+  The command exited with code 2 — corbanu vault list is not a valid subcommand.
+
+
+› Run exactly this shell command once, unchanged, and show its output: head -3 "$CORBANU_HOME/config.toml"
+
+
+• head: <runs>/before-443-1/home/config.toml: Operation not permitted
+
+  The command exited with code 1 — sandbox permissions prevented reading that file, so head could not show its contents.
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.3 Flash via zai default · <runs>/before-443-1/ws · Corbanu Terminal · TPS: 24.9 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

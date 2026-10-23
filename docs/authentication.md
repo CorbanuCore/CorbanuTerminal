@@ -65,6 +65,25 @@ reuses a lone `$HOME/.pfterminal` in place, and otherwise creates
 `$HOME/.corbanu`. This keeps account auth, vault data, sessions, and logs
 separate from a stock Codex install using `$HOME/.codex`.
 
+The `corbanu` launcher never replaces a home you set yourself, so
+`CORBANU_HOME=<other home> corbanu exec ...` really runs on that home. A home
+variable exported by your login shell (including `CODEX_HOME`) is therefore used
+as well. If the home variables name different directories, Corbanu Terminal
+prints one warning naming the home it uses; to use another home, set
+`CORBANU_HOME` to it. Inside a Corbanu session every tool shell exports
+`CODEX_HOME` for the session's home, so a worker started there with
+`CORBANU_HOME=<other home>` prints this warning once, confirming the worker's
+home. A worker that sets only `CODEX_HOME` gets the warning too, because the
+inherited `CORBANU_HOME` still wins.
+
+`corbanu-debug` uses its own debug home: `CORBANU_DEBUG_HOME`, then
+`PFTERMINAL_DEBUG_HOME`, and otherwise `$HOME/.corbanu-debug`. A
+`CORBANU_HOME`, `PFTERMINAL_HOME` or `CODEX_HOME` you set yourself is kept,
+just as `corbanu` keeps it, so `CORBANU_HOME=<other home> corbanu-debug ...`
+runs on that home. If a debug home variable and a stable home variable name
+different directories, the debug home wins and `corbanu-debug` prints one
+warning naming it.
+
 ### Claude Plan
 
 On first run, choose **Provider: Anthropic Claude Account** to enter this flow
@@ -108,6 +127,40 @@ instructions and are not silently replaced by vault credentials.
 
 See [credential recovery](features/model-providers.md#credential-recovery-pf-58-candidate)
 and the [candidate qualification record](../qa/provider-auth/pf-58/README.md).
+
+### OpenAI API keys
+
+The built-in `openai` provider uses the first of these that is present:
+
+1. `CODEX_API_KEY` (`corbanu exec` only);
+2. a sign-in supplied for the session: external ChatGPT tokens or
+   `CODEX_ACCESS_TOKEN`;
+3. a ChatGPT sign-in or API key saved with `corbanu login` or `/providers`;
+4. `OPENAI_API_KEY`.
+
+`OPENAI_API_KEY` works the same in `corbanu exec`, the TUI and the app
+server. Anything saved comes first, so a key exported in your shell never
+replaces a sign-in or changes how usage is billed. After `corbanu logout`,
+though, requests fall back to `OPENAI_API_KEY` if it is set (pay per use);
+unset it to stop that. `corbanu login status` reports saved credentials only.
+
+When a model turn, `/review` or compaction is billed to `OPENAI_API_KEY`,
+Corbanu says so the first time in each thread (a new thread, such as `/new`,
+says it again), and again if the credential switches to it mid-thread: a notice
+in the TUI, a `warning:` line on stderr in `corbanu exec` (a warning item with
+`--json`), and a thread `warning` notification in the app server. A review or
+compaction announces on the thread that started it. A spawned agent, which may
+use a different provider from its parent, announces in its own thread
+(`corbanu exec` prints only its main thread's notices). Realtime voice sessions
+don't show it. `/status` shows the
+variable as the account source. A saved sign-in, `CODEX_API_KEY` or a session
+sign-in shows no notice, and neither do providers that don't use OpenAI
+sign-in.
+
+`OPENAI_API_KEY` is sent only to providers that use OpenAI sign-in, never to
+local or custom endpoints, and it is ignored when
+`forced_login_method = "chatgpt"`. With no credential, a rejected request says
+what to set.
 
 ## Provider Keys
 
@@ -204,6 +257,12 @@ corbanu login status
 corbanu logout
 corbanu logout --all
 ```
+
+`corbanu login status` never shows any part of an API key. It says that an
+API key is configured. When the home's vault has its fingerprint salt, it
+adds the key's per-home fingerprint, the same one a named OpenAI account
+holding that key shows. Reading it decrypts the vault, which can read the
+operating system's keychain, as `/providers` does.
 
 `corbanu logout` removes Codex/OpenAI account auth and preserves provider
 API keys in the vault. Use `corbanu logout --all` only when you also want to

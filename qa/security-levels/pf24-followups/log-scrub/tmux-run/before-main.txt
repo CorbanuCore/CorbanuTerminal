@@ -1,0 +1,28 @@
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/workspace │
+╰──────────────────────────────────────────────────────╯
+• You ran printf 'old build: GET https://x.test/v1?key=fake-old-0001\n' >> ../logs/codex-tui.log; rm
+  │ ../logs/.codex-tui.log.scrub-v1; sqlite3 ../home/pfterminal_logs_2.sqlite "INSERT INTO logs (ts, ts_nanos,
+  │ level, target, feedback_log_body) VALUES (strftime('%s','now'), 0, 'DEBUG', 'old', 'old build: GET
+  │ … +2 lines
+  └ ../logs/codex-tui.log:3
+    ../home/pfterminal_logs_2.sqlite:0
+    rm: ../logs/.codex-tui.log.scrub-v1: No such file or directory
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+To continue this session, run corbanu resume 01a11163-27bb-77c2-a7ec-9882c9b8c3b1
+[demo] restarting Corbanu Terminal with the same profile...
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.2   /model to change                │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/workspace │
+╰──────────────────────────────────────────────────────╯
+• You ran sleep 2; grep '^old build' ../logs/codex-tui.log; sqlite3 ../home/pfterminal_logs_2.sqlite "SELECT
+  │ feedback_log_body FROM logs WHERE target = 'old'; PRAGMA user_version;"; grep -c 'fake-ol[d]' ../logs/
+  │ codex-tui.log ../home/pfterminal_logs_2.sqlite* | awk -F: '{n+=$NF} END {print "copies left:", n}'
+  └ old build: GET https://x.test/v1?key=fake-old-0001
+    old build: GET https://x.test/v1?key=fake-old-0002
+    0
+    copies left: 4
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+› Improve documentation in @filename
+  Z.AI GLM 5.2 via zai standard · /Volumes/CorbanuDrive/Corbanu/worktrees/sec-log-scrub-20261006/qa/demos/out/log-scrub…

@@ -1,0 +1,120 @@
+# #434 (milestone AGG-16): under Aggressive with the output gate on, a value
+# the person adds to the vault mid-session is removed from what the agent
+# reads, and so is a value stored before the session started (after "restart
+# now"). The milestone's feature flags; the level is chosen in /security.
+# Record with DEMO_CANDIDATE=<corbanu> and --bin qa/demos/wrappers/restart-once.sh.
+id = "issue434-vault-value-gated"
+feature = "#434: vault values are removed from command output, mid-session and after restart"
+expected = "After /vault adds synthetic/agg16 = AGG16SYNTH123, `cat notes.txt` shows [REDACTED:vault:synthetic/agg16] instead of the value; after restart now, it is still redacted."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"notes.txt" = "buy coffee\nreview budget\nAGG16SYNTH123\n"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Aggressive\\?"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "r"
+[[steps]]
+wait = "restarting Corbanu Terminal|Corbanu Terminal \\(v"
+timeout = 60
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "/vault"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Add credential"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Label"
+[[steps]]
+type = "synthetic/agg16"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Secret value"
+[[steps]]
+type = "AGG16SYNTH123"
+verify = false
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Added vault credential"
+timeout = 30
+[[steps]]
+pause = 1.5
+
+[[steps]]
+type = "Run exactly this shell command once: cat notes.txt . Then repeat its output verbatim."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)review budget.*(REDACTED:vault:synthetic/agg16|AGG16SYNTH123).*\n›"
+timeout = 240
+compress = 3
+[[steps]]
+pause = 2.5
+
+[[steps]]
+type = "/exit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)\\[demo\\] restarting.*Corbanu Terminal \\(v"
+timeout = 60
+[[steps]]
+pause = 1.5
+[[steps]]
+type = "After restart: run exactly this shell command once: cat notes.txt . Then repeat its output verbatim."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)After restart.*review budget.*(REDACTED:vault:synthetic/agg16|AGG16SYNTH123).*\n›"
+timeout = 240
+compress = 3
+[[steps]]
+pause = 4.0

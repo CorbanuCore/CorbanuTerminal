@@ -37,7 +37,7 @@ use crate::tools::sandboxing::ToolCtx;
 use crate::tools::sandboxing::ToolError;
 use crate::tools::sandboxing::ToolRuntime;
 use crate::tools::sandboxing::managed_network_for_sandbox_permissions;
-use crate::tools::sandboxing::sandbox_permissions_preserving_denied_reads;
+use crate::tools::sandboxing::sandbox_permissions_for_session;
 use crate::tools::sandboxing::with_cached_approval;
 use codex_network_proxy::NetworkProxy;
 use codex_protocol::exec_output::ExecToolCallOutput;
@@ -153,27 +153,37 @@ impl Approvable<ShellRequest> for ShellRuntime {
         let turn = ctx.turn;
         let call_id = ctx.call_id.to_string();
         Box::pin(async move {
-            with_cached_approval(&session.services, "shell", keys, move || async move {
-                let available_decisions = None;
-                session
-                    .request_command_approval(
-                        turn,
-                        call_id,
-                        /*approval_id*/ None,
-                        environment_id,
-                        command,
-                        cwd,
-                        reason,
-                        ctx.network_approval_context.clone(),
-                        req.exec_approval_requirement
-                            .proposed_execpolicy_amendment()
-                            .cloned(),
-                        req.additional_permissions.clone(),
-                        available_decisions,
-                        /*plugin_attribution_override*/ None,
-                    )
-                    .await
-            })
+            let fresh = ctx.fresh_human_authority;
+            with_cached_approval(
+                &session.services,
+                "shell",
+                keys,
+                fresh,
+                move || async move {
+                    let available_decisions = None;
+                    session
+                        .request_command_approval(
+                            turn,
+                            call_id,
+                            /*approval_id*/ None,
+                            environment_id,
+                            command,
+                            cwd,
+                            reason,
+                            ctx.network_approval_context.clone(),
+                            // A post-taint approval covers this action only:
+                            // no "don't ask again" rule (PF-30-S03).
+                            req.exec_approval_requirement
+                                .proposed_execpolicy_amendment()
+                                .filter(|_| !fresh)
+                                .cloned(),
+                            req.additional_permissions.clone(),
+                            available_decisions,
+                            /*plugin_attribution_override*/ None,
+                        )
+                        .await
+                },
+            )
             .await
         })
     }
@@ -208,11 +218,28 @@ impl Approvable<ShellRequest> for ShellRuntime {
     fn sandbox_permissions(&self, req: &ShellRequest) -> SandboxPermissions {
         req.sandbox_permissions
     }
+
+    fn additional_permissions<'r>(
+        &self,
+        req: &'r ShellRequest,
+    ) -> Option<&'r codex_protocol::models::AdditionalPermissionProfile> {
+        req.additional_permissions.as_ref()
+    }
 }
 
 impl ToolRuntime<ShellRequest, ExecToolCallOutput> for ShellRuntime {
     fn workspace_roots<'a>(&self, req: &'a ShellRequest) -> &'a [PathUri] {
         req.turn_environment.workspace_roots()
+    }
+
+    fn command_cwd(&self, req: &ShellRequest) -> Option<AbsolutePathBuf> {
+        Some(req.cwd.clone())
+    }
+
+    fn local_search_path<'a>(&self, req: &'a ShellRequest) -> Option<&'a str> {
+        (!req.turn_environment.environment.is_remote())
+            .then(|| req.env.get("PATH").map(String::as_str))
+            .flatten()
     }
 
     fn network_approval_spec(
@@ -221,9 +248,10 @@ impl ToolRuntime<ShellRequest, ExecToolCallOutput> for ShellRuntime {
         ctx: &ToolCtx,
     ) -> Option<NetworkApprovalSpec> {
         let file_system_sandbox_policy = ctx.turn.file_system_sandbox_policy();
-        let sandbox_permissions = sandbox_permissions_preserving_denied_reads(
+        let sandbox_permissions = sandbox_permissions_for_session(
             req.sandbox_permissions,
             &file_system_sandbox_policy,
+            &ctx.session,
         );
         let network =
             managed_network_for_sandbox_permissions(req.network.as_ref(), sandbox_permissions)?;
@@ -251,6 +279,15 @@ impl ToolRuntime<ShellRequest, ExecToolCallOutput> for ShellRuntime {
         attempt: &SandboxAttempt<'_>,
         ctx: &ToolCtx,
     ) -> Result<ExecToolCallOutput, ToolError> {
+        // This runtime only spawns processes on the Codex host. For a remote
+        // environment that would run the command on the wrong machine, outside
+        // the remote executor, so refuse instead.
+        if req.turn_environment.environment.is_remote() {
+            return Err(ToolError::Rejected(format!(
+                "{} runs commands on the Codex host only, so it can't run in the remote environment `{}`",
+                ctx.tool_name.name, req.turn_environment.environment_id
+            )));
+        }
         let session_shell = ctx.session.user_shell();
         let shell = req
             .turn_environment
@@ -259,9 +296,10 @@ impl ToolRuntime<ShellRequest, ExecToolCallOutput> for ShellRuntime {
             .unwrap_or(session_shell.as_ref());
         let shell_snapshot_location = req.turn_environment.shell_snapshot(&req.cwd);
         let (file_system_sandbox_policy, _) = attempt.permissions.to_runtime_permissions();
-        let sandbox_permissions = sandbox_permissions_preserving_denied_reads(
+        let sandbox_permissions = sandbox_permissions_for_session(
             req.sandbox_permissions,
             &file_system_sandbox_policy,
+            &ctx.session,
         );
         let managed_network =
             managed_network_for_sandbox_permissions(req.network.as_ref(), sandbox_permissions);

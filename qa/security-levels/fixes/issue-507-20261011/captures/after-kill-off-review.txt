@@ -1,0 +1,73 @@
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     loading   /model to change                   │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/507/after/ws │
+╰─────────────────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/.codex-work/workers-20261002/agg-dec-c/runs/507/after/ws · Corbanu Terminal · TPS: -- tok/s
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     glm-5.3-flash   /model to change             │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/507/after/ws │
+╰─────────────────────────────────────────────────────────╯
+
+
+› Run exactly this shell command once, unchanged, and wait for it to finish: sleep 45 && touch ran-after-kill-switch.txt && echo FINISHED
+
+
+⚠ Stopped: the security kill switch was turned on, so Corbanu ended this reply and the commands it was running, and sends nothing to the model until the switch
+  is turned off. Messages from other agents wait until then. To turn it off, open /security, press g, choose "Turn the kill switch off" and confirm.
+
+■ Turn stopped by the security kill switch.
+
+
+› What is 2+2?
+
+
+■ Not sent: the security kill switch is on, so Corbanu sends nothing to the model, and this message was not kept. To turn it off, open /security, press g,
+choose "Turn the kill switch off" and confirm.
+
+Grants and kill switch
+Core's level: Aggressive · Kill switch: on
+
+Turn the kill switch off?
+Turns are sent to the model again, in Codex and Claude panes. Messages from other agents that waited reach Codex panes with their next turn (turning it off does
+not start one); tasks held for Claude panes are sent now. Protected actions can be approved again and grants can be issued. Revoked grants and approvals do not
+come back; stopped replies and commands do not restart.
+The level stays Aggressive: turning the kill switch off never lowers it.
+
+  Back (the kill switch stays on)
+› Turn the kill switch off
+
+↑/↓ choose · enter confirm · esc cancel, nothing changes
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

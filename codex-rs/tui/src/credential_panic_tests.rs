@@ -63,26 +63,42 @@ fn production_panic_hook_does_not_log_scoped_credentials() {
             .expect("encrypted synthetic credential");
         if order == "vault-first" {
             vault
-                .with_scoped_credential(&credential, 110, &Default::default(), |_| Ok(()))
+                .with_scoped_credential(
+                    &credential,
+                    /*now_unix_seconds*/ 110,
+                    &Default::default(),
+                    |_| Ok(()),
+                )
                 .expect("initialize vault hook first");
         }
         color_eyre::install().expect("production previous hook");
-        tracing_subscriber::fmt()
-            .with_ansi(false)
-            .with_writer(std::io::stderr)
-            .try_init()
-            .expect("production log capture");
+        codex_log_guard::guard(
+            tracing_subscriber::fmt()
+                .with_ansi(false)
+                .with_writer(std::io::stderr)
+                .finish(),
+        )
+        .try_init()
+        .expect("production log capture");
         super::install_panic_hook();
         super::tui::set_panic_hook();
         let error = vault
-            .with_scoped_credential(&credential, 110, &Default::default(), |secret| {
-                panic!("callback secret: {secret}")
-            })
+            .with_scoped_credential(
+                &credential,
+                /*now_unix_seconds*/ 110,
+                &Default::default(),
+                |secret| panic!("callback secret: {secret}"),
+            )
             .expect_err("contained callback panic");
         assert_eq!(error, ScopedCredentialError::CallbackPanicked);
         assert!(!codex_vault::scoped_credential_callback_active());
         vault
-            .with_scoped_credential(&credential, 110, &Default::default(), |_| Ok(()))
+            .with_scoped_credential(
+                &credential,
+                /*now_unix_seconds*/ 110,
+                &Default::default(),
+                |_| Ok(()),
+            )
             .expect("recovery after panic");
         assert!(std::panic::catch_unwind(|| panic!("ordinary-tui-panic-visible")).is_err());
         writeln!(std::io::stdout(), "SCOPED_PANIC_RECOVERED").expect("subprocess checkpoint");

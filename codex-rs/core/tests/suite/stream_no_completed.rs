@@ -43,6 +43,7 @@ async fn retries_on_early_close() {
     // environment variables.
 
     let model_provider = ModelProviderInfo {
+        account: None,
         name: "openai".into(),
         base_url: Some(format!("{}/v1", server.uri())),
         // Environment variable that should exist in the test environment.
@@ -70,6 +71,7 @@ async fn retries_on_early_close() {
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
+        billing: None,
     };
 
     let TestCodex { codex, .. } = test_codex()

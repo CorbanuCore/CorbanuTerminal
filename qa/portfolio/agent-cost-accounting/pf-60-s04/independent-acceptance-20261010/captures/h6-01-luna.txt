@@ -1,0 +1,50 @@
+╭────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                  │
+│                                                │
+│ model:     gpt-5.6-luna low   /model to change │
+│ directory: ~/corbanu-rtx/pf60s04-ia/work/ws    │
+╰────────────────────────────────────────────────╯
+
+
+› Reply with the single word LUNA.
+
+
+⚠ Code Mode is unavailable because failed to spawn code-mode host <rtx-home>/corbanu-rtx/pf60s04-ia/bin/codex-code-mode-host: host executable was not found.
+  Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.
+
+• LUNA
+
+
+› Explain this codebase
+
+  GPT-5.6-Luna low · ~/corbanu-rtx/pf60s04-ia/work/ws · Corbanu Terminal · TPS: 4.9 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

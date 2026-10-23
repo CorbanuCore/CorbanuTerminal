@@ -1,0 +1,4 @@
+after typing in the Troll pane:
+codex-task.txt
+notes.txt
+pf507-codex-task

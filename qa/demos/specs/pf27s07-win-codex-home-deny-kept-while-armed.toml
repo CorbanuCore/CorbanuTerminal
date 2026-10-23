@@ -1,0 +1,107 @@
+# PF-27-S07 Windows gate: while a protected session (flag on) holds CODEX_HOME's lock, a flag-off
+# process on the same CODEX_HOME leaves the deny in place. Normal session.
+id = "pf27s07-win-codex-home-deny-kept-while-armed"
+feature = "Windows: a flag-off process does not remove the CODEX_HOME deny while a protected session is running"
+expected = "The agent command adds the deny; a flag-off `corbanu features list` on the same CODEX_HOME runs while this session holds the lock, and the deny is still there."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[windows]
+sandbox = "elevated"
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+isolated_credential_broker = true
+secretless_agent_launch = true
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"sddl.ps1" = '''
+# Shows CODEX_HOME's DACL entries for the elevated sandbox's group (CodexSandboxUsers).
+$h = $env:CODEX_HOME
+$g = (New-Object Security.Principal.NTAccount 'CodexSandboxUsers').Translate([Security.Principal.SecurityIdentifier]).Value
+"group CodexSandboxUsers = $g"
+$flag = (Select-String -Path "$h\config.toml" '^secretless_agent_launch\s*=\s*(\w+)').Matches[0].Groups[1].Value
+"this session: secretless_agent_launch = $flag"
+if (Test-Path before.txt) { Get-Content before.txt }
+function denies($p) { $s = (Get-Acl -LiteralPath $p).Sddl; @([regex]::Matches($s, '\(D;[^)]*;' + $g + '\)') | ForEach-Object { $_.Value }) }
+$d = denies $h
+"CODEX_HOME deny entries for CodexSandboxUsers now: " + $(if ($d.Count) { $d -join ' ' } else { 'none' })
+$f = denies "$h\config.toml"
+"config.toml inherited deny entries now: " + $(if ($f.Count) { $f -join ' ' } else { 'none' })
+'sddl check done'
+'''
+
+"flagoff.ps1" = '''
+# Runs the candidate corbanu (path written by the setup step) on this CODEX_HOME with secretless_agent_launch off.
+$exe = (Get-Content corbanu-path.txt -Raw).Trim()
+"flag-off process on the same CODEX_HOME: corbanu -c features.secretless_agent_launch=false features list"
+& $exe -c features.secretless_agent_launch=false features list | Select-String 'secretless_agent_launch'
+"exit $LASTEXITCODE"
+'''
+
+[[steps]]
+wait = "Do you trust the contents of this directory"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+run = "cygpath -w \"$CORBANU_CANDIDATE\" > corbanu-path.txt"
+
+[[steps]]
+type = "Run the shell command: whoami. Run it exactly once and show me its raw output, then stop."
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "(?i)codexsandboxoffline"
+timeout = 240
+compress = 3
+
+[[steps]]
+wait = "\\A(?![\\s\\S]*esc to interrupt)"
+timeout = 120
+compress = 2
+
+[[steps]]
+type = "!powershell -NoProfile -ExecutionPolicy Bypass -File flagoff.ps1"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "exit \\d"
+timeout = 60
+
+[[steps]]
+type = "!powershell -NoProfile -ExecutionPolicy Bypass -File sddl.ps1"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "sddl check done"
+timeout = 60
+
+[[steps]]
+pause = 6.0

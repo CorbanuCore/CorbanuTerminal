@@ -1,0 +1,99 @@
+# Issue #507 (from #445, AGG-22): turning the kill switch on stops the work in progress.
+id = "issue507-kill-switch-stops-running-work"
+feature = "Turning the kill switch on stops the reply in progress and its running command"
+expected = "A 40-second command is running; the person turns the kill switch on in /security; the turn stops at once with a message saying why and how to turn it off, and the command never finishes."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Aggressive\\?"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active now in this session"
+[[steps]]
+key = "Escape"
+
+[[steps]]
+type = "Run exactly this shell command once, unchanged, and wait for it: sleep 40 && echo FINISHED"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "sleep 40"
+timeout = 120
+compress = 2
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Security level"
+[[steps]]
+key = "g"
+[[steps]]
+wait = "Grants and kill switch"
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Turn the kill switch on\\?"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Kill switch on"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "esc back to the levels"
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "Security level"
+[[steps]]
+key = "Escape"
+[[steps]]
+pause = 0.5
+[[steps]]
+wait = "Turn stopped by the security kill switch"
+timeout = 30
+[[steps]]
+pause = 4.0

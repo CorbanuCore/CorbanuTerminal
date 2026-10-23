@@ -1,0 +1,8 @@
+{
+  "cause": "source-without-edge",
+  "thread": "01a05a43-fc00-7c33-9e5c-9b67c03caab2",
+  "source": "{\"subagent\": {\"thread_spawn\": {\"parent_thread_id\": \"01a054e6-b180-7ca3-8abb-c8c8ea6ec539\", \"depth\": 1}}}",
+  "edge_parents": [],
+  "inspect_pid": 88410,
+  "read_at_monotonic_ns": 740266128649208
+}

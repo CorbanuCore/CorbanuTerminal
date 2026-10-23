@@ -1,0 +1,17 @@
+{"t": 1791780334.929, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780335.547, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDOTHERPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780336.181, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780336.792, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDPROCESSHELPER", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780337.408, "ev": "aws-sts", "action": "AssumeRole", "role": "arn:aws:iam::222222222222:role/chain", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "sts", "session_token": false}}
+{"t": 1791780337.408, "ev": "aws-sts", "action": "AssumeRole", "role": "arn:aws:iam::222222222222:role/chain", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "sts", "session_token": false}}
+{"t": 1791780337.42, "ev": "aws-sts", "action": "AssumeRole", "role": "arn:aws:iam::222222222222:role/chain", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "sts", "session_token": false}}
+{"t": 1791780337.429, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "ASIAROLECHAIN", "region": "us-west-2", "service": "bedrock-mantle", "session_token": true}, "model": "openai.gpt-5.4"}
+{"t": 1791780338.043, "ev": "aws-sso", "role": "Dev", "account": "333333333333", "bearer": true}
+{"t": 1791780338.048, "ev": "aws-sso", "role": "Dev", "account": "333333333333", "bearer": true}
+{"t": 1791780338.061, "ev": "aws-sso", "role": "Dev", "account": "333333333333", "bearer": true}
+{"t": 1791780338.073, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "ASIASSOPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": true}, "model": "openai.gpt-5.4"}
+{"t": 1791780338.343, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "bearer", "canary": "envbearer"}, "model": "openai.gpt-5.4"}
+{"t": 1791780338.703, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDENVDECOY", "region": "us-west-2", "service": "bedrock-mantle", "session_token": true}, "model": "openai.gpt-5.4"}
+{"t": 1791780339.041, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "bearer", "canary": "envbearer"}, "model": "openai.gpt-5.4"}
+{"t": 1791780340.285, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDNOREGION", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780344.563, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDOTHERPROFILE", "region": "ap-northeast-1", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}

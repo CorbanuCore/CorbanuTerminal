@@ -1,0 +1,31 @@
+# #81: a pin on retired Claude Opus 4.8 moves to Opus 5 Plan with a notice.
+id = "issue81-retired-opus-4-8-pin"
+feature = "#81: a retired claude-opus-4-8-plan pin keeps working"
+expected = "Started with claude-opus-4-8-plan on claude-plan, the session shows a notice that the model is retired, runs on claude-opus-5-plan, and a pong turn succeeds instead of failing every turn."
+model = "claude-opus-4-8-plan"
+provider = "claude-plan"
+cols = 140
+rows = 40
+config = """
+model = "claude-opus-4-8-plan"
+model_provider = "claude-plan"
+"""
+
+[credentials]
+CLAUDE_CODE_OAUTH_TOKEN = "claude-plan-test-token"
+
+[[steps]]
+wait = "has been retired"
+timeout = 60
+[[steps]]
+pause = 3.0
+[[steps]]
+type = "Reply with exactly: pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^• pong"
+timeout = 120
+compress = 2
+[[steps]]
+pause = 3.0

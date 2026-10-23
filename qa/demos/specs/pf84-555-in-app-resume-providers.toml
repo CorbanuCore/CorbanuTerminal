@@ -1,0 +1,75 @@
+# PF-84 #555: in-app /resume: Esc returns to the session; a missing account points to /providers.
+# Record with
+#   DEMO_CANDIDATE=<corbanu> python3 scripts/demo_video.py record \
+#     qa/demos/specs/pf84-555-in-app-resume-providers.toml \
+#     --bin qa/demos/wrappers/pf84-555-in-app-resume-providers.sh --sprint ISSUE-555-RESUME --publish
+id = "pf84-555-in-app-resume-providers"
+feature = "PF-84 #555: in-app /resume names a missing account with the /providers recovery"
+expected = "In a session on personal, Esc in /resume returns to the session; /resume of the conversation whose account work was removed names work and says to add it or pick another account in /providers."
+model = "glm-5.3-flash"
+provider = "zai"
+rows = 44
+config = """
+suppress_unstable_features_warning = true
+[features]
+named_accounts = true
+[provider_accounts]
+zai = "personal"
+"""
+
+[credentials]
+PF84_ACCOUNT_SEED = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Reply with the single word ping"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*ping\\W*$"
+timeout = 120
+compress = 3
+[[steps]]
+run = "sleep 8"
+[[steps]]
+type = "/exit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Now: corbanu   \\(account work was removed"
+[[steps]]
+pause = 2.0
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/resume"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Resume a previous session"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Escape"
+[[steps]]
+pause = 1.5
+[[steps]]
+type = "/resume"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Resume a previous session"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "pick another account in\\s+`/providers`"
+[[steps]]
+pause = 4.0

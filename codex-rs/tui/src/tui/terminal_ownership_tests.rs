@@ -1,3 +1,7 @@
+// Clippy's allow-expect-in-tests does not cover helpers in a
+// `cfg(all(test, unix))` module.
+#![allow(clippy::expect_used)]
+
 use std::fs::File;
 use std::io::Read;
 use std::mem::MaybeUninit;

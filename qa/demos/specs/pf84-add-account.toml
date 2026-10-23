@@ -1,0 +1,64 @@
+# PF-84-S04: /providers adds a second Z.AI account. The name is checked, the
+# key goes into masked entry, and the list then shows one row per account with
+# a salted fingerprint. Synthetic key only. Record with
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-add-account.toml \
+#     --bin <candidate> --sprint PF-84-S04 --publish
+id = "pf84-add-account"
+feature = "PF-84-S04: add a named account in /providers"
+expected = "Z.AI gains account work: the key is masked while typed, and /providers lists 'Z.AI · default' and 'Z.AI · work' with a fingerprint."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "read-only"
+[features]
+named_accounts = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/providers"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Configure providers"
+[[steps]]
+key = "Down"
+repeat = 6
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Add another account"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Account name"
+[[steps]]
+type = "work"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "masked"
+[[steps]]
+type = "pf84-s04-demo-fake-zai-key-0003"
+verify = false
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Z\\.AI · work"
+[[steps]]
+pause = 4.0

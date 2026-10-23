@@ -1,0 +1,3 @@
+$ grep -il anthropic logs/*.err logs/*.jsonl   (excluding logs/aborted/)
+scanned: d1.err d1.jsonl d2.err d2.jsonl dk.err dk.jsonl sk-after.err sk-after.jsonl sk-predel.err sk-predel.jsonl sk-predel2.err sk-predel2.jsonl sk0.err sk0.jsonl sk58s.err sk58s.jsonl sk6d.err sk6d.jsonl sk95d.err sk95d.jsonl 
+files matching: 0

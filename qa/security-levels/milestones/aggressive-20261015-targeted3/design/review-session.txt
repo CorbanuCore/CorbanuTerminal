@@ -1,0 +1,6 @@
+start 2026-10-15T21:20:34Z
+exit=0
+end 2026-10-15T21:27:28Z
+"thread_id":"01a14170-3154-7860-9a0b-3bc1fdbdf699"
+binary sha256: f141adf3e8fb172b8dc99c82ba8a6a3bab98cde6d4fe6240f64d5095d584c5e5  /Users/Neo/.local/bin/corbanu
+-s read-only, claude-opus-5-5-plan on claude-plan, reasoning high, -C review-packet

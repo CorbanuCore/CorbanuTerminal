@@ -24,16 +24,3 @@ pub use children::TrustedChildRun;
 mod root;
 #[cfg(target_os = "linux")]
 pub use root::RootChildRun;
-
-#[cfg(all(target_os = "linux", feature = "synthetic-fixture"))]
-mod launch;
-#[cfg(all(target_os = "linux", feature = "synthetic-fixture"))]
-pub use launch::SyntheticChildIdentity;
-#[cfg(all(target_os = "linux", feature = "synthetic-fixture"))]
-pub use launch::SyntheticChildRole;
-#[cfg(all(target_os = "linux", feature = "synthetic-fixture"))]
-pub use launch::SyntheticLaunchRecipe;
-#[cfg(all(target_os = "linux", feature = "synthetic-fixture"))]
-pub use launch::SyntheticManifestInspection;
-#[cfg(all(target_os = "linux", feature = "synthetic-fixture"))]
-pub use launch::SyntheticSealedImage;

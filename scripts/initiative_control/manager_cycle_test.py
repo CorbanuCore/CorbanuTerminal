@@ -1,0 +1,670 @@
+"""Synthetic regression coverage for terminal-history briefing compaction."""
+
+import copy
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from coordinator import Coordinator, Rejected, TERMINAL, digest, encoded
+import fable_launcher as f
+import manager_cycle as m
+from test_coordinator import seed
+
+
+class BriefingSizeTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.context = self.root / "context.json"
+        f.write_json(self.context, {"observed_at": "2026-09-14T00:00:00Z",
+                                  "context": {"scope": "synthetic offline test"}})
+        self.c = Coordinator(self.root / "state")
+        self.c.initialize(*seed())
+        self.c.set_enabled(True, {"source": "fixture"})
+        self.c.event({"id": "tick", "text": "pending work"})
+
+    def ref(self, body):
+        with self.c.connection() as db:
+            return self.c._reference(db, body)
+
+    def action(self, key="prior", status="accepted", size=1000):
+        action = dict(id=key, kind="repair", workstream="delivery", sprint="PF-80-S01",
+                      status=status, sequence=[0, 0], rationale="fixture",
+                      inputs={"allocation": "historical", "task": "x" * size},
+                      allocation_digest="a" * 64)
+        for field in ("dispatch_receipt", "ack_receipt", "result", "verification"):
+            action[field] = self.ref({"kind": field, "text": key * size})
+        return action
+
+    def packet(self, actions, recent=None):
+        packet = self.c.begin_manager()
+        packet["actions"] = {a["id"]: a for a in actions}
+        packet["last_three_actions"]["delivery"] = actions[-3:] if recent is None else recent
+        return packet
+
+    def brief(self, packet):
+        return json.loads(m.briefing(self.c, packet, self.context))
+
+    def test_terminal_statuses_keep_identity_and_digest_omissions(self):
+        actions = [self.action(status, status) for status in sorted(TERMINAL)]
+        packet = self.packet(actions)
+        before = copy.deepcopy(packet)
+        brief = self.brief(packet)
+        for action in actions:
+            compact = brief["actions"][action["id"]]
+            for field in ("id", "kind", "workstream", "sprint", "status",
+                          "rationale", "allocation_digest"):
+                self.assertEqual(action[field], compact[field])
+            self.assertEqual("historical", compact["allocation"])
+            self.assertNotIn("inputs", compact)
+            omission = next(o for o in brief["evidence_omissions"] if o["id"] == action["id"])
+            self.assertEqual(digest(action["inputs"]), omission["inputs_digest"])
+            for field in ("dispatch_receipt", "ack_receipt", "result", "verification"):
+                key = action[field]["evidence_digest"]
+                self.assertEqual(key, compact[field]["evidence_digest"])
+                if field in {"result", "verification"}:
+                    self.assertEqual(action[field], compact[field])
+                else:
+                    self.assertNotIn("preview", compact[field])
+                self.assertNotIn(key, brief["original_evidence"])
+                self.assertIn(key, omission["evidence_digests"])
+        self.assertEqual(before, packet)
+        self.assertEqual(m.briefing(self.c, packet, self.context),
+                         m.briefing(self.c, packet, self.context))
+
+    def test_recent_transition_keeps_inputs_and_recursive_originals(self):
+        for status, event in (
+            ("accepted", {"id": "verified:prior", "accepted": True}),
+            ("failed", {"id": "verified:prior", "accepted": False}),
+            ("failed", {"id": "dispatch-reconciled:prior:23"}),
+            ("accepted", {"id": "owner_complete:23", "action": "prior"}),
+            ("accepted", {"id": "owner_successor:23", "action": "prior"}),
+            ("cancelled", {"id": "owner_allocation:23", "allocation": "historical"}),
+            ("accepted", {"id": "status-update", "action": "prior", "status": "accepted"}),
+        ):
+            with self.subTest(status=status, event=event):
+                action = self.action(status=status)
+                nested = self.ref({"full": "z" * 2000})
+                action["result"] = self.ref({"nested": nested})
+                packet = {"events": [{"id": event["id"], **self.ref(event)}],
+                          "workstreams": dict.fromkeys(("delivery", "accounting", "privacy"), {}),
+                          "actions": {"prior": action}, "allocations": {},
+                          "last_three_actions": {"delivery": [action]}}
+                brief = self.brief(packet)
+                self.assertEqual(action["inputs"], brief["actions"]["prior"]["inputs"])
+                for field in ("dispatch_receipt", "ack_receipt", "result", "verification"):
+                    key = action[field]["evidence_digest"]
+                    self.assertEqual(self.c.read_evidence(key), brief["original_evidence"][key])
+                self.assertEqual({"full": "z" * 2000},
+                                 brief["original_evidence"][nested["evidence_digest"]])
+                self.assertEqual([], brief["evidence_omissions"])
+
+    def test_outcome_previews_survive_after_transition_batch_is_consumed(self):
+        fields = ("result", "verification", "owner_failure", "owner_cancellation")
+        for status in sorted(TERMINAL):
+            with self.subTest(status=status):
+                action = self.action(status=status)
+                for field in fields:
+                    action[field] = self.ref({"reason": field + ":" + "理由" * 1000})
+                event = {"id": "transition", "action": "prior", "status": status}
+                packet = {"events": [{"id": event["id"], **self.ref(event)}],
+                          "workstreams": dict.fromkeys(("delivery", "accounting", "privacy"), {}),
+                          "actions": {"prior": action}, "allocations": {},
+                          "last_three_actions": {"delivery": [action]}}
+                transition = self.brief(packet)
+                for field in fields:
+                    self.assertNotIn("preview", transition["actions"]["prior"][field])
+                    key = action[field]["evidence_digest"]
+                    self.assertEqual(self.c.read_evidence(key), transition["original_evidence"][key])
+
+                # A later claim contains only an unrelated event; the transition is consumed.
+                tick = {"id": "next-tick", "text": "pending work"}
+                packet["events"] = [{"id": tick["id"], **self.ref(tick)}]
+                before = copy.deepcopy(packet)
+                forbidden = {action[field]["evidence_digest"] for field in fields}
+                original_read = self.c.read_evidence
+
+                def read(key):
+                    self.assertNotIn(key, forbidden)
+                    return original_read(key)
+
+                with patch.object(self.c, "read_evidence", read):
+                    brief = self.brief(packet)
+                for field in fields:
+                    self.assertEqual(action[field], brief["actions"]["prior"][field])
+                    self.assertEqual(400, len(brief["actions"]["prior"][field]["preview"]))
+                    key = action[field]["evidence_digest"]
+                    self.assertNotIn(key, brief["original_evidence"])
+                    self.assertIn(key, brief["evidence_omissions"][0]["evidence_digests"])
+                self.assertEqual(before, packet)
+
+    def test_compact_preview_byte_growth_is_bounded(self):
+        packet = self.large_packet()
+        fields = ("result", "verification", "owner_failure", "owner_cancellation")
+        for action in packet["actions"].values():
+            for field in fields:
+                action[field] = self.ref({"reason": field + ":" + "理由" * 1000})
+        raw = m.briefing(self.c, packet, self.context)
+        brief = json.loads(raw)
+        without_previews = copy.deepcopy(brief)
+        count = 0
+        for action in without_previews["actions"].values():
+            for field in fields:
+                preview = action[field].pop("preview")
+                self.assertEqual(400, len(preview))
+                count += 1
+        growth = len(raw) - len(encoded(without_previews).encode())
+        self.assertGreater(growth, 0)
+        # Six bytes per character covers JSON escapes, plus the field syntax.
+        self.assertLessEqual(growth, count * (400 * 6 + 32))
+        self.assertLess(len(raw), f.BRIEF_LIMIT)
+        for action in packet["actions"].values():
+            for field in fields:
+                self.assertNotIn(action[field]["evidence_digest"], brief["original_evidence"])
+
+    def test_changed_action_outside_last_three_stays_compact_but_event_is_full(self):
+        action = self.action()
+        event = {"id": "verified:prior", "accepted": True, "evidence": action["verification"]}
+        self.c.event(event)
+        packet = self.packet([action], recent=[])
+        brief = self.brief(packet)
+        self.assertNotIn("inputs", brief["actions"]["prior"])
+        self.assertEqual(event, brief["original_evidence"][digest(event)])
+        key = action["verification"]["evidence_digest"]
+        self.assertEqual(self.c.read_evidence(key), brief["original_evidence"][key])
+        omission = brief["evidence_omissions"][0]
+        self.assertNotIn(key, omission["evidence_digests"])
+        self.assertNotIn(action["dispatch_receipt"]["evidence_digest"], brief["original_evidence"])
+
+    def test_unrelated_nested_and_prefix_events_do_not_establish_transition(self):
+        action = self.action(status="failed")
+        self.c.event({"id": "observation", "action": "prior",
+                      "nested": {"id": "verified:prior", "action": "prior", "status": "failed"}})
+        self.c.event({"id": "dispatch-reconciled:prior:other:23"})
+        brief = self.brief(self.packet([action]))
+        self.assertNotIn("inputs", brief["actions"]["prior"])
+        self.assertNotIn(action["result"]["evidence_digest"], brief["original_evidence"])
+
+    def test_nonterminal_inputs_and_owner_proofs_are_preserved(self):
+        action = self.action(status="running")
+        nested = self.ref({"full": "body"})
+        action["inputs"]["nested"] = nested
+        terminal = self.action("closed")
+        terminal["owner_failure"] = self.ref({"proof": nested})
+        brief = self.brief(self.packet([action, terminal]))
+        self.assertEqual(action["inputs"], brief["actions"]["prior"]["inputs"])
+        for field in ("dispatch_receipt", "ack_receipt", "result", "verification"):
+            key = action[field]["evidence_digest"]
+            self.assertEqual(self.c.read_evidence(key), brief["original_evidence"][key])
+        self.assertEqual(self.c.read_evidence(nested["evidence_digest"]),
+                         brief["original_evidence"][nested["evidence_digest"]])
+        self.assertEqual(terminal["owner_failure"], brief["actions"]["closed"]["owner_failure"])
+        key = terminal["owner_failure"]["evidence_digest"]
+        self.assertNotIn(key, brief["original_evidence"])
+        self.assertIn(key, brief["evidence_omissions"][0]["evidence_digests"])
+
+    def test_consumed_allocations_stay_compact_without_losing_active_inputs(self):
+        action = self.action(status="running")
+        packet = self.packet([action])
+        allocation = packet["allocations"]["bootstrap"]
+        allocation["inputs"] = {"consumed": True, "payload": "x" * 4000,
+                                "reference": self.ref({"full": "allocation evidence"})}
+        action["inputs"] = {"allocation": "bootstrap", **allocation["inputs"]}
+        action["allocation_digest"] = digest(allocation)
+        before = copy.deepcopy(packet)
+        brief = self.brief(packet)
+        self.assertEqual({"consumed": True}, brief["allocations"]["bootstrap"]["inputs"])
+        self.assertEqual(action["inputs"], brief["actions"]["prior"]["inputs"])
+        self.assertNotIn("inputs_from_allocation", brief["actions"]["prior"])
+        omission = brief["evidence_omissions"][0]
+        self.assertEqual(("allocations", "bootstrap"),
+                         (omission["source"], omission["id"]))
+        self.assertEqual(digest(allocation["inputs"]), omission["inputs_digest"])
+        self.assertNotIn("evidence_digests", omission)  # Still needed by the running action.
+        self.assertEqual(before, packet)
+
+    def test_minimal_consumed_stubs_collapse_into_a_digest_index(self):
+        # A stub holding only its consumed marker and the frozen original's
+        # digest carries no decision content, so it must not cost a full object.
+        packet = self.packet([])
+        stubs = {}
+        for index in range(20):
+            key = "spent-%02d" % index
+            stub = copy.deepcopy(packet["allocations"]["bootstrap"])
+            stub["inputs"] = {"consumed": True, "original_digest": "%064x" % index}
+            stubs[key] = stub
+        packet["allocations"].update(stubs)
+        packet["actions"]["named"] = {"id": "named", "workstream": "delivery", "status": "accepted",
+                                      "sequence": [0, 0], "inputs": {"allocation": "spent-03"}}
+        brief = self.brief(packet)
+        index = {key: stub["inputs"]["original_digest"] for key, stub in stubs.items()}
+        for key in stubs:
+            self.assertNotIn(key, brief["allocations"])
+            self.assertFalse([e for e in brief["evidence_omissions"] if e["id"] == key])
+        # Counted and recoverable, never silently dropped: the count, the digest of
+        # the full id -> original digest index, and every entry a supplied action names.
+        self.assertEqual({"count": 20, "index_digest": digest(index),
+                          "named": {"spent-03": "%064x" % 3}}, brief["consumed_allocations"])
+        # The summary does not grow with history.
+        self.assertLess(len(encoded(brief["consumed_allocations"]).encode()), 300)
+        # Live allocations are untouched.
+        self.assertIn("bootstrap", brief["allocations"])
+
+    def test_richer_consumed_stub_still_reports_an_omission(self):
+        # Anything beyond the bare marker may hide content, so it keeps the
+        # existing omission entry rather than collapsing silently.
+        packet = self.packet([])
+        allocation = packet["allocations"]["bootstrap"]
+        allocation["inputs"] = {"consumed": True, "original_digest": "a" * 64, "task": "x" * 500}
+        brief = self.brief(packet)
+        self.assertEqual({"consumed": True}, brief["allocations"]["bootstrap"]["inputs"])
+        self.assertEqual(0, brief["consumed_allocations"]["count"])
+        self.assertTrue([e for e in brief["evidence_omissions"] if e["id"] == "bootstrap"])
+
+    def test_consumed_requires_boolean_true_and_omits_only_unneeded_references(self):
+        packet = self.packet([])
+        allocation = packet["allocations"]["bootstrap"]
+        ref = self.ref({"full": "omitted allocation evidence"})
+        for value in (False, 1, "true", True):
+            with self.subTest(value=value):
+                allocation["inputs"] = {"consumed": value, "ref": ref}
+                brief = self.brief(packet)
+                if value is True:
+                    self.assertEqual({"consumed": True}, brief["allocations"]["bootstrap"]["inputs"])
+                    self.assertEqual([ref["evidence_digest"]],
+                                     brief["evidence_omissions"][0]["evidence_digests"])
+                else:
+                    self.assertEqual(allocation, brief["allocations"]["bootstrap"])
+                    self.assertEqual([], brief["evidence_omissions"])
+
+    def test_unexpanded_roots_are_recorded_without_loading_originals(self):
+        action = self.action()
+        missing = {"evidence_digest": "b" * 64, "bytes": 1000}
+        action["result"] = missing
+        action["inputs"]["nested"] = {"evidence_digest": "c" * 64}
+        packet = self.packet([action])
+        original_read = self.c.read_evidence
+
+        def read(key):
+            self.assertNotIn(key, {"b" * 64, "c" * 64})
+            return original_read(key)
+
+        with patch.object(self.c, "read_evidence", read):
+            brief = self.brief(packet)
+        for key in ("b" * 64, "c" * 64):
+            self.assertIn(key, brief["evidence_omissions"][0]["evidence_digests"])
+
+    def test_retained_missing_corrupt_and_wrong_size_evidence_still_holds(self):
+        action = self.action(status="running")
+        packet = self.packet([action])
+        with patch.object(self.c, "read_evidence", return_value={"corrupt": True}):
+            with self.assertRaisesRegex(f.LaunchError, "evidence_digest_mismatch"):
+                self.brief(packet)
+        action["result"] = {"evidence_digest": "d" * 64}
+        with self.assertRaisesRegex(Rejected, "unknown evidence"):
+            self.brief(packet)
+        action["result"] = {**action["ack_receipt"], "bytes": 1}
+        with self.assertRaisesRegex(f.LaunchError, "evidence_size_mismatch"):
+            self.brief(packet)
+
+    def test_oversized_event_still_holds_without_truncation(self):
+        # Oversized relative to the live ceiling, not a number that silently
+        # becomes "small" when the ceiling moves.
+        event = {"id": "large", "text": "z" * (f.BRIEF_LIMIT + 4464)}
+        self.c.event(event)
+        with self.assertRaisesRegex(Rejected, "record exceeds JSON byte limit"):
+            self.brief(self.packet([]))
+
+    def test_fifo_restriction_recomputes_recent_transition_from_selected_events(self):
+        action = self.action(size=18000)
+        # Restriction is now reached only by mandatory event bodies: optional
+        # expansion is skipped and reported instead of forcing an event to be
+        # deferred. The padding puts the cost where the FIFO walk can reach it.
+        self.c.event({"id": "verified:prior", "accepted": True, "pad": "z" * 60000})
+        packet = self.packet([action])
+        selected, raw = m.fit_briefing(self.c, packet, self.context)
+        brief = json.loads(raw)
+        self.assertEqual({"selected": 1, "deferred": 1}, brief["event_batch"])
+        self.assertEqual(["tick"], [event["id"] for event in selected["events"]])
+        self.assertNotIn("inputs", brief["actions"]["prior"])
+        self.assertNotIn(action["result"]["evidence_digest"], brief["original_evidence"])
+        with self.c.connection() as db:
+            self.assertEqual(2, db.execute("SELECT COUNT(*) FROM events WHERE consumed IS NULL").fetchone()[0])
+
+    def large_packet(self):
+        actions = [self.action("closed-" + str(i), size=2000) for i in range(3)]
+        packet = self.packet(actions)
+        packet["allocations"]["bootstrap"]["inputs"] = {
+            "consumed": True, "task": "x" * 20000,
+            "proof": self.ref({"full": "y" * 20000})}
+        return packet
+
+    def test_one_event_with_large_terminal_history_fits_unchanged_limit(self):
+        packet = self.large_packet()
+        raw = m.briefing(self.c, packet, self.context)
+        brief = json.loads(raw)
+        # The contract is 65536. A temporary 10 KiB grant on 2026-09-15 was
+        # handed back the same day once the structural cost was removed, so any
+        # nonzero grant means we are living on an allowance again.
+        self.assertEqual(0, f.BRIEF_GRANT)
+        self.assertEqual(65536, f.BRIEF_LIMIT)
+        # The standing reserve exists to be drawn on deliberately, and never
+        # beyond what Travis actually granted.
+        self.assertEqual(15 * 1024, f.BRIEF_RESERVE)
+        self.assertLessEqual(f.BRIEF_GRANT, f.BRIEF_RESERVE)
+        self.assertLess(len(raw), f.BRIEF_LIMIT)
+        self.assertEqual(1, len(brief["events"]))
+        self.assertEqual(4, len(brief["evidence_omissions"]))
+
+    def test_optional_expansion_beyond_budget_is_reported_not_dropped(self):
+        # The 2026-09-16 block: the overflow came from bodies referenced by live
+        # (non-terminal) actions, which no event-prefix walk can reach.
+        actions = [self.action("live-" + str(i), status="accepted", size=6000)
+                   for i in range(6)]
+        for action in actions:
+            action["status"] = "dispatched"
+        packet = self.packet(actions, recent=actions[-3:])
+        raw = m.briefing(self.c, packet, self.context)
+        brief = json.loads(raw)
+        self.assertLess(len(raw), f.BRIEF_LIMIT)
+        budget = [e for e in brief["evidence_omissions"] if e["id"] == "evidence_budget"]
+        self.assertEqual(1, len(budget), brief["evidence_omissions"])
+        entry = budget[0]
+        self.assertEqual(("briefing", "briefing_byte_limit"), (entry["source"], entry["reason"]))
+        self.assertTrue(entry["evidence_digests"])
+        self.assertEqual(sorted(set(entry["evidence_digests"])), entry["evidence_digests"])
+        # Every skipped digest is genuinely absent, and everything absent is named:
+        # the manager can tell a short briefing from a complete one.
+        referenced = {a[field]["evidence_digest"] for a in actions
+                      for field in ("dispatch_receipt", "ack_receipt", "result", "verification")}
+        for key in entry["evidence_digests"]:
+            self.assertIn(key, referenced)
+            self.assertNotIn(key, brief["original_evidence"])
+        self.assertEqual(sorted(referenced - set(brief["original_evidence"])),
+                         entry["evidence_digests"])
+        # Mandatory selected-event bodies are never charged to this budget.
+        for event in brief["events"]:
+            self.assertIn(event["evidence_digest"], brief["original_evidence"])
+
+    def test_partial_fit_evicts_only_what_the_limit_requires(self):
+        # One body small enough to survive, one that cannot: the interleaving
+        # where the reserve arithmetic, not the all-refused case, is load-bearing.
+        small = self.ref({"kind": "small", "text": "s" * 40})
+        actions = []
+        for index in range(4):
+            action = dict(id="live-%d" % index, kind="repair", workstream="delivery",
+                          sprint="PF-80-S01", status="dispatched", sequence=[index, 0],
+                          rationale="fixture", inputs={"allocation": "historical"},
+                          allocation_digest="a" * 64, ack_receipt=small,
+                          result=self.ref({"kind": "bulk", "text": "b%d" % index * 9000}))
+            actions.append(action)
+        raw = m.briefing(self.c, self.packet(actions, recent=actions[-3:]), self.context)
+        brief = json.loads(raw)
+        self.assertLess(len(raw), f.BRIEF_LIMIT)
+        # The shared small body is referenced by all four actions and survives;
+        # the large per-action bodies are the ones reported as unreadable.
+        self.assertIn(small["evidence_digest"], brief["original_evidence"])
+        budget = next(e for e in brief["evidence_omissions"] if e["id"] == "evidence_budget")
+        self.assertNotIn(small["evidence_digest"], budget["evidence_digests"])
+        self.assertTrue(set(budget["evidence_digests"])
+                        & {a["result"]["evidence_digest"] for a in actions})
+
+    def test_a_refused_digest_is_not_reinstated_by_a_second_reference(self):
+        shared = self.ref({"kind": "shared", "text": "q" * 30000})
+        actions = []
+        for index in range(4):
+            actions.append(dict(id="live-%d" % index, kind="repair", workstream="delivery",
+                                sprint="PF-80-S01", status="dispatched", sequence=[index, 0],
+                                rationale="fixture", inputs={"allocation": "historical",
+                                                             "task": "x" * 9000},
+                                allocation_digest="a" * 64, result=shared))
+        brief = self.brief(self.packet(actions, recent=actions[-3:]))
+        key = shared["evidence_digest"]
+        # Four live actions reference the one body. Refusing it once must hold:
+        # the later references must not quietly put it back.
+        self.assertNotIn(key, brief["original_evidence"])
+        budget = next(e for e in brief["evidence_omissions"] if e["id"] == "evidence_budget")
+        self.assertEqual([key], budget["evidence_digests"])
+        self.assertFalse({d for e in brief["evidence_omissions"]
+                          for d in e.get("evidence_digests", [])}
+                         & set(brief["original_evidence"]),
+                         "nothing reported as unreadable may actually be present")
+
+    def live_actions(self, count, size, pad):
+        actions = []
+        for index in range(count):
+            action = dict(id="live-%d" % index, kind="repair", workstream="delivery",
+                          sprint="PF-80-S01", status="dispatched", sequence=[index, 0],
+                          rationale="fixture", allocation_digest="a" * 64,
+                          inputs={"allocation": "historical", "task": "x" * pad})
+            for field in ("dispatch_receipt", "ack_receipt", "result", "verification"):
+                action[field] = self.ref({"kind": field,
+                                          "text": ("%s-%d" % (field, index)) * size})
+            actions.append(action)
+        return actions
+
+    def test_the_omission_report_itself_cannot_push_the_briefing_over(self):
+        # Each refusal after the last accepted body adds a digest to the report
+        # and to the missing lists, none of which an estimate made at accept time
+        # can have reserved. These three shapes overshoot without the final
+        # eviction pass, so they pin it rather than the arithmetic that guesses.
+        for count, pad, size in ((3, 0, 740), (3, 500, 680), (3, 1000, 660)):
+            with self.subTest(count=count, pad=pad, size=size):
+                state = Coordinator(self.root / ("edge-%d-%d-%d" % (count, pad, size)))
+                state.initialize(*seed())
+                state.set_enabled(True, {"source": "fixture"})
+                state.event({"id": "tick", "text": "pending work"})
+                saved, self.c = self.c, state
+                try:
+                    actions = self.live_actions(count, size, pad)
+                    raw = m.briefing(self.c, self.packet(actions, recent=actions[-3:]),
+                                     self.context)
+                finally:
+                    self.c = saved
+                brief = json.loads(raw)
+                self.assertLessEqual(len(raw), f.BRIEF_LIMIT)
+                absent = {action[field]["evidence_digest"] for action in actions
+                          for field in ("dispatch_receipt", "ack_receipt",
+                                        "result", "verification")} - set(brief["original_evidence"])
+                reported = {d for e in brief["evidence_omissions"]
+                            for d in e.get("evidence_digests", [])}
+                self.assertTrue(absent)
+                self.assertEqual(absent, absent & reported)
+
+    def test_returned_result_awaiting_a_verdict_survives_budget_pressure(self):
+        actions = self.live_actions(6, 900, 4000)
+        returned = dict(actions[0], id="returned-0", status="returned", sequence=[9, 0],
+                        result=self.ref({"kind": "result", "text": "RETURN " + "r" * 3000}))
+        actions.append(returned)
+        raw = m.briefing(self.c, self.packet(actions, recent=actions[-3:]), self.context)
+        brief = json.loads(raw)
+        self.assertLessEqual(len(raw), f.BRIEF_LIMIT)
+        budget = next(e for e in brief["evidence_omissions"] if e["id"] == "evidence_budget")
+        self.assertTrue(budget["evidence_digests"])
+        self.assertIn(returned["result"]["evidence_digest"], brief["original_evidence"])
+        self.assertNotIn(returned["result"]["evidence_digest"], budget["evidence_digests"])
+
+    def test_fit_prefers_fewer_events_over_dropping_a_returned_result(self):
+        for index in range(6):
+            self.c.event({"id": "bulk-%d" % index, "text": "e" * 9000})
+        actions = self.live_actions(1, 10, 0)
+        actions[0].update(status="returned", result=self.ref({"kind": "result", "text": "R" * 12000}))
+        packet = self.packet(actions, recent=actions)
+        self.assertEqual(7, len(packet["events"]))
+        # With every event selected, the mandatory event bodies leave no room for the result.
+        full = json.loads(m.briefing(self.c, {**packet, "event_batch": {"selected": 7, "deferred": 0}},
+                                     self.context))
+        self.assertNotIn(actions[0]["result"]["evidence_digest"], full["original_evidence"])
+        candidate, raw = m.fit_briefing(self.c, packet, self.context)
+        brief = json.loads(raw)
+        self.assertIn(actions[0]["result"]["evidence_digest"], brief["original_evidence"])
+        selected = brief["event_batch"]["selected"]
+        self.assertTrue(1 <= selected < 7)
+        self.assertEqual(7 - selected, brief["event_batch"]["deferred"])
+        self.assertEqual(selected, len(self.c.snapshot()["manager"]["events"]))
+        # The next prefix up would have dropped it: the choice is the largest that keeps it.
+        larger = json.loads(m.briefing(self.c, {**packet, "events": packet["events"][:selected + 1],
+                                                "event_batch": {"selected": selected + 1,
+                                                                "deferred": 6 - selected}}, self.context))
+        self.assertNotIn(actions[0]["result"]["evidence_digest"], larger["original_evidence"])
+
+    def test_many_returned_results_degrade_by_eviction_deterministically(self):
+        actions = self.live_actions(8, 10, 0)
+        for index, action in enumerate(actions):
+            action["status"] = "returned"
+            action["result"] = self.ref({"kind": "result", "text": ("%d" % index) * 12000})
+        packet = self.packet(actions, recent=actions[-3:])
+        raw = m.briefing(self.c, packet, self.context)
+        self.assertEqual(raw, m.briefing(self.c, packet, self.context))
+        brief = json.loads(raw)
+        self.assertLessEqual(len(raw), f.BRIEF_LIMIT)
+        results = {a["result"]["evidence_digest"] for a in actions}
+        absent = results - set(brief["original_evidence"])
+        budget = next(e for e in brief["evidence_omissions"] if e["id"] == "evidence_budget")
+        self.assertTrue(absent)
+        self.assertLessEqual(absent, set(budget["evidence_digests"]))
+        self.assertTrue(results & set(brief["original_evidence"]))
+
+    def test_no_budget_omission_when_everything_fits(self):
+        brief = self.brief(self.packet([self.action(size=10)]))
+        self.assertEqual([], [e for e in brief["evidence_omissions"]
+                              if e["id"] == "evidence_budget"])
+
+
+
+class BoundedBriefingTests(unittest.TestCase):
+    """Round 7: the briefing is bounded and prioritized; nothing is silently dropped."""
+    setUp = BriefingSizeTests.setUp
+    ref = BriefingSizeTests.ref
+
+    def history(self, consumed=250, events=40):
+        allocation = self.c.snapshot()["allocations"]["bootstrap"]
+        with self.c.mutation("fixture", {}) as (_, state):
+            for index in range(consumed):
+                state["allocations"]["spent-%03d" % index] = dict(
+                    allocation, resources=["consumed"], scope=["consumed"],
+                    inputs={"consumed": True, "original_digest": "%064x" % index})
+        for index in range(events):
+            self.c.event({"id": "owner_allocation:%d" % index, "allocation": "spent-%03d" % index,
+                          "evidence": self.ref({"note": "h" * 300, "index": index})})
+
+    def test_live_shaped_history_fits_with_a_full_event_batch(self):
+        # Round 6 live shape: ~250 consumed allocations, ~85 pending events. The old
+        # briefing selected 6 events; the bounded one carries a full batch.
+        self.history(consumed=250, events=85)
+        packet = self.c.begin_manager(priority=True)
+        candidate, raw = m.fit_briefing(self.c, packet, self.context)
+        brief = json.loads(raw)
+        self.assertLessEqual(len(raw), f.BRIEF_LIMIT)
+        self.assertEqual(24, brief["event_batch"]["selected"])
+        self.assertEqual(250, brief["consumed_allocations"]["count"])
+        backlog = brief["event_backlog"]
+        self.assertEqual((86, 24, 62), (backlog["pending"], backlog["selected"], backlog["deferred"]))
+        self.assertEqual(62, sum(backlog["deferred_by_kind"].values()))
+        # Aging slots take the two oldest, then the newest history leads.
+        self.assertEqual(["tick", "owner_allocation:0", "owner_allocation:84"],
+                         [e["id"] for e in brief["events"][:3]])
+        self.assertEqual(["owner_allocation:1", "owner_allocation:2"], backlog["oldest_unclaimed"][:2])
+
+    def test_deferred_events_are_counted_and_consumed_by_later_cycles(self):
+        self.history(consumed=0, events=50)
+        seen = set()
+        for _ in range(3):
+            packet = self.c.begin_manager(priority=True)
+            candidate, raw = m.fit_briefing(self.c, packet, self.context)
+            brief = json.loads(raw)
+            ids = [e["id"] for e in brief["events"]]
+            self.assertFalse(seen & set(ids))
+            seen.update(ids)
+            self.assertEqual(brief["event_backlog"]["pending"] - len(ids), brief["event_backlog"]["deferred"])
+            self.c.accept_decision(packet["manager_run"], {
+                "state_revision": candidate["state_revision"], "actions": [],
+                "no_action_reason": "history"}, {"fixture": True})
+        self.assertEqual(51, len(seen))
+        with self.c.connection() as db:
+            self.assertFalse(db.execute("SELECT 1 FROM events WHERE meaningful=1 AND consumed IS NULL").fetchone())
+
+    def test_backlog_counts_every_kind_left_out_of_a_restricted_batch(self):
+        for index in range(6):
+            self.c.event({"id": "bulk:%d" % index, "text": "e" * 15000})
+        packet = self.c.begin_manager(priority=True)
+        candidate, raw = m.fit_briefing(self.c, packet, self.context)
+        brief = json.loads(raw)
+        selected = brief["event_batch"]["selected"]
+        self.assertTrue(1 <= selected < 7)
+        self.assertEqual(7 - selected, sum(brief["event_backlog"]["deferred_by_kind"].values()))
+        self.assertEqual(7 - selected, brief["event_backlog"]["deferred"])
+
+
+class CompactionPolicyTests(unittest.TestCase):
+    setUp = BriefingSizeTests.setUp
+
+    def finished(self, key, status, updated, kinds=("repair",)):
+        allocation = dict(self.c.snapshot()["allocations"]["bootstrap"], kinds=list(kinds),
+                          resources=[key])
+        if "complete_sprint" in kinds:
+            allocation["inputs"] = dict(allocation["inputs"], receiving_action="r", receiving_commit="a" * 40,
+                                        mandatory_gates=["g"])
+        self.c.put_allocation(key, allocation, False, self.c.snapshot()["revision"], {"fixture": True})
+        if status is None:
+            return
+        with self.c.mutation("fixture", {}) as (_, state):
+            state["actions"]["act-" + key] = {"id": "act-" + key, "workstream": "delivery",
+                                              "status": status, "sequence": [0, 0], "updated": updated,
+                                              "inputs": {"allocation": key}}
+
+    def test_policy_compacts_only_finished_work_past_its_grace(self):
+        now = 10 * 86400
+        self.finished("accepted-old", "accepted", now - m.COMPACT_ACCEPTED_AFTER - 1)
+        self.finished("accepted-fresh", "accepted", now - 60)
+        self.finished("fresh-failure", "failed", now - m.COMPACT_ACCEPTED_AFTER - 1)
+        self.finished("old-failure", "failed", now - m.COMPACT_FAILED_AFTER - 1)
+        self.finished("still-running", "running", 0)
+        self.finished("never-used", None, 0)
+        self.finished("lifecycle", "accepted", 0, kinds=("complete_sprint",))
+        # complete_sprint and activate_successor re-check the receiving/successor
+        # action's allocation digest: lifecycle allocations of an unfinished sprint stay.
+        self.finished("integration", "accepted", 0, kinds=("integrate",))
+        self.finished("successor", "accepted", 0, kinds=("prepare_successor",))
+        self.assertEqual(["accepted-old", "old-failure"], m.compact_finished(self.c, now))
+        allocations = self.c.snapshot()["allocations"]
+        for key in ("accepted-old", "old-failure"):
+            self.assertIs(True, allocations[key]["inputs"]["consumed"])
+        for key in ("accepted-fresh", "fresh-failure", "still-running", "never-used", "lifecycle",
+                    "integration", "successor", "bootstrap"):
+            self.assertNotIn("consumed", allocations[key]["inputs"])
+        self.assertEqual([], m.compact_finished(self.c, now))
+        # Once the sprint is completed its lifecycle proofs are spent.
+        with self.c.mutation("fixture", {}) as (_, state):
+            state["sprints"]["PF80"]["status"] = "completed"
+        self.assertEqual(["accepted-fresh", "fresh-failure", "integration", "successor"],
+                         m.compact_finished(self.c, now))
+
+    def test_policy_waits_while_paused_or_a_manager_owns_the_cycle(self):
+        self.finished("accepted-one", "accepted", 0)
+        self.assertEqual([], m.compact_finished(self.c, 60))
+        self.c.set_enabled(False, {"fixture": True})
+        self.assertEqual([], m.compact_finished(self.c, 2 * 86400))
+        self.c.set_enabled(True, {"fixture": True})
+        self.c.begin_manager()
+        self.assertEqual([], m.compact_finished(self.c, 2 * 86400))
+
+    def test_a_concurrent_change_stops_the_pass_without_partial_effect(self):
+        self.finished("a", "accepted", 0)
+        self.finished("b", "accepted", 0)
+        real = self.c.compact_allocation
+        calls = []
+        def stale(key, revision, evidence):
+            calls.append(key)
+            return real(key, revision - 1, evidence)
+        with patch.object(self.c, "compact_allocation", stale):
+            self.assertEqual([], m.compact_finished(self.c, 2 * 86400))
+        self.assertEqual(["a"], calls)
+        self.assertEqual(["a", "b"], m.compact_finished(self.c, 2 * 86400))
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -317,11 +317,12 @@ pub(crate) async fn ensure_spawn_runtime_eligible(
             config.model_provider_id
         )));
     }
-    let model_info = session
-        .services
-        .models_manager
-        .get_model_info(model, &config.to_models_manager_config())
-        .await;
+    let model_info = crate::model_info_for_provider::model_info_for_config(
+        &session.services.models_manager,
+        model,
+        config,
+    )
+    .await;
     if model_info
         .orchestration
         .as_ref()
@@ -371,11 +372,6 @@ pub(crate) async fn apply_requested_spawn_agent_model_overrides(
             .list_models(RefreshStrategy::Offline, config.http_client_factory())
             .await;
         let selected_model_name = find_spawn_agent_model_name(&available_models, requested_model)?;
-        let selected_model_info = session
-            .services
-            .models_manager
-            .get_model_info(&selected_model_name, &config.to_models_manager_config())
-            .await;
 
         config.model = Some(selected_model_name.clone());
         // A model switch must not silently keep the parent's provider when that provider cannot
@@ -396,9 +392,20 @@ pub(crate) async fn apply_requested_spawn_agent_model_overrides(
                 corrected_provider = corrected,
                 "correcting inherited provider for spawn_agent model switch"
             );
+            let info = info
+                .clone()
+                .with_account_from(&config.model_provider)
+                .map_err(FunctionCallError::RespondToModel)?;
             config.model_provider_id = corrected.to_string();
-            config.model_provider = info.clone();
+            config.model_provider = info;
         }
+        // The child's provider is final now (#572: Bedrock metadata).
+        let selected_model_info = crate::model_info_for_provider::model_info_for_config(
+            &session.services.models_manager,
+            &selected_model_name,
+            config,
+        )
+        .await;
         if let Some(reasoning_effort) = requested_reasoning_effort {
             validate_spawn_agent_reasoning_effort(
                 &selected_model_name,
@@ -482,11 +489,12 @@ pub(crate) async fn apply_requested_spawn_agent_runtime_overrides(
     config.model_provider = provider;
     config.model = Some(requested_model.to_string());
 
-    let selected_model_info = session
-        .services
-        .models_manager
-        .get_model_info(requested_model, &config.to_models_manager_config())
-        .await;
+    let selected_model_info = crate::model_info_for_provider::model_info_for_config(
+        &session.services.models_manager,
+        requested_model,
+        config,
+    )
+    .await;
     if let Some(reasoning_effort) = requested_reasoning_effort {
         validate_spawn_agent_reasoning_effort(
             requested_model,
@@ -522,11 +530,12 @@ pub(crate) async fn apply_spawn_agent_service_tier(
             "spawn_agent could not resolve the child model for service tier validation".to_string(),
         )
     })?;
-    let model_info = session
-        .services
-        .models_manager
-        .get_model_info(model.as_str(), &config.to_models_manager_config())
-        .await;
+    let model_info = crate::model_info_for_provider::model_info_for_config(
+        &session.services.models_manager,
+        model.as_str(),
+        config,
+    )
+    .await;
 
     if let Some(requested_service_tier) = requested_service_tier
         && !model_info.supports_service_tier(requested_service_tier)

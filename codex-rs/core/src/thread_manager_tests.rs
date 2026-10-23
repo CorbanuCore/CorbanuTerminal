@@ -16,6 +16,7 @@ use codex_protocol::AgentPath;
 use codex_protocol::ResponseItemId;
 use codex_protocol::capabilities::CapabilityRootLocation;
 use codex_protocol::capabilities::SelectedCapabilityRoot;
+use codex_protocol::config_types::ForcedLoginMethod;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ReasoningItemReasoningSummary;
@@ -426,6 +427,226 @@ async fn shutdown_all_threads_bounded_submits_shutdown_to_every_thread() {
     assert!(report.submit_failed.is_empty());
     assert!(report.timed_out.is_empty());
     assert!(manager.list_thread_ids().await.is_empty());
+}
+
+#[tokio::test]
+async fn start_thread_refuses_a_missing_named_account() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    config.cwd = config.codex_home.abs();
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+    config.model_provider = ModelProviderInfo::create_zai_provider();
+    config.model_provider.account = Some(codex_model_provider_info::NamedProviderAccount {
+        provider_id: "zai".to_string(),
+        name: "gone".to_string(),
+    });
+
+    let manager = ThreadManager::with_models_provider_and_home_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+    );
+    let Err(error) = manager.start_thread(StartThreadOptions::new(config)).await else {
+        panic!("a missing named account must not start a thread");
+    };
+    let CodexErrorDetails::InvalidRequest(message) = error.details() else {
+        panic!("expected an invalid request, got {error}");
+    };
+    assert_eq!(
+        message,
+        &("account `gone` of provider `zai` is not configured; add it with \
+         `corbanu account add zai gone` or pick another with `--account` (see `corbanu account list`)"
+            .to_string())
+    );
+}
+
+/// PF-84-S06 (#570): a process whose session runs on a named sign-in account
+/// leaves a default login the login restrictions rule out in place (its
+/// default-login manager hides it), so a thread that would run on that
+/// default login (a switch to the default account, a spawned agent on it, a
+/// resumed default thread) is refused with the reason, and the login is not
+/// touched. A thread on a named account, a process that enforced at startup,
+/// the feature off or no restriction: no check.
+#[tokio::test]
+async fn start_thread_refuses_a_ruled_out_default_login_without_logging_it_out() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    config.cwd = config.codex_home.abs();
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+    config
+        .features
+        .enable(Feature::NamedAccounts)
+        .expect("named accounts should be available in tests");
+    config.model_provider_id = "openai".to_string();
+    config.model_provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+    config.configured_forced_login_method = Some(ForcedLoginMethod::Chatgpt);
+    config.forced_login_method = Some(ForcedLoginMethod::Chatgpt);
+    config.cli_auth_credentials_store_mode = codex_config::types::AuthCredentialsStoreMode::File;
+    codex_login::login_with_api_key(
+        &config.codex_home,
+        "sk-default-570",
+        config.cli_auth_credentials_store_mode,
+        config.auth_keyring_backend_kind(),
+    )
+    .expect("seed the default login");
+    let auth_file = config.codex_home.join("auth.json");
+    let before = std::fs::read(&auth_file).expect("default login");
+
+    let mut named = config.clone();
+    named.model_provider.account = Some(codex_model_provider_info::NamedProviderAccount {
+        provider_id: "openai".to_string(),
+        name: "work".to_string(),
+    });
+    // The process's default-login manager, built from the named session's
+    // config, hides the ruled-out login; one built from a default session's
+    // config does not.
+    let hiding = AuthManager::shared_from_config(&named, /*enable_codex_api_key_env*/ false).await;
+    assert!(hiding.hides_restricted_default_login());
+    assert!(hiding.auth_cached().is_none());
+    let enforcing =
+        AuthManager::shared_from_config(&config, /*enable_codex_api_key_env*/ false).await;
+    assert!(!enforcing.hides_restricted_default_login());
+
+    let message = crate::config::default_login_restriction_error(&config, &hiding)
+        .expect("an API key breaks a required ChatGPT login");
+    assert!(
+        message.contains("ChatGPT login is required") && message.contains("left unchanged"),
+        "{message}"
+    );
+
+    let mut feature_off = config.clone();
+    feature_off
+        .features
+        .disable(Feature::NamedAccounts)
+        .expect("named accounts can be turned off");
+    // A process without a restriction hides nothing.
+    let mut unrestricted = named.clone();
+    unrestricted.configured_forced_login_method = None;
+    unrestricted.forced_login_method = None;
+    let hiding_nothing =
+        AuthManager::shared_from_config(&unrestricted, /*enable_codex_api_key_env*/ false).await;
+    assert!(hiding_nothing.hides_restricted_default_login());
+    assert!(hiding_nothing.auth_cached().is_some());
+    for (other, manager) in [
+        (&named, &hiding),
+        (&feature_off, &hiding),
+        (&config, &hiding_nothing),
+        (&config, &enforcing),
+    ] {
+        assert_eq!(
+            crate::config::default_login_restriction_error(other, manager),
+            None
+        );
+    }
+
+    let mut manager = ThreadManager::with_models_provider_and_home_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+    );
+    Arc::get_mut(&mut manager.state)
+        .expect("a fresh manager's state is not shared")
+        .auth_manager = hiding;
+    let Err(error) = manager.start_thread(StartThreadOptions::new(config)).await else {
+        panic!("a ruled-out default login must not start a thread");
+    };
+    let CodexErrorDetails::InvalidRequest(refusal) = error.details() else {
+        panic!("expected an invalid request, got {error}");
+    };
+    assert_eq!(refusal, &message);
+    assert_eq!(
+        std::fs::read(&auth_file).expect("default login kept"),
+        before
+    );
+}
+
+/// #425: `--account <other-provider>:<name>` whose account is missing is
+/// refused at thread start with the session-provider case's text, instead of
+/// running the session on its provider's default account.
+#[tokio::test]
+async fn start_thread_refuses_a_missing_account_of_another_provider() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    config.cwd = config.codex_home.abs();
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+    config.model_provider_id = "zai".to_string();
+    config.model_provider = ModelProviderInfo::create_zai_provider();
+    let mut kimi = ModelProviderInfo::create_zai_provider();
+    kimi.account = Some(codex_model_provider_info::NamedProviderAccount {
+        provider_id: "kimi-code".to_string(),
+        name: "ghost".to_string(),
+    });
+    config.model_providers.insert("kimi-code".to_string(), kimi);
+    config.provider_account_override = Some("kimi-code:ghost".to_string());
+
+    let manager = ThreadManager::with_models_provider_and_home_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        config.codex_home.to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+    );
+    let Err(error) = manager.start_thread(StartThreadOptions::new(config)).await else {
+        panic!("a missing account of another provider must not start a thread");
+    };
+    let CodexErrorDetails::InvalidRequest(message) = error.details() else {
+        panic!("expected an invalid request, got {error}");
+    };
+    assert_eq!(
+        message,
+        &("account `ghost` of provider `kimi-code` is not configured; add it with \
+         `corbanu account add kimi-code ghost` or pick another with `--account` (see `corbanu account list`)"
+            .to_string())
+    );
+}
+
+/// #425: another provider's account that is configured starts the session
+/// (it is used by agents on that provider); a spawned agent checks only the
+/// account it runs on, and `default` is never refused.
+#[tokio::test]
+async fn other_provider_account_check_accepts_configured_accounts_and_spawned_agents() {
+    let temp_dir = tempdir().expect("tempdir");
+    let mut config = test_config().await;
+    config.codex_home = temp_dir.path().join("codex-home").abs();
+    std::fs::create_dir_all(&config.codex_home).expect("create codex home");
+    config.model_provider_id = "zai".to_string();
+    config.model_provider = ModelProviderInfo::create_zai_provider();
+    codex_vault::Vault::new(config.codex_home.to_path_buf())
+        .write_provider_account(
+            "kimi-code",
+            &codex_vault::ProviderAccountName::parse("alt").expect("name"),
+            codex_vault::ProviderAccountKind::ApiKey,
+            "canary-kimi-alt",
+        )
+        .expect("write account");
+    let with_kimi = |name: Option<&str>| {
+        let mut config = config.clone();
+        let mut kimi = ModelProviderInfo::create_zai_provider();
+        kimi.account = name.map(|name| codex_model_provider_info::NamedProviderAccount {
+            provider_id: "kimi-code".to_string(),
+            name: name.to_string(),
+        });
+        config.model_providers.insert("kimi-code".to_string(), kimi);
+        config.provider_account_override = Some(format!("kimi-code:{}", name.unwrap_or("default")));
+        config
+    };
+    let spawned = SessionSource::SubAgent(SubAgentSource::Review);
+    assert_eq!(
+        [
+            thread_start_account_error(&with_kimi(Some("alt")), &SessionSource::Exec),
+            thread_start_account_error(&with_kimi(/*name*/ None), &SessionSource::Exec),
+            thread_start_account_error(&with_kimi(Some("ghost")), &spawned),
+        ],
+        [None, None, None]
+    );
+    assert!(
+        thread_start_account_error(&with_kimi(Some("ghost")), &SessionSource::Cli)
+            .is_some_and(|message| message.starts_with("account `ghost` of provider `kimi-code`"))
+    );
 }
 
 #[tokio::test]
@@ -2722,4 +2943,74 @@ async fn interrupted_fork_snapshot_uses_persisted_mid_turn_history_without_live_
             .count(),
         1,
     );
+}
+
+/// PF-84-S06 (#571): a session whose configured provider is Z.AI gets the
+/// API-key-only onboarding default (`forced_login_method` reads `api`), but
+/// a named OpenAI ChatGPT account selected for it (`--account openai:work`)
+/// keeps its sign-in: the account's manager, built from the real config,
+/// loads it, so a switch to OpenAI sends work's token.
+#[tokio::test]
+async fn named_chatgpt_account_loads_in_a_session_on_a_third_party_provider() {
+    use base64::Engine;
+    let home = tempdir().expect("tempdir");
+    let b64 = |data: &[u8]| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(data);
+    let id_token = format!(
+        "{}.{}.{}",
+        b64(br#"{"alg":"none","typ":"JWT"}"#),
+        b64(serde_json::json!({
+            "email": "work@example.com",
+            "https://api.openai.com/auth": {"chatgpt_account_id": "ws-work"},
+        })
+        .to_string()
+        .as_bytes()),
+        b64(b"sig")
+    );
+    let sign_in: codex_login::AuthDotJson = serde_json::from_value(serde_json::json!({
+        "auth_mode": "chatgpt",
+        "OPENAI_API_KEY": null,
+        "tokens": {
+            "id_token": id_token,
+            "access_token": "work-access",
+            "refresh_token": "work-refresh",
+            "account_id": "ws-work",
+        },
+        "last_refresh": "2026-10-01T00:00:00Z",
+    }))
+    .expect("sign-in");
+    let work = codex_login::NamedChatgptAccount {
+        provider_id: "openai".to_string(),
+        name: "work".to_string(),
+    };
+    codex_login::save_named_account_auth(home.path(), &work, &sign_in, /*must_be_new*/ true)
+        .expect("named sign-in");
+    let config = crate::config::ConfigBuilder::default()
+        .codex_home(home.path().to_path_buf())
+        .cli_overrides(vec![
+            ("model_provider".to_string(), "zai".into()),
+            ("model".to_string(), "glm-5.3-flash".into()),
+            ("features.named_accounts".to_string(), true.into()),
+        ])
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(crate::session::tests::kept_test_cwd()),
+            provider_account: Some("openai:work".to_string()),
+            ..Default::default()
+        })
+        .build()
+        .await
+        .expect("config");
+    assert_eq!(config.model_provider_id, "zai");
+    assert_eq!(config.forced_login_method, Some(ForcedLoginMethod::Api));
+    assert_eq!(config.configured_forced_login_method, None);
+    assert_eq!(crate::config::session_account_error(&config), None);
+
+    let base = AuthManager::shared_from_config(&config, /*enable_codex_api_key_env*/ false).await;
+    let named = base.for_named_account(work);
+    assert!(
+        named
+            .auth()
+            .await
+            .is_some_and(|auth| auth.is_chatgpt_auth())
+    );
+    assert_eq!(named.named_sign_in_unavailable(), None);
 }

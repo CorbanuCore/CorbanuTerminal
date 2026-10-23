@@ -162,6 +162,10 @@ fn is_write_patch_constrained_to_writable_paths(
         Some(out)
     }
 
+    // #606: a writable link the sandboxes leave out (#535: it leads into
+    // another root's read-only path) grants nothing, so a patch through it
+    // is not constrained to writable paths.
+    let excluded = file_system_sandbox_policy.writable_links_into_read_only_paths(&native_cwd);
     // Determine whether `path` is inside **any** writable root. Both `path`
     // and roots are converted to absolute, normalized forms before the
     // prefix check.
@@ -176,7 +180,11 @@ fn is_write_patch_constrained_to_writable_paths(
             None => return false,
         };
 
-        file_system_sandbox_policy.can_write_path_with_cwd(&abs, &native_cwd)
+        file_system_sandbox_policy.can_write_path_outside_excluded_links(
+            &abs,
+            &native_cwd,
+            &excluded,
+        )
     };
 
     for (path, change) in action.changes() {

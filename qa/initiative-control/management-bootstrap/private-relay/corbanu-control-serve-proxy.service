@@ -1,0 +1,12 @@
+[Unit]
+Description=Private Corbanu Control socket-to-loopback relay
+Requires=corbanu-control-serve-proxy.socket
+After=corbanu-control-serve-proxy.socket
+
+[Service]
+ExecStart=/lib/systemd/systemd-socket-proxyd --connections-max=16 --exit-idle-time=60s 127.0.0.1:8768
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX AF_INET
+MemoryMax=32M
+TasksMax=32
+TimeoutStopSec=10

@@ -1,0 +1,88 @@
+# Issue #507 (Travis, 2026-10-12): the kill switch reaches another Corbanu Terminal running on the same home.
+# The recorded pane is process B. Process A is a second `corbanu` on the same disposable home, started and driven
+# off screen by the `run` steps (its own tmux server); the person turns the kill switch on there.
+id = "issue507-kill-switch-other-process"
+feature = "The kill switch turned on in another Corbanu Terminal stops the work running here"
+expected = "Two Corbanu Terminals share one home. This one runs a 45-second command; in the other, the person turns the kill switch on in /security. Within about a second this one says so, stops the turn and its command, and refuses the next message."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+# Process A: another Corbanu Terminal on this home, off screen.
+[[steps]]
+run = """
+tmux -L demo507x-other -f /dev/null new-session -d -s a -x 160 -y 50 "{bin} -C {workspace} -m glm-5.3-flash -c model_provider=zai; sleep 600"
+for i in $(seq 1 60); do tmux -L demo507x-other capture-pane -p -t a | grep -q 'Corbanu Terminal (v' && exit 0; sleep 1; done
+exit 1
+"""
+timeout = 70
+
+[[steps]]
+type = "Run exactly this shell command once, unchanged, and wait for it: touch cmd-started.txt && sleep 45 && echo FINISHED"
+[[steps]]
+key = "Enter"
+# The command itself is running once it made its first file.
+[[steps]]
+run = "for i in $(seq 1 120); do [ -e {workspace}/cmd-started.txt ] && exit 0; sleep 1; done; exit 1"
+timeout = 125
+[[steps]]
+pause = 2.0
+
+# In process A: /security, confirm Aggressive (no restart), then turn the kill switch on.
+[[steps]]
+run = """
+t() { tmux -L demo507x-other "$@"; }
+w() { for i in $(seq 1 30); do t capture-pane -p -t a | grep -Eq -- "$1" && return 0; sleep 0.5; done; return 1; }
+s() { t send-keys -t a -l "$1"; sleep 0.5; t send-keys -t a Enter; }
+s /security; w 'Active in this session: Permissive' || exit 1
+t send-keys -t a Down; sleep 0.3; t send-keys -t a Down; sleep 0.3; t send-keys -t a Enter
+w 'Switch to Aggressive' || exit 1; sleep 0.5; t send-keys -t a Enter
+w 'Saved: Aggressive' || exit 1; sleep 0.5; t send-keys -t a Escape; sleep 1
+s /security; w 'Security level' || exit 1; sleep 0.5
+t send-keys -t a g; w 'Grants and kill switch' || exit 1; sleep 0.5
+t send-keys -t a Down; sleep 0.3; t send-keys -t a Enter
+w 'Turn the kill switch on\\?' || exit 1; sleep 0.5; t send-keys -t a Enter
+w 'Kill switch on' || exit 1
+echo "the kill switch was turned on in the other Corbanu Terminal"
+"""
+timeout = 60
+
+[[steps]]
+wait = "turned on in another Corbanu Terminal on this home"
+timeout = 10
+[[steps]]
+wait = "Turn stopped by the security kill switch"
+timeout = 10
+[[steps]]
+pause = 3.0
+
+[[steps]]
+type = "What is 2+2?"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Not sent: the security kill switch is on"
+timeout = 20
+[[steps]]
+run = "tmux -L demo507x-other kill-server; true"
+[[steps]]
+pause = 4.0

@@ -1,0 +1,29 @@
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     loading   /model to change                  │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+
+› Find and fix a bug in @filename
+
+  Z.AI GLM 5.3 Flash via zpx default · $S/work · Corbanu Terminal · TPS: -- tok/s
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+• Saved zpx account `aa1`. Use it from /providers, `--account aa1` or a spawn `account`.
+
+• Saved zpx account `aa2`. Use it from /providers, `--account aa2` or a spawn `account`.
+
+• Removed zpx account `aa1`.
+
+■ Could not rename zpx account `aa2`: invalid credential label: zpx already has an account `quota`
+To continue this session, run corbanu resume 01a12ab5-3351-7993-8970-587e2e1d994b
+TUI_EXITED rc=0

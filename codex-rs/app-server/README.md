@@ -147,7 +147,7 @@ Example with notification opt-out:
 
 ## API Overview
 
-- `thread/start` — create a new thread; emits `thread/started` (including the current `thread.status`) and auto-subscribes you to turn/item events for that thread. Experimental `historyMode: "paginated"` selects projection-backed durable history. When the request includes a `cwd` and the resolved sandbox is `workspace-write` or full access, app-server also marks that project as trusted in the user `config.toml`. Pass `sessionStartSource: "clear"` when starting a replacement thread after clearing the current session so `SessionStart` hooks receive `source: "clear"` instead of the default `"startup"`. Experimental `allowProviderModelFallback` lets providers backed by an authoritative static model catalog replace an unavailable requested `model` with the catalog default; dynamic or cached catalogs preserve the requested model. Experimental `runtimeWorkspaceRoots` supplies the runtime workspace roots used when app-server creates default environment selections; paths must be absolute. For permissions, prefer experimental `permissions` profile selection by id; the legacy `sandbox` shorthand is still accepted but cannot be combined with `permissions`. Deprecated experimental `multiAgentMode` is ignored; use Ultra reasoning effort for proactive multi-agent behavior. Experimental `environments` selects the sticky execution environments for turns on the thread; omit it to use the server default, pass `[]` to disable environments, or pass explicit environment ids with per-environment `cwd` and optional environment-native `runtimeWorkspaceRoots`. Explicit environments ignore the top-level roots; omitted per-environment roots default to that environment's `cwd`, while an empty list explicitly selects no roots. Experimental `selectedCapabilityRoots` selects environment-owned plugin or standalone-skill roots using environment-native absolute paths. Skills found below those roots are listed and read through the owning environment. Stdio MCP servers declared by selected plugins are started in that environment, and HTTP MCP connections use that environment's HTTP client.
+- `thread/start` — create a new thread; emits `thread/started` (including the current `thread.status`) and auto-subscribes you to turn/item events for that thread. Experimental `historyMode: "paginated"` selects projection-backed durable history. When the request includes a `cwd` and the resolved sandbox is `workspace-write` or full access, app-server also marks that project as trusted in the user `config.toml`. Pass `sessionStartSource: "clear"` when starting a replacement thread after clearing the current session so `SessionStart` hooks receive `source: "clear"` instead of the default `"startup"`. Experimental `reopenedByPromptEdit: true` marks a thread that continues a saved conversation whose first message the user edited: it has no history, but its startup warm-up is a reopen warm-up (labelled as one, announced, and skipped with `skip_reopen_warmup`). Experimental `allowProviderModelFallback` lets providers backed by an authoritative static model catalog replace an unavailable requested `model` with the catalog default; dynamic or cached catalogs preserve the requested model. Experimental `runtimeWorkspaceRoots` supplies the runtime workspace roots used when app-server creates default environment selections; paths must be absolute. For permissions, prefer experimental `permissions` profile selection by id; the legacy `sandbox` shorthand is still accepted but cannot be combined with `permissions`. Deprecated experimental `multiAgentMode` is ignored; use Ultra reasoning effort for proactive multi-agent behavior. Experimental `environments` selects the sticky execution environments for turns on the thread; omit it to use the server default, pass `[]` to disable environments, or pass explicit environment ids with per-environment `cwd` and optional environment-native `runtimeWorkspaceRoots`. Explicit environments ignore the top-level roots; omitted per-environment roots default to that environment's `cwd`, while an empty list explicitly selects no roots. Experimental `selectedCapabilityRoots` selects environment-owned plugin or standalone-skill roots using environment-native absolute paths. Skills found below those roots are listed and read through the owning environment. Stdio MCP servers declared by selected plugins are started in that environment, and HTTP MCP connections use that environment's HTTP client.
 - `thread/resume` — reopen an existing thread by id so subsequent `turn/start` calls append to it. Accepts the same permission override rules as `thread/start`.
 - `thread/fork` — fork an existing thread into a new thread id by copying the stored history; pass an optional `lastTurnId` to copy history only through that turn, inclusive, and drop later turns from the fork. An in-progress `lastTurnId` boundary is rejected. Experimental `beforeTurnId` instead copies history strictly before the referenced turn, including when that turn is in progress, and cannot be combined with `lastTurnId`. If both boundaries are null while the source thread is mid-turn, the fork records the same interruption marker as `turn/interrupt` instead of inheriting an unmarked partial turn suffix. The returned `thread.forkedFromId` points at the source thread when known. Accepts `ephemeral: true` for an in-memory temporary fork, emits `thread/started` (including the current `thread.status`), and auto-subscribes you to turn/item events for the new thread. Experimental clients can pass `excludeTurns: true` when they plan to page fork history via `thread/turns/list` instead of receiving the full turn array immediately, or `deferGoalContinuation: true` to carry the source thread's current goal into the fork and run an explicit turn before automatic continuation resumes. Deferred goal continuation is persisted until that turn starts and cannot be combined with `ephemeral: true`. Accepts the same permission override rules as `thread/start`.
 - `thread/start`, `thread/resume`, and `thread/fork` responses include the legacy `sandbox` compatibility projection. `instructionSources` lists loaded instruction files using each source environment's native absolute path syntax, including files loaded from remote environments. Experimental clients can read `runtimeWorkspaceRoots` for the thread-scoped runtime roots and `activePermissionProfile` for the named or implicit built-in profile identity/provenance when known. Their deprecated experimental `multiAgentMode` field, and the corresponding thread setting, always report `explicitRequestOnly`; Ultra reasoning effort is the source of proactive multi-agent behavior.
@@ -160,7 +160,7 @@ Example with notification opt-out:
 - `thread/searchOccurrences` — experimental; find literal, case-insensitive matches in visible user messages and summary-selected final assistant messages within one paginated thread.
 - `thread/metadata/update` — patch stored thread metadata in sqlite; supports updating persisted `gitInfo` fields and returns the refreshed `thread`.
 - `thread/section/move` — atomically move a thread into the section identified by `sectionId`, before another thread or at the end when `beforeThreadId` is `null`. Reordering within the same section preserves `sectionEnteredAt`; entering a different section resets it. Set `sectionId` to `null` to remove the thread from its section. Returns `{}` on success.
-- `thread/settings/update` — experimental; queue a partial update to a loaded thread’s next-turn settings without starting a turn or adding transcript items. Omitted fields leave settings unchanged; `serviceTier: null` clears the tier; deprecated `multiAgentMode` is ignored, while Ultra reasoning effort enables proactive multi-agent behavior; `sandboxPolicy` and `permissions` cannot be combined. Returns `{}` when the update is accepted and emits `thread/settings/updated` with the full effective settings only if they actually change. `turn/start` settings overrides emit the same notification when they change the stored settings.
+- `thread/settings/update` — experimental; queue a partial update to a loaded thread’s settings without starting a turn or adding transcript items. Omitted fields leave settings unchanged; `serviceTier: null` clears the tier; deprecated `multiAgentMode` is ignored, while Ultra reasoning effort enables proactive multi-agent behavior; `sandboxPolicy` and `permissions` cannot be combined. By default returns the legacy acceptance-only `{}`. With `confirm: true`, returns `{"outcome":"applied"}` only after this operation's Core success, including unchanged or empty updates. Validation/Core rejection returns a request-correlated error. Listener replacement, disconnect, shutdown, submission loss or a 10-second deadline can leave the effect unknown: a reachable client receives `{"outcome":"uncertain"}`; transport loss is also uncertain. Never retry automatically after an uncertain effect. Older servers may ignore `confirm` and return `{}` or reject the method: neither confirms application. Existing command turns and pending approvals retain their authority; subsequent turns use the session settings. Shared-service refresh behavior (including MCP) is unchanged. `thread/settings/updated` carries the observed effective snapshot only when it changes; it is not a confirmation or a snapshot attributed to the confirming request. `turn/start` settings overrides emit the same notification when they change stored settings.
 - `thread/memoryMode/set` — experimental; set a thread’s persisted memory eligibility to `"enabled"` or `"disabled"` for either a loaded thread or a stored rollout; returns `{}` on success.
 - `memory/reset` — experimental; clear the current `CODEX_HOME/memories` directory and reset persisted memory stage data in sqlite while preserving existing thread memory modes; returns `{}` on success.
 - `thread/goal/set` — create or update the single persisted goal for a materialized thread; returns the current goal and emits `thread/goal/updated`.
@@ -341,6 +341,12 @@ Only one app-server process can hold a paginated thread open for writing at a ti
 Experimental clients that want the live resume subscription plus a turns page in one round trip can pass `initialTurnsPage`. It accepts the same `limit`, `sortDirection`, and `itemsView` controls as `thread/turns/list`; omitted controls use its defaults. The response includes `initialTurnsPage` with `nextCursor` and `backwardsCursor` for follow-up pagination.
 
 By default, resume uses the latest persisted `model` and `reasoningEffort` values associated with the thread. Supplying any of `model`, `modelProvider`, `config.model`, or `config.model_reasoning_effort` disables that persisted fallback and uses the explicit overrides plus normal config resolution instead.
+
+Without explicit model or tier overrides, resume also restores the latest matching
+durable `serviceTier`. Legacy sessions without a recorded tier use standard
+routing, not the current global new-session tier. Explicit `serviceTier`
+(including `null`) or `config.service_tier` still takes precedence. Unsupported
+explicit tiers retain normal warning-and-omission handling.
 
 Example:
 
@@ -946,6 +952,26 @@ Use `thread/inject_items` to append prebuilt Responses API items to a loaded thr
 { "id": 36, "result": {} }
 ```
 
+### Realtime-only threads: pass `model` on `thread/start`
+
+`thread/start` warms up the thread's text model when its provider uses a
+WebSocket connection, as the built-in OpenAI provider does: one paid request
+with the session's instructions and tools (typically 10,000 to 15,000 input
+tokens), priced for that model. A thread started for `thread/realtime/start`
+uses its text model only for handoffs (when the realtime model hands a request
+to Codex) and, where it's enabled, the end-of-session transcript turn. When a
+session makes few or no handoffs, the warm-up on the default model can cost
+several times the realtime session itself (#1045).
+
+Clients that start a thread only for realtime should pass a small, cheap text
+`model` on `thread/start`. The warm-up is then priced for that model. Handoffs
+also run on it, so this trades away handoff quality. Keep the thread's provider:
+realtime connects through it, so moving the thread to a provider without a
+WebSocket connection (which would skip the warm-up) also moves realtime there.
+The `model` on `thread/realtime/start` selects the realtime model only; it
+doesn't change the warm-up. Skipping the warm-up for realtime-only threads is a
+possible later change (#1045).
+
 ### Example: Start realtime with WebRTC
 
 Use `thread/realtime/start` with `transport.type: "webrtc"` when a browser or webview owns the `RTCPeerConnection` and app-server should create the server-side realtime session. The transport `sdp` must be the offer SDP produced by `RTCPeerConnection.createOffer()`, not a hand-written or minimal SDP string.
@@ -1509,7 +1535,7 @@ The app-server streams JSON-RPC notifications while a turn is running. Each turn
 - `agentMessage` — `{id, text}` containing the accumulated agent reply.
 - `plan` — `{id, text}` emitted for plan-mode turns; plan text can stream via `item/plan/delta` (experimental).
 - `reasoning` — `{id, summary, content}` where `summary` holds streamed reasoning summaries (applicable for most OpenAI models) and `content` holds raw reasoning blocks (applicable for e.g. open source models).
-- `commandExecution` — `{id, pluginId?, scriptPath?, command, cwd, status, commandActions, aggregatedOutput?, exitCode?, durationMs?}` for sandboxed commands; `pluginId` is present only for commands attributed to a trusted first-party plugin, newly attributed items also include `scriptPath` as a safe `/`-separated path relative to the trusted plugin root, older history may omit `scriptPath`, and `status` is `inProgress`, `completed`, `failed`, or `declined`.
+- `commandExecution` — `{id, pluginId?, scriptPath?, command, cwd, status, commandActions, aggregatedOutput?, exitCode?, durationMs?}` for sandboxed commands; `pluginId` is present only for commands attributed to a trusted first-party plugin, newly attributed items also include `scriptPath` as a safe `/`-separated path relative to the trusted plugin root, older history may omit `scriptPath`, and `status` is `inProgress`, `completed`, `failed`, `declined`, or `refused`. `refused` means policy or setup refused the command without an approval decline, usually before it ran (a network-policy denial can arrive after it started, so do not assume it never ran); `declined` means an approval request resolved without permission. Preserve `aggregatedOutput` as the refusal reason and do not interpret the sentinel exit code as an executed process.
   `cwd` and read `commandActions[].path` use the executor's native path convention, even when the app-server runs on a different operating system. For example, an app-server running on Linux can return `C:\repo\src\main.rs` for a Windows executor; clients must not interpret that path as local to the app-server.
 - `fileChange` — `{id, changes, status}` describing proposed edits; `changes` list `{path, kind, diff}` and `status` is `inProgress`, `completed`, `failed`, or `declined`.
 - `mcpToolCall` — `{id, server, tool, status, arguments, appContext, mcpAppResourceUri?, pluginId, readOnlyHint, result?, error?}` describing MCP calls; `appContext` is `{connectorId, linkId, resourceUri, appName, actionName}` for calls through a trusted MCP app, where `connectorId` identifies the connector that owns the tool, `linkId` identifies the app link, `resourceUri` points to the widget template, `appName` is the connector's display name, and `actionName` is the stable connector `Action.name`. `readOnlyHint` is `true` for read-only tools, `false` for write-capable tools, and `null` when the annotation is unavailable, including older rollout entries. The hint describes tool capability, not whether an invocation succeeded or performed a write; use `status`, `result`, and `error` to determine the execution outcome. `appName` and `actionName` may be null for older rollout entries. The top-level `mcpAppResourceUri` is deprecated and temporarily duplicated for client migration. `tool` identifies the raw MCP tool. `status` is `inProgress`, `completed`, or `failed`.
@@ -1595,7 +1621,7 @@ Order of messages:
 2. `item/commandExecution/requestApproval` (request) — carries the same `itemId`, `threadId`, `turnId`, the nullable `environmentId` where the command will run, optionally `approvalId` (for subcommand callbacks), and `reason`. New shell and unified-exec approvals set `environmentId`; older events that do not provide one are exposed as `null`. For normal command approvals, the request also includes `command`, `cwd`, and `commandActions` for friendly display. When `initialize.params.capabilities.experimentalApi = true`, it may also include experimental `additionalPermissions` describing requested per-command sandbox access; any filesystem paths in that payload are absolute on the wire, and network access is represented as `additionalPermissions.network.enabled`. For network-only approvals, those command fields may be omitted and `networkApprovalContext` is provided instead. Optional persistence hints may also be included via `proposedExecpolicyAmendment` and `proposedNetworkPolicyAmendments`. Clients can prefer `availableDecisions` when present to render the exact set of choices the server wants to expose, while still falling back to the older heuristics if it is omitted.
 3. Client response — for example `{ "decision": "accept" }`, `{ "decision": "acceptForSession" }`, `{ "decision": { "acceptWithExecpolicyAmendment": { "execpolicy_amendment": [...] } } }`, `{ "decision": { "applyNetworkPolicyAmendment": { "network_policy_amendment": { "host": "example.com", "action": "allow" } } } }`, `{ "decision": "decline" }`, or `{ "decision": "cancel" }`.
 4. `serverRequest/resolved` — `{ threadId, requestId }` confirms the pending request has been resolved or cleared, including lifecycle cleanup on turn start/complete/interrupt.
-5. `item/completed` — final `commandExecution` item with `status: "completed" | "failed" | "declined"` and execution output. Render this as the authoritative result.
+5. `item/completed` — final `commandExecution` item with `status: "completed" | "failed" | "declined" | "refused"` and execution output or the refusal reason. Render this as the authoritative result.
 
 ### File change approvals
 
@@ -2136,7 +2162,7 @@ Codex supports these authentication modes. The current mode is surfaced in `acco
 - `account/login/completed` (notify) — emitted when a login attempt finishes (success or error).
 - `account/login/cancel` — cancel a pending managed ChatGPT login by `loginId`.
 - `account/logout` — sign out; triggers `account/updated` on success.
-- `account/updated` (notify) — emitted whenever auth mode changes (`authMode`: `apikey`, `bedrockApiKey`, `chatgpt`, `personalAccessToken`, or `null`) and includes the current ChatGPT `planType` when available.
+- `account/updated` (notify) — emitted whenever auth mode changes (`authMode`: `apikey`, `bedrockApiKey`, `chatgpt`, `personalAccessToken`, or `null`) and includes the current ChatGPT `planType` when available. `apiKeyEnvVar` names the environment variable the OpenAI API key is read from (for example `OPENAI_API_KEY`), or is `null`; like `authMode`, it describes the OpenAI credential whatever the active provider.
 - `account/rateLimits/read` — fetch ChatGPT rate limits, an optional effective monthly credit limit, whether spend control has been reached, and the earned rate-limit resets currently available, including expiry details when provided by the backend. Rate-limit updates arrive via `account/rateLimits/updated` (notify); reset-credit data is snapshot-only.
 - `account/rateLimitResetCredit/consume` — consume one earned reset using a caller-provided idempotency key, optionally selecting a reset-credit ID returned by `account/rateLimits/read`.
 - `account/usage/read` — fetch ChatGPT account token-activity summary and daily buckets.
@@ -2166,6 +2192,7 @@ Field notes:
 
 - `refreshToken` (bool): set `true` to force a token refresh.
 - `email` is `null` when the ChatGPT account does not have an email address.
+- For `apiKey`, `envVar` names the environment variable the key is read from (for example `OPENAI_API_KEY` when no sign-in or key is saved), or is `null` for a saved key or a provider that doesn't use OpenAI sign-in. The first model turn, review or compaction a thread bills to the `OPENAI_API_KEY` fallback also emits a thread-scoped `warning` notification, and again whenever the credential switches back to it. Spawned agent threads announce for themselves; review and compaction sub-sessions, internal sessions and realtime sessions don't emit it.
 - `requiresOpenaiAuth` reflects the active provider; when `false`, Codex can run without OpenAI credentials.
 - Amazon Bedrock reports `usesCodexManagedCredentials: true` when it uses a Bedrock API key managed by Codex. It reports `false` for external credential paths, including the AWS credential chain and configured command auth. This identifies whether Codex-managed credentials are selected; it does not validate that the credential source can resolve credentials.
 
@@ -2186,7 +2213,7 @@ Field notes:
 3. Notifications:
    ```json
    { "method": "account/login/completed", "params": { "loginId": null, "success": true, "error": null } }
-   { "method": "account/updated", "params": { "authMode": "apikey", "planType": null } }
+   { "method": "account/updated", "params": { "authMode": "apikey", "planType": null, "apiKeyEnvVar": null } }
    ```
 
 ### 3) Log in with ChatGPT (browser flow)
@@ -2205,7 +2232,7 @@ Field notes:
 3. Wait for notifications:
    ```json
    { "method": "account/login/completed", "params": { "loginId": "<uuid>", "success": true, "error": null } }
-   { "method": "account/updated", "params": { "authMode": "chatgpt", "planType": "plus" } }
+   { "method": "account/updated", "params": { "authMode": "chatgpt", "planType": "plus", "apiKeyEnvVar": null } }
    ```
 
 ### 3) Log in with an Amazon Bedrock API key
@@ -2227,7 +2254,7 @@ This experimental flow requires the client to initialize with `experimentalApi: 
 3. Notifications:
    ```json
    { "method": "account/login/completed", "params": { "loginId": null, "success": true, "error": null } }
-   { "method": "account/updated", "params": { "authMode": "bedrockApiKey", "planType": null } }
+   { "method": "account/updated", "params": { "authMode": "bedrockApiKey", "planType": null, "apiKeyEnvVar": null } }
    ```
 
 Codex stores the key and region as the primary Codex auth, replacing any previously stored login, and writes `model_provider = "amazon-bedrock"` to the active user config. Existing loaded sessions keep their current provider selection, so clients should restart the app-server before sending more model requests. This limitation will be addressed in a follow-up.
@@ -2243,7 +2270,7 @@ Codex stores the key and region as the primary Codex auth, replacing any previou
 3. Wait for notifications:
    ```json
    { "method": "account/login/completed", "params": { "loginId": "<uuid>", "success": true, "error": null } }
-   { "method": "account/updated", "params": { "authMode": "chatgpt", "planType": "plus" } }
+   { "method": "account/updated", "params": { "authMode": "chatgpt", "planType": "plus", "apiKeyEnvVar": null } }
    ```
 
 ### 5) Cancel a ChatGPT login
@@ -2258,7 +2285,7 @@ Codex stores the key and region as the primary Codex auth, replacing any previou
 ```json
 { "method": "account/logout", "id": 6 }
 { "id": 6, "result": {} }
-{ "method": "account/updated", "params": { "authMode": null, "planType": null } }
+{ "method": "account/updated", "params": { "authMode": null, "planType": null, "apiKeyEnvVar": null } }
 ```
 
 When using a Codex-managed Bedrock key, logout removes the key and clears `model_provider` if it is still set to `"amazon-bedrock"`. When using AWS-managed credentials, manage them through AWS or switch providers before logging out.

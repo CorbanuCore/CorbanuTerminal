@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "level": "aggressive",
+  "revocations": {
+    "schema_version": 1,
+    "generation": 2,
+    "kill_switch_active": true,
+    "applied_event_ids": [
+      "9e2a5326c23529ec8dca7bd218040908168efeebe5b28a6b218b0f547ab0b0b1",
+      "fc8af0b3f88f77c08ec9204aee20e2b9537f9b3c4c5c72795b78a453f8b00fb2"
+    ],
+    "all_authority_revoked_at_unix_seconds": 1791804018,
+    "last_kill_switch_event": {
+      "created_at_unix_seconds": 1791804018,
+      "event_id": "fc8af0b3f88f77c08ec9204aee20e2b9537f9b3c4c5c72795b78a453f8b00fb2"
+    }
+  }
+}

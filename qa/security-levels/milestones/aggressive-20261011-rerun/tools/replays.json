@@ -1,0 +1,46 @@
+{
+ "G11b": {
+  "group": "G11",
+  "cases": [
+   "AGG-33"
+  ],
+  "note": "Attempt 1 typed the command as the whole message; the product's model replied that it could not append to ~/.zshrc and no approval prompt appeared, so the case was stopped. To reach a command's approval prompt, ask the product's agent to run it (for example: Run exactly this command: echo '# expiry-probe' >> ~/.zshrc). If the model declines, record its words verbatim and resubmit the same request unchanged once. The product's `~` is your account's home (`$HOME`), not the product home."
+ },
+ "G14b": {
+  "group": "G14",
+  "cases": [
+   "AGG-24"
+  ],
+  "note": "Attempt 1 stopped because the starting state was not already present. Each group starts from a fresh profile: you set up starting conditions yourself in this run. For AGG-24: make Aggressive active (S1), then perform the actions of AGG-09, AGG-12 and AGG-14 (their own outcomes are not judged here), then create the held grant named in the amendment (ask the product's agent to run the command, then on its approval prompt choose Grant once, press u, Grant and run), then do AGG-24's actions. If the product's model declines a request, record its words verbatim and resubmit the same request unchanged once."
+ },
+ "G17b": {
+  "group": "G17",
+  "cases": [
+   "AGG-27"
+  ],
+  "note": "Attempt 1 stopped because Aggressive was not already active. Each group starts from a fresh profile: you set up the starting conditions yourself in this run (they are not provided ready-made). For AGG-27: make Aggressive active first (S1: /security, choose Aggressive, confirm, restart with r), then do the case's actions."
+ },
+ "G08b": {
+  "group": "G08",
+  "cases": [
+   "AGG-38"
+  ],
+  "note": "Attempt 1 stopped because no hook was configured. Each group starts from a fresh profile: you set up the starting conditions yourself in this run (they are not provided ready-made). Configuration that a starting condition describes (here: one harmless hook) is set up by you in the product's own settings under `$AGMS_RUN/product-home` (its config.toml) or in the project, using the product's documented hook settings or menus as they appear; record exactly what you configured."
+ },
+ "G22b": {
+  "group": "G22",
+  "cases": [
+   "AGG-R01",
+   "AGG-R03",
+   "AGG-R04"
+  ],
+  "note": "Fresh profile; set up S1 yourself. Relay traffic (mediator-window.jsonl) is not available to you: it is kept by the coordinator and checked by the evidence check, so record the UTC time at which you confirmed the kill switch (and turned it off) and judge only what you can observe. In AGG-R03, never type text or press keys into an open approval prompt (attempt 1 did, which approved the command); if the product offers no way to reach another pane while pane A's prompt is open, record exactly what you tried and stop AGG-R03 as blocked. AGG-R04 follows AGG-R01 and AGG-R03 in this run with the kill switch on; if AGG-R03 was stopped, turn the kill switch on as in AGG-R01 before AGG-R04 and note it."
+ },
+ "G28b": {
+  "group": "G28",
+  "cases": [
+   "AGG-R15"
+  ],
+  "note": "Fresh profile; set up S1 yourself. Attempt 1 pressed Enter twice on the Grants screen (once on 'Turn the kill switch on', which opened its review, and again on the review, which confirmed it), so the case was not performed as written. The case has exactly ONE Enter: highlight 'Turn the kill switch on', press Enter once, then press Esc, Esc without any other key. To make the reply stream, send: Write a 2000-word story. Do not approve or decline anything else."
+ }
+}

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use codex_core::accounting_extensions::ExtensionAccounting;
 use codex_core::config::Config;
 use codex_extension_api::ConfigContributor;
 use codex_extension_api::ExtensionData;
@@ -100,6 +101,7 @@ impl ToolContributor for ImageGenerationExtension {
                 thread_store
                     .get::<ThreadOriginator>()
                     .map(|originator| originator.0.clone()),
+                thread_store.get::<ExtensionAccounting>(),
             ),
             config.save_root.clone(),
             thread_store.level_id().to_string(),

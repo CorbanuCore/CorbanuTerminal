@@ -17,7 +17,6 @@ use core_test_support::apps_test_server::AppsTestServer;
 use core_test_support::responses;
 use core_test_support::skip_if_no_network;
 use core_test_support::skip_if_target_windows;
-use core_test_support::test_codex::local_selections;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_mcp_server;
@@ -45,6 +44,10 @@ async fn local_mcp_startup_and_refresh_use_configured_http_client() -> Result<()
     if std::env::var_os(PROXY_TEST_SUBPROCESS_ENV_VAR).is_none() {
         let proxy = MockServer::start().await;
         let _apps_server = AppsTestServer::mount(&proxy).await?;
+        // The remote exec-server host stays out of the test proxy too.
+        let no_proxy = core_test_support::test_codex::no_proxy_with_remote_exec_server(
+            codex_network_proxy::DEFAULT_NO_PROXY_VALUE,
+        );
         let mut command = Command::new(std::env::current_exe()?);
         command.arg("--exact").arg(TEST_NAME);
         for &key in codex_network_proxy::PROXY_ENV_KEYS {
@@ -54,8 +57,8 @@ async fn local_mcp_startup_and_refresh_use_configured_http_client() -> Result<()
             .env(PROXY_TEST_SUBPROCESS_ENV_VAR, "1")
             .env("HTTP_PROXY", proxy.uri())
             .env("http_proxy", proxy.uri())
-            .env("NO_PROXY", codex_network_proxy::DEFAULT_NO_PROXY_VALUE)
-            .env("no_proxy", codex_network_proxy::DEFAULT_NO_PROXY_VALUE);
+            .env("NO_PROXY", &no_proxy)
+            .env("no_proxy", &no_proxy);
 
         let output = command.output().await?;
         let requests = proxy
@@ -212,6 +215,10 @@ async fn skill_mcp_dependency_oauth_uses_configured_http_client() -> Result<()> 
             .mount(&proxy)
             .await;
 
+        // The remote exec-server host stays out of the test proxy too.
+        let no_proxy = core_test_support::test_codex::no_proxy_with_remote_exec_server(
+            codex_network_proxy::DEFAULT_NO_PROXY_VALUE,
+        );
         let mut command = Command::new(std::env::current_exe()?);
         command.arg("--exact").arg(SKILL_TEST_NAME);
         for &key in codex_network_proxy::PROXY_ENV_KEYS {
@@ -221,8 +228,8 @@ async fn skill_mcp_dependency_oauth_uses_configured_http_client() -> Result<()> 
             .env(PROXY_TEST_SUBPROCESS_ENV_VAR, "1")
             .env("HTTP_PROXY", proxy.uri())
             .env("http_proxy", proxy.uri())
-            .env("NO_PROXY", codex_network_proxy::DEFAULT_NO_PROXY_VALUE)
-            .env("no_proxy", codex_network_proxy::DEFAULT_NO_PROXY_VALUE);
+            .env("NO_PROXY", &no_proxy)
+            .env("no_proxy", &no_proxy);
 
         let output = command.output().await?;
         let requests = proxy
@@ -326,7 +333,8 @@ async fn skill_mcp_dependency_oauth_uses_configured_http_client() -> Result<()> 
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
-                environments: Some(local_selections(fixture.config.cwd.clone())),
+                // The test's default environment: remote in the remote lane.
+                environments: None,
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,

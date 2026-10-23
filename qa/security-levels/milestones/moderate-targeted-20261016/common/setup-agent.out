@@ -1,0 +1,9 @@
+key file present (not read here)
+{"allowed_prefixes": ["/api/paas/v4/", "/api/coding/paas/v4/", "/api/anthropic/"], "allowed_target": "api.z.ai:443", "event": "started", "port": 18443, "time_ns": 1792146282992141000, "ts": "2026-10-16T03:24:42-0700"}
+2026-10-16T10:24:43Z clear (baseline login-window SecurityAgent only)
+/Users/agent 700 agent
+/Users/agent/agms 700 agent
+/Users/agent/agms-canary 700 agent
+/private/tmp/agms-canary-ipc 700 agent
+/Users/Shared/agms-canary-ipc.pid 644 agent
+setup-agent done

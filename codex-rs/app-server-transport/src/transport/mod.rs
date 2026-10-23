@@ -376,6 +376,7 @@ mod tests {
                     codex_home,
                     platform_family: "unix".to_string(),
                     platform_os: "linux".to_string(),
+                    ruled_out_default_login: None,
                 },
             )),
         });

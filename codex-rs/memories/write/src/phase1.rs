@@ -66,6 +66,29 @@ struct StageOneOutput {
     pub(crate) rollout_slug: Option<String>,
 }
 
+/// Parses the stage-one answer. Some providers (GLM) wrap the JSON in one
+/// Markdown code fence despite the output schema, so exactly one fenced block
+/// tagged `json` or untagged is also accepted. Nothing else is loosened.
+fn parse_stage_one_output(text: &str) -> serde_json::Result<StageOneOutput> {
+    match serde_json::from_str(text) {
+        Ok(output) => Ok(output),
+        Err(err) => match single_fenced_json_block(text) {
+            Some(inner) => serde_json::from_str(inner),
+            None => Err(err),
+        },
+    }
+}
+
+fn single_fenced_json_block(text: &str) -> Option<&str> {
+    let rest = text.trim().strip_prefix("```")?;
+    let (info, body) = rest.split_once('\n')?;
+    if !matches!(info.trim(), "" | "json") {
+        return None;
+    }
+    // A second block, or prose after the fence, is not JSON: serde rejects it.
+    body.trim_end().strip_suffix("```")
+}
+
 /// Runs memory phase 1 in strict step order:
 /// 1) claim eligible rollout jobs
 /// 2) build metrics context and refresh each job's host routing
@@ -261,6 +284,7 @@ mod job {
         let (stage_one_output, token_usage, client) = match sample(
             context,
             config,
+            claimed_thread.id,
             &claimed_thread.rollout_path,
             &claimed_thread.cwd,
             stage_one_context,
@@ -333,25 +357,58 @@ mod job {
     async fn sample(
         context: &MemoryStartupContext,
         config: &Config,
+        source_thread: codex_protocol::ThreadId,
         rollout_path: &Path,
         rollout_cwd: &Path,
         stage_one_context: &StageOneRequestContext,
     ) -> anyhow::Result<(StageOneOutput, Option<TokenUsage>, StageOneMemoryClient)> {
-        let (rollout_items, _, _) = RolloutRecorder::load_rollout_items(rollout_path).await?;
-        let rollout_contents = serialize_filtered_rollout_response_items(&rollout_items)?;
+        let client = context.stage_one_client(config).await?;
+        // PF-23-S01: above Permissive Core builds the whole message from the
+        // source session's own rollout; Permissive is unchanged.
+        // PF-23-S03: also when the source session ran above Permissive.
+        let labelled = if client.requires_labelled_input_for(rollout_path).await? {
+            let model_info = &stage_one_context.model_info;
+            Some(
+                client
+                    .label_rollout(
+                        source_thread,
+                        rollout_path,
+                        crate::prompts::stage_one_rollout_token_limit(model_info),
+                        redact_secrets,
+                        |contents| {
+                            build_stage_one_input_message(
+                                model_info,
+                                rollout_path,
+                                rollout_cwd,
+                                contents,
+                            )
+                        },
+                    )
+                    .await?,
+            )
+        } else {
+            None
+        };
+        let text = match &labelled {
+            Some(labelled) => labelled.message().to_string(),
+            None => {
+                let (rollout_items, _, _) =
+                    RolloutRecorder::load_rollout_items(rollout_path).await?;
+                let rollout_contents = serialize_filtered_rollout_response_items(&rollout_items)?;
+                build_stage_one_input_message(
+                    &stage_one_context.model_info,
+                    rollout_path,
+                    rollout_cwd,
+                    &rollout_contents,
+                )?
+            }
+        };
 
         let mut prompt = Prompt::default();
         prompt.input = vec![ResponseItem::Message {
             id: None,
             role: "user".to_string(),
-            content: vec![ContentItem::InputText {
-                text: build_stage_one_input_message(
-                    &stage_one_context.model_info,
-                    rollout_path,
-                    rollout_cwd,
-                    &rollout_contents,
-                )?,
-            }],
+            content: vec![ContentItem::InputText { text }],
             phase: None,
             internal_chat_message_metadata_passthrough: None,
         }];
@@ -362,10 +419,16 @@ mod job {
         prompt.output_schema_strict = true;
 
         let (result, token_usage, client) = context
-            .stream_stage_one_prompt(config, &prompt, stage_one_context)
+            .stream_stage_one_prompt(
+                config,
+                &prompt,
+                stage_one_context,
+                client,
+                labelled.as_ref(),
+            )
             .await?;
 
-        let mut output: StageOneOutput = serde_json::from_str(&result)?;
+        let mut output = parse_stage_one_output(&result)?;
         output.raw_memory = redact_secrets(output.raw_memory);
         output.rollout_summary = redact_secrets(output.rollout_summary);
         output.rollout_slug = output.rollout_slug.map(redact_secrets);
@@ -466,7 +529,14 @@ mod job {
                 | RolloutItem::Compacted(_)
                 | RolloutItem::TurnContext(_)
                 | RolloutItem::WorldState(_)
+                | RolloutItem::SourceOrigin(_)
                 | RolloutItem::EventMsg(_) => None,
+            })
+            .map(|mut item| {
+                // #578: local provenance (fragment sources and producer) is
+                // not part of the memory text.
+                item.clear_local_provenance();
+                item
             })
             .collect::<Vec<_>>();
         let serialized = serde_json::to_string(&filtered).map_err(|err| {
@@ -724,6 +794,50 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     #[test]
+    fn parses_stage_one_output_plain_or_in_one_json_fence() {
+        let json = r#"{"raw_memory":"m","rollout_summary":"s","rollout_slug":"x"}"#;
+        for text in [
+            json.to_string(),
+            format!("```json\n{json}\n```"),
+            format!("```\n{json}\n```"),
+            format!("  \n```json\n{json}\n```\n"),
+            format!("```json\r\n{json}\r\n```\r\n"),
+        ] {
+            let output =
+                parse_stage_one_output(&text).unwrap_or_else(|err| panic!("{text}: {err}"));
+            assert_eq!(
+                (output.raw_memory.as_str(), output.rollout_summary.as_str()),
+                ("m", "s")
+            );
+            assert_eq!(output.rollout_slug.as_deref(), Some("x"));
+        }
+        // A Markdown code block inside a value is kept.
+        let text =
+            "```json\n{\"raw_memory\":\"a ```rust\\nx\\n``` b\",\"rollout_summary\":\"s\"}\n```";
+        let output = parse_stage_one_output(text).unwrap_or_else(|err| panic!("{text}: {err}"));
+        assert_eq!(output.raw_memory, "a ```rust\nx\n``` b");
+    }
+
+    #[test]
+    fn rejects_stage_one_output_outside_one_json_fence() {
+        let json = r#"{"raw_memory":"m","rollout_summary":"s"}"#;
+        for text in [
+            format!("Here you go:\n```json\n{json}\n```"),
+            format!("```json\n{json}\n```\nDone."),
+            format!("```rust\n{json}\n```"),
+            format!("```json {json} ```"),
+            format!("```json\n{json}\n```\n```json\n{json}\n```"),
+            format!("```json\n{json}"),
+            r#"```json
+{"raw_memory":"m","rollout_summary":"s","extra":1}
+```"#
+                .to_string(),
+        ] {
+            assert!(parse_stage_one_output(&text).is_err(), "accepted: {text}");
+        }
+    }
+
+    #[test]
     fn serializes_memory_rollout_with_agents_removed_but_environment_kept() {
         let mixed_contextual_message = ResponseItem::Message {
             id: None,
@@ -845,6 +959,40 @@ mod tests {
         let parsed: Vec<ResponseItem> = serde_json::from_str(&serialized).expect("parse");
 
         assert_eq!(parsed, expected);
+    }
+
+    /// #578: the producer recorded on model output is not part of the memory text.
+    #[test]
+    fn memory_text_leaves_out_local_provenance() {
+        let mut call = ResponseItem::FunctionCall {
+            id: None,
+            name: "shell".to_string(),
+            namespace: None,
+            arguments: "{}".to_string(),
+            encrypted_function_args: None,
+            call_id: "call-1".to_string(),
+            internal_chat_message_metadata_passthrough: None,
+        };
+        call.set_producer("zai");
+        let mut answer = ResponseItem::Message {
+            id: None,
+            role: "assistant".to_string(),
+            content: vec![ContentItem::OutputText {
+                text: "done".to_string(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        };
+        answer.set_producer("openai:work");
+
+        let serialized = job::serialize_filtered_rollout_response_items(&[
+            RolloutItem::ResponseItem(call),
+            RolloutItem::ResponseItem(answer),
+        ])
+        .expect("serialize");
+
+        assert!(serialized.contains("done"), "{serialized}");
+        assert!(!serialized.contains("producer"), "{serialized}");
     }
 
     #[test]

@@ -23,19 +23,19 @@ run() {
         return "$result"
     fi
 }
-run fix-service just fix -p codex-secret-broker-service --features synthetic-fixture
+run fix-service just fix -p codex-secret-broker-service -p codex-secret-broker-fixture
 run fix-broker just fix -p codex-secret-broker --lib
 run fmt just fmt
 run clippy-default just clippy -p codex-secret-broker-service
-run clippy-synthetic just clippy -p codex-secret-broker-service --features synthetic-fixture
+run clippy-synthetic just clippy -p codex-secret-broker-service -p codex-secret-broker-fixture
 git diff --binary > "$evidence/post-format.patch"
 run bazel-lock just bazel-lock-update
 bazel shutdown > "$evidence/bazel-shutdown.log" 2>&1 || true
 run service-default just test -p codex-secret-broker-service --retries 0 --test-threads 4
-run service-synthetic just test -p codex-secret-broker-service --features synthetic-fixture --retries 0 --test-threads 4
+run service-synthetic just test -p codex-secret-broker-service -p codex-secret-broker-fixture --retries 0 --test-threads 4
 run broker-vault-proxy just test -p codex-secret-broker -p codex-vault -p codex-network-proxy --retries 0 --test-threads 4
 run core just test -p codex-core --lib -E 'test(broker_client) | test(network_proxy_credential)' --retries 0 --test-threads 4
-run service-build bash -c 'cd codex-rs && cargo build --locked -p codex-secret-broker-service --features synthetic-fixture'
+run service-build bash -c 'cd codex-rs && cargo build --locked -p codex-secret-broker-service -p codex-secret-broker-fixture'
 mkdir -p "$evidence/candidate"
 cp "$CARGO_TARGET_DIR/debug/codex-secret-broker-service" "$evidence/candidate/"
 cp "$CARGO_TARGET_DIR/debug/codex-secret-broker-service-fixture" "$evidence/candidate/"

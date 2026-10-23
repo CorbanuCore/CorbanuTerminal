@@ -1,0 +1,20 @@
+### logs/h1.launch.sh (last launch)
+#!/bin/bash
+<rtx-home>/corbanu-rtx/pf60s04-ia/bin/corbanu -C <rtx-home>/corbanu-rtx/pf60s04-ia/work/ws -c log_dir=\"<rtx-home>/corbanu-rtx/pf60s04-ia/homes/h1/logs\" -c service_tier=\"priority\" resume 01a12451-0c3e-78d1-af1e-971bc1e26a14 2>>"$CODEX_HOME/logs/stderr.log"
+echo EXITED $?; sleep 600
+### logs/h2.launch.sh (last launch)
+#!/bin/bash
+<rtx-home>/corbanu-rtx/pf60s04-ia/bin/corbanu -C <rtx-home>/corbanu-rtx/pf60s04-ia/work/ws -c log_dir=\"<rtx-home>/corbanu-rtx/pf60s04-ia/homes/h2/logs\" resume 01a1245e-ee6f-7931-8f41-387419f53ada 2>>"$CODEX_HOME/logs/stderr.log"
+echo EXITED $?; sleep 600
+### logs/h3.launch.sh (last launch)
+#!/bin/bash
+<rtx-home>/corbanu-rtx/pf60s04-ia/bin/corbanu -C <rtx-home>/corbanu-rtx/pf60s04-ia/work/ws -c log_dir=\"<rtx-home>/corbanu-rtx/pf60s04-ia/homes/h3/logs\" 2>>"$CODEX_HOME/logs/stderr.log"
+echo EXITED $?; sleep 600
+### logs/h4.launch.sh (last launch)
+#!/bin/bash
+<rtx-home>/corbanu-rtx/pf60s04-ia/bin/corbanu -C <rtx-home>/corbanu-rtx/pf60s04-ia/work/ws -c log_dir=\"<rtx-home>/corbanu-rtx/pf60s04-ia/homes/h4/logs\" resume 01a12468-99a5-77b2-8c7e-2cf5ac88a589 2>>"$CODEX_HOME/logs/stderr.log"
+echo EXITED $?; sleep 600
+### logs/h6.launch.sh (last launch)
+#!/bin/bash
+<rtx-home>/corbanu-rtx/pf60s04-ia/bin/corbanu -C <rtx-home>/corbanu-rtx/pf60s04-ia/work/ws -c log_dir=\"<rtx-home>/corbanu-rtx/pf60s04-ia/homes/h6/logs\" -m gpt-5.6-terra resume 01a1247a-b973-7073-847c-3996cc248ad2 2>>"$CODEX_HOME/logs/stderr.log"
+echo EXITED $?; sleep 600

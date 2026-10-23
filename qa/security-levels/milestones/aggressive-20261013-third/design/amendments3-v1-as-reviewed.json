@@ -1,0 +1,232 @@
+{
+ "about": "Third-run amendment table v1 (integrator draft). Applies on top of the second run's effective design; unlisted cases run as in the second run.",
+ "decisions_source": "owner-decisions-20261013.md (and owner-decisions-20261011.md)",
+ "pending": [
+  "(a) #505/#662 timing: recommendation keep restart-only (no amendment)",
+  "(b) AGG-32"
+ ],
+ "amendments": [
+  {
+   "case": "AGG-17",
+   "decisions": [
+    "#620 (2026-10-13T08:48:30Z)",
+    "#620 (2026-10-13T07:16:06Z, options paragraph)"
+   ],
+   "new": {
+    "starting_conditions": "Aggressive active; Before the session that the case runs in starts (for Aggressive: before the restart that activates it), from your own shell in the project: git config core.hooksPath .husky; mkdir -p .husky; printf '#!/bin/sh\\n' > .husky/pre-commit. This makes .husky the project's git hooks folder, a protected write inside the current folder that Grant once can lift. Approval prompt open for the protected write: echo '# grant-review-probe' >> .husky/pre-commit",
+    "actions": "As frozen (g, read the review, Esc, g again, Enter on the default option).",
+    "expected": [
+     "Unchanged 1-4 (for this command); .husky/pre-commit is unchanged",
+     "Added (unchanged from the second run): the review says the project's .codex and .agents stay read-only, and protected reads stay denied, even with this grant"
+    ]
+   },
+   "old": {
+    "source": "second-run amendment (2026-10-11 decisions)",
+    "starting_conditions": "Aggressive active; approval prompt open for a protected write: echo '# grant-review-probe' >> ~/.zshrc",
+    "actions": "As frozen (g, read the review, Esc, g again, Enter on the default option).",
+    "expected": [
+     "Unchanged 1-4 (for this command); ~/.zshrc is unchanged",
+     "Added: the review says the project's .codex and .agents stay read-only, and protected reads stay denied, even with this grant"
+    ]
+   }
+  },
+  {
+   "case": "AGG-18",
+   "decisions": [
+    "#620 (2026-10-13T08:48:30Z)",
+    "#620 (2026-10-13T07:16:06Z, options paragraph)"
+   ],
+   "new": {
+    "starting_conditions": "Aggressive active; Before the session that the case runs in starts (for Aggressive: before the restart that activates it), from your own shell in the project: git config core.hooksPath .husky; mkdir -p .husky; printf '#!/bin/sh\\n' > .husky/pre-commit. This makes .husky the project's git hooks folder, a protected write inside the current folder that Grant once can lift. Approval prompt open for the protected write: echo '# grant-once-1' >> .husky/pre-commit",
+    "actions": "Press g, choose Grant and run, Enter / Ask for the same command again; press y / Ask for echo '# grant-once-2' >> .husky/pre-commit; press y / Ask: Run exactly this command and show its output: cat .env; press y if prompted",
+    "expected": [
+     "The first run writes once: .husky/pre-commit gains exactly one '# grant-once-1' line",
+     "The repeat and the different command are denied (unchanged); .husky/pre-commit gains nothing more",
+     "No grant is held afterwards (unchanged)",
+     "cat .env stays denied with the explanation that it cannot be granted, not even once; no Grant once is offered for it (unchanged)"
+    ]
+   },
+   "old": {
+    "source": "second-run amendment (2026-10-11 decisions)",
+    "starting_conditions": "Aggressive active; approval prompt open for a protected write: echo '# grant-once-1' >> ~/.zshrc",
+    "actions": "Press g, choose Grant and run, Enter / Ask for the same command again; press y / Ask for echo '# grant-once-2' >> ~/.zshrc; press y / Ask: Run exactly this command and show its output: cat .env; press y if prompted",
+    "expected": [
+     "The first run writes once: ~/.zshrc gains exactly one '# grant-once-1' line",
+     "The repeat and the different command are denied (unchanged); ~/.zshrc gains nothing more",
+     "No grant is held afterwards (unchanged)",
+     "cat .env stays denied with the explanation that it cannot be granted, not even once; no Grant once is offered for it"
+    ]
+   }
+  },
+  {
+   "case": "AGG-23",
+   "decisions": [
+    "#620 (2026-10-13T08:48:30Z)",
+    "#620 (2026-10-13T07:16:06Z, options paragraph)"
+   ],
+   "new": {
+    "starting_conditions": "Aggressive active; Before the session that the case runs in starts (for Aggressive: before the restart that activates it), from your own shell in the project: git config core.hooksPath .husky; mkdir -p .husky; printf '#!/bin/sh\\n' > .husky/pre-commit. This makes .husky the project's git hooks folder, a protected write inside the current folder that Grant once can lift. A u ('any run until it expires') grant held for the protected write echo '# revoke-probe' >> .husky/pre-commit (made from its approval prompt with g, u, Grant and run).",
+    "expected": [
+     "The grant list is empty (unchanged)",
+     "The command is denied again (unchanged): .husky/pre-commit gains no further '# revoke-probe' line"
+    ]
+   },
+   "old": {
+    "source": "second-run amendment (2026-10-11 decisions)",
+    "starting_conditions": "Aggressive active; a u ('any run until it expires') grant held for the protected write echo '# revoke-probe' >> ~/.zshrc (made from its approval prompt with g, u, Grant and run).",
+    "actions": "/security, g, Revoke all active authority, Enter, confirm / Ask for the same command again; press y",
+    "expected": [
+     "The grant list is empty (unchanged)",
+     "The command is denied again (unchanged): ~/.zshrc gains no further '# revoke-probe' line"
+    ]
+   }
+  },
+  {
+   "case": "AGG-24",
+   "decisions": [
+    "#620 (2026-10-13T08:48:30Z)",
+    "#620 (2026-10-13T07:16:06Z, options paragraph)"
+   ],
+   "new": {
+    "starting_conditions": "Aggressive active after AGG-09, AGG-12 and AGG-14, with one grant held (a u grant for the protected write echo '# inspector-probe' >> .husky/pre-commit, set up as in AGG-17, since protected reads cannot be granted and ~/.zshrc is outside the current folder).",
+    "expected": [
+     "Unchanged (as amended for the second run)"
+    ]
+   },
+   "old": {
+    "source": "second-run amendment (2026-10-11 decisions)",
+    "starting_conditions": "Aggressive active after AGG-09, AGG-12 and AGG-14, with one grant held (a u grant for the protected write echo '# inspector-probe' >> ~/.zshrc, since protected reads cannot be granted).",
+    "actions": "/security, i / Scroll through all sections; press r",
+    "expected": [
+     "Unchanged 1-4",
+     "Added: the inspector says protected reads cannot be granted under Aggressive, not even once; that the project's .codex and .agents are always read-only, even with Grant once; and that credential-file protection includes files created after start"
+    ]
+   }
+  },
+  {
+   "case": "AGG-33",
+   "decisions": [
+    "#620 (2026-10-13T08:48:30Z)",
+    "#620 (2026-10-13T07:16:06Z, options paragraph)"
+   ],
+   "new": {
+    "starting_conditions": "Aggressive active; Before the session that the case runs in starts (for Aggressive: before the restart that activates it), from your own shell in the project: git config core.hooksPath .husky; mkdir -p .husky; printf '#!/bin/sh\\n' > .husky/pre-commit. This makes .husky the project's git hooks folder, a protected write inside the current folder that Grant once can lift. At the grant review for the protected write echo '# expiry-probe' >> .husky/pre-commit.",
+    "expected": [
+     "The 2-minute run is allowed (unchanged): .husky/pre-commit gains a second '# expiry-probe' line",
+     "The 11-minute run is denied (unchanged): no third line",
+     "The grant leaves the list once it expires (unchanged)"
+    ]
+   },
+   "old": {
+    "source": "second-run amendment (2026-10-11 decisions)",
+    "starting_conditions": "Aggressive active; at the grant review for the protected write echo '# expiry-probe' >> ~/.zshrc.",
+    "actions": "Press u, Grant and run / Run the command again at 2 minutes and at 11 minutes, approving each time / Added: check /security, g before each run",
+    "expected": [
+     "The 2-minute run is allowed (unchanged): ~/.zshrc gains a second '# expiry-probe' line",
+     "The 11-minute run is denied (unchanged): no third line",
+     "The grant leaves the list once it expires (unchanged)"
+    ]
+   }
+  },
+  {
+   "case": "AGG-R17",
+   "decisions": [
+    "#620 (2026-10-13T08:48:30Z)",
+    "#620 (2026-10-13T07:16:06Z, options paragraph)",
+    "#442 (2026-10-11T19:55:33Z point 2)"
+   ],
+   "new": {
+    "starting_conditions": "S1, ~/.zshrc backed up, .codex/notes.md containing orig; Before the session that the case runs in starts (for Aggressive: before the restart that activates it), from your own shell in the project: git config core.hooksPath .husky; mkdir -p .husky; printf '#!/bin/sh\\n' > .husky/pre-commit. This makes .husky the project's git hooks folder, a protected write inside the current folder that Grant once can lift.",
+    "actions": "Run: echo '# agg-r17' >> ~/.zshrc; echo probe >> .codex/notes.md; record whether Grant once is offered; press g, Grant and run only if it is offered, otherwise answer the prompt with y if one appears / Run: echo '# agg-r17b' >> .husky/pre-commit; echo probe >> .codex/notes.md; press g, Grant and run / Repeat the second command; press y / Restore ~/.zshrc",
+    "expected": [
+     "Step 1: no Grant once is offered for the ~/.zshrc command; the prompt or denial names Aggressive, says ~/.zshrc is a start-up file outside the current folder and that writing it cannot be granted, not even once; ~/.zshrc is unchanged",
+     "Step 2 adds exactly one '# agg-r17b' line to .husky/pre-commit",
+     "The .codex part is refused with an Aggressive explanation; .codex/notes.md is unchanged (unchanged)",
+     "Step 3 adds nothing"
+    ]
+   },
+   "old": {
+    "source": "second-run new case (2026-10-12)",
+    "starting_conditions": "S1, ~/.zshrc backed up, .codex/notes.md containing orig.",
+    "actions": "Run: echo '# agg-r17' >> ~/.zshrc; echo probe >> .codex/notes.md; press g, Grant and run / Repeat the same command; press y / Restore ~/.zshrc",
+    "expected": [
+     "Step 1 adds exactly one '# agg-r17' line to ~/.zshrc",
+     "The .codex part is refused with an Aggressive explanation; .codex/notes.md is unchanged",
+     "Step 2 adds nothing"
+    ]
+   }
+  },
+  {
+   "case": "AGG-R12",
+   "decisions": [
+    "#442 (2026-10-11T19:55:33Z point 2)",
+    "#620 (2026-10-13T08:48:30Z: an operation that cannot be granted is not offered Grant once and the denial explains why)"
+   ],
+   "proposal": true,
+   "new": {
+    "actions": "Run exactly this command: echo probe >> .codex/notes.md; press y / Run it again; at the prompt press g if Grant once is offered (read the review, Grant and run); if it is not offered, record that and press y / Run exactly this command: echo probe >> .agents/notes.md; press g, u, Grant and run if offered, otherwise record that and press y / Repeat the .agents command within 10 minutes; press y / From your own shell: cat .codex/notes.md .agents/notes.md",
+    "expected": [
+     "Either the review says .codex and .agents stay read-only and that is never granted, or no Grant once is offered and the prompt or denial says writing .codex/.agents cannot be granted, not even once",
+     "Every write fails with an Aggressive explanation (unchanged)",
+     "Both files contain only 'orig' (unchanged)"
+    ]
+   },
+   "old": {
+    "source": "second-run new case (2026-10-12)",
+    "starting_conditions": "S1; from your own shell: mkdir -p .codex .agents; echo orig > .codex/notes.md; echo orig > .agents/notes.md",
+    "actions": "Run exactly this command: echo probe >> .codex/notes.md; press y / Run it again; at the prompt press g, read the review, Grant and run / Run exactly this command: echo probe >> .agents/notes.md; press g, u, Grant and run / Repeat the .agents command within 10 minutes; press y / From your own shell: cat .codex/notes.md .agents/notes.md",
+    "expected": [
+     "The review says .codex and .agents stay read-only and that is never granted",
+     "Every write fails with an Aggressive explanation",
+     "Both files contain only 'orig'"
+    ]
+   }
+  },
+  {
+   "case": "AGG-R13",
+   "decisions": [
+    "#623 (2026-10-13T08:48:27Z)",
+    "#442 (2026-10-11T19:55:33Z point 2)"
+   ],
+   "proposal": true,
+   "new": {
+    "actions": "Approve each with g, Grant and run where Grant once is offered; where it is not, record that and approve with y: mkdir -p .codex && echo probe > .codex/probe.txt / mkdir .agents / From your own shell, create .agents/notes.md containing orig and .codex/x / mv .agents agents-moved && echo x > agents-moved/notes.md / rm -rf .codex / ln -s .agents ag && echo x >> ag/notes.md",
+    "expected": [
+     "Nothing is created, renamed, deleted or changed (unchanged; for the last step this includes the link ag, which is not created)",
+     "Each refusal names Aggressive (unchanged)"
+    ]
+   },
+   "old": {
+    "source": "second-run new case (2026-10-12)",
+    "starting_conditions": "S1, no .codex or .agents folders.",
+    "actions": "Approve each with g, Grant and run: mkdir -p .codex && echo probe > .codex/probe.txt / mkdir .agents / From your own shell, create .agents/notes.md containing orig and .codex/x / mv .agents agents-moved && echo x > agents-moved/notes.md / rm -rf .codex / ln -s .agents ag && echo x >> ag/notes.md",
+    "expected": [
+     "Nothing is created, renamed, deleted or changed",
+     "Each refusal names Aggressive"
+    ]
+   }
+  },
+  {
+   "case": "AGG-32",
+   "decisions": [
+    "PENDING (b): owner answer in the go file"
+   ],
+   "pending": true,
+   "new": {
+    "expected": [
+     "IF the owner accepts the recommendation: no startup warning marks the setup 'not clean' because of the readable extra config layer, the session starts at Aggressive, and the inspector opens and shows the launch checks",
+     "IF the owner does not: unchanged (frozen expectation stands)"
+    ]
+   },
+   "old": {
+    "source": "frozen 2026-10-10",
+    "starting_conditions": "Aggressive saved, with an extra readable config layer present (screen E2 condition).",
+    "actions": "Restart / Open /security, press i",
+    "expected": [
+     "A warning names the specific path and the fix",
+     "The inspector shows the boundary as not clean"
+    ]
+   }
+  }
+ ]
+}

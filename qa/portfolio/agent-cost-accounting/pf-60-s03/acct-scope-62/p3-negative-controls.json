@@ -1,0 +1,90 @@
+{
+  "checks": [
+    {
+      "case": "mixed-day-wrong-day",
+      "rejected": true,
+      "error": "('2026-11-01', {'2026-11-02'})",
+      "old_check_passes": true
+    },
+    {
+      "case": "mixed-day-missing-day",
+      "rejected": true,
+      "error": "('2026-11-01', set())",
+      "old_check_passes": true
+    },
+    {
+      "case": "deleted-history-after-retention-wrong-day",
+      "rejected": true,
+      "error": "('2026-03-08', {'2026-11-02'})",
+      "old_check_passes": true
+    },
+    {
+      "case": "deleted-history-after-retention-missing-day",
+      "rejected": true,
+      "error": "('2026-03-08', set())",
+      "old_check_passes": true
+    },
+    {
+      "case": "compact-hour-explanation-removed",
+      "rejected": true,
+      "error": "Requested: [2026-11-01T05:00:00.000Z, 2026-11-01T07:00:00.000Z); timezone: UTC; grouping: Hour Oldest retained aggregate day (ledger): Some(20520); 90-day drill-down cutoff: Some(1793512799000) ms UTC (exclusive) Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable \u2014 no settlement evidence. Range: Unknown parent population: 0 inspectable attempts, excluded from range total Ancestry counts cover inspectable slices only; unavailable slices may contain additional unknown ancestry. Bucket: [2026-11-01T05:00:00.000Z, 2026-11-01T06:00:00.000Z); effective coverage (requested \u2229 aggregate retention \u2229 snapshot): [2026-11-01T05:00:00.000Z, 2026-11- 01T06:00:00.000Z) Whole bucket within aggregate retention coverage; detail availability checked separately Request detail unavailable for this whole UTC day \u2014 compacted history lost request/provider attribution. No total shown. Store checkpoint: 1801288799000; aggregate day floor: 20484; oldest recorded day: Some(20520); 90-day wall-clock detail cutoff: Some(1793512799000) ms UTC. Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded. Billed cost: unavailable \u2014 no settlement evidence Logical requests may have attempts outside this bucket; this UTC hour is not their complete lifetime. History unavailable. Whole UTC-day bounds offered: [2026-11-01T00:00:00.000Z, 2026-11-02T00:00:00.000Z); this does not restore attribution. Back Refresh Close",
+      "old_check_passes": true
+    },
+    {
+      "case": "TZ-stripped-from-actual-product-process",
+      "rejected": true,
+      "error": "{'pid': 75037, 'tz': '', 'epoch': 1773144000, 'local': '2026-03-10T05:00:00-0700'}"
+    },
+    {
+      "case": "four-positive-product-process-controls",
+      "controls": [
+        {
+          "pid": 33802,
+          "tz": "America/New_York",
+          "epoch": 1773144000,
+          "local": "2026-03-10T08:00:00-0400",
+          "expected_local": "2026-03-10T08:00:00-04:00",
+          "passed": true
+        },
+        {
+          "pid": 34045,
+          "tz": "UTC",
+          "epoch": 1773144000,
+          "local": "2026-03-10T12:00:00+0000",
+          "expected_local": "2026-03-10T12:00:00+00:00",
+          "passed": true
+        },
+        {
+          "pid": 34177,
+          "tz": "Asia/Kolkata",
+          "epoch": 1773144000,
+          "local": "2026-03-10T17:30:00+0530",
+          "expected_local": "2026-03-10T17:30:00+05:30",
+          "passed": true
+        },
+        {
+          "pid": 34302,
+          "tz": "America/Phoenix",
+          "epoch": 1773144000,
+          "local": "2026-03-10T05:00:00-0700",
+          "expected_local": "2026-03-10T05:00:00-07:00",
+          "passed": true
+        }
+      ],
+      "passed": true
+    }
+  ],
+  "negative_count": 6,
+  "positive_count": 4,
+  "removed_tz_process": {
+    "binary": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target/debug/codex",
+    "pid": 75037,
+    "version": "corbanu 0.1.42",
+    "observed": {
+      "pid": 75037,
+      "tz": "",
+      "epoch": 1773144000,
+      "local": "2026-03-10T05:00:00-0700"
+    }
+  }
+}

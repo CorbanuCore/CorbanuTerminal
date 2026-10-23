@@ -71,6 +71,10 @@ async fn regular_responses_turn_honors_respect_system_proxy() -> Result<()> {
             Ok::<_, anyhow::Error>(headers.lines().next().unwrap_or_default().to_string())
         });
 
+        // The remote exec-server host stays out of the test proxy too.
+        let no_proxy = core_test_support::test_codex::no_proxy_with_remote_exec_server(
+            codex_network_proxy::DEFAULT_NO_PROXY_VALUE,
+        );
         let mut command = Command::new(std::env::current_exe()?);
         command.arg("--exact").arg(TEST_NAME);
         for &key in codex_network_proxy::PROXY_ENV_KEYS {
@@ -82,8 +86,8 @@ async fn regular_responses_turn_honors_respect_system_proxy() -> Result<()> {
             .env(SYSTEM_PROXY_TEST_SUBPROCESS_ENV_VAR, "1")
             .env("HTTP_PROXY", &proxy_url)
             .env("http_proxy", proxy_url)
-            .env("NO_PROXY", codex_network_proxy::DEFAULT_NO_PROXY_VALUE)
-            .env("no_proxy", codex_network_proxy::DEFAULT_NO_PROXY_VALUE);
+            .env("NO_PROXY", &no_proxy)
+            .env("no_proxy", &no_proxy);
 
         let output = command.output().await?;
         if !output.status.success() {

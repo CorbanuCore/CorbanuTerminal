@@ -1,0 +1,114 @@
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       gpt-6-luna medium   /model to change       │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+⚠ MCP client for `codex_apps` failed to start: MCP startup failed: handshaking with MCP server failed: Send message error Transport
+  [rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rmcp_client::http_client_adapter::StreamableHttpClie
+  ntAdapter>>] error: unexpected server response: HTTP 404: , when send initialize request
+
+⚠ MCP startup incomplete (failed: codex_apps)
+
+• Model changed to GPT-6 Luna via OpenAI medium
+
+
+› Reply with exactly: pong
+
+
+⚠ Code Mode is unavailable because failed to spawn code-mode host $S/bin/codex-code-mode-host: host executable was not
+  found. Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.
+
+• mock: chatgpt tuidefault gen1
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date                            │
+│ information on rate limits and credits                                                   │
+│                                                                                          │
+│  Model:                GPT-6 Luna (reasoning medium, summaries auto)                     │
+│  Model provider:       OpenAI - http://127.0.0.1:34731/v1 · account default              │
+│  Directory:            $S/ws              │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              OpenAI API key configured (run corbanu login to use ChatGPT)      │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a13462-62ca-7053-946e-1a3e538ba9bd                              │
+│                                                                                          │
+│  Token usage:          129 total  (120 input + 9 output)                                 │
+│  Context window:       100% left (129 used / 998K)                                       │
+│  Account usage:        default · 120 input · 9 output                                    │
+│  5h limit:             [██████░░░░░░░░░░░░░░] 30% left                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       gpt-6-luna medium   /model to change       │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+Token usage: total=129 input=120 output=9
+To continue this session, run corbanu resume 01a13462-62ca-7053-946e-1a3e538ba9bd
+
+• New session: requests to openai use account `work`.
+
+⚠ MCP client for `codex_apps` failed to start: MCP startup failed: handshaking with MCP server failed: Send message error Transport
+  [rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rmcp_client::http_client_adapter::StreamableHttpClie
+  ntAdapter>>] error: unexpected server response: HTTP 404: , when send initialize request
+
+⚠ MCP startup incomplete (failed: codex_apps)
+
+• Model changed to GPT-6 Luna via OpenAI medium
+
+⚠ MCP client for `codex_apps` failed to start: MCP startup failed: handshaking with MCP server failed: Send message error Transport
+  [rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rmcp_client::http_client_adapter::StreamableHttpClie
+  ntAdapter>>] error: unexpected server response: HTTP 404: , when send initialize request
+
+⚠ MCP startup incomplete (failed: codex_apps)
+
+
+› Reply with exactly: pong
+
+
+⚠ Code Mode is unavailable because failed to spawn code-mode host $S/bin/codex-code-mode-host: host executable was not
+  found. Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.
+
+• mock: chatgpt tuiwork2 gen1
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date                            │
+│ information on rate limits and credits                                                   │
+│                                                                                          │
+│  Model:                GPT-6 Luna (reasoning medium, summaries auto)                     │
+│  Model provider:       OpenAI - http://127.0.0.1:34731/v1 · account work                 │
+│  Directory:            $S/ws              │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              ChatGPT sign-in · t…@example.com · Plus (account work)            │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a13463-28a6-7812-bf43-15b341b2c417                              │
+│                                                                                          │
+│  Token usage:          129 total  (120 input + 9 output)                                 │
+│  Context window:       100% left (129 used / 998K)                                       │
+│  Account usage:        work · 120 input · 9 output                                       │
+│  5h limit:             [█████████░░░░░░░░░░░] 44% left                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  GPT-6 Luna medium · $S/ws · Corbanu Terminal · TPS: 73.8 tok/s

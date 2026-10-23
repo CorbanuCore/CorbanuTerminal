@@ -25,10 +25,9 @@ pub(crate) async fn chatgpt_get_request_with_timeout<T: DeserializeOwned>(
     timeout: Option<Duration>,
 ) -> anyhow::Result<T> {
     let chatgpt_base_url = &config.chatgpt_base_url;
-    let auth_manager =
-        AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false).await;
-    let auth = auth_manager
-        .auth()
+    let auth = AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false)
+        .await
+        .session_auth()
         .await
         .ok_or_else(|| anyhow::anyhow!("ChatGPT auth not available"))?;
     anyhow::ensure!(

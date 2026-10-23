@@ -1,0 +1,253 @@
+# Linux gate on 1870dd89e6
++ cargo test --locked -p codex-login --lib -- named default_login_restriction shared_from_config enforce_login_restrictions required_chatgpt
++ g
++ grep -E '^test .*(FAILED|ok)$|test result|panicked|^error|^failures'
+test auth::manager::tests::external_bearer_command_receives_the_named_account ... ok
+test auth::manager::tests::claude_plan_helper_that_predates_named_accounts_is_refused ... ok
+test auth::manager::tests::enforce_login_restrictions_allows_any_matching_workspace_in_list ... ok
+test auth::named_chatgpt::tests::login_restrictions_refuse_the_other_kind_and_other_workspaces ... ok
+test auth::manager::tests::enforce_login_restrictions_allows_api_key_if_login_method_not_set_but_forced_chatgpt_workspace_id_is_set ... ok
+test auth::named_chatgpt::tests::summaries_show_kind_email_hint_and_plan_only ... ok
+test auth::manager::tests::enforce_login_restrictions_blocks_env_api_key_when_chatgpt_required ... ok
+test auth::manager::tests::enforce_login_restrictions_allows_matching_workspace ... ok
+test auth::named_chatgpt::tests::an_unreadable_sign_in_never_quotes_its_value ... ok
+test auth::manager::tests::enforce_login_restrictions_logs_out_for_agent_identity_workspace_mismatch ... ok
+test auth::manager::tests::enforce_login_restrictions_logs_out_for_personal_access_token_workspace_mismatch ... ok
+test auth::manager::tests::enforce_login_restrictions_logs_out_for_method_mismatch ... ok
+test auth::manager::tests::enforce_login_restrictions_logs_out_for_workspace_mismatch ... ok
+test auth::named_chatgpt::tests::each_account_reads_and_writes_only_its_own_label ... ok
+test auth::manager::named_account::tests::restricted_sign_ins_never_load_and_the_base_stays_the_default ... ok
+test auth::manager::named_account::tests::an_unreadable_sign_in_is_still_removed ... ok
+test auth::provider_key_vault::tests::single_account_home_is_unchanged_until_a_named_account_is_added ... ok
+test auth::provider_key_vault::tests::named_account_keys_are_isolated_from_each_other_and_from_default ... ok
+test auth::manager::tests::named_chatgpt_account_follows_only_the_configured_login_method ... ok
+test auth::manager::tests::required_chatgpt_login_ignores_openai_api_key_env ... ok
+test auth::manager::tests::shared_from_config_hides_a_restricted_default_login_only_in_named_sessions ... ok
+test auth::manager::tests::shared_from_config_reads_openai_api_key_env_unless_chatgpt_login_is_required ... ok
+test auth::named_chatgpt::tests::same_user_sign_ins_name_the_default_and_other_accounts ... ok
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 151 filtered out; finished in 1.67s
++ cargo test --locked -p codex-login --test all named_accounts
++ g
++ grep -E '^test .*(FAILED|ok)$|test result|panicked|^error|^failures'
+test suite::named_accounts::replaced_sign_ins_are_revoked_only_for_another_user ... ok
+test suite::named_accounts::device_code_sign_in_is_saved_to_the_named_account_only ... ok
+test suite::named_accounts::a_named_account_without_a_sign_in_ignores_environment_keys ... ok
+test suite::named_accounts::logout_clears_only_that_account_and_missing_accounts_never_fall_back ... ok
+test suite::named_accounts::refreshes_from_another_process_are_picked_up_and_rejections_name_the_account ... ok
+test suite::named_accounts::concurrent_refreshes_write_back_to_their_own_account_only ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 37 filtered out; finished in 8.74s
++ cargo test --locked -p codex-model-provider --lib named
++ g
++ grep -E '^test .*(FAILED|ok)$|test result|panicked|^error|^failures'
+test amazon_bedrock::named_account::tests::default_account_keeps_the_managed_key ... ok
+test provider::tests::custom_provider_named_openai_still_uses_its_active_helper_model ... ok
+test auth::tests::pf_84_named_account_key_is_brokered_without_env_keys ... ok
+test auth::tests::pf_27_s05_brokered_provider_keys_are_named_not_read ... ok
+test amazon_bedrock::named_account::tests::unusable_profile_errors_name_the_recovery ... ok
+test amazon_bedrock::named_account::tests::named_account_ignores_the_managed_key_and_uses_its_profile_region ... ok
+test amazon_bedrock::named_account::tests::account_without_a_profile_is_refused ... ok
+test models_endpoint::tests::named_command_account_without_credential_sends_no_models_request ... ok
+test auth::named_sign_in_tests::named_openai_account_without_a_sign_in_is_refused_not_sent_unauthenticated ... ok
+test auth::named_sign_in_tests::hidden_default_login_is_refused_not_sent_unauthenticated ... ok
+test auth::named_sign_in_tests::named_and_default_openai_providers_never_mix_sign_ins ... ok
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 84 filtered out; finished in 0.59s
++ cargo test --locked -p codex-core --lib --features developer-accounting -- thread_manager::tests config::provider_accounts named
++ grep -E 'test result|panicked|FAILED|^error|ruled_out'
+test thread_manager::tests::start_thread_refuses_a_ruled_out_default_login_without_logging_it_out ... ok
+test result: ok. 62 passed; 0 failed; 0 ignored; 0 measured; 2847 filtered out; finished in 2.46s
++ cargo test --locked -p codex-exec --test all --features codex-core/developer-accounting named_account_login_restrictions
++ g
++ grep -E '^test .*(FAILED|ok)$|test result|panicked|^error|^failures'
+test suite::named_account_login_restrictions::named_session_restriction_names_only_its_own_account ... ok
+test suite::named_account_login_restrictions::case2_refused_named_api_key_session_keeps_the_default_login ... ok
+test suite::named_account_login_restrictions::case3_default_session_still_logs_out_a_ruled_out_default_login ... ok
+test suite::named_account_login_restrictions::case6_default_session_still_logs_out_a_ruled_out_chatgpt_login ... ok
+test suite::named_account_login_restrictions::case1_named_chatgpt_session_keeps_the_default_api_key ... ok
+test suite::named_account_login_restrictions::case5_named_api_key_session_keeps_the_default_chatgpt_login ... ok
+test suite::named_account_login_restrictions::case7_named_session_is_not_refused_for_the_default_logins_workspace ... ok
+test suite::named_account_login_restrictions::resumed_named_thread_keeps_the_default_login ... ok
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 84 filtered out; finished in 8.86s
++ cargo test --locked -p codex-cli --test provider_accounts --features codex-core/developer-accounting,codex-tui/developer-accounting
++ g
++ grep -E '^test .*(FAILED|ok)$|test result|panicked|^error|^failures'
+test named_chatgpt_sign_in_is_not_refused_for_a_third_party_session_provider ... ok
+test account_add_validates_claude_config_dirs_and_names_the_kind ... ok
+test claude_token_helper_refuses_named_accounts_when_the_feature_is_off ... ok
+test named_openai_account_login_list_status_logout ... ok
+test bedrock_accounts_hold_a_validated_aws_profile_name ... ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.78s
++ cargo test --locked -p codex-tui --lib --features developer-accounting -- provider_account startup_provider provider_status_host
++ g
++ grep -E '^test .*(FAILED|ok)$|test result|panicked|^error|^failures'
+test provider_account_auth_host::tests::pending_cancel_actions_target_the_exact_account_reducer ... ok
+test provider_account_auth_host::tests::pending_cancel_actions_are_secret_free_and_distinct ... ok
+test provider_status_host::tests::environment_precedence_skips_managed_reads_until_environment_is_missing ... ok
+test provider_account_auth_host::tests::claude_recovery_snapshot_presents_the_method_choice ... ok
+test provider_account_auth_host::tests::submitted_claude_token_does_not_reopen_the_entry_form ... ok
+test provider_status_host::tests::every_corbanu_environment_alias_is_ready_and_precedes_stored_account_status ... ok
+test provider_status_host::tests::blank_or_missing_corbanu_aliases_allow_the_managed_credential_fallback ... ok
+test provider_status_host::tests::authorized_command_runtime_converges_to_configured_ready ... ok
+test provider_status_host::tests::command_authorization_rejection_is_exact_and_debug_output_is_secret_free ... ok
+test provider_status_host::tests::current_selection_changes_status_without_persisting_policy ... ok
+test provider_status_host::tests::custom_storage_metadata_is_secret_free_and_missing_file_is_active ... ok
+test provider_status_host::tests::local_and_no_auth_custom_providers_are_ready_without_enrollment ... ok
+test provider_status_host::tests::correlated_corbanu_metadata_resolves_without_credential_reread ... ok
+test provider_status_host::tests::unchecked_command_is_configured_but_a_rejected_authorization_is_status_only ... ok
+test provider_status_host::tests::unselected_claude_environment_token_is_configured_not_ambiguous ... ok
+test provider_status_host::tests::openai_on_a_named_sign_in_account_is_configured_without_a_default_login ... ok
+test startup_provider::tests::a_named_session_needs_no_default_login_screen ... ok
+test provider_status_host::tests::enrolled_named_account_configures_its_provider_without_a_default_key ... ok
+test startup_provider::tests::recovered_install_skips_provider_onboarding_but_not_other_gates ... ok
+test session_resume::tests::recorded_provider_account_is_the_newest_turn_contexts ... ok
+test startup_provider::tests::command_authorization_is_lazy_but_current_and_selectable ... ok
+test startup_provider::tests::app_reuses_unchanged_startup_resolution_with_exact_current ... ok
+test startup_provider::tests::implicit_local_entries_do_not_hide_an_unconfigured_current_provider ... ok
+test startup_provider::tests::credential_free_custom_runtime_skips_provider_onboarding ... ok
+test app::provider_accounts::tests::a_default_set_by_a_higher_layer_is_reported ... ok
+test app::provider_accounts::tests::a_session_account_that_cannot_load_changes_nothing ... FAILED
+test startup_provider::tests::removed_custom_current_enters_chat_for_explicit_providers_recovery ... ok
+test startup_provider::tests::local_only_runtime_skips_provider_onboarding ... ok
+test app::provider_accounts::tests::one_session_selection_covers_one_provider ... ok
+test startup_provider::tests::login_status_metadata_is_scoped_to_the_exact_openai_runtime ... ok
+test startup_provider::tests::app_refreshes_resolution_after_provider_context_changes ... ok
+test status::tests::status_snapshot_uses_command_backed_provider_account_identity ... ok
+test app::provider_accounts::tests::openai_add_methods_follow_only_the_configured_login_method ... ok
+test provider_status_host::tests::eligibility_survives_restart_without_touching_credentials ... ok
+test provider_status_host::tests::saved_managed_custom_key_resolves_configured_ready_without_secret_leakage ... ok
+test startup_provider::tests::unconfigured_current_with_ready_alternative_uses_in_app_recovery ... ok
+test app::provider_accounts::tests::rename_carries_the_default_along ... ok
+failures:
+thread 'app::provider_accounts::tests::a_session_account_that_cannot_load_changes_nothing' (3165574) panicked at tui/src/app/provider_accounts_tests.rs:41:10:
+failures:
+test result: FAILED. 36 passed; 1 failed; 0 ignored; 0 measured; 4430 filtered out; finished in 0.92s
+error: test failed, to rerun pass `-p codex-tui --lib`
++ cargo test --locked -p codex-login --lib -- named default_login_restriction shared_from_config enforce_login_restrictions required_chatgpt
++ g
++ grep -E '^test .*(FAILED|ok)$|test result|panicked|^error|^failures'
+test auth::manager::tests::external_bearer_command_receives_the_named_account ... ok
+test auth::manager::tests::claude_plan_helper_that_predates_named_accounts_is_refused ... ok
+test auth::named_chatgpt::tests::an_unreadable_sign_in_never_quotes_its_value ... ok
+test auth::named_chatgpt::tests::login_restrictions_refuse_the_other_kind_and_other_workspaces ... ok
+test auth::manager::named_account::tests::restricted_sign_ins_never_load_and_the_base_stays_the_default ... ok
+test auth::named_chatgpt::tests::summaries_show_kind_email_hint_and_plan_only ... ok
+test auth::named_chatgpt::tests::each_account_reads_and_writes_only_its_own_label ... ok
+test auth::manager::tests::named_chatgpt_account_follows_only_the_configured_login_method ... ok
+test auth::manager::tests::enforce_login_restrictions_logs_out_for_personal_access_token_workspace_mismatch ... ok
+test auth::manager::tests::shared_from_config_reads_openai_api_key_env_unless_chatgpt_login_is_required ... ok
+test auth::manager::tests::enforce_login_restrictions_allows_matching_workspace ... ok
+test auth::manager::tests::enforce_login_restrictions_logs_out_for_agent_identity_workspace_mismatch ... ok
+test auth::manager::named_account::tests::an_unreadable_sign_in_is_still_removed ... ok
+test auth::provider_key_vault::tests::named_account_keys_are_isolated_from_each_other_and_from_default ... ok
+test auth::provider_key_vault::tests::single_account_home_is_unchanged_until_a_named_account_is_added ... ok
+test auth::manager::tests::shared_from_config_hides_a_restricted_default_login_only_in_named_sessions ... ok
+test auth::manager::tests::enforce_login_restrictions_allows_api_key_if_login_method_not_set_but_forced_chatgpt_workspace_id_is_set ... ok
+test auth::manager::tests::enforce_login_restrictions_allows_any_matching_workspace_in_list ... ok
+test auth::manager::tests::enforce_login_restrictions_blocks_env_api_key_when_chatgpt_required ... ok
+test auth::manager::tests::enforce_login_restrictions_logs_out_for_method_mismatch ... ok
+test auth::manager::tests::enforce_login_restrictions_logs_out_for_workspace_mismatch ... ok
+test auth::manager::tests::required_chatgpt_login_ignores_openai_api_key_env ... ok
+test auth::named_chatgpt::tests::same_user_sign_ins_name_the_default_and_other_accounts ... ok
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 151 filtered out; finished in 2.39s
++ cargo test --locked -p codex-login --test all named_accounts
++ g
++ grep -E '^test .*(FAILED|ok)$|test result|panicked|^error|^failures'
+test suite::named_accounts::refreshes_from_another_process_are_picked_up_and_rejections_name_the_account ... ok
+test suite::named_accounts::device_code_sign_in_is_saved_to_the_named_account_only ... ok
+test suite::named_accounts::logout_clears_only_that_account_and_missing_accounts_never_fall_back ... ok
+test suite::named_accounts::concurrent_refreshes_write_back_to_their_own_account_only ... ok
+test suite::named_accounts::replaced_sign_ins_are_revoked_only_for_another_user ... ok
+test suite::named_accounts::a_named_account_without_a_sign_in_ignores_environment_keys ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 37 filtered out; finished in 10.57s
++ cargo test --locked -p codex-model-provider --lib named
++ g
++ grep -E '^test .*(FAILED|ok)$|test result|panicked|^error|^failures'
+test provider::tests::custom_provider_named_openai_still_uses_its_active_helper_model ... ok
+test auth::tests::pf_84_named_account_key_is_brokered_without_env_keys ... ok
+test auth::tests::pf_27_s05_brokered_provider_keys_are_named_not_read ... ok
+test amazon_bedrock::named_account::tests::default_account_keeps_the_managed_key ... ok
+test amazon_bedrock::named_account::tests::named_account_ignores_the_managed_key_and_uses_its_profile_region ... ok
+test amazon_bedrock::named_account::tests::account_without_a_profile_is_refused ... ok
+test amazon_bedrock::named_account::tests::unusable_profile_errors_name_the_recovery ... ok
+test models_endpoint::tests::named_command_account_without_credential_sends_no_models_request ... ok
+test auth::named_sign_in_tests::named_openai_account_without_a_sign_in_is_refused_not_sent_unauthenticated ... ok
+test auth::named_sign_in_tests::hidden_default_login_is_refused_not_sent_unauthenticated ... ok
+test auth::named_sign_in_tests::named_and_default_openai_providers_never_mix_sign_ins ... ok
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 84 filtered out; finished in 0.65s
++ cargo test --locked -p codex-core --lib -- thread_manager::tests config::provider_accounts named
++ grep -E 'test result|panicked|FAILED|^error|ruled_out'
+test thread_manager::tests::start_thread_refuses_a_ruled_out_default_login_without_logging_it_out ... ok
+test result: ok. 62 passed; 0 failed; 0 ignored; 0 measured; 2842 filtered out; finished in 2.66s
++ cargo test --locked -p codex-exec --test all named_account_login_restrictions
++ g
++ grep -E '^test .*(FAILED|ok)$|test result|panicked|^error|^failures'
+test suite::named_account_login_restrictions::case2_refused_named_api_key_session_keeps_the_default_login ... ok
+test suite::named_account_login_restrictions::case3_default_session_still_logs_out_a_ruled_out_default_login ... ok
+test suite::named_account_login_restrictions::case6_default_session_still_logs_out_a_ruled_out_chatgpt_login ... ok
+test suite::named_account_login_restrictions::named_session_restriction_names_only_its_own_account ... ok
+test suite::named_account_login_restrictions::case1_named_chatgpt_session_keeps_the_default_api_key ... ok
+test suite::named_account_login_restrictions::case5_named_api_key_session_keeps_the_default_chatgpt_login ... ok
+test suite::named_account_login_restrictions::case7_named_session_is_not_refused_for_the_default_logins_workspace ... ok
+test suite::named_account_login_restrictions::resumed_named_thread_keeps_the_default_login ... ok
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 84 filtered out; finished in 3.19s
++ g
++ cargo test --locked -p codex-cli --test provider_accounts
++ grep -E '^test .*(FAILED|ok)$|test result|panicked|^error|^failures'
+test named_chatgpt_sign_in_is_not_refused_for_a_third_party_session_provider ... ok
+test account_add_validates_claude_config_dirs_and_names_the_kind ... ok
+test claude_token_helper_refuses_named_accounts_when_the_feature_is_off ... ok
+test named_openai_account_login_list_status_logout ... ok
+test bedrock_accounts_hold_a_validated_aws_profile_name ... ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.85s
++ cargo test --locked -p codex-tui --lib -- provider_account startup_provider provider_status_host
++ g
++ grep -E '^test .*(FAILED|ok)$|test result|panicked|^error|^failures'
+test provider_account_auth_host::tests::pending_cancel_actions_target_the_exact_account_reducer ... ok
+test provider_account_auth_host::tests::pending_cancel_actions_are_secret_free_and_distinct ... ok
+test provider_account_auth_host::tests::submitted_claude_token_does_not_reopen_the_entry_form ... ok
+test provider_account_auth_host::tests::claude_recovery_snapshot_presents_the_method_choice ... ok
+test provider_status_host::tests::blank_or_missing_corbanu_aliases_allow_the_managed_credential_fallback ... ok
+test provider_status_host::tests::environment_precedence_skips_managed_reads_until_environment_is_missing ... ok
+test provider_status_host::tests::every_corbanu_environment_alias_is_ready_and_precedes_stored_account_status ... ok
+test provider_status_host::tests::unchecked_command_is_configured_but_a_rejected_authorization_is_status_only ... ok
+test provider_status_host::tests::unselected_claude_environment_token_is_configured_not_ambiguous ... ok
+test provider_status_host::tests::current_selection_changes_status_without_persisting_policy ... ok
+test provider_status_host::tests::command_authorization_rejection_is_exact_and_debug_output_is_secret_free ... ok
+test provider_status_host::tests::custom_storage_metadata_is_secret_free_and_missing_file_is_active ... ok
+test provider_status_host::tests::authorized_command_runtime_converges_to_configured_ready ... ok
+test provider_status_host::tests::correlated_corbanu_metadata_resolves_without_credential_reread ... ok
+test provider_status_host::tests::enrolled_named_account_configures_its_provider_without_a_default_key ... ok
+test provider_status_host::tests::local_and_no_auth_custom_providers_are_ready_without_enrollment ... ok
+test provider_status_host::tests::openai_on_a_named_sign_in_account_is_configured_without_a_default_login ... ok
+test startup_provider::tests::a_named_session_needs_no_default_login_screen ... ok
+test session_resume::tests::recorded_provider_account_is_the_newest_turn_contexts ... ok
+test startup_provider::tests::recovered_install_skips_provider_onboarding_but_not_other_gates ... ok
+test startup_provider::tests::local_only_runtime_skips_provider_onboarding ... ok
+test startup_provider::tests::app_reuses_unchanged_startup_resolution_with_exact_current ... ok
+test startup_provider::tests::credential_free_custom_runtime_skips_provider_onboarding ... ok
+test startup_provider::tests::implicit_local_entries_do_not_hide_an_unconfigured_current_provider ... ok
+test startup_provider::tests::command_authorization_is_lazy_but_current_and_selectable ... ok
+test startup_provider::tests::app_refreshes_resolution_after_provider_context_changes ... ok
+test startup_provider::tests::removed_custom_current_enters_chat_for_explicit_providers_recovery ... ok
+test status::tests::status_snapshot_uses_command_backed_provider_account_identity ... ok
+test startup_provider::tests::login_status_metadata_is_scoped_to_the_exact_openai_runtime ... ok
+test app::provider_accounts::tests::a_session_account_that_cannot_load_changes_nothing ... FAILED
+test app::provider_accounts::tests::a_default_set_by_a_higher_layer_is_reported ... ok
+test app::provider_accounts::tests::one_session_selection_covers_one_provider ... ok
+test provider_status_host::tests::eligibility_survives_restart_without_touching_credentials ... ok
+test app::provider_accounts::tests::openai_add_methods_follow_only_the_configured_login_method ... ok
+test provider_status_host::tests::saved_managed_custom_key_resolves_configured_ready_without_secret_leakage ... ok
+test app::provider_accounts::tests::rename_carries_the_default_along ... ok
+test startup_provider::tests::unconfigured_current_with_ready_alternative_uses_in_app_recovery ... ok
+failures:
+thread 'app::provider_accounts::tests::a_session_account_that_cannot_load_changes_nothing' (3221051) panicked at tui/src/app/provider_accounts_tests.rs:41:10:
+failures:
+test result: FAILED. 36 passed; 1 failed; 0 ignored; 0 measured; 4430 filtered out; finished in 0.66s
+error: test failed, to rerun pass `-p codex-tui --lib`
+== gate-clippy-acct
+    Checking codex-cloud-tasks v0.1.48 (/home/ambient/corbanu-rtx/f57x/codex-rs/cloud-tasks)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 02s
+EXIT 0
+== gate-clippy-plain
+    Checking codex-cli v0.1.48 (/home/ambient/corbanu-rtx/f57x/codex-rs/cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 06s
+EXIT 0

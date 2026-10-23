@@ -1,0 +1,24 @@
+› Reply with exactly: pong
+• mock: sigv4 AKIDWORKPROFILE us-west-2
+/status
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                GPT-5.4 (reasoning medium, summaries auto)                        │
+│  Model provider:       Amazon Bedrock - http://127.0.0.1:34631/openai/v1 · account work  │
+│  Directory:            /Volumes/CorbanuDrive/Corbanu/.codex-work/s06acc/ws               │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Amazon Bedrock AWS credentials                                    │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12e80-fe34-75a3-ae65-6b5305124bff                              │
+│                                                                                          │
+│  Token usage:          129 total  (120 input + 9 output)                                 │
+│  Context window:       100% left (129 used / 258K)                                       │
+│  Account usage:        work · 120 input · 9 output                                       │
+│  5h limit:             [███████████████████░] 93% left                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+› Find and fix a bug in @filename
+  GPT-5.4 via amazon-bedrock default · /Volumes/CorbanuDrive/Corbanu/.codex-work/s06acc/ws · Corbanu Terminal · TPS: 84.9 tok/s
+{"t": 1791781590.721, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}

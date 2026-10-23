@@ -1,0 +1,55 @@
+{
+ "note": "Model-visible tool sets observed by the mediator over the whole second targeted re-run (names only; no bodies). Executor (corbanu exec) and product (TUI) requests share the mediator; per-run windows are in runs/*/mediator-window.jsonl. Full log: common/mediator-final.jsonl.gz.",
+ "observed_tool_sets": [
+  {
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "structured_edit",
+    "structured_write",
+    "view_image",
+    "spawn_agent_v1",
+    "send_input_v1",
+    "wait_agent_v1",
+    "close_agent_v1",
+    "resume_agent_v1",
+    "get_goal",
+    "create_goal",
+    "update_goal"
+   ],
+   "requests": 135
+  },
+  {
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "view_image",
+    "spawn_agent_v1",
+    "send_input_v1",
+    "wait_agent_v1",
+    "close_agent_v1",
+    "resume_agent_v1"
+   ],
+   "requests": 1
+  },
+  {
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "structured_edit",
+    "structured_write",
+    "view_image",
+    "get_goal",
+    "create_goal",
+    "update_goal"
+   ],
+   "requests": 1
+  }
+ ]
+}

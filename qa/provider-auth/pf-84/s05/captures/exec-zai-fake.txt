@@ -1,0 +1,14 @@
+Corbanu Terminal v0.1.48
+--------
+workdir: /Volumes/CorbanuDrive/Corbanu/tmp/pf84s05/work
+model: glm-5.3-flash
+provider: zai
+approval: never
+sandbox: danger-full-access
+session id: 01a12ad5-1091-7a81-8b66-a62e58ea8445
+--------
+user
+Reply with exactly the word pong and nothing else.
+ERROR: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 2dd4965c-3262-4a4c-8f72-896a343c14f9
+ERROR: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 2dd4965c-3262-4a4c-8f72-896a343c14f9
+exit=1

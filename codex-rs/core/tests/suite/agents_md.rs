@@ -17,7 +17,7 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_path_uri::PathUri;
 use core_test_support::PathBufExt;
 use core_test_support::create_directory_symlink;
-use core_test_support::load_default_config_for_test;
+use core_test_support::load_default_config_for_test_in;
 use core_test_support::responses;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_response_created;
@@ -928,7 +928,10 @@ async fn fork_injects_changed_agents_md_once() -> Result<()> {
         NEW_GLOBAL_INSTRUCTIONS,
     )?;
     assert_ne!(source, new_source);
-    let mut fork_config = load_default_config_for_test(home.as_ref()).await;
+    // Built for the parent's own folder, as a session forked there is.
+    let mut fork_config =
+        load_default_config_for_test_in(home.as_ref(), Default::default(), &parent.config.cwd)
+            .await;
     fork_config.cwd = parent.config.cwd.clone();
     fork_config.model = parent.config.model.clone();
     fork_config.model_provider = parent.config.model_provider.clone();

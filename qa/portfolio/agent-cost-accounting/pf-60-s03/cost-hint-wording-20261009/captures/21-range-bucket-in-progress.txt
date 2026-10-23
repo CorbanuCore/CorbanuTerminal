@@ -1,0 +1,54 @@
+╭───────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                 │
+│                                               │
+│ model:     glm-5.2   /model to change         │
+│ directory: <scratch>/ws │
+╰───────────────────────────────────────────────╯
+Read README.md and summarize it in one sentence.
+• This is a tiny scratch project used to check the /cost screens.
+Cost so far — this conversation
+→ Request 2 · Z.AI · Z.AI GLM 5.2 · estimated $0.011708 (rounded)
+→ Root's own attempts (2 attempts)
+→ Descendant attempts (none)
+→ Unknown provider/model attribution (none)
+→ Unknown parent population (none)
+Back
+Refresh
+Close
+Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+↑↓ scroll · Enter open · Esc back/close
+Requested: [2026-10-08T00:00:00.000Z, 2026-10-10T00:00:00.000Z); timezone: UTC; grouping: Day
+Retention: request detail kept since 2026-07-11T09:18:52.328Z; daily totals kept since 2025-10-10
+Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate
+in bucket breakdowns.
+Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+Bucket: [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z); effective coverage (requested ∩ aggregate retention
+∩ snapshot): [2026-10-09T00:00:00.000Z, 2026-10-09T09:16:31.206Z)
+In progress — totals so far, recorded through 2026-10-09T09:16:31.205Z
+This conversation, so far in [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z) (UTC):
+• Z.AI · Z.AI GLM 5.2 — Pay per use. 2 requests, 25,140 tokens. Estimated cost: $0.029378 (rounded).
+Other conversations are not included in this view; /cost covers only the open conversation.
+Costs are estimates from published prices; Z.AI doesn't report its charges — check Z.AI's bill.
+Select a provider below to see its requests.
+—— Details ——
+Estimated token cost for recorded attempts: $0.029378 (rounded)
+Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+Logical requests may have attempts outside this bucket; this bucket is not their complete lifetime.
+Read at: 2026-10-09T09:18:52.328Z; ledger current to: 2026-10-09T09:16:31.205Z (141123 ms behind)
+Retention: request detail kept since 2026-07-11T09:18:52.328Z; daily totals kept since 2025-10-10; oldest recorded
+day in this conversation 2026-10-09
+Known subtotal exact USD: 0.02937828
+Input: 25,085
+Noncached input (derived for inclusive input): not reported (2 attempts) — costed as input − cache read for 2
+attempts, whose price charges nothing for cache writes
+Cache read: 5,248
+Cache write: not reported (2 attempts) — free at the price of 2 attempts, so nothing was charged
+Output: 55
+Reasoning (subset, not separately billed): 10
+Total (not separately billed): 25,140
+Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total.
+Compare exact USD, not rounded displays.
+Bucket: Unknown parent population: 0 attempts, excluded from root total
+—— Open ——
+→ Z.AI · Z.AI GLM 5.2 — estimated $0.029378 (rounded) (2 requests)
+→ Request 1 · Z.AI · Z.AI GLM 5.2 · estimated $0.017670 (rounded)

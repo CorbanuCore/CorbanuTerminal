@@ -1,0 +1,36 @@
+**Verdict: APPROVE WITH NITS.** I found no P0 or P1 issues. Fix the two P2s before the flag is turned on by default; they don't block merging while it stays off.
+
+I read the whole `origin/main...HEAD` diff (one commit, `1c1ab846a2`; nothing uncommitted) and ran `cargo test -j4 -p codex-network-proxy pf_27_s04`: 12 passed, 0 failed. I could not build for Windows here, so the Windows warning below is from reading the code, not a compile.
+
+**What holds up**
+- **No way back to a raw value.** Every message the broker sends Core is a reference, a generation number or an error code. Denial bodies are fixed text. The frame header is removed before the request goes upstream, and the broker resolves and verifies TLS for the target host itself.
+- **Agents can't use the broker directly.** The peer check (uid plus Core's pid) runs before any bytes are read. Even if an agent tricked Core into connecting for it (for example through the macOS `x-unix-socket` feature), it would still need a signed frame. A frame only allows the exact host, method and path the agent could already ask Core to send, so a stolen frame gains it nothing.
+- **Replay and cross-run frames are rejected.** The replay window logic is correct, and frames are tied to the controller, broker and run generation.
+- **Revocation and restart behave correctly.** The broker subscribes to the generation before authorizing, checks it again afterwards, and cuts off streaming responses when it changes. Core and the broker can't race on revoke and register because both hold the state write lock. A restarted broker uses a new socket and an empty credential table.
+- **No fallback to raw injection.** A broker failure returns 502 or a policy block. An unavailable broker leaves dummy values only, and the plain-HTTP path never receives the raw value.
+- **Flag off changes nothing.** The proxy builds the same in-process broker as before, and the new authorization-hook check only applies to brokered requests.
+
+**P2**
+1. **The broker process isn't hardened.** `isolated/server.rs:83-98` (and the dispatch at `arg0/src/lib.rs:105`) never makes the process non-dumpable, blocks debuggers or disables core dumps. On Linux systems that allow same-user ptrace (Fedora's default) or with an unsandboxed agent, the agent can read the raw values and the signing key from the broker's memory. A broker crash can also write a core file containing them.
+   - **Fix:** call `codex_process_hardening::pre_main_hardening()` (or set `PR_SET_DUMPABLE=0`, `RLIMIT_CORE=0` and `PT_DENY_ATTACH`) first thing in `run_credential_broker_main`.
+   - Core's own environment still holds the raw values, which the sprint already lists as open (PF-27-S02). Keep the goal "raw credentials exist only in the broker" marked as not yet met.
+2. **macOS pipe race at broker spawn.** In `isolated/client.rs:148-165`, Rust on macOS creates pipes with `pipe()` and then sets close-on-exec in a separate step. If an agent command is spawned on another thread in that gap, it can inherit the broker's control pipe. It could then read the Hello message (which carries the signing key) or later Register lines (which carry raw values). It could also keep the broker alive after Core exits.
+   - This is more exposed than usual because the broker starts lazily inside `virtualize_child_env`, exactly while commands are being spawned, and `live_client()` (`credential_broker.rs:523`) respawns it there after it dies.
+   - **Fix:** start the broker once when the proxy starts, before any agent child exists. After it dies, fail closed or respawn only while holding a lock that also blocks child spawning, and rate-limit respawns. Alternatively, spawn sandboxed children with `POSIX_SPAWN_CLOEXEC_DEFAULT` on macOS.
+
+**P3**
+3. **Windows warnings.** `CredentialRecord::fingerprint` (`credential_broker.rs:716`) is only called from code that exists on Unix, so Windows gets a dead-code warning, which fails any build using `-D warnings`. Mark it `#[cfg(unix)]`. Separately, `arg0/Cargo.toml` adds `codex-network-proxy` for every platform but only uses it on Unix; move it under `[target.'cfg(unix)'.dependencies]`.
+4. **Blocking calls while holding a lock.** `live_client` and `register_isolated` (`credential_broker.rs:523` and `:590`) run the spawn and control round-trip (up to 10 seconds each, `client.rs:481-491`) while holding the credential state write lock, from async callers. Every proxied request stalls meanwhile. Starting the broker at proxy startup (item 2) fixes this; otherwise use `spawn_blocking` and release the lock first.
+5. **Socket in a directory agents can write to.** The socket lives under `$TMPDIR` or `/tmp` (`server.rs:135-143,203-211`), which the workspace sandbox can usually write to. An agent can rename `b.sock` and put its own socket there. This only causes a denial of service and lets Core trust a fake broker's response, which goes back to the agent anyway. **Fix:** in `send_with_frame`, check that the connected server's pid is the broker child's pid, or put the directory somewhere the sandbox can't write.
+6. **Accept loop can spin.** `server.rs:236-239` retries immediately when `accept()` fails, so an error like running out of file descriptors pins a CPU core. Add a short sleep before retrying.
+7. **Request slots never time out.** A response the agent never reads, or a stalled upstream, holds a slot forever (`server.rs:517,577-584`). Sixty-four of them lock everyone sharing the proxy out with "capacity" errors. Add idle and total timeouts, or a per-response idle timer.
+8. **Revocation has no production trigger.** Nothing in production calls `revoke_brokered_credentials`. Also, `revoke_isolated_credentials` (`credential_broker.rs:212`) goes through `live_client()`, so it starts a new broker just to revoke it. **Fix:** revoke only an existing client, and either connect revocation to session teardown or permission changes, or document that only the process lifetime ends a run.
+9. **Spawn cleanup gaps** in `client.rs`:
+   - If the reader thread fails to start (`171-188`), the function returns without killing or reaping the child.
+   - If validation fails after Ready (`222-228`), `kill_and_reap` runs without removing the socket directory. Use `kill_and_reap_with_cleanup` with the reported path.
+10. **Requests that work today get blocked with the flag on.** Record or fix these before turning it on:
+    - Paths longer than 1,024 bytes, and methods outside GET/HEAD/POST/PUT/PATCH/DELETE (`secret-broker/src/ipc.rs:269-277`), are blocked, with a misleading `PathDenied` error.
+    - The broker's upstream policy (`server.rs:217-222`) drops Core's allowlist of explicitly allowed local hosts, so GitHub Enterprise servers on private IPs fail unless `allow_local_binding` is on.
+11. **Nits:**
+    - `providers.rs:108-116` maps every provider that isn't GitHub to OpenAI; use an exhaustive match or return an `Option`.
+    - The comment at `server.rs:564-566` says the TLS handshake chooses the HTTP version, but the code forces HTTP/1.1. Fix the comment.

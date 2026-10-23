@@ -1,0 +1,65 @@
+{"time_ns": 1791918481900270000, "utc": "2026-10-13T19:08:01Z", "requested": "start", "args": []}
+{"time_ns": 1791918483929589000, "utc": "2026-10-13T19:08:03Z", "executed": "start", "argv": ["/opt/agms/bin/agms-product", "zai", "glm-5.3-flash"]}
+{"time_ns": 1791918498028849000, "utc": "2026-10-13T19:08:18Z", "requested": "screen", "args": ["initial-trust-prompt"]}
+{"time_ns": 1791918498066601000, "utc": "2026-10-13T19:08:18Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791918498072512000, "utc": "2026-10-13T19:08:18Z", "executed": "key", "key": "Enter", "pty_offset": 1556}
+{"time_ns": 1791918500308783000, "utc": "2026-10-13T19:08:20Z", "requested": "screen", "args": ["after-trust"]}
+{"time_ns": 1791918504437399000, "utc": "2026-10-13T19:08:24Z", "requested": "text", "args": ["/security"]}
+{"time_ns": 1791918504443583000, "utc": "2026-10-13T19:08:24Z", "executed": "text", "text": "/security", "pty_offset": 5289}
+{"time_ns": 1791918505497005000, "utc": "2026-10-13T19:08:25Z", "requested": "screen", "args": ["before-security-enter"]}
+{"time_ns": 1791918505540129000, "utc": "2026-10-13T19:08:25Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791918505545683000, "utc": "2026-10-13T19:08:25Z", "executed": "key", "key": "Enter", "pty_offset": 5534}
+{"time_ns": 1791918507784987000, "utc": "2026-10-13T19:08:27Z", "requested": "screen", "args": ["security-initial"]}
+{"time_ns": 1791918513214307000, "utc": "2026-10-13T19:08:33Z", "requested": "key", "args": ["Down"]}
+{"time_ns": 1791918513220099000, "utc": "2026-10-13T19:08:33Z", "executed": "key", "key": "Down", "pty_offset": 6276}
+{"time_ns": 1791918514448253000, "utc": "2026-10-13T19:08:34Z", "requested": "screen", "args": ["security-after-one-down"]}
+{"time_ns": 1791918514487444000, "utc": "2026-10-13T19:08:34Z", "requested": "key", "args": ["Down"]}
+{"time_ns": 1791918514493323000, "utc": "2026-10-13T19:08:34Z", "executed": "key", "key": "Down", "pty_offset": 6714}
+{"time_ns": 1791918515712236000, "utc": "2026-10-13T19:08:35Z", "requested": "screen", "args": ["security-after-two-downs"]}
+{"time_ns": 1791918515753549000, "utc": "2026-10-13T19:08:35Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791918515759279000, "utc": "2026-10-13T19:08:35Z", "executed": "key", "key": "Enter", "pty_offset": 7187}
+{"time_ns": 1791918518004709000, "utc": "2026-10-13T19:08:38Z", "requested": "screen", "args": ["security-after-aggressive"]}
+{"time_ns": 1791918521927390000, "utc": "2026-10-13T19:08:41Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791918521933412000, "utc": "2026-10-13T19:08:41Z", "executed": "key", "key": "Enter", "pty_offset": 17750}
+{"time_ns": 1791918524164565000, "utc": "2026-10-13T19:08:44Z", "requested": "screen", "args": ["security-after-confirm"]}
+{"time_ns": 1791918530084910000, "utc": "2026-10-13T19:08:50Z", "requested": "key", "args": ["r"]}
+{"time_ns": 1791918530090971000, "utc": "2026-10-13T19:08:50Z", "executed": "key", "key": "r", "pty_offset": 20889}
+{"time_ns": 1791918535313325000, "utc": "2026-10-13T19:08:55Z", "requested": "screen", "args": ["after-aggressive-restart"]}
+{"time_ns": 1791918542149565000, "utc": "2026-10-13T19:09:02Z", "requested": "text", "args": ["/security"]}
+{"time_ns": 1791918542156085000, "utc": "2026-10-13T19:09:02Z", "executed": "text", "text": "/security", "pty_offset": 24907}
+{"time_ns": 1791918543227923000, "utc": "2026-10-13T19:09:03Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791918543234417000, "utc": "2026-10-13T19:09:03Z", "executed": "key", "key": "Enter", "pty_offset": 25152}
+{"time_ns": 1791918545452906000, "utc": "2026-10-13T19:09:05Z", "requested": "screen", "args": ["security-after-restart"]}
+{"time_ns": 1791918545490529000, "utc": "2026-10-13T19:09:05Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791918545496164000, "utc": "2026-10-13T19:09:05Z", "executed": "key", "key": "Escape", "pty_offset": 25987}
+{"time_ns": 1791918552476804000, "utc": "2026-10-13T19:09:12Z", "requested": "text", "args": ["/vault"]}
+{"time_ns": 1791918552482559000, "utc": "2026-10-13T19:09:12Z", "executed": "text", "text": "/vault", "pty_offset": 26471}
+{"time_ns": 1791918553536792000, "utc": "2026-10-13T19:09:13Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791918553542127000, "utc": "2026-10-13T19:09:13Z", "executed": "key", "key": "Enter", "pty_offset": 26706}
+{"time_ns": 1791918556764412000, "utc": "2026-10-13T19:09:16Z", "requested": "screen", "args": ["vault-initial"]}
+{"time_ns": 1791918562884416000, "utc": "2026-10-13T19:09:22Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791918562890282000, "utc": "2026-10-13T19:09:22Z", "executed": "key", "key": "Enter", "pty_offset": 27540}
+{"time_ns": 1791918565126001000, "utc": "2026-10-13T19:09:25Z", "requested": "screen", "args": ["vault-add-initial"]}
+{"time_ns": 1791918572617707000, "utc": "2026-10-13T19:09:32Z", "requested": "text", "args": ["synthetic/value"]}
+{"time_ns": 1791918572623956000, "utc": "2026-10-13T19:09:32Z", "executed": "text", "text": "synthetic/value", "pty_offset": 28016}
+{"time_ns": 1791918573689650000, "utc": "2026-10-13T19:09:33Z", "requested": "screen", "args": ["vault-add-label-typed"]}
+{"time_ns": 1791918573729739000, "utc": "2026-10-13T19:09:33Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791918573735460000, "utc": "2026-10-13T19:09:33Z", "executed": "key", "key": "Enter", "pty_offset": 28221}
+{"time_ns": 1791918575973860000, "utc": "2026-10-13T19:09:35Z", "requested": "screen", "args": ["vault-add-secret-prompt"]}
+{"time_ns": 1791918584943690000, "utc": "2026-10-13T19:09:44Z", "requested": "text", "args": ["AGMS-SYNTHETIC-4161"]}
+{"time_ns": 1791918584950506000, "utc": "2026-10-13T19:09:44Z", "executed": "text", "text": "AGMS-SYNTHETIC-4161", "pty_offset": 28517}
+{"time_ns": 1791918586005296000, "utc": "2026-10-13T19:09:46Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791918586010603000, "utc": "2026-10-13T19:09:46Z", "executed": "key", "key": "Enter", "pty_offset": 28764}
+{"time_ns": 1791918589240769000, "utc": "2026-10-13T19:09:49Z", "requested": "screen", "args": ["vault-add-complete"]}
+{"time_ns": 1791918615159657000, "utc": "2026-10-13T19:10:15Z", "requested": "text", "args": ["cat notes.txt"]}
+{"time_ns": 1791918615166055000, "utc": "2026-10-13T19:10:15Z", "executed": "text", "text": "cat notes.txt", "pty_offset": 29542}
+{"time_ns": 1791918616233709000, "utc": "2026-10-13T19:10:16Z", "requested": "screen", "args": ["prompt-before-enter"]}
+{"time_ns": 1791918616272634000, "utc": "2026-10-13T19:10:16Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791918616278195000, "utc": "2026-10-13T19:10:16Z", "executed": "key", "key": "Enter", "pty_offset": 30075}
+{"time_ns": 1791918621495175000, "utc": "2026-10-13T19:10:21Z", "requested": "screen", "args": ["after-cat-request-5s"]}
+{"time_ns": 1791918629036503000, "utc": "2026-10-13T19:10:29Z", "requested": "wait", "args": ["approval|approve|Deny|deny|notes.txt", "60"]}
+{"time_ns": 1791918629042801000, "utc": "2026-10-13T19:10:29Z", "executed": "wait", "pattern": "approval|approve|Deny|deny|notes.txt", "matched": true}
+{"time_ns": 1791918629075165000, "utc": "2026-10-13T19:10:29Z", "requested": "screen", "args": ["after-cat-wait"]}
+{"time_ns": 1791918656909477000, "utc": "2026-10-13T19:10:56Z", "requested": "fixture", "args": ["AGG-16-after"]}
+{"time_ns": 1791918761672618000, "utc": "2026-10-13T19:12:41Z", "requested": "stop", "args": []}
+{"time_ns": 1791918761677865000, "utc": "2026-10-13T19:12:41Z", "executed": "stop"}

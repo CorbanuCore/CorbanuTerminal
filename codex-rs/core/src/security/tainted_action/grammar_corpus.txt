@@ -1,0 +1,84 @@
+# #932 differential corpus: shell lines from the review history of #899,
+# #986, #1114, #1158 and #1172 (issues #932 and #1159), beyond the string
+# literals the harness already takes from the classifier's tests. One case
+# per line; `\n`, `\t` and `\\` are escapes.
+echo $(\\\n( '$(sed 1e\\ id f)0' ))
+$(( $'\\x24(sed 1e\\\\ id f)0' ))
+$(( a[\\$(cmd)0] ))
+echo $((1)) "${x}r"
+jobs=${JOBS:-4}; $((jobs))
+export v=$(cat notes); bash -c $'echo $((\\x76))'
+echo ${x:-'}'} y
+echo $(case x in a) echo;; esac) y
+echo $( ( case x in a) echo;; esac ) ) y
+repeat 1 case x in a) ;; esac
+coproc case x in a) ;; esac
+echo "${x:-'$(id)'}"
+echo $(( ${x:-'$(id)'} ))
+echo $[ ${x:-'$(id)'} ]
+(( ${x:-'$(id)'} ))
+n=options; zstyle -a :c s $n
+: ${(PAA)n::=on}
+cat f | read -A $n
+typeset "$n=on"
+${:-emulate} csh
+${:-setopt} globsubst
+export ARGV${:-0}=sh
+${:-eval} x
+echo ${(f)x} HEAD~1
+echo ${(%):-%~}
+make options=fast
+env X=1 ls -la "$d"
+set $(cat f)
+emulate sh -c 'echo x'
+git checkout-index -a --prefix=$HOME/
+git read-tree --index-output=f HEAD
+GIT_INDEX_FILE=f git add x
+git log --output=$(cat f)
+tee $(cat f)
+IFS=,; x=a,b; $x
+git -C dir commit -m "$msg"
+git commit -c HEAD
+git log -- --output=x
+alias g='git config --comment x=--get --global core.pager "touch pwned"'
+x=$(cat f); eval "$x"
+python -c 'print(f"{argv}")'
+echo ${(e)x}
+export "$name"
+diff\\\ntool x
+=git status
+git.exe status
+echo "$(echo ')')"
+echo `echo \\`id\\``
+cat <<EOF\n$(id)\nEOF
+cat <<'EOF'\n$(id)\nEOF
+cat <<-EOF\n\t$(id)\n\tEOF
+cat <<<"$(id)"
+f() { eval "$1"; }; f 'id'
+ls *(e:'id':)
+echo $x[1]
+for x (a b) echo $x
+if [[ -n x ]] { echo y }
+case x { a) echo ;; }
+{ echo }
+setopt rcquotes; echo 'it''s'
+watch -n1 'id'
+find . -exec sh -c 'id' \\;
+xargs sh -c 'id' < f
+sudo -u root sh -c 'id'
+ssh host 'id'
+echo a\tb
+# From the #1183 reviews (rounds 1-4).
+cat <<'EOF'\nEOF; cat <<'Z'\nEOF\necho x\nZ\n
+cat <<E"O"F\nx\nEOF\necho x\nE"O"F\n
+x=a; echo ${x#$(echo x)}
+rm >/dev/null -rf ~/x
+cat <<EOF\n${x:-'$(id)'}\nEOF\n
+(echo == x; rm -rf ~)
+set -k; git fetch origin X=y
+[[ x =~ '([['a ]] || echo x '' ]]
+(( '$(id)' ))
+command {shopt,-s,expand_aliases}\ncommand {alias,ls=echo\ x}\nls /
+c=shopt; command $c -s expand_aliases
+POSIXLY_CORRECT=1\nBASH_ALIASES[ls]='rm x'\nls
+{echo,hi}\n}

@@ -1,0 +1,19 @@
+== acc-B-agmx1-20261016T032950Z
+done acc-B-agmx1-20261016T032950Z exit=0
+== acc-A-agmx2-20261016T035204Z
+done acc-A-agmx2-20261016T035204Z exit=0
+== acc-C-agmx3-20261016T042942Z
+done acc-C-agmx3-20261016T042942Z exit=0
+== acc-D-agmx1-20261016T045841Z
+done acc-D-agmx1-20261016T045841Z exit=0
+== acc-E-agmx2-20261016T052736Z
+done acc-E-agmx2-20261016T052736Z exit=0
+== acc-F-agmx3-20261016T060934Z
+done acc-F-agmx3-20261016T060934Z exit=0
+SEQ-DONE B A C D E F
+2026-10-16T06:32:18Z REPLAYS start (C2: packet v2 navigation note; E2: harness fix 1)
+== acc-C2-agmx1-20261016T063218Z
+done acc-C2-agmx1-20261016T063218Z exit=0
+== acc-E2-agmx2-20261016T072426Z
+done acc-E2-agmx2-20261016T072426Z exit=0
+SEQ-DONE C2 E2

@@ -1,0 +1,16 @@
+model = "glm-5.2"
+model_provider = "zai"
+service_tier = "default"
+
+[model_providers.zai]
+billing = "subscription"
+
+[model_providers.zaiproxy]
+name = "zaiproxy"
+base_url = "http://127.0.0.1:18471/api/paas/v4"
+env_key = "ZAI_API_KEY"
+wire_api = "chat"
+billing = "pay_per_use"
+
+[projects."<scratch>/work/repo"]
+trust_level = "trusted"

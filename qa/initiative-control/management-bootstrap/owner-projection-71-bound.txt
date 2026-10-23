@@ -1,0 +1,6 @@
+{
+  "maximum_field_row_canonical_bytes": 440,
+  "maximum_field_row_pretty_increment": 588,
+  "row_allowance": 1024,
+  "maximum_feed_rows": 4969
+}

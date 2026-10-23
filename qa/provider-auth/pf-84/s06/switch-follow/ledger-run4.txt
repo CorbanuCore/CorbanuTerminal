@@ -1,0 +1,17 @@
+# accounting ledger attempts in this home (model, account), oldest first; run 4 is the last 4
+glm-5.3-flash default
+gpt-5.4-mini work
+gpt-5.4-mini work
+gpt-5.4-mini work
+gpt-5.4-mini work
+glm-5.3-flash default
+gpt-5.6-luna work
+gpt-5.6-luna work
+gpt-5.4-mini work
+gpt-5.4-mini work
+gpt-5.6-luna work
+glm-5.3-flash default
+gpt-5.4-mini work
+gpt-5.4-mini work
+gpt-5.6-luna work
+glm-5.3-flash default

@@ -1,0 +1,142 @@
+{
+  "rendered_observations": 8,
+  "renderer_programs": 1,
+  "runs": {
+    "focused": {
+      "failure_names": [],
+      "modules": {
+        "test_attention": 24,
+        "test_control": 39,
+        "test_decision_feed": 39,
+        "test_owner_daemon": 133,
+        "test_owner_preflight_98": 4,
+        "test_owner_promotion_94": 8,
+        "test_owner_tmux": 52
+      },
+      "passed": true,
+      "seconds": 103.452,
+      "tests": 299
+    },
+    "focused-final": {
+      "failure_names": [],
+      "modules": {
+        "test_attention": 24,
+        "test_control": 39,
+        "test_decision_feed": 39,
+        "test_owner_daemon": 133,
+        "test_owner_preflight_98": 4,
+        "test_owner_promotion_94": 8,
+        "test_owner_tmux": 52
+      },
+      "passed": true,
+      "seconds": 107.956,
+      "tests": 299
+    },
+    "suite": {
+      "failure_names": [],
+      "modules": {
+        "test_activity": 9,
+        "test_attention": 24,
+        "test_control": 39,
+        "test_coordinator": 72,
+        "test_decision_alerts": 24,
+        "test_decision_feed": 39,
+        "test_decision_inspection": 9,
+        "test_decision_manager": 113,
+        "test_decision_replies": 30,
+        "test_decisions": 13,
+        "test_fable_launcher": 32,
+        "test_facility_control": 8,
+        "test_integration": 13,
+        "test_isolated_browser_guest": 17,
+        "test_isolated_model_transport": 26,
+        "test_manager_cycle": 36,
+        "test_native_owner": 20,
+        "test_owner_daemon": 133,
+        "test_owner_tmux": 52,
+        "test_preparation": 21,
+        "test_reference_documents": 3,
+        "test_slack_reply_poll": 15,
+        "test_slack_transport": 83,
+        "test_status_source": 9,
+        "test_tasknode": 33,
+        "test_tick": 7
+      },
+      "passed": true,
+      "seconds": 505.489,
+      "tests": 880
+    },
+    "suite-final": {
+      "failure_names": [],
+      "modules": {
+        "test_activity": 9,
+        "test_attention": 24,
+        "test_control": 39,
+        "test_coordinator": 72,
+        "test_decision_alerts": 24,
+        "test_decision_feed": 39,
+        "test_decision_inspection": 9,
+        "test_decision_manager": 113,
+        "test_decision_replies": 30,
+        "test_decisions": 13,
+        "test_fable_launcher": 32,
+        "test_facility_control": 8,
+        "test_integration": 13,
+        "test_isolated_browser_guest": 17,
+        "test_isolated_model_transport": 26,
+        "test_manager_cycle": 36,
+        "test_native_owner": 20,
+        "test_owner_daemon": 133,
+        "test_owner_tmux": 52,
+        "test_preparation": 21,
+        "test_reference_documents": 3,
+        "test_slack_reply_poll": 15,
+        "test_slack_transport": 83,
+        "test_status_source": 9,
+        "test_tasknode": 33,
+        "test_tick": 7
+      },
+      "passed": true,
+      "seconds": 501.647,
+      "tests": 880
+    },
+    "targeted-1": {
+      "failure_names": [],
+      "modules": {
+        "test_attention": 2,
+        "test_decision_manager": 3,
+        "test_slack_transport": 8
+      },
+      "passed": true,
+      "seconds": 12.247,
+      "tests": 13
+    },
+    "targeted-2": {
+      "failure_names": [],
+      "modules": {
+        "test_slack_transport": 2
+      },
+      "passed": true,
+      "seconds": 3.075,
+      "tests": 2
+    },
+    "targeted-3": {
+      "failure_names": [],
+      "modules": {
+        "test_decision_manager": 1,
+        "test_slack_transport": 2
+      },
+      "passed": true,
+      "seconds": 3.727,
+      "tests": 3
+    }
+  },
+  "source_sha256": {
+    "attention.py": "b33b6f1866b4a93bc02bfaaa387c5e45fb8979bc1433143701f8adb3fe7523ae",
+    "decision_feed.py": "47967d10b4e933e04f761f57ce7ce8a2d662b6b39baeb69868e259d4181fde34",
+    "decision_manager.py": "deaf1181f5d93a733fbbfb8b31d837f40ffae9ba547545e87690002912f2844b",
+    "slack_transport.py": "de86ef30761334b98b5f75ba0ad909854361af6197723dd5595ecec21dd9785d",
+    "test_decision_manager.py": "ccca5f0c24ff041e858dd6e8f672126b8246ba05df330cf03a10de956db45ee7",
+    "test_slack_transport.py": "08b7a71c5c394b43047ac09dfcbbb3b30035fdacec629eafd3ef29913efce2a8"
+  }
+}

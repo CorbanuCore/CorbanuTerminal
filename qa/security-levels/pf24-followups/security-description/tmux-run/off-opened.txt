@@ -1,0 +1,33 @@
+
+╭───────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                     │
+│                                                   │
+│ model:     loading   /model to change             │
+│ directory: /Volumes/…/tmp/tui-r2-2a-off/workspace │
+╰───────────────────────────────────────────────────╯
+
+› Write tests for @filename
+
+  Z.AI GLM 5.2 via zai standard · <run>/workspace · Corbanu Terminal · TPS: -…
+
+╭───────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                     │
+│                                                   │
+│ model:     glm-5.2   /model to change             │
+│ directory: /Volumes/…/tmp/tui-r2-2a-off/workspace │
+╰───────────────────────────────────────────────────╯
+
+Security profiles — read only
+Requested: Permissive (configuration only)
+Effective protection: unverified. Live security status is unavailable.
+Protected modes are blocked; required controls are not qualified.
+
+> Permissive
+  Moderate
+  Aggressive
+
+No additional security controls. Existing approvals, sandbox, vault, wallet, tool, network and agent policies remain
+unchanged.
+
+↑/↓ explore · enter inspect · esc close
+

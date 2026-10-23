@@ -63,7 +63,7 @@ with tempfile.TemporaryDirectory(prefix='.pf27c-', dir='/home/travis') as temp:
             f'export TMPDIR={shlex.quote(temp)}; '
             'export CARGO_BUILD_JOBS=8 RUST_MIN_STACK=8388608 CORBANU_TEST_NO_NATIVE_KEYRING=1; '
             'flock /home/travis/security-round5/locks/build.lock '
-            'just test -p codex-secret-broker-service --features synthetic-fixture '
+            'just test -p codex-secret-broker-service -p codex-secret-broker-fixture '
             '--retries 0 --test-threads 4; printf "\\nchildren-exit=%s\\n" "$?"'
         )
         lifecycle = wait_for('children-exit=0')

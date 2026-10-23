@@ -1,0 +1,18 @@
+{
+  "mode": "enabled",
+  "binary": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-20-artifacts/enabled-core.rlib",
+  "sha256": "17aa86eb34acdffd9146cff6ab3553ae5f807eac1e37bd0b3657033deef54119",
+  "activation_symbol_count": 4,
+  "collector_control_symbol_count": 14,
+  "activation_symbols": [
+    "                 U __ZN10codex_core10accounting25developer_accounting_mode28_$u7b$$u7b$closure$u7d$$u7d$17h31f43971d8d3aee9E",
+    "000000000000047c T __ZN10codex_core10accounting25developer_accounting_mode17h1ae0b13a76c12b35E",
+    "0000000000000000 T __ZN10codex_core10accounting25developer_accounting_mode28_$u7b$$u7b$closure$u7d$$u7d$17h31f43971d8d3aee9E",
+    "                 U __ZN10codex_core10accounting25developer_accounting_mode17h1ae0b13a76c12b35E"
+  ],
+  "control_sample": [
+    "0000000000143608 T __ZN4core3ptr97drop_in_place$LT$codex_core..accounting..Sampling..start_request..$u7b$$u7b$closure$u7d$$u7d$$GT$17hd5da5d7b9bebcaf2E",
+    "                 U __ZN10codex_core10accounting8Sampling13start_request28_$u7b$$u7b$closure$u7d$$u7d$28_$u7b$$u7b$closure$u7d$$u7d$17h028499b614e58ffeE"
+  ],
+  "limitations": "Tests these exact unstripped native artifacts only. Does not prove other targets, optimized/stripped builds, release packaging, feature-unified/all-features builds or absence of differently named equivalent code. Existing collector/install APIs remain compiled in by design."
+}

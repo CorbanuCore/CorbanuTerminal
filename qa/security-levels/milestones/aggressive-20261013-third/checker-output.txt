@@ -1,0 +1,5 @@
+$ python3 qa/code-blind-functional/check.py qa/security-levels/milestones/aggressive-20261013-third/design.json qa/security-levels/milestones/aggressive-20261013-third/results.json <candidate package>/bin/corbanu   (2026-10-14T01:43:54Z)
+BLOCKED: unresolved AGG-01: failed
+exit=1
+
+Expected while any case is failed or blocked: the checker stops at the first unresolved case (6 failed, 7 blocked). It is structural traceability only; the independent evidence check is recorded in review/ and results.json.

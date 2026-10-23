@@ -1874,6 +1874,16 @@ impl ChatComposer {
             return self.begin_history_search();
         }
 
+        // The slash popup can open on a typed `/` while the rest of the command is still held by
+        // the rapid-input detector. Enter and Tab act on the popup selection, so materialize that
+        // input first; otherwise they would accept a command chosen from a stale filter.
+        if matches!(self.popups.active, ActivePopup::Command(_))
+            && matches!(key_event.code, KeyCode::Enter | KeyCode::Tab)
+            && let Some(pasted) = self.draft.paste_burst.flush_before_modified_input()
+        {
+            self.handle_paste(pasted);
+        }
+
         let result = match &mut self.popups.active {
             ActivePopup::Command(_) => self.handle_key_event_with_slash_popup(key_event),
             ActivePopup::File(_) => self.handle_key_event_with_file_popup(key_event),
@@ -4813,6 +4823,28 @@ impl ChatComposer {
                 }
             }
         }
+        if self.draft.input_enabled
+            && mask_char.is_none()
+            && !self.blocks_direct_input
+            && !textarea_rect.is_empty()
+            && let Some(hint) = self.slash_input().argument_hint(self.draft.textarea.text())
+        {
+            // The hint follows the typed `/name ` on its single line when it
+            // fits whole; typing an argument removes it.
+            let width = |text: &str| {
+                u16::try_from(unicode_width::UnicodeWidthStr::width(text)).unwrap_or(u16::MAX)
+            };
+            let typed = width(self.draft.textarea.text());
+            if typed.saturating_add(width(hint)) <= textarea_rect.width {
+                let rect = Rect {
+                    x: textarea_rect.x + typed,
+                    width: textarea_rect.width - typed,
+                    height: 1,
+                    ..textarea_rect
+                };
+                Line::from(hint.dim()).render(rect, buf);
+            }
+        }
         if !self.draft.input_enabled || textarea_is_empty {
             let text = if self.draft.input_enabled {
                 self.placeholder_text.as_str().to_string()
@@ -5322,6 +5354,58 @@ mod tests {
             buf[(shell_label_x as u16, footer_y)].style().fg,
             Some(Color::LightRed)
         );
+    }
+
+    /// Whether `hint` is shown, dimmed, right after `text` on its composer
+    /// row, at `width` columns; `false` if it appears anywhere else or not at all.
+    fn shows_argument_hint(text: &str, width: u16, setup: impl FnOnce(&mut ChatComposer)) -> bool {
+        let hint = crate::slash_command::COST_ARGUMENT_HINT;
+        let (mut composer, _rx) = new_test_composer();
+        setup(&mut composer);
+        composer.set_text_content(text.to_string(), Vec::new(), Vec::new());
+        composer.move_cursor_to_end();
+        let area = Rect::new(0, 0, width, 20);
+        let mut buf = Buffer::empty(area);
+        composer.render(area, &mut buf);
+        let typed = format!("› {text}");
+        let rows: Vec<String> = (0..area.height)
+            .map(|y| (0..area.width).map(|x| buf[(x, y)].symbol()).collect())
+            .collect();
+        let Some(y) = rows.iter().position(|row| row.contains(hint)) else {
+            return false;
+        };
+        assert!(
+            rows[y].starts_with(&format!("{typed}{hint}")),
+            "{}",
+            rows[y]
+        );
+        let x = u16::try_from(typed.chars().count()).unwrap();
+        let y = u16::try_from(y).unwrap();
+        assert!(buf[(x, y)].style().add_modifier.contains(Modifier::DIM));
+        true
+    }
+
+    #[test]
+    fn slash_command_argument_hint_shows_until_an_argument_is_typed() {
+        // `/cost` exists only in developer-accounting builds.
+        let shown = cfg!(feature = "developer-accounting");
+        assert_eq!(shows_argument_hint("/cost ", /*width*/ 100, |_| {}), shown);
+        assert_eq!(
+            shows_argument_hint("/cost   ", /*width*/ 100, |_| {}),
+            shown
+        );
+        // Not before the space, once an argument is typed, for a command
+        // without a hint, where it would not fit whole, or where `/cost`
+        // cannot be submitted.
+        for text in ["/cost", "/cost 2", "/cost 2026-10-09 ", "/diff ", "/cost\t"] {
+            assert!(!shows_argument_hint(text, /*width*/ 100, |_| {}), "{text}");
+        }
+        assert!(!shows_argument_hint("/cost ", /*width*/ 40, |_| {}));
+        assert!(!shows_argument_hint(
+            "/cost ",
+            /*width*/ 100,
+            ChatComposer::set_parent_owned_thread
+        ));
     }
 
     fn plugin_mention_foreground_color(composer: &ChatComposer) -> Option<Color> {
@@ -8628,6 +8712,56 @@ mod tests {
             assert_eq!(result, InputResult::Command(expected), "command {text}");
             assert!(composer.draft.textarea.text().is_empty(), "command {text}");
             assert!(!composer.is_in_paste_burst(), "command {text}");
+        }
+    }
+
+    /// Regression for tmux smoke flakes: a slowly rendered prefix opens the slash popup, the rest
+    /// of the command is still held by the rapid-input detector, and Enter arrives before the
+    /// idle flush. Enter must act on the full command, not the stale popup selection.
+    #[test]
+    fn slash_popup_enter_materializes_rapid_input_tail() {
+        use crate::slash_command::SlashCommand;
+        use crossterm::event::KeyCode;
+        use crossterm::event::KeyEvent;
+        use crossterm::event::KeyModifiers;
+
+        for (typed, held, expected) in [
+            ("/", "exit", SlashCommand::Exit),
+            ("/ex", "it", SlashCommand::Exit),
+            ("/walle", "t", SlashCommand::Wallet),
+        ] {
+            let (mut composer, _rx) = new_test_composer();
+            let mut now = Instant::now();
+            for character in typed.chars() {
+                let _ = composer.handle_input_basic_with_time(
+                    KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE),
+                    now,
+                );
+                now += ChatComposer::recommended_paste_flush_delay();
+                composer.handle_paste_burst_flush(now);
+                composer.sync_popups();
+            }
+            for character in held.chars() {
+                let _ = composer.handle_input_basic_with_time(
+                    KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE),
+                    now,
+                );
+                now += Duration::from_millis(1);
+            }
+            composer.sync_popups();
+            assert_eq!(composer.draft.textarea.text(), typed, "{typed}+{held}");
+            assert!(
+                matches!(composer.popups.active, ActivePopup::Command(_)),
+                "{typed}+{held}"
+            );
+            assert!(composer.is_in_paste_burst(), "{typed}+{held}");
+
+            let (result, _) =
+                composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+            assert_eq!(result, InputResult::Command(expected), "{typed}+{held}");
+            assert!(composer.draft.textarea.text().is_empty(), "{typed}+{held}");
+            assert!(!composer.is_in_paste_burst(), "{typed}+{held}");
         }
     }
 

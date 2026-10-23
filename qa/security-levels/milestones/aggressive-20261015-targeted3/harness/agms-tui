@@ -1,0 +1,182 @@
+#!/usr/bin/python3
+"""Neutral terminal driver for the code-blind executor.
+
+Every invocation is appended to $AGMS_RUN/evidence/actions.jsonl with a
+timestamp; every screen read is appended to screens.jsonl. The product runs in
+a private tmux server on $AGMS_RUN/tmux.sock; raw terminal output is piped to
+evidence/pty.raw.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+RUN = os.environ["AGMS_RUN"]
+EVIDENCE = os.path.join(RUN, "evidence")
+SOCK = os.path.join(RUN, "tmux.sock")
+TMUX = ["/opt/agms/bin/tmux", "-f", "/opt/agms/etc/tmux.conf", "-S", SOCK]
+TARGET = "product"
+TERM_NO = 1  # --term 2 selects a second Corbanu Terminal on the same run profile (same CORBANU_HOME)
+FIXTURE = os.path.join(RUN, "fixture")
+USAGE = """usage:
+  agms-tui start [--route zai|zai-anthropic|zai-plain-http] [--model glm-5.3-flash|glm-5.2]
+                 [--env NAME=synthetic...] [PRODUCT ARGS...]   launch the product (defaults: zai,
+                                    glm-5.3-flash). PRODUCT ARGS go to the product, e.g. `resume ...`
+                                    or `-c key=value`. --env adds a synthetic environment variable (fixture v2: value of letters, digits, . _ -).
+  agms-tui text 'literal text'      type text (does not press Enter)
+  agms-tui key KEY [KEY...]         press keys: Enter Escape Up Down Left Right Tab
+                                    BSpace Space C-c C-d y n 1 2 3 ... (tmux key names)
+  agms-tui screen [LABEL]           print the current screen
+  agms-tui wait REGEX [SECONDS]     wait until the screen matches REGEX (default 60s)
+  agms-tui fixture [LABEL]          list fixture files with their contents
+  agms-tui stop                     end the product terminal session
+  agms-tui --term 2 COMMAND ...     the same commands for a SECOND Corbanu Terminal, started with
+                                    `agms-tui --term 2 start ...`: same test project, same product
+                                    home (the same $CORBANU_HOME), its own terminal. Without --term,
+                                    commands go to the first terminal. `agms-tui --term 2 stop` ends
+                                    only the second; `agms-tui stop` ends both.
+"""
+
+
+def log(kind, row):
+    row = dict(time_ns=time.time_ns(), utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **row)
+    if TERM_NO != 1:
+        row["term"] = TERM_NO
+    with open(os.path.join(EVIDENCE, kind), "a") as out:
+        out.write(json.dumps(row) + "\n")
+
+
+def tmux(*args, check=True):
+    result = subprocess.run(TMUX + list(args), capture_output=True, text=True)
+    if check and result.returncode != 0:
+        raise SystemExit("tmux error: " + result.stderr.strip())
+    return result
+
+
+def pty_name():
+    return "pty.raw" if TERM_NO == 1 else "pty-%d.raw" % TERM_NO
+
+
+def pty_offset():
+    path = os.path.join(EVIDENCE, pty_name())
+    return os.path.getsize(path) if os.path.exists(path) else 0
+
+
+def capture():
+    return tmux("capture-pane", "-p", "-t", TARGET).stdout
+
+
+def show(label, screen):
+    log("screens.jsonl", dict(label=label, pty_offset=pty_offset(), screen=screen))
+    print(screen.rstrip("\n"))
+
+
+def fixture_state():
+    state = {}
+    for base, dirs, files in os.walk(FIXTURE):
+        dirs.sort()
+        if os.path.basename(base) == ".git":
+            # git internals: list hooks/config, skip object storage
+            dirs[:] = [d for d in dirs if d in ("hooks", "info")]
+        for name in sorted(files):
+            path = os.path.join(base, name)
+            rel = os.path.relpath(path, FIXTURE)
+            try:
+                with open(path, "rb") as stream:
+                    data = stream.read(4096)
+                state[rel] = data.decode("utf-8", "replace")
+            except OSError as exc:
+                state[rel] = "<unreadable: %s>" % exc.strerror
+    return state
+
+
+def main(argv):
+    global TERM_NO, TARGET
+    if argv[:1] == ["--term"]:
+        if len(argv) < 2 or argv[1] not in ("1", "2"):
+            print("--term takes 1 or 2")
+            return 64
+        TERM_NO = int(argv[1])
+        TARGET = "product" if TERM_NO == 1 else "term%d" % TERM_NO  # not a prefix of "product": tmux prefix-matches -t
+        argv = argv[2:]
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(USAGE)
+        return 0
+    cmd, args = argv[0], argv[1:]
+    log("actions.jsonl", dict(requested=cmd, args=args))
+    if cmd == "start":
+        route, model, extra = "zai", "glm-5.3-flash", []
+        while args[:1] and args[0] in ("--route", "--model", "--env"):
+            if args[0] == "--route":
+                route = args[1]
+            elif args[0] == "--model":
+                model = args[1]
+            else:
+                extra.append(args[1])
+            args = args[2:]
+        if tmux("has-session", "-t", TARGET, check=False).returncode == 0:
+            print("a product session is already running; use 'agms-tui stop' first")
+            return 1
+        product = ["/opt/agms/bin/agms-product", route, model] + args
+        tmux("new-session", "-d", "-s", TARGET, "-x", "150", "-y", "45",
+             "-e", "AGMS_EXTRA_ENV=" + "\n".join(extra),
+             " ".join("'" + a.replace("'", "'\\''") + "'" for a in product))
+        tmux("pipe-pane", "-o", "-t", TARGET, "cat >> '%s'" % os.path.join(EVIDENCE, pty_name()))
+        time.sleep(2)
+        log("actions.jsonl", dict(executed="start", argv=product))
+        show("after-start", capture())
+    elif cmd == "text":
+        text = " ".join(args)
+        tmux("send-keys", "-t", TARGET, "-l", text)
+        log("actions.jsonl", dict(executed="text", text=text, pty_offset=pty_offset()))
+        print("typed %d characters" % len(text))
+    elif cmd == "key":
+        for key in args:
+            tmux("send-keys", "-t", TARGET, key)
+            log("actions.jsonl", dict(executed="key", key=key, pty_offset=pty_offset()))
+            time.sleep(0.15)
+        print("pressed " + " ".join(args))
+    elif cmd == "ansi":
+        # Coloured capture (coordinator screenshots).
+        screen = tmux("capture-pane", "-e", "-p", "-t", TARGET).stdout
+        log("screens.jsonl", dict(label=(args[0] if args else "ansi"), pty_offset=pty_offset(), ansi=True, screen=screen))
+        print(screen.rstrip("\n"))
+    elif cmd == "screen":
+        show(args[0] if args else "screen", capture())
+    elif cmd == "wait":
+        pattern = re.compile(args[0])
+        limit = float(args[1]) if len(args) > 1 else 60.0
+        deadline = time.time() + limit
+        while True:
+            screen = capture()
+            if pattern.search(screen):
+                log("actions.jsonl", dict(executed="wait", pattern=args[0], matched=True))
+                show("wait-matched:" + args[0], screen)
+                return 0
+            if time.time() > deadline:
+                log("actions.jsonl", dict(executed="wait", pattern=args[0], matched=False))
+                show("wait-timeout:" + args[0], screen)
+                print("TIMEOUT: pattern not seen within %ss" % limit)
+                return 2
+            time.sleep(0.5)
+    elif cmd == "fixture":
+        state = fixture_state()
+        log("fixture.jsonl", dict(label=args[0] if args else "fixture", files=state))
+        print(json.dumps(state, indent=1, sort_keys=True))
+    elif cmd == "stop":
+        if TERM_NO == 1:
+            tmux("kill-server", check=False)
+        else:
+            tmux("kill-session", "-t", TARGET, check=False)
+        log("actions.jsonl", dict(executed="stop"))
+        print("stopped")
+    else:
+        print(USAGE)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

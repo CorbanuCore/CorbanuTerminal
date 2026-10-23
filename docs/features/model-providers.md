@@ -182,6 +182,31 @@ same provider can serve both Responses-, Chat Completions-, and
 Anthropic-compatible models. Those transport details do not create additional
 user-facing providers.
 
+## Choosing the connection
+
+Some models are served over more than one connection. GLM 5.3 Flash, GLM 5.3 and
+GLM 5.2 reach Z.AI either OpenAI-style (`zai`, billed per token) or Claude-style
+(`zai-anthropic`, the GLM Coding Plan route). Both use your Z.AI key.
+
+1. Run `/model` and open the **Z.AI** tab.
+2. Each model is listed once per connection, OpenAI-style first:
+   **GLM 5.3 Flash · Z.AI (OpenAI-style)** and **GLM 5.3 Flash · Z.AI (Claude-style)**.
+   The one you're on says *(current)*.
+3. Pick a row and an effort. The session switches to that connection straight
+   away, and it's saved as your default like any other `/model` choice.
+
+- The OpenAI-style connection is the default wherever Corbanu picks one for you
+  (first launch, a model chosen without a provider, repairs of an impossible
+  provider and model pair).
+- Only connections you can use are shown: the provider must be set up and active
+  in `/providers`. This works at every security level; under Aggressive, a key the
+  credential broker holds counts as set up.
+- [Named accounts](../provider-accounts.md) belong to one provider, so `zai` and
+  `zai-anthropic` can use different accounts. When they do, each row names its
+  account (`· account work`, `· default account`).
+- Telegram's `/model` doesn't offer the choice yet; it keeps the session's
+  connection.
+
 ## Which command to use
 
 | Command | Purpose |

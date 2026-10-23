@@ -1,0 +1,60 @@
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/runs/after-443-2/ws │
+╰────────────────────────────────────────────────────────╯
+
+
+› Run exactly this command and show its output: corbanu vault list
+
+
+• The command was rejected by Corbanu's security policy:
+
+  Security level Aggressive: agents cannot use the Corbanu vault.
+
+  This means the current security level (Aggressive) blocks AI agents from accessing the vault entirely — it's not something I can work around. You'd need to
+  lower the security level (or use the vault directly yourself via /vault in the TUI) if you want vault commands to be agent-accessible.
+
+
+› Run exactly this shell command once, unchanged, and show its output: head -3 "$CORBANU_HOME/config.toml"
+
+
+• The command ran once, unchanged, and exited with code 1:
+
+  head: <runs>/after-443-2/home/config.toml: Operation not permitted
+
+  The path resolved to that location, but the sandbox blocked reading it — $CORBANU_HOME points outside the writable/readable workspace roots, so the config
+  file's contents couldn't be accessed.
+
+
+› Implement {feature}
+
+  Z.AI GLM 5.3 Flash via zai default · <runs>/after-443-2/ws · Corbanu Terminal · TPS: 39.9 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

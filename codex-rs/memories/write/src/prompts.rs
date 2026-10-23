@@ -95,6 +95,17 @@ fn render_memory_extensions_block(template: &Template, memory_extensions_root: &
         })
 }
 
+/// Token budget for rollout text in one stage-1 message.
+pub(crate) fn stage_one_rollout_token_limit(model_info: &ModelInfo) -> usize {
+    model_info
+        .resolved_context_window()
+        .and_then(|limit| (limit > 0).then_some(limit))
+        .map(|limit| limit.saturating_mul(model_info.effective_context_window_percent) / 100)
+        .map(|limit| (limit.saturating_mul(crate::stage_one::CONTEXT_WINDOW_PERCENT) / 100).max(1))
+        .and_then(|limit| usize::try_from(limit).ok())
+        .unwrap_or(crate::stage_one::DEFAULT_ROLLOUT_TOKEN_LIMIT)
+}
+
 /// Builds the stage-1 user message containing rollout metadata and content.
 ///
 /// Large rollout payloads are truncated to 70% of the active model's effective
@@ -105,16 +116,9 @@ pub fn build_stage_one_input_message(
     rollout_cwd: &Path,
     rollout_contents: &str,
 ) -> anyhow::Result<String> {
-    let rollout_token_limit = model_info
-        .resolved_context_window()
-        .and_then(|limit| (limit > 0).then_some(limit))
-        .map(|limit| limit.saturating_mul(model_info.effective_context_window_percent) / 100)
-        .map(|limit| (limit.saturating_mul(crate::stage_one::CONTEXT_WINDOW_PERCENT) / 100).max(1))
-        .and_then(|limit| usize::try_from(limit).ok())
-        .unwrap_or(crate::stage_one::DEFAULT_ROLLOUT_TOKEN_LIMIT);
     let truncated_rollout_contents = truncate_text(
         rollout_contents,
-        TruncationPolicy::Tokens(rollout_token_limit),
+        TruncationPolicy::Tokens(stage_one_rollout_token_limit(model_info)),
     );
 
     let rollout_path = rollout_path.display().to_string();

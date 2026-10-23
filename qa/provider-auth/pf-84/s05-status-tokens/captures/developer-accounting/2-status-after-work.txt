@@ -1,0 +1,71 @@
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:       loading   /model to change                │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/run-da/ws │
+│ permissions: YOLO mode                                 │
+╰────────────────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/.codex-work/pf84-status-tokens/run-da/ws · Corbanu Terminal · TPS: -- tok/s
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:       glm-5.3-flash   /model to change          │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/run-da/ws │
+│ permissions: YOLO mode                                 │
+╰────────────────────────────────────────────────────────╯
+
+/status
+
+╭───────────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                                │
+│                                                                                               │
+│  Model:                Z.AI GLM 5.3 Flash                                                     │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account work                     │
+│  Directory:            /Volumes/CorbanuDrive/Corbanu/.codex-work/pf84-status-tokens/run-da/ws │
+│  Permissions:          Next turn: Full Access                                                 │
+│  Security:             Requested Permissive; effective protection unverified (/security)      │
+│  Agents.md:            <none>                                                                 │
+│  Collaboration mode:   Default                                                                │
+│  Session:              01a12d44-8e33-7363-9d5b-2cc6060944aa                                   │
+│                                                                                               │
+│  Token usage:          0 total  (0 input + 0 output)                                          │
+│  Account usage:        work · no usage yet                                                    │
+│  Limits:               data not available yet                                                 │
+╰───────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Reply with the single word pong
+
+
+• pong
+
+/status
+
+╭───────────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                                │
+│                                                                                               │
+│  Model:                Z.AI GLM 5.3 Flash                                                     │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account work                     │
+│  Directory:            /Volumes/CorbanuDrive/Corbanu/.codex-work/pf84-status-tokens/run-da/ws │
+│  Permissions:          Next turn: Full Access                                                 │
+│  Security:             Requested Permissive; effective protection unverified (/security)      │
+│  Agents.md:            <none>                                                                 │
+│  Collaboration mode:   Default                                                                │
+│  Session:              01a12d44-8e33-7363-9d5b-2cc6060944aa                                   │
+│                                                                                               │
+│  Token usage:          7.42K total  (7.42K input + 3 output)                                  │
+│  Context window:       100% left (7.42K used / 950K)                                          │
+│  Account usage:        work · 7,421 input · 3 output                                          │
+│  Limits:               data not available yet                                                 │
+╰───────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/.codex-work/pf84-status-tokens/run-da/ws · Corbanu Terminal · TPS: 0.5 tok/s

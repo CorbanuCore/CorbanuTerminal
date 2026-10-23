@@ -1,0 +1,63 @@
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       loading   /model to change                 │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+
+› Summarize recent commits
+
+  GPT-6 Luna default · $S/ws · Corbanu Terminal · TPS: -- tok/s
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       gpt-6-luna   /model to change              │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+⚠ MCP client for `codex_apps` failed to start: MCP startup failed: handshaking with MCP server failed: Send message error Transport
+  [rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rmcp_client::http_client_adapter::StreamableHttpClie
+  ntAdapter>>] error: unexpected server response: HTTP 404: , when send initialize request
+
+⚠ MCP startup incomplete (failed: codex_apps)
+
+
+› Reply with exactly: pong
+
+
+⚠ Code Mode is unavailable because failed to spawn code-mode host $S/bin/codex-code-mode-host: host executable was not
+  found. Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.
+
+• mock: chatgpt tuiwork2 gen2
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date                            │
+│ information on rate limits and credits                                                   │
+│                                                                                          │
+│  Model:                GPT-6 Luna (reasoning medium, summaries auto)                     │
+│  Model provider:       OpenAI - http://127.0.0.1:34731/v1 · account work                 │
+│  Directory:            $S/ws              │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              ChatGPT sign-in · t…@example.com · Plus (account work)            │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a1349c-2836-7ba1-8fa3-fc87bed8fa1b                              │
+│                                                                                          │
+│  Context window:       100% left (129 used / 998K)                                       │
+│  5h limit:             [█████████░░░░░░░░░░░] 44% left                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Summarize recent commits
+
+  GPT-6 Luna default · $S/ws · Corbanu Terminal · TPS: 14.4 tok/s

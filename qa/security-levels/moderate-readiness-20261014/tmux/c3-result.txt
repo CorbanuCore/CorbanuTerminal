@@ -1,0 +1,61 @@
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     loading   /model to change                   │
+│ directory: <run>/proj/ledger-notes │
+╰─────────────────────────────────────────────────────────╯
+
+› Explain this codebase
+
+  Z.AI GLM 5.3 Flash via zai default · <run>/proj/ledger-notes · Corbanu Terminal · TPS: -- tok/s
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     glm-5.3-flash   /model to change             │
+│ directory: <run>/proj/ledger-notes │
+╰─────────────────────────────────────────────────────────╯
+
+› Run exactly this shell command and show me its output: echo moderate-check >> ../outside-notes.txt
+
+✔ You approved Corbanu to run echo moderate-check >> ../outside-notes.txt this time
+
+• Ran echo moderate-check >> ../outside-notes.txt
+  └ Protected launch refused: this command would run outside the OS sandbox, which protected launch does not allow.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• I ran exactly:
+
+  echo moderate-check >> ../outside-notes.txt
+
+  It failed with:
+
+  Protected launch refused: this command would run outside the OS sandbox, which protected launch does not allow.
+
+  No output was appended because the command was refused before execution.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+› Run exactly this shell command and show me its output: head -3 ~/.corbanu/config.toml
+
+✔ You approved Corbanu to run head -3 ~/.corbanu/config.toml this time
+
+• Ran head -3 ~/.corbanu/config.toml
+  └ head: <run>/userhome/.corbanu/config.toml: Operation not permitted
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Output:
+
+  head -3 ~/.corbanu/config.toml
+
+  head: <run>/userhome/.corbanu/config.toml: Operation not permitted
+
+  Exit code: 1
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+› Explain this codebase
+
+  Z.AI GLM 5.3 Flash via zai default · <run>/proj/ledger-notes · Corbanu Terminal · TPS: 10.9 tok/s

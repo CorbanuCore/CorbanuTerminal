@@ -1,0 +1,50 @@
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       gpt-6-luna medium   /model to change       │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+• Model changed to GPT-6 Luna via OpenAI medium
+
+
+› Reply with exactly: pong
+
+
+⚠ Code Mode is unavailable because failed to spawn code-mode host $S/bin/codex-code-mode-host: host executable was not
+  found. Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.
+
+⚠ Using OPENAI_API_KEY from your environment — billed per use to that API key. Sign in or unset it to change.
+
+• mock: bearer envkey
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date                            │
+│ information on rate limits and credits                                                   │
+│                                                                                          │
+│  Model:                GPT-6 Luna (reasoning medium, summaries auto)                     │
+│  Model provider:       OpenAI - http://127.0.0.1:34731/v1 · account default              │
+│  Directory:            $S/ws              │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              OpenAI API key configured (run corbanu login to use ChatGPT)      │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a1344d-5054-7e70-9115-a8dc9217435e                              │
+│                                                                                          │
+│  Token usage:          129 total  (120 input + 9 output)                                 │
+│  Context window:       100% left (129 used / 998K)                                       │
+│  Account usage:        default · 120 input · 9 output                                    │
+│  5h limit:             [███████████████████░] 93% left                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Improve documentation in @filename
+
+  GPT-6 Luna medium · $S/ws · Corbanu Terminal · TPS: 91.8 tok/s

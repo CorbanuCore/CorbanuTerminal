@@ -1,0 +1,76 @@
+home hC accounts:
+  claude-plan	cfgacct	claude_config_dir
+  claude-plan	fake	claude_oauth_token
+  claude-plan	real	claude_oauth_token
+
+### S02-3b re-check (#414): session selects claude-plan account fake; real default token in CLAUDE_CODE_OAUTH_TOKEN
+== PATH corbanu = candidate (origin/main) (exit 1)
+   | ERROR: unexpected status 401 Unauthorized: OAuth access token is invalid., url: https://api.anthropic.com/v1/messages, cf-ray: a48a70fbcdfe6be9-DFW
+== PATH corbanu = pre-PF-84 build 44b527f11f (exit 1)
+   | ERROR: Fatal error: provider auth command `corbanu` predates named accounts, so account `fake` was refused instead of using the default account; update it or put a current `corbanu` first on PATH
+   token-command calls via the PATH candidate shim:   10 argv=[internal-claude-oauth-token --account fake --enable named_accounts] CORBANU_PROVIDER_ACCOUNT=fake
+   token-command calls via the PATH pre-PF-84 shim:   8 argv=[internal-claude-oauth-token --account fake --enable named_accounts] CORBANU_PROVIDER_ACCOUNT=fake
+
+### S03 exec --account on claude-plan (PATH corbanu = pre-PF-84 build, real default token in env)
+== --account real (exit 1)
+   | ERROR: Fatal error: provider auth command `corbanu` predates named accounts, so account `real` was refused instead of using the default account; update it or put a current `corbanu` first on PATH
+== --account fake (exit 1)
+   | ERROR: Fatal error: provider auth command `corbanu` predates named accounts, so account `fake` was refused instead of using the default account; update it or put a current `corbanu` first on PATH
+== --account ghost (exit 1)
+   | Error: thread/start: thread/start failed: account `ghost` of provider `claude-plan` is not configured; add it with `corbanu account add claude-plan ghost` or pick another with `--account` (see `corbanu account list`) (code -32600)
+== --account cfgacct (exit 1)
+   | ERROR: Fatal error: provider auth command `corbanu` predates named accounts, so account `cfgacct` was refused instead of using the default account; update it or put a current `corbanu` first on PATH
+   token-command calls via the PATH pre-PF-84 shim: 24
+
+### S02-9b re-check (#415): internal-claude-oauth-token, flag on vs off
+expected: fake token sha12=5ec578e961bb; cfgacct sha12=63a0e6c87903; env canary sha12=56b729c16f5d
+-- flag ON (config.toml named_accounts = true)
+--account fake: exit=0 stdout=sha12=5ec578e961bb stderr=
+--account cfgacct: exit=0 stdout=sha12=63a0e6c87903 stderr=
+--account ghost: exit=1 stdout=EMPTY stderr=Error: Claude account `ghost` is not configured; add it with `corbanu account add claude-plan ghost --kind claude-token` or choose another account 
+CORBANU_PROVIDER_ACCOUNT=fake: exit=0 stdout=sha12=5ec578e961bb stderr=
+-- flag OFF (config.toml named_accounts = false)  [#415]
+--account fake: exit=1 stdout=EMPTY stderr=Error: Claude account `fake` was requested, but named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts` 
+--account cfgacct: exit=1 stdout=EMPTY stderr=Error: Claude account `cfgacct` was requested, but named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts` 
+CORBANU_PROVIDER_ACCOUNT=fake: exit=1 stdout=EMPTY stderr=Error: Claude account `fake` was requested, but named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts` 
+CORBANU_PROVIDER_ACCOUNT=fake + env token: exit=1 stdout=EMPTY stderr=Error: Claude account `fake` was requested, but named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts` 
+--account fake + env token: exit=1 stdout=EMPTY stderr=Error: Claude account `fake` was requested, but named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts` 
+flag OFF exec with provider_accounts.claude-plan=fake and the real default token in env (exit 0):
+   | pong
+   | warning: `[provider_accounts]` is ignored because the `named_accounts` feature is off; every provider uses its default account.
+-- env exception stays default-only (flag on)
+no account + env token: exit=0 stdout=sha12=56b729c16f5d stderr=
+CORBANU_PROVIDER_ACCOUNT=fake + env token (candidate): exit=0 stdout=sha12=5ec578e961bb stderr=
+CORBANU_PROVIDER_ACCOUNT=fake + env token (pre-PF-84 build): exit=0 stdout=sha12=56b729c16f5d stderr=
+--account fake + env token (pre-PF-84 build): exit=2 stdout=EMPTY stderr=error: unexpected argument '--account' found  Usage: corbanu internal-claude-oauth-token [OPTIONS]  For more information, try '--help'. 
+security(1) CLI shim calls: 0
+
+### S03 exec --account on claude-plan (PATH corbanu = candidate, real default token in env)
+== --account real (exit 0)
+   | pong
+== --account fake (exit 1)
+   | ERROR: unexpected status 401 Unauthorized: OAuth access token is invalid., url: https://api.anthropic.com/v1/messages, cf-ray: a48a71ee4cbb4677-DFW
+== --account ghost (exit 1)
+   | Error: thread/start: thread/start failed: account `ghost` of provider `claude-plan` is not configured; add it with `corbanu account add claude-plan ghost` or pick another with `--account` (see `corbanu account list`) (code -32600)
+== --account cfgacct (exit 1)
+   | ERROR: Reconnecting... 1/5
+   | ERROR: Reconnecting... 2/5
+   | ERROR: Reconnecting... 3/5
+== --account default (exit 0)
+   | pong
+== resume the --account fake session without --account (exit 1)
+   | ERROR: unexpected status 401 Unauthorized: OAuth access token is invalid., url: https://api.anthropic.com/v1/messages, cf-ray: a48a72938d755d95-DFW
+   token-command argv seen by the PATH shim:
+       27 argv=[internal-claude-oauth-token --account cfgacct --enable named_accounts] CORBANU_PROVIDER_ACCOUNT=cfgacct
+       20 argv=[internal-claude-oauth-token --account fake --enable named_accounts] CORBANU_PROVIDER_ACCOUNT=fake
+        6 argv=[internal-claude-oauth-token --account real --enable named_accounts] CORBANU_PROVIDER_ACCOUNT=real
+        6 argv=[internal-claude-oauth-token] CORBANU_PROVIDER_ACCOUNT=<unset>
+
+### cfgacct (claude_config_dir account whose .credentials.json holds a synthetic token), candidate first on PATH: full error tail
+exit=1
+   | ERROR: Reconnecting... 3/5
+   | ERROR: Reconnecting... 4/5
+   | ERROR: Reconnecting... 5/5
+   | ERROR: provider auth command `corbanu` exited with status exit status: 1: Error: Claude Code OAuth refresh token is missing. Run `claude /login` again.
+   token-command calls: 27
+   internal-claude-oauth-token --account cfgacct returns sha12=63a0e6c87903 (expected the synthetic canary sha12=63a0e6c87903)

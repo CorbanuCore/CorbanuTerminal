@@ -95,13 +95,14 @@ fn hook_trusted_hash_edit(hook_key: &str, current_hash: &str) -> ConfigEdit {
 
 async fn trust_materialized_plugin_hooks(
     materializations: Vec<RemotePluginMaterialization>,
-    auth_manager: &AuthManager,
+    auth_manager: &Arc<AuthManager>,
     thread_manager: &ThreadManager,
     config_manager: &ConfigManager,
     config_processor: &ConfigRequestProcessor,
 ) -> Result<(), String> {
+    // #658: the sign-in the process's user sessions run on, read again below.
     let Some(current_account_id) = auth_manager
-        .auth_cached()
+        .session_auth_cached()
         .and_then(|auth| auth.get_account_id())
     else {
         return Ok(());
@@ -146,7 +147,7 @@ async fn trust_materialized_plugin_hooks(
         return Ok(());
     }
     if auth_manager
-        .auth_cached()
+        .session_auth_cached()
         .and_then(|auth| auth.get_account_id())
         .as_deref()
         != Some(current_account_id.as_str())

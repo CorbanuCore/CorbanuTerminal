@@ -1,0 +1,109 @@
+# PF-25-S02: Turning the kill switch off keeps the level (GLM 5.2).
+id = "pf25s02-kill-switch-off"
+feature = "Turning the kill switch off keeps the level"
+expected = "With the kill switch on, /security, g: Turn the kill switch off opens on Back; Enter alone goes back. Down and Enter turn it off: the result says Level: Aggressive, and the list shows Core's level Aggressive with the kill switch off."
+model = "glm-5.2"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "!printf 'shipped-%s\\n' v2-canary > {home}/team-notes.txt && echo seeded"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "seeded"
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "r restart now"
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Restarting Corbanu Terminal[\\s\\S]*Corbanu Terminal \\(v[\\s\\S]*› "
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "g grants and kill switch"
+[[steps]]
+key = "g"
+[[steps]]
+wait = "Grants and kill switch"
+[[steps]]
+pause = 2.5
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Kill switch on in this session"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "> Turn the kill switch off"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Turn the kill switch off\\?[\\s\\S]*› Back"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Cancelled\\. Nothing changed\\."
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+key = "Down"
+[[steps]]
+wait = "› Turn the kill switch off"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Kill switch off[\\s\\S]*Level: Aggressive"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Core's level: Aggressive · Kill switch: off"
+[[steps]]
+pause = 4.0

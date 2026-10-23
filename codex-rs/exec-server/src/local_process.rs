@@ -1284,6 +1284,10 @@ mod tests {
         if cfg!(target_os = "windows") {
             expected.insert("PATHEXT".to_string(), ".COM;.EXE;.BAT;.CMD".to_string());
         }
+        // Debug builds keep test keyring isolation in every child (`create_env`).
+        if let Some((name, value)) = shell_environment::keyring_isolation_env_var() {
+            expected.insert(name.to_string(), value);
+        }
 
         assert_eq!(child_env(&params), expected);
     }

@@ -205,6 +205,9 @@ pub enum SandboxTransformError {
     },
     MissingLinuxSandboxExecutable,
     EnvironmentNetworkProxy(String),
+    /// #536: a writable root moved through a link (see
+    /// [`crate::writable_root_ledger`]).
+    WritableRootRefused(crate::writable_root_ledger::WritableRootRefusal),
     #[cfg(target_os = "linux")]
     Wsl1UnsupportedForBubblewrap,
     #[cfg(not(target_os = "macos"))]
@@ -232,6 +235,7 @@ impl std::fmt::Display for SandboxTransformError {
             Self::EnvironmentNetworkProxy(err) => {
                 write!(f, "failed to prepare environment network proxy: {err}")
             }
+            Self::WritableRootRefused(refusal) => write!(f, "{refusal}"),
             #[cfg(target_os = "linux")]
             Self::Wsl1UnsupportedForBubblewrap => write!(f, "{WSL1_BWRAP_WARNING}"),
             #[cfg(not(target_os = "macos"))]
@@ -251,6 +255,7 @@ impl std::error::Error for SandboxTransformError {
             | Self::InvalidSandboxPolicyCwd { source, .. } => Some(source),
             Self::MissingLinuxSandboxExecutable => None,
             Self::EnvironmentNetworkProxy(_) => None,
+            Self::WritableRootRefused(refusal) => Some(refusal),
             #[cfg(target_os = "linux")]
             Self::Wsl1UnsupportedForBubblewrap => None,
             #[cfg(not(target_os = "macos"))]
@@ -353,6 +358,13 @@ impl SandboxManager {
                 let (file_system_sandbox_policy, network_sandbox_policy) = pending
                     .effective_permission_profile
                     .to_runtime_permissions();
+                // #536: the arguments grant writes at the real locations
+                // this check pins.
+                crate::writable_root_ledger::check_writable_roots(
+                    &file_system_sandbox_policy,
+                    pending.native_sandbox_policy_cwd.as_path(),
+                )
+                .map_err(SandboxTransformError::WritableRootRefused)?;
                 let mut args = create_seatbelt_command_args(CreateSeatbeltCommandArgsParams {
                     command: os_argv_to_strings(argv),
                     file_system_sandbox_policy: &file_system_sandbox_policy,
@@ -386,6 +398,16 @@ impl SandboxManager {
                     allow_proxy_network,
                     is_wsl1(),
                 )?;
+                // #536: the helper binds the writable roots at the real
+                // locations this check pins.
+                let pinned = crate::writable_root_ledger::check_writable_roots(
+                    &pending
+                        .effective_permission_profile
+                        .to_runtime_permissions()
+                        .0,
+                    pending.native_sandbox_policy_cwd.as_path(),
+                )
+                .map_err(SandboxTransformError::WritableRootRefused)?;
                 let mut args = create_linux_sandbox_command_args_for_permission_profile(
                     os_argv_to_strings(argv),
                     pending.native_command_cwd.as_path(),
@@ -394,6 +416,14 @@ impl SandboxManager {
                     use_legacy_landlock,
                     allow_proxy_network,
                 );
+                crate::landlock::insert_pinned_writable_roots_arg(&mut args, &pinned);
+                // #348: where the helper records the placeholders it makes.
+                if let Ok(codex_home) = codex_utils_home_dir::find_codex_home() {
+                    crate::landlock::insert_placeholder_record_dir_arg(
+                        &mut args,
+                        codex_home.as_path(),
+                    );
+                }
                 let mut full_command = Vec::with_capacity(1 + args.len());
                 full_command.push(os_string_to_command_component(exe.as_os_str().to_owned()));
                 full_command.append(&mut args);
@@ -552,9 +582,10 @@ fn wrap_windows_sandbox_exec_request_for_direct_spawn(
     let write_roots_override = overrides
         .as_ref()
         .and_then(|overrides| overrides.write_roots_override.as_deref());
-    let deny_read_paths_override = overrides.as_ref().map_or(empty_paths, |overrides| {
-        overrides.additional_deny_read_paths.as_slice()
-    });
+    let no_deny_read = codex_windows_sandbox::DenyReadTargets::default();
+    let deny_read_override = overrides
+        .as_ref()
+        .map_or(&no_deny_read, |overrides| &overrides.additional_deny_read);
     let deny_write_paths_override = overrides.as_ref().map_or(empty_paths, |overrides| {
         overrides.additional_deny_write_paths.as_slice()
     });
@@ -573,7 +604,7 @@ fn wrap_windows_sandbox_exec_request_for_direct_spawn(
             read_roots_override,
             read_roots_include_platform_defaults,
             write_roots_override,
-            deny_read_paths_override,
+            deny_read_override,
             deny_write_paths_override,
             codex_home,
         );

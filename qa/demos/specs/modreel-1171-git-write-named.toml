@@ -1,0 +1,43 @@
+# #1171 (#1139, D94): under Moderate, a refused write into the project's .git names the level and says what to do.
+id = "modreel-1171-git-write-named"
+feature = "#1171: Moderate names itself when the sandbox stops a write into .git"
+expected = "Under Moderate, `git config user.name demo` in the project fails because the sandbox keeps .git read-only, and a warning says Security level Moderate blocked writing .git/config, why, and what a person can do."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+wait = "model:\\s+glm-5\\.3-flash"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this shell command in the sandbox, without asking for escalation, and show me its output: git config user.name demo-1171"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)(blocked writing|Operation not permitted|could not lock)(?:(?!Working).)*\\n› "
+timeout = 240
+compress = 3
+[[steps]]
+pause = 4.0

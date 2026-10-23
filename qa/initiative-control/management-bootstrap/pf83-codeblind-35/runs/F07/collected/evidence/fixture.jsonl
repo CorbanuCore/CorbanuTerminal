@@ -1,0 +1,5 @@
+{"time_ns": 1791248766335551000, "utc": "2026-10-06T01:06:06Z", "label": "AFTER_TURN1", "files": {"events.txt": "", "input.txt": "permission-test\n", "workspace/events.txt": "F07-START\n"}}
+{"time_ns": 1791248967205406000, "utc": "2026-10-06T01:09:27Z", "label": "PROBE_R1_AFTER", "files": {"events.txt": "PROBE-R1-FA\n", "input.txt": "permission-test\n", "workspace/events.txt": "F07-START\n"}}
+{"time_ns": 1791249036541169000, "utc": "2026-10-06T01:10:36Z", "label": "R2_PRE_PROBE", "files": {"events.txt": "PROBE-R1-FA\n", "input.txt": "permission-test\n", "workspace/events.txt": "F07-START\n"}}
+{"time_ns": 1791249059254253000, "utc": "2026-10-06T01:10:59Z", "label": "R2_PROBE_AFTER", "files": {"events.txt": "PROBE-R1-FA\n", "input.txt": "permission-test\n", "workspace/events.txt": "F07-START\n"}}
+{"time_ns": 1791249088954616000, "utc": "2026-10-06T01:11:28Z", "label": "FINAL", "files": {"events.txt": "PROBE-R1-FA\n", "input.txt": "permission-test\n", "workspace/events.txt": "F07-START\n"}}

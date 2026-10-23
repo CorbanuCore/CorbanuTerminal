@@ -1211,7 +1211,7 @@ impl TaskNodeClient {
     async fn get(&self, path: &str) -> anyhow::Result<TaskNodeResponse> {
         let response = self
             .transport
-            .request(reqwest::Method::GET, path, None)
+            .request(reqwest::Method::GET, path, /*body*/ None)
             .await?;
         Ok(TaskNodeResponse {
             status: response.status,
@@ -1676,7 +1676,12 @@ mod tests {
             );
         }
         assert_eq!(
-            resolve_tasknode_profile(None, Err(&missing), /*agent_session*/ false).unwrap(),
+            resolve_tasknode_profile(
+                /*explicit*/ None,
+                Err(&missing),
+                /*agent_session*/ false
+            )
+            .unwrap(),
             None
         );
         assert_eq!(
@@ -1713,8 +1718,12 @@ mod tests {
             ("\"alice\"", "alice-account"),
             ("\"bob\"", "bob-account"),
         ] {
-            let profile =
-                resolve_tasknode_profile(None, Ok(inherited), /*agent_session*/ true).unwrap();
+            let profile = resolve_tasknode_profile(
+                /*explicit*/ None,
+                Ok(inherited),
+                /*agent_session*/ true,
+            )
+            .unwrap();
             let active = codex_tasknode_session::load_scoped(
                 &vault,
                 &tasknode_session_scope(profile.as_ref()),

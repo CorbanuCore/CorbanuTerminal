@@ -1,0 +1,44 @@
+$ git rev-parse HEAD   # worktree checked out at origin/main
+886f19c873dd12dc62ddd5598732ec784a9334a7
+$ git merge-base --is-ancestor f0d71e62b6419593a8888f03c3ad74753842ad48 HEAD; echo $?   # PR #305 merge commit
+0
+$ git merge-base --is-ancestor c76e6d0845b972d2dea02f42ccf3fc22687c8c5a HEAD; echo $?   # PR #291 merge commit
+0
+$ sw_vers; uname -m
+  ProductName:		macOS
+  ProductVersion:		26.6.2
+  BuildVersion:		25G83
+arm64
+$ rustc --version
+rustc 1.95.0 (59807616e 2026-04-14)
+
+# 1) tools/build-mac.sh  (developer accounting), tail of its log:
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4m 00s
+BUILD_EXIT=0
+$ cp <target>/debug/corbanu <scratch>/bin/corbanu-acct   # done before build 2
+# 2) tools/build-mac.sh default, tail of its log:
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 42s
+BUILD_EXIT=0
+$ cp <target>/debug/corbanu <scratch>/bin/corbanu-default
+$ shasum -a 256 <scratch>/bin/corbanu-* <target>/debug/corbanu   # the binaries that ran; target now = default build
+033518e68e99a79a71c1e64dbc7e566ce31e1547bafa512c45b39b7ed39152ab  <scratch>/bin/corbanu-acct
+01913860aa10d143f692a9bd8cc13d3c90d98fe246559af7a69bdea634d0178d  <scratch>/bin/corbanu-default
+01913860aa10d143f692a9bd8cc13d3c90d98fe246559af7a69bdea634d0178d  <target>/debug/corbanu
+$ <scratch>/bin/corbanu-acct --version; <scratch>/bin/corbanu-default --version
+corbanu 0.1.48
+corbanu 0.1.48
+# running processes were checked with ps before captures, e.g. the default-build TUI: '<scratch>/bin/corbanu-default resume 01a11cba-262d-7032-a774-ca7bffe30f5b'
+
+$ shasum -a 256 ../rerun-20261008/tools/<f> tools/<f>   # unchanged copies
+bb58864f3788a1d7c97464af8eededdb6a709ada2f25fed3c103c3ae55ada236  ../rerun-20261008/tools/usage_proxy.py
+bb58864f3788a1d7c97464af8eededdb6a709ada2f25fed3c103c3ae55ada236  tools/usage_proxy.py
+a50c51217e846848f35ecbb7ed1e0c6c5899faf15489a051751d5df9a404829e  ../rerun-20261008/tools/recompute.py
+a50c51217e846848f35ecbb7ed1e0c6c5899faf15489a051751d5df9a404829e  tools/recompute.py
+3d131576c69f77c378c27b5452d25f87a5e1b44256744af07fbca69893fa1ebc  ../rerun-20261008/tools/home-config.toml
+3d131576c69f77c378c27b5452d25f87a5e1b44256744af07fbca69893fa1ebc  tools/home-config.toml
+
+$ gh pr view 291|305 --json number,mergeCommit,state
+PR #291 MERGED merge commit c76e6d0845b972d2dea02f42ccf3fc22687c8c5a
+PR #305 MERGED merge commit f0d71e62b6419593a8888f03c3ad74753842ad48
+$ git status --short --untracked-files=no   # tracked tree clean (worktree created fresh from origin/main; only this untracked evidence dir added)
+(empty)

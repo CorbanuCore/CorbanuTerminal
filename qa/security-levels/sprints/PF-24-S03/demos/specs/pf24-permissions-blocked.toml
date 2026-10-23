@@ -1,0 +1,52 @@
+# Aggressive active (stored before launch by wrappers/seed-aggressive.sh).
+# /permissions cannot quietly undo it.
+id = "pf24-permissions-blocked"
+feature = "Aggressive: /permissions cannot undo it"
+expected = "Choosing Full Access in /permissions is refused with 'Security level Aggressive manages permissions'; /status still shows the corbanu-aggressive profile."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/permissions"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Update Model Permissions"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Up"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Enable full access\\?"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Security level Aggressive manages permissions"
+[[steps]]
+pause = 2.0
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Aggressive active"
+[[steps]]
+pause = 3.5

@@ -1,0 +1,79 @@
+[0] › Today (UTC) in this conversation:
+[1] › • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 5 requests, 39,488 tokens. Estimated cost: $0.003116 (rounded).
+[2] › • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 1 request, tokens not reported. Estimated cost: not available — usage incomplete.
+[3] › • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 1 request, 4,616 tokens. Estimated cost: $0.000601 (rounded).
+[4] › Other conversations on this day, not included above: 7 requests in 5 conversations.
+[5] › • Kimi Code · account alt · kimi-k3 — Covered by your subscription (not billed per request). 2 requests, 11,357 tokens. Same work at API prices: not available.
+[6] › • Kimi Code · account default · kimi-k3 — Covered by your subscription (not billed per request). 2 requests, 11,421 tokens. Same work at API prices: not available.
+[7] › • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 1 request, 7,425 tokens. Estimated cost: $0.001115 (rounded).
+[8] › • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 1 request, tokens not reported. Estimated cost: not available — usage incomplete.
+[9] › • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 1 request, 7,425 tokens. Estimated cost: $0.000961 (rounded).
+[10] › Other conversations' estimated cost: at least $0.002076 (1 attempt had incomplete usage); subscription part — same work at API prices: not available.
+[11] › To see those requests, open that conversation with /resume and run /cost there.
+[12] › Next step for requests with incomplete usage: check the bill from Z.AI. Their provider did not report every token count, so the estimate is missing or only a lower
+[13] › bound.
+[14] › Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's usage
+[15] › page.
+[16] › Costs are estimates from published prices; Z.AI doesn't report its charges — check Z.AI's bill.
+[17] › Select a provider below to see its requests.
+[18] › —— Details ——
+[19] › Known estimated token cost: $0.003717 (rounded) + unknown costs
+[20] › Full recorded estimate: unavailable (1 of 7 billed attempts incomplete)
+[21] › Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+[22] › Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+[23] › Snapshot is not current; newer activity is unverified
+[24] › Day covered (UTC): [2026-10-11T00:00:00.000Z, 2026-10-12T00:00:00.000Z)
+[25] › Read at: 2026-10-11T13:31:15.340Z; ledger current to: 2026-10-11T13:28:12.812Z (182528 ms behind)
+[26] › Retention: request detail kept since 2026-07-13T13:31:15.340Z; daily totals kept since 2025-10-12; oldest recorded day in this conversation 2026-10-11
+[27] › Known subtotal exact USD: 0.00371733
+[28] › Input: 43,849 + not reported by 1 attempt
+[29] › Noncached input (derived for inclusive input): not reported (7 attempts) — costed as input − cache read for 6 attempts, whose price charges nothing for cache writes
+[30] › Cache read: 24,896 + not reported by 1 attempt
+[31] › Cache write: not reported (7 attempts) — free at the price of 7 attempts, so nothing was charged
+[32] › Output: 255 + not reported by 1 attempt
+[33] › Reasoning (subset, not separately billed): 79 + not reported by 1 attempt
+[34] › Total (not separately billed): 44,104 + not reported by 1 attempt
+[35] › Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+[36] › Unknown parent population: 0 attempts, excluded from root total
+[37] › —— Open ——
+[38] › → Z.AI · account default · Z.AI GLM 5.3 Flash — estimated $0.003116 (rounded) (5 requests)
+[39] › → Z.AI · account fake · Z.AI GLM 5.3 Flash — usage incomplete (1 request)
+[40] › → Z.AI · account work · Z.AI GLM 5.3 Flash — estimated $0.000601 (rounded) (1 request)
+[41] › → Request 1 · Z.AI · account default · Z.AI GLM 5.3 Flash · estimated $0.001149 (rounded)
+[42] › → Request 2 · Z.AI · account default · Z.AI GLM 5.3 Flash · estimated $0.001108 (rounded)
+[43] › → Request 3 · Z.AI · account default · Z.AI GLM 5.3 Flash · estimated $0.000272 (rounded)
+[44] › → Request 4 · Z.AI · account work · Z.AI GLM 5.3 Flash · estimated $0.000601 (rounded)
+[45] › → Request 5 · Z.AI · account default · Z.AI GLM 5.3 Flash · estimated $0.000287 (rounded)
+[46] › → Request 6 · Z.AI · account fake · Z.AI GLM 5.3 Flash · usage incomplete
+[47] › → Request 7 · Z.AI · account default · Z.AI GLM 5.3 Flash · estimated $0.000301 (rounded)
+[48] › → Root's own attempts (5 attempts)
+[49] › → Descendant attempts (2 attempts)
+[50] › → Unknown provider/model attribution (none)
+[51] › → Unknown parent population (none)
+[52] › Refresh
+[53] › Close
+[54] › Today (UTC) in this conversation:
+[55] › • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 5 requests, 39,488 tokens. Estimated cost: $0.003116 (rounded).
+[56] › • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 1 request, tokens not reported. Estimated cost: not available — usage incomplete.
+[57] › • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 1 request, 4,616 tokens. Estimated cost: $0.000601 (rounded).
+[58] › Other conversations on this day, not included above: 7 requests in 5 conversations.
+[59] › • Kimi Code · account alt · kimi-k3 — Covered by your subscription (not billed per request). 2 requests, 11,357 tokens. Same work at API prices: not available.
+--- final viewport ---
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.3-flash   /model to change          │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s05acc/ws │
+╰──────────────────────────────────────────────────────╯
+  Cost — this conversation
+  Requested UTC day: 2026-10-11
+  Today (UTC) in this conversation:
+  • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 5 requests, 39,488 tokens. Estimated cost: $0.003116 (rounded).
+  • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 1 request, tokens not reported. Estimated cost: not available — usage incomplete.
+  • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 1 request, 4,616 tokens. Estimated cost: $0.000601 (rounded).
+  Other conversations on this day, not included above: 7 requests in 5 conversations.
+  • Kimi Code · account alt · kimi-k3 — Covered by your subscription (not billed per request). 2 requests, 11,357 tokens. Same work at API prices: not available.
+› • Kimi Code · account default · kimi-k3 — Covered by your subscription (not billed per request). 2 requests, 11,421 tokens. Same work at API prices: not available.
+  • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 1 request, 7,425 tokens. Estimated cost: $0.001115 (rounded).
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

@@ -1,0 +1,26 @@
+# AGMS milestone profile: the "Aggressive ships" feature flags. The security level is chosen by the person in /security.
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+
+[projects."/Users/agmx2/runs/agms-G08-agmx2-20261013T184753Z/fixture/workspace"]
+trust_level = "trusted"
+
+[[hooks.SessionStart]]
+matcher = "*"
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = "/bin/echo AGG38-HOOK-RAN"
+
+[hooks.state]
+
+[hooks.state."/Users/agmx2/runs/agms-G08-agmx2-20261013T184753Z/product-home/config.toml:session_start:0:0"]
+trusted_hash = "sha256:5aa2b1f8b881fcfb0e29947634d74206bb19cbc1867353bde3c0ff4710b9747c"

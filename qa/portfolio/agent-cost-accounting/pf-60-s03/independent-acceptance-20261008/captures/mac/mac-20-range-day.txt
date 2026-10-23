@@ -1,0 +1,27 @@
+$ /usage requests 2026-10-07 2026-10-09 day
+  Recorded request range
+  Requested: [2026-10-07T00:00:00.000Z, 2026-10-09T00:00:00.000Z); timezone: UTC; grouping: Day
+  Retention: request detail kept since 2026-07-10T10:55:09.474Z; oldest daily total kept none
+  Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost:
+  unavailable — no settlement evidence.
+  Snapshot is not current; newer activity is unverified
+  Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+  Other conversations are not included in this view; /cost covers only the open conversation.
+  Range total unavailable — partial or unavailable buckets excluded; no partial total.
+  ↑↓ scroll · Enter open · Esc back/close
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-10-07T00:00:00.000Z, 2026-10-08T00:00:00.000Z): [2026-10-07T00:00:00.000Z, 2026-
+  10-08T00:00:00.000Z)
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-10-08T00:00:00.000Z, 2026-10-09T00:00:00.000Z): [2026-10-08T00:00:00.000Z, 2026-
+  10-08T10:51:31.522Z)
+  —— Open ——
+  → Day [2026-10-07T00:00:00.000Z, 2026-10-08T00:00:00.000Z)
+  → Day [2026-10-08T00:00:00.000Z, 2026-10-09T00:00:00.000Z)
+  Refresh
+  Close
+--- last screen:
+  unavailable — no settlement evidence.
+  Snapshot is not current; newer activity is unverified
+  Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+› Other conversations are not included in this view; /cost covers only the open conversation.
+  Range total unavailable — partial or unavailable buckets excluded; no partial total.
+  ↑↓ scroll · Enter open · Esc back/close

@@ -1,0 +1,81 @@
+# PF-41-S01: the read-only inspector (i in /security) shows configured, resolved and observed protection
+# separately after Aggressive is confirmed and the session restarts.
+id = "pf41-inspector-live-aggressive"
+feature = "Inspector shows the protection actually enforced"
+expected = "After Aggressive is confirmed and Corbanu restarts, i in /security opens the inspector: the badge, Core's live policy and generation, the session's checked values, runtime controls, MCP/hooks/! commands as not contained, and P1 controls as not available."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+secret_output_gate = true
+source_envelopes = true
+isolated_credential_broker = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "r restart now"
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Restarting Corbanu Terminal[\\s\\S]*Corbanu Terminal \\(v[\\s\\S]*› "
+timeout = 60
+[[steps]]
+type = "Reply with exactly: READY"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "READY"
+timeout = 90
+compress = 2
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "i inspect"
+[[steps]]
+key = "i"
+[[steps]]
+wait = "Security inspector \\(read only\\)"
+[[steps]]
+wait = "Live policy: Aggressive in force"
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "Down"
+repeat = 18
+[[steps]]
+wait = "Runtime controls"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Down"
+repeat = 30
+[[steps]]
+wait = "Not available"
+[[steps]]
+pause = 4.0

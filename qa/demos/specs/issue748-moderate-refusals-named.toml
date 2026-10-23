@@ -1,0 +1,71 @@
+# #748: under Moderate, refusals of protected reads name the level (or
+# secretless agent launch, where it keeps the file at every level), what is
+# protected and the way forward; on main they read only "Operation not
+# permitted".
+id = "issue748-moderate-refusals-named"
+feature = "#748: Moderate refusals name the level"
+expected = "Under config Moderate with the milestone flags, reading ~/.ssh/config is denied with a warning that security level Moderate blocked it and that /security can switch to Permissive; reading a dummy vault-store file, approved by the person, is denied with a warning that secretless agent launch blocked it at every level, Moderate included."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+run = "mkdir -p \"$CODEX_HOME/secrets\" \"$HOME/.ssh\" && printf 'dummy-748\\n' > \"$CODEX_HOME/secrets/probe.txt\" && printf 'Host demo\\n' > \"$HOME/.ssh/config\" && echo \"$CODEX_HOME\""
+capture = "c"
+
+[[steps]]
+type = "Run exactly this shell command and show me its output: cat ~/.ssh/config"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)Security level Moderate\\s+blocked\\s+access(?:(?!Working).)*\n› "
+timeout = 240
+compress = 3
+[[steps]]
+pause = 3.0
+
+[[steps]]
+type = "Run exactly this shell command and show me its output: cat {c}/secrets/probe.txt"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Press enter to confirm"
+timeout = 240
+compress = 2
+[[steps]]
+key = "y"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)Secretless\\s+agent\\s+launch\\s+blocked\\s+access(?:(?!Working).)*\n› "
+timeout = 240
+compress = 3
+[[steps]]
+pause = 3.0

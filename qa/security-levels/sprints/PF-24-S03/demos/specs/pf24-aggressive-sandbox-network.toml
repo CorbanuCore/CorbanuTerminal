@@ -1,0 +1,47 @@
+# Aggressive active (stored before launch by wrappers/seed-aggressive.sh).
+# GLM runs writes outside the folder, to /tmp, and a network call; the human
+# approves, and the sandbox still blocks all three.
+id = "pf24-aggressive-sandbox-network"
+feature = "Aggressive: approved command stays sandboxed"
+expected = "The command asks for approval. After approving, the probe prints outside-denied, tmp-denied and network-denied; nothing is written."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"sandbox-probe.sh" = """
+echo hi > ../outside/x.txt && echo outside-written || echo outside-denied
+echo t > /tmp/pf24-demo.txt && echo tmp-written || echo tmp-denied
+curl -sS -m 5 https://example.com -o /dev/null && echo network-ok || echo network-denied
+"""
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run exactly this shell command without requesting escalated permissions and show its raw output: bash sandbox-probe.sh"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Would you like to run the following command\\?"
+timeout = 180
+compress = 2
+[[steps]]
+pause = 2.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)outside-denied.*tmp-denied.*network-denied"
+timeout = 180
+compress = 2
+[[steps]]
+pause = 4.0

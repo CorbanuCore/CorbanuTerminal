@@ -1,0 +1,20 @@
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     glm-5.3-flash low   /model to change │
+│ directory: /tmp/pf84sw.rMHJ/ws                  │
+╰─────────────────────────────────────────────────╯
+› Reply with exactly: work-first
+• work-first
+• Connectors, usage and the model list now use the default account; model list refreshed.
+• Model changed to Z.AI GLM 5.3 Flash via Z.AI low
+• Connectors, usage and the model list now use openai account `work`; model list refreshed.
+• Model changed to GPT-5.6-Luna via OpenAI low
+› Reply with exactly: work-again
+• work-again
+• Connectors, usage and the model list now use the default account; model list refreshed.
+• Model changed to Z.AI GLM 5.3 Flash via Z.AI low
+› Reply with exactly: default-glm
+• default-glm
+› Explain this codebase
+  Z.AI GLM 5.3 Flash via zai low · /tmp/pf84sw.rMHJ/ws · Corbanu Terminal · TPS: 4.9 tok/s

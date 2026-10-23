@@ -1,0 +1,60 @@
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     glm-5.3-flash   /model to change             │
+│ directory: /Volumes/CorbanuDrive/…/runs/before-445-1/ws │
+╰─────────────────────────────────────────────────────────╯
+
+
+› What is 2+2?
+
+
+• 4
+
+Security level
+Active in this session: Permissive
+Saved: Aggressive. Core's protections (vault refusal, protected paths) apply in this session now; the sandbox, approval, network, environment and child-agent
+rows take effect when you restart Corbanu Terminal.
+Core's level: Aggressive
+Kill switch: on. New grants and protected actions after untrusted content are refused; press g to review it.
+
+  Permissive  (active)
+  Moderate  not available yet
+> Aggressive
+
+Sensitive access denied by default, built from existing sandbox, approval, network and exec-policy controls.
+
+↑/↓ move · enter choose · r restart now · g grants and kill switch · esc close · i inspect
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

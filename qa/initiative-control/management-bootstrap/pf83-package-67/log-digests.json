@@ -1,0 +1,37 @@
+{
+  "build-driver.log": {
+    "sha256": "3aed9efc715525f1d7c34bb65b3b73a1164c11689a1674ef8318a678c1a63fec",
+    "bytes": 689,
+    "lines": 4
+  },
+  "artifacts/build.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "lines": 0
+  },
+  "artifacts/build.stderr": {
+    "sha256": "17633d86d3d13660d3cf4581180668a362d0825f12142a2b7fc4d7cae40189ec",
+    "bytes": 73884,
+    "lines": 1501
+  },
+  "artifacts/test-cache-copy.log": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "lines": 0
+  },
+  "artifacts/prerequisites.log": {
+    "sha256": "29f1c6cffd30a0e502ccd8288a62bf1c8f9deb70e23f81fa38a4edbd70c9e3eb",
+    "bytes": 61334,
+    "lines": 1467
+  },
+  "artifacts/thread-settings.log": {
+    "sha256": "f94220547ac4b0f50f0e5cbff8178681f702a12107fa916b997923b6d649452c",
+    "bytes": 30709,
+    "lines": 541
+  },
+  "artifacts/permission-confirmation.log": {
+    "sha256": "67908b1db4e7336361267b727fbf1364a412acd545d40e0fe458206370493505",
+    "bytes": 37752,
+    "lines": 754
+  }
+}

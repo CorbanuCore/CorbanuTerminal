@@ -1,0 +1,54 @@
+# AGMS harness, "Moderate ships" Tart parity run (tart-par1): effective isolation policy, one fresh Tart clone per group, 2026-10-20 UTC
+
+Same isolation design and guest harness as the UTM Moderate runs (../../moderate-targeted2-20261020/common/effective-policy.txt),
+ported to Tart as in qwen-1052 (../../moderate-localmodel-20261020/) with the local-model route removed. Harness: ../harness/
+(diff against the UTM harness: ../review/harness-vs-utm.diff); driver ../harness/tart-run.sh and
+../tools/run-groups.sh. No harness or packet file changed after the freeze (design/FROZEN.sha256, pushed 99f84e8655 at
+2026-10-20T11:45:56Z, before the first clone at 11:46:05Z).
+
+VM. Tart 2.41.1 (TART_HOME .codex-work/tart-home). Every group (and every replay) ran in its own fresh APFS clone
+`tart-par1-run` of the local base `corbanu-qa-base` (macOS 26.6.2, 25G83; SIP enabled; Gatekeeper on; 8 CPUs, 16 GiB),
+started headless with no host share, clipboard or audio (`tart run --no-graphics --no-audio --no-clipboard`), and deleted
+after the group. One Tart VM at a time under .codex-work/workers-20261002/vm-tart.lock (holder tart-par1) and
+scripts/qa/tart/lib.sh guard_slot (refuses a second Tart VM or a third macOS guest). UTM "macOS 2" and "macOS 3" stayed
+stopped and were not touched (`utmctl list` only, at each clone start: common/<clone>/vm-start.txt). Before each clone the
+driver waited while host memory_pressure free% < 20 (it never paused; free 41-46%).
+Each clone's evidence folder is common/<group>[-replay]-<UTC>/: vm-start.txt (versions, console state), seal.out,
+setup-agent.out, provision.out, policy-root-start/end.txt, gate/, tunnel.log, tunnel-listeners.txt, guard-*.txt,
+mediator-final.jsonl.gz, kill-lane-procs-end.out, erase-test-data.out, vm-state-end.txt.
+
+Sealed guest. scripts/qa/tart/seal-guest.sh (main's, copied into ../harness/) at each fresh clone: coordinator account
+`agent`, stand-in homes, api.z.ai pinned in /etc/hosts, pf allowing only SSH from the host, DHCP and HTTPS to the pinned
+Z.AI addresses, a loopback DNS responder that refuses everything (github.com and example.com unresolvable: gate/agent-egress.txt).
+
+Accounts. As on UTM: executors run as hidden, password-less, non-admin, non-staff, non-SSH accounts agmx1-agmx3; agmx0 is the
+coordinator's gate lane, never an executor. Homes mode 700, wiped before and after the group. One group per clone, lanes
+rotating agmx1-3 (runs/seq.log). Launch path: coordinator 'agent' -> sudo -n -u LANE -H /opt/agms/bin/agms-launch MODE RUN
+GROUP; hard wall-clock budget 5400 s per executor (UTM's).
+
+Network. Executors and the product reach only the loopback inference mediator (127.0.0.1:18443; per-uid pf rules,
+policy-root-start.txt). The guest mediator (../harness/agms_mediator.py, qwen-1052's) forwards only allowlisted api.z.ai
+inference paths, one request per connection, as plain HTTP over one SSH reverse tunnel (guest 127.0.0.1:18601 -> host
+127.0.0.1:11237) to the host relay (../harness/host_zai_relay.py), which adds the Z.AI key on the host and sends the request
+to api.z.ai over TLS. The guest holds only a synthetic placeholder key file. Differences from UTM: on UTM the guest mediator
+read the owner-approved key file inside the guest and connected to api.z.ai itself; here the key never enters the guest.
+The mediator also accepts CONNECT to qwen.agms.test:443 (qwen-1052's local-model target) but has no upstream for it in
+this run (no tunnel port 18602) and no product route uses it; the probes check its non-inference paths are refused.
+
+Gate (every clone, before its group). agmx0 probe: 99 probes ok (UTM's 85 plus tunnel and qwen-path denials), PTY input
+echoed; smoke turn AGMS-SMOKE-OK on GLM 5.3 Flash; relay positive control 200 (h/gate_ok.py reads only this clone's
+current gate run). Every group re-ran the coordinator probes (runs/*/preflight-summary.stdout) and every executor ran
+agms-probe itself (runs/*/collected/evidence/preflight-executor.json).
+
+Native-prompt guard. As on UTM, a guard loop flagged any SecurityAgent process other than the login window's (each clone
+boots to the login window with one SecurityAgent: vm-start.txt): 0 SECURITYAGENT-SEEN in every clone (guard-final.txt).
+
+Product under test. The candidate package at /opt/agms/pkg (root-owned, read-only): run 1's candidate-v2 package
+(helpers df3d8c5d1c) with bin/corbanu replaced by main 8c73c8ea80 (15cb32e9…4c4ae6), as the UTM targeted runs did
+(../candidate/). Started only through agms-tui -> agms-product with a fresh profile per group (product-home/config.toml =
+harness/product-config.toml: the milestone feature flags on, Permissive). Product model GLM 5.3 Flash on zai (GLM 5.2 for
+MOD-09 and MOD-21, amendments-v3 R-1). Executor model GLM 5.3 Flash on zai (the candidate's corbanu exec).
+
+Closing (every clone). Mediator log, guard and root policy captured; lane processes killed; every lane home (synthetic
+test data), the placeholder key file and the mediator's synthetic leaf key deleted and checked absent; 0 synthetic
+credential files left (erase-test-data.out); tunnel stopped; clone stopped and deleted; lock released (vm-state-end.txt).

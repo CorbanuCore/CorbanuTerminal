@@ -11,6 +11,22 @@ use codex_utils_path_uri::PathUri;
 use pretty_assertions::assert_eq;
 use tempfile::tempdir;
 
+#[test]
+fn incomplete_project_security_warning_names_the_refused_config_file() {
+    let tmp = tempdir().expect("tempdir");
+    let config_file = tmp.path().join("project/.codex/config.toml");
+
+    let warning = ignored_incomplete_project_security_warning(&config_file);
+
+    assert_eq!(
+        warning,
+        format!(
+            "Ignored incomplete project [security] table in {}: level = \"permissive\" without version cannot override trusted security settings.",
+            config_file.display()
+        )
+    );
+}
+
 struct TestFileSystem;
 
 impl ExecutorFileSystem for TestFileSystem {

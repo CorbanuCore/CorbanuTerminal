@@ -1,0 +1,26 @@
+# RETURN — acct-bounds-14 (stopped, incomplete)
+
+- Allocation digest: `fa49e6657deb1a88c4605069c3411bec8d5783e3209d755e7a728ea8f70cfd49`.
+- Claim: `469d91dc-54f5-4762-b917-824cdf23d998`.
+- Runtime: gpt-6-astra, high.
+- Brief SHA-256 verified: `584b89a7e865fbef779bab95c4da6d1250737dd5e35a70edb1a9f5718e178bfd`.
+- Initial HEAD matched `1b1ea6912ef2a8ff2d005c202fba33c9256f04a6`; initial working tree was clean.
+- Classification: bounded fix under PF-60-S03 (in_progress); product heading **Product measurement**, excerpt “No commercial performance numbers have been supplied.” Existing plan outcome: inspect one run and its descendants.
+- Stop reason: the frozen brief says to stop rather than adjust the regression if the original code does not fail with TooLarge. Both new tests instead failed during fixture setup with `future dispatch`.
+- Fixture error: `store.admit(owner, &attempt(4, DAY)?, &[], 0)` attempts to admit a next-day template at time zero. The unrelated population was never inserted; this run neither proves nor disproves the candidate-bound defect.
+- Source fixture retained unchanged after the failed result for manager inspection; not suitable for integration.
+- Intended shape: (b), broad enumeration with explicit ancestry traversal-work accounting, to preserve unknown-parent discovery. Not implemented.
+- Intended bound: count all ancestry-walk steps, including cached revisits, while retaining the existing 10,000-entry and 4 MiB byte ceilings. No new bound exists in this return.
+- Before: `just test -p codex-state accounting_inspect_public_unrelated`, exit 100; 2 tests run, 0 passed, 2 failed, 342 skipped. Nextest automatically attempted each twice; every attempt reported `future dispatch`.
+- After: not run; no production change.
+- Required state gate `just test -p codex-state accounting`: not run, 0 tests.
+- Required TUI gate `just test -p codex-tui usage`: not run, 0 tests.
+- Positive boundary additions: none. Existing tests already assert Ready at 512 attempts and 4,096 observations; this contradicts the brief's claim that they only test refusal.
+- No maximal valid packet fixture was built; no maximality claim.
+- Existing `accounting_inspect_candidate_cap_precedes_unavailable_candidates` explicitly depends on the store-wide 512 candidate refusal. It was preserved, not executed or rewritten.
+- Additional scope limitation: `accounting_lifecycle.rs::inspect_window_on_connection` separately enforces whole-store limits of 10,000 attempts, 4 MiB stored input, and 4,096 observations per attempt. That file is outside writable scope, so this allocation cannot remove every whole-store dependency.
+- Test-source changes: 98 insertions, 0 deletions in `codex-rs/state/tests/accounting_store.rs`. Production-source changes: 0.
+- All existing tests retained. Only the changed Rust file was formatted with `rustfmt --edition 2024`; no workspace formatter or fix command ran.
+- Test isolation guidance read before execution; guarded just test used; no live profile, credential read, native prompt, or push.
+- Raw output: [acct-bounds-14-before.log](acct-bounds-14-before.log). Evidence logs are ignored by repository rules and remain on disk.
+- No code-blind, interactive, live-repository, human acceptance, or release qualification claimed; required functional handoff remains with the manager.

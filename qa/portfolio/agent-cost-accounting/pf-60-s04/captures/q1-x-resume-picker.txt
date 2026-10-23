@@ -1,0 +1,50 @@
+ Resume a previous session
+
+ Type to search                                                                                                   Filter: [Cwd] All    Sort: [Updated] Created
+
+  ❯ 3m ago      Use the spawn_agent tool three times: a sub-agent on model k3 (provider kimi-code) with the message 'Reply with the single word KIMI.', a ...
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 1 / 1 · 100% ─
+ enter resume   esc exit   ctrl+c exit   tab focus sort/filter   ←/→ change option
+ ctrl+o comfortable view   ctrl+t transcript   ctrl+e expand   ↑/↓ browse
+

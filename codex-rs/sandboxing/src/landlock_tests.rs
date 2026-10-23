@@ -93,3 +93,38 @@ fn proxy_network_requires_managed_requirements() {
         true
     );
 }
+
+#[test]
+fn placeholder_record_dir_goes_before_the_command_only_for_an_existing_home() {
+    let home = tempfile::TempDir::new().expect("home");
+    let mut args = vec![
+        "--sandbox-policy-cwd".to_string(),
+        "/w".to_string(),
+        "--".to_string(),
+        "--placeholder-record-dir".to_string(),
+    ];
+    insert_placeholder_record_dir_arg(&mut args, home.path());
+    let dir = home
+        .path()
+        .join(PLACEHOLDER_RECORD_DIR_NAME)
+        .to_string_lossy()
+        .into_owned();
+    assert_eq!(
+        args,
+        vec![
+            "--sandbox-policy-cwd".to_string(),
+            "/w".to_string(),
+            PLACEHOLDER_RECORD_DIR_FLAG.to_string(),
+            dir,
+            "--".to_string(),
+            "--placeholder-record-dir".to_string(),
+        ]
+    );
+
+    // Not for a home that does not exist (the helper never makes it), nor
+    // a relative one.
+    let mut args = vec!["--".to_string()];
+    insert_placeholder_record_dir_arg(&mut args, &home.path().join("missing"));
+    insert_placeholder_record_dir_arg(&mut args, Path::new("relative"));
+    assert_eq!(args, vec!["--".to_string()]);
+}

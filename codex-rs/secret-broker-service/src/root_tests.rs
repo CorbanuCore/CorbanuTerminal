@@ -4,6 +4,7 @@
 use super::*;
 use pretty_assertions::assert_eq;
 use std::io::Read;
+use std::io::Write;
 use std::os::unix::net::UnixListener;
 use std::process::Command;
 use std::process::Stdio;
@@ -12,6 +13,25 @@ use std::sync::atomic::Ordering;
 use std::sync::mpsc;
 use std::time::Duration;
 use std::time::Instant;
+
+/// Set only for the re-executed copy of this test binary acting as a child.
+const POST_EXEC_CHILD_SOCKET: &str = "CODEX_ROOT_TESTS_POST_EXEC_CHILD_SOCKET";
+
+/// Child helper, not a case: `Fixture` re-executes this unit-test binary with
+/// only this test selected, so each trusted child is a separate post-exec
+/// process. It connects, signals readiness, then waits for parent EOF. Without
+/// the socket variable it returns immediately.
+#[test]
+#[ignore = "child helper; run only by Fixture re-exec"]
+fn post_exec_child() {
+    let Some(path) = std::env::var_os(POST_EXEC_CHILD_SOCKET) else {
+        return;
+    };
+    let mut stream = UnixStream::connect(path).unwrap();
+    stream.write_all(b"R").unwrap();
+    let mut buffer = [0; 1];
+    while stream.read(&mut buffer).unwrap() != 0 {}
+}
 
 struct Fixture {
     _dir: tempfile::TempDir,
@@ -28,17 +48,20 @@ impl Fixture {
         let listener = UnixListener::bind(&path).unwrap();
         listener.set_nonblocking(true).unwrap();
         let launch = || {
-            Command::new(
-                codex_utils_cargo_bin::cargo_bin("codex-secret-broker-service-fixture").unwrap(),
-            )
-            .arg("--synthetic-post-exec-child")
-            .arg(&path)
-            .arg("1")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap()
+            Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "root::tests::post_exec_child",
+                    "--ignored",
+                    "--test-threads=1",
+                    "--quiet",
+                ])
+                .env(POST_EXEC_CHILD_SOCKET, &path)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap()
         };
         let policy_child = launch();
         let policy = accept(&listener);

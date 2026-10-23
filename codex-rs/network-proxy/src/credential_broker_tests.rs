@@ -342,7 +342,8 @@ fn scoped_authority() -> CredentialCapabilityRequest {
     ])
     .expect("actor chain");
     let revocations = RevocationState::new();
-    let destination = CredentialDestination::https("api.openai.com", 443).expect("destination");
+    let destination =
+        CredentialDestination::https("api.openai.com", /*port*/ 443).expect("destination");
     let credential =
         CredentialReference::new("provider.openai", "responses.create").expect("credential");
     let authorization = AuthorizationRequest::new(
@@ -377,8 +378,8 @@ fn scoped_authority() -> CredentialCapabilityRequest {
             BTreeMap::new(),
         )
         .expect("grant scope"),
-        90,
-        200,
+        /*issued_at_unix_seconds*/ 90,
+        /*expires_at_unix_seconds*/ 200,
         bounded("scoped-proxy-grant"),
     )
     .expect("grant");
@@ -389,10 +390,10 @@ fn scoped_authority() -> CredentialCapabilityRequest {
         CredentialHttpMethod::Post,
         destination,
         "/v1/responses",
-        100,
-        180,
+        /*issued_at_unix_seconds*/ 100,
+        /*expires_at_unix_seconds*/ 180,
         &revocations,
-        None,
+        /*triggering_receipt*/ None,
     )
     .expect("credential authority")
 }
@@ -431,7 +432,7 @@ fn scoped_openai_route_injects_once_and_passes_complete_context() {
         .inject_request_headers_for_request(
             "https",
             "API.OPENAI.COM",
-            443,
+            /*port*/ 443,
             "POST",
             "/v1/responses",
             &mut headers,
@@ -469,7 +470,7 @@ fn scoped_openai_route_injects_once_and_passes_complete_context() {
             .inject_request_headers_for_request(
                 "https",
                 "api.openai.com",
-                443,
+                /*port*/ 443,
                 "POST",
                 "/v1/responses",
                 &mut headers,
@@ -592,7 +593,7 @@ fn scoped_openai_stale_authority_and_unsupported_route_fail_closed() {
                 .inject_request_headers_for_request(
                     "https",
                     "api.openai.com",
-                    443,
+                    /*port*/ 443,
                     "POST",
                     "/v1/responses",
                     &mut headers,
@@ -606,8 +607,8 @@ fn scoped_openai_stale_authority_and_unsupported_route_fail_closed() {
 
     let resolver = Arc::new(TestResolver::new(ResolverOutcome::Success));
     let mut wrong_host = scoped_authority();
-    wrong_host.destination =
-        CredentialDestination::https("adjacent.openai.com", 443).expect("adjacent destination");
+    wrong_host.destination = CredentialDestination::https("adjacent.openai.com", /*port*/ 443)
+        .expect("adjacent destination");
     assert_eq!(
         ScopedCredentialRoute::new(
             CapabilityId::from_sha256_hex("e".repeat(64)).expect("capability id"),
@@ -667,7 +668,7 @@ fn pf_27_s04_isolated_route_never_injects_raw_auth_and_supports_fresh_dispatches
         broker.inject_request_headers_for_request(
             "https",
             "api.openai.com",
-            443,
+            /*port*/ 443,
             "POST",
             "/v1/responses",
             &mut headers,
@@ -679,7 +680,13 @@ fn pf_27_s04_isolated_route_never_injects_raw_auth_and_supports_fresh_dispatches
     for _ in 0..2 {
         assert_eq!(
             broker
-                .dispatch_isolated_openai("https", "API.OPENAI.COM", 443, "POST", "/v1/responses",)
+                .dispatch_isolated_openai(
+                    "https",
+                    "API.OPENAI.COM",
+                    /*port*/ 443,
+                    "POST",
+                    "/v1/responses",
+                )
                 .expect("broker receipt")
                 .response_status,
             200
@@ -690,10 +697,202 @@ fn pf_27_s04_isolated_route_never_injects_raw_auth_and_supports_fresh_dispatches
         broker.dispatch_isolated_openai(
             "https",
             "api.openai.com",
-            443,
+            /*port*/ 443,
             "POST",
             "/v1/chat/completions",
         ),
         Err(IsolatedCredentialDispatchError::Denied)
+    );
+}
+
+const PF27_S02_CORE_TOKEN: &str = "ghp_pf27s02CoreEnvironmentCanary00000000000";
+
+fn pf27_s02_core_env(key: &str) -> Option<String> {
+    (key == "GITHUB_TOKEN").then(|| PF27_S02_CORE_TOKEN.to_string())
+}
+
+#[test]
+fn pf_27_s02_stripped_child_env_still_gets_a_brokered_dummy() {
+    let permitted = ["GITHUB_TOKEN".to_string()];
+    let broker = CredentialBroker::new(/*enabled*/ true)
+        .with_process_env_lookup(Some(&permitted), pf27_s02_core_env);
+    // The launch allowlist removed GITHUB_TOKEN before the proxy saw the env.
+    let mut env = env_map([("PATH", "/usr/bin")]);
+    broker.virtualize_child_env(&mut env);
+
+    let dummy = env.get("GITHUB_TOKEN").expect("dummy inserted").clone();
+    assert_credential_shape(PF27_S02_CORE_TOKEN, &dummy, "ghp_");
+    assert!(env.values().all(|value| value != PF27_S02_CORE_TOKEN));
+
+    // A request carrying the dummy is authorized with Core's value.
+    let mut headers = headers_with_bearer(&dummy);
+    broker.inject_request_headers("api.github.com", &mut headers);
+    assert_eq!(
+        authorization(&headers),
+        Some(format!("Bearer {PF27_S02_CORE_TOKEN}").as_str())
+    );
+
+    // Re-applying to the same env keeps the same dummy.
+    broker.virtualize_child_env(&mut env);
+    assert_eq!(env.get("GITHUB_TOKEN"), Some(&dummy));
+}
+
+#[test]
+fn pf_27_s02_without_secretless_launch_the_child_env_is_the_only_source() {
+    let broker = CredentialBroker::new(/*enabled*/ true);
+    let mut env = env_map([("PATH", "/usr/bin")]);
+    broker.virtualize_child_env(&mut env);
+    assert_eq!(env.get("GITHUB_TOKEN"), None);
+}
+
+#[test]
+fn pf_27_s02_core_values_the_user_policy_excluded_are_not_brokered() {
+    // The user's shell environment policy dropped GITHUB_TOKEN, so it is not
+    // in the permitted list and the agent must not gain brokered access.
+    let broker = CredentialBroker::new(/*enabled*/ true)
+        .with_process_env_lookup(Some(&[]), pf27_s02_core_env);
+    let mut env = env_map([("PATH", "/usr/bin")]);
+    broker.virtualize_child_env(&mut env);
+    assert_eq!(env.get("GITHUB_TOKEN"), None);
+}
+
+fn pf_28_s02_gated_broker() -> (CredentialBroker, String) {
+    let broker = CredentialBroker::new(/*enabled*/ true).with_response_gate(/*enabled*/ true);
+    let mut env = env_map([("GH_TOKEN", PF28_S02_TOKEN)]);
+    broker.virtualize_child_env(&mut env);
+    (broker, env["GH_TOKEN"].clone())
+}
+
+const PF28_S02_TOKEN: &str = "ghp_pf28s02LegacyBindingCanary000000000000";
+
+#[test]
+fn pf_28_s02_legacy_credential_is_bound_to_https_method_and_path() {
+    let (broker, dummy) = pf_28_s02_gated_broker();
+    let route = |scheme: &str, host: &str, port: u16, method: &str, path: &str| {
+        let mut headers = headers_with_bearer(&dummy);
+        let result = broker
+            .route_request_credentials(scheme, host, port, method, path, &mut headers)
+            .map(|routing| match routing {
+                CredentialRouting::Direct(gate) => gate.is_some(),
+                #[cfg(any(unix, windows))]
+                CredentialRouting::Brokered(_) => false,
+            });
+        (result, authorization(&headers).map(str::to_string))
+    };
+    let injected = Some(format!("Bearer {PF28_S02_TOKEN}"));
+    let kept = Some(format!("Bearer {dummy}"));
+    for (request, expected) in [
+        (
+            ("https", "api.github.com", 443, "GET", "/user?per_page=1"),
+            Ok(true),
+        ),
+        (
+            (
+                "https",
+                "github.com",
+                443,
+                "POST",
+                "/o/r.git/git-upload-pack",
+            ),
+            Ok(true),
+        ),
+        (
+            ("https", "github.com", 443, "GET", "/settings/tokens"),
+            Err(ScopedCredentialInjectionError::PathDenied),
+        ),
+        (
+            ("https", "api.github.com", 443, "GET", "/repos/../user"),
+            Err(ScopedCredentialInjectionError::PathDenied),
+        ),
+        (
+            (
+                "https",
+                "github.com",
+                443,
+                "GET",
+                "/%2e%2e/o/r.git/info/refs",
+            ),
+            Err(ScopedCredentialInjectionError::PathDenied),
+        ),
+        (
+            ("https", "api.github.com", 443, "GET", "/repos/o/r/..;/user"),
+            Err(ScopedCredentialInjectionError::PathDenied),
+        ),
+        (
+            (
+                "https",
+                "api.github.com",
+                443,
+                "GET",
+                "/repos/%252e%252e/user",
+            ),
+            Err(ScopedCredentialInjectionError::PathDenied),
+        ),
+        (
+            ("https", "api.github.com", 8443, "GET", "/user"),
+            Err(ScopedCredentialInjectionError::PortDenied),
+        ),
+        (
+            ("http", "api.github.com", 443, "GET", "/user"),
+            Err(ScopedCredentialInjectionError::SchemeDenied),
+        ),
+        (
+            ("https", "api.github.com", 443, "TRACE", "/user"),
+            Err(ScopedCredentialInjectionError::MethodDenied),
+        ),
+    ] {
+        let (scheme, host, port, method, path) = request;
+        let header = if expected.is_ok() { &injected } else { &kept };
+        assert_eq!(
+            route(scheme, host, port, method, path),
+            (expected, header.clone()),
+            "{request:?}"
+        );
+    }
+    // Plain-HTTP injection is off while credentials are bound to HTTPS.
+    let mut headers = headers_with_bearer(&dummy);
+    broker.inject_request_headers("api.github.com", &mut headers);
+    assert_eq!(authorization(&headers), kept.as_deref());
+}
+
+#[test]
+fn pf_28_s02_legacy_route_returns_a_gate_for_the_injected_value() {
+    let (broker, dummy) = pf_28_s02_gated_broker();
+    let mut headers = headers_with_bearer(&dummy);
+    let Ok(CredentialRouting::Direct(Some(gate))) = broker.route_request_credentials(
+        "https",
+        "api.github.com",
+        /*port*/ 443,
+        "GET",
+        "/user",
+        &mut headers,
+    ) else {
+        panic!("expected a gated direct route");
+    };
+    let echoed = format!("{{\"authorization\":\"Bearer {PF28_S02_TOKEN}\"}}");
+    assert_eq!(
+        gate.scrub_header(echoed.as_bytes()),
+        Some(b"{\"authorization\":\"Bearer [REDACTED:broker:GH_TOKEN]\"}".to_vec())
+    );
+}
+
+#[test]
+fn pf_28_s02_legacy_route_is_unchanged_without_the_gate() {
+    let broker = CredentialBroker::new(/*enabled*/ true);
+    let mut env = env_map([("GH_TOKEN", PF28_S02_TOKEN)]);
+    broker.virtualize_child_env(&mut env);
+    let mut headers = headers_with_bearer(&env["GH_TOKEN"]);
+    let routing = broker.route_request_credentials(
+        "https",
+        "github.com",
+        /*port*/ 443,
+        "GET",
+        "/settings/tokens",
+        &mut headers,
+    );
+    assert!(matches!(routing, Ok(CredentialRouting::Direct(None))));
+    assert_eq!(
+        authorization(&headers),
+        Some(format!("Bearer {PF28_S02_TOKEN}").as_str())
     );
 }

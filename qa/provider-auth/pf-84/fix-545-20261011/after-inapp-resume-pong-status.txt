@@ -1,0 +1,42 @@
+╰──────────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: /private/tmp/f545proj            │
+╰─────────────────────────────────────────────╯
+
+› reply with the single word pong
+
+• pong
+
+Token usage: total=28,050 input=28,016 (+ 576 cached) output=34 (reasoning 27)
+To continue this session, run corbanu resume 01a12dbd-dfcd-7c30-95fa-399612a23ae4
+
+⚠ Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set
+  `suppress_unstable_features_warning = true` in /private/tmp/f545h.dLk7/config.toml.
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Z.AI GLM 5.3 Flash                                                │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account work                │
+│  Directory:            /private/tmp/f545proj                                             │
+│  Permissions:          Next turn: Workspace (Ask for approval)                           │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12dbc-1a2f-7c62-a19d-8be54117a9fb                              │
+│                                                                                          │
+│  Token usage:          13.7K total  (13.7K input + 3 output)                             │
+│  Context window:       100% left (14.3K used / 950K)                                     │
+│  Account usage:        work · 13,706 input · 576 cached input · 3 output                 │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+› Improve documentation in @filename
+
+  Z.AI GLM 5.3 Flash via zai default · /private/tmp/f545proj · Corbanu Terminal · TPS: -- tok/s

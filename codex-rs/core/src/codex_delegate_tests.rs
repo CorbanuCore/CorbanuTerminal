@@ -206,7 +206,7 @@ async fn run_codex_thread_interactive_respects_pre_cancelled_spawn() {
         Duration::from_secs(/*secs*/ 1),
         run_codex_thread_interactive(
             parent_ctx.config.as_ref().clone(),
-            Arc::clone(&parent_session.services.auth_manager),
+            parent_session.services.auth_manager(),
             Arc::clone(&parent_session.services.models_manager),
             parent_session,
             parent_ctx,
@@ -552,4 +552,68 @@ async fn delegated_mcp_user_reviewer_returns_none_without_metadata() {
     )
     .await;
     assert_eq!(response, None);
+}
+
+/// PF-84: a delegate (guardian or `/review`) reports its usage per account as
+/// a running total; each increase counts toward the parent conversation once,
+/// and the delegate's token counts never reach the consumer.
+#[tokio::test]
+async fn forward_events_counts_delegate_usage_toward_the_parent_once() {
+    let (tx_events, rx_events) = bounded(SUBMISSION_CHANNEL_CAPACITY);
+    let (tx_sub, _rx_sub) = bounded(SUBMISSION_CHANNEL_CAPACITY);
+    let (_agent_status_tx, agent_status) = watch::channel(AgentStatus::PendingInit);
+    let (session, ctx) = crate::session::tests::pf84_session(/*named_accounts*/ true).await;
+    let io = Arc::new(SessionIo {
+        tx_sub,
+        rx_event: rx_events,
+        agent_status,
+        session_loop_termination: completed_session_loop_termination(),
+    });
+    let (tx_out, rx_out) = bounded(SUBMISSION_CHANNEL_CAPACITY);
+    let forward = tokio::spawn(forward_events(
+        Arc::clone(&io),
+        Arc::clone(&session),
+        tx_out,
+        Arc::clone(&session),
+        ctx,
+        Arc::new(Mutex::new(HashMap::new())),
+        CancellationToken::new(),
+    ));
+    let usage = |input: i64| codex_protocol::protocol::TokenUsage {
+        input_tokens: input,
+        total_tokens: input,
+        ..Default::default()
+    };
+    let report = |account_usage: Option<i64>| Event {
+        id: "delegate-turn".to_string(),
+        msg: EventMsg::TokenCount(TokenCountEvent {
+            info: None,
+            rate_limits: None,
+            account_usage: account_usage.map(|input| {
+                vec![AccountTokenUsage {
+                    provider_id: "zai".to_string(),
+                    account: "work".to_string(),
+                    usage: usage(input),
+                }]
+            }),
+        }),
+    };
+    for event in [report(Some(10)), report(Some(25)), report(None)] {
+        tx_events.send(event).await.unwrap();
+    }
+    drop(tx_events);
+    timeout(std::time::Duration::from_secs(5), forward)
+        .await
+        .expect("forward_events hung")
+        .expect("forward_events join error");
+
+    assert_eq!(
+        session.account_token_usage().await,
+        Some(vec![AccountTokenUsage {
+            provider_id: "zai".to_string(),
+            account: "work".to_string(),
+            usage: usage(25),
+        }])
+    );
+    assert!(rx_out.try_recv().is_err());
 }

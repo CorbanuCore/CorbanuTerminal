@@ -1,0 +1,16 @@
+  Root's own attempts
+  Requested UTC day: 2026-10-08
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-08T00:00:00.000Z, 2026-10-09T00:00:00.000Z)
+  Read at: 2026-10-08T11:27:41.030Z; ledger current to: 2026-10-08T11:24:32.708Z (188322 ms behind)
+  Estimated token cost for recorded attempts: $0.019307 (rounded)
+  Recorded attempts: 5
+  ↑↓ scroll · Enter open · Esc back/close
+  Known estimate exact USD: 0.01930652
+  Estimate versus billed difference: unknown — no settlement evidence
+  —— Open ——
+  → Request 0a3b8c0b-8410-4c51-a5ae-fcc6d20ced1c
+  → Request 3378966e-4ea4-40a0-ad06-af551bf75d68

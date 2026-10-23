@@ -354,10 +354,14 @@ fn replacement_history_from_rollout(path: &Path) -> Result<Vec<Value>> {
         if let RolloutItem::Compacted(compacted) = entry.item
             && let Some(items) = compacted.replacement_history
         {
+            // As sent: local provenance (#578 `producer`) never reaches a provider.
             replacement_history = Some(
                 items
                     .into_iter()
-                    .map(serde_json::to_value)
+                    .map(|mut item| {
+                        item.clear_local_provenance();
+                        serde_json::to_value(item)
+                    })
                     .collect::<std::result::Result<Vec<_>, _>>()?,
             );
         }

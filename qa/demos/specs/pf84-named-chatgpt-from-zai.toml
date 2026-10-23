@@ -1,0 +1,73 @@
+# PF-84 #571/#573: with Z.AI as the configured provider, a named OpenAI account signs in with ChatGPT
+# (device code, off screen before launch; refused before #573). The TUI starts on Z.AI with
+# `--account openai:work` and no default OpenAI login; /model offers OpenAI, and after the switch the
+# request is authorized as work (before #571 it went out with no credentials: "authorized as none").
+# Local mock issuer + Responses (qa/provider-auth/pf-84/s06/scripts/mock_openai.py), fake tokens only;
+# the Z.AI key is a fake file credential (no Z.AI request is made). Record with
+#   printf fake-zai-key > /tmp/pf84-fake-zai-key
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-named-chatgpt-from-zai.toml \
+#     --bin <candidate> --sprint PF-84-S06 --credential ZAI_API_KEY=file:/tmp/pf84-fake-zai-key --publish
+id = "pf84-named-chatgpt-from-zai"
+feature = "PF-84 #571/#573: a named ChatGPT account used from a Z.AI session"
+expected = "With Z.AI configured, `corbanu login --account work --device-auth` signs work in; a Z.AI session with --account openai:work and no default OpenAI login switches to OpenAI GPT-6 Luna, its request is authorized as work, and /status names account work."
+args = ["--account", "openai:work"]
+setup = """(nohup python3 {run}/../../../../provider-auth/pf-84/s06/scripts/mock_openai.py --port 38464 --log {logs}/mock-openai.jsonl > /dev/null 2>&1 &)
+sleep 1
+curl -s -X POST -H 'content-type: application/json' -d '{"user":"work","ttl":3600}' http://127.0.0.1:38464/_next_user > /dev/null
+{bin} login --account work --device-auth --experimental_issuer http://127.0.0.1:38464 2>&1 | tee /dev/stderr | grep -q 'Signed in OpenAI account `work`'"""
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+model_provider = "zai"
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "read-only"
+openai_base_url = "http://127.0.0.1:38464/v1"
+chatgpt_base_url = "http://127.0.0.1:38464/backend-api/"
+cli_auth_credentials_store = "file"
+[features]
+named_accounts = true
+"""
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/model"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Model and Effort"
+[[steps]]
+key = "Left"
+[[steps]]
+wait = "\\[OpenAI\\]"
+[[steps]]
+key = "Down"
+repeat = 3
+[[steps]]
+wait = "› +4\\. GPT-6 Luna"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Reasoning Level"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Model changed to GPT-6 Luna"
+[[steps]]
+type = "Reply with exactly: pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "authorized as work"
+compress = 2
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "account work"
+[[steps]]
+pause = 4.0

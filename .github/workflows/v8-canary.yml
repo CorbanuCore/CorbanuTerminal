@@ -133,9 +133,9 @@ jobs:
           python-version: "3.12"
 
       - name: Set up Rust toolchain for Cargo smoke
-        uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
         with:
-          toolchain: "1.95.0"
+          toolchain: "1.99.1"
 
       - name: Build Bazel V8 release pair
         env:
@@ -288,9 +288,9 @@ jobs:
           architecture: x64
 
       - name: Set up Codex Rust toolchain for Cargo smoke
-        uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
         with:
-          toolchain: "1.95.0"
+          toolchain: "1.99.1"
           targets: ${{ matrix.target }}
 
       - name: Install rusty_v8 Rust toolchain
@@ -308,7 +308,8 @@ jobs:
         run: git submodule status --recursive > git_submodule_status.txt
 
       - name: Restore upstream source-build cache
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+        id: source_build_cache
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
         with:
           path: |
             ${{ steps.setup_ci.outputs.cargo-target-dir }}/sccache
@@ -379,8 +380,19 @@ jobs:
             cd codex-rs
             RUSTY_V8_ARCHIVE="${GITHUB_WORKSPACE}/${archive}" \
             RUSTY_V8_SRC_BINDING_PATH="${GITHUB_WORKSPACE}/${binding}" \
-            cargo +1.95.0 test -p codex-v8-poc --target "${TARGET}" --features sandbox --no-run
+            cargo +1.99.1 test -p codex-v8-poc --target "${TARGET}" --features sandbox --no-run
           )
+
+      # Only main saves caches; PRs restore main's (#636).
+      - name: Save upstream source-build cache
+        if: steps.source_build_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ${{ steps.setup_ci.outputs.cargo-target-dir }}/sccache
+            ${{ steps.setup_ci.outputs.cargo-target-dir }}/${{ matrix.target }}/release/gn_out
+          key: ${{ steps.source_build_cache.outputs.cache-primary-key }}
 
       - name: Upload staged artifacts
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7

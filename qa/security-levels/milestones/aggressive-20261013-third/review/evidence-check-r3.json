@@ -1,0 +1,14 @@
+{
+ "agent": "01a13831-7438-72d2-b70d-2c0b821fcb4c",
+ "verdict": "fail",
+ "round": 3,
+ "start": "2026-10-14T02:15:27Z",
+ "end": "2026-10-14T02:28:27Z",
+ "usage": {
+  "input_tokens": 18246943,
+  "cached_input_tokens": 17994641,
+  "cache_write_input_tokens": 252134,
+  "output_tokens": 52995,
+  "reasoning_output_tokens": 0
+ }
+}

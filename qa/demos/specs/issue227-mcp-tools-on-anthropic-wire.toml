@@ -1,0 +1,57 @@
+# #227: the same on the Anthropic Messages wire: a Claude Plan model sees the MCP server's tools
+# under flat names, calls one directly, and the MCP approval prompt asks first.
+# The MCP fixture is the rmcp test_stdio_server built in the lane target (machine-specific path):
+# cargo build -p codex-rmcp-client --bin test_stdio_server
+id = "issue227-mcp-tools-on-anthropic-wire"
+feature = "#227: MCP tools reach Anthropic Messages models directly"
+expected = "With code mode off, Claude Fable 5.1 on the Claude Plan (Anthropic Messages) calls the rmcp server's echo tool by its flat name mcp__rmcp__echo; the MCP approval prompt appears, and after Allow the call runs as rmcp.echo."
+model = "claude-fable-5-1-plan"
+provider = "claude-plan"
+cols = 120
+rows = 36
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[features]
+code_mode = false
+code_mode_only = false
+
+[mcp_servers.rmcp]
+command = "/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/fix-515-mcp-chat-wires/debug/test_stdio_server"
+default_tools_approval_mode = "prompt"
+"""
+
+[credentials]
+CLAUDE_CODE_OAUTH_TOKEN = "claude-plan-test-token"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Call the mcp__rmcp__echo tool directly (not through any script) exactly once with message hello-227, then stop."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Run the tool and continue"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 3.0
+
+[[steps]]
+key = "1"
+[[steps]]
+wait = "› 1\\. Allow"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Called rmcp\\.echo"
+timeout = 120
+compress = 2
+[[steps]]
+pause = 3.0

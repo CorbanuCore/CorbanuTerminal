@@ -1,0 +1,17 @@
+---
+source: tui/src/bottom_pane/security_level_picker_tests.rs
+expression: "render(&picker, 80)"
+---
+Security level
+Active in this session: Permissive
+
+  Permissive  (active)
+  Moderate  needs the Windows sandbox set up
+> Aggressive  needs the Windows sandbox set up
+
+Sensitive access denied by default, built from existing sandbox, approval,
+network and exec-policy controls.
+Aggressive needs the default Windows sandbox. The Windows sandbox is not set up.
+Open /permissions, choose Default and pick "Set up default sandbox" (it needs
+Administrator permission), then choose Aggressive again. Nothing changed.
+↑/↓ move · enter choose · esc close

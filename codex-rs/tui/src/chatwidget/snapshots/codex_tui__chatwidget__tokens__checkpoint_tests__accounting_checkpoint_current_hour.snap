@@ -1,0 +1,21 @@
+---
+source: tui/src/chatwidget/tokens_checkpoint_tests.rs
+expression: all
+---
+Recorded request range
+Requested: [1970-04-11T01:00:00.000Z, 1970-04-11T02:00:00.000Z); timezone: UTC; grouping: Hour
+Retention: request detail kept since 1970-01-11T01:30:00.000Z; daily totals kept since 1970-01-01
+Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns.
+Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+Other conversations are not included in this view; /cost covers only the open conversation.
+Recorded through ledger checkpoint: 1970-04-11T00:30:00.000Z (as of this read)
+No recorded attempts; collection coverage unknown.
+Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [1970-04-11T01:00:00.000Z, 1970-04-11T02:00:00.000Z): no recorded interval through the ledger checkpoint
+Recorded requests through checkpoint
+Requested: [1970-04-11T01:00:00.000Z, 1970-04-11T02:00:00.000Z); timezone: UTC; grouping: Hour
+Retention: request detail kept since 1970-01-11T01:30:00.000Z; daily totals kept since 1970-01-01
+Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns.
+Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+Bucket: [1970-04-11T01:00:00.000Z, 1970-04-11T02:00:00.000Z); effective coverage (requested ∩ aggregate retention ∩ snapshot): no recorded interval through the ledger checkpoint
+Recorded through ledger checkpoint: 1970-04-11T00:30:00.000Z (as of this read)
+Nothing recorded yet: this bucket starts after the ledger checkpoint.

@@ -38,7 +38,7 @@ fn tmux_security_profiles_are_observation_only_at_normal_and_narrow_widths() -> 
         let session = tmux.new_session(
             SessionSpec::new(
                 level,
-                TerminalSize::new(width, 48),
+                TerminalSize::new(width, /*rows*/ 48),
                 CommandSpec::new(&binary)
                     .env("CODEX_HOME", home.path())
                     .env("CORBANU_HOME", home.path())
@@ -77,6 +77,10 @@ fn tmux_security_profiles_are_observation_only_at_normal_and_narrow_widths() -> 
         command(pane, "/security")?;
         pane.wait_stable_contains("Security profiles", TIMEOUT)?;
         pane.send_key(TmuxKey::Escape)?;
+        // As above: typing before the view closes sends /exit to the view.
+        pane.wait_stable_until("profile view closes", TIMEOUT, |text| {
+            !text.contains("Security profiles — read only")
+        })?;
         command(pane, "/exit")?;
         session.wait_for_exit(TIMEOUT)?;
     }
@@ -112,7 +116,7 @@ fn tmux_security_unknown_config_fails_without_permissive_fallback() -> Result<()
     // typed driver can inspect startup rejection and dismiss it with Enter.
     let session = tmux.new_session(SessionSpec::new(
         "security-invalid",
-        TerminalSize::new(80, 24),
+        TerminalSize::new(/*columns*/ 80, /*rows*/ 24),
         CommandSpec::new("sh")
             .env("CODEX_HOME", home.path())
             .env("CORBANU_HOME", home.path())
@@ -126,9 +130,15 @@ fn tmux_security_unknown_config_fails_without_permissive_fallback() -> Result<()
             .arg(repo),
     ))?;
     let pane = session.primary_pane();
-    let text = pane.wait_stable_contains("unknown variant", TIMEOUT)?;
+    // The error embeds the config path, so where the viewport splits words
+    // across rows depends on the TMPDIR length; match with whitespace removed.
+    let text = pane.wait_stable_until(
+        "viewport containing \"unknown variant\"",
+        TIMEOUT,
+        |capture| without_whitespace(capture).contains("unknownvariant"),
+    )?;
     ensure!(
-        !text.contains("Requested: Permissive"),
+        !without_whitespace(&text).contains("Requested:Permissive"),
         "unknown state fell back to Permissive"
     );
     capture(pane, "unknown-config-error")?;
@@ -136,6 +146,10 @@ fn tmux_security_unknown_config_fails_without_permissive_fallback() -> Result<()
     pane.send_key(TmuxKey::Enter)?;
     session.wait_for_exit(TIMEOUT)?;
     Ok(())
+}
+
+fn without_whitespace(text: &str) -> String {
+    text.split_whitespace().collect()
 }
 
 fn command(pane: &TmuxPane<'_>, command: &str) -> Result<()> {

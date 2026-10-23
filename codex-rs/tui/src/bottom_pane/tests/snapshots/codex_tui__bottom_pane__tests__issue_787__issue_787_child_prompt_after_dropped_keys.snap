@@ -1,0 +1,21 @@
+---
+source: tui/src/bottom_pane/tests/issue_787.rs
+expression: "render_snapshot(&pane, area)"
+---
+                                                                                
+  Would you like to run the following command?                                  
+                                                                                
+  Thread: Agent (01a13a2a)                                                      
+                                                                                
+  $ sleep 60; echo finished > ks-child.txt                                      
+                                                                                
+› 1. Yes, proceed (y)                                                           
+  2. Yes, and don't ask again for commands that start with `sleep`              
+  3. No, and tell Corbanu Terminal what to do differently (esc)                 
+                                                                                
+  A letter in brackets only highlights its option; enter confirms it. Options   
+  that last beyond this request: choose with ↑/↓, then enter.                   
+  Press enter to confirm or esc to cancel or o to open thread                   
+                                                                                
+  Keys pressed as this request appeared were ignored. Choose an option with ↑/  
+  ↓, then enter; esc cancels.

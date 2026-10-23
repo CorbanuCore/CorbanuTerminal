@@ -1,0 +1,11 @@
+{
+  "backend-refresh": "235e7b4cf958ddb5819b2b5e098d8561a12de1aa77ae7d7c18cac089bc03aacc",
+  "historical-Request-1": "6ae0a1c45cce50eca7bc612ae3af34582b477491686a8d9646bd1f014dc1654d",
+  "missing-price-Request-1": "1be5885dcfb194067eff41f4809518b491dab5702403b248df227169be78c9e5",
+  "mixed-provider-Request-1": "4ee1502987950937edc2e0bd7c6fac8e8e77fef5cf5117af755eee9f0e91dfb2",
+  "narrow-Request-1": "89fe009a8b800098ab3826afe4d2c61bc05080d029bd9587dfb382dd2f404ecd",
+  "no-usage-Request-1": "cc39bf6b7da6ed8fa8a1ab552c97a9004b4aaf7c5c0b4a6af6fcb1b89feba131",
+  "stale-estimate": "02919663d4961f32ddadc856d7ea610e8bf17180ff53107517cc060ed3193f50",
+  "stale-refresh": "02919663d4961f32ddadc856d7ea610e8bf17180ff53107517cc060ed3193f50",
+  "unavailable-backend": "235e7b4cf958ddb5819b2b5e098d8561a12de1aa77ae7d7c18cac089bc03aacc"
+}

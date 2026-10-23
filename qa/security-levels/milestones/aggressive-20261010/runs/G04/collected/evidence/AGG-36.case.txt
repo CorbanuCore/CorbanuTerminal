@@ -1,0 +1,10 @@
+### AGG-36 (advisory)
+
+- Starting conditions: Aggressive active.
+- Actions:
+  1. Approve python3 src/notes.py list
+  2. Approve git status
+- Expected:
+  - The commands succeed
+  - /tmp, xcrun and DARWIN noise is absent or explained as a sandbox side effect
+

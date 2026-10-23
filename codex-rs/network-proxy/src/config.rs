@@ -137,6 +137,28 @@ pub struct NetworkProxyConfig {
     pub mitm: bool,
     #[serde(default)]
     pub credential_broker: bool,
+    /// PF-27-S04: keep brokered raw credentials in a separate broker process.
+    #[serde(default)]
+    pub isolated_credential_broker: bool,
+    /// PF-27-S02: agent environments are built without provider tokens, so
+    /// brokered values come from Core's own environment, limited to the
+    /// variables listed here (those the user's environment policy would have
+    /// passed). `None` when secretless launch is off. Set by Core only.
+    #[serde(skip)]
+    pub secretless_agent_launch: Option<Vec<String>>,
+    /// PF-27-S02: parent directory for the isolated broker's private socket
+    /// directory (Core passes `CODEX_HOME/run`). Set by Core only.
+    #[serde(skip)]
+    pub credential_broker_runtime_dir: Option<std::path::PathBuf>,
+    /// PF-33-S01: enforce URL, DNS and redirect destination policy on every
+    /// proxied request (feature `url_destination_policy`). Set by Core only.
+    #[serde(skip)]
+    pub url_destination_policy: bool,
+    /// PF-28-S02: bind injected credentials to HTTPS, method and path, and
+    /// scrub them from responses (feature `secret_output_gate`). Set by Core
+    /// only.
+    #[serde(skip)]
+    pub credential_response_gate: bool,
     #[serde(default)]
     pub dangerously_allow_plaintext_credential_injection: bool,
     #[serde(default)]
@@ -160,6 +182,11 @@ impl Default for NetworkProxyConfig {
             allow_local_binding: false,
             mitm: false,
             credential_broker: false,
+            isolated_credential_broker: false,
+            secretless_agent_launch: None,
+            credential_broker_runtime_dir: None,
+            url_destination_policy: false,
+            credential_response_gate: false,
             dangerously_allow_plaintext_credential_injection: false,
             mitm_hooks: Vec::new(),
         }
@@ -170,6 +197,38 @@ impl NetworkProxyConfig {
     pub fn set_credential_broker_enabled(&mut self, enabled: bool) {
         self.credential_broker = enabled;
         self.mitm |= enabled;
+    }
+
+    /// Enables the credential broker with raw values held only by the
+    /// separate broker process (PF-27-S04).
+    pub fn set_isolated_credential_broker_enabled(&mut self, enabled: bool) {
+        self.isolated_credential_broker = enabled;
+        if enabled {
+            self.set_credential_broker_enabled(/*enabled*/ true);
+        }
+    }
+
+    /// PF-27-S02: source the listed brokered credential variables from Core's
+    /// environment (`None` turns secretless launch off).
+    pub fn set_secretless_agent_launch(&mut self, brokered_env_keys: Option<Vec<String>>) {
+        self.secretless_agent_launch = brokered_env_keys;
+    }
+
+    /// PF-33-S01: arm the URL, DNS and redirect destination guard. It needs
+    /// interception to see the path, method and redirects of HTTPS requests.
+    pub fn set_url_destination_policy(&mut self, enabled: bool) {
+        self.url_destination_policy = enabled;
+        self.mitm |= enabled;
+    }
+
+    /// PF-28-S02: bind and scrub injected credentials.
+    pub fn set_credential_response_gate(&mut self, enabled: bool) {
+        self.credential_response_gate = enabled;
+    }
+
+    /// PF-27-S02: where the isolated broker creates its private directory.
+    pub fn set_credential_broker_runtime_dir(&mut self, dir: Option<std::path::PathBuf>) {
+        self.credential_broker_runtime_dir = dir;
     }
 
     pub fn allowed_domains(&self) -> Option<Vec<String>> {
@@ -619,6 +678,11 @@ mod tests {
                 allow_local_binding: false,
                 mitm: false,
                 credential_broker: false,
+                isolated_credential_broker: false,
+                secretless_agent_launch: None,
+                credential_broker_runtime_dir: None,
+                url_destination_policy: false,
+                credential_response_gate: false,
                 dangerously_allow_plaintext_credential_injection: false,
                 mitm_hooks: Vec::new(),
             }
@@ -704,6 +768,7 @@ mod tests {
                 "allow_local_binding": false,
                 "mitm": false,
                 "credential_broker": false,
+                "isolated_credential_broker": false,
                 "dangerously_allow_plaintext_credential_injection": false,
                 "mitm_hooks": [],
             })

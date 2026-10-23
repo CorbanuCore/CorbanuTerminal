@@ -1,4 +1,5 @@
 use codex_protocol::models::ContentItem;
+use codex_protocol::models::InternalChatMessageMetadataPassthrough;
 use codex_protocol::models::ResponseInputItem;
 use codex_protocol::models::ResponseItem;
 
@@ -51,6 +52,13 @@ pub trait ContextualUserFragment {
         false
     }
 
+    /// Stable producer ID recorded with the rendered fragment, such as a World State section ID.
+    ///
+    /// Provider adapters use it to tell apart distinct sources that share markers.
+    fn source_id(&self) -> Option<&'static str> {
+        None
+    }
+
     fn markers(&self) -> (&'static str, &'static str);
 
     fn body(&self) -> String;
@@ -81,27 +89,11 @@ pub trait ContextualUserFragment {
     where
         Self: Sized,
     {
-        ResponseItem::Message {
-            id: None,
-            role: self.role().to_string(),
-            content: vec![ContentItem::InputText {
-                text: self.render(),
-            }],
-            phase: None,
-            internal_chat_message_metadata_passthrough: None,
-        }
+        context_message(self.role(), [(self.render(), self.source_id())])
     }
 
     fn into_boxed_response_item(self: Box<Self>) -> ResponseItem {
-        ResponseItem::Message {
-            id: None,
-            role: self.role().to_string(),
-            content: vec![ContentItem::InputText {
-                text: self.render(),
-            }],
-            phase: None,
-            internal_chat_message_metadata_passthrough: None,
-        }
+        context_message(self.role(), [(self.render(), self.source_id())])
     }
 
     fn into_response_input_item(self) -> ResponseInputItem
@@ -115,6 +107,86 @@ pub trait ContextualUserFragment {
             }],
             phase: None,
         }
+    }
+}
+
+/// Builds a context message from rendered sections and their producer IDs.
+///
+/// Producers are recorded, aligned with the content, for developer messages, the only role whose
+/// contextual sections are deduplicated per producer before non-OpenAI requests.
+pub fn context_message(
+    role: &str,
+    sections: impl IntoIterator<Item = (String, Option<&'static str>)>,
+) -> ResponseItem {
+    let (content, sources): (Vec<_>, Vec<_>) = sections
+        .into_iter()
+        .map(|(text, source_id)| {
+            (
+                ContentItem::InputText { text },
+                source_id.map(str::to_string),
+            )
+        })
+        .unzip();
+    let internal_chat_message_metadata_passthrough = (role == "developer"
+        && sources.iter().any(Option::is_some))
+    .then(|| InternalChatMessageMetadataPassthrough {
+        context_fragment_sources: Some(sources),
+        ..Default::default()
+    });
+    ResponseItem::Message {
+        id: None,
+        role: role.to_string(),
+        content,
+        phase: None,
+        internal_chat_message_metadata_passthrough,
+    }
+}
+
+/// A fragment attributed to a stable producer ID, such as the World State section that rendered
+/// it.
+///
+/// Producer IDs share one namespace across World State sections and extension fragments.
+pub struct AttributedFragment<F: ?Sized> {
+    source_id: &'static str,
+    fragment: Box<F>,
+}
+
+impl<F: ?Sized> AttributedFragment<F> {
+    pub fn new(source_id: &'static str, fragment: Box<F>) -> Self {
+        Self {
+            source_id,
+            fragment,
+        }
+    }
+}
+
+impl<F: ContextualUserFragment + ?Sized> ContextualUserFragment for AttributedFragment<F> {
+    fn role(&self) -> &'static str {
+        self.fragment.role()
+    }
+
+    fn requires_separate_message(&self) -> bool {
+        self.fragment.requires_separate_message()
+    }
+
+    fn source_id(&self) -> Option<&'static str> {
+        Some(self.source_id)
+    }
+
+    fn markers(&self) -> (&'static str, &'static str) {
+        self.fragment.markers()
+    }
+
+    fn body(&self) -> String {
+        self.fragment.body()
+    }
+
+    fn type_markers() -> (&'static str, &'static str) {
+        ("", "")
+    }
+
+    fn render(&self) -> String {
+        self.fragment.render()
     }
 }
 

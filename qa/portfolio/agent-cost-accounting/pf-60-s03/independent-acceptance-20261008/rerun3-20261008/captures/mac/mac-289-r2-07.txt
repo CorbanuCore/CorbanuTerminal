@@ -1,0 +1,9 @@
+$ /usage requests 2026-10-12 2026-10-19 week
+  Z.AI GLM 5.2 via zai standard · <scratch>/repos/is-plain-obj · Corbanu Terminal · TPS: -- tok/s
+--- last screen:
+╰───────────────────────────────────────────────────────╯
+› Read readme.md and summarize it in one sentence.
+• is-plain-obj is a tiny npm package that checks whether a value is a plain object — one created via {}, new Object(), or Object.create(null) — working correctly even across JavaScript realms.
+■ Range refused: future start is unavailable. Usage: /usage requests START END hour|day|week|month
+› Implement {feature}
+  Z.AI GLM 5.2 via zai standard · <scratch>/repos/is-plain-obj · Corbanu Terminal · TPS: -- tok/s

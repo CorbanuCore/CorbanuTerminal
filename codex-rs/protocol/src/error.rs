@@ -402,6 +402,13 @@ impl CodexErr {
         }
     }
 
+    /// #616: whether this failure came from an unreadable Corbanu home
+    /// (see [`crate::home_unreadable`]).
+    pub fn is_home_unreadable(&self) -> bool {
+        matches!(self.details(), CodexErrorDetails::Io(error)
+            if crate::home_unreadable::is_home_unreadable(error))
+    }
+
     pub fn retry_delay(&self) -> Option<Duration> {
         self.retry_delay
     }
@@ -495,7 +502,11 @@ pub struct ConnectionFailedError {
 
 impl std::fmt::Display for ConnectionFailedError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Connection failed: {}", self.source)
+        write!(
+            f,
+            "Connection failed: {}",
+            codex_http_client::redact_reqwest_error(&self.source)
+        )
     }
 }
 
@@ -510,7 +521,7 @@ impl std::fmt::Display for ResponseStreamFailed {
         write!(
             f,
             "Error while reading the server response: {}{}",
-            self.source,
+            codex_http_client::redact_reqwest_error(&self.source),
             self.request_id
                 .as_ref()
                 .map(|id| format!(", request id: {id}"))
@@ -572,6 +583,7 @@ impl std::fmt::Display for UnexpectedResponseError {
             format!("unexpected status {status}: {body}")
         };
         if let Some(url) = &self.url {
+            let url = codex_http_client::redact_url(url);
             message.push_str(&format!(", url: {url}"));
         }
         if let Some(cf_ray) = &self.cf_ray {

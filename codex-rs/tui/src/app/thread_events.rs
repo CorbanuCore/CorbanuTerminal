@@ -427,6 +427,7 @@ mod tests {
             message_history: None,
             network_proxy: None,
             rollout_path: Some(PathBuf::new()),
+            provider_account: None,
         }
     }
 

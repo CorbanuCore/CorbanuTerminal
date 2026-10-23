@@ -82,6 +82,20 @@ fn collect_resume_override_mismatches(
             config_snapshot.model_provider_id
         ));
     }
+    // Only an account of the thread's own provider can mismatch; another
+    // provider's account applies to agents on that provider (#425).
+    if let Some((provider_id, name)) = request.provider_account.as_deref().map(|selection| {
+        codex_core::config::split_account_selection(selection, &config_snapshot.model_provider_id)
+    }) && provider_id == config_snapshot.model_provider_id
+    {
+        let requested_account = format!("{provider_id}:{name}");
+        if config_snapshot.provider_account.as_deref() != Some(requested_account.as_str()) {
+            mismatch_details.push(format!(
+                "provider_account requested={requested_account} active={:?}",
+                config_snapshot.provider_account
+            ));
+        }
+    }
     if let Some(requested_service_tier) = request.service_tier.as_ref()
         && requested_service_tier != &config_snapshot.service_tier
     {
@@ -227,6 +241,24 @@ fn latest_persisted_thread_runtime(history: &[RolloutItem]) -> Option<PersistedT
     })
 }
 
+/// PF-84: `<provider>:<account>` from the newest turn context, when it
+/// recorded an account (only while named accounts are on) for the provider
+/// the thread resumes on.
+fn recorded_provider_account(
+    history: &[RolloutItem],
+    resumed_provider_id: Option<&str>,
+) -> Option<String> {
+    let turn_context = history.iter().rev().find_map(|item| match item {
+        RolloutItem::TurnContext(turn_context) => Some(turn_context),
+        _ => None,
+    })?;
+    let provider_id = turn_context.model_provider.as_deref()?;
+    let account = turn_context.provider_account.as_deref()?;
+    resumed_provider_id
+        .is_none_or(|resumed| resumed == provider_id)
+        .then(|| format!("{provider_id}:{account}"))
+}
+
 fn apply_persisted_thread_runtime(
     request_overrides: &mut Option<HashMap<String, serde_json::Value>>,
     typesafe_overrides: &mut ConfigOverrides,
@@ -248,6 +280,61 @@ fn apply_persisted_thread_runtime(
                 overrides.remove("model_reasoning_effort");
             }
         }
+    }
+}
+
+fn merge_persisted_service_tier(
+    history: &[RolloutItem],
+    request_overrides: Option<&HashMap<String, serde_json::Value>>,
+    typesafe_overrides: &mut ConfigOverrides,
+) {
+    if typesafe_overrides.service_tier.is_some()
+        || request_overrides.is_some_and(|overrides| overrides.contains_key("service_tier"))
+        || has_model_resume_override(request_overrides, typesafe_overrides)
+    {
+        return;
+    }
+    let runtime = latest_persisted_thread_runtime(history);
+    let tier = history
+        .iter()
+        .rev()
+        .find_map(|item| match item {
+            RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) => {
+                let settings = &event.thread_settings;
+                // TurnContext does not carry a tier. Never restore a tier from an older model.
+                Some(
+                    if runtime.as_ref().is_some_and(|runtime| {
+                        runtime.model == settings.model
+                            && runtime
+                                .model_provider
+                                .as_ref()
+                                .is_none_or(|provider| provider == &settings.model_provider_id)
+                    }) {
+                        settings.service_tier.clone()
+                    } else {
+                        None
+                    },
+                )
+            }
+            _ => None,
+        })
+        .flatten();
+    // Explicit standard routing also shields legacy sessions without a tier record from
+    // today's unrelated global default. No history/schema migration is needed.
+    typesafe_overrides.service_tier = Some(tier);
+}
+
+fn prepend_missing_resume_settings(context: &mut Vec<RolloutItem>, history: &[RolloutItem]) {
+    if let Some(settings) = history.iter().rev().find(|item| {
+        matches!(
+            item,
+            RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(_))
+        )
+    }) {
+        // Keep the newer model-context suffix authoritative; this older metadata only supplies
+        // fields (notably tier) that TurnContext cannot represent.
+        let position = usize::from(matches!(context.first(), Some(RolloutItem::SessionMeta(_))));
+        context.insert(position, settings.clone());
     }
 }
 
@@ -595,6 +682,7 @@ impl ThreadRequestProcessor {
             supports_openai_form_elicitation,
             request_context,
             ThreadStartResponseKind::ThreadStart,
+            /*inherited_provider_account*/ None,
         )
         .await
         .map(|()| None)
@@ -616,6 +704,16 @@ impl ThreadRequestProcessor {
             agent_class,
             mut thread,
         } = params;
+        // PF-84: a worker inherits its parent's live account; an explicit
+        // account of the same provider beats it, one of another provider
+        // leaves it in place (#425).
+        let parent_provider_account = match ThreadId::from_string(&parent_thread_id) {
+            Ok(parent_id) => match self.thread_manager.get_thread(parent_id).await {
+                Ok(parent) => parent.config_snapshot().await.provider_account,
+                Err(_) => None,
+            },
+            Err(_) => None,
+        };
         thread.spawn_agent_parent_thread_id = Some(parent_thread_id);
         thread.spawn_agent_role = Some(agent_role);
         thread.thread_source = Some(codex_app_server_protocol::ThreadSource::Subagent);
@@ -630,6 +728,7 @@ impl ThreadRequestProcessor {
                 agent_nickname,
                 agent_class,
             },
+            parent_provider_account,
         )
         .await
         .map(|()| None)
@@ -1252,10 +1351,12 @@ impl ThreadRequestProcessor {
         supports_openai_form_elicitation: bool,
         request_context: RequestContext,
         response_kind: ThreadStartResponseKind,
+        inherited_provider_account: Option<String>,
     ) -> Result<(), JSONRPCErrorError> {
         let ThreadStartParams {
             model,
             model_provider,
+            provider_account,
             allow_provider_model_fallback,
             service_tier,
             cwd,
@@ -1277,6 +1378,7 @@ impl ThreadRequestProcessor {
             ephemeral,
             history_mode,
             session_start_source,
+            reopened_by_prompt_edit,
             thread_source,
             spawn_agent_parent_thread_id,
             spawn_agent_role,
@@ -1314,7 +1416,10 @@ impl ThreadRequestProcessor {
             personality,
         );
         typesafe_overrides.ephemeral = ephemeral;
+        typesafe_overrides.reopened_by_prompt_edit = reopened_by_prompt_edit;
         typesafe_overrides.allow_provider_model_fallback = allow_provider_model_fallback;
+        typesafe_overrides.provider_account = provider_account;
+        typesafe_overrides.inherited_provider_account = inherited_provider_account;
         let listener_task_context = ListenerTaskContext {
             thread_manager: Arc::clone(&self.thread_manager),
             thread_state_manager: self.thread_state_manager.clone(),
@@ -1507,8 +1612,11 @@ impl ThreadRequestProcessor {
                 .map_err(|err| config_load_error(&err))?;
         }
 
-        if let Ok(Some(err)) =
-            codex_core::check_execpolicy_for_warnings(&config.config_layer_stack).await
+        // With strict rules the thread fails to start and its error says why;
+        // "custom rules not applied" would wrongly suggest it ran without them.
+        if !config.strict_rules
+            && let Ok(Some(err)) =
+                codex_core::check_execpolicy_for_warnings(&config.config_layer_stack).await
         {
             let notification = crate::exec_policy_config_warning(&err);
             if !initial_config_warnings.contains(&notification) {
@@ -3504,6 +3612,7 @@ impl ThreadRequestProcessor {
             path,
             model,
             model_provider,
+            provider_account,
             service_tier,
             cwd,
             runtime_workspace_roots,
@@ -3574,6 +3683,7 @@ impl ThreadRequestProcessor {
             developer_instructions,
             personality,
         );
+        typesafe_overrides.provider_account = provider_account;
         let has_explicit_model_resume_override =
             has_model_resume_override(request_overrides.as_ref(), &typesafe_overrides);
         let persisted_reasoning_effort = self
@@ -3583,6 +3693,15 @@ impl ThreadRequestProcessor {
                 &mut typesafe_overrides,
             )
             .await;
+        // PF-84: resume on the recorded account (only when the thread resumes
+        // on the recorded provider). An explicit account of the same provider
+        // beats it; one of another provider leaves it in place (#425).
+        if let InitialHistory::Resumed(resumed_history) = &thread_history {
+            typesafe_overrides.inherited_provider_account = recorded_provider_account(
+                &resumed_history.history,
+                typesafe_overrides.model_provider.as_deref(),
+            );
+        }
 
         // Derive a Config using the same logic as new conversation, honoring overrides if provided.
         let mut config = match self
@@ -3803,6 +3922,7 @@ impl ThreadRequestProcessor {
                     initial_turns_page,
                     turns_backwards_cursor,
                     items_backwards_cursor,
+                    provider_account: config_snapshot.provider_account.clone(),
                 };
 
                 let connection_id = request_id.connection_id;
@@ -3860,6 +3980,11 @@ impl ThreadRequestProcessor {
         );
         let had_explicit_model_override =
             has_model_resume_override(request_overrides.as_ref(), typesafe_overrides);
+        merge_persisted_service_tier(
+            &resumed_history.history,
+            request_overrides.as_ref(),
+            typesafe_overrides,
+        );
         let persisted_metadata = match self.state_db.as_ref() {
             Some(state_db_ctx) => state_db_ctx
                 .get_thread(resumed_history.conversation_id)
@@ -4173,7 +4298,7 @@ impl ThreadRequestProcessor {
         stored_thread: StoredThread,
     ) -> Result<(InitialHistory, StoredThread), JSONRPCErrorError> {
         if matches!(stored_thread.history_mode, ThreadHistoryMode::Paginated) {
-            let model_context = self
+            let mut model_context = self
                 .thread_store
                 .load_latest_model_context(StoreLoadThreadHistoryParams {
                     thread_id: stored_thread.thread_id,
@@ -4181,6 +4306,33 @@ impl ThreadRequestProcessor {
                 })
                 .await
                 .map_err(thread_store_resume_read_error)?;
+            if !model_context.items.iter().any(|item| {
+                matches!(
+                    item,
+                    RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(_))
+                )
+            }) {
+                // A compacted suffix is not evidence that the thread never recorded a tier.
+                // Use the existing store history API (including fork lineage), not a raw path.
+                // This cold-resume fallback may read the full history; it does not replay it.
+                // Stores that keep paginated history out of full-history reads report
+                // `Unsupported`; the model-context suffix then stays authoritative, as it
+                // was before this fallback existed, instead of failing the resume.
+                match self
+                    .thread_store
+                    .load_history(StoreLoadThreadHistoryParams {
+                        thread_id: stored_thread.thread_id,
+                        include_archived: true,
+                    })
+                    .await
+                {
+                    Ok(durable) => {
+                        prepend_missing_resume_settings(&mut model_context.items, &durable.items);
+                    }
+                    Err(ThreadStoreError::Unsupported { .. }) => {}
+                    Err(err) => return Err(thread_store_resume_read_error(err)),
+                }
+            }
             let history = InitialHistory::Resumed(ResumedHistory {
                 conversation_id: model_context.thread_id,
                 history: Arc::new(model_context.items),
@@ -4439,6 +4591,7 @@ impl ThreadRequestProcessor {
             path,
             model,
             model_provider,
+            provider_account,
             service_tier,
             cwd,
             runtime_workspace_roots,
@@ -4582,37 +4735,54 @@ impl ThreadRequestProcessor {
             /*personality*/ None,
         );
         typesafe_overrides.ephemeral = ephemeral.then_some(true);
-        let latest_context = if paginated_source
+        // PF-84 (#555): a fork runs on the account its source thread runs on
+        // (the loaded thread's, else the newest one it recorded), as a spawned
+        // worker does. An explicit account of the same provider beats it; an
+        // account of another provider never applies (#425). A fork cut at an
+        // earlier turn of a paginated thread also takes the source's current
+        // account, not the one that turn ran on (#588, Travis 2026-10-13).
+        // The recorded account is passed whatever the server's own config
+        // says: the fork's config (its request overrides and project layers)
+        // decides whether named accounts apply, and with them off the loader
+        // refuses a recorded named account, as for a resume (#588).
+        typesafe_overrides.provider_account = provider_account;
+        let loaded_source = self.thread_manager.get_thread(source_thread_id).await.ok();
+        let reviewer_from_history = paginated_source
             && typesafe_overrides.approvals_reviewer.is_none()
             && !request_overrides
                 .as_ref()
-                .is_some_and(|overrides| overrides.contains_key("approvals_reviewer"))
-        {
-            if let Ok(parent) = self.thread_manager.get_thread(source_thread_id).await {
-                typesafe_overrides.approvals_reviewer =
-                    Some(parent.config_snapshot().await.approvals_reviewer);
-                None
-            } else if last_turn_id.is_some() || before_turn_id.is_some() {
-                Some(
-                    self.thread_store
-                        .load_latest_model_context(StoreLoadThreadHistoryParams {
-                            thread_id: source_thread_id,
-                            include_archived: true,
-                        })
-                        .await
-                        .map_err(thread_store_resume_read_error)?
-                        .items,
-                )
-            } else {
-                None
-            }
+                .is_some_and(|overrides| overrides.contains_key("approvals_reviewer"));
+        let cut_at_earlier_turn =
+            paginated_source && (last_turn_id.is_some() || before_turn_id.is_some());
+        let latest_context = if loaded_source.is_none() && cut_at_earlier_turn {
+            Some(
+                self.thread_store
+                    .load_latest_model_context(StoreLoadThreadHistoryParams {
+                        thread_id: source_thread_id,
+                        include_archived: true,
+                    })
+                    .await
+                    .map_err(thread_store_resume_read_error)?
+                    .items,
+            )
         } else {
             None
         };
+        let current_source_history = latest_context
+            .as_deref()
+            .unwrap_or_else(|| source_history_items.as_ref());
+        typesafe_overrides.inherited_provider_account = match loaded_source.as_ref() {
+            Some(source) => source.config_snapshot().await.provider_account,
+            None => {
+                recorded_provider_account(current_source_history, /*resumed_provider_id*/ None)
+            }
+        };
+        if reviewer_from_history && let Some(source) = loaded_source.as_ref() {
+            typesafe_overrides.approvals_reviewer =
+                Some(source.config_snapshot().await.approvals_reviewer);
+        }
         merge_persisted_approvals_reviewer(
-            latest_context
-                .as_deref()
-                .unwrap_or_else(|| source_history_items.as_ref()),
+            current_source_history,
             request_overrides.as_ref(),
             &mut typesafe_overrides,
         );
@@ -4858,6 +5028,7 @@ impl ThreadRequestProcessor {
             active_permission_profile,
             reasoning_effort: session_configured.reasoning_effort,
             multi_agent_mode: MultiAgentMode::ExplicitRequestOnly,
+            provider_account: config_snapshot.provider_account,
         };
 
         let notif = thread_started_notification(thread);

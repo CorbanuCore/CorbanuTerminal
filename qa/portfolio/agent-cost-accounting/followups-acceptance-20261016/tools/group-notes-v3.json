@@ -1,0 +1,11 @@
+{
+ "A": "group A of the design (`zai-s06`). ACC-34 applies to this group's own screens and output only.",
+ "B": "group B of the design (`moonshot`). ACC-35 is optional: run its part a after ACC-08 and part b after ACC-09 only if `/opt/agms/packet/d3.txt` says `D3 GRANTED`; otherwise do not send any second Moonshot turn and record ACC-35 as `not checked live; covered by test` (VERDICT ACC-35: blocked, with that reason). ACC-34 applies to this group's own screens and output only.",
+ "C": "group C of the design (`openai-warmup`), with ACC-36 between ACC-17 and ACC-18 as amended. ACC-34 applies to this group's own screens and output only.",
+ "D": "group D of the design (`openai-pricing`). ACC-34 applies to this group's own screens and output only.",
+ "E": "group E of the design (`stand-in-charges`), with ACC-37 after ACC-29 as amended. ACC-34 applies to this group's own screens and output only.",
+ "F": "group F of the design (`chatgpt`). ACC-34 applies to this group's own screens and output only.",
+ "C2": "fresh replay of group C of the design (new executor, new profile) (`openai-warmup`), with ACC-36 between ACC-17 and ACC-18 as amended. ACC-34 applies to this group's own screens and output only.",
+ "D2": "fresh replay of group D of the design (new executor, new profile) (`openai-pricing`). ACC-34 applies to this group's own screens and output only.",
+ "E2": "fresh replay of group E of the design (new executor, new profile) (`stand-in-charges`), with ACC-37 after ACC-29 as amended. ACC-34 applies to this group's own screens and output only."
+}

@@ -1,0 +1,15 @@
+Collecting markdown-it-py==3.0.0 (from -r scripts/initiative_control/requirements.txt (line 1))
+  Downloading markdown_it_py-3.0.0-py3-none-any.whl.metadata (6.9 kB)
+Collecting mdurl==0.1.2 (from -r scripts/initiative_control/requirements.txt (line 2))
+  Downloading mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+Collecting slack-sdk==3.44.1 (from -r scripts/initiative_control/requirements.txt (line 3))
+  Downloading slack_sdk-3.44.1-py2.py3-none-any.whl.metadata (16 kB)
+Downloading markdown_it_py-3.0.0-py3-none-any.whl (87 kB)
+Downloading mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+Downloading slack_sdk-3.44.1-py2.py3-none-any.whl (319 kB)
+Installing collected packages: slack-sdk, mdurl, markdown-it-py
+
+Successfully installed markdown-it-py-3.0.0 mdurl-0.1.2 slack-sdk-3.44.1
+
+[notice] A new release of pip is available: 26.0.1 -> 26.2.1
+[notice] To update, run: /private/tmp/owner-limited-113b.6NPgsz/venv/bin/python -m pip install --upgrade pip

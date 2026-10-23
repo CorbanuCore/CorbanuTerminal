@@ -1,0 +1,5 @@
+Security level Aggressive could not be fully applied:
+  Vault: host_executable rules limit `corbanu` to listed paths, so the vault rule would not apply at other paths
+Fix the setting, or choose Permissive by editing <run>/home/security_level.toml.
+[exited] 1
+

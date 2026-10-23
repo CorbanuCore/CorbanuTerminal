@@ -15,6 +15,8 @@ use tempfile::TempDir;
 use tempfile::tempdir;
 
 use super::provider_management::select_label;
+use crate::support::chat_ready;
+use crate::support::secret_scan;
 use crate::support::tmux::CommandSpec;
 use crate::support::tmux::SessionSpec;
 use crate::support::tmux::TerminalSize;
@@ -77,7 +79,7 @@ fn tmux_first_run_anthropic_account_selects_claude_login_after_success() -> Resu
     wait_claude_configured(pane)?;
     pane.send_key(TmuxKey::Escape)?;
     let viewport = pane.capture_viewport()?;
-    let scrollback = pane.capture_scrollback_tail(2_000)?;
+    let scrollback = pane.capture_scrollback_tail(/*lines*/ 2_000)?;
     exit_tui(pane)?;
     session.wait_for_exit(READY_TIMEOUT)?;
 
@@ -122,7 +124,7 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
         codex_home.path(),
         &log_dir,
         &fake,
-        None,
+        /*login_fixture*/ None,
         /*provide_openai_fixture*/ true,
     ))?;
     let pane = session.primary_pane();
@@ -161,7 +163,7 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
     wait_claude_configured(pane)?;
     pane.send_key(TmuxKey::Escape)?;
     let first_viewport = pane.capture_viewport()?;
-    let first_scrollback = pane.capture_scrollback_tail(2_000)?;
+    let first_scrollback = pane.capture_scrollback_tail(/*lines*/ 2_000)?;
     assert_claude_model_catalog(pane)?;
     exit_tui(pane)?;
     session.wait_for_exit(READY_TIMEOUT)?;
@@ -173,7 +175,7 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
         codex_home.path(),
         &log_dir,
         &fake,
-        None,
+        /*login_fixture*/ None,
         /*provide_openai_fixture*/ true,
     ))?;
     let resumed_pane = resumed.primary_pane();
@@ -181,7 +183,7 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
     open_providers(resumed_pane)?;
     wait_claude_configured(resumed_pane)?;
     let resumed_viewport = resumed_pane.capture_viewport()?;
-    let resumed_scrollback = resumed_pane.capture_scrollback_tail(2_000)?;
+    let resumed_scrollback = resumed_pane.capture_scrollback_tail(/*lines*/ 2_000)?;
     resumed_pane.send_key(TmuxKey::Escape)?;
     assert_claude_model_catalog(resumed_pane)?;
     exit_tui(resumed_pane)?;
@@ -214,7 +216,20 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
 // Real key-driven coverage of the provider-manager -> model-picker boundary.
 // Credential configuration alone did not previously refresh picker eligibility.
 fn assert_claude_model_catalog(pane: &TmuxPane) -> Result<()> {
+    // The caller's Escape may still be closing the provider manager; typing into
+    // it selects a provider instead of opening the model picker.
+    pane.wait_stable_until("provider manager closed", READY_TIMEOUT, |text| {
+        !text.contains("Configure providers and control")
+            && !text.contains("Press enter to confirm or esc to go back")
+    })?;
+    pane.wait_stable_contains("Corbanu Terminal · TPS:", READY_TIMEOUT)?;
+    pane.wait_stable_until(
+        "session configured",
+        READY_TIMEOUT,
+        chat_ready::session_configured,
+    )?;
     pane.send_literal("/model")?;
+    pane.wait_stable_contains("/model", Duration::from_secs(10))?;
     pane.send_key(TmuxKey::Enter)?;
     pane.wait_stable_contains("Select Model", READY_TIMEOUT)?;
     for _ in 0..16 {
@@ -368,6 +383,7 @@ fn assert_managed_resolver_returns(codex: &Path, codex_home: &Path, canary: &str
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn session_spec(
     name: &str,
     codex: &Path,
@@ -538,24 +554,7 @@ fn synthetic_canary() -> String {
 }
 
 fn tree_contains(root: &Path, needle: &[u8]) -> Result<bool> {
-    if !root.exists() {
-        return Ok(false);
-    }
-    if root.is_file() {
-        let bytes = fs::read(root)?;
-        return Ok(bytes.windows(needle.len()).any(|window| window == needle));
-    }
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
-        let file_type = entry.file_type()?;
-        if file_type.is_symlink() {
-            continue;
-        }
-        if tree_contains(&entry.path(), needle)? {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+    secret_scan::tree_contains(root, needle, &|_| false)
 }
 
 fn codex_binary(repo_root: &Path) -> Result<PathBuf> {

@@ -192,6 +192,13 @@ async fn probe_with(
     configure_turn: impl FnOnce(&mut TurnContext),
     inputs: ToolPlanInputs,
 ) -> ToolPlanProbe {
+    ToolPlanProbe::from_router(planned_router(configure_turn, inputs).await)
+}
+
+async fn planned_router(
+    configure_turn: impl FnOnce(&mut TurnContext),
+    inputs: ToolPlanInputs,
+) -> ToolRouter {
     let (_session, mut turn) = make_session_and_context().await;
     use_openai_provider(&mut turn);
     configure_turn(&mut turn);
@@ -211,13 +218,12 @@ async fn probe_with(
         inputs.extension_tool_executors,
         &inputs.dynamic_tools,
     );
-    let router = ToolRouter::from_tools(
+    ToolRouter::from_tools(
         step_context.turn.as_ref(),
         tool_runtimes,
         hosted_specs,
         &Default::default(),
-    );
-    ToolPlanProbe::from_router(router)
+    )
 }
 
 async fn probe(configure_turn: impl FnOnce(&mut TurnContext)) -> ToolPlanProbe {
@@ -282,6 +288,17 @@ fn use_chatgpt_auth(turn: &mut TurnContext) {
     turn.auth_manager = Some(AuthManager::from_auth_for_testing(
         CodexAuth::create_dummy_chatgpt_auth_for_testing(),
     ));
+    turn.provider = create_model_provider(
+        turn.config.model_provider.clone(),
+        turn.auth_manager.clone(),
+    );
+}
+
+fn use_api_key_auth(turn: &mut TurnContext) {
+    use_openai_provider(turn);
+    turn.auth_manager = Some(AuthManager::from_auth_for_testing(CodexAuth::from_api_key(
+        "sk-test",
+    )));
     turn.provider = create_model_provider(
         turn.config.model_provider.clone(),
         turn.auth_manager.clone(),
@@ -2096,6 +2113,369 @@ async fn v1_multi_agent_tools_defer_when_tool_search_available() {
     assert!(description.contains("- Multi-agent tools: Spawn and manage sub-agents."));
 }
 
+fn flat_call(name: &str) -> crate::tools::router::ToolCall {
+    crate::tools::router::ToolCall {
+        tool_name: ToolName::plain(name),
+        call_id: "call-1".to_string(),
+        payload: crate::tools::context::ToolPayload::Function {
+            arguments: "{}".to_string(),
+        },
+        encrypted_function_args: None,
+    }
+}
+
+async fn router_with(
+    configure_turn: fn(&mut TurnContext),
+    tool_runtimes: Vec<Arc<dyn CoreToolRuntime>>,
+) -> ToolRouter {
+    let (_session, mut turn) = make_session_and_context().await;
+    configure_turn(&mut turn);
+    ToolRouter::from_tools(&turn, tool_runtimes, Vec::new(), &Default::default())
+}
+
+async fn mcp_router(configure_turn: fn(&mut TurnContext)) -> ToolRouter {
+    router_with(
+        configure_turn,
+        vec![
+            mcp_runtime("orders", "mcp__orders", "lookup", ToolExposure::Direct),
+            mcp_runtime("orders", "mcp__orders", "cancel", ToolExposure::Direct),
+        ],
+    )
+    .await
+}
+
+/// A custom provider on the Chat Completions wire (no provider-specific branch).
+fn use_generic_chat_provider(turn: &mut TurnContext) {
+    let provider_info = ModelProviderInfo {
+        wire_api: codex_model_provider_info::WireApi::Chat,
+        ..ModelProviderInfo::create_openai_provider(Some("http://localhost:1/v1".to_string()))
+    };
+    update_config(turn, |config| {
+        config.model_provider_id = "custom-chat".to_string();
+        config.model_provider = provider_info.clone();
+    });
+    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+}
+
+fn plain_dynamic_runtime(name: &str) -> Arc<dyn CoreToolRuntime> {
+    let DynamicToolSpec::Function(function) =
+        dynamic_tool(/*namespace*/ None, name, /*defer_loading*/ false)
+    else {
+        unreachable!("plain dynamic tools are functions");
+    };
+    Arc::new(
+        crate::tools::handlers::DynamicToolHandler::new(&function)
+            .expect("dynamic tool spec should build"),
+    )
+}
+
+#[tokio::test]
+async fn flat_mcp_names_never_shadow_registered_plain_tools() {
+    let router = router_with(
+        use_zai_provider,
+        vec![
+            plain_dynamic_runtime("mcp__orders__lookup"),
+            mcp_runtime("orders", "mcp__orders", "lookup", ToolExposure::Direct),
+        ],
+    )
+    .await;
+    let specs = router.model_visible_specs();
+    let flat_names: Vec<&str> = specs
+        .iter()
+        .map(ToolSpec::name)
+        .filter(|name| name.starts_with("mcp__orders__lookup"))
+        .collect();
+    assert_eq!(flat_names.len(), 2, "{flat_names:?}");
+    let hashed = flat_names
+        .iter()
+        .find(|name| **name != "mcp__orders__lookup")
+        .expect("the MCP tool gets a hashed name");
+
+    // The plain name still reaches the plain tool; the hashed one reaches MCP.
+    let plain = router.resolve_flat_tool_call(flat_call("mcp__orders__lookup"));
+    assert_eq!(plain.tool_name, ToolName::plain("mcp__orders__lookup"));
+    let mcp = router.resolve_flat_tool_call(flat_call(hashed));
+    assert_eq!(mcp.tool_name, ToolName::namespaced("mcp__orders", "lookup"));
+}
+
+#[tokio::test]
+async fn flattened_mcp_tools_stay_within_the_tool_count_limit() {
+    // Registered in reverse name order.
+    let tool_runtimes = (0..200)
+        .rev()
+        .map(|index| {
+            mcp_runtime(
+                "bulk",
+                "mcp__bulk",
+                &format!("tool_{index:03}"),
+                ToolExposure::Direct,
+            )
+        })
+        .collect();
+    let router = router_with(use_zai_provider, tool_runtimes).await;
+    let specs = router.model_visible_specs();
+    assert_eq!(specs.len(), 128);
+    // The kept tools are the first ones by name, independent of registration order.
+    assert!(
+        specs
+            .iter()
+            .any(|spec| spec.name() == "mcp__bulk__tool_000")
+    );
+    assert!(
+        !specs
+            .iter()
+            .any(|spec| spec.name() == "mcp__bulk__tool_199")
+    );
+    // #688: the left-out tools are reported (by the turn, once per session).
+    let omitted = router.omitted_tools();
+    assert_eq!(omitted.len(), 200 - 128);
+    assert_eq!(
+        omitted.first(),
+        Some(&ToolName::namespaced("mcp__bulk", "tool_128"))
+    );
+    assert_eq!(
+        omitted.last(),
+        Some(&ToolName::namespaced("mcp__bulk", "tool_199"))
+    );
+}
+
+#[tokio::test]
+async fn nothing_is_reported_omitted_within_the_tool_count_limit() {
+    let router = mcp_router(use_zai_provider).await;
+    assert_eq!(router.omitted_tools(), &[] as &[ToolName]);
+}
+
+#[tokio::test]
+async fn mcp_tools_are_flattened_and_resolved_on_wires_without_namespace_tools() {
+    for configure_turn in [
+        use_zai_provider as fn(&mut TurnContext),
+        use_openrouter_provider,
+        use_claude_plan_provider,
+        use_generic_chat_provider,
+    ] {
+        let router = mcp_router(configure_turn).await;
+        let specs = router.model_visible_specs();
+        assert!(
+            !specs
+                .iter()
+                .any(|spec| matches!(spec, ToolSpec::Namespace(_))),
+            "namespaces must not reach a wire without namespace tools: {specs:?}"
+        );
+        for (flat, name) in [
+            ("mcp__orders__lookup", "lookup"),
+            ("mcp__orders__cancel", "cancel"),
+        ] {
+            let Some(ToolSpec::Function(tool)) = specs.iter().find(|spec| spec.name() == flat)
+            else {
+                panic!("expected flat MCP function `{flat}` in {specs:?}");
+            };
+            // The namespace is not sent, so the tool carries the server's description.
+            assert_eq!(
+                tool.description,
+                format!("{name} test tool\n\nTools from orders.")
+            );
+            assert_eq!(tool.defer_loading, None);
+
+            let resolved = router.resolve_flat_tool_call(flat_call(flat));
+            assert_eq!(
+                resolved.tool_name,
+                ToolName::namespaced("mcp__orders", name)
+            );
+            assert!(router.tool_runtime(&resolved).is_some());
+        }
+
+        let unknown = router.resolve_flat_tool_call(flat_call("mcp__orders__missing"));
+        assert_eq!(unknown.tool_name, ToolName::plain("mcp__orders__missing"));
+    }
+}
+
+/// #547: every grouped tool, not only MCP tools, is offered under a flat name
+/// on wires without namespaces and routed back to its namespaced runtime.
+#[tokio::test]
+async fn non_mcp_namespaced_tools_are_flattened_and_resolved_without_namespace_tools() {
+    for configure_turn in [
+        use_zai_provider as fn(&mut TurnContext),
+        use_claude_plan_provider,
+        use_generic_chat_provider,
+    ] {
+        let router = planned_router(
+            |turn| {
+                configure_turn(turn);
+                set_feature(turn, Feature::SleepTool, /*enabled*/ true);
+            },
+            ToolPlanInputs {
+                extension_tool_executors: vec![Arc::new(TestNamespaceExtensionTool {
+                    namespace: "registry_extension",
+                    tool_name: "lookup",
+                })],
+                dynamic_tools: vec![dynamic_tool(
+                    Some("registry_dynamic"),
+                    "lookup",
+                    /*defer_loading*/ false,
+                )],
+                ..ToolPlanInputs::default()
+            },
+        )
+        .await;
+        let specs = router.model_visible_specs();
+        assert!(
+            !specs
+                .iter()
+                .any(|spec| matches!(spec, ToolSpec::Namespace(_))),
+            "{specs:?}"
+        );
+        for (flat, namespace, name, namespace_description) in [
+            (
+                "clock__sleep",
+                "clock",
+                "sleep",
+                "Tools for reading and waiting on time.",
+            ),
+            (
+                "registry_extension__lookup",
+                "registry_extension",
+                "lookup",
+                "Test namespace.",
+            ),
+            (
+                "registry_dynamic__lookup",
+                "registry_dynamic",
+                "lookup",
+                "registry_dynamic dynamic tools",
+            ),
+        ] {
+            let Some(ToolSpec::Function(tool)) = specs.iter().find(|spec| spec.name() == flat)
+            else {
+                panic!("expected flat function `{flat}` in {specs:?}");
+            };
+            assert!(
+                tool.description.ends_with(namespace_description),
+                "{flat}: {}",
+                tool.description
+            );
+            let resolved = router.resolve_flat_tool_call(flat_call(flat));
+            assert_eq!(resolved.tool_name, ToolName::namespaced(namespace, name));
+            assert!(router.tool_runtime(&resolved).is_some(), "{flat}");
+        }
+    }
+}
+
+/// #547: V1 sub-agent tools reach every provider without namespace tools (a
+/// custom Chat Completions provider, Claude on the Anthropic wire), as plain
+/// aliases, and are not offered twice.
+#[tokio::test]
+async fn v1_multi_agent_tools_reach_every_provider_without_namespace_tools() {
+    for configure_turn in [
+        use_generic_chat_provider as fn(&mut TurnContext),
+        use_claude_plan_provider,
+        use_zai_provider,
+    ] {
+        let plan = probe(|turn| {
+            configure_turn(turn);
+            set_feature(turn, Feature::Collab, /*enabled*/ true);
+            set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
+        })
+        .await;
+        plan.assert_visible_contains(&[
+            "spawn_agent_v1",
+            "send_input_v1",
+            "wait_agent_v1",
+            "close_agent_v1",
+            "resume_agent_v1",
+        ]);
+        plan.assert_visible_lacks(&[
+            MULTI_AGENT_V1_NAMESPACE,
+            "spawn_agent",
+            "multi_agent_v1__spawn_agent",
+            "multi_agent_v1__resume_agent",
+        ]);
+    }
+}
+
+/// Built-in grouped tools are kept before MCP tools when the tool-count limit
+/// leaves room for only some of them, even when their names sort after the
+/// MCP tools'.
+#[tokio::test]
+async fn flattened_builtin_tools_keep_their_place_before_mcp_tools() {
+    let tool_runtimes = (0..200)
+        .map(|index| {
+            mcp_runtime(
+                "bulk",
+                "mcp__bulk",
+                &format!("tool_{index:03}"),
+                ToolExposure::Direct,
+            )
+        })
+        .collect();
+    let router = planned_router(
+        use_zai_provider,
+        ToolPlanInputs {
+            tool_runtimes,
+            extension_tool_executors: vec![Arc::new(TestNamespaceExtensionTool {
+                namespace: "zz_extension",
+                tool_name: "lookup",
+            })],
+            ..ToolPlanInputs::default()
+        },
+    )
+    .await;
+    let specs = router.model_visible_specs();
+    assert_eq!(specs.len(), 128);
+    assert!(
+        specs
+            .iter()
+            .any(|spec| spec.name() == "zz_extension__lookup")
+    );
+    assert!(
+        specs
+            .iter()
+            .any(|spec| spec.name() == "mcp__bulk__tool_000")
+    );
+}
+
+/// Memory reads stay off wires without namespaces until sending stored
+/// memories to those providers is decided (#547).
+#[tokio::test]
+async fn memory_tools_are_not_offered_without_namespace_tools() {
+    let router = planned_router(
+        use_generic_chat_provider,
+        ToolPlanInputs {
+            extension_tool_executors: vec![Arc::new(TestNamespaceExtensionTool {
+                namespace: "memories",
+                tool_name: "read",
+            })],
+            ..ToolPlanInputs::default()
+        },
+    )
+    .await;
+    assert!(
+        !router
+            .model_visible_specs()
+            .iter()
+            .any(|spec| spec.name().starts_with("memories")),
+    );
+}
+
+#[tokio::test]
+async fn mcp_tools_stay_namespaced_on_the_responses_wire() {
+    let router = mcp_router(use_openai_provider).await;
+    let specs = router.model_visible_specs();
+    let Some(ToolSpec::Namespace(namespace)) =
+        specs.iter().find(|spec| spec.name() == "mcp__orders")
+    else {
+        panic!("expected MCP namespace in {specs:?}");
+    };
+    assert_eq!(namespace.tools.len(), 2);
+    assert!(
+        !specs
+            .iter()
+            .any(|spec| spec.name() == "mcp__orders__lookup"),
+        "flat names are only for wires without namespaces"
+    );
+    let call = router.resolve_flat_tool_call(flat_call("mcp__orders__lookup"));
+    assert_eq!(call.tool_name, ToolName::plain("mcp__orders__lookup"));
+}
+
 #[tokio::test]
 async fn v1_multi_agent_tools_flatten_for_openrouter_without_namespace_tools() {
     let plan = probe(|turn| {
@@ -2305,6 +2685,75 @@ async fn hosted_web_search_fallback_follows_winning_browser_runtime() {
 }
 
 #[tokio::test]
+async fn standalone_image_generation_is_offered_on_an_openai_api_key() {
+    let image_generation_tool = Arc::new(TestNamespaceExtensionTool {
+        namespace: "image_gen",
+        tool_name: "imagegen",
+    });
+    // An OpenAI API key on the built-in provider reaches the public Images
+    // API with that key, so the tool is offered there too.
+    let api_key = probe_with(
+        |turn| {
+            use_api_key_auth(turn);
+            turn.model_info.input_modalities = vec![InputModality::Image];
+        },
+        ToolPlanInputs {
+            extension_tool_executors: vec![image_generation_tool.clone()],
+            ..Default::default()
+        },
+    )
+    .await;
+    api_key.assert_visible_contains(&["image_gen"]);
+
+    // Another provider's API key is not an OpenAI key: no Images API to reach.
+    let other_provider_api_key = probe_with(
+        |turn| {
+            use_api_key_auth(turn);
+            let provider_info = ModelProviderInfo {
+                name: "Custom".to_string(),
+                ..ModelProviderInfo::create_openai_provider(Some(
+                    "https://example.invalid/v1".to_string(),
+                ))
+            };
+            update_config(turn, |config| {
+                config.model_provider_id = "custom".to_string();
+                config.model_provider = provider_info.clone();
+            });
+            turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+            turn.model_info.input_modalities = vec![InputModality::Image];
+        },
+        ToolPlanInputs {
+            extension_tool_executors: vec![image_generation_tool.clone()],
+            ..Default::default()
+        },
+    )
+    .await;
+    other_provider_api_key.assert_visible_lacks(&["image_gen"]);
+
+    // A custom provider that only borrows the name is not the built-in one.
+    let named_openai = probe_with(
+        |turn| {
+            use_api_key_auth(turn);
+            let provider_info = ModelProviderInfo::create_openai_provider(Some(
+                "https://proxy.example.invalid/v1".to_string(),
+            ));
+            update_config(turn, |config| {
+                config.model_provider_id = "my-proxy".to_string();
+                config.model_provider = provider_info.clone();
+            });
+            turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+            turn.model_info.input_modalities = vec![InputModality::Image];
+        },
+        ToolPlanInputs {
+            extension_tool_executors: vec![image_generation_tool],
+            ..Default::default()
+        },
+    )
+    .await;
+    named_openai.assert_visible_lacks(&["image_gen"]);
+}
+
+#[tokio::test]
 async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates() {
     let image_generation_tool = Arc::new(TestNamespaceExtensionTool {
         namespace: "image_gen",
@@ -2497,4 +2946,160 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
     })
     .await;
     unsupported_provider.assert_visible_lacks(&["web_search"]);
+}
+
+// Issue #820: real tool planning and serde, with disposable config and no provider call.
+fn issue820_use_custom_provider(turn: &mut TurnContext, base_url: &str, wire_api: &str) {
+    let provider_info: ModelProviderInfo = toml::from_str(&format!(
+        r#"
+name = "Custom official endpoint"
+base_url = "{base_url}"
+env_key = "ISSUE820_SYNTHETIC_UNSET_KEY"
+wire_api = "{wire_api}"
+billing = "pay_per_use"
+"#
+    ))
+    .expect("synthetic provider config");
+    // Wire-schema compatibility must not relabel this provider or enable built-in auth.
+    assert!(!provider_info.is_openai());
+    assert!(!provider_info.requires_openai_auth);
+    update_config(turn, |config| {
+        config.model_provider_id = "myopenai".to_string();
+        config.model_provider = provider_info.clone();
+    });
+    turn.provider = create_model_provider(provider_info, turn.auth_manager.clone());
+}
+
+#[tokio::test]
+async fn issue820_custom_official_responses_tools_match_builtin() {
+    let builtin = probe(|turn| {
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+    })
+    .await;
+    let expected = serde_json::to_value(builtin.visible_spec(MULTI_AGENT_V2_NAMESPACE))
+        .expect("built-in collaboration serialization");
+    for base_url in [
+        "https://api.openai.com/v1",
+        "https://api.openai.com/v1/",
+        "https://api.openai.com:443/v1",
+        "https://API.OPENAI.COM/v1",
+    ] {
+        let custom = probe(|turn| {
+            issue820_use_custom_provider(turn, base_url, "responses");
+            set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+        })
+        .await;
+        let captured = serde_json::to_value(custom.visible_spec(MULTI_AGENT_V2_NAMESPACE))
+            .expect("custom collaboration serialization");
+        assert_eq!(captured, expected, "reserved tools diverged for {base_url}");
+    }
+}
+
+#[tokio::test]
+async fn issue820_custom_official_responses_register_plaintext_adapters() {
+    let custom = probe(|turn| {
+        issue820_use_custom_provider(turn, "https://api.openai.com/v1", "responses");
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+    })
+    .await;
+    for name in [
+        "spawn_agent_plaintext",
+        "send_message_plaintext",
+        "followup_task_plaintext",
+    ] {
+        custom.assert_registered_contains(&[name]);
+        let captured =
+            serde_json::to_value(custom.visible_spec(name)).expect("adapter serialization");
+        assert_eq!(
+            captured.pointer("/parameters/properties/message/encrypted"),
+            None
+        );
+    }
+}
+
+#[tokio::test]
+async fn issue820_other_responses_endpoints_keep_provider_neutral_tools() {
+    for base_url in [
+        "https://openrouter.ai/api/v1",
+        "https://example.openai.azure.com/openai/v1",
+        "https://api.openai.com.example.test/v1",
+        "https://api.openai.com@provider.example/v1",
+        "https://provider.example/api.openai.com/v1",
+        "http://api.openai.com/v1",
+        "https://api.openai.com:8443/v1",
+        "https://api.openai.com/proxy/v1",
+        "https://api.openai.com/v1?endpoint=other",
+        "https://api.openai.com/v1#other",
+        "not-a-url",
+    ] {
+        let plan = probe(|turn| {
+            issue820_use_custom_provider(turn, base_url, "responses");
+            set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+        })
+        .await;
+        let ToolSpec::Namespace(namespace) = plan.visible_spec(MULTI_AGENT_V2_NAMESPACE) else {
+            panic!("expected collaboration namespace for {base_url}");
+        };
+        for name in ["spawn_agent", "send_message", "followup_task"] {
+            let function = namespace
+                .tools
+                .iter()
+                .find_map(|tool| match tool {
+                    ResponsesApiNamespaceTool::Function(tool) if tool.name == name => Some(tool),
+                    _ => None,
+                })
+                .expect("provider-neutral collaboration function");
+            assert_eq!(
+                function
+                    .parameters
+                    .properties
+                    .as_ref()
+                    .expect("object params")["message"]
+                    .encrypted,
+                None,
+                "{base_url} must retain plaintext {name}"
+            );
+        }
+        plan.assert_registered_lacks(&[
+            "spawn_agent_plaintext",
+            "send_message_plaintext",
+            "followup_task_plaintext",
+        ]);
+    }
+}
+
+#[tokio::test]
+async fn issue820_chat_wire_keeps_plaintext_and_no_reserved_adapters() {
+    let plan = probe(|turn| {
+        issue820_use_custom_provider(turn, "https://api.openai.com/v1", "chat");
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+    })
+    .await;
+    plan.assert_registered_lacks(&[
+        "spawn_agent_plaintext",
+        "send_message_plaintext",
+        "followup_task_plaintext",
+    ]);
+    // Chat has no namespaces: the v2 handler is registered as a plain function.
+    let captured = serde_json::to_value(plan.visible_spec("followup_task"))
+        .expect("flat chat tool serialization");
+    assert_eq!(
+        captured.pointer("/parameters/properties/message/encrypted"),
+        None
+    );
+}
+
+#[tokio::test]
+async fn issue820_disabled_v2_does_not_add_reserved_adapters() {
+    let plan = probe(|turn| {
+        issue820_use_custom_provider(turn, "https://api.openai.com/v1", "responses");
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
+    })
+    .await;
+    plan.assert_visible_lacks(&[MULTI_AGENT_V2_NAMESPACE]);
+    plan.assert_registered_lacks(&[
+        "spawn_agent_plaintext",
+        "send_message_plaintext",
+        "followup_task_plaintext",
+    ]);
 }

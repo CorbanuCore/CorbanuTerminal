@@ -241,12 +241,42 @@ where
             continue;
         };
         let _guard = AbsolutePathBufGuard::new(parent);
-        if let Some(error) = config_error_from_typed_toml::<T>(&path, &contents) {
+        let error = if matches!(layer.name, ConfigLayerSource::Project { .. }) {
+            // The loader may drop or strip parts of a project file (#850's
+            // unversioned permissive `[security]` table, ignored keys), so
+            // judge the layer it loaded and use the file only for the span:
+            // a dropped table must not be blamed for another failure (#845).
+            config_error_from_typed_layer::<T>(&path, &contents, &layer.config)
+        } else {
+            config_error_from_typed_toml::<T>(&path, &contents)
+        };
+        if let Some(error) = error {
             return Some(error);
         }
     }
 
     None
+}
+
+/// The first error deserializing `layer` (the config a layer loaded from the
+/// file at `path`), located in that file's `contents`.
+fn config_error_from_typed_layer<T: DeserializeOwned>(
+    path: &Path,
+    contents: &str,
+    layer: &toml::Value,
+) -> Option<ConfigError> {
+    let result: Result<T, _> = serde_path_to_error::deserialize(layer.clone());
+    let err = result.err()?;
+    let path_hint = err.path().clone();
+    let toml_err: toml::de::Error = err.into_inner();
+    let range = span_for_config_path(contents, &path_hint)
+        .map(|span| text_range_from_span(contents, span))
+        .unwrap_or_else(default_range);
+    Some(ConfigError::new(
+        path.to_path_buf(),
+        range,
+        toml_err.message(),
+    ))
 }
 
 fn config_path_for_layer(layer: &ConfigLayerEntry, config_toml_file: &str) -> Option<PathBuf> {

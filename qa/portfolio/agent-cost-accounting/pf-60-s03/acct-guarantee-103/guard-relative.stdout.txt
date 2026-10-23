@@ -1,0 +1,1 @@
+STOP: CORBANU_AUDIT_DIR must be absolute.

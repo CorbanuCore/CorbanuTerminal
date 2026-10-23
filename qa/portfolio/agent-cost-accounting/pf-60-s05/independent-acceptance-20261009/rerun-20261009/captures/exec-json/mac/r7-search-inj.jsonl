@@ -1,0 +1,8 @@
+{"type":"thread.started","thread_id":"01a12218-0f4c-7282-92dd-0cbebe22468d"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Skill descriptions were shortened to fit the 2% skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest."}}
+{"type":"item.started","item":{"id":"item_1","type":"web_search","id":"ws_02b5fb6f15b77463016ac93d77558087d1bd434426542ad0d3","query":"","action":{"type":"other"}}}
+{"type":"item.completed","item":{"id":"item_1","type":"web_search","id":"ws_02b5fb6f15b77463016ac93d77558087d1bd434426542ad0d3","query":"Lobsters link aggregator website domain","action":{"type":"search","query":"Lobsters link aggregator website domain","queries":["Lobsters link aggregator website domain"]}}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"lobste.rs"}}
+{"type":"item.completed","item":{"id":"item_3","type":"error","message":"Developer accounting could not record one or more model requests in this turn. They were sent anyway; /cost does not include them. The cause is in the log (target codex_core::accounting)."}}
+{"type":"turn.completed","usage":{"input_tokens":18306,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":78,"reasoning_output_tokens":69}}

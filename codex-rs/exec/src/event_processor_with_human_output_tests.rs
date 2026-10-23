@@ -23,6 +23,7 @@ use super::EventProcessorWithHumanOutput;
 use super::config_summary_entries;
 use super::final_message_from_turn_items;
 use super::reasoning_text;
+use super::rejected_account_message;
 use super::should_print_final_message_to_stdout;
 use super::should_print_final_message_to_tty;
 use crate::event_processor::EventProcessor;
@@ -305,6 +306,8 @@ fn turn_completed_recovers_final_message_from_turn_items() {
         final_message_rendered: false,
         emit_final_message_on_shutdown: false,
         last_total_token_usage: None,
+        shown_config_warnings: Vec::new(),
+        rejected_account_message: None,
     };
 
     let status = processor.process_server_notification(ServerNotification::TurnCompleted(
@@ -353,6 +356,8 @@ fn turn_completed_overwrites_stale_final_message_from_turn_items() {
         final_message_rendered: true,
         emit_final_message_on_shutdown: false,
         last_total_token_usage: None,
+        shown_config_warnings: Vec::new(),
+        rejected_account_message: None,
     };
 
     let status = processor.process_server_notification(ServerNotification::TurnCompleted(
@@ -402,6 +407,8 @@ fn turn_completed_preserves_streamed_final_message_when_turn_items_are_empty() {
         final_message_rendered: false,
         emit_final_message_on_shutdown: false,
         last_total_token_usage: None,
+        shown_config_warnings: Vec::new(),
+        rejected_account_message: None,
     };
 
     let status = processor.process_server_notification(ServerNotification::TurnCompleted(
@@ -446,6 +453,8 @@ fn turn_failed_clears_stale_final_message() {
         final_message_rendered: true,
         emit_final_message_on_shutdown: true,
         last_total_token_usage: None,
+        shown_config_warnings: Vec::new(),
+        rejected_account_message: None,
     };
 
     let status = processor.process_server_notification(ServerNotification::TurnCompleted(
@@ -491,6 +500,8 @@ fn turn_interrupted_clears_stale_final_message() {
         final_message_rendered: true,
         emit_final_message_on_shutdown: true,
         last_total_token_usage: None,
+        shown_config_warnings: Vec::new(),
+        rejected_account_message: None,
     };
 
     let status = processor.process_server_notification(ServerNotification::TurnCompleted(
@@ -516,4 +527,157 @@ fn turn_interrupted_clears_stale_final_message() {
     assert_eq!(processor.final_message, None);
     assert!(!processor.final_message_rendered);
     assert!(!processor.emit_final_message_on_shutdown);
+}
+
+/// #419: the session repeats its config's startup warnings; a repeat of a
+/// config warning already printed is consumed instead of printed again.
+#[test]
+fn session_repeat_of_a_config_warning_is_consumed_once() {
+    let mut processor = EventProcessorWithHumanOutput {
+        bold: Style::new(),
+        cyan: Style::new(),
+        dimmed: Style::new(),
+        green: Style::new(),
+        italic: Style::new(),
+        magenta: Style::new(),
+        red: Style::new(),
+        yellow: Style::new(),
+        show_agent_reasoning: true,
+        show_raw_agent_reasoning: false,
+        last_message_path: None,
+        final_message: None,
+        final_message_rendered: false,
+        emit_final_message_on_shutdown: false,
+        last_total_token_usage: None,
+        shown_config_warnings: Vec::new(),
+        rejected_account_message: None,
+    };
+    let warning = "`[provider_accounts]` is ignored".to_string();
+    processor.process_server_notification(ServerNotification::ConfigWarning(
+        codex_app_server_protocol::ConfigWarningNotification {
+            summary: warning.clone(),
+            details: None,
+            path: None,
+            range: None,
+        },
+    ));
+    assert_eq!(processor.shown_config_warnings, vec![warning.clone()]);
+    processor.process_server_notification(ServerNotification::Warning(
+        codex_app_server_protocol::WarningNotification {
+            thread_id: None,
+            message: warning,
+        },
+    ));
+    assert!(processor.shown_config_warnings.is_empty());
+}
+
+/// PF-84 (#480): a rejected named account is named with its recovery, as in
+/// the TUI; the default account adds nothing.
+#[tokio::test]
+async fn a_rejected_named_account_is_named_with_its_recovery() {
+    let codex_home = tempfile::tempdir().expect("create codex home");
+    let config = ConfigBuilder::default()
+        .codex_home(codex_home.path().to_path_buf())
+        .build()
+        .await
+        .expect("build default config");
+    assert_eq!(
+        rejected_account_message(&config, "zai:fake").as_deref(),
+        Some(
+            "Z.AI (zai) account `fake` was rejected. Replace its key with `corbanu account add zai fake` (reads stdin), or choose another account. The default Z.AI credential is unchanged."
+        )
+    );
+    let claude = rejected_account_message(&config, "claude-plan:cpfake").expect("message");
+    assert!(
+        claude.contains("account `cpfake` was rejected")
+            && claude.contains("corbanu account add claude-plan cpfake --kind claude-token"),
+        "{claude}"
+    );
+    assert_eq!(rejected_account_message(&config, "zai:default"), None);
+    assert_eq!(rejected_account_message(&config, "zai"), None);
+}
+
+/// #480: a failed turn whose credential was rejected names the account the
+/// session runs on, including a resumed thread's recorded account; any other
+/// failure, or the default account, prints only the error.
+#[tokio::test]
+async fn a_rejected_turn_prints_the_account_line() {
+    let codex_home = tempfile::tempdir().expect("create codex home");
+    let config = ConfigBuilder::default()
+        .codex_home(codex_home.path().to_path_buf())
+        .build()
+        .await
+        .expect("build default config");
+    let mut processor = EventProcessorWithHumanOutput::create_with_ansi(
+        /*with_ansi*/ false, &config, /*last_message_path*/ None,
+    );
+    let error = |info| codex_app_server_protocol::TurnError {
+        message: "unexpected status 401 Unauthorized".to_string(),
+        codex_error_info: info,
+        additional_details: None,
+    };
+    let unauthorized = error(Some(
+        codex_app_server_protocol::CodexErrorInfo::Unauthorized,
+    ));
+    assert_eq!(
+        processor.failed_turn_lines(&unauthorized).len(),
+        1,
+        "the default account adds nothing"
+    );
+    processor.set_provider_account(&config, "zai:fake");
+    let lines = processor.failed_turn_lines(&unauthorized);
+    assert_eq!(lines.len(), 2);
+    assert!(
+        lines[1].starts_with("Z.AI (zai) account `fake` was rejected."),
+        "{lines:?}"
+    );
+    assert_eq!(
+        processor
+            .failed_turn_lines(&error(Some(
+                codex_app_server_protocol::CodexErrorInfo::BadRequest
+            )))
+            .len(),
+        1
+    );
+    processor.set_provider_account(&config, "zai:default");
+    assert_eq!(processor.failed_turn_lines(&unauthorized).len(), 1);
+}
+
+/// #873: a refusal never claims the command did not run (a network-policy
+/// refusal can come after it ran); approval declines and runs keep theirs.
+#[test]
+fn command_status_header_for_a_refusal_is_neutral() {
+    use super::command_status_header;
+    use codex_app_server_protocol::CommandExecutionStatus;
+
+    let refused = command_status_header(
+        &CommandExecutionStatus::Refused,
+        /*exit_code*/ Some(-1),
+        /*duration_ms*/ Some(0),
+    );
+    assert_eq!(refused, " refused:");
+    assert_eq!(
+        command_status_header(
+            &CommandExecutionStatus::Declined,
+            /*exit_code*/ Some(-1),
+            /*duration_ms*/ Some(0),
+        ),
+        " declined in 0ms:"
+    );
+    assert_eq!(
+        command_status_header(
+            &CommandExecutionStatus::Failed,
+            /*exit_code*/ Some(7),
+            /*duration_ms*/ Some(3),
+        ),
+        " exited 7 in 3ms:"
+    );
+    assert_eq!(
+        command_status_header(
+            &CommandExecutionStatus::Completed,
+            /*exit_code*/ Some(0),
+            /*duration_ms*/ None,
+        ),
+        " succeeded:"
+    );
 }

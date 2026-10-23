@@ -1,0 +1,51 @@
+# PF-27-S06 Windows gate: the unelevated (restricted-token) sandbox cannot deny reads, so
+# protected launch refuses agent commands with the reason.
+id = "pf27s06-win-unelevated-refused"
+feature = "Windows secretless launch: under the unelevated sandbox an agent command is refused, with the reason"
+expected = "Protected launch refused: the unelevated Windows sandbox cannot deny reads of the vault and sign-in files; set sandbox = \"elevated\" under [windows]."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[windows]
+sandbox = "unelevated"
+
+[features]
+secretless_agent_launch = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Do you trust the contents of this directory"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+type = "Run the shell command: whoami. Run it exactly once, then tell me the exact error text if it fails, and stop."
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Protected launch refused"
+timeout = 240
+compress = 3
+
+[[steps]]
+wait = "set .sandbox"
+timeout = 120
+compress = 3
+
+[[steps]]
+pause = 4.0

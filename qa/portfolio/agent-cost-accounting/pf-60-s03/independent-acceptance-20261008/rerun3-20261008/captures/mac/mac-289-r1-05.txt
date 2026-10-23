@@ -1,0 +1,7 @@
+$ /usage bogus
+  Z.AI GLM 5.2 via zai standard · <scratch>/repos/is-plain-obj · Corbanu Terminal · TPS: -- tok/s
+--- last screen:
+■ Sign in with ChatGPT to view OpenAI account usage.
+■ Sign in with ChatGPT to view OpenAI account usage.
+› Explain this codebase
+  Z.AI GLM 5.2 via zai standard · <scratch>/repos/is-plain-obj · Corbanu Terminal · TPS: -- tok/s

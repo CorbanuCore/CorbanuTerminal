@@ -1,0 +1,4 @@
+{
+ "G18b": {"group": "G18", "cases": ["MOD-22"], "note": "MOD-22's 'repeat MOD-07 steps 2-3' continues MOD-07's own sequence: in the same session, send MOD-07 step 1's request first, then its steps 2 and 3. Do the same after the relaunch."},
+ "G21b": {"group": "G21", "cases": ["MOD-29"], "note": "The /security picker opens with its cursor on the level active in this session, and the list wraps around; watch the highlighted name to reach the level a case names."}
+}

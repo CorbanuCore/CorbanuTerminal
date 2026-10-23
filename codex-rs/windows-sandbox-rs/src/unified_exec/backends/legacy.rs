@@ -356,7 +356,8 @@ pub(crate) async fn spawn_windows_sandbox_session_legacy(
     )?;
     allow_null_device_for_workspace_write(common.uses_write_capabilities);
 
-    apply_legacy_session_acl_rules(
+    // Held until the command has exited (#158).
+    let integrity_lease = match apply_legacy_session_acl_rules(
         &common.permissions,
         codex_home,
         &common.current_dir,
@@ -368,7 +369,16 @@ pub(crate) async fn spawn_windows_sandbox_session_legacy(
             readonly_sid_str: security.readonly_sid_str.as_deref(),
             write_root_sids: &security.write_root_sids,
         },
-    )?;
+        /*session*/ true,
+    ) {
+        Ok(lease) => lease,
+        Err(err) => {
+            unsafe {
+                CloseHandle(security.h_token);
+            }
+            return Err(err);
+        }
+    };
 
     let (writer_tx, writer_rx) = mpsc::channel::<Vec<u8>>(128);
     let (stdout_tx, stdout_rx) = broadcast::channel::<Vec<u8>>(256);
@@ -421,6 +431,7 @@ pub(crate) async fn spawn_windows_sandbox_session_legacy(
         let _desktop = desktop;
         let timeout = timeout_ms.map(|ms| ms as u32).unwrap_or(INFINITE);
         let wait_res = unsafe { WaitForSingleObject(pi.hProcess, timeout) };
+        let mut descendants_preserved = false;
         if wait_res == WAIT_TIMEOUT {
             terminate_job_or_process(&job_for_wait, &wait_handle, wait_logs_base_dir.as_deref());
         } else if let Err(err) = job_for_wait.preserve_descendants() {
@@ -428,6 +439,8 @@ pub(crate) async fn spawn_windows_sandbox_session_legacy(
                 &format!("legacy spawn failed to preserve descendants after root exit: {err}"),
                 wait_logs_base_dir.as_deref(),
             );
+        } else {
+            descendants_preserved = true;
         }
         if let Some(hpc) = hpc_for_wait
             && let Ok(mut guard) = hpc.lock()
@@ -439,6 +452,11 @@ pub(crate) async fn spawn_windows_sandbox_session_legacy(
             if token_handle != 0 && token_handle != INVALID_HANDLE_VALUE {
                 CloseHandle(token_handle);
             }
+        }
+        // Labels are put back before the exit is reported, unless processes
+        // the command left running still use them.
+        if let Some(lease) = integrity_lease {
+            lease.release_after_job(Arc::clone(&job_for_wait), descendants_preserved);
         }
         finalize_exit(
             exit_tx,

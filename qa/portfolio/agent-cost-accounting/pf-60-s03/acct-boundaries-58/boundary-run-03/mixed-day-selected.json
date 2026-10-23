@@ -1,0 +1,9 @@
+[
+  "Request detail unavailable for this whole UTC day \u2014 compacted history lost request/provider attribution. No total shown. Store checkpoint: 1801288799000; aggregate day floor:",
+  "20484; oldest recorded day: Some(20520); 90-day wall-clock detail cutoff: Some(1793512799000) ms UTC.",
+  "Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.",
+  "Billed cost: unavailable \u2014 no settlement evidence",
+  "Logical requests may have attempts on other days; this UTC day is not their complete lifetime.",
+  "Refresh",
+  "Close"
+]

@@ -1,0 +1,2 @@
+B: NO STOP MESSAGE within 10 s
+B: NO OFF NOTICE within 10 s

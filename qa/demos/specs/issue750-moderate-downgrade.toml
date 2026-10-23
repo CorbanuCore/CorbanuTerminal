@@ -1,0 +1,76 @@
+# Issue #750: from Moderate back to Permissive: what is removed, saved for the next start, Moderate stays on until then.
+id = "issue750-moderate-downgrade"
+feature = "From Moderate back to Permissive"
+expected = "With Moderate saved and confirmed, choosing Permissive lists the protections removed at the next start; Enter saves Permissive, and the session says Core's Moderate rules stay on until the restart."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+# The session has started (its policy runs in this process) once the model shows.
+[[steps]]
+wait = "model:\\s+glm-5\\.3-flash"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "enter confirm and save"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Moderate"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Escape"
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Moderate\\. Core's Moderate rules apply in this session now"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Return to Permissive\\?"
+[[steps]]
+wait = "Core's Moderate rules stay on in this session until then"
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Permissive"
+[[steps]]
+wait = "Core's level stays Moderate in this session and is Permissive from the next start"
+[[steps]]
+pause = 3.0

@@ -1,0 +1,13 @@
+---
+source: tui/src/chatwidget/tokens/scope_tests.rs
+expression: "pages[1].text.join(\"\\n\")"
+---
+Provider: local-mock
+Model: mock-model
+Billing: Pay per use
+Estimated cost: no price available
+Next step for requests with no price: check the bill from local-mock. No published price covers them, so no cost is shown for them here.
+Tokens: 55 tokens
+—— Details ——
+Billed cost: local-mock doesn't report its charges, so any cost here is an estimate — check local-mock's bill.
+Request: 00000000-0000-0000-0000-0000000003ea

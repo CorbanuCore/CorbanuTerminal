@@ -1,0 +1,16 @@
+test_poison_shapes_are_quarantined_and_following_human_reply_is_delivered (test_slack_transport.TransportTests.test_poison_shapes_are_quarantined_and_following_human_reply_is_delivered) ... ok
+test_quarantine_is_bounded_and_redelivery_does_not_starve_valid_intake (test_slack_transport.TransportTests.test_quarantine_is_bounded_and_redelivery_does_not_starve_valid_intake) ... ok
+test_quarantine_write_failure_never_acknowledges_or_covers_callback (test_slack_transport.TransportTests.test_quarantine_write_failure_never_acknowledges_or_covers_callback) ... ok
+test_three_fence_marks_can_be_cleanup_with_zero_callbacks (test_slack_transport.TransportTests.test_three_fence_marks_can_be_cleanup_with_zero_callbacks) ... ok
+test_session_generation_duplicate_conflict_and_unbound_thread_hold (test_slack_transport.TransportTests.test_session_generation_duplicate_conflict_and_unbound_thread_hold) ... ok
+test_real_child_failure_record_survives_reap_and_projects_to_dashboard (test_decision_manager.ManagerTests.test_real_child_failure_record_survives_reap_and_projects_to_dashboard) ... ok
+test_production_child_reports_missing_disposable_credentials_without_sdk_io (test_decision_manager.ManagerTests.test_production_child_reports_missing_disposable_credentials_without_sdk_io) ... ok
+test_failure_before_handshake_survives_failed_start_cleanup (test_decision_manager.ManagerTests.test_failure_before_handshake_survives_failed_start_cleanup) ... ok
+test_failure_frames_are_bounded_and_closed_vocabulary_only (test_decision_manager.ManagerTests.test_failure_frames_are_bounded_and_closed_vocabulary_only) ... ok
+test_unbound_follower_reply_is_never_attributed_to_parent (test_decision_manager.ManagerTests.test_unbound_follower_reply_is_never_attributed_to_parent) ... ok
+test_dedicated_exec_rejects_wrong_root_and_inherited_descriptor_before_ready (test_decision_manager.ManagerTests.test_dedicated_exec_rejects_wrong_root_and_inherited_descriptor_before_ready) ... ok
+
+----------------------------------------------------------------------
+Ran 11 tests in 11.311s
+
+OK

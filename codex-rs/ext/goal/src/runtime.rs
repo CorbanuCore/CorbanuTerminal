@@ -434,7 +434,11 @@ impl GoalRuntimeHandle {
             tracing::debug!("skipping goal steering because live thread is unavailable");
             return;
         };
-        if thread.inject_if_running(vec![item]).await.is_err() {
+        if thread
+            .inject_extension_if_running(vec![item])
+            .await
+            .is_err()
+        {
             tracing::debug!("skipping goal steering because no turn is active");
         }
     }

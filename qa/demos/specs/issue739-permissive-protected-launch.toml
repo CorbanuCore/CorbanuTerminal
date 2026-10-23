@@ -1,0 +1,53 @@
+# Issue #739 (option B, security sign-off 2026-10-14): under Permissive with protected launch on, no run outside the sandbox is offered.
+id = "issue739-permissive-protected-launch"
+feature = "Permissive with protected launch offers no run outside the sandbox"
+expected = "Under Permissive with the milestone flags, the agent asks to run a write outside the project outside the sandbox. No approval is offered: a warning says it isn't possible here. A remembered allow rule still skips the prompt but runs inside the sandbox, with a note. The file outside is not written."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+run = "mkdir -p {home}/rules && printf 'prefix_rule(pattern=[\"touch\"], decision=\"allow\")\\n' > {home}/rules/default.rules"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run this shell command once with sandbox_permissions set to require_escalated (justification: write the notes): echo protected >> ../outside/notes.txt"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "isn't possible here(?:(?!Working).)*\\n› "
+timeout = 180
+compress = 3
+[[steps]]
+pause = 4.0
+[[steps]]
+type = "Run exactly this command (a saved rule allows touch): touch ../outside/touched.txt"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "remembered approval or allow rule[\\s\\S]*Operation not permitted(?:(?!Working).)*\\n› "
+timeout = 180
+compress = 3
+[[steps]]
+pause = 4.0
+[[steps]]
+run = "test ! -e {outside}/notes.txt && test ! -e {outside}/touched.txt && echo 'outside/notes.txt and outside/touched.txt were not written'"
+[[steps]]
+pause = 3.0

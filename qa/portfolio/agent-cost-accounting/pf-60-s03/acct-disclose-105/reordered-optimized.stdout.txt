@@ -1,0 +1,2 @@
+Observed alias-unignored-regression: old=0/new=1
+{"passed": 7, "old_alias_exit": 0, "new_alias_exit": 1, "receipt": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-disclose-105/reordered-optimized.json"}

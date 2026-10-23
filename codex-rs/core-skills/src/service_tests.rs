@@ -230,8 +230,8 @@ async fn bundled_frontend_design_skill_loads_from_unrelated_cwd() {
     assert!(
         skill
             .path_to_skills_md
-            .to_string_lossy()
-            .contains("skills/.system/frontend-design/SKILL.md"),
+            .as_path()
+            .ends_with(Path::new("skills/.system/frontend-design/SKILL.md")),
         "unexpected bundled skill path: {}",
         skill.path_to_skills_md.display()
     );
@@ -259,8 +259,8 @@ async fn bundled_corbanu_terminal_help_skill_loads_from_unrelated_cwd() {
     assert!(
         skill
             .path_to_skills_md
-            .to_string_lossy()
-            .contains("skills/.system/corbanu-terminal-help/SKILL.md"),
+            .as_path()
+            .ends_with(Path::new("skills/.system/corbanu-terminal-help/SKILL.md")),
         "unexpected bundled skill path: {}",
         skill.path_to_skills_md.display()
     );

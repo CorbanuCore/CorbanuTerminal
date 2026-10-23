@@ -1,0 +1,11 @@
+# ISSUE-507 demo videos
+
+Recorded with `scripts/demo_video.py`; see [the demo SOP](../README.md).
+Videos are assets on the [`demos` prerelease](https://github.com/CorbanuCore/CorbanuTerminal/releases/tag/demos).
+
+| Date | Demo | Feature | Commit | Model | Length | Video |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 | `issue507-kill-switch-stops-running-work` | Turning the kill switch on stops the reply in progress and its running command | `bd25c93499a9` | glm-5.3-flash | 32s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-507-issue507-kill-switch-stops-running-work-bd25c93499a9-2026-10-11.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-507-issue507-kill-switch-stops-running-work-bd25c93499a9-2026-10-11.cast) |
+| 2026-10-11 | `issue507-kill-switch-stops-claude-pane` | The kill switch stops a Claude pane's reply and refuses its next turn | `bd25c93499a9` | glm-5.3-flash | 48s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-507-issue507-kill-switch-stops-claude-pane-bd25c93499a9-2026-10-11.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-507-issue507-kill-switch-stops-claude-pane-bd25c93499a9-2026-10-11.cast) |
+| 2026-10-12 | `issue507-kill-switch-other-process` | The kill switch turned on in another Corbanu Terminal stops the work running here | `6876c2557f10` | glm-5.3-flash | 25s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-507-issue507-kill-switch-other-process-6876c2557f10-2026-10-12.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-507-issue507-kill-switch-other-process-6876c2557f10-2026-10-12.cast) |
+| 2026-10-12 | `issue507-switch-off-restarts-nothing` | Turning the kill switch off restarts nothing; a waiting task goes with the pane's next turn | `4f41d8b859bc` | glm-5.3-flash | 80s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-507-issue507-switch-off-restarts-nothing-4f41d8b859bc-2026-10-12.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-507-issue507-switch-off-restarts-nothing-4f41d8b859bc-2026-10-12.cast) |

@@ -1,0 +1,77 @@
+# PF-84 follow-up (Travis, 2026-10-11, option b): /status shows the session's
+# token totals per named account, with no prices and no cost records. The
+# coordinator runs on the default Z.AI account and a spawned agent on the named
+# account `work` (the same real key enrolled under a second name; enrolled
+# while the TUI starts, so the session itself stays on `default`). /status then
+# lists both accounts with the active one marked. Works in release and
+# developer builds; tmux-check.sh in qa/provider-auth/pf-84/s05-status-tokens
+# covers two named accounts. Record with
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-status-account-tokens.toml \
+#     --bin <candidate> --sprint PF-84-S05 --publish
+id = "pf84-status-account-tokens"
+feature = "PF-84: token usage per account in /status"
+expected = "After a turn on account default and a spawned agent's turn on account work, /status lists both accounts' tokens, default marked active."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 140
+rows = 40
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+[features]
+named_accounts = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+run = "printf %s \"$ZAI_API_KEY\" | {bin} account add zai work >/dev/null && echo enrolled work"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Account usage:\\s+default · no usage yet"
+timeout = 30
+[[steps]]
+pause = 2.5
+[[steps]]
+type = "Reply with the single word pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*pong\\W*$"
+timeout = 120
+compress = 3
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Account usage:\\s+default · [0-9,]+ input"
+timeout = 30
+[[steps]]
+pause = 2.5
+[[steps]]
+type = "Use the spawn_agent tool exactly once with account set to work and the message 'Reply with the single word pong'. Wait for it, then reply with the word done. Do not retry on another account."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*done\\W*$"
+timeout = 300
+compress = 5
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "work\\s+[0-9,]+\\s+[0-9,]+"
+timeout = 30
+[[steps]]
+pause = 6.0

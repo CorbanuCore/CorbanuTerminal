@@ -6,6 +6,7 @@ use crate::session::turn_context::TurnContext;
 use crate::tools::context::SharedTurnDiffTracker;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
+use crate::tools::flat_tool_names::FlatToolNames;
 #[cfg(test)]
 use crate::tools::handlers::ToolSearchHandlerCache;
 use crate::tools::handlers::parse_arguments_for_tool;
@@ -76,6 +77,10 @@ pub(crate) fn tool_log_payload<'a>(
 pub struct ToolRouter {
     registry: ToolRegistry,
     model_visible_specs: Vec<ToolSpec>,
+    /// Flat names offered for namespaced tools on wires without namespaces.
+    flat_tool_names: FlatToolNames,
+    /// Tools left out because a wire without namespaces caps the tool count.
+    omitted_tools: Vec<ToolName>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -110,7 +115,45 @@ impl ToolRouter {
         Self {
             registry,
             model_visible_specs,
+            flat_tool_names: FlatToolNames::default(),
+            omitted_tools: Vec::new(),
         }
+    }
+
+    pub(crate) fn with_flat_tool_names(mut self, flat_tool_names: FlatToolNames) -> Self {
+        self.flat_tool_names = flat_tool_names;
+        self
+    }
+
+    pub(crate) fn with_omitted_tools(mut self, omitted_tools: Vec<ToolName>) -> Self {
+        self.omitted_tools = omitted_tools;
+        self
+    }
+
+    /// Flat names this router offers for namespaced tools (empty on wires
+    /// with namespaces).
+    pub(crate) fn flat_tool_names(&self) -> &FlatToolNames {
+        &self.flat_tool_names
+    }
+
+    /// Tools not offered because of the tool-count limit, sorted by name.
+    pub(crate) fn omitted_tools(&self) -> &[ToolName] {
+        &self.omitted_tools
+    }
+
+    /// Maps a call to a flat tool name back to the namespaced tool it was
+    /// offered for, so it runs through the same handler, approvals and gates
+    /// as a namespaced call on the Responses wire. Registered plain tools always
+    /// win, and calls that are already namespaced pass through unchanged.
+    pub(crate) fn resolve_flat_tool_call(&self, mut call: ToolCall) -> ToolCall {
+        if call.tool_name.namespace.is_none()
+            && !self.flat_tool_names.is_empty()
+            && self.registry.tool(&call.tool_name).is_none()
+            && let Some(tool_name) = self.flat_tool_names.resolve(&call.tool_name.name)
+        {
+            call.tool_name = tool_name.clone();
+        }
+        call
     }
 
     pub(crate) fn model_visible_specs(&self) -> Vec<ToolSpec> {
@@ -275,6 +318,9 @@ impl ToolRouter {
         source: ToolCallSource,
         terminal_outcome_reached: Option<Arc<AtomicBool>>,
     ) -> Result<AnyToolResult, FunctionCallError> {
+        // #507: a tool call streamed before the kill switch was turned on
+        // does not run.
+        crate::security::kill_switch_stop::refuse_tool_call(&session)?;
         let ToolCall {
             tool_name,
             call_id,

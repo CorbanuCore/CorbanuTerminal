@@ -1,0 +1,34 @@
+#!/bin/bash
+# Launch the exact pinned package with the run's private profile. Usage:
+#   agms-product ROUTE MODEL [ARGS...]      (ARGS may start with: resume ...)
+set -u
+route="$1"; model="$2"; shift 2
+case "$route" in zai|zai-anthropic|zai-plain-http) ;; *) echo "unknown route $route" >&2; exit 64;; esac
+case "$model" in glm-5.3-flash|glm-5.2) ;; *) echo "unknown model $model" >&2; exit 64;; esac
+RUN="${AGMS_RUN:?}"
+provider=(-c "model_provider=\"$route\"")
+if [ "$route" = zai-plain-http ]; then
+  # Fixture route: same models, provider address given as plain HTTP (a URL the credential broker cannot accept).
+  provider=(-c 'model_providers.zaihttp={name="Z.AI plain-HTTP test route",base_url="http://127.0.0.1:18443/api/paas/v4",env_key="ZAI_API_KEY",wire_api="chat"}'
+            -c 'model_provider="zaihttp"')
+fi
+# Synthetic extra environment requested by the tester (AGMS_EXTRA_ENV: NAME=value lines; values must start with "synthetic").
+extra_env=()
+while IFS= read -r line; do
+  [ -z "$line" ] && continue
+  [[ "$line" =~ ^[A-Z][A-Z0-9_]*=synthetic[A-Za-z0-9._-]*$ ]] || { echo "refused extra env: $line" >&2; exit 64; }
+  extra_env+=("$line")
+done <<< "${AGMS_EXTRA_ENV:-}"
+cfg=(--no-alt-screen -m "$model" "${provider[@]}"
+     -c "log_dir=\"$RUN/product-logs\"" -C "$RUN/fixture/workspace")
+cd "$RUN/fixture/workspace" || exit 66
+env_args=(-i PATH=/opt/agms/bin:/usr/bin:/bin:/usr/sbin:/sbin HOME="$HOME" USER="$USER"
+  LOGNAME="$USER" SHELL=/bin/bash TERM="${TERM:-screen-256color}" LANG=en_US.UTF-8
+  TMPDIR="$RUN/tmp/" CORBANU_HOME="$RUN/product-home" CODEX_HOME="$RUN/product-home"
+  HTTPS_PROXY="$AGMS_PROXY" CODEX_CA_CERTIFICATE=/opt/agms/etc/mediation-ca.pem
+  ZAI_API_KEY=agms-synthetic-placeholder-not-a-credential AGMS_RUN="$RUN" ${extra_env[@]+"${extra_env[@]}"})
+if [ "${1:-}" = "resume" ]; then
+  shift
+  exec env "${env_args[@]}" /opt/agms/pkg/bin/corbanu resume "$@" "${cfg[@]}"
+fi
+exec env "${env_args[@]}" /opt/agms/pkg/bin/corbanu "${cfg[@]}" "$@"

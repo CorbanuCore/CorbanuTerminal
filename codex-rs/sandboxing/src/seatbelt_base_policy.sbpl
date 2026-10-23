@@ -89,6 +89,15 @@
   (global-name "com.apple.system.opendirectoryd.libinfo")
 )
 
+; Resolve the per-user temp and cache folders (confstr DARWIN_USER_TEMP_DIR).
+; Without them, with network off, the /usr/bin/python3 and xcrun shims fail
+; to find their cache and print xcrun, DARWIN_USER_TEMP_DIR and /tmp errors
+; on every run (#444). Writing there is still decided by the file rules.
+(allow mach-lookup
+  (global-name "com.apple.bsd.dirhelper")
+  (global-name "com.apple.system.opendirectoryd.membership")
+)
+
 ; Needed for python multiprocessing on MacOS for the SemLock
 (allow ipc-posix-sem)
 

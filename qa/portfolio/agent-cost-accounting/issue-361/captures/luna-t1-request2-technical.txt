@@ -1,0 +1,66 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     gpt-5.6-luna low   /model to change           │
+│ directory: <scratch>/…/work/repo │
+╰──────────────────────────────────────────────────────────╯
+
+  Reply with exactly the word: ok
+• ok
+  Attempt, components and original price
+  Requested UTC day: 2026-10-09
+  Provider: OpenAI
+  Model: GPT-5.6-Luna
+  Billing: Pay per use
+  Estimated cost: $0.004339 (rounded)
+  Tokens: 17,336 tokens
+  —— Details ——
+  Billed cost: OpenAI doesn't report its charges, so any cost here is an estimate — check OpenAI's bill.
+  Request: e864bfc4-4fad-40ba-97e3-01f0a0cf2a2d
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Attempt: f8d42cf0-57c0-445a-97ce-d09809644040
+  Thread: 01a12251-f24d-7e81-9458-bf7ddec67d3a
+  Turn: 01a12251-f45d-7620-a955-104a2931aeb2
+  Provider: openai
+  Model: gpt-5.6-luna
+  Opaque scope: 8a0db42d-c196-4ecf-8c98-ff7e5b8dc085
+  Arithmetic dialect: Inclusive
+  Admission time: 2026-10-09T20:19:20.507Z
+  Retry predecessor: none
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Estimated token cost for recorded attempts: $0.004339 (rounded)
+  Billing basis: pay per use
+  Input: 17331
+  Noncached input (derived for inclusive input): 3 (derived)
+  Cache read: 0 (reported)
+  Cache write: 17328
+  Output: 5
+  Reasoning (subset, not separately billed): 0 (reported)
+  Total (not separately billed): 17336
+  Noncached input cost: $0.000001 (rounded) (nonzero, less than $0.000001); exact USD 0.0000006
+  Cache read cost: $0.000000; exact USD 0
+  Cache write cost: $0.004332; exact USD 0.004332
+  Output cost: $0.000006; exact USD 0.000006
+  Known subtotal exact USD: 0.0043386
+  Price ID: 5fe5055d-9b04-45cf-9321-8da54a3834e1
+  Price source: NativeCatalog; reference 87dc783a-3750-512e-8228-713fbbc697c1
+  Price currency/unit: Usd / PerMillionTokens
+  Price observed/approved: 2026-10-09T20:19:20.507Z / 2026-10-09T20:19:20.507Z
+  Price effective interval: [2026-10-09T20:19:20.507Z, unbounded)
+  Noncached input rate: 0.2 USD per million tokens
+  Cache read rate: 0.02 USD per million tokens
+  Cache write rate: 0.25 USD per million tokens
+  Output rate: 1.2 USD per million tokens
+  Long-context price: above 272000 input tokens, the whole request is priced at:
+    Noncached input rate: 0.4 USD per million tokens
+    Cache read rate: 0.04 USD per million tokens
+    Cache write rate: 0.5 USD per million tokens
+    Output rate: 1.8 USD per million tokens
+  Long-context price not applied: input 17331 ≤ 272000
+  Evidence revision 9; source d40bd2d6-9f49-4248-b698-8a7c07a7a57c; sequence 9; presence patch
+  {"input":17331,"read":0,"write":17328,"output":5,"reasoning":0,"total":17336}
+  Snapshot is not current; newer activity is unverified
+  Back
+  Refresh
+  Close

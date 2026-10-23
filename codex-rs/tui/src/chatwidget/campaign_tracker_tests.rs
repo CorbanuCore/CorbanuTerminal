@@ -6,11 +6,12 @@ async fn campaign_tracker_overview_shows_recording_state_and_recovery() {
     let (mut chat, _, _, _) = crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
     chat.campaign_tracker_result(
         "/status".to_string(),
-        None,
-        None,
+        /*enrollment*/ None,
+        /*body*/ None,
         Ok(json!({"handle":"alice","usage":{"events":12}})),
     );
-    let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 100);
+    let rendered =
+        crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 100);
     insta::assert_snapshot!("campaign_tracker_overview", rendered);
 }
 #[tokio::test]
@@ -19,8 +20,8 @@ async fn campaign_tracker_refresh_replaces_view_instead_of_growing_the_stack() {
     for _ in 0..4 {
         chat.campaign_tracker_result(
             "/status".to_string(),
-            None,
-            None,
+            /*enrollment*/ None,
+            /*body*/ None,
             Ok(json!({"handle":"alice","usage":{"events":0}})),
         );
     }
@@ -34,8 +35,9 @@ async fn campaign_tracker_refresh_replaces_view_instead_of_growing_the_stack() {
 #[tokio::test]
 async fn campaign_tracker_summary_only_replay_does_not_offer_prompt_review() {
     let (mut chat, _, _, _) = crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
-    chat.campaign_tracker_result("/replay".to_string(),None,None,Ok(json!({"items":[{"id":"event","kind":"human_prompt","accountId":"alice","sessionId":"thread","handleAtExecution":"alice","content":"","promptWithheld":true,"capabilities":["summary","replay"],"repository":{"label":"repo"},"goal":{"active":false}}]})));
-    let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 100);
+    chat.campaign_tracker_result("/replay".to_string(),/*enrollment*/ None,/*body*/ None,Ok(json!({"items":[{"id":"event","kind":"human_prompt","accountId":"alice","sessionId":"thread","handleAtExecution":"alice","content":"","promptWithheld":true,"capabilities":["summary","replay"],"repository":{"label":"repo"},"goal":{"active":false}}]})));
+    let rendered =
+        crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 100);
     assert!(rendered.contains("Prompt access not granted"));
     assert!(!rendered.contains("Review this prompt"));
 }
@@ -44,11 +46,12 @@ async fn campaign_tracker_failed_request_preserves_a_retry_path() {
     let (mut chat, _, _, _) = crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
     chat.campaign_tracker_result(
         "/activity".to_string(),
-        None,
-        None,
+        /*enrollment*/ None,
+        /*body*/ None,
         Err("Tracker service unavailable".to_string()),
     );
-    let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 100);
+    let rendered =
+        crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 100);
     assert!(rendered.contains("Retry"));
     assert!(rendered.contains("Tracker service unavailable"));
     assert_eq!(chat.bottom_pane.active_view_id(), Some(VIEW));
@@ -61,11 +64,12 @@ async fn campaign_tracker_read_retry_preserves_route_and_search_scope() {
     let path = "/activity?accountId=alice&taskId=task-one&search=retry%20queue";
     chat.campaign_tracker_result(
         path.to_string(),
-        None,
-        None,
+        /*enrollment*/ None,
+        /*body*/ None,
         Err("Activity search exceeds 500 UTF-8 bytes.".to_string()),
     );
-    let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 100);
+    let rendered =
+        crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 100);
     insta::assert_snapshot!("campaign_tracker_read_error_recovery", rendered);
     chat.handle_key_event(crossterm::event::KeyCode::Enter.into());
     let request = std::iter::from_fn(|| rx.try_recv().ok()).find_map(|event| match event {
@@ -105,7 +109,7 @@ async fn campaign_tracker_failed_forms_restore_drafts_without_repeating_writes()
             crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
         chat.campaign_tracker_result(
             route.to_string(),
-            None,
+            /*enrollment*/ None,
             Some(body.clone()),
             Err(if route == "/campaigns" {
                 "Campaign name exceeds 200 UTF-8 bytes. Shorten it and submit again."
@@ -114,7 +118,8 @@ async fn campaign_tracker_failed_forms_restore_drafts_without_repeating_writes()
             }
             .to_string()),
         );
-        let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 100);
+        let rendered =
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 100);
         assert!(rendered.contains("Edit draft"));
         assert!(!rendered.contains("Retry"));
         if route == "/campaigns" {
@@ -129,7 +134,8 @@ async fn campaign_tracker_failed_forms_restore_drafts_without_repeating_writes()
             .expect("local draft recovery event");
         assert_eq!((&path, &draft), (&editor.to_string(), &Some(body)));
         chat.open_campaign_tracker(path, draft);
-        let form = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 110);
+        let form =
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 110);
         assert!(form.contains(title), "{form}");
         assert!(form.contains(retained), "{form}");
         chat.handle_key_event(crossterm::event::KeyCode::Esc.into());

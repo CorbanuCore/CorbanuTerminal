@@ -2,12 +2,12 @@
 sprint_id: "PF-27-S03"
 title: "Platform containment contract and probes"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 16
 owner: "Codex foundation/platform lane"
 parallel_lane: "foundation-platform"
-write_scope: "codex-rs/secret-broker/, codex-rs/Cargo.toml, codex-rs/Cargo.lock, BUILD.bazel, MODULE.bazel.lock, .github/workflows/security-platform-contract.yml, scripts/security-platform-probe, scripts/security_platform_probe.py, scripts/test_security_platform_probe.py, qa/security-levels/platform/, qa/security-levels/sprints/PF-27-S03/, docs/plans/active/p0-security-levels.md, docs/sprints/current/p0-security-levels/, docs/sprints/archive/p0-security-levels/pf-27-s03-platform-containment-contract.md, docs/sprints/index.md, mkdocs.yml"
+write_scope: "codex-rs/secret-broker/, codex-rs/Cargo.toml, codex-rs/Cargo.lock, BUILD.bazel, MODULE.bazel.lock, .github/workflows/security-platform-contract.yml, scripts/security-platform-probe, scripts/security_platform_probe.py, scripts/test_security_platform_probe.py, qa/security-levels/platform/, qa/security-levels/sprints/PF-27-S03/, docs/plans/completed/main-2026-10-08-p0-security-levels.md, docs/sprints/current/p0-security-levels/, docs/sprints/archive/p0-security-levels/pf-27-s03-platform-containment-contract.md, docs/sprints/index.md, mkdocs.yml"
 integration_gate: "The Codex ingress/classifier integration lane receives the PF-27-S03 candidate at G1, audits the literal scope, exclusively registers codex-secret-broker Cargo/Bazel workspace surfaces after codex-content-security, reruns schema/probe/governance checks on the combined tree, then archives the sprint before a consumer can use the contract."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform"
 branch: "feat/p0-security-foundation-platform"
@@ -26,7 +26,7 @@ updated: 2026-08-30
 
 ## Plan linkage
 
-- Plan: [P0 security levels](../../../plans/active/p0-security-levels.md#pf-27).
+- Plan: [P0 security levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md#pf-27).
 - Feature: `PF-27`.
 - Product citation: **Reconciled security scope — TO BUILD** — “Unknown or unsupported protected paths fail visibly rather than falling back to raw secrets or unscreened execution.”
 - Acceptance advanced: [accepted architecture refinements](../../../plans/security-architecture-refinements-2026-08-28.md).

@@ -1,0 +1,16 @@
+model = "mock-model"
+model_provider = "cmdp"
+
+[features]
+named_accounts = true
+
+[model_providers.cmdp]
+name = "Mock auth.command provider"
+base_url = "http://127.0.0.1:18484/v1"
+wire_api = "responses"
+request_max_retries = 0
+stream_max_retries = 0
+
+[model_providers.cmdp.auth]
+command = "/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/mock/authcmd.sh"
+timeout_ms = 5000

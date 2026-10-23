@@ -2,7 +2,7 @@
 sprint_id: "PF-21-S01"
 title: "Permissive compatibility baseline reconciliation"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-21"
 execution_order: 7
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-08-25
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md)
 - Feature: `PF-21`
 - Acceptance advanced: existing installations gain no silent approval, vault, tool, network, or agent-policy change.
 

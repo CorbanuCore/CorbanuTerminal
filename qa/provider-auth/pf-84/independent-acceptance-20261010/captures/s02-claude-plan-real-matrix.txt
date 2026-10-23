@@ -1,0 +1,17 @@
+== P1 claude-plan named real (claude-plan-test-token) (exit 0)
+   args: -c provider_accounts.claude-plan="real"
+   | pong
+   | tokens used
+== P2 claude-plan named fake (exit 1)
+   args: -c provider_accounts.claude-plan="fake"
+   | ERROR: unexpected status 401 Unauthorized: OAuth access token is invalid., url: https://api.anthropic.com/v1/messages, cf-ray: a4851755bf7d1efd-DFW
+== P3 claude-plan named ghost (exit 1)
+   args: -c provider_accounts.claude-plan="ghost"
+   | 2026-10-10T10:55:10.066954Z ERROR codex_login::auth::manager: Failed to resolve external auth: provider auth command `corbanu` exited with status exit status: 1: Error: Claude account `ghost` is not configured; add it with `corbanu account add claude-plan ghost --kind claude-token` or choose another account
+   | 2026-10-10T10:55:10.217635Z ERROR codex_login::auth::manager: Failed to resolve external auth: provider auth command `corbanu` exited with status exit status: 1: Error: Claude account `ghost` is not configured; add it with `corbanu account add claude-plan ghost --kind claude-token` or choose another account
+   | 2026-10-10T10:55:10.360017Z ERROR codex_login::auth::manager: Failed to resolve external auth: provider auth command `corbanu` exited with status exit status: 1: Error: Claude account `ghost` is not configured; add it with `corbanu account add claude-plan ghost --kind claude-token` or choose another account
+   | 2026-10-10T10:55:10.503440Z ERROR codex_login::auth::manager: Failed to resolve external auth: provider auth command `corbanu` exited with status exit status: 1: Error: Claude account `ghost` is not configured; add it with `corbanu account add claude-plan ghost --kind claude-token` or choose another account
+   | 2026-10-10T10:55:10.657066Z ERROR codex_login::auth::manager: Failed to resolve external auth: provider auth command `corbanu` exited with status exit status: 1: Error: Claude account `ghost` is not configured; add it with `corbanu account add claude-plan ghost --kind claude-token` or choose another account
+   | 2026-10-10T10:55:10.933494Z ERROR codex_login::auth::manager: Failed to resolve external auth: provider auth command `corbanu` exited with status exit status: 1: Error: Claude account `ghost` is not configured; add it with `corbanu account add claude-plan ghost --kind claude-token` or choose another account
+   auth-command calls (P3 only): 28
+  28    | argv=[internal-claude-oauth-token] CORBANU_PROVIDER_ACCOUNT=ghost

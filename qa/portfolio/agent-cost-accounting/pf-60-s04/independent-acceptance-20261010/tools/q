@@ -1,0 +1,16 @@
+#!/bin/bash
+# local (macOS). Adapted from the lane's pf-60-s04/tools/q for the independent acceptance.
+# usage: q start <session> <home> <cwd> [corbanu args]   keys resolved here by the INSTALLED wrapper (no test env vars),
+#                                                        piped over ssh stdin into the remote session's environment only
+#        q <session> <op> [args]                         drv.sh (text/key/wait/cap/scroll/kill)
+#        q sh "<remote command>"
+RTX=${RTX:-<rtx-user>@<rtx-host>}; R='$HOME/corbanu-rtx/pf60s04-ia'
+V(){ env -u CORBANU_TEST_NO_NATIVE_KEYRING -u CORBANU_HOME -u CODEX_HOME -u PFTERMINAL_HOME ~/.local/bin/corbanu vault auth-helper "$1" < /dev/null; }
+echo "$(date -u +%FT%TZ) $(printf '%q ' "$@")" >> "${STEPS_LOG:-$(dirname "$0")/../data/keys-sent.log}"
+case $1 in
+  start) shift; args=$(printf '%q ' "$@")
+    { printf '%s\n' "$(V provider/zai_api_key)"; printf '%s\n' "$(V provider/kimi_api_key)"; printf '%s\n' "$(V claude-plan-test-token)"; printf '%s\n' "$(V openai-api-key)"; } \
+      | ssh -o BatchMode=yes $RTX "NO_OPENAI_ENV=$NO_OPENAI_ENV RUST_LOG=$RUST_LOG bash $R/start.sh $args" ;;
+  sh) shift; ssh -o BatchMode=yes $RTX "$*" ;;
+  *) args=$(printf '%q ' "$@"); ssh -o BatchMode=yes $RTX "bash $R/drv.sh $args" ;;
+esac

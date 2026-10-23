@@ -775,6 +775,14 @@ pub struct InterAgentCommunication {
     #[ts(optional)]
     pub created_at_ms: Option<i64>,
     pub author: AgentPath,
+    /// Core's description of an `author` outside the recipient's agent tree, such as an agent
+    /// in another pane sending a task to a pane the person opened (issue 1248). Agent paths
+    /// are relative to their own tree, so such an author's `/root` would read as the
+    /// recipient's own root. Shown to the recipient's model as a `Sender:` line; it names the
+    /// sender only and grants no trust: the message stays inter-agent data.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub author_label: Option<String>,
     pub recipient: AgentPath,
     #[serde(default)]
     pub other_recipients: Vec<AgentPath>,
@@ -810,6 +818,7 @@ impl InterAgentCommunication {
             }),
             created_at_ms: Some(chrono::Utc::now().timestamp_millis()),
             author,
+            author_label: None,
             recipient,
             other_recipients,
             content,
@@ -838,6 +847,7 @@ impl InterAgentCommunication {
             }),
             created_at_ms: Some(chrono::Utc::now().timestamp_millis()),
             author,
+            author_label: None,
             recipient,
             other_recipients,
             content: String::new(),
@@ -917,7 +927,8 @@ impl InterAgentCommunication {
                     AgentMessageInputContent::InputText {
                         text: format!(
                             "Message Type: {message_type}\nTask name: {}\nSender: {}\nPayload:\n",
-                            self.recipient, self.author
+                            self.recipient,
+                            self.author_label.as_deref().unwrap_or(self.author.as_str())
                         ),
                     },
                     AgentMessageInputContent::EncryptedContent {
@@ -925,9 +936,16 @@ impl InterAgentCommunication {
                     },
                 ]
             }
-            None => vec![AgentMessageInputContent::InputText {
-                text: self.content.clone(),
-            }],
+            None => self
+                .author_label
+                .iter()
+                .map(|label| AgentMessageInputContent::InputText {
+                    text: format!("Sender: {label}"),
+                })
+                .chain([AgentMessageInputContent::InputText {
+                    text: self.content.clone(),
+                }])
+                .collect(),
         };
         ResponseItem::AgentMessage {
             id: self.id.clone(),
@@ -2260,6 +2278,68 @@ impl TokenUsageInfo {
 pub struct TokenCountEvent {
     pub info: Option<TokenUsageInfo>,
     pub rate_limits: Option<RateLimitSnapshot>,
+    /// PF-84: this thread's provider-reported usage per (provider, named
+    /// account), `default` included. Present only while named accounts are
+    /// on, so other rollouts and notifications keep their bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub account_usage: Option<Vec<AccountTokenUsage>>,
+}
+
+/// PF-84: provider-reported token usage of one named provider account. Holds
+/// the provider id and account name only, never credential material.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+pub struct AccountTokenUsage {
+    pub provider_id: String,
+    pub account: String,
+    pub usage: TokenUsage,
+}
+
+impl AccountTokenUsage {
+    /// Adds `usage` to the entry for (`provider_id`, `account`), creating it
+    /// in first-use order.
+    pub fn accumulate(
+        entries: &mut Vec<AccountTokenUsage>,
+        provider_id: &str,
+        account: &str,
+        usage: &TokenUsage,
+    ) {
+        match entries
+            .iter_mut()
+            .find(|entry| entry.provider_id == provider_id && entry.account == account)
+        {
+            Some(entry) => entry.usage.add_assign(usage),
+            None => entries.push(AccountTokenUsage {
+                provider_id: provider_id.to_string(),
+                account: account.to_string(),
+                usage: usage.clone(),
+            }),
+        }
+    }
+
+    /// What `current` (a running total per account) added since `previous`,
+    /// leaving out accounts with nothing new.
+    pub fn increase_since(
+        previous: &[AccountTokenUsage],
+        current: &[AccountTokenUsage],
+    ) -> Vec<AccountTokenUsage> {
+        current
+            .iter()
+            .filter_map(|entry| {
+                let usage = match previous.iter().find(|old| {
+                    old.provider_id == entry.provider_id && old.account == entry.account
+                }) {
+                    Some(old) => entry.usage.saturating_sub(&old.usage),
+                    None => entry.usage.clone(),
+                };
+                (usage != TokenUsage::default()).then(|| AccountTokenUsage {
+                    provider_id: entry.provider_id.clone(),
+                    account: entry.account.clone(),
+                    usage,
+                })
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, JsonSchema, TS)]
@@ -2375,6 +2455,25 @@ impl TokenUsage {
         ((remaining as f64 / effective_window as f64) * 100.0)
             .clamp(0.0, 100.0)
             .round() as i64
+    }
+
+    /// Each count less `other`'s, never below zero.
+    pub fn saturating_sub(&self, other: &TokenUsage) -> TokenUsage {
+        let less = |now: i64, then: i64| (now - then).max(0);
+        TokenUsage {
+            input_tokens: less(self.input_tokens, other.input_tokens),
+            cached_input_tokens: less(self.cached_input_tokens, other.cached_input_tokens),
+            cache_write_input_tokens: less(
+                self.cache_write_input_tokens,
+                other.cache_write_input_tokens,
+            ),
+            output_tokens: less(self.output_tokens, other.output_tokens),
+            reasoning_output_tokens: less(
+                self.reasoning_output_tokens,
+                other.reasoning_output_tokens,
+            ),
+            total_tokens: less(self.total_tokens, other.total_tokens),
+        }
     }
 
     /// In-place element-wise sum of token counts.
@@ -2893,6 +2992,11 @@ pub enum ThreadSource {
 }
 
 impl ThreadSource {
+    /// The feature name a TUI `/side` conversation is forked with
+    /// (`ThreadSource::Feature`); developer accounting labels its paid work
+    /// `side:` and every other temporary fork `fork:` (PF-60-S06).
+    pub const SIDE_CONVERSATION: &'static str = "side";
+
     pub fn as_str(&self) -> &str {
         match self {
             ThreadSource::User => "user",
@@ -3153,6 +3257,7 @@ fn multi_agent_version_from_items(
             | RolloutItem::InterAgentCommunicationMetadata { .. }
             | RolloutItem::Compacted(_)
             | RolloutItem::WorldState(_)
+            | RolloutItem::SourceOrigin(_)
             | RolloutItem::EventMsg(_) => None,
         })
     })
@@ -3337,6 +3442,8 @@ pub enum RolloutItem {
     TurnContext(TurnContextItem),
     WorldState(WorldStateItem),
     EventMsg(EventMsg),
+    /// Host-recorded origins for preceding items (`source_envelopes`).
+    SourceOrigin(crate::provenance::SourceOriginRecord),
 }
 
 /// Persisted comparison state used to resume model-visible world-state diffing.
@@ -3426,6 +3533,12 @@ pub struct TurnContextItem {
     pub model: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_provider: Option<String>,
+    /// PF-84: the named account of `model_provider` (`default` included),
+    /// recorded only while named accounts are on, so resume restores it. An
+    /// account of another provider that `model_provider` runs on (they share
+    /// an API key) is recorded as `<owner>:<name>` (#1129).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_account: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub comp_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3441,6 +3554,11 @@ pub struct TurnContextItem {
     pub realtime_active: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effort: Option<ReasoningEffortConfig>,
+    /// The security level this turn ran under (PF-23-S03). Memory work on
+    /// this rollout later treats it as a floor; absent in older rollouts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(skip)]
+    pub security_level: Option<codex_security_policy::SecurityLevel>,
     // Compatibility-only field written with a default value so older Codex
     // versions can deserialize turn-context rollout items. It is no longer
     // read by context reconstruction and should be removed in a future schema
@@ -3646,6 +3764,7 @@ pub enum ExecCommandStatus {
     Completed,
     Failed,
     Declined,
+    Refused,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
@@ -4427,6 +4546,10 @@ pub struct CollabAgentSpawnEndEvent {
     pub model: String,
     /// Effective reasoning effort used by the spawned agent after inheritance and role overrides.
     pub reasoning_effort: ReasoningEffortConfig,
+    /// The named account the spawned agent uses (`default` included), only
+    /// while named accounts are on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_account: Option<String>,
     /// Last known status of the new agent reported to the sender agent.
     pub status: AgentStatus,
 }
@@ -4783,6 +4906,7 @@ mod tests {
             kind: Some(AgentMessageKind::Assignment),
             created_at_ms: Some(1_000),
             author: AgentPath::root(),
+            author_label: None,
             recipient: AgentPath::root().join("reviewer").expect("recipient path"),
             other_recipients: vec![AgentPath::root().join("worker").expect("recipient path")],
             content: "review the diff".to_string(),
@@ -4865,6 +4989,62 @@ mod tests {
                 internal_chat_message_metadata_passthrough: None,
             }
         );
+    }
+
+    #[test]
+    fn cross_tree_author_label_renders_as_the_sender_line() {
+        let label = "agent /root in another pane's agent tree (thread t1), not this pane's /root";
+        let mut plaintext = InterAgentCommunication::new(
+            AgentPath::root(),
+            AgentPath::root(),
+            Vec::new(),
+            "agent task".to_string(),
+            /*trigger_turn*/ true,
+        );
+        plaintext.author_label = Some(label.to_string());
+        assert_eq!(
+            plaintext.to_model_input_item(),
+            ResponseItem::AgentMessage {
+                id: None,
+                author: "/root".to_string(),
+                recipient: "/root".to_string(),
+                content: vec![
+                    AgentMessageInputContent::InputText {
+                        text: format!("Sender: {label}"),
+                    },
+                    AgentMessageInputContent::InputText {
+                        text: "agent task".to_string(),
+                    },
+                ],
+                internal_chat_message_metadata_passthrough: None,
+            }
+        );
+
+        let mut encrypted = InterAgentCommunication::new_encrypted(
+            AgentPath::root(),
+            AgentPath::root(),
+            Vec::new(),
+            "encrypted payload".to_string(),
+            /*trigger_turn*/ true,
+        );
+        encrypted.author_label = Some(label.to_string());
+        let ResponseItem::AgentMessage { content, .. } = encrypted.to_model_input_item() else {
+            panic!("expected an agent message");
+        };
+        assert_eq!(
+            content[0],
+            AgentMessageInputContent::InputText {
+                text: format!(
+                    "Message Type: NEW_TASK\nTask name: /root\nSender: {label}\nPayload:\n"
+                ),
+            }
+        );
+
+        // Messages without a label (every same-tree message) keep their old shape and JSON.
+        let mut unlabelled = plaintext;
+        unlabelled.author_label = None;
+        let json = serde_json::to_string(&unlabelled).expect("serialize");
+        assert!(!json.contains("author_label"), "{json}");
     }
 
     #[test]
@@ -6342,6 +6522,7 @@ mod tests {
             ])),
             model: "gpt-5".to_string(),
             model_provider: None,
+            provider_account: None,
             comp_hash: None,
             personality: None,
             collaboration_mode: None,
@@ -6349,6 +6530,7 @@ mod tests {
             multi_agent_mode: None,
             realtime_active: None,
             effort: None,
+            security_level: None,
             summary: ReasoningSummaryConfig::Auto,
         };
 

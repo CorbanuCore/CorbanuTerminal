@@ -1170,6 +1170,10 @@ impl App {
         role: SpawnRole,
         parent_node_id: Option<String>,
     ) {
+        if let Some(reason) = crate::security::level::external_agent_block_reason() {
+            self.chat_widget.add_error_message(reason);
+            return;
+        }
         let mut items = Vec::new();
         for profile in ClaudeProviderProfileKind::creation_options() {
             let profile_config = profile.profile();
@@ -1226,15 +1230,12 @@ impl App {
 
     pub(crate) fn open_spawn_agent_task_prompt(&mut self, thread_id: ThreadId) {
         let title = self.thread_label(thread_id);
-        let tx = self.app_event_tx.clone();
         let view = CustomPromptView::new(
             format!("Send Task to {title}"),
             "Describe the work to run in this pane".to_string(),
             String::new(),
             Some("Task".to_string()),
-            Box::new(move |task| {
-                tx.send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
-            }),
+            spawn_agent_task_prompt_submit(self.app_event_tx.clone(), thread_id),
         );
         self.chat_widget.show_custom_prompt_view(view);
     }
@@ -1250,19 +1251,54 @@ impl App {
         task.trim().to_string()
     }
 
-    /// Route native work according to thread ownership. Managed `/spawn` agents consume the Core
-    /// mailbox, while operator-created `/panes` threads accept ordinary user turns.
+    /// Send an agent's task (assignment fires, model dispatch) to a native pane. Every native
+    /// pane takes it from its Core mailbox as inter-agent data, also a pane the person opened
+    /// (D106, #1176): an agent's task never arrives as the person's own input. The person's own
+    /// task from Spawn status takes [`AppEvent::SubmitSpawnAgentTaskFromPerson`] instead.
     pub(crate) fn send_native_task_event(&self, thread_id: ThreadId, task: String) {
-        let is_operator_pane = self
+        // #660: only agents (assignment fires, model dispatch) send through
+        // here; a task sent while the switch is on never starts a turn, even
+        // when it is handled just after switch-off.
+        let sent_while_kill_switch_on = self.kill_switch_on_now();
+        self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+            thread_id,
+            task,
+            sent_while_kill_switch_on,
+        });
+    }
+
+    /// #660 follow-up: a task for the managed Codex pane `thread_id` waits in
+    /// its mailbox because of the kill switch, until that pane's next turn.
+    /// Not when the pane is running a turn: that turn takes the task. Reports
+    /// held in a mailbox are not tasks and are not listed (as for Claude panes).
+    pub(crate) fn note_kill_switch_held_native_task(&mut self, thread_id: ThreadId) {
+        let running = self
             .agent_navigation
             .get(&thread_id)
-            .is_some_and(|entry| self.is_operator_owned_codex_user_pane(thread_id, entry));
-        if is_operator_pane {
-            self.app_event_tx
-                .send(AppEvent::SubmitCodexUserPaneTask { thread_id, task });
+            .is_some_and(|entry| entry.is_running);
+        if !running && !self.kill_switch_held_native_tasks.contains(&thread_id) {
+            self.kill_switch_held_native_tasks.push(thread_id);
+        }
+    }
+
+    /// #660 follow-up: a turn started in `thread_id` (its waiting task went
+    /// with it) or the pane closed; it no longer has a waiting task.
+    pub(crate) fn clear_kill_switch_held_native_task(&mut self, thread_id: ThreadId) {
+        self.kill_switch_held_native_tasks
+            .retain(|held| *held != thread_id);
+    }
+
+    /// #507/#660: what the person is told when a task for a managed Codex
+    /// pane waits in its mailbox because of the kill switch.
+    pub(crate) fn kill_switch_held_native_task_message(&self, label: &str) -> String {
+        if self.kill_switch_on_now() {
+            format!(
+                "A task for {label} waits: the security kill switch is on. Turning it off starts nothing: the task goes with that pane's next turn, when someone types in it or it gets new work."
+            )
         } else {
-            self.app_event_tx
-                .send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
+            format!(
+                "A task for {label} waits: it was sent while the security kill switch was on, and turning the switch off starts nothing. It goes with that pane's next turn, when someone types in it or it gets new work."
+            )
         }
     }
 
@@ -1275,9 +1311,11 @@ impl App {
             String::new(),
             Some("Task".to_string()),
             Box::new(move |task| {
+                // A person's own task: held only while the switch is on.
                 tx.send(AppEvent::SubmitSpawnClaudePaneTask {
                     pane_id: pane_id.clone(),
                     task,
+                    sent_while_kill_switch_on: false,
                 });
             }),
         );
@@ -1556,8 +1594,12 @@ impl App {
                             .insert(origin_id.to_string());
                     }
                     self.register_spawn_dispatch_acks_for_task(&target_node_id, &task, vec![ack]);
-                    self.app_event_tx
-                        .send(AppEvent::SubmitSpawnClaudePaneTask { pane_id, task });
+                    let sent_while_kill_switch_on = self.kill_switch_on_now();
+                    self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
+                        pane_id,
+                        task,
+                        sent_while_kill_switch_on,
+                    });
                     self.record_spawn_dispatch_queued(
                         source_pane_id,
                         source_is_active,
@@ -1665,7 +1707,12 @@ impl App {
             let report = spawn_child_report(&child_title, "completed", result, seq, &as_of);
             let notify =
                 node_id_pane(&parent_node_id).is_some_and(|pane_id| pane_id != CODEX_MAIN_PANE_ID);
-            self.record_spawn_parent_report_with_notify(parent_node_id, report, notify);
+            self.record_spawn_parent_report_with_notify(
+                parent_node_id,
+                report,
+                notify,
+                /*start_turns*/ true,
+            );
         }
     }
 
@@ -1782,11 +1829,28 @@ impl App {
         );
     }
 
+    /// Tests: a report that may start turns in the parent.
+    #[cfg(test)]
     pub(crate) fn record_spawn_child_report_for_claude_pane(
         &mut self,
         pane_id: &str,
         status: &str,
         result: Option<&str>,
+    ) {
+        self.record_spawn_child_report_for_claude_pane_with(
+            pane_id, status, result, /*start_turns*/ true,
+        );
+    }
+
+    /// Records a Claude pane's report for its parent. With `start_turns`
+    /// false the parent is told but no turn is started for it (#507: the
+    /// report of a turn the kill switch stopped).
+    pub(crate) fn record_spawn_child_report_for_claude_pane_with(
+        &mut self,
+        pane_id: &str,
+        status: &str,
+        result: Option<&str>,
+        start_turns: bool,
     ) {
         if !self.spawn_node_is_persistent_crew_member(&pane_node_id(pane_id)) {
             return;
@@ -1798,18 +1862,30 @@ impl App {
         let child_node_id = pane_node_id(pane_id);
         let (seq, as_of) = self.reserve_spawn_report_seq(&child_node_id);
         let report = spawn_child_report(&child_title, status, result, seq, &as_of);
-        self.record_spawn_parent_report(parent_node_id, report);
+        self.record_spawn_parent_report_with_notify(
+            parent_node_id,
+            report,
+            /*notify*/ true,
+            start_turns,
+        );
     }
 
+    #[cfg(test)]
     pub(crate) fn record_spawn_parent_report(&mut self, parent_node_id: String, report: String) {
-        self.record_spawn_parent_report_with_notify(parent_node_id, report, /*notify*/ true);
+        self.record_spawn_parent_report_with_notify(
+            parent_node_id,
+            report,
+            /*notify*/ true,
+            /*start_turns*/ true,
+        );
     }
 
-    fn record_spawn_parent_report_with_notify(
+    pub(crate) fn record_spawn_parent_report_with_notify(
         &mut self,
         parent_node_id: String,
         report: String,
         notify: bool,
+        start_turns: bool,
     ) {
         let inserted = {
             let reports = self
@@ -1831,11 +1907,22 @@ impl App {
             }
         };
         if inserted && notify {
-            self.notify_spawn_parent_report(&parent_node_id, &report);
+            self.notify_spawn_parent_report(&parent_node_id, &report, start_turns);
         }
     }
 
-    fn notify_spawn_parent_report(&mut self, parent_node_id: &str, report: &str) {
+    fn notify_spawn_parent_report(
+        &mut self,
+        parent_node_id: &str,
+        report: &str,
+        start_turns: bool,
+    ) {
+        // #507: no turn is started for a report while the kill switch is on
+        // either (it would only wait, and could push a real waiting task out
+        // of a Claude pane); the parent has it with its next turn. #660: as
+        // this process last learned it too (a switch-off elsewhere is not
+        // handled here yet).
+        let start_turns = start_turns && !self.kill_switch_on_now();
         let summary = "Child report delivered.".to_string();
         let hint = Some(report.to_string());
         // `codex-main` is the native primary Codex thread, not a Claude pane. Route it through the
@@ -1852,12 +1939,13 @@ impl App {
                     Arc::new(crate::history_cell::new_info_event(summary, hint)),
                 );
             }
-            if !self.claude_panes.claude_pane_is_running(parent_pane_id) {
+            if start_turns && !self.claude_panes.claude_pane_is_running(parent_pane_id) {
                 if self.begin_spawn_auto_processing_turn(parent_node_id) {
                     let trigger_prompt = child_report_processing_prompt(report);
                     self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
                         pane_id: parent_pane_id.to_string(),
                         task: trigger_prompt,
+                        sent_while_kill_switch_on: self.kill_switch_on_now(),
                     });
                 } else {
                     if self.spawn_auto_processing_quarantined() {
@@ -1923,7 +2011,7 @@ impl App {
                             AgentMessageKind::Informational
                         },
                         content: report.to_string(),
-                        trigger_turn: true,
+                        trigger_turn: start_turns,
                     },
                 });
         }
@@ -2006,17 +2094,59 @@ impl App {
         task: &str,
         detail: impl AsRef<str>,
     ) {
-        let detail = detail.as_ref();
+        self.record_spawn_dispatch_failed_for_task_with_turns(
+            target_node_id,
+            task,
+            detail.as_ref(),
+            /*start_turns*/ true,
+        );
+    }
+
+    /// #660: as `record_spawn_dispatch_failed_for_task`, for a task held or
+    /// refused because of the kill switch: the senders are told, but no turn
+    /// starts for it in them, also when it is handled just after switch-off
+    /// (nothing restarts after switch-off, #507).
+    pub(crate) fn record_kill_switch_dispatch_failed_for_task(
+        &mut self,
+        target_node_id: &str,
+        task: &str,
+        detail: impl AsRef<str>,
+    ) {
+        self.record_spawn_dispatch_failed_for_task_with_turns(
+            target_node_id,
+            task,
+            detail.as_ref(),
+            /*start_turns*/ false,
+        );
+    }
+
+    /// `start_turns` false (#660): as `record_kill_switch_dispatch_failed_for_task`.
+    pub(crate) fn record_spawn_dispatch_failed_for_task_with_turns(
+        &mut self,
+        target_node_id: &str,
+        task: &str,
+        detail: &str,
+        start_turns: bool,
+    ) {
         let acks = self.take_spawn_dispatch_acks_for_task(target_node_id, task);
         self.release_spawn_dispatch_origins(&acks);
         for ack in &acks {
-            self.note_assignment_dispatch_failure(
+            self.note_assignment_dispatch_failure_with_turns(
                 &ack.source_node_id,
                 detail,
                 /*will_retry*/ false,
+                start_turns,
             );
         }
-        self.record_spawn_dispatch_acks(&acks, "failed", detail, /*notify*/ true);
+        for ack in &acks {
+            self.record_spawn_dispatch_ack(
+                ack,
+                "failed",
+                detail,
+                /*notify*/ true,
+                start_turns,
+            );
+        }
     }
 
     pub(crate) fn release_spawn_dispatch_origins(&mut self, acks: &[SpawnDispatchAck]) {
@@ -2034,9 +2164,28 @@ impl App {
         detail: impl AsRef<str>,
         notify: bool,
     ) {
-        let detail = detail.as_ref();
+        self.record_spawn_dispatch_acks_with_turns(
+            acks,
+            status,
+            detail.as_ref(),
+            notify,
+            /*start_turns*/ true,
+        );
+    }
+
+    /// `start_turns` false (#660): the senders are told without a turn
+    /// starting in them (a task another agent sent while the kill switch was
+    /// on, also when it fails just after switch-off).
+    pub(crate) fn record_spawn_dispatch_acks_with_turns(
+        &mut self,
+        acks: &[SpawnDispatchAck],
+        status: &str,
+        detail: &str,
+        notify: bool,
+        start_turns: bool,
+    ) {
         for ack in acks {
-            self.record_spawn_dispatch_ack(ack, status, detail, notify);
+            self.record_spawn_dispatch_ack(ack, status, detail, notify, start_turns);
         }
     }
 
@@ -2046,6 +2195,7 @@ impl App {
         status: &str,
         detail: &str,
         notify: bool,
+        start_turns: bool,
     ) {
         let report = format!(
             "dispatch_ack; #{}; target={}; status={}; detail={}",
@@ -2054,7 +2204,12 @@ impl App {
             status,
             compact_spawn_context_value(detail)
         );
-        self.record_spawn_parent_report_with_notify(ack.source_node_id.clone(), report, notify);
+        self.record_spawn_parent_report_with_notify(
+            ack.source_node_id.clone(),
+            report,
+            notify,
+            start_turns,
+        );
     }
 
     fn make_spawn_dispatch_ack(
@@ -2372,11 +2527,28 @@ impl App {
         } else {
             self.config.model_providers.get(provider_id)
         };
+        // PF-84: check the worker's own account. A missing named account is
+        // refused before its command could run; a configured one is tested
+        // with that account, never the default account's command.
+        if let Some(provider) = provider
+            && let Some(message) = codex_model_provider::selected_account_error(
+                self.config.codex_home.as_path(),
+                provider,
+            )
+        {
+            return Err(eyre!(
+                "Cannot run a native Corbanu Terminal worker on provider `{provider_id}`: {message}"
+            ));
+        }
         if let Some(provider) = provider
             && let Some(auth) = provider.auth.as_ref()
         {
             let provider_name = provider_display_name(provider_id, provider.name.as_str());
-            codex_login::validate_provider_auth_command(auth)
+            let account = provider
+                .account
+                .as_ref()
+                .map(|account| account.name.as_str());
+            codex_login::validate_provider_auth_command_for_account(auth, account)
                 .await
                 .map_err(|err| {
                     eyre!(
@@ -2423,7 +2595,15 @@ impl App {
         if !providers.contains(&self.config.model_provider_id) {
             providers.push(self.config.model_provider_id.clone());
         }
+        // #646: Claude Code panes record `external-claude:<profile>`, which is not a
+        // configured provider. Without an explicit allowlist, a crew must accept
+        // the panes a person can create, or a Claude Code member could not join.
+        providers.extend(
+            crate::claude_panes::ClaudeProviderProfileKind::restoration_options()
+                .map(crate::claude_panes::ClaudeProviderProfileKind::crew_runtime_provider_id),
+        );
         providers.sort();
+        providers.dedup();
         providers
     }
 
@@ -5395,6 +5575,24 @@ fn saved_spawn_child_identity(
     })
 }
 
+/// Whether a restored pane layout holds a pre-CrewSpec `/spawn` hierarchy, which stays read-only.
+///
+/// A `/spawn` hierarchy always has a pane root (`pane:codex-main` or a Claude pane), a bound
+/// Nazgul, Claude panes, or pending dispatches. Sub-agents started by the model's spawn-agent
+/// tool are recorded only as `thread:` -> `thread:` edges; they are not `/spawn` panes and keep
+/// working after resume, so they alone do not make the layout legacy (#1208).
+pub(crate) fn pane_layout_has_legacy_spawn_hierarchy(
+    layout: &crate::claude_panes::PaneLayoutState,
+) -> bool {
+    !layout.spawn_pending_dispatches.is_empty()
+        || layout.spawn_crew.is_none()
+            && (layout.spawn_nazgul_pane_id.is_some()
+                || layout.spawn_parent_by_node.iter().any(|(child, parent)| {
+                    node_id_thread(child).is_none() || node_id_thread(parent).is_none()
+                })
+                || !layout.claude_pane_ids.is_empty())
+}
+
 pub(crate) fn thread_node_id(thread_id: ThreadId) -> String {
     format!("thread:{thread_id}")
 }
@@ -5844,6 +6042,18 @@ fn exact_crew_runtime_for_node(
             )),
             RuntimeRequest::Selector { .. } => None,
         })
+}
+
+/// D95 (#1146): what Spawn status's "Send task to" prompt does with the text
+/// the person typed: it reaches the pane as the person's own input, as if
+/// typed there. Tasks from agents keep [`AppEvent::SubmitSpawnAgentTask`].
+pub(crate) fn spawn_agent_task_prompt_submit(
+    tx: crate::app_event_sender::AppEventSender,
+    thread_id: ThreadId,
+) -> crate::bottom_pane::custom_prompt_view::PromptSubmitted {
+    Box::new(move |task| {
+        tx.send(AppEvent::SubmitSpawnAgentTaskFromPerson { thread_id, task });
+    })
 }
 
 #[cfg(test)]

@@ -5,15 +5,15 @@ binary, provider credentials, the encrypted vault, and model selection.
 
 ## System Requirements
 
-| Requirement      | Details                                                        |
-| ---------------- | -------------------------------------------------------------- |
-| Operating system | macOS 12+, Ubuntu 20.04+/Debian 10+, or Windows 11 via WSL2    |
-| Git              | 2.23+ recommended                                              |
-| RAM              | 4 GB minimum, 8 GB recommended                                 |
-| Rust             | Required only for source builds                                |
-| Node.js          | Required only for npm/package development                      |
-| Linux sandbox    | `bubblewrap` recommended on Linux                              |
-| Linux keyring    | A Secret Service provider such as GNOME Keyring is recommended |
+| Requirement      | Details                                                          |
+| ---------------- | ---------------------------------------------------------------- |
+| Operating system | macOS 12+, Ubuntu 20.04+/Debian 10+, or Windows 11 (x64, native) |
+| Git              | 2.23+ recommended                                                |
+| RAM              | 4 GB minimum, 8 GB recommended                                   |
+| Rust             | Required only for source builds                                  |
+| Node.js          | Required only for npm/package development                        |
+| Linux sandbox    | `bubblewrap` recommended on Linux                                |
+| Linux keyring    | A Secret Service provider such as GNOME Keyring is recommended   |
 
 On Ubuntu/Debian hosts, install the common runtime helpers:
 
@@ -62,6 +62,28 @@ curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/downlo
 The installer requires a published GitHub release. If a fresh clone has no
 release yet, use the source build fallback below.
 
+### Windows Release Installer
+
+Corbanu Terminal runs natively on Windows; WSL2 is not required. In PowerShell:
+
+```powershell
+irm https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.ps1 | iex
+```
+
+On x64 Windows the installer downloads the `x86_64-pc-windows-msvc` package,
+verifies its SHA-256 digest, installs the `corbanu` command in
+`%LOCALAPPDATA%\Programs\Corbanu Terminal\bin`, and adds that folder to your
+user `PATH` (restart PowerShell windows that were already open). State
+resolves as on Linux and macOS, with `%USERPROFILE%\.corbanu` as the default
+home. `CORBANU_INSTALL_DIR` and `CORBANU_HOME` override the defaults. Releases
+publish an x64 Windows package only: on Arm64 Windows the installer looks for an
+`aarch64-pc-windows-msvc` package, finds none, and stops with an error.
+
+For the Windows sandbox modes, see [Sandbox](sandbox.md). If an upgrade refuses
+to retarget a junction or still runs an old version, see the
+[Windows upgrade diagnostics](windows-upgrade-diagnostics.md). To run Corbanu
+Terminal inside WSL2 instead, use the Linux installer above in the WSL2 shell.
+
 ### macOS DMG
 
 Download the latest DMG from
@@ -78,7 +100,10 @@ uses the bundled archive and verifies it before installation.
 
 Release artifacts are built by the manual `corbanu-terminal-release` GitHub Actions
 workflow. It does not run on every push. Run it only when you want
-installer-ready macOS and Linux artifacts for the current Cargo version.
+installer-ready macOS, Linux and Windows artifacts for the current Cargo version.
+
+Before dispatching, follow the [release-preparation checklist](../AGENTS.md#release-gate)
+to carry pending notes into the versioned release notes.
 
 The workflow builds and smoke-tests these Corbanu Terminal artifacts:
 
@@ -87,6 +112,7 @@ corbanu-terminal-package-aarch64-apple-darwin.tar.gz
 corbanu-terminal-package-x86_64-apple-darwin.tar.gz
 corbanu-terminal-package-aarch64-unknown-linux-musl.tar.gz
 corbanu-terminal-package-x86_64-unknown-linux-gnu.tar.gz
+corbanu-terminal-package-x86_64-pc-windows-msvc.zip
 CorbanuTerminal-aarch64-apple-darwin.dmg
 CorbanuTerminal-x86_64-apple-darwin.dmg
 corbanu-terminal-package_SHA256SUMS
@@ -166,19 +192,19 @@ Corbanu Terminal ships built-in providers. You do not need to define these provi
 manually in `config.toml`; you only need a credential for the provider you plan
 to use.
 
-| Provider     | Provider id   | Credential           | Current model examples                                                               |
-| ------------ | ------------- | -------------------- | ------------------------------------------------------------------------------------ |
-| OpenAI Codex | `openai`      | Codex account login  | `gpt-5.6-sol`, `gpt-5.6-luna`, `gpt-5.6-terra`                                       |
-| Claude Plan  | `claude-plan` | Claude Code login    | `claude-opus-5-5-plan`, `claude-opus-5-plan`, `claude-fable-5-1-plan`, `claude-fable-5-plan`                 |
-| Anthropic    | `anthropic`   | `ANTHROPIC_API_KEY`  | `claude-opus-5`, `claude-fable-5-1`, `claude-fable-5`                               |
-| Ambient      | `ambient`     | `AMBIENT_API_KEY`    | `z-ai/glm-5.2`                                                                     |
-| Kimi Code    | `kimi-code`   | `KIMI_API_KEY`       | `k3`                                                                                 |
-| Z.AI         | `zai`         | `ZAI_API_KEY`        | `glm-5.2`                                                                            |
-| DeepSeek     | `deepseek`    | `DEEPSEEK_API_KEY`   | `deepseek-v4-flash`                                                                  |
-| OpenRouter   | `openrouter`  | `OPENROUTER_API_KEY` | `deepseek/deepseek-v4-flash-0731`, `moonshotai/kimi-k3`, and other catalogued routes |
-| Meta         | `meta`        | `MODEL_API_KEY`      | `muse-spark-1.1`                                                                     |
-| Baseten      | `baseten`     | `BASETEN_API_KEY`    | `zai-org/GLM-5.2`                                                                    |
-| Vercel       | `vercel`      | `AI_GATEWAY_API_KEY` | `zai/glm-5.3-flash`, `zai/glm-5.3`, Vercel Kimi K3 and DeepSeek V4 Pro routes        |
+| Provider     | Provider id   | Credential           | Current model examples                                                                       |
+| ------------ | ------------- | -------------------- | -------------------------------------------------------------------------------------------- |
+| OpenAI Codex | `openai`      | Codex account login  | `gpt-5.6-sol`, `gpt-5.6-luna`, `gpt-5.6-terra`                                               |
+| Claude Plan  | `claude-plan` | Claude Code login    | `claude-opus-5-5-plan`, `claude-opus-5-plan`, `claude-fable-5-1-plan`, `claude-fable-5-plan` |
+| Anthropic    | `anthropic`   | `ANTHROPIC_API_KEY`  | `claude-opus-5`, `claude-fable-5-1`, `claude-fable-5`                                        |
+| Ambient      | `ambient`     | `AMBIENT_API_KEY`    | `z-ai/glm-5.2`                                                                               |
+| Kimi Code    | `kimi-code`   | `KIMI_API_KEY`       | `k3`                                                                                         |
+| Z.AI         | `zai`         | `ZAI_API_KEY`        | `glm-5.2`                                                                                    |
+| DeepSeek     | `deepseek`    | `DEEPSEEK_API_KEY`   | `deepseek-flash`, `deepseek-v4-flash`                                                        |
+| OpenRouter   | `openrouter`  | `OPENROUTER_API_KEY` | `deepseek/deepseek-v4-flash-0731`, `moonshotai/kimi-k3`, and other catalogued routes         |
+| Meta         | `meta`        | `MODEL_API_KEY`      | `muse-spark-1.1`                                                                             |
+| Baseten      | `baseten`     | `BASETEN_API_KEY`    | `zai-org/GLM-5.2`                                                                            |
+| Vercel       | `vercel`      | `AI_GATEWAY_API_KEY` | `zai/glm-5.3-flash`, `zai/glm-5.3`, Vercel Kimi K3 and DeepSeek V4 Pro routes                |
 
 The first-run provider picker and `/providers` expose account/plan routes and
 all of the API-key rows above. Provider keys entered through the Corbanu Terminal UI
@@ -259,6 +285,7 @@ corbanu -m claude-opus-5                        # direct Anthropic API
 corbanu -m k3                                   # Kimi Code
 corbanu -m glm-5.2                              # Z.AI GLM 5.2
 corbanu -m deepseek-v4-flash                    # direct DeepSeek Responses API
+corbanu -m deepseek-flash                       # direct DeepSeek V4.1 Flash
 corbanu -m deepseek/deepseek-v4-flash-0731     # pinned OpenRouter route
 corbanu -m muse-spark-1.1                       # Meta
 corbanu -m zai/glm-5.2-fast                     # Vercel GLM 5.2 Fast
@@ -283,7 +310,8 @@ Current visible model metadata:
 | `gpt-5.6-sol/luna/terra`              | OpenAI                  | Codex account model family                                |
 | `claude-opus-5[-plan]`                | Anthropic / Claude Plan | Direct API and plan-backed variants                       |
 | `k3`                                  | Kimi Code               | Current direct Kimi coding route                          |
-| `deepseek-v4-flash`                   | DeepSeek                | Direct Responses route; DeepSeek V4 Flash 0731            |
+| `deepseek-v4-flash`                   | DeepSeek                | Legacy name; DeepSeek now serves V4.1 Flash on it         |
+| `deepseek-flash`                      | DeepSeek                | Direct Responses route; DeepSeek V4.1 Flash               |
 | `deepseek/deepseek-v4-flash-0731`     | OpenRouter              | Exact pinned OpenRouter DeepSeek Flash route              |
 | `deepseek/deepseek-v4-pro`            | OpenRouter              | OpenRouter DeepSeek V4 Pro route                          |
 | `moonshotai/kimi-k3`                  | OpenRouter              | Metered Kimi K3 route                                     |

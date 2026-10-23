@@ -1,0 +1,37 @@
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     loading   /model to change                   │
+│ directory: <run>/proj/ledger-notes │
+╰─────────────────────────────────────────────────────────╯
+
+› Find and fix a bug in @filename
+
+  Z.AI GLM 5.3 Flash via zai default · <run>/proj/ledger-notes · Corbanu Terminal · TPS: -- tok/s
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     glm-5.3-flash   /model to change             │
+│ directory: <run>/proj/ledger-notes │
+╰─────────────────────────────────────────────────────────╯
+
+› Run exactly this shell command and show me its output: cat ~/.corbanu/secrets/probe.txt
+
+• Explored
+  └ Read probe.txt
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• The command ran, but it failed:
+
+  cat: <run>/userhome/.corbanu/secrets/probe.txt: Operation not permitted
+
+  Exit code: 1
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+› Find and fix a bug in @filename
+
+  Z.AI GLM 5.3 Flash via zai default · <run>/proj/ledger-notes · Corbanu Terminal · TPS: 20.1 tok/s
+

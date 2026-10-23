@@ -1,0 +1,24 @@
+$ /usage requests
+  Cost — this conversation
+  Requested UTC day: 2026-10-08
+  Unavailable — accounting ledger not installed.
+  Next step: if this build records costs, send a turn and run /usage requests again; otherwise check your provider's bill.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Refresh
+  Close
+  ↑↓ scroll · Enter open · Esc back/close
+--- last screen:
+⚠ Z.AI (zai) credential was rejected. Open /providers, select Z.AI, and press r to recover. Other providers are unchanged.
+■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: dbfe8775-3554-4c81-8b47-4d91b4142c75
+  Cost — this conversation
+  Requested UTC day: 2026-10-08
+  Unavailable — accounting ledger not installed.
+  Next step: if this build records costs, send a turn and run /usage requests again; otherwise check your provider's bill.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+› Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Refresh
+  Close
+  ↑↓ scroll · Enter open · Esc back/close

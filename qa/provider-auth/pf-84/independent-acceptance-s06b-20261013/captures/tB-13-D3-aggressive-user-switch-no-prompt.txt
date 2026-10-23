@@ -1,0 +1,55 @@
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:     loading   /model to change                 │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+╰───────────────────────────────────────────────────────╯
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: -- tok/s
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:     glm-5.3-flash   /model to change           │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+╰───────────────────────────────────────────────────────╯
+
+/status
+
+╭─────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                      │
+│                                                                                     │
+│  Model:                Z.AI GLM 5.3 Flash                                           │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account default        │
+│  Directory:            $S/ws         │
+│  Permissions:          Next turn: Profile corbanu-aggressive (workspace, untrusted) │
+│  Security:             Aggressive active (/security)                                │
+│  Agents.md:            <none>                                                       │
+│  Account:              Z.AI API key configured                                      │
+│  Collaboration mode:   Default                                                      │
+│  Session:              01a1345d-b987-7a82-bebc-5447bdac19f2                         │
+│                                                                                     │
+│  Token usage:          0 total  (0 input + 0 output)                                │
+│  Account usage:        default · no usage yet                                       │
+│  Limits:               data not available yet                                       │
+╰─────────────────────────────────────────────────────────────────────────────────────╯
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:     glm-5.3-flash   /model to change           │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+╰───────────────────────────────────────────────────────╯
+
+To continue this session, run corbanu resume 01a1345d-b987-7a82-bebc-5447bdac19f2
+
+• New session: requests to openai use account `work`.
+
+
+› Implement {feature}
+
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: -- tok/s

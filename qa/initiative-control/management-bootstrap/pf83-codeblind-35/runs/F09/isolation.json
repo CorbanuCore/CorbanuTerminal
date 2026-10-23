@@ -1,0 +1,41 @@
+{
+ "enforcement": "os-enforced",
+ "agent": "01a10ebf-3e80-7f32-847b-e2ddd87859c4",
+ "run_id": "cb35-F09-pf83x3-20261006T010509Z",
+ "case_id": "F09",
+ "design_sha256": "2a3ab1611fdbbec5cb76ae36593609a38c880b1cf7057489dbeb50d5bbe9859d",
+ "candidate_sha256": "e552180a2dfc5457a93881cc4822054e18a4a90e8bf86f67008238e461e758f6",
+ "policy": {
+  "path": "common/effective-policy.txt",
+  "sha256": "db018a029672b3e3b21b461f1304a3c5351e80e5f3792dc0854303944d60077f"
+ },
+ "tool_inventory": {
+  "path": "common/tool-inventory.json",
+  "sha256": "7555266a6a4c60fd6aae1a56d61b663753e69226685b62cd4244a0534b6be344"
+ },
+ "probe_evidence": {
+  "path": "runs/F09/probes.json",
+  "sha256": "8ba624b1192e15d6a34b9036d7703bb572f1a484fb0b540e64ddf1ba907ff5fc"
+ },
+ "packet_readable": true,
+ "candidate_launchable": true,
+ "actual_input_available": true,
+ "probe_documents_ok": {
+  "preflight-launcher.json": true,
+  "preflight-tmux-child.json": true,
+  "preflight-executor.json": true
+ },
+ "source_denied": true,
+ "history_denied": true,
+ "symlink_escape_denied": true,
+ "credentials_denied": true,
+ "cross_run_ipc_denied": true,
+ "network_restricted": true,
+ "package_readonly": true,
+ "children_confined": true,
+ "mediator_window": {
+  "path": "runs/F09/mediator-window.jsonl",
+  "sha256": "657d008e158fa90e6c6ca535b32ebf91678610a2145c7a0ee742fe17310a1cec"
+ },
+ "mediator_window_note": "all mediator rows from preflight to executor end; concurrent lanes share the mediator"
+}

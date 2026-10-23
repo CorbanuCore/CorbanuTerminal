@@ -1,0 +1,60 @@
+pre-PF-84 exec on hM: 2 pong; session 01a128f0-2f77-7320-a700-0d7c87bb5ae4; pre TUI session 01a128ef-84cc-7ec0-b297-92dfbff398e3
+hM baseline (after pre-PF-84 onboarding + sessions): config.toml=1ee1e6ebcf10 secrets/local.age=74f75f093bfb secrets/keyring-fallback/<id>.key=2a395b5a126f 
+== M1 candidate exec, flag off (default) (exit 0)
+   args: exec --skip-git-repo-check Reply with exactly the word pong and nothing else.
+   | pong
+   hashes: config.toml=1ee1e6ebcf10 secrets/local.age=74f75f093bfb secrets/keyring-fallback/<id>.key=2a395b5a126f 
+== M2 candidate exec --enable named_accounts (exit 0)
+   args: exec --skip-git-repo-check --enable named_accounts Reply with exactly the word pong and nothing else.
+   | pong
+   | warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Volumes/CorbanuDrive/Corbanu/tmp/pf84s03acc/homes/hM/config.toml.
+   hashes: config.toml=1ee1e6ebcf10 secrets/local.age=74f75f093bfb secrets/keyring-fallback/<id>.key=2a395b5a126f 
+== M3 candidate exec --enable named_accounts --account default (exit 0)
+   args: exec --skip-git-repo-check --enable named_accounts --account default Reply with exactly the word pong and nothing else.
+   | pong
+   | warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Volumes/CorbanuDrive/Corbanu/tmp/pf84s03acc/homes/hM/config.toml.
+   hashes: config.toml=1ee1e6ebcf10 secrets/local.age=74f75f093bfb secrets/keyring-fallback/<id>.key=2a395b5a126f 
+== M4 candidate exec --enable named_accounts --account main (nothing enrolled) (exit 1)
+   args: exec --skip-git-repo-check --enable named_accounts --account main Reply with exactly the word pong and nothing else.
+   | Error: thread/start: thread/start failed: account `main` of provider `zai` is not configured; add it with `corbanu account add zai main` or pick another with `--account` (see `corbanu account list`) (code -32600)
+   hashes: config.toml=1ee1e6ebcf10 secrets/local.age=74f75f093bfb secrets/keyring-fallback/<id>.key=2a395b5a126f 
+== M5 candidate account list --enable named_accounts (exit 0)
+   args: account list --enable named_accounts
+   hashes: config.toml=1ee1e6ebcf10 secrets/local.age=74f75f093bfb secrets/keyring-fallback/<id>.key=2a395b5a126f 
+== M6 candidate exec resume <pre-PF-84 exec session> --enable named_accounts (exit 0)
+   args: exec --skip-git-repo-check --enable named_accounts resume 01a128f0-2f77-7320-a700-0d7c87bb5ae4 Reply with exactly the word pong and nothing else.
+   | pong
+   | warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Volumes/CorbanuDrive/Corbanu/tmp/pf84s03acc/homes/hM/config.toml.
+   hashes: config.toml=1ee1e6ebcf10 secrets/local.age=74f75f093bfb secrets/keyring-fallback/<id>.key=2a395b5a126f 
+== M7 candidate exec resume <pre-PF-84 TUI session> --enable named_accounts -c provider_accounts.zai="main" (exit 1)
+   args: exec --skip-git-repo-check --enable named_accounts -c provider_accounts.zai="main" resume 01a128ef-84cc-7ec0-b297-92dfbff398e3 Reply with exactly the word pong and nothing else.
+   | Error: thread/resume: thread/resume failed: account `main` of provider `zai` is not configured; add it with `corbanu account add zai main` or pick another with `--account` (see `corbanu account list`) (code -32600)
+   hashes: config.toml=1ee1e6ebcf10 secrets/local.age=74f75f093bfb secrets/keyring-fallback/<id>.key=2a395b5a126f 
+== M8 candidate exec resume <pre-PF-84 TUI session>, flag off (exit 0)
+   args: exec --skip-git-repo-check resume 01a128ef-84cc-7ec0-b297-92dfbff398e3 Reply with exactly the word pong and nothing else.
+   | pong
+   hashes: config.toml=1ee1e6ebcf10 secrets/local.age=74f75f093bfb secrets/keyring-fallback/<id>.key=2a395b5a126f 
+== M9 pre-PF-84 build resumes its exec session after the candidate runs: 2 pong
+
+### OpenAI gpt-5.4 (API-key login made by the pre-PF-84 build)
+   pre login: Reading API key from stdin...
+   pre login: Successfully logged in
+pre-PF-84 exec on hO: 2 pong
+hO baseline: config.toml=7b6e696a8ae7 auth.json=b595a6443ebb 
+== O1 candidate exec, flag off (exit 0)
+   args: exec --skip-git-repo-check Reply with exactly the word pong and nothing else.
+   | pong
+   hashes: config.toml=7b6e696a8ae7 auth.json=b595a6443ebb 
+== O2 candidate exec --enable named_accounts --account default (exit 0)
+   args: exec --skip-git-repo-check --enable named_accounts --account default Reply with exactly the word pong and nothing else.
+   | pong
+   | warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Volumes/CorbanuDrive/Corbanu/tmp/pf84s03acc/homes/hO/config.toml.
+   hashes: config.toml=7b6e696a8ae7 auth.json=b595a6443ebb 
+== O3 candidate exec --enable named_accounts --account work (named OpenAI sign-ins are descoped to S04) (exit 1)
+   args: exec --skip-git-repo-check --enable named_accounts --account work Reply with exactly the word pong and nothing else.
+   | Error: --account openai:work: provider `openai` does not support named accounts yet
+   hashes: config.toml=7b6e696a8ae7 auth.json=b595a6443ebb 
+== O4 candidate account add openai work --enable named_accounts (stdin: synthetic) (exit 1)
+   args: account add openai work --enable named_accounts
+   | Error: provider `openai` does not take `--kind api-key` accounts
+   hashes: config.toml=7b6e696a8ae7 auth.json=b595a6443ebb 

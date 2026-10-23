@@ -1,0 +1,18 @@
+/status
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Z.AI GLM 5.3 Flash                                                │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account default             │
+│  Directory:            /Volumes/CorbanuDrive/Corbanu/tmp/pf84s05/work                    │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Z.AI API key configured                                           │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12ad5-676f-7ad3-8805-d3215d4d4840                              │
+│                                                                                          │
+│  Token usage:          15.1K total  (14.9K input + 243 output)                           │
+│  Context window:       100% left (8K used / 950K)                                        │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯

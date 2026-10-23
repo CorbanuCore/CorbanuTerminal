@@ -12,7 +12,12 @@ SETUP_SCRIPT = REPO_ROOT / "codex-rs" / "scripts" / "setup-telegram.sh"
 
 
 class SetupTelegramHomeTest(unittest.TestCase):
-    def run_setup(self, home: Path, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    def run_setup(
+        self,
+        home: Path,
+        extra_env: dict[str, str] | None = None,
+        chat_id: str = "1",
+    ) -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
         for name in ("CORBANU_HOME", "PFTERMINAL_HOME", "CODEX_HOME"):
             env.pop(name, None)
@@ -23,12 +28,14 @@ class SetupTelegramHomeTest(unittest.TestCase):
                 "bash",
                 str(SETUP_SCRIPT),
                 "--chat-id",
-                "1",
+                chat_id,
                 "--no-token-required",
                 "--allow-danger-full-access",
             ],
             cwd=REPO_ROOT,
             env=env,
+            # Never the caller's terminal: the script prompts when stdin is one.
+            stdin=subprocess.DEVNULL,
             check=False,
             capture_output=True,
             text=True,
@@ -83,6 +90,14 @@ class SetupTelegramHomeTest(unittest.TestCase):
             self.assertTrue((corbanu / "config.toml").is_file())
             self.assertFalse((legacy / "config.toml").exists())
             self.assertFalse((codex / "config.toml").exists())
+
+    def test_empty_chat_id_is_reported_not_an_unbound_variable(self) -> None:
+        # macOS bash 3.2 treats an empty array as unset under `set -u` (#530).
+        with TemporaryDirectory() as temp_dir:
+            result = self.run_setup(Path(temp_dir), chat_id="")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertNotIn("unbound variable", result.stderr)
+            self.assertIn("provide at least one --chat-id", result.stderr)
 
 
 if __name__ == "__main__":

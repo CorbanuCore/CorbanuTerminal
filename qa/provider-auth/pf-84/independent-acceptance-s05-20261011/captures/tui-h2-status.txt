@@ -1,0 +1,53 @@
+
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.3-flash   /model to change          │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s05acc/ws │
+╰──────────────────────────────────────────────────────╯
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Z.AI GLM 5.3 Flash                                                │
+│  Model provider:       Z.AI via QA proxy - http://127.0.0.1:18451 · account default      │
+│  Directory:            $S/ws               │
+│  Permissions:          Next turn: Custom (workspace, never)                              │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Z.AI via QA proxy API key configured                              │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12b21-42b7-7a02-bc05-08702c0f21a5                              │
+│                                                                                          │
+│  Token usage:          16.5K total  (15.2K input + 1.22K output)                         │
+│  Context window:       100% left (11.6K used / 950K)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Explain this codebase
+
+  Z.AI GLM 5.3 Flash via zproxy default · $S/ws · Corbanu Terminal · TPS: 10.8 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

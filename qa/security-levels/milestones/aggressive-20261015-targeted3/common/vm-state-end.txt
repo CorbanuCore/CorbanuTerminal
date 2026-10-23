@@ -1,0 +1,39 @@
+2026-10-15T23:46:21Z verification boot: utmctl start
+2026-10-15T23:46:35Z ssh reachable: yes
+ls: /Users/agent/agms: No such file or directory
+ls: /Users/agent/agms-canary: No such file or directory
+ls: /etc/sudoers.d/agms-codeblind: No such file or directory
+ls: /opt/agms: No such file or directory
+agmx accounts: 0
+-rw-r--r--  1 root  wheel  82 Sep 17 22:00 /etc/codex/config.toml
+AGMS pf lines: 0
+10:set skip on lo0
+1
+agadmin-1792107944-97674.sh
+agadmin-1792107948-97696.sh
+agadmin-1792107950-97710.sh
+agadmin-1792107963-97862.sh
+su.exp
+0
+2026-10-15T23:46:38Z
+2026-10-15T23:46:51Z clean shutdown from inside with h/guest-shutdown-clean.sh (removes ~agent/ag-admin first)
+
+System shutdown time has arrived
+Connection to 192.168.64.3 closed by remote host.
+2026-10-15T23:47:03Z status: stopped
+2026-10-15T23:47:10Z second verification boot (check ~agent/ag-admin removal): utmctl start
+ls: /Users/agent/ag-admin: No such file or directory
+ls: /Users/agent/agms: No such file or directory
+ls: /opt/agms: No such file or directory
+agmx accounts: 0
+1
+2026-10-15T23:47:27Z
+2026-10-15T23:47:29Z utmctl stop --request
+2026-10-15T23:49:33Z status: started
+2026-10-15T23:49:41Z shutdown request not answered; guest data already verified erased and no admin helper present (a clean inside shutdown would need the helper again), so utmctl stop (power-off)
+synced
+stop-rc=0
+2026-10-15T23:49:42Z status: stopped
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3

@@ -16,6 +16,8 @@ pub(crate) struct ProviderManagementHost {
     account_auth_host: ProviderAccountAuthHost,
     session: ProviderManagementSession,
     focused_provider: Option<codex_provider_auth::ProviderCatalogId>,
+    /// PF-84-S04: named accounts; `None` while the feature is off.
+    named_accounts: Option<Vec<crate::provider_named_accounts::NamedAccountRow>>,
 }
 
 impl ProviderManagementHost {
@@ -38,7 +40,21 @@ impl ProviderManagementHost {
             account_auth_host,
             session,
             focused_provider: None,
+            named_accounts: None,
         }
+    }
+
+    pub(crate) fn named_accounts(
+        &self,
+    ) -> Option<&[crate::provider_named_accounts::NamedAccountRow]> {
+        self.named_accounts.as_deref()
+    }
+
+    pub(crate) fn set_named_accounts(
+        &mut self,
+        accounts: Option<Vec<crate::provider_named_accounts::NamedAccountRow>>,
+    ) {
+        self.named_accounts = accounts;
     }
 
     pub(crate) fn status_host(&self) -> &ProviderStatusHost {
@@ -171,6 +187,8 @@ fn replacement_candidates_for(
     statuses: &[ProviderStatusSnapshot],
     current_model: Option<String>,
 ) -> Vec<ExplicitProviderSelection> {
+    // #665: a connection without its own credential cannot replace anything.
+    let without_credential = status_host.connections_without_credential();
     statuses
         .iter()
         .filter(|status| {
@@ -181,7 +199,11 @@ fn replacement_candidates_for(
         })
         .filter_map(|status| {
             let entry = status_host.catalog().get(status.id.as_str())?;
-            let runtime_provider_id = entry.runtime_provider_ids.first()?.clone();
+            let runtime_provider_id = entry
+                .runtime_provider_ids
+                .iter()
+                .find(|id| !without_credential.contains(id.as_str()))?
+                .clone();
             let model = codex_model_provider_info::resolve_model_for_provider(
                 current_model.clone(),
                 runtime_provider_id.as_str(),

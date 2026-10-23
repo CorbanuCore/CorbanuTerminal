@@ -12,6 +12,13 @@ use crate::legacy_core::config::resolve_bootstrap_auth_keyring_backend_kind;
 use crate::legacy_core::config::resolve_bootstrap_http_client_factory;
 use crate::legacy_core::config::resolve_oss_provider;
 use crate::legacy_core::config::resolve_profile_v2_config_path;
+use crate::resume_launch::ResumeLaunchSelection;
+use crate::resume_launch::check_resume_before_onboarding;
+use crate::resume_launch::chosen_thread_account_error;
+use crate::resume_launch::defers_launch_account_check;
+use crate::resume_launch::is_resume_launch;
+use crate::resume_launch::resume_recorded_provider_account;
+use crate::resume_launch::select_resume_launch_session;
 use crate::session_resume::ResolveCwdOutcome;
 use crate::session_resume::ResumeCwdContext;
 use crate::session_resume::effective_resume_cwd_mode;
@@ -47,11 +54,9 @@ use codex_config::format_config_error_with_source;
 use codex_config::types::ResumeCwdMode;
 use codex_exec_server::EnvironmentManager;
 use codex_exec_server::ExecServerRuntimePaths;
-use codex_login::AuthConfig;
 use codex_login::AuthRouteConfig;
 use codex_login::default_client::originator;
 use codex_login::default_client::set_default_client_residency_requirement;
-use codex_login::enforce_login_restrictions;
 use codex_protocol::ThreadId;
 use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::AltScreenMode;
@@ -114,6 +119,7 @@ mod crew_presets;
 mod crew_state;
 mod custom_spawn_crew;
 pub(crate) mod custom_terminal;
+mod default_login_launch;
 mod pets;
 pub use custom_terminal::Terminal;
 mod auto_review_denials;
@@ -129,6 +135,7 @@ mod external_editor;
 mod external_plan_agent_adapter;
 mod file_search;
 mod frames;
+mod gated_log_writer;
 mod get_git_diff;
 mod git_action_directives;
 mod goal_display;
@@ -170,10 +177,12 @@ mod provider_account_feedback;
 mod provider_auth_effect_executor;
 mod provider_auth_presentation;
 mod provider_management_host;
+mod provider_named_accounts;
 mod provider_status_host;
 pub(crate) mod public_widgets;
 mod render;
 mod resize_reflow_cap;
+mod resume_launch;
 mod resume_picker;
 mod security;
 mod selection_list;
@@ -259,6 +268,16 @@ use codex_arg0::Arg0DispatchPaths;
 pub use markdown_render::render_markdown_text;
 pub use public_widgets::composer_input::ComposerAction;
 pub use public_widgets::composer_input::ComposerInput;
+pub use security::nested::NestedKind;
+pub use security::nested::NestedLaunch;
+pub use security::nested::aggressive_env_overrides;
+pub use security::nested::apply_aggressive_launch_overrides;
+pub use security::nested::nested_launch;
+pub use security::nested::prepare_nested_exec;
+pub use security::nested::verify_aggressive_config;
+pub use security::restart::RESTART_BANNER;
+pub use security::restart::restart_process;
+pub use security::restart::take_restart_marker;
 // (tests access modules directly within the crate)
 
 const TUI_LOG_FILE_NAME: &str = "codex-tui.log";
@@ -510,9 +529,25 @@ async fn start_app_server(
         )
         .await
         .map(AppServerClient::InProcess),
-        AppServerTarget::LocalDaemon { endpoint } | AppServerTarget::Remote { endpoint } => {
-            connect_remote_app_server(endpoint.clone()).await
+        AppServerTarget::LocalDaemon { endpoint } => {
+            let client = connect_remote_app_server(endpoint.clone()).await?;
+            // PF-84-S06 (#595): this session left a ruled-out default login
+            // in place because the daemon refuses to use it; a daemon
+            // restarted since without that must not serve the session.
+            if codex_login::default_login_left_unenforced()
+                && let AppServerClient::Remote(remote) = &client
+                && !default_login_launch::daemon_matches_default_login_policy(remote, &config)
+            {
+                return Err(color_eyre::eyre::eyre!(
+                    "The running local app-server daemon does not confirm that it leaves alone \
+                     the default OpenAI login this session's login settings rule out (it may \
+                     have been restarted, or the session's settings differ). Restart the daemon \
+                     or start corbanu again."
+                ));
+            }
+            Ok(client)
         }
+        AppServerTarget::Remote { endpoint } => connect_remote_app_server(endpoint.clone()).await,
     }
 }
 
@@ -717,6 +752,41 @@ async fn lookup_session_target_by_name_with_app_server(
             return Ok(None);
         }
         cursor = response.next_cursor;
+    }
+}
+
+fn exit_missing_session(
+    terminal_restore_guard: &mut tui::TerminalRestoreGuard,
+    tui: &mut Tui,
+    id_str: &str,
+    action: &str,
+) -> AppExitInfo {
+    error!("Error finding conversation path: {id_str}");
+    terminal_restore_guard.restore_silently();
+    session_log::log_session_end();
+    let _ = tui.terminal.clear();
+    fatal_exit_info(format!(
+        "No saved session found with ID {id_str}. Run `corbanu {action}` without an ID to choose from existing sessions."
+    ))
+}
+
+fn fatal_exit_info(message: String) -> AppExitInfo {
+    AppExitInfo {
+        token_usage: crate::token_usage::TokenUsage::default(),
+        thread_id: None,
+        resume_hint: None,
+        update_action: None,
+        exit_reason: ExitReason::Fatal(message),
+    }
+}
+
+fn user_requested_exit_info() -> AppExitInfo {
+    AppExitInfo {
+        token_usage: crate::token_usage::TokenUsage::default(),
+        thread_id: None,
+        resume_hint: None,
+        update_action: None,
+        exit_reason: ExitReason::UserRequested,
     }
 }
 
@@ -944,6 +1014,12 @@ fn app_server_target_for_launch(
     }
 }
 
+#[allow(clippy::print_stderr)]
+fn exit_with_security_error(message: &str) -> ! {
+    eprintln!("{message}");
+    std::process::exit(1);
+}
+
 fn loader_overrides_are_default(loader_overrides: &LoaderOverrides) -> bool {
     let loader_overrides_are_default = loader_overrides.user_config_path.is_none()
         && loader_overrides.user_config_profile.is_none()
@@ -981,6 +1057,12 @@ pub async fn run_main(
     loader_overrides: LoaderOverrides,
     explicit_remote_endpoint: Option<RemoteAppServerEndpoint>,
 ) -> std::io::Result<AppExitInfo> {
+    // PF-24-S02 "restart now": the same arguments, without sending the
+    // initial prompt and images a second time.
+    if security::restart::restarted() {
+        cli.prompt = None;
+        cli.images.clear();
+    }
     let strict_config = cli.strict_config;
     let (sandbox_mode, approval_policy) = if cli.dangerously_bypass_approvals_and_sandbox {
         (
@@ -1006,7 +1088,7 @@ pub async fn run_main(
     let raw_overrides = cli.config_overrides.raw_overrides.clone();
     // `oss` model provider.
     let overrides_cli = codex_utils_cli::CliConfigOverrides { raw_overrides };
-    let cli_kv_overrides = match overrides_cli.parse_overrides() {
+    let mut cli_kv_overrides = match overrides_cli.parse_overrides() {
         // Parse `-c` overrides from the CLI.
         Ok(v) => v,
         #[allow(clippy::print_stderr)]
@@ -1025,6 +1107,9 @@ pub async fn run_main(
             std::process::exit(1);
         }
     };
+    let mut security_launch =
+        security::launch::LaunchPlan::prepare(&codex_home, &mut cli_kv_overrides)
+            .unwrap_or_else(|message| exit_with_security_error(&message));
 
     let mut launch_loader_overrides = loader_overrides.clone();
     if let Some(profile_v2) = cli.config_profile_v2.as_ref() {
@@ -1052,6 +1137,11 @@ pub async fn run_main(
         .cwd
         .clone()
         .filter(|_| app_server_target.uses_remote_workspace());
+    if let Err(message) =
+        security_launch.check_target(!matches!(app_server_target, AppServerTarget::Embedded))
+    {
+        exit_with_security_error(&message);
+    }
 
     let local_runtime_paths = ExecServerRuntimePaths::from_optional_paths(
         arg0_paths.codex_self_exe.clone(),
@@ -1087,6 +1177,10 @@ pub async fn run_main(
     )
     .await;
     let bootstrap_config_toml = &bootstrap_config.config_toml;
+    security_launch.extend_env_overrides(
+        &bootstrap_config_toml.shell_environment_policy,
+        &mut cli_kv_overrides,
+    );
 
     let chatgpt_base_url = bootstrap_config_toml
         .chatgpt_base_url
@@ -1184,7 +1278,7 @@ pub async fn run_main(
 
     let additional_dirs = cli.add_dir.clone();
 
-    let overrides = ConfigOverrides {
+    let mut overrides = ConfigOverrides {
         model,
         // Interactive startup must tolerate model/provider pairs persisted by
         // older releases. Preserve the configured provider and let its model
@@ -1202,10 +1296,12 @@ pub async fn run_main(
         show_raw_agent_reasoning: cli.oss.then_some(true),
         bypass_hook_trust: cli.bypass_hook_trust.then_some(true),
         additional_writable_roots: additional_dirs,
+        provider_account: cli.account.clone(),
         ..Default::default()
     };
+    security_launch.apply_launch_overrides(&mut overrides);
 
-    let config = load_config_or_exit(
+    let mut config = load_config_or_exit(
         cli_kv_overrides.clone(),
         overrides.clone(),
         loader_overrides.clone(),
@@ -1213,6 +1309,33 @@ pub async fn run_main(
         strict_config,
     )
     .await;
+    let origin_registry_update = security_launch.origin_registry_update();
+    if let Err(message) = security_launch.finish(&mut config).await {
+        exit_with_security_error(&message);
+    }
+    // PF-84 (#426): a missing named account (`--account` or
+    // `[provider_accounts]`) is refused before onboarding, with exec's
+    // recovery text, instead of asking for a default key. The account a
+    // resumed thread recorded is checked once the thread is selected (#545),
+    // and so is `[provider_accounts]` for a resume, which runs on that
+    // recorded account instead (#555). A local daemon serves this same home;
+    // a remote app server checks its own home at thread start.
+    let deferred_account_check =
+        !app_server_target.uses_remote_workspace() && defers_launch_account_check(&cli, &config);
+    if !app_server_target.uses_remote_workspace()
+        && let Some(message) =
+            crate::resume_launch::launch_account_error(&config, deferred_account_check)
+    {
+        exit_with_security_error(&message);
+    }
+    if let Some(aggressive) = origin_registry_update
+        && let Err(err) = security::nested::register_origin(&codex_home, aggressive)
+        && aggressive
+    {
+        config.startup_warnings.push(format!(
+            "Could not record this Corbanu home for nested-launch checks ({err}); an agent command that changes CODEX_HOME may not be recognised as nested."
+        ));
+    }
 
     let cloud_config_bundle = cloud_config_bundle_loader_for_storage(
         config.codex_home.to_path_buf(),
@@ -1262,6 +1385,31 @@ pub async fn run_main(
             codex_rollout::sqlite_telemetry_recorder(metrics.clone(), otel_originator.as_str());
         let _ = codex_state::install_process_db_telemetry(telemetry);
     }
+    let launches_resume_or_fork =
+        is_resume_launch(&cli) || cli.fork_picker || cli.fork_last || cli.fork_session_id.is_some();
+    #[allow(clippy::print_stderr)]
+    let default_login_launch::DefaultLoginAtLaunch {
+        app_server_target,
+        left_in_place,
+        daemon_not_reused,
+    } = match default_login_launch::settle_default_login_at_launch(
+        &config,
+        launches_resume_or_fork,
+        app_server_target,
+    )
+    .await
+    {
+        Ok(settled) => settled,
+        Err(err) => {
+            eprintln!("{err}");
+            std::process::exit(1);
+        }
+    };
+    if left_in_place {
+        codex_login::leave_default_login_unenforced();
+    }
+    config.startup_warnings.extend(daemon_not_reused);
+
     let state_db = init_state_db_for_app_server_target(&config, &app_server_target).await?;
     let config_toml_log_dir_configured = config
         .config_layer_stack
@@ -1288,25 +1436,6 @@ pub async fn run_main(
         }
     }
 
-    if !app_server_target.uses_remote_workspace() {
-        let auth_route_config = config.auth_route_config();
-        #[allow(clippy::print_stderr)]
-        if let Err(err) = enforce_login_restrictions(&AuthConfig {
-            codex_home: config.codex_home.to_path_buf(),
-            auth_credentials_store_mode: config.cli_auth_credentials_store_mode,
-            keyring_backend_kind: config.auth_keyring_backend_kind(),
-            forced_login_method: config.forced_login_method,
-            forced_chatgpt_workspace_id: config.forced_chatgpt_workspace_id.clone(),
-            chatgpt_base_url: Some(config.chatgpt_base_url.clone()),
-            auth_route_config,
-        })
-        .await
-        {
-            eprintln!("{err}");
-            std::process::exit(1);
-        }
-    }
-
     let (tui_file_layer, _tui_file_log_guard) = if config_toml_log_dir_configured {
         let log_dir = config.log_dir.clone();
         std::fs::create_dir_all(&log_dir)?;
@@ -1328,7 +1457,7 @@ pub async fn run_main(
             EnvFilter::new("codex_core=info,codex_tui=info,codex_rmcp_client=info")
         });
         let file_layer = tracing_subscriber::fmt::layer()
-            .with_writer(non_blocking)
+            .with_writer(move || gated_log_writer::GatedLogWriter(non_blocking.clone()))
             .with_target(true)
             .with_ansi(false)
             .with_span_events(
@@ -1369,14 +1498,41 @@ pub async fn run_main(
         .clone()
         .map(|layer| layer.with_filter(log_db::default_filter()));
 
-    let _ = tracing_subscriber::registry()
-        .with(tui_file_layer)
-        .with(feedback_layer)
-        .with(feedback_metadata_layer)
-        .with(log_db_layer)
-        .with(otel_logger_layer)
-        .with(otel_tracing_layer)
-        .try_init();
+    let _ = codex_log_guard::guard(
+        tracing_subscriber::registry()
+            .with(tui_file_layer)
+            .with(feedback_layer)
+            .with(feedback_metadata_layer)
+            .with(log_db_layer)
+            .with(otel_logger_layer)
+            .with(otel_tracing_layer),
+    )
+    .try_init();
+
+    // Older builds wrote credentials to these files (#179, #196). Masking
+    // keeps every byte offset, so it runs beside this process's appends.
+    std::thread::spawn({
+        let log_dir = config.log_dir.clone();
+        #[cfg(target_os = "windows")]
+        let sandbox_dir = codex_windows_sandbox::sandbox_dir(&config.codex_home);
+        move || {
+            for name in [TUI_LOG_FILE_NAME, "codex-login.log"] {
+                if let Err(err) = codex_state::scrub_log_file_once(&log_dir.join(name)) {
+                    tracing::warn!("failed to scrub old secrets from {name}: {err}");
+                }
+            }
+            // Older builds logged sandboxed command lines verbatim (#398).
+            #[cfg(target_os = "windows")]
+            if let Err(err) = codex_state::scrub_sandbox_logs_once(&sandbox_dir) {
+                tracing::warn!("failed to scrub old secrets from the sandbox logs: {err}");
+            }
+            // #158: put back integrity labels a crashed sandbox session left.
+            #[cfg(target_os = "windows")]
+            if let Err(err) = codex_windows_sandbox::repair_stale_integrity_labels() {
+                tracing::warn!("failed to repair stale sandbox integrity labels: {err:#}");
+            }
+        }
+    });
 
     run_ratatui_app(
         cli,
@@ -1413,9 +1569,9 @@ async fn run_ratatui_app(
     strict_config: bool,
     app_server_target: AppServerTarget,
     remote_cwd_override: Option<PathBuf>,
-    initial_config: Config,
+    mut initial_config: Config,
     manually_selected_oss_provider: Option<String>,
-    overrides: ConfigOverrides,
+    mut overrides: ConfigOverrides,
     cli_kv_overrides: Vec<(String, toml::Value)>,
     mut cloud_config_bundle: CloudConfigBundleLoader,
     feedback: codex_feedback::CodexFeedback,
@@ -1427,9 +1583,14 @@ async fn run_ratatui_app(
     color_eyre::install()?;
 
     tooltips::announcement::prewarm(initial_config.http_client_factory());
+    // PF-84-S06 (#595): the session's final config keeps the warning that a
+    // local daemon was not reused, whatever reloads it below (resume, fork,
+    // onboarding).
+    let daemon_not_reused = default_login_launch::daemon_not_reused_warning(&initial_config);
 
     install_panic_hook();
     tui::configure_panic_diagnostics(initial_config.log_dir.clone());
+    security::restart::clear_restart_banner();
     let mut initialized_terminal = tui::init()?;
     initialized_terminal.terminal.clear()?;
 
@@ -1511,26 +1672,161 @@ async fn run_ratatui_app(
         unreachable!("app server should exist while resolving provider status");
     };
     let login_status = get_login_status(app_server_for_status, &initial_config).await?;
-    let startup_provider = startup_provider::resolve(
+    // PF-84-S06: a named OpenAI sign-in account was checked before startup
+    // (it holds a sign-in), so the default login's state does not apply.
+    let openai_metadata_for = |provider: &codex_model_provider_info::ModelProviderInfo| {
+        if codex_model_provider::named_sign_in_account(provider).is_some() {
+            codex_login::OpenAiAuthMetadata::Account
+        } else {
+            startup_provider::openai_metadata(login_status)
+        }
+    };
+    let mut startup_provider = startup_provider::resolve(
         &initial_config,
-        Some(startup_provider::openai_metadata(login_status)),
+        Some(openai_metadata_for(&initial_config.model_provider)),
     )
     .await;
+
+    // PF-84 (#545): onboarding would ask for a default key, but a resumed
+    // thread runs on the account it recorded. Pick the thread first (this
+    // runs the picker before onboarding) and check that account instead.
+    let deferred_account_check =
+        !uses_remote_workspace && defers_launch_account_check(&cli, &initial_config);
+    // Whether a resume restores the thread's own model and provider (#555).
+    let resume_model_settings =
+        crate::app::resume_model_settings_for_overrides(&initial_config, &overrides);
+    let mut early_resume_selection = None;
+    let use_fork = cli.fork_picker || cli.fork_last || cli.fork_session_id.is_some();
+    if startup_provider.requires_provider_onboarding
+        && is_resume_launch(&cli)
+        && !use_fork
+        && !uses_remote_workspace
+        && initial_config
+            .features
+            .enabled(codex_features::Feature::NamedAccounts)
+    {
+        // Esc leaves this picker: a new session would need onboarding (#555).
+        let selection = select_resume_launch_session(
+            &mut tui,
+            &cli,
+            &initial_config,
+            &mut app_server,
+            uses_remote_workspace,
+            remote_cwd_override.as_deref(),
+            resume_picker::SessionPickerLaunchContext::StartupBeforeOnboarding,
+        )
+        .await?;
+        let refusal = match &selection {
+            ResumeLaunchSelection::Missing(id_str) => {
+                shutdown_app_server_if_present(app_server.take()).await;
+                return Ok(exit_missing_session(
+                    &mut terminal_restore_guard,
+                    &mut tui,
+                    id_str,
+                    "resume",
+                ));
+            }
+            ResumeLaunchSelection::Selected(resume_picker::SessionSelection::Exit) => {
+                terminal_restore_guard.restore_silently();
+                session_log::log_session_end();
+                return Ok(user_requested_exit_info());
+            }
+            ResumeLaunchSelection::Selected(selected) => {
+                match resume_recorded_provider_account(
+                    selected,
+                    &initial_config,
+                    uses_remote_workspace,
+                    resume_model_settings,
+                )
+                .await
+                {
+                    Some(recorded) => {
+                        overrides.inherited_provider_account = Some(recorded.selection());
+                        initial_config = load_config_or_exit(
+                            cli_kv_overrides.clone(),
+                            overrides.clone(),
+                            loader_overrides.clone(),
+                            cloud_config_bundle.clone(),
+                            strict_config,
+                        )
+                        .await;
+                        let (resolution, refusal) = check_resume_before_onboarding(
+                            selected,
+                            &initial_config,
+                            &recorded,
+                            startup_provider::openai_metadata(login_status),
+                        )
+                        .await;
+                        startup_provider = resolution;
+                        refusal
+                    }
+                    None => chosen_thread_account_error(
+                        &initial_config,
+                        /*recorded*/ None,
+                        deferred_account_check,
+                        resume_launch::ThreadOpening::of(selected),
+                    ),
+                }
+            }
+        };
+        if let Some(message) = refusal {
+            shutdown_app_server_if_present(app_server.take()).await;
+            terminal_restore_guard.restore_silently();
+            session_log::log_session_end();
+            return Ok(fatal_exit_info(message));
+        }
+        early_resume_selection = Some(selection);
+    }
     let requires_provider_onboarding = startup_provider.requires_provider_onboarding;
+    let default_login_forced_method =
+        startup_provider::default_login_forced_method(&initial_config);
     let should_show_onboarding = startup_provider::should_show_provider_onboarding(
         should_show_trust_screen_flag,
         requires_provider_onboarding,
-        initial_config.forced_login_method,
+        default_login_forced_method,
         login_status,
     );
     let mut startup_provider_resolution = Some(startup_provider);
 
     let mut deferred_provider_setup = None;
+    // The picker above consumed the app server; onboarding needs one. Start it
+    // on the onboarding config and drop it afterwards, so the session's app
+    // server still starts on the resumed thread's config as it always has.
+    let onboarding_only_app_server = should_show_onboarding && app_server.is_none();
+    if onboarding_only_app_server {
+        match start_app_server(
+            &app_server_target,
+            arg0_paths.clone(),
+            initial_config.clone(),
+            cli_kv_overrides.clone(),
+            loader_overrides.clone(),
+            strict_config,
+            cloud_config_bundle.clone(),
+            feedback.clone(),
+            log_db.clone(),
+            state_db.clone(),
+            environment_manager.clone(),
+        )
+        .await
+        {
+            Ok(started) => {
+                app_server = Some(
+                    AppServerSession::new(started, app_server_target.thread_params_mode())
+                        .with_remote_cwd_override(remote_cwd_override.clone()),
+                );
+            }
+            Err(err) => {
+                terminal_restore_guard.restore_silently();
+                session_log::log_session_end();
+                return Err(err);
+            }
+        }
+    }
     let config = if should_show_onboarding {
         startup_provider_resolution = None;
         let show_login_screen = requires_provider_onboarding
             || matches!(
-                initial_config.forced_login_method,
+                default_login_forced_method,
                 Some(ForcedLoginMethod::Chatgpt)
             ) && login_status == LoginStatus::NotAuthenticated;
         let onboarding_result = run_onboarding_app(
@@ -1622,24 +1918,10 @@ async fn run_ratatui_app(
     } else {
         initial_config
     };
+    if onboarding_only_app_server {
+        shutdown_app_server_if_present(app_server.take()).await;
+    }
 
-    let mut missing_session_exit = |id_str: &str, action: &str| {
-        error!("Error finding conversation path: {id_str}");
-        terminal_restore_guard.restore_silently();
-        session_log::log_session_end();
-        let _ = tui.terminal.clear();
-        Ok(AppExitInfo {
-            token_usage: crate::token_usage::TokenUsage::default(),
-            thread_id: None,
-            resume_hint: None,
-            update_action: None,
-            exit_reason: ExitReason::Fatal(format!(
-                "No saved session found with ID {id_str}. Run `corbanu {action}` without an ID to choose from existing sessions."
-            )),
-        })
-    };
-
-    let use_fork = cli.fork_picker || cli.fork_last || cli.fork_session_id.is_some();
     let session_selection = if use_fork {
         if let Some(id_str) = cli.fork_session_id.as_deref() {
             let Some(startup_app_server) = app_server.as_mut() else {
@@ -1650,7 +1932,12 @@ async fn run_ratatui_app(
                 Some(selection) => selection,
                 None => {
                     shutdown_app_server_if_present(app_server.take()).await;
-                    return missing_session_exit(id_str, "fork");
+                    return Ok(exit_missing_session(
+                        &mut terminal_restore_guard,
+                        &mut tui,
+                        id_str,
+                        "fork",
+                    ));
                 }
             }
         } else if cli.fork_last {
@@ -1699,69 +1986,38 @@ async fn run_ratatui_app(
         } else {
             resume_picker::SessionSelection::StartFresh
         }
-    } else if let Some(id_str) = cli.resume_session_id.as_deref() {
-        let Some(startup_app_server) = app_server.as_mut() else {
-            unreachable!("app server should be initialized for --resume <id>");
-        };
-        let target = lookup_session_target_with_app_server(startup_app_server, id_str).await?;
-        match explicit_resume_selection(
-            config.codex_home.as_ref(),
-            id_str,
-            target,
-            uses_remote_workspace,
-        ) {
+    } else if is_resume_launch(&cli) {
+        let selection = match early_resume_selection.take() {
             Some(selection) => selection,
             None => {
-                shutdown_app_server_if_present(app_server.take()).await;
-                return missing_session_exit(id_str, "resume");
+                select_resume_launch_session(
+                    &mut tui,
+                    &cli,
+                    &config,
+                    &mut app_server,
+                    uses_remote_workspace,
+                    remote_cwd_override.as_deref(),
+                    resume_picker::SessionPickerLaunchContext::Startup,
+                )
+                .await?
             }
-        }
-    } else if cli.resume_last {
-        let filter_cwd = latest_session_cwd_filter(
-            uses_remote_workspace,
-            remote_cwd_override.as_deref(),
-            &config,
-            cli.resume_show_all,
-        );
-        let Some(app_server) = app_server.as_mut() else {
-            unreachable!("app server should be initialized for --resume --last");
         };
-        match lookup_latest_session_target_with_app_server(
-            app_server,
-            &config,
-            filter_cwd,
-            cli.resume_include_non_interactive,
-        )
-        .await?
-        {
-            Some(target_session) => resume_picker::SessionSelection::Resume(target_session),
-            None => resume_picker::SessionSelection::StartFresh,
-        }
-    } else if cli.resume_picker {
-        let Some(app_server) = app_server.take() else {
-            unreachable!("app server should be initialized for --resume picker");
-        };
-        match resume_picker::run_resume_picker_with_app_server(
-            &mut tui,
-            &config,
-            cli.resume_show_all,
-            cli.resume_include_non_interactive,
-            app_server,
-        )
-        .await?
-        {
-            resume_picker::SessionSelection::Exit => {
+        match selection {
+            ResumeLaunchSelection::Missing(id_str) => {
+                shutdown_app_server_if_present(app_server.take()).await;
+                return Ok(exit_missing_session(
+                    &mut terminal_restore_guard,
+                    &mut tui,
+                    &id_str,
+                    "resume",
+                ));
+            }
+            ResumeLaunchSelection::Selected(resume_picker::SessionSelection::Exit) => {
                 terminal_restore_guard.restore_silently();
                 session_log::log_session_end();
-                return Ok(AppExitInfo {
-                    token_usage: crate::token_usage::TokenUsage::default(),
-                    thread_id: None,
-                    resume_hint: None,
-                    update_action: None,
-                    exit_reason: ExitReason::UserRequested,
-                });
+                return Ok(user_requested_exit_info());
             }
-            other => other,
+            ResumeLaunchSelection::Selected(selection) => selection,
         }
     } else {
         resume_picker::SessionSelection::StartFresh
@@ -1798,10 +2054,30 @@ async fn run_ratatui_app(
         }
     };
 
+    if let resume_picker::SessionSelection::Resume(target)
+    | resume_picker::SessionSelection::Fork(target) = &session_selection
+        && let Some(message) = security::preflight::resume_refusal(&target.thread_id)
+    {
+        exit_with_security_error(&message);
+    }
+
     let picker_cancelled_without_selection = matches!(
         session_selection,
         resume_picker::SessionSelection::StartFresh
     ) && (cli.resume_picker || cli.fork_picker);
+
+    // PF-84 (#545): the session config carries the account the resumed thread
+    // runs on, so the TUI shows and checks the account the app server uses.
+    let resume_recorded_account = resume_recorded_provider_account(
+        &session_selection,
+        &config,
+        uses_remote_workspace,
+        resume_model_settings,
+    )
+    .await;
+    if let Some(recorded) = resume_recorded_account.as_ref() {
+        overrides.inherited_provider_account = Some(recorded.selection());
+    }
 
     let reloads_provider_config = matches!(
         &session_selection,
@@ -1833,6 +2109,22 @@ async fn run_ratatui_app(
     };
     if reloads_provider_config {
         startup_provider_resolution = None;
+    }
+    if let Some(warning) = daemon_not_reused
+        && !config.startup_warnings.contains(&warning)
+    {
+        config.startup_warnings.push(warning);
+    }
+    if let Some(message) = chosen_thread_account_error(
+        &config,
+        resume_recorded_account.as_ref(),
+        deferred_account_check,
+        resume_launch::ThreadOpening::of(&session_selection),
+    ) {
+        shutdown_app_server_if_present(app_server.take()).await;
+        terminal_restore_guard.restore_silently();
+        session_log::log_session_end();
+        return Ok(fatal_exit_info(message));
     }
 
     // Configure syntax highlighting theme from the final config — onboarding
@@ -2014,7 +2306,7 @@ async fn get_login_status(
 ) -> color_eyre::Result<LoginStatus> {
     let account = app_server.read_account().await?;
     Ok(match account.account {
-        Some(AppServerAccount::ApiKey {}) => LoginStatus::AuthMode(AuthMode::ApiKey),
+        Some(AppServerAccount::ApiKey { .. }) => LoginStatus::AuthMode(AuthMode::ApiKey),
         Some(AppServerAccount::Chatgpt { .. }) => LoginStatus::AuthMode(AuthMode::Chatgpt),
         Some(AppServerAccount::AmazonBedrock { .. }) => LoginStatus::NotAuthenticated,
         None => LoginStatus::NotAuthenticated,
@@ -2047,6 +2339,7 @@ async fn load_config_or_exit_with_fallback_cwd(
     strict_config: bool,
     fallback_cwd: Option<PathBuf>,
 ) -> Config {
+    let inherited_provider_account = overrides.inherited_provider_account.clone();
     #[allow(clippy::print_stderr)]
     match ConfigBuilder::default()
         .cli_overrides(cli_kv_overrides)
@@ -2058,7 +2351,16 @@ async fn load_config_or_exit_with_fallback_cwd(
         .build()
         .await
     {
-        Ok(config) => config,
+        Ok(mut config) => {
+            if let Err(message) = security::launch::verify_reloaded(&config).await {
+                exit_with_security_error(&message);
+            }
+            crate::resume_launch::apply_inherited_account_to_its_provider(
+                &mut config,
+                inherited_provider_account.as_deref(),
+            );
+            config
+        }
         Err(err) => {
             eprintln!("Error loading configuration: {err}");
             std::process::exit(1);

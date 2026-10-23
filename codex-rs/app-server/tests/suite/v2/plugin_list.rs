@@ -2136,9 +2136,8 @@ async fn plugin_list_includes_remote_marketplaces_when_remote_plugin_enabled() -
             "project management".to_string()
         ]
     );
-    let cache_files = std::fs::read_dir(codex_home.path().join("cache/remote_plugin_catalog"))?
-        .map(|entry| entry.map(|entry| entry.path()))
-        .collect::<Result<Vec<_>, _>>()?;
+    let cache_files =
+        cached_remote_catalog_files(&codex_home.path().join("cache/remote_plugin_catalog"))?;
     assert_eq!(cache_files.len(), 1);
     let cached_catalog: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&cache_files[0])?)?;
@@ -2486,6 +2485,92 @@ async fn app_server_startup_refreshes_cached_remote_catalog_without_blocking_plu
         "notion@openai-curated-remote"
     );
     sleep(Duration::from_millis(100)).await;
+    wait_for_remote_plugin_request_count(&server, "/ps/plugins/list", /*expected_count*/ 1).await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn app_server_startup_and_concurrent_plugin_lists_download_remote_catalog_once() -> Result<()>
+{
+    let codex_home = TempDir::new()?;
+    let server = MockServer::start().await;
+    write_remote_plugin_catalog_config(
+        codex_home.path(),
+        &format!("{}/backend-api/", server.uri()),
+    )?;
+    write_chatgpt_auth(
+        codex_home.path(),
+        ChatGptAuthFixture::new("chatgpt-token")
+            .account_id("account-123")
+            .chatgpt_user_id("user-123")
+            .chatgpt_account_id("account-123"),
+        AuthCredentialsStoreMode::File,
+    )?;
+    // The TUI sends several plugin/list requests while the startup refresh runs; a slow
+    // catalog keeps them all overlapping, as with the real multi-megabyte download.
+    Mock::given(method("GET"))
+        .and(path("/backend-api/ps/plugins/list"))
+        .and(query_param("scope", "GLOBAL"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(remote_plugin_list_body(
+                    "plugins~Plugin_00000000000000000000000000000000",
+                    "linear",
+                    "Linear",
+                    "Plan work",
+                ))
+                .set_delay(Duration::from_secs(/*secs*/ 1)),
+        )
+        .mount(&server)
+        .await;
+    mount_remote_installed_plugins(&server, "GLOBAL", empty_remote_installed_plugins_body()).await;
+    mount_remote_installed_plugins(&server, "WORKSPACE", empty_remote_installed_plugins_body())
+        .await;
+    mount_empty_user_installed_plugins(&server).await;
+
+    let mut app_server = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .with_plugin_startup_tasks()
+        .build()
+        .await?;
+    timeout(DEFAULT_TIMEOUT, app_server.initialize()).await??;
+    let mut request_ids = Vec::new();
+    for _ in 0..3 {
+        request_ids.push(
+            app_server
+                .send_plugin_list_request(PluginListParams {
+                    cwds: None,
+                    marketplace_kinds: None,
+                    force_refetch: false,
+                })
+                .await?,
+        );
+    }
+    for request_id in request_ids {
+        let response: PluginListResponse = to_response(
+            timeout(
+                DEFAULT_TIMEOUT,
+                app_server.read_stream_until_response_message(RequestId::Integer(request_id)),
+            )
+            .await??,
+        )?;
+        assert!(
+            response
+                .marketplaces
+                .iter()
+                .any(|marketplace| marketplace.name == "openai-curated-remote"),
+            "expected the remote marketplace in every plugin/list response"
+        );
+    }
+    wait_for_cached_remote_catalog_plugin_ids(
+        codex_home.path(),
+        &["plugins~Plugin_00000000000000000000000000000000"],
+    )
+    .await?;
+    // Let a late startup refresh, if any, reach the server before counting.
+    sleep(Duration::from_millis(500)).await;
     wait_for_remote_plugin_request_count(&server, "/ps/plugins/list", /*expected_count*/ 1).await?;
 
     Ok(())
@@ -4797,14 +4882,30 @@ async fn wait_for_cached_remote_catalog_plugin_ids(
     Ok(())
 }
 
+/// The catalog cache files in `cache_dir`. The cache is written atomically
+/// through a temporary file in the same folder, which can be empty when read;
+/// only the finished `.json` files count.
+fn cached_remote_catalog_files(cache_dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>> {
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(cache_dir)? {
+        let path = entry?.path();
+        if path
+            .extension()
+            .is_some_and(|extension| extension == "json")
+        {
+            files.push(path);
+        }
+    }
+    Ok(files)
+}
+
 fn cached_remote_catalog_plugin_ids(codex_home: &std::path::Path) -> Result<Vec<String>> {
     let cache_dir = codex_home.join("cache/remote_plugin_catalog");
     if !cache_dir.exists() {
         return Ok(Vec::new());
     }
     let mut plugin_ids = Vec::new();
-    for entry in std::fs::read_dir(cache_dir)? {
-        let path = entry?.path();
+    for path in cached_remote_catalog_files(&cache_dir)? {
         let cached_catalog: serde_json::Value = serde_json::from_slice(&std::fs::read(path)?)?;
         let Some(plugins) = cached_catalog["plugins"].as_array() else {
             continue;
@@ -4825,8 +4926,7 @@ fn rewrite_cached_remote_catalog_fetched_at(
     fetched_at: chrono::DateTime<Utc>,
 ) -> Result<()> {
     let cache_dir = codex_home.join("cache/remote_plugin_catalog");
-    for entry in std::fs::read_dir(cache_dir)? {
-        let path = entry?.path();
+    for path in cached_remote_catalog_files(&cache_dir)? {
         let mut cached_catalog: serde_json::Value = serde_json::from_slice(&std::fs::read(&path)?)?;
         cached_catalog["fetched_at"] = serde_json::json!(fetched_at);
         std::fs::write(path, serde_json::to_vec_pretty(&cached_catalog)?)?;
@@ -4927,10 +5027,12 @@ async fn mount_delayed_remote_plugin_list(server: &MockServer, scope: &str, body
         .and(query_param("limit", "200"))
         .and(header("authorization", "Bearer chatgpt-token"))
         .and(header("chatgpt-account-id", "account-123"))
+        // Callers read stale catalogs while this refresh is in flight. 200ms let a loaded
+        // nightly runner finish the refresh before the next plugin/list was served.
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_string(body)
-                .set_delay(Duration::from_millis(/*millis*/ 200)),
+                .set_delay(Duration::from_secs(/*secs*/ 5)),
         )
         .mount(server)
         .await;

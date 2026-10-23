@@ -1,0 +1,2316 @@
+python3 ../scripts/isolated_rust_tests.py "$@"
+Test isolation: disposable profile; native keyring disabled (debug lane)
+warning: enum `Checkpoint` is never used
+  --> protected-state/src/checkpoint.rs:24:17
+   |
+24 | pub(crate) enum Checkpoint {
+   |                 ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: enum `Binding` is never used
+  --> protected-state/src/checkpoint.rs:31:17
+   |
+31 | pub(crate) enum Binding {
+   |                 ^^^^^^^
+
+warning: function `hash_valid` is never used
+  --> protected-state/src/checkpoint.rs:42:15
+   |
+42 | pub(crate) fn hash_valid(hash: &str) -> bool {
+   |               ^^^^^^^^^^
+
+warning: methods `validate_successor`, `validate`, and `sequence` are never used
+   --> protected-state/src/checkpoint.rs:50:19
+    |
+ 49 | impl Checkpoint {
+    | --------------- methods in this implementation
+ 50 |     pub(crate) fn validate_successor(
+    |                   ^^^^^^^^^^^^^^^^^^
+...
+ 77 |     pub(crate) fn validate(&self, binding: &Binding) -> Result<(), RootError> {
+    |                   ^^^^^^^^
+...
+113 |     pub(crate) fn sequence(&self) -> u64 {
+    |                   ^^^^^^^^
+
+warning: `codex-protected-state` (lib) generated 4 warnings
+warning: field `runtime` is never read
+  --> state/src/runtime/accounting.rs:27:5
+   |
+26 | struct Journal<'a> {
+   |        ------- field in this struct
+27 |     runtime: &'a StateRuntime,
+   |     ^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: methods `begin_attempt`, `append_observation`, and `read_observations` are never used
+   --> state/src/runtime/accounting.rs:49:14
+    |
+ 30 | impl<'a> Journal<'a> {
+    | -------------------- methods in this implementation
+...
+ 49 |     async fn begin_attempt(&self, attempt: &Attempt) -> anyhow::Result<()> {
+    |              ^^^^^^^^^^^^^
+...
+ 54 |     async fn append_observation(
+    |              ^^^^^^^^^^^^^^^^^^
+...
+162 |     async fn read_observations(
+    |              ^^^^^^^^^^^^^^^^^
+
+warning: field `journal` is never read
+  --> state/src/runtime/accounting_estimates.rs:27:5
+   |
+26 | struct EstimateStore<'a> {
+   |        ------------- field in this struct
+27 |     journal: Journal<'a>,
+   |     ^^^^^^^
+
+warning: methods `persist_current` and `read_estimate` are never used
+  --> state/src/runtime/accounting_estimates.rs:50:14
+   |
+30 | impl<'a> EstimateStore<'a> {
+   | -------------------------- methods in this implementation
+...
+50 |     async fn persist_current(
+   |              ^^^^^^^^^^^^^^^
+...
+99 |     async fn read_estimate(
+   |              ^^^^^^^^^^^^^
+
+warning: method `full` is never used
+  --> state/src/runtime/accounting_lifecycle.rs:25:8
+   |
+24 | impl Metric {
+   | ----------- method in this implementation
+25 |     fn full(&self) -> Option<i64> {
+   |        ^^^^
+
+warning: method `full_usd` is never used
+  --> state/src/runtime/accounting_lifecycle.rs:63:8
+   |
+51 | impl DayTotals {
+   | -------------- method in this implementation
+...
+63 |     fn full_usd(&self) -> Option<Decimal> {
+   |        ^^^^^^^^
+
+warning: struct `Lifecycle` is never constructed
+  --> state/src/runtime/accounting_lifecycle.rs:93:8
+   |
+93 | struct Lifecycle<'a> {
+   |        ^^^^^^^^^
+
+warning: methods `refresh_current`, `read_day`, and `delete_recorded_thread` are never used
+   --> state/src/runtime/accounting_lifecycle.rs:114:14
+    |
+ 97 | impl<'a> Lifecycle<'a> {
+    | ---------------------- methods in this implementation
+...
+114 |     async fn refresh_current(&self, id: Uuid) -> anyhow::Result<Current<()>> {
+    |              ^^^^^^^^^^^^^^^
+...
+135 |     async fn read_day(&self, thread: ThreadId, day: i64) -> anyhow::Result<Current<DayTotals>> {
+    |              ^^^^^^^^
+...
+178 |     async fn delete_recorded_thread(&self, thread: ThreadId, as_of_ms: i64) -> anyhow::Result<()> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `maintain_retention` and `read_retained_day` are never used
+  --> state/src/runtime/accounting_retention_atomic.rs:55:14
+   |
+54 | impl Lifecycle<'_> {
+   | ------------------ methods in this implementation
+55 |     async fn maintain_retention(&self, as_of_ms: i64) -> anyhow::Result<()> {
+   |              ^^^^^^^^^^^^^^^^^^
+...
+73 |     pub(in crate::runtime::accounting::pricing::storage::lifecycle) async fn read_retained_day(
+   |                                                                              ^^^^^^^^^^^^^^^^^
+
+warning: method `append_native` is never used
+  --> state/src/runtime/accounting_native.rs:53:49
+   |
+ 8 | impl Journal<'_> {
+   | ---------------- method in this implementation
+...
+53 |     pub(in crate::runtime::accounting) async fn append_native(
+   |                                                 ^^^^^^^^^^^^^
+
+warning: `codex-state` (lib) generated 10 warnings
+warning: static `LINUX_SANDBOX_SKIP_REASON` is never used
+  --> core/tests/common/lib.rs:52:8
+   |
+52 | static LINUX_SANDBOX_SKIP_REASON: OnceLock<Option<String>> = OnceLock::new();
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `core_test_support` (lib) generated 1 warning
+   Compiling codex-core v0.1.42 (/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs/core)
+warning: function `append_chat_messages_for_response_item` is never used
+    --> core/src/client.rs:3946:4
+     |
+3946 | fn append_chat_messages_for_response_item(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `test_claude_plan_model_info` is never used
+    --> core/src/client_tests.rs:1640:4
+     |
+1640 | fn test_claude_plan_model_info() -> ModelInfo {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `count_cache_control_markers` is never used
+    --> core/src/client_tests.rs:1687:4
+     |
+1687 | fn count_cache_control_markers(value: &serde_json::Value) -> usize {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `test_openrouter_gemini_model_info` is never used
+    --> core/src/client_tests.rs:1926:4
+     |
+1926 | fn test_openrouter_gemini_model_info() -> ModelInfo {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `test_openrouter_anthropic_model_info` is never used
+    --> core/src/client_tests.rs:1959:4
+     |
+1959 | fn test_openrouter_anthropic_model_info() -> ModelInfo {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `submit_inter_agent_communication` is never used
+   --> core/src/agent/control.rs:428:14
+    |
+162 | impl AgentControl {
+    | ----------------- method in this implementation
+...
+428 |     async fn submit_inter_agent_communication(
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `codex-core` (lib test) generated 6 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11m 03s
+────────────
+ Nextest run ID c4aa98a5-3308-4d24-a95e-9589bdd3760b with nextest profile: local
+    Starting 126 tests across 4 binaries (3529 tests skipped)
+        PASS [   0.079s] (  1/126) codex-core accounting::prices::tests::accounting_price_projection_retains_absent_read_and_write_and_exact_milli
+        PASS [   0.085s] (  2/126) codex-core accounting::prices::tests::accounting_price_authority_rejects_aliases_remote_and_non_metered_rows
+        PASS [   0.087s] (  3/126) codex-core accounting::prices::tests::accounting_bundled_prices_are_exact_prospective_and_content_identified
+        PASS [   0.097s] (  4/126) codex-core accounting::prices::tests::accounting_responses_prices_exact_and_unknown
+        PASS [   0.124s] (  5/126) codex-core accounting::prices::tests::accounting_chat_prices_exact_source_and_unknown
+        LEAK [   0.875s] (  6/126) codex-core accounting::chat::tests::accounting_chat_borrowed_binding_denies_existing_and_future_clones
+        PASS [   1.322s] (  7/126) codex-core accounting::chat::tests::accounting_chat_frame_guard_denies_provider_change_before_client_publication
+        PASS [   1.758s] (  8/126) codex-core accounting::policy_tests::accounting_policy_wait_cancellation_and_post_wait_failure_have_no_effect
+        PASS [   1.759s] (  9/126) codex-core accounting::policy_tests::accounting_policy_completion_guard_never_repairs_possible_committed_rows
+        PASS [   1.798s] ( 10/126) codex-core accounting::policy_tests::accounting_policy_observe_wait_cancel_and_start_cancel_publish_nothing
+        PASS [   1.811s] ( 11/126) codex-core accounting::policy_tests::accounting_policy_serial_retry_identity_and_time_sample_after_gate
+        PASS [   1.900s] ( 12/126) codex-core accounting::responses::tests::accounting_responses_auth_and_guard_precede_admission
+        PASS [   1.926s] ( 13/126) codex-core accounting::responses::tests::accounting_responses_auth_route_eligibility
+        PASS [   1.933s] ( 14/126) codex-core accounting::chat::tests::accounting_chat_response_local_attempt_identity
+        LEAK [   1.970s] ( 15/126) codex-core accounting::chat::tests::accounting_chat_bootstrap_is_lazy_once_and_mode_local
+        PASS [   1.989s] ( 16/126) codex-core accounting::chat::tests::accounting_chat_role_inheritance_reserved_id_parity
+        PASS [   0.095s] ( 17/126) codex-core accounting::websocket::tests::accounting_responses_ws_role_inheritance_preserves_reserved_provider_rule
+        PASS [   1.937s] ( 18/126) codex-core accounting::responses::tests::accounting_responses_bootstrap_is_lazy_and_once
+        PASS [   0.029s] ( 19/126) codex-core memory_stage_one::accounting_tests::accounting_developer_activation_excludes_other_routes
+        PASS [   1.992s] ( 20/126) codex-core accounting::responses::tests::accounting_responses_scope_cleanup_and_failure_latch
+        PASS [   2.049s] ( 21/126) codex-core accounting::responses::tests::accounting_responses_role_overlay_preserves_binding
+        PASS [   2.091s] ( 22/126) codex-core accounting::responses::tests::accounting_responses_response_local_identity
+        PASS [   0.068s] ( 23/126) codex-core memory_stage_one::accounting_tests::accounting_role_overlay_keeps_explicit_provider_fields_and_validates_conflicts
+        PASS [   0.060s] ( 24/126) codex-core memory_stage_one::accounting_tests::accounting_role_reload_preserves_internal_binding_without_changing_off_route_behavior
+        PASS [   2.474s] ( 25/126) codex-core accounting::chat::tests::accounting_chat_auth_and_guard_before_admission
+        PASS [   2.658s] ( 26/126) codex-core accounting::responses::tests::accounting_responses_bootstrap_failure_and_cancellation
+        PASS [   0.658s] ( 27/126) codex-core session::rollout_reconstruction_tests::record_initial_history_resumed_aborted_turn_without_id_clears_active_turn_for_compaction_accounting
+        PASS [   1.215s] ( 28/126) codex-core memory_stage_one::accounting_tests::accounting_awaited_auth_denial_creates_no_attempt_or_transport_send
+  TRY 1 FAIL [   1.249s] (───────) codex-core memory_stage_one::accounting_tests::accounting_developer_activation_samples_http_and_installs_inspectable_day
+  stdout ───
+
+    running 1 test
+    test memory_stage_one::accounting_tests::accounting_developer_activation_samples_http_and_installs_inspectable_day ... FAILED
+
+    failures:
+
+    failures:
+        memory_stage_one::accounting_tests::accounting_developer_activation_samples_http_and_installs_inspectable_day
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2472 filtered out; finished in 1.20s
+
+  stderr ───
+    Error: stream error: Anthropic messages stream completed without any model output
+
+        PASS [   1.365s] ( 29/126) codex-core memory_stage_one::accounting_tests::accounting_actual_transport_retries_and_old_response_keep_distinct_owned_identity
+        PASS [   1.242s] ( 30/126) codex-core memory_stage_one::accounting_tests::accounting_guard_denial_precedes_admission_and_never_sends
+        PASS [   1.302s] ( 31/126) codex-core memory_stage_one::accounting_tests::accounting_scope_drop_clears_cancelled_sampling_and_observation_failure_is_fatal
+        PASS [   3.531s] ( 32/126) codex-core accounting::policy_tests::accounting_policy_previous_poison_before_and_during_admission_is_sticky
+        PASS [   3.545s] ( 33/126) codex-core accounting::policy_tests::accounting_policy_cancel_in_operation_rejects_and_releases_capacity
+        PASS [   1.311s] ( 34/126) codex-core memory_stage_one::accounting_tests::accounting_writer_barrier_prevents_send_until_durable_admission
+        PASS [   2.011s] ( 35/126) codex-core accounting::websocket::tests::accounting_responses_ws_fallback_keeps_request_and_predecessor
+        PASS [   2.045s] ( 36/126) codex-core accounting::websocket::tests::accounting_responses_ws_original_price_binding
+        PASS [   4.065s] ( 37/126) codex-core accounting::policy_tests::accounting_policy_slot_poison_rejects_stale_and_incoming_without_disabling
+        PASS [   2.377s] ( 38/126) codex-core accounting::websocket::tests::accounting_responses_ws_stream_guard_checks_live_policy_with_session_state_locked
+  TRY 2 FAIL [   1.210s] ( 39/126) codex-core memory_stage_one::accounting_tests::accounting_developer_activation_samples_http_and_installs_inspectable_day
+  stdout ───
+
+    running 1 test
+    test memory_stage_one::accounting_tests::accounting_developer_activation_samples_http_and_installs_inspectable_day ... FAILED
+
+    failures:
+
+    failures:
+        memory_stage_one::accounting_tests::accounting_developer_activation_samples_http_and_installs_inspectable_day
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2472 filtered out; finished in 1.15s
+
+  stderr ───
+    Error: stream error: Anthropic messages stream completed without any model output
+
+        PASS [   4.649s] ( 40/126) codex-core accounting::chat::tests::accounting_chat_bootstrap_cancel_scope_and_latch
+        PASS [   3.269s] ( 41/126) codex-core memory_stage_one::accounting_tests::accounting_admission_failure_and_route_mismatch_are_sticky_without_send
+        PASS [   3.629s] ( 42/126) codex-core accounting::websocket::tests::accounting_responses_ws_failure_and_cancellation_latch
+        PASS [   4.579s] ( 43/126) codex-core accounting::websocket::tests::accounting_responses_ws_cached_connection_provenance
+        PASS [   3.774s] ( 44/126) codex-core accounting::websocket::tests::accounting_responses_ws_mode_scope_and_lazy_bootstrap
+        PASS [   4.423s] ( 45/126) codex-core accounting::websocket::tests::accounting_responses_ws_exact_endpoint_binding
+        PASS [   6.092s] ( 46/126) codex-core accounting::chat::tests::accounting_chat_exact_final_endpoint_binding
+        PASS [   6.654s] ( 47/126) codex-core accounting::chat::tests::accounting_chat_direct_auth_and_gateway_eligibility
+        SLOW [> 30.000s] (───────) codex-core accounting::websocket::tests::accounting_responses_ws_auth_route_eligibility
+        SLOW [> 30.000s] (───────) codex-core memory_stage_one::accounting_tests::accounting_build_activation_uses_loaded_provider
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_actual_presence_revisions_and_remote_only_price_unknown
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_cancel_held_http_other_owner_fresh_turn_and_two_resumes
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_default_off_does_not_install_and_installed_off_deletion_cleans
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_http_and_payload_retries_are_separate_durable_attempts
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_native_presence_prices_and_two_reopens
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_native_spawned_children_role_reload_and_fork_own_only_new_sends
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_request_retry
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_stream_retry
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_endpoint_mismatch_has_no_unapproved_send
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_extends_actual_child_idle_timeout
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_401_and_429_are_terminal_and_preflight_schema_fault_has_no_send
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_cancel_keeps_intent_or_observed_start_through_reopen
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_deleted_native_owner_cannot_be_resurrected_by_delayed_usage
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_missing_optional_state_is_only_fatal_when_enabled
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_observation_failure_stops_real_sampling_without_repair_send
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_opt_in_does_not_activate_other_native_routes
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_endpoint
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_stream_retry_retains_start_usage_without_merging_reused_provider_id
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_cumulative_and_separate_usage
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_finish_reason_and_tool_parity
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_gateway_exclusion_and_header_parity
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_immutable_prices_and_unpriced_rows
+        PASS [  45.009s] ( 48/126) codex-core memory_stage_one::accounting_tests::accounting_build_activation_uses_loaded_provider
+        PASS [  48.240s] ( 49/126) codex-core accounting::websocket::tests::accounting_responses_ws_auth_route_eligibility
+        PASS [   0.809s] ( 50/126) codex-core::all suite::accounting_chat::accounting_chat_native_mismatched_endpoint_never_sends
+  TRY 1 FAIL [  58.754s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_actual_presence_revisions_and_remote_only_price_unknown
+  stdout ───
+
+    running 1 test
+    test suite::accounting_anthropic::accounting_anthropic_actual_presence_revisions_and_remote_only_price_unknown ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_anthropic::accounting_anthropic_actual_presence_revisions_and_remote_only_price_unknown
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 58.68s
+
+  stderr ───
+
+    thread 'suite::accounting_anthropic::accounting_anthropic_actual_presence_revisions_and_remote_only_price_unknown' (29738371) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wiremock-0.6.5/src/mock_server/exposed_server.rs:367:17:
+    Verifications failed:
+    - Mock #0.
+    Expected range of matching incoming requests: == 1
+    Number of matched incoming requests: 0
+
+    The server did not receive any request.
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  TRY 1 FAIL [  59.595s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_cancel_held_http_other_owner_fresh_turn_and_two_resumes
+  stdout ───
+
+    running 1 test
+    test suite::accounting_anthropic::accounting_anthropic_cancel_held_http_other_owner_fresh_turn_and_two_resumes ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_anthropic::accounting_anthropic_cancel_held_http_other_owner_fresh_turn_and_two_resumes
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 59.53s
+
+  stderr ───
+    Error: deadline has elapsed
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_default_off_does_not_install_and_installed_off_deletion_cleans
+   TRY 1 TMT [  60.016s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_default_off_does_not_install_and_installed_off_deletion_cleans
+  stdout ───
+
+    running 1 test
+  stderr ───
+
+    thread 'suite::accounting_anthropic::accounting_anthropic_default_off_does_not_install_and_installed_off_deletion_cleans' (29738545) panicked at core/tests/common/lib.rs:369:14:
+    timeout waiting for event: Elapsed(())
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_http_and_payload_retries_are_separate_durable_attempts
+   TRY 1 TMT [  60.010s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_http_and_payload_retries_are_separate_durable_attempts
+  stdout ───
+
+    running 1 test
+  stderr ───
+
+    thread 'suite::accounting_anthropic::accounting_anthropic_http_and_payload_retries_are_separate_durable_attempts' (29738653) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wiremock-0.6.5/src/mock_server/exposed_server.rs:367:17:
+    Verifications failed:
+    - Mock #0.
+    Expected range of matching incoming requests: == 2
+    Number of matched incoming requests: 0
+
+    The server did not receive any request.
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_native_presence_prices_and_two_reopens
+   TRY 1 TMT [  60.008s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_native_presence_prices_and_two_reopens
+  stdout ───
+
+    running 1 test
+  stderr ───
+
+    thread 'suite::accounting_anthropic::accounting_anthropic_native_presence_prices_and_two_reopens' (29738682) panicked at core/tests/common/lib.rs:369:14:
+    timeout waiting for event: Elapsed(())
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_native_spawned_children_role_reload_and_fork_own_only_new_sends
+   TRY 1 TMT [  60.012s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_native_spawned_children_role_reload_and_fork_own_only_new_sends
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_request_retry
+   TRY 1 TMT [  60.008s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_request_retry
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_stream_retry
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_endpoint_mismatch_has_no_unapproved_send
+   TRY 1 TMT [  60.009s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_stream_retry
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+   TRY 1 TMT [  60.006s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_endpoint_mismatch_has_no_unapproved_send
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_extends_actual_child_idle_timeout
+   TRY 1 TMT [  60.011s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_extends_actual_child_idle_timeout
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_401_and_429_are_terminal_and_preflight_schema_fault_has_no_send
+   TRY 1 TMT [  60.011s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_401_and_429_are_terminal_and_preflight_schema_fault_has_no_send
+  stdout ───
+
+    running 1 test
+  stderr ───
+
+    thread 'suite::accounting_anthropic_recovery::accounting_anthropic_401_and_429_are_terminal_and_preflight_schema_fault_has_no_send' (29738834) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wiremock-0.6.5/src/mock_server/exposed_server.rs:367:17:
+    Verifications failed:
+    - Mock #0.
+    Expected range of matching incoming requests: == 1
+    Number of matched incoming requests: 0
+
+    The server did not receive any request.
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_cancel_keeps_intent_or_observed_start_through_reopen
+   TRY 1 TMT [  60.009s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_cancel_keeps_intent_or_observed_start_through_reopen
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_deleted_native_owner_cannot_be_resurrected_by_delayed_usage
+   TRY 1 TMT [  60.010s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_deleted_native_owner_cannot_be_resurrected_by_delayed_usage
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_missing_optional_state_is_only_fatal_when_enabled
+   TRY 1 TMT [  60.012s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_missing_optional_state_is_only_fatal_when_enabled
+  stdout ───
+
+    running 1 test
+  stderr ───
+    failed to initialize state runtime: failed to initialize state runtime at /private/tmp/cacctact20.8ZOWuP/tmp/.tmpR5lxto/unusable-sqlite-home: File exists (os error 17)
+
+    thread 'suite::accounting_anthropic_recovery::accounting_anthropic_missing_optional_state_is_only_fatal_when_enabled' (29739035) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wiremock-0.6.5/src/mock_server/exposed_server.rs:367:17:
+    Verifications failed:
+    - Mock #0.
+    Expected range of matching incoming requests: == 1
+    Number of matched incoming requests: 0
+
+    The server did not receive any request.
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_observation_failure_stops_real_sampling_without_repair_send
+   TRY 1 TMT [  60.013s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_observation_failure_stops_real_sampling_without_repair_send
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_opt_in_does_not_activate_other_native_routes
+   TRY 1 TMT [  60.011s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_opt_in_does_not_activate_other_native_routes
+  stdout ───
+
+    running 1 test
+  stderr ───
+
+    thread 'suite::accounting_anthropic_recovery::accounting_anthropic_opt_in_does_not_activate_other_native_routes' (29739495) panicked at core/tests/common/lib.rs:369:14:
+    timeout waiting for event: Elapsed(())
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_endpoint
+   TRY 1 TMT [  60.011s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_endpoint
+  stdout ───
+
+    running 1 test
+  stderr ───
+
+    thread 'suite::accounting_anthropic_recovery::accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_endpoint' (29739621) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wiremock-0.6.5/src/mock_server/exposed_server.rs:367:17:
+    Verifications failed:
+    - Mock #0.
+    Expected range of matching incoming requests: == 1
+    Number of matched incoming requests: 0
+
+    The server did not receive any request.
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_stream_retry_retains_start_usage_without_merging_reused_provider_id
+   TRY 1 TMT [  60.007s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_stream_retry_retains_start_usage_without_merging_reused_provider_id
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_cumulative_and_separate_usage
+   TRY 1 TMT [  60.010s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_cumulative_and_separate_usage
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_finish_reason_and_tool_parity
+   TRY 1 TMT [  60.011s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_finish_reason_and_tool_parity
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_gateway_exclusion_and_header_parity
+   TRY 1 TMT [  60.012s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_gateway_exclusion_and_header_parity
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+  TRY 1 FAIL [  59.552s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_immutable_prices_and_unpriced_rows
+  stdout ───
+
+    running 1 test
+    test suite::accounting_chat::accounting_chat_native_immutable_prices_and_unpriced_rows ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_chat::accounting_chat_native_immutable_prices_and_unpriced_rows
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 59.52s
+
+  stderr ───
+
+    thread 'suite::accounting_chat::accounting_chat_native_immutable_prices_and_unpriced_rows' (29740036) panicked at core/tests/common/lib.rs:369:14:
+    timeout waiting for event: Elapsed(())
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_literal_partial_and_zero_goldens
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_missing_usage_and_correlation
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_actual_presence_revisions_and_remote_only_price_unknown
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_cancel_held_http_other_owner_fresh_turn_and_two_resumes
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_default_off_does_not_install_and_installed_off_deletion_cleans
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_http_and_payload_retries_are_separate_durable_attempts
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_native_presence_prices_and_two_reopens
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_native_spawned_children_role_reload_and_fork_own_only_new_sends
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_request_retry
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_endpoint_mismatch_has_no_unapproved_send
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_stream_retry
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_extends_actual_child_idle_timeout
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_401_and_429_are_terminal_and_preflight_schema_fault_has_no_send
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_cancel_keeps_intent_or_observed_start_through_reopen
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_deleted_native_owner_cannot_be_resurrected_by_delayed_usage
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_missing_optional_state_is_only_fatal_when_enabled
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_observation_failure_stops_real_sampling_without_repair_send
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_opt_in_does_not_activate_other_native_routes
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_endpoint
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_stream_retry_retains_start_usage_without_merging_reused_provider_id
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_cumulative_and_separate_usage
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_finish_reason_and_tool_parity
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_gateway_exclusion_and_header_parity
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_immutable_prices_and_unpriced_rows
+  TRY 1 FAIL [  58.948s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_literal_partial_and_zero_goldens
+  stdout ───
+
+    running 1 test
+    test suite::accounting_chat::accounting_chat_native_literal_partial_and_zero_goldens ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_chat::accounting_chat_native_literal_partial_and_zero_goldens
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 58.91s
+
+  stderr ───
+
+    thread 'suite::accounting_chat::accounting_chat_native_literal_partial_and_zero_goldens' (29741010) panicked at core/tests/common/lib.rs:369:14:
+    timeout waiting for event: Elapsed(())
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  TRY 1 FAIL [  59.129s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_missing_usage_and_correlation
+  stdout ───
+
+    running 1 test
+    test suite::accounting_chat::accounting_chat_native_missing_usage_and_correlation ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_chat::accounting_chat_native_missing_usage_and_correlation
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 59.10s
+
+  stderr ───
+    Error: deadline has elapsed
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_actual_presence_revisions_and_remote_only_price_unknown
+   TRY 2 TMT [  60.011s] ( 51/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_actual_presence_revisions_and_remote_only_price_unknown
+  stdout ───
+
+    running 1 test
+  stderr ───
+
+    thread 'suite::accounting_anthropic::accounting_anthropic_actual_presence_revisions_and_remote_only_price_unknown' (29741395) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wiremock-0.6.5/src/mock_server/exposed_server.rs:367:17:
+    Verifications failed:
+    - Mock #0.
+    Expected range of matching incoming requests: == 1
+    Number of matched incoming requests: 0
+
+    The server did not receive any request.
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+    (test timed out)
+
+  TRY 2 FAIL [  59.957s] ( 52/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_cancel_held_http_other_owner_fresh_turn_and_two_resumes
+  stdout ───
+
+    running 1 test
+    test suite::accounting_anthropic::accounting_anthropic_cancel_held_http_other_owner_fresh_turn_and_two_resumes ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_anthropic::accounting_anthropic_cancel_held_http_other_owner_fresh_turn_and_two_resumes
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 59.93s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 FAIL [  59.601s] ( 53/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_native_presence_prices_and_two_reopens
+  stdout ───
+
+    running 1 test
+    test suite::accounting_anthropic::accounting_anthropic_native_presence_prices_and_two_reopens ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_anthropic::accounting_anthropic_native_presence_prices_and_two_reopens
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 59.57s
+
+  stderr ───
+
+    thread 'suite::accounting_anthropic::accounting_anthropic_native_presence_prices_and_two_reopens' (29741547) panicked at core/tests/common/lib.rs:369:14:
+    timeout waiting for event: Elapsed(())
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  TRY 2 FAIL [  59.775s] ( 54/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_default_off_does_not_install_and_installed_off_deletion_cleans
+  stdout ───
+
+    running 1 test
+    test suite::accounting_anthropic::accounting_anthropic_default_off_does_not_install_and_installed_off_deletion_cleans ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_anthropic::accounting_anthropic_default_off_does_not_install_and_installed_off_deletion_cleans
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 59.74s
+
+  stderr ───
+
+    thread 'suite::accounting_anthropic::accounting_anthropic_default_off_does_not_install_and_installed_off_deletion_cleans' (29741500) panicked at core/tests/common/lib.rs:369:14:
+    timeout waiting for event: Elapsed(())
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  TRY 2 FAIL [  59.717s] ( 55/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_native_spawned_children_role_reload_and_fork_own_only_new_sends
+  stdout ───
+
+    running 1 test
+    test suite::accounting_anthropic::accounting_anthropic_native_spawned_children_role_reload_and_fork_own_only_new_sends ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_anthropic::accounting_anthropic_native_spawned_children_role_reload_and_fork_own_only_new_sends
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 59.69s
+
+  stderr ───
+    Error: deadline has elapsed
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_http_and_payload_retries_are_separate_durable_attempts
+   TRY 2 TMT [  60.009s] ( 56/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_http_and_payload_retries_are_separate_durable_attempts
+  stdout ───
+
+    running 1 test
+  stderr ───
+
+    thread 'suite::accounting_anthropic::accounting_anthropic_http_and_payload_retries_are_separate_durable_attempts' (29741516) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wiremock-0.6.5/src/mock_server/exposed_server.rs:367:17:
+    Verifications failed:
+    - Mock #0.
+    Expected range of matching incoming requests: == 2
+    Number of matched incoming requests: 0
+
+    The server did not receive any request.
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_request_retry
+  TRY 2 FAIL [  59.993s] ( 57/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_endpoint_mismatch_has_no_unapproved_send
+  stdout ───
+
+    running 1 test
+    test suite::accounting_anthropic::accounting_anthropic_role_endpoint_mismatch_has_no_unapproved_send ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_anthropic::accounting_anthropic_role_endpoint_mismatch_has_no_unapproved_send
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 59.96s
+
+  stderr ───
+    Error: deadline has elapsed
+
+   TRY 2 TMT [  60.008s] ( 58/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_request_retry
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_stream_retry
+   TRY 2 TMT [  60.009s] ( 59/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_stream_retry
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_extends_actual_child_idle_timeout
+   TRY 2 TMT [  60.009s] ( 60/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_extends_actual_child_idle_timeout
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_401_and_429_are_terminal_and_preflight_schema_fault_has_no_send
+   TRY 2 TMT [  60.010s] ( 61/126) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_401_and_429_are_terminal_and_preflight_schema_fault_has_no_send
+  stdout ───
+
+    running 1 test
+  stderr ───
+
+    thread 'suite::accounting_anthropic_recovery::accounting_anthropic_401_and_429_are_terminal_and_preflight_schema_fault_has_no_send' (29741819) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wiremock-0.6.5/src/mock_server/exposed_server.rs:367:17:
+    Verifications failed:
+    - Mock #0.
+    Expected range of matching incoming requests: == 1
+    Number of matched incoming requests: 0
+
+    The server did not receive any request.
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_cancel_keeps_intent_or_observed_start_through_reopen
+   TRY 2 TMT [  60.010s] ( 62/126) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_cancel_keeps_intent_or_observed_start_through_reopen
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_deleted_native_owner_cannot_be_resurrected_by_delayed_usage
+   TRY 2 TMT [  60.004s] ( 63/126) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_deleted_native_owner_cannot_be_resurrected_by_delayed_usage
+  stdout ───
+
+    running 1 test
+    test suite::accounting_anthropic_recovery::accounting_anthropic_deleted_native_owner_cannot_be_resurrected_by_delayed_usage ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_anthropic_recovery::accounting_anthropic_deleted_native_owner_cannot_be_resurrected_by_delayed_usage
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 59.97s
+
+  stderr ───
+    Error: deadline has elapsed
+
+    (test timed out)
+
+  TRY 2 FAIL [  59.974s] ( 64/126) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_missing_optional_state_is_only_fatal_when_enabled
+  stdout ───
+
+    running 1 test
+    test suite::accounting_anthropic_recovery::accounting_anthropic_missing_optional_state_is_only_fatal_when_enabled ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_anthropic_recovery::accounting_anthropic_missing_optional_state_is_only_fatal_when_enabled
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 59.94s
+
+  stderr ───
+    failed to initialize state runtime: failed to initialize state runtime at /private/tmp/cacctact20.8ZOWuP/tmp/.tmpyugSO2/unusable-sqlite-home: File exists (os error 17)
+
+    thread 'suite::accounting_anthropic_recovery::accounting_anthropic_missing_optional_state_is_only_fatal_when_enabled' (29742035) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wiremock-0.6.5/src/mock_server/exposed_server.rs:367:17:
+    Verifications failed:
+    - Mock #0.
+    Expected range of matching incoming requests: == 1
+    Number of matched incoming requests: 0
+
+    The server did not receive any request.
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_observation_failure_stops_real_sampling_without_repair_send
+   TRY 2 TMT [  60.012s] ( 65/126) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_observation_failure_stops_real_sampling_without_repair_send
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_opt_in_does_not_activate_other_native_routes
+   TRY 2 TMT [  60.011s] ( 66/126) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_opt_in_does_not_activate_other_native_routes
+  stdout ───
+
+    running 1 test
+  stderr ───
+
+    thread 'suite::accounting_anthropic_recovery::accounting_anthropic_opt_in_does_not_activate_other_native_routes' (29742126) panicked at core/tests/common/lib.rs:369:14:
+    timeout waiting for event: Elapsed(())
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+    (test timed out)
+
+        PASS [   0.596s] ( 67/126) codex-core::all suite::accounting_responses::accounting_responses_native_endpoint_mismatch
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_endpoint
+   TRY 2 TMT [  60.011s] ( 68/126) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_endpoint
+  stdout ───
+
+    running 1 test
+  stderr ───
+
+    thread 'suite::accounting_anthropic_recovery::accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_endpoint' (29742166) panicked at /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wiremock-0.6.5/src/mock_server/exposed_server.rs:367:17:
+    Verifications failed:
+    - Mock #0.
+    Expected range of matching incoming requests: == 1
+    Number of matched incoming requests: 0
+
+    The server did not receive any request.
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+    (test timed out)
+
+  TRY 2 FAIL [  59.997s] ( 69/126) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_stream_retry_retains_start_usage_without_merging_reused_provider_id
+  stdout ───
+
+    running 1 test
+    test suite::accounting_anthropic_recovery::accounting_anthropic_stream_retry_retains_start_usage_without_merging_reused_provider_id ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_anthropic_recovery::accounting_anthropic_stream_retry_retains_start_usage_without_merging_reused_provider_id
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 59.97s
+
+  stderr ───
+    Error: deadline has elapsed
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_cumulative_and_separate_usage
+   TRY 2 TMT [  60.008s] ( 70/126) codex-core::all suite::accounting_chat::accounting_chat_native_cumulative_and_separate_usage
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_finish_reason_and_tool_parity
+   TRY 2 TMT [  60.014s] ( 71/126) codex-core::all suite::accounting_chat::accounting_chat_native_finish_reason_and_tool_parity
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_gateway_exclusion_and_header_parity
+   TRY 2 TMT [  60.012s] ( 72/126) codex-core::all suite::accounting_chat::accounting_chat_native_gateway_exclusion_and_header_parity
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_immutable_prices_and_unpriced_rows
+   TRY 2 TMT [  60.008s] ( 73/126) codex-core::all suite::accounting_chat::accounting_chat_native_immutable_prices_and_unpriced_rows
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_literal_partial_and_zero_goldens
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_missing_usage_and_correlation
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_off_and_mode_isolation
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_sampling_auxiliary_scope
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_top_level_error_retains_usage
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_admission_barrier_and_failure
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_api_key_401_no_invented_refresh
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_cancellation_and_two_reopens
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_http_retry_policy
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_delete_rejects_late_usage
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_invalid_evidence_no_repair
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_observation_failure_no_repair
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_outer_retry_prefix_and_ids
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_redirects_no_follow_or_repair
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_spawned_role_children_and_fork
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_complete_and_partial_goldens
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_no_usage_is_unknown
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_off_and_unsupported
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_sampling_and_auxiliary_scope
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_separate_and_terminal_usage
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_unknown_prices_and_tiers
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_ws_fallback_http_segment
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_ws_only_no_install
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_admission_barrier
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_literal_partial_and_zero_goldens
+   TRY 2 TMT [  60.010s] ( 74/126) codex-core::all suite::accounting_chat::accounting_chat_native_literal_partial_and_zero_goldens
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_missing_usage_and_correlation
+   TRY 2 TMT [  60.011s] ( 75/126) codex-core::all suite::accounting_chat::accounting_chat_native_missing_usage_and_correlation
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+  TRY 1 FAIL [  45.461s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_ws_only_no_install
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses::accounting_responses_native_ws_only_no_install ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses::accounting_responses_native_ws_only_no_install
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 45.43s
+
+  stderr ───
+
+    thread 'suite::accounting_responses::accounting_responses_native_ws_only_no_install' (29744603) panicked at core/tests/suite/accounting_responses.rs:373:5:
+    assertion failed: `(left == right)`
+
+    Diff < left / right > :
+    <0
+    >2
+
+
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_off_and_mode_isolation
+   TRY 1 TMT [  60.012s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_off_and_mode_isolation
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_sampling_auxiliary_scope
+   TRY 1 TMT [  60.006s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_sampling_auxiliary_scope
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_top_level_error_retains_usage
+   TRY 1 TMT [  60.011s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_top_level_error_retains_usage
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_admission_barrier_and_failure
+   TRY 1 TMT [  60.013s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_admission_barrier_and_failure
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_api_key_401_no_invented_refresh
+   TRY 1 TMT [  60.009s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_api_key_401_no_invented_refresh
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+  TRY 1 FAIL [  59.727s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_http_retry_policy
+  stdout ───
+
+    running 1 test
+    test suite::accounting_chat_recovery::accounting_chat_native_http_retry_policy ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_chat_recovery::accounting_chat_native_http_retry_policy
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 59.69s
+
+  stderr ───
+    Error: deadline has elapsed
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_cancellation_and_two_reopens
+   TRY 1 TMT [  60.013s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_cancellation_and_two_reopens
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_delete_rejects_late_usage
+   TRY 1 TMT [  60.013s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_delete_rejects_late_usage
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_invalid_evidence_no_repair
+   TRY 1 TMT [  60.013s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_invalid_evidence_no_repair
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_observation_failure_no_repair
+   TRY 1 TMT [  60.013s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_observation_failure_no_repair
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_outer_retry_prefix_and_ids
+   TRY 1 TMT [  60.011s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_outer_retry_prefix_and_ids
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_redirects_no_follow_or_repair
+   TRY 1 TMT [  60.009s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_redirects_no_follow_or_repair
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_spawned_role_children_and_fork
+   TRY 1 TMT [  60.012s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_spawned_role_children_and_fork
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_complete_and_partial_goldens
+   TRY 1 TMT [  60.009s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_complete_and_partial_goldens
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_no_usage_is_unknown
+   TRY 1 TMT [  60.010s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_no_usage_is_unknown
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_off_and_unsupported
+   TRY 1 TMT [  60.008s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_off_and_unsupported
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_sampling_and_auxiliary_scope
+   TRY 1 TMT [  60.009s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_sampling_and_auxiliary_scope
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_separate_and_terminal_usage
+   TRY 1 TMT [  60.008s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_separate_and_terminal_usage
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_unknown_prices_and_tiers
+   TRY 1 TMT [  60.010s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_unknown_prices_and_tiers
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_ws_fallback_http_segment
+   TRY 1 TMT [  60.008s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_ws_fallback_http_segment
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_admission_barrier
+   TRY 1 TMT [  60.012s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_admission_barrier
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_api_key_401
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_cancel_two_reopens
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_ws_only_no_install
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_off_and_mode_isolation
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_sampling_auxiliary_scope
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_top_level_error_retains_usage
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_admission_barrier_and_failure
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_api_key_401_no_invented_refresh
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_http_retry_policy
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_cancellation_and_two_reopens
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_delete_rejects_late_usage
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_invalid_evidence_no_repair
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_observation_failure_no_repair
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_outer_retry_prefix_and_ids
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_redirects_no_follow_or_repair
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_spawned_role_children_and_fork
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_complete_and_partial_goldens
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_no_usage_is_unknown
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_off_and_unsupported
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_sampling_and_auxiliary_scope
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_separate_and_terminal_usage
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_unknown_prices_and_tiers
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_ws_fallback_http_segment
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_admission_barrier
+  TRY 2 FAIL [  45.505s] ( 76/126) codex-core::all suite::accounting_responses::accounting_responses_native_ws_only_no_install
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses::accounting_responses_native_ws_only_no_install ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses::accounting_responses_native_ws_only_no_install
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 45.48s
+
+  stderr ───
+
+    thread 'suite::accounting_responses::accounting_responses_native_ws_only_no_install' (29745921) panicked at core/tests/suite/accounting_responses.rs:373:5:
+    assertion failed: `(left == right)`
+
+    Diff < left / right > :
+    <0
+    >2
+
+
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_api_key_401
+   TRY 1 TMT [  60.011s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_api_key_401
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_cancel_two_reopens
+   TRY 1 TMT [  60.011s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_cancel_two_reopens
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_off_and_mode_isolation
+   TRY 2 TMT [  60.010s] ( 77/126) codex-core::all suite::accounting_chat::accounting_chat_native_off_and_mode_isolation
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_sampling_auxiliary_scope
+   TRY 2 TMT [  60.009s] ( 78/126) codex-core::all suite::accounting_chat::accounting_chat_native_sampling_auxiliary_scope
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat::accounting_chat_native_top_level_error_retains_usage
+   TRY 2 TMT [  60.012s] ( 79/126) codex-core::all suite::accounting_chat::accounting_chat_native_top_level_error_retains_usage
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_admission_barrier_and_failure
+   TRY 2 TMT [  60.012s] ( 80/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_admission_barrier_and_failure
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_api_key_401_no_invented_refresh
+   TRY 2 TMT [  60.012s] ( 81/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_api_key_401_no_invented_refresh
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_http_retry_policy
+   TRY 2 TMT [  60.012s] ( 82/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_http_retry_policy
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_cancellation_and_two_reopens
+   TRY 2 TMT [  60.008s] ( 83/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_cancellation_and_two_reopens
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_delete_rejects_late_usage
+   TRY 2 TMT [  60.014s] ( 84/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_delete_rejects_late_usage
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_invalid_evidence_no_repair
+   TRY 2 TMT [  60.008s] ( 85/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_invalid_evidence_no_repair
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_observation_failure_no_repair
+   TRY 2 TMT [  60.010s] ( 86/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_observation_failure_no_repair
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_outer_retry_prefix_and_ids
+   TRY 2 TMT [  60.013s] ( 87/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_outer_retry_prefix_and_ids
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_redirects_no_follow_or_repair
+   TRY 2 TMT [  60.011s] ( 88/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_redirects_no_follow_or_repair
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_spawned_role_children_and_fork
+   TRY 2 TMT [  60.008s] ( 89/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_spawned_role_children_and_fork
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_complete_and_partial_goldens
+   TRY 2 TMT [  60.011s] ( 90/126) codex-core::all suite::accounting_responses::accounting_responses_native_complete_and_partial_goldens
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_no_usage_is_unknown
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_off_and_unsupported
+   TRY 2 TMT [  60.008s] ( 91/126) codex-core::all suite::accounting_responses::accounting_responses_native_off_and_unsupported
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+   TRY 2 TMT [  60.013s] ( 92/126) codex-core::all suite::accounting_responses::accounting_responses_native_no_usage_is_unknown
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_sampling_and_auxiliary_scope
+   TRY 2 TMT [  60.013s] ( 93/126) codex-core::all suite::accounting_responses::accounting_responses_native_sampling_and_auxiliary_scope
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_separate_and_terminal_usage
+   TRY 2 TMT [  60.008s] ( 94/126) codex-core::all suite::accounting_responses::accounting_responses_native_separate_and_terminal_usage
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_unknown_prices_and_tiers
+   TRY 2 TMT [  60.012s] ( 95/126) codex-core::all suite::accounting_responses::accounting_responses_native_unknown_prices_and_tiers
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses::accounting_responses_native_ws_fallback_http_segment
+   TRY 2 TMT [  60.009s] ( 96/126) codex-core::all suite::accounting_responses::accounting_responses_native_ws_fallback_http_segment
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+TRY 2 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_admission_barrier
+   TRY 2 TMT [  60.010s] ( 97/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_admission_barrier
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_delete_rejects_late_usage
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_api_key_401
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_cancel_two_reopens
+  TRY 1 FAIL [  15.268s] (───────) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_complete_and_partial_goldens
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_complete_and_partial_goldens ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_complete_and_partial_goldens
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.22s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  15.281s] (───────) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_connection_limit_reconnect
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_connection_limit_reconnect ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_connection_limit_reconnect
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.23s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  15.262s] (───────) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_fallback_http_transport_retry
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_fallback_http_transport_retry ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_fallback_http_transport_retry
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.23s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  15.242s] (───────) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_incremental_sampling_and_turn_identity
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_incremental_sampling_and_turn_identity ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_incremental_sampling_and_turn_identity
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.20s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  15.254s] (───────) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_off_and_http_only_compatibility
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_off_and_http_only_compatibility ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_off_and_http_only_compatibility
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.22s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  15.236s] (───────) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_previous_response_missing_full_retry
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_previous_response_missing_full_retry ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_previous_response_missing_full_retry
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.20s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  15.237s] (───────) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_prewarm_preconnect_and_cached_reuse
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_prewarm_preconnect_and_cached_reuse ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_prewarm_preconnect_and_cached_reuse
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.21s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  15.250s] (───────) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_ws_prefix_then_http_fallback
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_ws_prefix_then_http_fallback ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_ws_prefix_then_http_fallback
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.22s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  15.218s] (───────) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.18s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  15.227s] (───────) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_delete_rejects_late_usage
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws_recovery::accounting_responses_ws_native_delete_rejects_late_usage ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws_recovery::accounting_responses_ws_native_delete_rejects_late_usage
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.19s
+
+  stderr ───
+    Error: deadline has elapsed
+
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_http_retry_policy
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_observation_failure
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_outer_retry_prefix
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_redirects
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_spawned_role_children
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_endpoint_and_cached_auth_mismatch
+  TRY 2 FAIL [  15.257s] ( 98/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_complete_and_partial_goldens
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_complete_and_partial_goldens ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_complete_and_partial_goldens
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.22s
+
+  stderr ───
+    Error: deadline has elapsed
+
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_handshake_and_postdispatch_errors
+  TRY 2 FAIL [  15.297s] ( 99/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_connection_limit_reconnect
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_connection_limit_reconnect ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_connection_limit_reconnect
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.26s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  30.303s] (───────) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_handshake_and_postdispatch_errors
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_handshake_and_postdispatch_errors ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_handshake_and_postdispatch_errors
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 30.26s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 FAIL [  15.294s] (100/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_fallback_http_transport_retry
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_fallback_http_transport_retry ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_fallback_http_transport_retry
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.27s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 FAIL [  15.215s] (101/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_incremental_sampling_and_turn_identity
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_incremental_sampling_and_turn_identity ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_incremental_sampling_and_turn_identity
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.19s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 FAIL [  15.237s] (102/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_off_and_http_only_compatibility
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_off_and_http_only_compatibility ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_off_and_http_only_compatibility
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.20s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 FAIL [  15.226s] (103/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_previous_response_missing_full_retry
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_previous_response_missing_full_retry ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_previous_response_missing_full_retry
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.19s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 FAIL [  15.239s] (104/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_prewarm_preconnect_and_cached_reuse
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_prewarm_preconnect_and_cached_reuse ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_prewarm_preconnect_and_cached_reuse
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.20s
+
+  stderr ───
+    Error: deadline has elapsed
+
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_upgrade_required_http_fallback
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_redirects_never_escape_binding
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_admission_and_guard_barriers
+  TRY 1 FAIL [  30.302s] (───────) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_redirects_never_escape_binding
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_redirects_never_escape_binding ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_redirects_never_escape_binding
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 30.26s
+
+  stderr ───
+    Error: deadline has elapsed
+
+        SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_cancel_before_and_after_dispatch
+  TRY 2 FAIL [  15.201s] (105/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_ws_prefix_then_http_fallback
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_ws_prefix_then_http_fallback ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_ws_prefix_then_http_fallback
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.17s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  30.454s] (───────) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_admission_and_guard_barriers
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws_recovery::accounting_responses_ws_native_admission_and_guard_barriers ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws_recovery::accounting_responses_ws_native_admission_and_guard_barriers
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 30.42s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 FAIL [  15.225s] (106/126) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.19s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 FAIL [  15.226s] (107/126) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_delete_rejects_late_usage
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws_recovery::accounting_responses_ws_native_delete_rejects_late_usage ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws_recovery::accounting_responses_ws_native_delete_rejects_late_usage
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.19s
+
+  stderr ───
+    Error: deadline has elapsed
+
+TRY 1 TRMNTG [> 60.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_delete_rejects_late_usage
+   TRY 1 TMT [  60.008s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_delete_rejects_late_usage
+  stdout ───
+
+    running 1 test
+
+    (test timed out)
+
+  TRY 2 FAIL [  58.358s] (108/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_api_key_401
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_recovery::accounting_responses_native_api_key_401 ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_recovery::accounting_responses_native_api_key_401
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 58.31s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 FAIL [  57.503s] (109/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_cancel_two_reopens
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_recovery::accounting_responses_native_cancel_two_reopens ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_recovery::accounting_responses_native_cancel_two_reopens
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 57.46s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  15.214s] (───────) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_late_clone_binding_stops_running_dispatch
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws_recovery::accounting_responses_ws_native_late_clone_binding_stops_running_dispatch ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws_recovery::accounting_responses_ws_native_late_clone_binding_stops_running_dispatch
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.17s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  15.204s] (───────) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_observation_failure_no_repair
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws_recovery::accounting_responses_ws_native_observation_failure_no_repair ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws_recovery::accounting_responses_ws_native_observation_failure_no_repair
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.16s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  15.212s] (───────) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_spawned_role_children_and_fork
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws_recovery::accounting_responses_ws_native_spawned_role_children_and_fork ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws_recovery::accounting_responses_ws_native_spawned_role_children_and_fork
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.18s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  15.233s] (───────) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_two_reopens_and_original_prices
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws_recovery::accounting_responses_ws_native_two_reopens_and_original_prices ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws_recovery::accounting_responses_ws_native_two_reopens_and_original_prices
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.20s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  15.219s] (───────) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_unknown_prices_and_no_usage
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws_recovery::accounting_responses_ws_native_unknown_prices_and_no_usage ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws_recovery::accounting_responses_ws_native_unknown_prices_and_no_usage
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.18s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  51.885s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_http_retry_policy
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_recovery::accounting_responses_native_http_retry_policy ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_recovery::accounting_responses_native_http_retry_policy
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 51.84s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  51.016s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_observation_failure
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_recovery::accounting_responses_native_observation_failure ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_recovery::accounting_responses_native_observation_failure
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 50.98s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  50.866s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_redirects
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_recovery::accounting_responses_native_redirects ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_recovery::accounting_responses_native_redirects
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 50.82s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  51.090s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_outer_retry_prefix
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_recovery::accounting_responses_native_outer_retry_prefix ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_recovery::accounting_responses_native_outer_retry_prefix
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 51.05s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 1 FAIL [  50.881s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_spawned_role_children
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_recovery::accounting_responses_native_spawned_role_children ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_recovery::accounting_responses_native_spawned_role_children
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 50.84s
+
+  stderr ───
+    Error: deadline has elapsed
+
+        PASS [  51.222s] (110/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_endpoint_and_cached_auth_mismatch
+  TRY 1 FAIL [  50.126s] (───────) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_upgrade_required_http_fallback
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_upgrade_required_http_fallback ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_upgrade_required_http_fallback
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 50.09s
+
+  stderr ───
+
+    thread 'suite::accounting_responses_ws::accounting_responses_ws_native_upgrade_required_http_fallback' (29750931) panicked at core/tests/suite/accounting_responses_ws.rs:162:5:
+    assertion failed: `(left == right)`
+
+    Diff < left / right > :
+    <2
+    >1
+
+
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [  49.849s] (111/126) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_cancel_before_and_after_dispatch
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_handshake_and_postdispatch_errors
+  TRY 2 FAIL [  15.210s] (112/126) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_late_clone_binding_stops_running_dispatch
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws_recovery::accounting_responses_ws_native_late_clone_binding_stops_running_dispatch ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws_recovery::accounting_responses_ws_native_late_clone_binding_stops_running_dispatch
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.18s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 FAIL [  15.198s] (113/126) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_observation_failure_no_repair
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws_recovery::accounting_responses_ws_native_observation_failure_no_repair ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws_recovery::accounting_responses_ws_native_observation_failure_no_repair
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.16s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 FAIL [  30.246s] (114/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_handshake_and_postdispatch_errors
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_handshake_and_postdispatch_errors ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_handshake_and_postdispatch_errors
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 30.21s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 FAIL [  15.227s] (115/126) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_spawned_role_children_and_fork
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws_recovery::accounting_responses_ws_native_spawned_role_children_and_fork ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws_recovery::accounting_responses_ws_native_spawned_role_children_and_fork
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.19s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 FAIL [  15.184s] (116/126) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_two_reopens_and_original_prices
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws_recovery::accounting_responses_ws_native_two_reopens_and_original_prices ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws_recovery::accounting_responses_ws_native_two_reopens_and_original_prices
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.16s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 FAIL [  15.179s] (117/126) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_unknown_prices_and_no_usage
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws_recovery::accounting_responses_ws_native_unknown_prices_and_no_usage ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws_recovery::accounting_responses_ws_native_unknown_prices_and_no_usage
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 15.15s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_redirects_never_escape_binding
+  TRY 2 FAIL [  30.242s] (118/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_redirects_never_escape_binding
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_redirects_never_escape_binding ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_redirects_never_escape_binding
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 30.21s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_admission_and_guard_barriers
+  TRY 2 FAIL [  30.412s] (119/126) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_admission_and_guard_barriers
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws_recovery::accounting_responses_ws_native_admission_and_guard_barriers ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws_recovery::accounting_responses_ws_native_admission_and_guard_barriers
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 30.38s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 SLOW [> 30.000s] (───────) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_delete_rejects_late_usage
+  TRY 2 FAIL [  30.742s] (120/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_delete_rejects_late_usage
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_recovery::accounting_responses_native_delete_rejects_late_usage ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_recovery::accounting_responses_native_delete_rejects_late_usage
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 30.71s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 FAIL [  18.359s] (121/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_outer_retry_prefix
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_recovery::accounting_responses_native_outer_retry_prefix ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_recovery::accounting_responses_native_outer_retry_prefix
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 18.33s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 FAIL [  18.750s] (122/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_observation_failure
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_recovery::accounting_responses_native_observation_failure ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_recovery::accounting_responses_native_observation_failure
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 18.73s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 FAIL [  18.384s] (123/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_spawned_role_children
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_recovery::accounting_responses_native_spawned_role_children ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_recovery::accounting_responses_native_spawned_role_children
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 18.35s
+
+  stderr ───
+    Error: deadline has elapsed
+
+  TRY 2 PASS [  19.365s] (124/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_http_retry_policy
+  TRY 2 FAIL [  17.555s] (125/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_upgrade_required_http_fallback
+  stdout ───
+
+    running 1 test
+    test suite::accounting_responses_ws::accounting_responses_ws_native_upgrade_required_http_fallback ... FAILED
+
+    failures:
+
+    failures:
+        suite::accounting_responses_ws::accounting_responses_ws_native_upgrade_required_http_fallback
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1183 filtered out; finished in 17.53s
+
+  stderr ───
+
+    thread 'suite::accounting_responses_ws::accounting_responses_ws_native_upgrade_required_http_fallback' (29753895) panicked at core/tests/suite/accounting_responses_ws.rs:162:5:
+    assertion failed: `(left == right)`
+
+    Diff < left / right > :
+    <2
+    >1
+
+
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  TRY 2 PASS [  19.702s] (126/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_redirects
+────────────
+     Summary [ 313.613s] 126 tests run: 54 passed (4 slow, 2 flaky, 2 leaky), 34 failed, 38 timed out, 3529 skipped
+   FLAKY 2/2 [  19.365s] (124/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_http_retry_policy
+   FLAKY 2/2 [  19.702s] (126/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_redirects
+  TRY 2 FAIL [   1.210s] ( 39/126) codex-core memory_stage_one::accounting_tests::accounting_developer_activation_samples_http_and_installs_inspectable_day
+   TRY 2 TMT [  60.011s] ( 51/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_actual_presence_revisions_and_remote_only_price_unknown
+  TRY 2 FAIL [  59.957s] ( 52/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_cancel_held_http_other_owner_fresh_turn_and_two_resumes
+  TRY 2 FAIL [  59.601s] ( 53/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_native_presence_prices_and_two_reopens
+  TRY 2 FAIL [  59.775s] ( 54/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_default_off_does_not_install_and_installed_off_deletion_cleans
+  TRY 2 FAIL [  59.717s] ( 55/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_native_spawned_children_role_reload_and_fork_own_only_new_sends
+   TRY 2 TMT [  60.009s] ( 56/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_http_and_payload_retries_are_separate_durable_attempts
+  TRY 2 FAIL [  59.993s] ( 57/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_endpoint_mismatch_has_no_unapproved_send
+   TRY 2 TMT [  60.008s] ( 58/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_request_retry
+   TRY 2 TMT [  60.009s] ( 59/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_stream_retry
+   TRY 2 TMT [  60.009s] ( 60/126) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_extends_actual_child_idle_timeout
+   TRY 2 TMT [  60.010s] ( 61/126) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_401_and_429_are_terminal_and_preflight_schema_fault_has_no_send
+   TRY 2 TMT [  60.010s] ( 62/126) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_cancel_keeps_intent_or_observed_start_through_reopen
+   TRY 2 TMT [  60.004s] ( 63/126) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_deleted_native_owner_cannot_be_resurrected_by_delayed_usage
+  TRY 2 FAIL [  59.974s] ( 64/126) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_missing_optional_state_is_only_fatal_when_enabled
+   TRY 2 TMT [  60.012s] ( 65/126) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_observation_failure_stops_real_sampling_without_repair_send
+   TRY 2 TMT [  60.011s] ( 66/126) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_opt_in_does_not_activate_other_native_routes
+   TRY 2 TMT [  60.011s] ( 68/126) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_endpoint
+  TRY 2 FAIL [  59.997s] ( 69/126) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_stream_retry_retains_start_usage_without_merging_reused_provider_id
+   TRY 2 TMT [  60.008s] ( 70/126) codex-core::all suite::accounting_chat::accounting_chat_native_cumulative_and_separate_usage
+   TRY 2 TMT [  60.014s] ( 71/126) codex-core::all suite::accounting_chat::accounting_chat_native_finish_reason_and_tool_parity
+   TRY 2 TMT [  60.012s] ( 72/126) codex-core::all suite::accounting_chat::accounting_chat_native_gateway_exclusion_and_header_parity
+   TRY 2 TMT [  60.008s] ( 73/126) codex-core::all suite::accounting_chat::accounting_chat_native_immutable_prices_and_unpriced_rows
+   TRY 2 TMT [  60.010s] ( 74/126) codex-core::all suite::accounting_chat::accounting_chat_native_literal_partial_and_zero_goldens
+   TRY 2 TMT [  60.011s] ( 75/126) codex-core::all suite::accounting_chat::accounting_chat_native_missing_usage_and_correlation
+  TRY 2 FAIL [  45.505s] ( 76/126) codex-core::all suite::accounting_responses::accounting_responses_native_ws_only_no_install
+   TRY 2 TMT [  60.010s] ( 77/126) codex-core::all suite::accounting_chat::accounting_chat_native_off_and_mode_isolation
+   TRY 2 TMT [  60.009s] ( 78/126) codex-core::all suite::accounting_chat::accounting_chat_native_sampling_auxiliary_scope
+   TRY 2 TMT [  60.012s] ( 79/126) codex-core::all suite::accounting_chat::accounting_chat_native_top_level_error_retains_usage
+   TRY 2 TMT [  60.012s] ( 80/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_admission_barrier_and_failure
+   TRY 2 TMT [  60.012s] ( 81/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_api_key_401_no_invented_refresh
+   TRY 2 TMT [  60.012s] ( 82/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_http_retry_policy
+   TRY 2 TMT [  60.008s] ( 83/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_cancellation_and_two_reopens
+   TRY 2 TMT [  60.014s] ( 84/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_delete_rejects_late_usage
+   TRY 2 TMT [  60.008s] ( 85/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_invalid_evidence_no_repair
+   TRY 2 TMT [  60.010s] ( 86/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_observation_failure_no_repair
+   TRY 2 TMT [  60.013s] ( 87/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_outer_retry_prefix_and_ids
+   TRY 2 TMT [  60.011s] ( 88/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_redirects_no_follow_or_repair
+   TRY 2 TMT [  60.008s] ( 89/126) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_spawned_role_children_and_fork
+   TRY 2 TMT [  60.011s] ( 90/126) codex-core::all suite::accounting_responses::accounting_responses_native_complete_and_partial_goldens
+   TRY 2 TMT [  60.008s] ( 91/126) codex-core::all suite::accounting_responses::accounting_responses_native_off_and_unsupported
+   TRY 2 TMT [  60.013s] ( 92/126) codex-core::all suite::accounting_responses::accounting_responses_native_no_usage_is_unknown
+   TRY 2 TMT [  60.013s] ( 93/126) codex-core::all suite::accounting_responses::accounting_responses_native_sampling_and_auxiliary_scope
+   TRY 2 TMT [  60.008s] ( 94/126) codex-core::all suite::accounting_responses::accounting_responses_native_separate_and_terminal_usage
+   TRY 2 TMT [  60.012s] ( 95/126) codex-core::all suite::accounting_responses::accounting_responses_native_unknown_prices_and_tiers
+   TRY 2 TMT [  60.009s] ( 96/126) codex-core::all suite::accounting_responses::accounting_responses_native_ws_fallback_http_segment
+   TRY 2 TMT [  60.010s] ( 97/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_admission_barrier
+  TRY 2 FAIL [  15.257s] ( 98/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_complete_and_partial_goldens
+  TRY 2 FAIL [  15.297s] ( 99/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_connection_limit_reconnect
+  TRY 2 FAIL [  15.294s] (100/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_fallback_http_transport_retry
+  TRY 2 FAIL [  15.215s] (101/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_incremental_sampling_and_turn_identity
+  TRY 2 FAIL [  15.237s] (102/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_off_and_http_only_compatibility
+  TRY 2 FAIL [  15.226s] (103/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_previous_response_missing_full_retry
+  TRY 2 FAIL [  15.239s] (104/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_prewarm_preconnect_and_cached_reuse
+  TRY 2 FAIL [  15.201s] (105/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_ws_prefix_then_http_fallback
+  TRY 2 FAIL [  15.225s] (106/126) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity
+  TRY 2 FAIL [  15.226s] (107/126) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_delete_rejects_late_usage
+  TRY 2 FAIL [  58.358s] (108/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_api_key_401
+  TRY 2 FAIL [  57.503s] (109/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_cancel_two_reopens
+  TRY 2 FAIL [  15.210s] (112/126) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_late_clone_binding_stops_running_dispatch
+  TRY 2 FAIL [  15.198s] (113/126) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_observation_failure_no_repair
+  TRY 2 FAIL [  30.246s] (114/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_handshake_and_postdispatch_errors
+  TRY 2 FAIL [  15.227s] (115/126) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_spawned_role_children_and_fork
+  TRY 2 FAIL [  15.184s] (116/126) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_two_reopens_and_original_prices
+  TRY 2 FAIL [  15.179s] (117/126) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_unknown_prices_and_no_usage
+  TRY 2 FAIL [  30.242s] (118/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_redirects_never_escape_binding
+  TRY 2 FAIL [  30.412s] (119/126) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_admission_and_guard_barriers
+  TRY 2 FAIL [  30.742s] (120/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_delete_rejects_late_usage
+  TRY 2 FAIL [  18.359s] (121/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_outer_retry_prefix
+  TRY 2 FAIL [  18.750s] (122/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_observation_failure
+  TRY 2 FAIL [  18.384s] (123/126) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_spawned_role_children
+  TRY 2 FAIL [  17.555s] (125/126) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_upgrade_required_http_fallback
+error: test run failed
+error: recipe `test` failed on line 82 with exit code 100

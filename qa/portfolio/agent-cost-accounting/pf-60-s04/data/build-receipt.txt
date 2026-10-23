@@ -1,0 +1,11 @@
+PF-60-S04 qualification binary (recorded)
+host: RTX box, Linux x86_64 (Ubuntu, kernel 7.0.0-38-generic)
+checkout: detached at 1e9cd464b978d38aa1e2c5d99be32a8dd318f92b ("Merge pull request #385 ...")
+build: cargo build --locked -p codex-cli --bin corbanu --features codex-core/developer-accounting,codex-tui/developer-accounting
+       (debug profile; CORBANU_TEST_NO_NATIVE_KEYRING=1; lane CARGO_TARGET_DIR)
+version: corbanu 0.1.48
+sha256: cb378c27331fa0fec973af3feffda251c061c20227887dec7574492fb37a1d58  corbanu
+seed tool: cargo build --locked -p codex-state --example accounting_demo_seed (same checkout)
+
+demo videos (macOS, same commit): debug corbanu with the same features
+sha256: 960b45257e4f995a72754479b735fbbfcd48ded2489ab8dab322c80833eae7d7  corbanu (aarch64-apple-darwin)

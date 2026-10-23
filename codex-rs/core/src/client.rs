@@ -23,6 +23,7 @@
 //! WebSocket prewarm is treated as the first websocket connection attempt for a turn. If it
 //! fails, normal stream retry/fallback logic handles recovery on the same turn.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -133,7 +134,9 @@ use tracing::instrument;
 use tracing::trace;
 use tracing::warn;
 
+use crate::anthropic_payload::ImageDimensionReport;
 use crate::anthropic_payload::enforce_anthropic_payload_budget;
+use crate::anthropic_payload::fit_anthropic_image_dimensions;
 use crate::anthropic_payload::is_anthropic_payload_too_large;
 use crate::attestation::AttestationContext;
 use crate::attestation::AttestationProvider;
@@ -158,12 +161,12 @@ use codex_model_provider::create_model_provider;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::AMBIENT_LEGACY_GLM_5_2_FP8_MODEL;
 use codex_model_provider_info::ANTHROPIC_LEGACY_OPUS_4_8_MODEL;
-use codex_model_provider_info::ANTHROPIC_OPUS_5_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_UPSTREAM_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL;
 use codex_model_provider_info::CLAUDE_OPUS_5_5_PLAN_MODEL;
+use codex_model_provider_info::CLAUDE_OPUS_5_5_PLAN_UPSTREAM_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_UPSTREAM_MODEL;
@@ -211,6 +214,7 @@ const RESPONSES_COMPACT_ENDPOINT: &str = "/responses/compact";
 // `/responses/compact` is unary, so the timeout covers the full response rather than one idle
 // period between stream events.
 const COMPACT_REQUEST_TIMEOUT_IDLE_MULTIPLIER: u32 = 4;
+#[cfg_attr(not(test), allow(dead_code))]
 const MEMORIES_SUMMARIZE_ENDPOINT: &str = "/memories/trace_summarize";
 #[cfg(test)]
 pub(crate) const WEBSOCKET_CONNECT_TIMEOUT: Duration =
@@ -264,6 +268,21 @@ struct ModelClientState {
     agent_identity_session_fallback: AgentIdentitySessionFallback,
     cached_websocket_session: StdMutex<WebsocketSession>,
     server_conversation_state: SharedServerConversationState,
+    /// Set once the gateway rejects a `previous_response_id` continuation for
+    /// this session. Some upstream models (Kimi K3 on Vercel) reject every
+    /// incremental continuation; retrying it each turn doubles the requests.
+    http_server_state_rejected: AtomicBool,
+    /// Set once the Vercel gateway refuses the pinned Z.AI upstream because an
+    /// account policy (for example zero data retention) excludes it. The
+    /// session then uses the gateway's own routing.
+    vercel_vendor_pin_rejected: AtomicBool,
+    /// Set once a provider rejects a tool continuation that ends in tool output after an
+    /// assistant message. The session then restores the legacy synthetic `Continue.` turn.
+    legacy_synthetic_continuation: AtomicBool,
+    /// #578: item IDs a Responses host reported it could not find (`store:
+    /// false` keeps nothing to look up). Later requests of this client send
+    /// none of them as a reference.
+    unresolvable_item_ids: StdMutex<HashSet<String>>,
 }
 
 /// Resolved API client setup for a single request attempt.
@@ -288,6 +307,9 @@ impl RequestRouteTelemetry {
     }
 }
 
+/// Issue #445: why a model request was not sent while the kill switch is on.
+pub const KILL_SWITCH_REFUSAL: &str = "Not sent: the security kill switch is on, so Corbanu sends nothing to the model, and this message was not kept. To turn it off, open /security, press g, choose \"Turn the kill switch off\" and confirm.";
+
 /// A session-scoped client for model-provider API calls.
 ///
 /// This holds configuration and state that should be shared across turns within a Codex session
@@ -308,7 +330,8 @@ pub struct ModelClient {
     // Restrictive configured intent, not an assertion of protected readiness.
     ingress_level: codex_security_policy::SecurityLevel,
     ingress_policy: Option<crate::security::ingress::BoundIngressPolicy>,
-    stage_one_memory_binding: Option<Arc<crate::memory_stage_one::StageOneMemoryBinding>>,
+    pub(crate) stage_one_memory_binding:
+        Arc<OnceLock<Arc<crate::memory_stage_one::StageOneMemoryBinding>>>,
     ingress_items: Arc<StdMutex<crate::security::ingress::NativeIngress>>,
 }
 
@@ -326,6 +349,9 @@ pub struct ModelClient {
 /// the previous turn's sticky-routing token into the next turn, which violates the client/server
 /// contract and can cause routing bugs.
 pub struct ModelClientSession {
+    pub(crate) accounting: crate::accounting::Slot,
+    pub(crate) responses_accounting: crate::accounting::responses::Slot,
+    pub(crate) chat_accounting: crate::accounting::chat::Slot,
     client: ModelClient,
     websocket_session: WebsocketSession,
     /// Turn state for sticky routing.
@@ -355,9 +381,64 @@ struct ServerConversationState {
 
 type SharedServerConversationState = Arc<StdMutex<Option<ServerConversationState>>>;
 
+/// #1311 (D171): who a websocket connection was opened as (the ChatGPT
+/// account and user, or the API key), as a digest, never the credential. A
+/// session whose sign-in was replaced by another user's or another key never
+/// reuses a connection opened with the old one; a refreshed token of the same
+/// sign-in keeps it. Providers without a `CodexAuth` identity use a digest of
+/// their resolved API auth headers instead (#1326).
+#[derive(Clone, PartialEq, Eq)]
+struct ConnectionIdentity([u8; 32]);
+
+impl std::fmt::Debug for ConnectionIdentity {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("ConnectionIdentity(..)")
+    }
+}
+
+impl ConnectionIdentity {
+    fn of(auth: Option<&CodexAuth>, api_auth: &dyn AuthProvider) -> Self {
+        use sha2::Digest;
+        let mut digest = sha2::Sha256::new();
+        let mut field = |value: Option<&str>| match value {
+            Some(value) => {
+                digest.update([1]);
+                digest.update((value.len() as u64).to_le_bytes());
+                digest.update(value.as_bytes());
+            }
+            None => digest.update([0]),
+        };
+        let mode = auth.map(|auth| format!("{:?}", auth.auth_mode()));
+        field(mode.as_deref());
+        field(auth.and_then(CodexAuth::get_account_id).as_deref());
+        field(auth.and_then(CodexAuth::get_chatgpt_user_id).as_deref());
+        field(auth.and_then(CodexAuth::api_key));
+        if auth.is_none() {
+            // No semantic sign-in identity is available for this provider.
+            // Hash the actual resolved header bytes, not the auth object's
+            // address or Debug output. Keep duplicate-value order, but ignore
+            // insertion order between different header names.
+            let headers = api_auth.to_auth_headers();
+            let mut fields = headers.iter().collect::<Vec<_>>();
+            fields.sort_by(|(left, _), (right, _)| left.as_str().cmp(right.as_str()));
+            digest.update(b"api-auth-headers");
+            for (name, value) in fields {
+                digest.update((name.as_str().len() as u64).to_le_bytes());
+                digest.update(name.as_str().as_bytes());
+                digest.update((value.as_bytes().len() as u64).to_le_bytes());
+                digest.update(value.as_bytes());
+            }
+        }
+        Self(digest.finalize().into())
+    }
+}
+
 #[derive(Debug, Default)]
 struct WebsocketSession {
     connection: Option<ApiWebSocketConnection>,
+    /// Who `connection` was opened as.
+    identity: Option<ConnectionIdentity>,
+    provenance: Option<crate::accounting::websocket::Provenance>,
     last_request: Option<ResponsesApiRequest>,
     last_response_rx: Option<oneshot::Receiver<LastResponse>>,
     last_response_from_untraced_warmup: bool,
@@ -508,10 +589,12 @@ fn items_after_last_model_output(input: &[ResponseItem]) -> Option<Vec<ResponseI
 /// Prevent a completed assistant message from becoming an accidental prefill on the next model
 /// request.
 ///
-/// Responses requests can contain tool activity after a visible assistant message. Some upstream
-/// models ignore those non-message items when validating conversation shape and reject the request
-/// because its latest message is still `assistant`. The continuation is request-only: it does not
-/// rewrite the durable conversation history.
+/// Only a request whose conversation genuinely ends with assistant output is a prefill; some
+/// upstream models reject that shape (Claude via Vercel: "This model does not support assistant
+/// message prefill"). Tool results after an assistant message are an ordinary tool continuation
+/// and are accepted by Kimi K3, GLM 5.3, Claude and DeepSeek V4 on the Vercel Responses route.
+/// Appending `Continue.` there made models read a user interjection after every tool result.
+/// The continuation is request-only: it does not rewrite the durable conversation history.
 fn responses_input_needs_synthetic_user_turn(input: &[ResponseItem]) -> bool {
     // A compaction trigger is itself the terminal request control. Appending anything after it is
     // invalid, and it does not need the user-message continuation used for ordinary sampling.
@@ -522,16 +605,58 @@ fn responses_input_needs_synthetic_user_turn(input: &[ResponseItem]) -> bool {
         return false;
     }
 
+    input
+        .iter()
+        .rev()
+        .find_map(terminal_item_is_assistant_output)
+        == Some(true)
+}
+
+/// Legacy session fallback: treat the conversation as a prefill whenever the latest *message* is
+/// assistant, even when tool activity follows. Used only after a provider rejects the narrower
+/// shape in this session.
+fn responses_input_latest_message_is_assistant(input: &[ResponseItem]) -> bool {
+    if input
+        .iter()
+        .any(|item| matches!(item, ResponseItem::CompactionTrigger { .. }))
+    {
+        return false;
+    }
     let latest_message_is_assistant = input.iter().rev().find_map(|item| match item {
         ResponseItem::Message { role, .. } => Some(role == "assistant"),
         // Incoming collaboration mail is serialized as an assistant-originated message by the
-        // Responses adapters. Treat it as message-shaped here as well; otherwise child completion
-        // mail arriving after a turn leaves the next request in the same invalid prefill shape as
-        // a trailing ordinary assistant message.
+        // Responses adapters. Treat it as message-shaped here as well.
         ResponseItem::AgentMessage { .. } => Some(true),
         _ => None,
     });
     latest_message_is_assistant == Some(true)
+}
+
+/// Classifies the item that ends a request: `Some(true)` for assistant output (a prefill),
+/// `Some(false)` for user input or tool activity, `None` for items that do not reach the model as
+/// conversation turns and are skipped.
+fn terminal_item_is_assistant_output(item: &ResponseItem) -> Option<bool> {
+    match item {
+        ResponseItem::Message { role, .. } => Some(role == "assistant"),
+        // Incoming collaboration mail is serialized as an assistant-originated message by the
+        // Responses adapters; child completion mail arriving after a turn is a prefill shape.
+        ResponseItem::AgentMessage { .. } => Some(true),
+        ResponseItem::LocalShellCall { .. }
+        | ResponseItem::FunctionCall { .. }
+        | ResponseItem::ToolSearchCall { .. }
+        | ResponseItem::FunctionCallOutput { .. }
+        | ResponseItem::CustomToolCall { .. }
+        | ResponseItem::CustomToolCallOutput { .. }
+        | ResponseItem::ToolSearchOutput { .. }
+        | ResponseItem::WebSearchCall { .. }
+        | ResponseItem::ImageGenerationCall { .. }
+        | ResponseItem::Compaction { .. }
+        | ResponseItem::ContextCompaction { .. } => Some(false),
+        ResponseItem::AdditionalTools { .. }
+        | ResponseItem::Reasoning { .. }
+        | ResponseItem::CompactionTrigger { .. }
+        | ResponseItem::Other => None,
+    }
 }
 
 fn append_synthetic_responses_user_turn(input: &mut Vec<ResponseItem>) {
@@ -697,6 +822,7 @@ pub(crate) struct RealtimeWebrtcCallStart {
     pub(crate) sdp: String,
     pub(crate) call_id: String,
     pub(crate) sideband_headers: ApiHeaderMap,
+    pub(crate) record: Option<crate::accounting::realtime::RealtimeSessionRecord>,
 }
 
 /// Reuses the API-auth material that created the WebRTC call for the sideband WebSocket join.
@@ -759,25 +885,31 @@ impl ModelClient {
                 agent_identity_session_fallback: AgentIdentitySessionFallback::default(),
                 cached_websocket_session: StdMutex::new(WebsocketSession::default()),
                 server_conversation_state: Arc::new(StdMutex::new(None)),
+                http_server_state_rejected: AtomicBool::new(false),
+                vercel_vendor_pin_rejected: AtomicBool::new(false),
+                legacy_synthetic_continuation: AtomicBool::new(false),
+                unresolvable_item_ids: StdMutex::new(HashSet::new()),
             }),
             agent_identity_policy,
             prompt_cache_key_override: None,
             http_client_factory,
             ingress_level: codex_security_policy::SecurityLevel::Permissive,
             ingress_policy: None,
-            stage_one_memory_binding: None,
+            stage_one_memory_binding: Arc::new(OnceLock::new()),
             ingress_items: Arc::new(StdMutex::new(
                 crate::security::ingress::NativeIngress::default(),
             )),
         }
     }
 
+    /// Install a denial binding once for this client and every existing/future clone.
     pub(crate) fn with_stage_one_memory_binding(
-        mut self,
+        &self,
         binding: Arc<crate::memory_stage_one::StageOneMemoryBinding>,
-    ) -> Self {
-        self.stage_one_memory_binding = Some(binding);
-        self
+    ) -> std::result::Result<(), crate::memory_stage_one::StageOneMemoryDenial> {
+        self.stage_one_memory_binding
+            .set(binding)
+            .map_err(|_| crate::memory_stage_one::StageOneMemoryDenial::PolicyUnavailable)
     }
 
     #[cfg(test)]
@@ -823,7 +955,53 @@ impl ModelClient {
         Ok(level)
     }
 
+    /// Issue #443: whether Aggressive is in force for this session now: in
+    /// its config, or in the live policy (also right after a person confirms
+    /// Aggressive in `/security`, before a restart). A bound policy that
+    /// cannot be read counts as Aggressive, as for source admission.
+    pub(crate) fn live_level_is_aggressive(&self) -> bool {
+        self.live_level() == codex_security_policy::SecurityLevel::Aggressive
+    }
+
+    /// The level in force for this session now: its config, or the live
+    /// policy (also right after a person confirms a level in `/security`).
+    /// A bound policy that cannot be read counts as Aggressive. Unlike the
+    /// post-taint state, this does not depend on `source_envelopes`.
+    pub(crate) fn live_level(&self) -> codex_security_policy::SecurityLevel {
+        live_level_of(
+            self.ingress_level,
+            self.ingress_policy.as_ref().map(|policy| &policy.0),
+            self.state.thread_id,
+        )
+    }
+
+    /// Issue #445: whether the security kill switch a person turned on in
+    /// `/security` is on for this session. Only that switch: a session
+    /// started from unreadable state or a cold-resumed child agent is denied
+    /// protected actions too, but its turns still run.
+    pub(crate) fn kill_switch_on(&self) -> bool {
+        self.ingress_policy.as_ref().is_some_and(|policy| {
+            policy
+                .0
+                .snapshot_for_agent(self.state.thread_id)
+                .is_ok_and(|snapshot| snapshot.authority_kill_switch_active)
+        })
+    }
+
+    /// Issue #445: with the kill switch on, no model request is sent (a
+    /// turn, compaction, memory summary or realtime call); a turn is also
+    /// refused before its input is recorded (`session::turn`). A policy that
+    /// cannot be read is refused by the source admission check instead.
+    pub(crate) fn refuse_under_kill_switch(&self) -> Result<()> {
+        if self.kill_switch_on() {
+            Err(CodexErr::InvalidRequest(KILL_SWITCH_REFUSAL.to_string()))
+        } else {
+            Ok(())
+        }
+    }
+
     pub(crate) fn check_source_admission(&self, prompt: &Prompt) -> Result<()> {
+        self.refuse_under_kill_switch()?;
         crate::security::ingress::check_native_request(
             self.source_admission_level()?,
             &prompt.input,
@@ -836,16 +1014,267 @@ impl ModelClient {
         prompt: &Prompt,
         use_responses_lite: bool,
     ) -> Result<Vec<ResponseItem>> {
+        self.refuse_under_kill_switch()?;
         if self.source_admission_level()? == codex_security_policy::SecurityLevel::Permissive {
             return Ok(prompt.get_formatted_input_for_request(use_responses_lite));
         }
+        let mut ingress = self.ingress_items.lock().map_err(|_| {
+            CodexErr::InvalidRequest("source admission registry is unavailable".into())
+        })?;
+        if ingress.labelled_mode() {
+            // Look up host registrations on recorded bytes, then format.
+            let mut input = ingress.project_labelled(&prompt.input);
+            if use_responses_lite {
+                crate::client_common::strip_image_details(&mut input);
+            }
+            return Ok(input);
+        }
+        // Without `source_envelopes` no producer admits external context, so
+        // protected requests fail closed here. Missing admissions (including the
+        // registry's size bound) mean the flag is off; keep any other cause.
+        use crate::security::ingress::IngressError;
+        ingress.project(&prompt.input).map_err(|error| {
+            let off = IngressError::SourceEnvelopesOff;
+            CodexErr::InvalidRequest(match error {
+                IngressError::NativeAdmissionUnavailable
+                | IngressError::RegistryUnavailable
+                | IngressError::TooLarge => off.to_string(),
+                other => format!("{off} ({other})"),
+            })
+        })
+    }
+
+    /// `source_envelopes`: send external context as labelled untrusted data
+    /// under Moderate/Aggressive. Permissive requests are unchanged.
+    pub(crate) fn with_source_envelopes(self, enabled: bool) -> Self {
+        if let Ok(mut ingress) = self.ingress_items.lock() {
+            ingress.set_labelled_mode(enabled);
+        }
+        // PF-41-S01: the inspector reads this thread's taint from here.
+        crate::security::inspection::register_ingress(self.state.thread_id, &self.ingress_items);
+        self
+    }
+
+    /// `source_envelopes`: load the key that authenticates origin records
+    /// for `codex_home`. Without it no records are written or restored, so
+    /// content resumes labelled. Replacement clients share the loaded key.
+    pub(crate) fn with_source_origin_key(self, codex_home: &std::path::Path) -> Self {
+        if let Ok(mut ingress) = self.ingress_items.lock()
+            && ingress.labelled_mode()
+            && !ingress.has_origin_key()
+        {
+            match crate::security::ingress::OriginKey::load_or_create(codex_home) {
+                Ok(key) => ingress.set_origin_key(key),
+                Err(error) => tracing::warn!(
+                    "source origin key unavailable ({}); content resumes as labelled data",
+                    error.kind()
+                ),
+            }
+        }
+        self
+    }
+
+    /// Restored/forked history keeps the standing its rollout origin records
+    /// give it; unrecorded content stays labelled and, when restored messages
+    /// lack records, fresh host context is reinjected on the next turn.
+    pub(crate) fn note_restored_history<'a>(
+        &self,
+        items: &[ResponseItem],
+        records: impl IntoIterator<Item = &'a codex_protocol::provenance::SourceOriginRecord>,
+    ) {
+        if let Ok(mut ingress) = self.ingress_items.lock() {
+            ingress.note_restored_history(items, records);
+        }
+    }
+
+    /// Restate the current origins of `items` for a history checkpoint.
+    pub(crate) fn journal_current_origins(&self, items: &[ResponseItem]) {
+        if let Ok(mut ingress) = self.ingress_items.lock() {
+            ingress.journal_current(items);
+        }
+    }
+
+    /// New origin registrations to persist right after the items they describe.
+    pub(crate) fn take_source_origin_record(
+        &self,
+    ) -> Option<codex_protocol::provenance::SourceOriginRecord> {
         self.ingress_items
             .lock()
-            .map_err(|_| {
-                CodexErr::InvalidRequest("source admission registry is unavailable".into())
-            })?
-            .project(&prompt.input)
-            .map_err(|error| CodexErr::InvalidRequest(error.to_string()))
+            .ok()
+            .and_then(|mut ingress| ingress.take_origin_record())
+    }
+
+    pub(crate) fn source_envelopes_enabled(&self) -> bool {
+        self.ingress_items
+            .lock()
+            .is_ok_and(|ingress| ingress.labelled_mode())
+    }
+
+    /// Host-recorded origin of an exact history message (labelled mode only).
+    pub(crate) fn message_origin(
+        &self,
+        item: &ResponseItem,
+    ) -> Option<crate::security::ingress::MessageOrigin> {
+        self.ingress_items
+            .lock()
+            .ok()
+            .filter(|ingress| ingress.labelled_mode())
+            .and_then(|ingress| ingress.message_origin(item))
+    }
+
+    /// See `NativeIngress::all_have_standing`; false when the flag is off.
+    pub(crate) fn all_have_standing(&self, items: &[ResponseItem]) -> bool {
+        self.ingress_items
+            .lock()
+            .is_ok_and(|ingress| ingress.labelled_mode() && ingress.all_have_standing(items))
+    }
+
+    /// PF-30-S03: note a batch just recorded into history (see
+    /// `NativeIngress::note_recorded`).
+    pub(crate) fn note_recorded_for_taint(&self, items: &[ResponseItem]) {
+        if let Ok(mut ingress) = self.ingress_items.lock() {
+            ingress.note_recorded(items);
+        }
+    }
+
+    /// PF-23-S01: see `NativeIngress::note_unrecorded_input`.
+    pub(crate) fn note_unrecorded_input_for_taint(&self) {
+        if let Ok(mut ingress) = self.ingress_items.lock() {
+            ingress.note_unrecorded_input();
+        }
+    }
+
+    /// PF-30-S03: the session's taint generation and effective policy when
+    /// post-taint checks apply (`source_envelopes` on and a protected level in
+    /// force), else `None`. An unavailable policy counts as protected; a
+    /// poisoned registry as tainted.
+    pub(crate) fn post_taint_state(
+        &self,
+    ) -> Option<crate::security::tainted_action::PostTaintState> {
+        use crate::security::tainted_action::PolicyBinding;
+        let protected = self.source_admission_level().map_or(true, |level| {
+            level != codex_security_policy::SecurityLevel::Permissive
+        });
+        let taint_generation = match self.ingress_items.lock() {
+            Ok(ingress) => {
+                (ingress.labelled_mode() && protected).then(|| ingress.taint_generation())
+            }
+            // A poisoned registry still says whether the flag is on; with it on,
+            // count the session as tainted (fail closed). Flag off stays off.
+            Err(poisoned) => {
+                (poisoned.into_inner().labelled_mode() && protected).then_some(u64::MAX)
+            }
+        }?;
+        let policy = match &self.ingress_policy {
+            None => PolicyBinding::Unbound,
+            Some(policy) => match policy.0.snapshot_for_agent(self.state.thread_id) {
+                Ok(snapshot) => PolicyBinding::Bound {
+                    epoch: snapshot.epoch,
+                    revocation_generation: snapshot.revocation_generation,
+                    kill_switch_active: snapshot.kill_switch_active,
+                    level: snapshot.level,
+                    actor_chain: snapshot.actor_chain,
+                },
+                Err(_) => PolicyBinding::Unavailable,
+            },
+        };
+        let level = self
+            .source_admission_level()
+            .unwrap_or(codex_security_policy::SecurityLevel::Aggressive);
+        Some(crate::security::tainted_action::PostTaintState {
+            taint_generation,
+            policy,
+            level,
+        })
+    }
+
+    /// Mark `input` as submitted to this session by another agent (see
+    /// `NativeIngress::mark_agent_input`). Keyed on the exact input, before
+    /// any media preparation, so the prompt seam sees the same key.
+    pub(crate) fn mark_agent_input(
+        &self,
+        input: &[codex_protocol::user_input::UserInput],
+        origin: crate::security::ingress::MessageOrigin,
+    ) {
+        if !self.source_envelopes_enabled() {
+            return;
+        }
+        if let Ok(bytes) = serde_json::to_vec(input)
+            && let Ok(mut ingress) = self.ingress_items.lock()
+        {
+            ingress.mark_agent_input(codex_content_security::ContentDigest::of(&bytes), origin);
+        }
+    }
+
+    /// A prompt that will never be recorded (blocked by a hook) drops one mark.
+    pub(crate) fn discard_agent_input(&self, input: &[codex_protocol::user_input::UserInput]) {
+        if !self.source_envelopes_enabled() {
+            return;
+        }
+        if let Ok(bytes) = serde_json::to_vec(input)
+            && let Ok(mut ingress) = self.ingress_items.lock()
+        {
+            ingress.discard_agent_input(&codex_content_security::ContentDigest::of(&bytes));
+        }
+    }
+
+    /// The origin to record for a prompt: another agent's mark, if any.
+    pub(crate) fn take_agent_input_origin(
+        &self,
+        input: &[codex_protocol::user_input::UserInput],
+    ) -> Option<crate::security::ingress::MessageOrigin> {
+        if !self.source_envelopes_enabled() {
+            return None;
+        }
+        let bytes = serde_json::to_vec(input).ok()?;
+        self.ingress_items
+            .lock()
+            .ok()?
+            .take_agent_input(&codex_content_security::ContentDigest::of(&bytes))
+    }
+
+    /// Standing of text this session's model hands to another agent (a
+    /// spawn task or `send_input`): host only while every item in `history`
+    /// had standing, otherwise agent data. Mirrors the compaction-summary rule,
+    /// so one tool output, memory or unattributed input taints the handoff.
+    pub(crate) fn agent_handoff_origin(
+        &self,
+        history: &[ResponseItem],
+    ) -> crate::security::ingress::MessageOrigin {
+        use crate::security::ingress::MessageOrigin;
+        if self.all_have_standing(history) {
+            MessageOrigin::Host
+        } else {
+            MessageOrigin::External(codex_protocol::provenance::SourceKind::ChildAgent)
+        }
+    }
+
+    /// Consumed only while protected: Permissive history stays unchanged and
+    /// a later live strengthening still gets fresh host context.
+    pub(crate) fn take_host_context_reinjection(&self) -> bool {
+        if self
+            .source_admission_level()
+            .is_ok_and(|level| level == codex_security_policy::SecurityLevel::Permissive)
+        {
+            return false;
+        }
+        self.ingress_items
+            .lock()
+            .is_ok_and(|mut ingress| ingress.take_host_context_reinjection())
+    }
+
+    /// Record the host-chosen origin of exact history messages. Only Core
+    /// record seams call this; text and role labels cannot choose an origin.
+    pub(crate) fn register_message_origin(
+        &self,
+        items: &[ResponseItem],
+        origin: crate::security::ingress::MessageOrigin,
+    ) {
+        if let Ok(mut ingress) = self.ingress_items.lock()
+            && ingress.labelled_mode()
+        {
+            ingress.register_messages(items, origin);
+        }
     }
 
     pub(crate) fn observe_native_ingress(&self, items: &[ResponseItem]) {
@@ -855,7 +1284,9 @@ impl ModelClient {
         {
             return;
         }
-        if let Ok(mut ingress) = self.ingress_items.lock() {
+        if let Ok(mut ingress) = self.ingress_items.lock()
+            && !ingress.labelled_mode()
+        {
             let now = u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap_or_default();
             ingress.observe(items, now);
         }
@@ -897,13 +1328,14 @@ impl ModelClient {
         call_id: &str,
         kind: codex_protocol::provenance::SourceKind,
     ) {
-        if self
+        let permissive = self
             .source_admission_level()
-            .is_ok_and(|level| level == codex_security_policy::SecurityLevel::Permissive)
+            .is_ok_and(|level| level == codex_security_policy::SecurityLevel::Permissive);
+        // Labelled mode records origins even while Permissive so a later live
+        // strengthening still labels earlier tool output with its real route.
+        if let Ok(mut ingress) = self.ingress_items.lock()
+            && (!permissive || ingress.labelled_mode())
         {
-            return;
-        }
-        if let Ok(mut ingress) = self.ingress_items.lock() {
             ingress.register_call(call_id, kind);
         }
     }
@@ -958,6 +1390,9 @@ impl ModelClient {
     /// when the first stream request is issued.
     pub fn new_session(&self) -> ModelClientSession {
         ModelClientSession {
+            accounting: Default::default(),
+            responses_accounting: Default::default(),
+            chat_accounting: Default::default(),
             client: self.clone(),
             websocket_session: self.take_cached_websocket_session(),
             turn_state: Arc::new(OnceLock::new()),
@@ -1014,6 +1449,10 @@ impl ModelClient {
                 agent_identity_session_fallback: self.state.agent_identity_session_fallback.clone(),
                 cached_websocket_session: StdMutex::new(WebsocketSession::default()),
                 server_conversation_state: Arc::new(StdMutex::new(None)),
+                http_server_state_rejected: AtomicBool::new(false),
+                vercel_vendor_pin_rejected: AtomicBool::new(false),
+                legacy_synthetic_continuation: AtomicBool::new(false),
+                unresolvable_item_ids: StdMutex::new(HashSet::new()),
             }),
             agent_identity_policy: self.agent_identity_policy,
             prompt_cache_key_override: self.prompt_cache_key_override.clone(),
@@ -1036,7 +1475,6 @@ impl ModelClient {
         self.state.provider.auth_manager()
     }
 
-    #[cfg(test)]
     pub(crate) fn provider_info(&self) -> &ModelProviderInfo {
         self.state.provider.info()
     }
@@ -1086,7 +1524,7 @@ impl ModelClient {
     ///
     /// The model selection and telemetry context are passed explicitly to keep `ModelClient`
     /// session-scoped.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub(crate) async fn compact_conversation_history(
         &self,
         prompt: &Prompt,
@@ -1096,13 +1534,62 @@ impl ModelClient {
         session_telemetry: &SessionTelemetry,
         compaction_trace: &CompactionTraceContext,
         responses_metadata: &CodexResponsesMetadata,
+        accounting: &crate::accounting::responses::Slot,
     ) -> Result<Vec<ResponseItem>> {
         if prompt.input.is_empty() {
             return Ok(Vec::new());
         }
+        // PF-28-S01: compaction sends the whole history to the model.
+        let gated_prompt = crate::security::disclosure_gate::gate_prompt(prompt);
+        let prompt = gated_prompt.as_ref().unwrap_or(prompt);
         let client_setup = self.current_client_setup().await?;
-        let transport =
-            self.build_api_transport(&client_setup.api_provider, RESPONSES_COMPACT_ENDPOINT)?;
+        // The legacy compaction endpoint is a model request the operator paid
+        // for. It answers with one JSON body rather than a stream, so it never
+        // met the streaming collector; it is collected here instead.
+        let sampling = match crate::accounting::responses::read(accounting)? {
+            Some(deferred) => {
+                deferred
+                    .resolve_path(
+                        self.state.provider.info(),
+                        client_setup.auth.as_ref(),
+                        &client_setup
+                            .api_provider
+                            .url_for_path(RESPONSES_COMPACT_ENDPOINT),
+                        RESPONSES_COMPACT_ENDPOINT.trim_start_matches('/'),
+                    )
+                    .await?
+            }
+            None => None,
+        };
+        let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+        // A collected request must not be able to follow a redirect: the
+        // streaming paths build a no-redirect client whenever evidence exists,
+        // so that a response from somewhere else can never be attributed to the
+        // approved endpoint. This endpoint needs the same rule.
+        let follow = if evidence.is_some() {
+            Some(
+                self.redirect_fallback(
+                    &client_setup
+                        .api_provider
+                        .url_for_path(RESPONSES_COMPACT_ENDPOINT),
+                )?,
+            )
+        } else {
+            None
+        };
+        let transport = if evidence.is_some() {
+            let client = self.api_client_without_redirects(
+                &client_setup
+                    .api_provider
+                    .url_for_path(RESPONSES_COMPACT_ENDPOINT),
+            )?;
+            crate::memory_stage_one::StageOneGuardedTransport::new(
+                ReqwestTransport::from_http_client(client),
+                self.stage_one_memory_binding.get().cloned(),
+            )
+        } else {
+            self.build_api_transport(&client_setup.api_provider, RESPONSES_COMPACT_ENDPOINT)?
+        };
         let request_telemetry = Self::build_request_telemetry(
             session_telemetry,
             AuthRequestTelemetryContext::new(
@@ -1173,6 +1660,15 @@ impl ModelClient {
             .api_provider
             .stream_idle_timeout
             .saturating_mul(COMPACT_REQUEST_TIMEOUT_IDLE_MULTIPLIER);
+        let transport = transport.map_inner(|inner| {
+            crate::accounting::transport::AccountingTransport::new(
+                inner,
+                evidence.clone(),
+                model.clone(),
+            )
+            .with_redirect_fallback(follow)
+            .with_tier(service_tier.clone())
+        });
         let client =
             ApiCompactClient::new(transport, client_setup.api_provider, client_setup.api_auth)
                 .with_telemetry(Some(request_telemetry));
@@ -1196,6 +1692,7 @@ impl ModelClient {
         session_config: ApiRealtimeSessionConfig,
         mut extra_headers: ApiHeaderMap,
         api_provider_override: Option<ApiProvider>,
+        accounting: &crate::accounting::responses::Slot,
     ) -> Result<RealtimeWebrtcCallStart> {
         self.check_source_admission(&Prompt::default())?;
         // Create the media call over HTTP first, then retain matching auth so realtime can attach
@@ -1209,7 +1706,53 @@ impl ModelClient {
             client_setup.api_auth.as_ref(),
         ));
         let api_provider = api_provider_override.unwrap_or(client_setup.api_provider);
-        let transport = self.build_api_transport(&api_provider, REALTIME_CALLS_ENDPOINT)?;
+        // Creating the call is a model request the operator paid for, so it is
+        // recorded. Its response carries no usage - the realtime protocol this
+        // client parses carries none anywhere - so the attempt lands with its
+        // tokens unknown, which is what the provider actually said.
+        //
+        // The route is read from the API client rather than restated: call
+        // creation picks its path from the session's parser and appends the
+        // pairs that select its architecture, and a pin missing those would
+        // refuse every call it was meant to record.
+        let call_url = codex_api::realtime_call_url(&api_provider, &session_config);
+        let call_route = codex_api::realtime_call_route(&api_provider, &session_config);
+        let sampling = match crate::accounting::responses::read(accounting)? {
+            Some(deferred) => {
+                deferred
+                    .resolve_path(
+                        self.state.provider.info(),
+                        client_setup.auth.as_ref(),
+                        &call_url,
+                        &call_route,
+                    )
+                    .await?
+            }
+            None => None,
+        };
+        let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+        let follow = if evidence.is_some() {
+            Some(self.redirect_fallback(&call_url)?)
+        } else {
+            None
+        };
+        let transport = if evidence.is_some() {
+            let client = self.api_client_without_redirects(&call_url)?;
+            crate::memory_stage_one::StageOneGuardedTransport::new(
+                ReqwestTransport::from_http_client(client),
+                self.stage_one_memory_binding.get().cloned(),
+            )
+        } else {
+            self.build_api_transport(&api_provider, REALTIME_CALLS_ENDPOINT)?
+        };
+        let transport = transport.map_inner(|inner| {
+            crate::accounting::transport::AccountingTransport::new(
+                inner,
+                evidence.clone(),
+                session_config.model.clone().unwrap_or_default(),
+            )
+            .with_redirect_fallback(follow)
+        });
         let response = ApiRealtimeCallClient::new(transport, api_provider, client_setup.api_auth)
             .create_with_session_and_headers(sdp, session_config, extra_headers)
             .await
@@ -1218,31 +1761,163 @@ impl ModelClient {
             sdp: response.sdp,
             call_id: response.call_id,
             sideband_headers,
+            record: evidence
+                .as_deref()
+                .and_then(crate::accounting::transport::ResponseEvidence::realtime_session_record),
         })
     }
 
+    /// #824: record a realtime WebSocket session that has just opened under
+    /// `base_url` as one request. A session is billed but this client never
+    /// sees its token usage, so the record states the route, model, provider
+    /// and start time now, the end time when the session closes
+    /// (`RealtimeSessionRecord::end`), and no token counts. `credential` is
+    /// the API key the session sends. `None` leaves the session unrecorded; it
+    /// is never refused.
+    pub(crate) async fn begin_realtime_session_record(
+        &self,
+        base_url: &str,
+        session_config: &ApiRealtimeSessionConfig,
+        accounting: &crate::accounting::responses::Slot,
+        credential: Option<&codex_login::CodexAuth>,
+    ) -> Option<crate::accounting::realtime::RealtimeSessionRecord> {
+        // Nothing collects this session: say nothing.
+        let deferred = crate::accounting::responses::read(accounting)
+            .ok()
+            .flatten()?;
+        let unrecorded = |cause: &dyn std::fmt::Display| {
+            deferred.reject();
+            crate::accounting::gap("realtime session route", cause);
+        };
+        let route = match codex_api::realtime_websocket_route(base_url, session_config) {
+            Ok(route) => route,
+            Err(error) => {
+                unrecorded(&error);
+                return None;
+            }
+        };
+        let Some(path) = route.route else {
+            unrecorded(&"the session URL is not under its base URL");
+            return None;
+        };
+        // The provider's configured query parameters ride on the session URL
+        // as on every other request; the pin adds them the same way.
+        let provider = self.state.provider.info();
+        let url = match crate::accounting::canonical_query(provider) {
+            Some(query) if route.url.contains('?') => format!("{}&{query}", route.url),
+            Some(query) => format!("{}?{query}", route.url),
+            None => route.url,
+        };
+        let model = session_config.model.as_deref().unwrap_or_default();
+        crate::accounting::realtime::RealtimeSessionRecord::begin(
+            &deferred, provider, credential, &url, &path, model,
+        )
+        .await
+    }
+
+    /// Leave a realtime WebSocket session that opened unrecorded, with the
+    /// `cause` logged as a gap (#889). Nothing is said when nothing collects.
+    pub(crate) fn leave_realtime_session_unrecorded(
+        &self,
+        accounting: &crate::accounting::responses::Slot,
+        cause: &'static str,
+    ) {
+        if let Some(deferred) = crate::accounting::responses::read(accounting)
+            .ok()
+            .flatten()
+        {
+            deferred.reject();
+            crate::accounting::gap("realtime session account", cause);
+        }
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
     /// Builds memory summaries for each provided normalized raw memory.
     ///
     /// This is a unary call (no streaming) to `/v1/memories/trace_summarize`.
     ///
     /// The model selection, reasoning effort, and telemetry context are passed explicitly to keep
     /// `ModelClient` session-scoped.
-    pub async fn summarize_memories(
+    pub(crate) async fn summarize_memories(
         &self,
         raw_memories: Vec<ApiRawMemory>,
         model_info: &ModelInfo,
         effort: Option<ReasoningEffortConfig>,
         session_telemetry: &SessionTelemetry,
+        accounting: &crate::accounting::responses::Slot,
     ) -> Result<Vec<ApiMemorySummarizeOutput>> {
         if raw_memories.is_empty() {
             return Ok(Vec::new());
+        }
+        // PF-28-S01: raw memories cannot be rebuilt after gating; refuse.
+        if crate::security::disclosure_gate::would_disclose(
+            codex_secret_broker::output_gate::OutputSink::ModelRequest,
+            &raw_memories,
+        ) {
+            return Err(CodexErr::UnsupportedOperation(
+                "memory summaries would send a managed secret to the model".to_string(),
+            ));
         }
 
         self.check_source_admission(&Prompt::default())?;
 
         let client_setup = self.current_client_setup().await?;
-        let transport =
-            self.build_api_transport(&client_setup.api_provider, MEMORIES_SUMMARIZE_ENDPOINT)?;
+        // Summarising memories names a model and a reasoning effort: it is
+        // inference the operator paid for, answered with one JSON body rather
+        // than a stream, so it is collected the way the legacy compaction
+        // endpoint is. The slot is a parameter because this client is
+        // session-scoped by design - which is also why this call could be
+        // written with no way to record it at all.
+        let sampling = match crate::accounting::responses::read(accounting)? {
+            Some(deferred) => {
+                deferred
+                    .resolve_path(
+                        self.state.provider.info(),
+                        client_setup.auth.as_ref(),
+                        &client_setup
+                            .api_provider
+                            .url_for_path(MEMORIES_SUMMARIZE_ENDPOINT),
+                        MEMORIES_SUMMARIZE_ENDPOINT.trim_start_matches('/'),
+                    )
+                    .await?
+            }
+            None => None,
+        };
+        let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+        // A collected request must not be able to follow a redirect, for the
+        // same reason every other collected route may not.
+        let follow = if evidence.is_some() {
+            Some(
+                self.redirect_fallback(
+                    &client_setup
+                        .api_provider
+                        .url_for_path(MEMORIES_SUMMARIZE_ENDPOINT),
+                )?,
+            )
+        } else {
+            None
+        };
+        let transport = if evidence.is_some() {
+            let client = self.api_client_without_redirects(
+                &client_setup
+                    .api_provider
+                    .url_for_path(MEMORIES_SUMMARIZE_ENDPOINT),
+            )?;
+            crate::memory_stage_one::StageOneGuardedTransport::new(
+                ReqwestTransport::from_http_client(client),
+                self.stage_one_memory_binding.get().cloned(),
+            )
+        } else {
+            self.build_api_transport(&client_setup.api_provider, MEMORIES_SUMMARIZE_ENDPOINT)?
+        };
+        let transport = transport.map_inner(|inner| {
+            crate::accounting::transport::AccountingTransport::new(
+                inner,
+                evidence.clone(),
+                model_info.slug.clone(),
+            )
+            .with_redirect_fallback(follow)
+        });
         let request_telemetry = Self::build_request_telemetry(
             session_telemetry,
             AuthRequestTelemetryContext::new(
@@ -1279,6 +1954,7 @@ impl ModelClient {
             .map_err(|error| self.state.provider.map_api_error(error))
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     fn build_subagent_headers(&self) -> ApiHeaderMap {
         let mut extra_headers = ApiHeaderMap::new();
         add_originator_header(&mut extra_headers, self.state.originator.as_str());
@@ -1627,6 +2303,11 @@ impl ModelClient {
         responses_metadata: &CodexResponsesMetadata,
     ) -> Result<ResponsesApiRequest> {
         let mut input = self.source_admitted_input(prompt, model_info.use_responses_lite)?;
+        // #578: after labelling, which looks items up by their recorded bytes.
+        if let Some(producer) = prompt.producer.as_deref() {
+            crate::context_manager::provider_items::strip_foreign_references(&mut input, producer);
+        }
+        self.drop_unresolvable_item_references(&mut input);
         let is_openai = self.state.provider.info().is_openai();
         if !is_openai {
             retain_latest_contextual_developer_fragments(&mut input);
@@ -1663,7 +2344,7 @@ impl ModelClient {
             &model_info.slug
         };
         let vercel_provider_options = is_vercel_gateway
-            .then(|| vercel_gateway_provider_options(upstream_model))
+            .then(|| self.vercel_gateway_provider_options(upstream_model))
             .flatten();
         let (instructions, tools) = if model_info.use_responses_lite {
             let tools = create_tools_json_for_responses_api(&prompt.tools)?;
@@ -1782,6 +2463,7 @@ impl ModelClient {
         if !self.state.provider.info().is_openai() {
             retain_latest_contextual_developer_fragments(&mut input);
         }
+        flatten_namespaced_history(&mut input, &prompt.tools, &prompt.flat_tool_names);
         let mut skipped_tool_call_ids = HashSet::new();
         append_chat_messages_for_response_items(
             input,
@@ -1887,7 +2569,7 @@ impl ModelClient {
             .provider
             .info()
             .is_vercel_gateway()
-            .then(|| vercel_gateway_provider_options(upstream_model))
+            .then(|| self.vercel_gateway_provider_options(upstream_model))
             .flatten();
         let provider_reasoning = if self.state.provider.info().is_openrouter() {
             Self::openrouter_reasoning(model_info, effort.as_ref())?
@@ -1968,6 +2650,7 @@ impl ModelClient {
         if !self.state.provider.info().is_openai() {
             retain_latest_contextual_developer_fragments(&mut input);
         }
+        flatten_namespaced_history(&mut input, &prompt.tools, &prompt.flat_tool_names);
         let mut messages = Vec::new();
         let mut skipped_tool_call_ids = HashSet::new();
         for item in input {
@@ -2013,7 +2696,7 @@ impl ModelClient {
             .provider
             .info()
             .is_vercel_gateway()
-            .then(|| vercel_gateway_provider_options(upstream_model))
+            .then(|| self.vercel_gateway_provider_options(upstream_model))
             .flatten();
         // Third-party slugs on this wire think by default, so an omitted
         // `thinking` block is not the same as thinking off. Only Anthropic's
@@ -2030,15 +2713,30 @@ impl ModelClient {
             tool_choice,
             stream: true,
             max_tokens: model_info.max_output_tokens.ok_or_else(|| {
-                CodexErr::InvalidRequest(format!(
-                    "model `{}` has no catalogued maximum output token limit",
-                    model_info.slug
-                ))
+                CodexErr::InvalidRequest(if model_info.used_fallback_model_metadata {
+                    format!(
+                        "model `{}` is not in this provider's model catalog, so its maximum output length is unknown; choose another model with /model or change `model` in config.toml",
+                        model_info.slug
+                    )
+                } else {
+                    format!(
+                        "model `{}` has no catalogued maximum output token limit",
+                        model_info.slug
+                    )
+                })
             })?,
             thinking,
             output_config,
             provider_options,
         };
+        let image_report = fit_anthropic_image_dimensions(&mut request);
+        if image_report != ImageDimensionReport::default() {
+            warn!(
+                resized_images = image_report.resized_images,
+                omitted_images = image_report.omitted_images,
+                "fitted Anthropic request images to the provider's dimension limits"
+            );
+        }
         let payload_report = enforce_anthropic_payload_budget(
             &mut request,
             self.state
@@ -2079,6 +2777,42 @@ impl ModelClient {
         ChatCachePolicy::default()
     }
 
+    /// #578: records the item a Responses host reported missing (`Item with
+    /// id '…' not found`). Returns the ID when it is new, so the caller can
+    /// retry once without it; `None` for any other error or an ID already
+    /// dropped (the retry did not help).
+    pub(crate) fn note_unresolvable_item_reference(&self, err: &CodexErr) -> Option<String> {
+        if self.state.provider.info().wire_api != WireApi::Responses {
+            return None;
+        }
+        let id = unresolvable_item_id(&err.to_string())?;
+        let mut ids = self.state.unresolvable_item_ids.lock().ok()?;
+        ids.insert(id.clone()).then_some(id)
+    }
+
+    /// Leaves the items in [`ModelClientState::unresolvable_item_ids`] out of
+    /// a Responses request as references: reasoning is dropped (without the
+    /// stored item it carries nothing the host can read), other items are
+    /// sent inline without their ID.
+    fn drop_unresolvable_item_references(&self, input: &mut Vec<ResponseItem>) {
+        let Ok(ids) = self.state.unresolvable_item_ids.lock() else {
+            return;
+        };
+        if ids.is_empty() {
+            return;
+        }
+        input.retain_mut(|item| {
+            if !item.id().is_some_and(|id| ids.contains(id.as_str())) {
+                return true;
+            }
+            if matches!(item, ResponseItem::Reasoning { .. }) {
+                return false;
+            }
+            item.set_id(/*new_id*/ None);
+            true
+        });
+    }
+
     fn prepare_response_items_for_request(&self, input: &mut [ResponseItem]) {
         for item in input {
             if item.id().is_some_and(|id| !id.is_prefixed()) {
@@ -2087,20 +2821,71 @@ impl ModelClient {
         }
     }
 
+    fn vercel_gateway_provider_options(&self, upstream_model: &str) -> Option<Value> {
+        if self
+            .state
+            .vercel_vendor_pin_rejected
+            .load(Ordering::Relaxed)
+        {
+            return None;
+        }
+        vercel_gateway_provider_options(upstream_model)
+    }
+
+    /// Records a policy exclusion of the pinned Vercel upstream. Returns true
+    /// when this is the first one for the session, so the caller retries the
+    /// request once with the gateway's own routing.
+    fn drop_vercel_vendor_pin_after_policy_exclusion(&self, err: &ApiError) -> bool {
+        if !self.state.provider.info().is_vercel_gateway()
+            || !is_vercel_gateway_policy_exclusion(err)
+        {
+            return false;
+        }
+        let first = !self
+            .state
+            .vercel_vendor_pin_rejected
+            .swap(true, Ordering::Relaxed);
+        if first {
+            warn!(
+                "Vercel gateway skipped every provider for the pinned upstream under this \
+                 account's policy; using gateway routing for the rest of this session"
+            );
+        }
+        first
+    }
+
     fn responses_input_needs_synthetic_user_turn(&self, input: &[ResponseItem]) -> bool {
         // This is conversation-shape normalization, not a provider-specific compatibility hack.
         // Collaboration mail and completed assistant output are model output for every Responses
         // endpoint; when either is terminal, append a request-only user continuation so the next
         // sample cannot be interpreted as an assistant prefill.
         responses_input_needs_synthetic_user_turn(input)
+            || (self
+                .state
+                .legacy_synthetic_continuation
+                .load(Ordering::Relaxed)
+                && responses_input_latest_message_is_assistant(input))
+    }
+
+    /// True when this request omits the synthetic turn only because of the narrower prefill
+    /// rule, so a 400 may come from a provider that still needs the legacy shape.
+    fn responses_input_omits_legacy_synthetic_turn(&self, input: &[ResponseItem]) -> bool {
+        !self
+            .state
+            .legacy_synthetic_continuation
+            .load(Ordering::Relaxed)
+            && responses_input_latest_message_is_assistant(input)
+            && !responses_input_needs_synthetic_user_turn(input)
     }
 
     /// Returns whether the Responses-over-WebSocket transport is active for this session.
     ///
     /// WebSocket use is controlled by provider capability and session-scoped fallback state.
     pub fn responses_websocket_enabled(&self) -> bool {
+        // PF-27-S05: a websocket handshake cannot carry a signed broker frame.
         if !self.state.provider.info().supports_websockets
             || self.state.disable_websockets.load(Ordering::Relaxed)
+            || codex_model_provider::model_key_broker_required()
         {
             return false;
         }
@@ -2115,21 +2900,52 @@ impl ModelClient {
     async fn current_client_setup(&self) -> Result<CurrentClientSetup> {
         let auth = self.state.provider.auth().await;
         let api_provider = self.state.provider.api_provider().await?;
-        let resolved_auth = self
-            .state
-            .provider
-            .api_auth_for_scope(ProviderAuthScope {
+        // #878: a broker refusal of this auth is this session's.
+        let resolved_auth = crate::model_broker_auth::refusals::owned_by(
+            self.state.thread_id,
+            self.state.provider.api_auth_for_scope(ProviderAuthScope {
                 agent_identity_policy: self.agent_identity_policy,
                 session_source: self.state.session_source.clone(),
                 agent_identity_session_fallback: self.state.agent_identity_session_fallback.clone(),
-            })
-            .await?;
+            }),
+        )
+        .await?;
+        // PF-27-S05: with a credential broker installed, `api_auth` signs for
+        // it and the transport sends the request only to its socket.
         Ok(CurrentClientSetup {
             auth,
             api_provider,
             api_auth: resolved_auth.auth,
             agent_identity_telemetry: resolved_auth.agent_identity_telemetry,
         })
+    }
+
+    /// The ordinary, redirect-following transport a recorded request is
+    /// resent on when its provider redirects it (see
+    /// `AccountingTransport::with_redirect_fallback`).
+    fn redirect_fallback(&self, request_url: &str) -> Result<ReqwestTransport> {
+        let client = create_client_for_route(
+            &self.http_client_factory,
+            request_url,
+            ClientRouteClass::Api,
+        )
+        .map_err(std::io::Error::from)?;
+        Ok(ReqwestTransport::from_http_client(client))
+    }
+
+    /// No-redirect client for one model request.
+    fn api_client_without_redirects(
+        &self,
+        request_url: &str,
+    ) -> Result<codex_http_client::HttpClient> {
+        Ok(
+            codex_login::default_client::create_client_for_route_without_redirects(
+                &self.http_client_factory,
+                request_url,
+                ClientRouteClass::Api,
+            )
+            .map_err(std::io::Error::from)?,
+        )
     }
 
     fn build_api_transport(
@@ -2146,7 +2962,7 @@ impl ModelClient {
         .map_err(std::io::Error::from)?;
         Ok(crate::memory_stage_one::StageOneGuardedTransport::new(
             ReqwestTransport::from_http_client(client),
-            self.stage_one_memory_binding.clone(),
+            self.stage_one_memory_binding.get().cloned(),
         ))
     }
 
@@ -2178,6 +2994,12 @@ impl ModelClient {
         auth_context: AuthRequestTelemetryContext,
         request_route_telemetry: RequestRouteTelemetry,
     ) -> std::result::Result<ApiWebSocketConnection, ApiError> {
+        // PF-27-S05: a brokered credential never travels over a websocket handshake.
+        if codex_model_provider::model_key_broker_required() {
+            return Err(ApiError::InvalidRequest {
+                message: "websockets are off under broker_model_auth".to_string(),
+            });
+        }
         let headers = self.build_websocket_headers(responses_metadata).await;
         let websocket_telemetry = ModelClientSession::build_websocket_telemetry(
             session_telemetry,
@@ -2356,8 +3178,20 @@ impl ModelClientSession {
         Ok(body.len())
     }
 
+    /// #1311 (D171): drops a connection (and the conversation state on it)
+    /// opened as another sign-in than the one this request uses.
+    fn drop_websocket_of_another_sign_in(&mut self, identity: &ConnectionIdentity) {
+        if self.websocket_session.connection.is_some()
+            && self.websocket_session.identity.as_ref() != Some(identity)
+        {
+            self.reset_websocket_session();
+        }
+    }
+
     fn reset_websocket_session(&mut self) {
         self.websocket_session.connection = None;
+        self.websocket_session.identity = None;
+        self.websocket_session.provenance = None;
         self.websocket_session.last_request = None;
         self.websocket_session.last_response_rx = None;
         self.websocket_session.last_response_from_untraced_warmup = false;
@@ -2491,6 +3325,7 @@ impl ModelClientSession {
     ) -> Result<ResponseStream> {
         let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
+        let mut transient_rate_limit_retries = 0;
         let mut signed_thinking_history_retry_used = false;
         let mut payload_retry_used = false;
         loop {
@@ -2504,9 +3339,33 @@ impl ModelClientSession {
                 "anthropic_http_after_client_setup",
                 provider_request_started_at,
             );
-            let transport = self
-                .client
-                .build_api_transport(&client_setup.api_provider, ANTHROPIC_MESSAGES_ENDPOINT)?;
+            let evidence = crate::accounting::read_slot(&self.accounting)?
+                .map(crate::accounting::transport::ResponseEvidence::new);
+            let follow = if evidence.is_some() {
+                Some(
+                    self.client.redirect_fallback(
+                        &client_setup
+                            .api_provider
+                            .url_for_path(ANTHROPIC_MESSAGES_ENDPOINT),
+                    )?,
+                )
+            } else {
+                None
+            };
+            let transport = if evidence.is_some() {
+                let client = self.client.api_client_without_redirects(
+                    &client_setup
+                        .api_provider
+                        .url_for_path(ANTHROPIC_MESSAGES_ENDPOINT),
+                )?;
+                crate::memory_stage_one::StageOneGuardedTransport::new(
+                    ReqwestTransport::from_http_client(client),
+                    self.client.stage_one_memory_binding.get().cloned(),
+                )
+            } else {
+                self.client
+                    .build_api_transport(&client_setup.api_provider, ANTHROPIC_MESSAGES_ENDPOINT)?
+            };
             let request_auth_context = AuthRequestTelemetryContext::new(
                 client_setup.auth.as_ref().map(CodexAuth::auth_mode),
                 client_setup.api_auth.as_ref(),
@@ -2559,12 +3418,40 @@ impl ModelClientSession {
             inference_trace_attempt.add_request_headers(&mut options.extra_headers);
             inference_trace_attempt.record_started(&request);
             maybe_dump_anthropic_messages_request(&request);
+            let transport = transport.map_inner(|inner| {
+                crate::accounting::transport::AccountingTransport::new(
+                    inner,
+                    evidence.clone(),
+                    accounting_model_identity(&model_info.slug),
+                )
+                .with_redirect_fallback(follow)
+                .with_configured_routing(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .chat_completions_provider
+                        .clone(),
+                )
+                .with_configured_routing_options(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .is_vercel_gateway()
+                        .then(|| vercel_gateway_provider_options(&request.model))
+                        .flatten(),
+                )
+            });
             let client = ApiAnthropicMessagesClient::new(
                 transport,
                 client_setup.api_provider,
                 client_setup.api_auth,
             )
-            .with_telemetry(Some(request_telemetry), Some(sse_telemetry));
+            .with_telemetry(Some(request_telemetry), Some(sse_telemetry))
+            .with_usage_observer(
+                evidence.map(|value| value as Arc<dyn codex_api::AnthropicUsageObserver>),
+            );
             trace_stream_timing(
                 "anthropic_http_before_stream_request",
                 provider_request_started_at,
@@ -2644,6 +3531,43 @@ impl ModelClientSession {
                          images and retrying once"
                     );
                     payload_retry_used = true;
+                    continue;
+                }
+                Err(err)
+                    if transient_rate_limit_retries < MAX_TRANSIENT_RATE_LIMIT_RETRIES
+                        && is_transient_upstream_rate_limit(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let delay = transient_rate_limit_delay(&err, transient_rate_limit_retries);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    transient_rate_limit_retries += 1;
+                    warn!(
+                        attempt = transient_rate_limit_retries,
+                        delay_ms = delay.as_millis() as u64,
+                        "gateway reported a transient shared upstream rate limit; retrying"
+                    );
+                    tokio::time::sleep(delay).await;
+                    continue;
+                }
+                Err(err)
+                    if self
+                        .client
+                        .drop_vercel_vendor_pin_after_policy_exclusion(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
                     continue;
                 }
                 Err(err) => {
@@ -2817,6 +3741,8 @@ impl ModelClientSession {
         if !self.client.responses_websocket_enabled() {
             return Ok(());
         }
+        // A connection opened as another sign-in is replaced at the turn's
+        // first request (#1311).
         if self.websocket_session.connection.is_some() {
             return Ok(());
         }
@@ -2826,11 +3752,18 @@ impl ModelClientSession {
                 "failed to build websocket prewarm client setup: {err}"
             ))
         })?;
+        let identity =
+            ConnectionIdentity::of(client_setup.auth.as_ref(), client_setup.api_auth.as_ref());
         let auth_context = AuthRequestTelemetryContext::new(
             client_setup.auth.as_ref().map(CodexAuth::auth_mode),
             client_setup.api_auth.as_ref(),
             client_setup.agent_identity_telemetry.clone(),
             PendingUnauthorizedRetry::default(),
+        );
+        let provenance = crate::accounting::websocket::Provenance::capture(
+            self.client.state.provider.info(),
+            client_setup.auth.as_ref(),
+            &client_setup.api_provider,
         );
         let connection = self
             .client
@@ -2844,6 +3777,8 @@ impl ModelClientSession {
             )
             .await?;
         self.websocket_session.connection = Some(connection);
+        self.websocket_session.identity = Some(identity);
+        self.websocket_session.provenance = Some(provenance);
         self.websocket_session
             .set_connection_reused(/*connection_reused*/ false);
         Ok(())
@@ -2866,6 +3801,8 @@ impl ModelClientSession {
         params: WebsocketConnectParams<'_>,
     ) -> std::result::Result<&ApiWebSocketConnection, ApiError> {
         let WebsocketConnectParams {
+            identity,
+            provenance,
             session_telemetry,
             api_provider,
             api_auth,
@@ -2874,7 +3811,10 @@ impl ModelClientSession {
             request_route_telemetry,
         } = params;
         let needs_new = match self.websocket_session.connection.as_ref() {
-            Some(conn) => conn.is_closed().await,
+            Some(conn) => {
+                self.websocket_session.identity.as_ref() != Some(&identity)
+                    || conn.is_closed().await
+            }
             None => true,
         };
 
@@ -2903,6 +3843,8 @@ impl ModelClientSession {
                 }
             };
             self.websocket_session.connection = Some(new_conn);
+            self.websocket_session.identity = Some(identity);
+            self.websocket_session.provenance = Some(provenance);
             self.websocket_session
                 .set_connection_reused(/*connection_reused*/ false);
         } else {
@@ -2963,14 +3905,12 @@ impl ModelClientSession {
             .then(|| uuid::Uuid::new_v4().to_string());
         let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
+        let mut transient_rate_limit_retries = 0;
         loop {
             let provider_request_started_at = Instant::now();
             trace_stream_timing("chat_http_before_client_setup", provider_request_started_at);
             let client_setup = self.client.current_client_setup().await?;
             trace_stream_timing("chat_http_after_client_setup", provider_request_started_at);
-            let transport = self
-                .client
-                .build_api_transport(&client_setup.api_provider, CHAT_COMPLETIONS_ENDPOINT)?;
             let request_auth_context = AuthRequestTelemetryContext::new(
                 client_setup.auth.as_ref().map(CodexAuth::auth_mode),
                 client_setup.api_auth.as_ref(),
@@ -3005,6 +3945,84 @@ impl ModelClientSession {
                 responses_metadata,
             )?;
             trace_stream_timing("chat_http_after_build_request", provider_request_started_at);
+            // Agent-identity sessions collect like any other. Excluding them here
+            // meant a whole class of sessions recorded nothing at all on every
+            // provider, while the policy that decides their economics already
+            // treats an agent identity as subscription capacity.
+            let sampling = match crate::accounting::chat::read(&self.chat_accounting)? {
+                Some(deferred) => {
+                    deferred
+                        .resolve(
+                            self.client.state.provider.info(),
+                            client_setup.auth.as_ref(),
+                            &client_setup
+                                .api_provider
+                                .url_for_path(CHAT_COMPLETIONS_ENDPOINT),
+                            &request,
+                        )
+                        .await?
+                }
+                None => None,
+            };
+            let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+            let follow = if evidence.is_some() {
+                Some(
+                    self.client.redirect_fallback(
+                        &client_setup
+                            .api_provider
+                            .url_for_path(CHAT_COMPLETIONS_ENDPOINT),
+                    )?,
+                )
+            } else {
+                None
+            };
+            let transport = if evidence.is_some() {
+                let client = self.client.api_client_without_redirects(
+                    &client_setup
+                        .api_provider
+                        .url_for_path(CHAT_COMPLETIONS_ENDPOINT),
+                )?;
+                crate::memory_stage_one::StageOneGuardedTransport::new(
+                    ReqwestTransport::from_http_client(client),
+                    self.client.stage_one_memory_binding.get().cloned(),
+                )
+            } else {
+                self.client
+                    .build_api_transport(&client_setup.api_provider, CHAT_COMPLETIONS_ENDPOINT)?
+            };
+            let transport = transport.map_inner(|inner| {
+                crate::accounting::transport::AccountingTransport::new(
+                    inner,
+                    evidence.clone(),
+                    accounting_model_identity(&model_info.slug),
+                )
+                .with_redirect_fallback(follow)
+                .with_configured_routing(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .chat_completions_provider
+                        .clone(),
+                )
+                .with_configured_routing_options(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .is_vercel_gateway()
+                        .then(|| vercel_gateway_provider_options(&request.model))
+                        .flatten(),
+                )
+                .with_configured_plugins(
+                    // Only the Chat request type carries `plugins`; OpenRouter web
+                    // search rides it, emitted by this client from the provider and
+                    // the session's tool set.
+                    serde_json::to_value(request.plugins.clone())
+                        .ok()
+                        .filter(|value| !value.is_null()),
+                )
+            });
             let inference_trace_attempt = inference_trace.start_attempt();
             inference_trace_attempt.add_request_headers(&mut options.extra_headers);
             inference_trace_attempt.record_started(&request);
@@ -3014,7 +4032,10 @@ impl ModelClientSession {
                 client_setup.api_provider,
                 client_setup.api_auth,
             )
-            .with_telemetry(Some(request_telemetry), Some(sse_telemetry));
+            .with_telemetry(Some(request_telemetry), Some(sse_telemetry))
+            .with_usage_observer(
+                evidence.map(|value| value as Arc<dyn codex_api::ChatUsageObserver>),
+            );
             trace_stream_timing(
                 "chat_http_before_stream_request",
                 provider_request_started_at,
@@ -3058,6 +4079,43 @@ impl ModelClientSession {
                             &self.client.state.provider,
                         )
                         .await?,
+                    );
+                    continue;
+                }
+                Err(err)
+                    if transient_rate_limit_retries < MAX_TRANSIENT_RATE_LIMIT_RETRIES
+                        && is_transient_upstream_rate_limit(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let delay = transient_rate_limit_delay(&err, transient_rate_limit_retries);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    transient_rate_limit_retries += 1;
+                    warn!(
+                        attempt = transient_rate_limit_retries,
+                        delay_ms = delay.as_millis() as u64,
+                        "gateway reported a transient shared upstream rate limit; retrying"
+                    );
+                    tokio::time::sleep(delay).await;
+                    continue;
+                }
+                Err(err)
+                    if self
+                        .client
+                        .drop_vercel_vendor_pin_after_policy_exclusion(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
                     );
                     continue;
                 }
@@ -3106,7 +4164,9 @@ impl ModelClientSession {
     ) -> Result<ResponseStream> {
         let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
+        let mut transient_rate_limit_retries = 0;
         let mut server_state_retry_used = false;
+        let mut legacy_continuation_retry_used = false;
         loop {
             let provider_request_started_at = Instant::now();
             trace_stream_timing(
@@ -3114,9 +4174,38 @@ impl ModelClientSession {
                 provider_request_started_at,
             );
             let client_setup = self.client.current_client_setup().await?;
-            let transport = self
-                .client
-                .build_api_transport(&client_setup.api_provider, RESPONSES_ENDPOINT)?;
+            let sampling = match crate::accounting::responses::read(&self.responses_accounting)? {
+                Some(deferred) => {
+                    deferred
+                        .resolve(
+                            self.client.state.provider.info(),
+                            client_setup.auth.as_ref(),
+                            &client_setup.api_provider.url_for_path(RESPONSES_ENDPOINT),
+                        )
+                        .await?
+                }
+                None => None,
+            };
+            let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+            let follow = if evidence.is_some() {
+                Some(self.client.redirect_fallback(
+                    &client_setup.api_provider.url_for_path(RESPONSES_ENDPOINT),
+                )?)
+            } else {
+                None
+            };
+            let transport = if evidence.is_some() {
+                let client = self.client.api_client_without_redirects(
+                    &client_setup.api_provider.url_for_path(RESPONSES_ENDPOINT),
+                )?;
+                crate::memory_stage_one::StageOneGuardedTransport::new(
+                    ReqwestTransport::from_http_client(client),
+                    self.client.stage_one_memory_binding.get().cloned(),
+                )
+            } else {
+                self.client
+                    .build_api_transport(&client_setup.api_provider, RESPONSES_ENDPOINT)?
+            };
             let request_auth_context = AuthRequestTelemetryContext::new(
                 client_setup.auth.as_ref().map(CodexAuth::auth_mode),
                 client_setup.api_auth.as_ref(),
@@ -3148,10 +4237,18 @@ impl ModelClientSession {
                 responses_metadata,
             )?;
             let logical_request = request.clone();
-            let uses_http_server_state = self.client.state.provider.info().is_vercel();
+            let uses_http_server_state = self.client.state.provider.info().is_vercel()
+                && !self
+                    .client
+                    .state
+                    .http_server_state_rejected
+                    .load(Ordering::Relaxed);
             let append_user_turn = self
                 .client
                 .responses_input_needs_synthetic_user_turn(&logical_request.input);
+            let omitted_legacy_synthetic_turn = self
+                .client
+                .responses_input_omits_legacy_synthetic_turn(&logical_request.input);
             if uses_http_server_state {
                 self.prepare_http_server_state_request(
                     &mut request,
@@ -3171,12 +4268,41 @@ impl ModelClientSession {
             inference_trace_attempt.add_request_headers(&mut options.extra_headers);
             inference_trace_attempt.record_started(&request);
             maybe_dump_responses_request(&request);
+            let transport = transport.map_inner(|inner| {
+                crate::accounting::transport::AccountingTransport::new(
+                    inner,
+                    evidence.clone(),
+                    accounting_model_identity(&model_info.slug),
+                )
+                .with_redirect_fallback(follow)
+                .with_configured_routing(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .chat_completions_provider
+                        .clone(),
+                )
+                .with_configured_routing_options(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .is_vercel_gateway()
+                        .then(|| vercel_gateway_provider_options(&request.model))
+                        .flatten(),
+                )
+                .with_tier(request.service_tier.clone())
+            });
             let client = ApiResponsesClient::new(
                 transport,
                 client_setup.api_provider,
                 client_setup.api_auth,
             )
-            .with_telemetry(Some(request_telemetry), Some(sse_telemetry));
+            .with_telemetry(Some(request_telemetry), Some(sse_telemetry))
+            .with_usage_observer(
+                evidence.map(|value| value as Arc<dyn codex_api::ResponsesUsageObserver>),
+            );
             trace_stream_timing(
                 "responses_http_before_stream_request",
                 provider_request_started_at,
@@ -3243,10 +4369,75 @@ impl ModelClientSession {
                         /*output_items*/ &[],
                     );
                     warn!(
-                        "server-state responses continuation rejected with 400; clearing server conversation state and retrying with full context"
+                        "server-state responses continuation rejected with 400; using full-context requests for the rest of this session"
                     );
+                    self.client
+                        .state
+                        .http_server_state_rejected
+                        .store(true, Ordering::Relaxed);
                     self.clear_http_server_conversation_state();
                     server_state_retry_used = true;
+                    continue;
+                }
+                Err(ApiError::Transport(
+                    bad_request_transport @ TransportError::Http { status, .. },
+                )) if status == StatusCode::BAD_REQUEST
+                    && !request_used_server_state
+                    && omitted_legacy_synthetic_turn
+                    && !legacy_continuation_retry_used =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context(&bad_request_transport);
+                    inference_trace_attempt.record_failed(
+                        &bad_request_transport,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    warn!(
+                        "provider rejected a tool continuation without a synthetic user turn; restoring it for this session"
+                    );
+                    self.client
+                        .state
+                        .legacy_synthetic_continuation
+                        .store(true, Ordering::Relaxed);
+                    legacy_continuation_retry_used = true;
+                    continue;
+                }
+                Err(err)
+                    if transient_rate_limit_retries < MAX_TRANSIENT_RATE_LIMIT_RETRIES
+                        && is_transient_upstream_rate_limit(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let delay = transient_rate_limit_delay(&err, transient_rate_limit_retries);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    transient_rate_limit_retries += 1;
+                    warn!(
+                        attempt = transient_rate_limit_retries,
+                        delay_ms = delay.as_millis() as u64,
+                        "gateway reported a transient shared upstream rate limit; retrying"
+                    );
+                    tokio::time::sleep(delay).await;
+                    continue;
+                }
+                Err(err)
+                    if self
+                        .client
+                        .drop_vercel_vendor_pin_after_policy_exclusion(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
                     continue;
                 }
                 Err(err) => {
@@ -3296,6 +4487,9 @@ impl ModelClientSession {
         let mut pending_retry = PendingUnauthorizedRetry::default();
         loop {
             let client_setup = self.client.current_client_setup().await?;
+            let identity =
+                ConnectionIdentity::of(client_setup.auth.as_ref(), client_setup.api_auth.as_ref());
+            self.drop_websocket_of_another_sign_in(&identity);
             let request_auth_context = AuthRequestTelemetryContext::new(
                 client_setup.auth.as_ref().map(CodexAuth::auth_mode),
                 client_setup.api_auth.as_ref(),
@@ -3311,6 +4505,41 @@ impl ModelClientSession {
                 service_tier.clone(),
                 responses_metadata,
             )?;
+            // Warmup is collected too. Skipping it here meant the prompt this
+            // client sends to prime the cache - and the cache writes the provider
+            // charges for - never reached the ledger on any provider.
+            let deferred = crate::accounting::responses::read(&self.responses_accounting)?
+                .filter(|value| !matches!(value.websocket_endpoint(), Ok(None)));
+            let provenance = crate::accounting::websocket::Provenance::capture(
+                self.client.state.provider.info(),
+                client_setup.auth.as_ref(),
+                &client_setup.api_provider,
+            );
+            let sampling = if let Some(deferred) = &deferred {
+                let open = self.websocket_session.connection.is_some();
+                let cached = self.websocket_session.provenance.as_ref().filter(|_| open);
+                if open && cached.is_none() {
+                    // Not attributable: send it unrecorded.
+                    deferred.reject();
+                    crate::accounting::gap(
+                        "websocket admission",
+                        "open connection has no recorded provenance",
+                    );
+                    None
+                } else if provenance.validate(deferred, cached)? {
+                    deferred
+                        .resolve(
+                            self.client.state.provider.info(),
+                            client_setup.auth.as_ref(),
+                            &client_setup.api_provider.url_for_path(RESPONSES_ENDPOINT),
+                        )
+                        .await?
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             let request_session_telemetry = if warmup {
                 // `generate=false` prewarm is connection setup, not an inference request.
                 session_telemetry.clone()
@@ -3325,6 +4554,8 @@ impl ModelClientSession {
             }
             match self
                 .websocket_connection(WebsocketConnectParams {
+                    identity,
+                    provenance,
                     session_telemetry,
                     api_provider: client_setup.api_provider,
                     api_auth: client_setup.api_auth,
@@ -3337,6 +4568,20 @@ impl ModelClientSession {
                 .await
             {
                 Ok(_) => {}
+                // A websocket connection never follows a redirect, recorded
+                // or not; accounting only stops recording this turn.
+                Err(err @ ApiError::Transport(TransportError::Http { status, .. }))
+                    if status.is_redirection() && sampling.is_some() =>
+                {
+                    if let Some(deferred) = &deferred {
+                        deferred.reject();
+                    }
+                    crate::accounting::gap(
+                        "websocket connect",
+                        format_args!("provider redirected the connection ({status})"),
+                    );
+                    return Err(self.client.state.provider.map_api_error(err));
+                }
                 Err(ApiError::Transport(TransportError::Http { status, .. }))
                     if status == StatusCode::UPGRADE_REQUIRED =>
                 {
@@ -3415,17 +4660,49 @@ impl ModelClientSession {
                         "websocket connection is unavailable".to_string(),
                     ))
                 })?;
-            if let Some(binding) = &self.client.stage_one_memory_binding {
+            if let Some(binding) = self.client.stage_one_memory_binding.get() {
                 binding
                     .check()
                     .await
                     .map_err(|reason| CodexErr::InvalidRequest(reason.to_string()))?;
             }
+            let admission = match (sampling, deferred.as_ref()) {
+                (Some(sampling), Some(deferred)) => {
+                    match (
+                        self.websocket_session.provenance.clone(),
+                        deferred.websocket_endpoint()?,
+                    ) {
+                        (Some(established), Some(expected)) => {
+                            Some(crate::accounting::websocket::Admission::new(
+                                sampling,
+                                established,
+                                expected,
+                                self.client.stage_one_memory_binding.clone(),
+                            ))
+                        }
+                        // Not attributable: send it unrecorded.
+                        (established, _) => {
+                            deferred.reject();
+                            crate::accounting::gap(
+                                "websocket admission",
+                                if established.is_none() {
+                                    "connection has no recorded provenance"
+                                } else {
+                                    "turn has no approved websocket endpoint"
+                                },
+                            );
+                            None
+                        }
+                    }
+                }
+                _ => None,
+            };
             let stream_result = websocket_connection
-                .stream_request(
+                .stream_request_with_accounting(
                     ws_request,
                     self.websocket_session.connection_reused(),
                     Some(Arc::clone(&self.turn_state)),
+                    admission,
                 )
                 .await;
             if let Some(original_item_ids) = original_item_ids {
@@ -3490,6 +4767,12 @@ impl ModelClientSession {
         ));
         let websocket_telemetry: Arc<dyn WebsocketTelemetry> = telemetry;
         websocket_telemetry
+    }
+
+    /// Whether this session has sent a request over its WebSocket, such as a
+    /// completed warm-up. A warm-up that fell back to HTTP sent nothing.
+    pub(crate) fn sent_websocket_request(&self) -> bool {
+        self.websocket_session.last_request.is_some()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3592,6 +4875,10 @@ impl ModelClientSession {
         inference_trace: &InferenceTraceContext,
         same_turn_attempt_index: u64,
     ) -> Result<ResponseStream> {
+        // PF-28-S01: the model sink never receives a managed secret, even one
+        // recorded before the value was registered.
+        let gated_prompt = crate::security::disclosure_gate::gate_prompt(prompt);
+        let prompt = gated_prompt.as_ref().unwrap_or(prompt);
         let wire_api = self.client.state.provider.info().wire_api;
         match wire_api {
             WireApi::Responses => {
@@ -3656,6 +4943,11 @@ impl ModelClientSession {
         }
     }
 
+    /// See [`ModelClient::note_unresolvable_item_reference`].
+    pub(crate) fn note_unresolvable_item_reference(&self, err: &CodexErr) -> Option<String> {
+        self.client.note_unresolvable_item_reference(err)
+    }
+
     /// Permanently disables WebSockets for this Codex session and resets WebSocket state.
     ///
     /// This is used after exhausting the provider retry budget, to force subsequent requests onto
@@ -3700,20 +4992,45 @@ fn chat_model_supports_vercel_cache_control(model_slug: &str) -> bool {
     model_slug.starts_with("anthropic/") || model_slug.starts_with("minimax/")
 }
 
+/// Rolling conversation breakpoints for explicit prompt caching.
+const CHAT_CACHE_ROLLING_BREAKPOINTS: usize = 2;
+
 fn apply_chat_cache_control(messages: &mut [ChatMessage]) {
     if let Some(system_message) = messages.iter_mut().find(|message| message.role == "system") {
         mark_chat_message_cache_control(system_message);
     }
 
-    let mut marked_user_messages = 0usize;
-    for index in (0..messages.len()).rev() {
-        if messages[index].role == "user" {
-            mark_chat_message_cache_control(&mut messages[index]);
-            marked_user_messages += 1;
-            if marked_user_messages >= 2 {
-                break;
-            }
+    // The breakpoints must follow the newest turn. An agent loop grows the
+    // transcript with assistant tool calls and `tool` results, not new user
+    // messages, so anchoring on user messages froze the cached prefix at the
+    // first request and re-billed every later turn at the uncached rate.
+    let mut marked = 0usize;
+    for message in messages.iter_mut().rev() {
+        if marked >= CHAT_CACHE_ROLLING_BREAKPOINTS {
+            break;
         }
+        if message.role != "system"
+            && chat_message_has_cacheable_text(message)
+            && mark_chat_message_cache_control(message)
+        {
+            marked += 1;
+        }
+    }
+}
+
+/// Anthropic rejects cache breakpoints on empty text blocks, and a
+/// tool-call-only assistant message has no text to mark.
+fn chat_message_has_cacheable_text(message: &ChatMessage) -> bool {
+    match &message.content {
+        Some(ChatMessageContent::Text(text)) => !text.trim().is_empty(),
+        Some(ChatMessageContent::Parts(parts)) => parts.iter().any(|part| {
+            part.kind == "text"
+                && part
+                    .text
+                    .as_deref()
+                    .is_some_and(|text| !text.trim().is_empty())
+        }),
+        None => false,
     }
 }
 
@@ -3744,18 +5061,115 @@ fn mark_chat_message_cache_control(message: &mut ChatMessage) -> bool {
     true
 }
 
-#[cfg(test)]
-fn append_chat_messages_for_response_item(
-    item: ResponseItem,
-    messages: &mut Vec<ChatMessage>,
-    skipped_tool_call_ids: &mut HashSet<String>,
+/// Largest slice of malformed tool-call arguments replayed to the model.
+const MALFORMED_CHAT_ARGUMENTS_REPLAY_CHARS: usize = 4_000;
+
+/// Chat Completions providers reject tool calls whose arguments are not JSON.
+/// Rather than dropping such a call and the error it produced, which leaves the
+/// model unaware that its call failed, replay the raw text inside a JSON
+/// object so the call and its error output stay visible.
+fn chat_replay_function_arguments(arguments: String) -> String {
+    if serde_json::from_str::<Value>(&arguments).is_ok() {
+        return arguments;
+    }
+    let total_chars = arguments.chars().count();
+    let mut raw: String = arguments
+        .chars()
+        .take(MALFORMED_CHAT_ARGUMENTS_REPLAY_CHARS)
+        .collect();
+    if total_chars > MALFORMED_CHAT_ARGUMENTS_REPLAY_CHARS {
+        raw.push_str(&format!(
+            "…[{} more characters omitted]",
+            total_chars - MALFORMED_CHAT_ARGUMENTS_REPLAY_CHARS
+        ));
+    }
+    json!({ "malformed_arguments": raw }).to_string()
+}
+
+/// Chat Completions and Anthropic Messages have no namespaces. A namespaced
+/// call recorded on the Responses wire (before a provider switch or in forked
+/// history) replays under the flat name this request offers for that exact
+/// tool (`flat_tool_names`, the request's own mapping), such as an MCP tool's
+/// `mcp__server__tool`, or the offered `*_v1` alias for a V1 agent tool;
+/// otherwise under its bare name, as before. A tool whose
+/// preferred flat name a plain tool already takes is offered under a hashed
+/// name, so its earlier calls never appear as calls of the plain tool (#688).
+fn flatten_namespaced_history(
+    input: &mut [ResponseItem],
+    tools: &[ToolSpec],
+    flat_tool_names: &crate::tools::flat_tool_names::FlatToolNames,
 ) {
-    append_chat_messages_for_response_items(
-        std::iter::once(item),
-        messages,
-        skipped_tool_call_ids,
-        ChatReasoningProtocol::Independent,
-    );
+    let offered: HashSet<&str> = tools
+        .iter()
+        .filter(|tool| matches!(tool, ToolSpec::Function(_) | ToolSpec::Freeform(_)))
+        .map(ToolSpec::name)
+        .collect();
+    for item in input {
+        let (ResponseItem::FunctionCall {
+            name, namespace, ..
+        }
+        | ResponseItem::CustomToolCall {
+            name, namespace, ..
+        }) = item
+        else {
+            continue;
+        };
+        let Some(namespace) = namespace.take() else {
+            continue;
+        };
+        let tool_name = codex_tools::ToolName::namespaced(namespace, name.clone());
+        let flat = flat_tool_names
+            .flat_name_for(&tool_name)
+            .filter(|flat| offered.contains(flat))
+            .or_else(|| {
+                // V1 tools use explicit plain aliases on these wires, so they
+                // are not present in the namespaced-tools flat-name mapping.
+                if tool_name.namespace.as_deref()
+                    != Some(crate::tools::handlers::multi_agents_spec::MULTI_AGENT_V1_NAMESPACE)
+                {
+                    return None;
+                }
+                let alias = match tool_name.name.as_str() {
+                    "spawn_agent" => "spawn_agent_v1",
+                    "send_input" => "send_input_v1",
+                    "wait_agent" => "wait_agent_v1",
+                    "close_agent" => "close_agent_v1",
+                    "resume_agent" => "resume_agent_v1",
+                    _ => return None,
+                };
+                offered.contains(alias).then_some(alias)
+            });
+        if let Some(flat) = flat {
+            *name = flat.to_string();
+        }
+    }
+}
+
+fn push_chat_tool_call(
+    messages: &mut Vec<ChatMessage>,
+    call_id: String,
+    name: String,
+    arguments: String,
+) {
+    let tool_call = ChatToolCall {
+        id: call_id,
+        kind: "function".to_string(),
+        function: ChatToolFunction { name, arguments },
+    };
+    if let Some(message) = messages
+        .last_mut()
+        .filter(|message| message.role == "assistant" && message.tool_call_id.is_none())
+    {
+        message.tool_calls.push(tool_call);
+    } else {
+        messages.push(ChatMessage {
+            role: "assistant".to_string(),
+            content: None,
+            reasoning_content: None,
+            tool_call_id: None,
+            tool_calls: vec![tool_call],
+        });
+    }
 }
 
 fn append_chat_messages_for_response_items(
@@ -3875,41 +5289,20 @@ fn append_chat_message_for_response_item(
             arguments,
             call_id,
             ..
+        } => {
+            let arguments = chat_replay_function_arguments(arguments);
+            push_chat_tool_call(messages, call_id, name, arguments);
         }
-        | ResponseItem::CustomToolCall {
+        ResponseItem::CustomToolCall {
             name,
-            input: arguments,
+            input,
             call_id,
             ..
         } => {
-            if serde_json::from_str::<Value>(&arguments).is_err() {
-                debug!(
-                    call_id = %call_id,
-                    name = %name,
-                    "skipping malformed historical chat tool call arguments during replay"
-                );
-                skipped_tool_call_ids.insert(call_id);
-                return;
-            }
-            let tool_call = ChatToolCall {
-                id: call_id,
-                kind: "function".to_string(),
-                function: ChatToolFunction { name, arguments },
-            };
-            if let Some(message) = messages
-                .last_mut()
-                .filter(|message| message.role == "assistant" && message.tool_call_id.is_none())
-            {
-                message.tool_calls.push(tool_call);
-            } else {
-                messages.push(ChatMessage {
-                    role: "assistant".to_string(),
-                    content: None,
-                    reasoning_content: None,
-                    tool_call_id: None,
-                    tool_calls: vec![tool_call],
-                });
-            }
+            // Chat Completions exposes freeform tools as `{"input": string}`
+            // functions, so replay custom calls in that same shape.
+            let arguments = json!({ "input": input }).to_string();
+            push_chat_tool_call(messages, call_id, name, arguments);
         }
         ResponseItem::FunctionCallOutput {
             call_id, output, ..
@@ -4249,7 +5642,7 @@ fn append_anthropic_message_for_response_item(
                 "assistant",
                 json!({
                     "type": "tool_use",
-                    "id": call_id,
+                    "id": anthropic_tool_use_id(&call_id),
                     "name": name,
                     "input": input,
                 }),
@@ -4273,7 +5666,7 @@ fn append_anthropic_message_for_response_item(
                 "user",
                 json!({
                     "type": "tool_result",
-                    "tool_use_id": call_id,
+                    "tool_use_id": anthropic_tool_use_id(&call_id),
                     "content": anthropic_tool_result_content(&output),
                 }),
             );
@@ -4302,6 +5695,38 @@ fn append_anthropic_message_for_response_item(
         | ResponseItem::ContextCompaction { .. }
         | ResponseItem::Other => {}
     }
+}
+
+/// Anthropic accepts only `tool_use` IDs matching `^[a-zA-Z0-9_-]+$`. Another
+/// provider's call IDs (a Chat host's `functions.shell:0`) are mapped onto
+/// that alphabet, the same way for a call and its result (#578), with a hash
+/// of the original so two IDs that differ only in other characters stay
+/// distinct. Valid IDs, Anthropic's own included, are unchanged.
+fn anthropic_tool_use_id(call_id: &str) -> Cow<'_, str> {
+    let valid = |c: char| c.is_ascii_alphanumeric() || c == '_' || c == '-';
+    if call_id.chars().all(valid) {
+        return Cow::Borrowed(call_id);
+    }
+    let mapped: String = call_id
+        .chars()
+        .map(|c| if valid(c) { c } else { '_' })
+        .collect();
+    // FNV-1a: stable across builds, so a replayed history maps the same way.
+    let hash = call_id
+        .bytes()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3)
+        });
+    Cow::Owned(format!("{mapped}_{hash:016x}"))
+}
+
+/// The item ID in a Responses `Item with id '<id>' not found` error (#578).
+fn unresolvable_item_id(message: &str) -> Option<String> {
+    const PREFIX: &str = "Item with id '";
+    let start = message.find(PREFIX)? + PREFIX.len();
+    let (id, rest) = message[start..].split_once('\'')?;
+    (rest.starts_with(" not found") && !id.is_empty() && !id.contains(char::is_whitespace))
+        .then(|| id.to_string())
 }
 
 fn push_anthropic_message(messages: &mut Vec<Value>, role: &str, block: Value) {
@@ -4610,6 +6035,26 @@ fn anthropic_reasoning_for_model_and_effort(
     (anthropic_thinking_for_effort(effort), None)
 }
 
+/// The identity an accounting attempt records.
+///
+/// Pricing is a catalogue lookup keyed by (slug, provider), so the ledger must
+/// record the identity the catalogue keys rather than the name this client puts
+/// on the wire. Those two differ wherever the client maps one to the other, and
+/// for every Claude Plan model and every gateway-prefixed model the catalogue
+/// keys the selected slug - which is why recording the wire name left those
+/// turns unpriceable.
+///
+/// Ambient's retired `zai-org/GLM-5.2-FP8` alias is the one mapping that runs
+/// the other way: it has no catalogue row of its own, and the priced Ambient row
+/// is the name it maps to. Following the mapping there is not a return to the
+/// wire name, it is the same rule - use whatever string the catalogue keys.
+fn accounting_model_identity(slug: &str) -> String {
+    match slug.trim() {
+        AMBIENT_LEGACY_GLM_5_2_FP8_MODEL => AMBIENT_DEFAULT_MODEL.to_string(),
+        _ => slug.to_string(),
+    }
+}
+
 fn chat_completions_upstream_model<'a>(model: &'a str, provider: &ModelProviderInfo) -> &'a str {
     if provider.is_ambient() && model.trim() == AMBIENT_LEGACY_GLM_5_2_FP8_MODEL {
         AMBIENT_DEFAULT_MODEL
@@ -4624,7 +6069,7 @@ fn anthropic_upstream_model(model: &str) -> &str {
     match model.trim() {
         CLAUDE_FABLE_5_1_PLAN_MODEL => CLAUDE_FABLE_5_1_PLAN_UPSTREAM_MODEL,
         CLAUDE_PLAN_MODEL => CLAUDE_PLAN_UPSTREAM_MODEL,
-        CLAUDE_OPUS_5_5_PLAN_MODEL => ANTHROPIC_OPUS_5_5_MODEL,
+        CLAUDE_OPUS_5_5_PLAN_MODEL => CLAUDE_OPUS_5_5_PLAN_UPSTREAM_MODEL,
         CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL => ANTHROPIC_LEGACY_OPUS_4_8_MODEL,
         CLAUDE_FABLE_5_PLAN_MODEL => CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL,
         _ => model,
@@ -4684,6 +6129,83 @@ fn vercel_gateway_vendor_pin(model: &str) -> Option<&'static str> {
         "zai" => Some("zai"),
         _ => None,
     }
+}
+
+/// Retries allowed for one request when the gateway reports a transient limit
+/// of a shared upstream pool, with exponential backoff from
+/// `TRANSIENT_RATE_LIMIT_BASE_DELAY` (about 30 seconds in total).
+const MAX_TRANSIENT_RATE_LIMIT_RETRIES: u32 = 4;
+const TRANSIENT_RATE_LIMIT_BASE_DELAY: Duration = Duration::from_secs(2);
+const TRANSIENT_RATE_LIMIT_MAX_DELAY: Duration = Duration::from_secs(60);
+
+/// True for a 429 that the gateway marks, in its structured error metadata, as
+/// a temporary limit of a shared upstream provider pool rather than the
+/// caller's own quota. OpenRouter reports these as
+/// `error.metadata.limit_source = "upstream_provider_shared_pool"` and asks the
+/// caller to retry shortly. Other 429s keep the no-retry behavior.
+fn is_transient_upstream_rate_limit(err: &ApiError) -> bool {
+    let ApiError::Transport(TransportError::Http {
+        status,
+        body: Some(body),
+        ..
+    }) = err
+    else {
+        return false;
+    };
+    if *status != StatusCode::TOO_MANY_REQUESTS {
+        return false;
+    }
+    serde_json::from_str::<Value>(body).is_ok_and(|body| {
+        body.pointer("/error/metadata/limit_source")
+            .and_then(Value::as_str)
+            == Some("upstream_provider_shared_pool")
+    })
+}
+
+/// Backoff before retry `attempt` (0-based), honoring a `Retry-After` header in
+/// seconds when the gateway sends one.
+fn transient_rate_limit_delay(err: &ApiError, attempt: u32) -> Duration {
+    let retry_after = match err {
+        ApiError::Transport(TransportError::Http {
+            headers: Some(headers),
+            ..
+        }) => headers
+            .get(http::header::RETRY_AFTER)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.trim().parse::<u64>().ok())
+            .map(Duration::from_secs),
+        _ => None,
+    };
+    retry_after
+        .unwrap_or_else(|| TRANSIENT_RATE_LIMIT_BASE_DELAY.saturating_mul(1 << attempt.min(8)))
+        .min(TRANSIENT_RATE_LIMIT_MAX_DELAY)
+}
+
+/// True when the Vercel gateway rejected a request without attempting any
+/// upstream because an account policy skipped every candidate, as reported in
+/// its structured routing metadata. With a vendor pin in place the pinned
+/// upstream is the only candidate, so zero-data-retention accounts get this
+/// for every Z.AI-pinned request while unpinned routing succeeds.
+fn is_vercel_gateway_policy_exclusion(err: &ApiError) -> bool {
+    let ApiError::Transport(TransportError::Http {
+        status,
+        body: Some(body),
+        ..
+    }) = err
+    else {
+        return false;
+    };
+    if *status != StatusCode::BAD_REQUEST {
+        return false;
+    }
+    let Ok(body) = serde_json::from_str::<Value>(body) else {
+        return false;
+    };
+    let routing = &body["providerMetadata"]["gateway"]["routing"];
+    routing["totalProviderAttemptCount"].as_u64() == Some(0)
+        && routing["skippedProviderAttempts"]
+            .as_array()
+            .is_some_and(|skipped| !skipped.is_empty())
 }
 
 fn vercel_gateway_provider_options(model: &str) -> Option<Value> {
@@ -4834,7 +6356,7 @@ fn responses_tool_to_anthropic_tool(mut tool: Value) -> Option<Value> {
 }
 
 fn freeform_tool_to_anthropic_tool(tool: &codex_tools::FreeformTool) -> Value {
-    let chat_tool = freeform_tool_to_chat_tool(tool, /*strip_strict*/ true);
+    let chat_tool = freeform_tool_to_chat_tool(tool);
     let function = chat_tool
         .get("function")
         .and_then(Value::as_object)
@@ -4877,7 +6399,7 @@ fn tool_spec_to_chat_tool(
                 })
             },
         )),
-        ToolSpec::Freeform(tool) => Some(Ok(freeform_tool_to_chat_tool(tool, strip_strict))),
+        ToolSpec::Freeform(tool) => Some(Ok(freeform_tool_to_chat_tool(tool))),
         ToolSpec::WebSearch { .. } if zai_native_web_search => Some(Ok(zai_web_search_tool())),
         ToolSpec::Namespace(_) | ToolSpec::ToolSearch { .. } | ToolSpec::WebSearch { .. } => None,
     }
@@ -4944,13 +6466,19 @@ fn responses_tool_to_chat_tool(mut tool: Value, strip_strict: bool) -> Option<Va
     }))
 }
 
-fn freeform_tool_to_chat_tool(tool: &codex_tools::FreeformTool, strip_strict: bool) -> Value {
+/// Wraps a freeform tool as a Chat Completions function with one `input`
+/// string. The wrapper is never `strict`: constrained decoding cannot recover
+/// from an unescaped quote in the raw input, because once the string closes the
+/// schema only permits whitespace. GPT-6 Sol spent 65,536 completion tokens on
+/// whitespace that way. Without `strict`, the same slip yields malformed
+/// arguments that the tool rejects with a correctable error.
+fn freeform_tool_to_chat_tool(tool: &codex_tools::FreeformTool) -> Value {
     let description = chat_completions_freeform_tool_description(tool);
     let input_description = format!(
         "Raw {} input. Put the tool payload directly in this string; do not nest JSON, shell commands, or heredocs inside it.",
         tool.name.as_str()
     );
-    let mut value = json!({
+    json!({
         "type": "function",
         "function": {
             "name": tool.name.as_str(),
@@ -4966,14 +6494,8 @@ fn freeform_tool_to_chat_tool(tool: &codex_tools::FreeformTool, strip_strict: bo
                 "required": ["input"],
                 "additionalProperties": false,
             },
-            "strict": true,
         },
-    });
-    if strip_strict && let Some(function) = value.get_mut("function").and_then(Value::as_object_mut)
-    {
-        function.remove("strict");
-    }
-    value
+    })
 }
 
 fn chat_completions_freeform_tool_description(tool: &codex_tools::FreeformTool) -> String {
@@ -5336,6 +6858,8 @@ impl AuthRequestTelemetryContext {
 }
 
 struct WebsocketConnectParams<'a> {
+    identity: ConnectionIdentity,
+    provenance: crate::accounting::websocket::Provenance,
     session_telemetry: &'a SessionTelemetry,
     api_provider: codex_api::Provider,
     api_auth: SharedAuthProvider,
@@ -5345,6 +6869,36 @@ struct WebsocketConnectParams<'a> {
 }
 
 async fn handle_unauthorized(
+    transport: TransportError,
+    auth_recovery: &mut Option<UnauthorizedRecovery>,
+    session_telemetry: &SessionTelemetry,
+    provider: &SharedModelProvider,
+) -> Result<UnauthorizedRecoveryExecution> {
+    match try_unauthorized_recovery(transport, auth_recovery, session_telemetry, provider).await {
+        Err(error) => Err(named_sign_in_revoked(provider).await.unwrap_or(error)),
+        recovered => recovered,
+    }
+}
+
+/// D171 (#1311): a named ChatGPT account removed or signed out while a
+/// request on it was in flight (its tokens were revoked, so the request got a
+/// 401) is reported with the account's recovery, as the next request would
+/// be, instead of a generic unauthorized error. The vault is read off the
+/// async workers.
+async fn named_sign_in_revoked(provider: &SharedModelProvider) -> Option<CodexErr> {
+    codex_model_provider::named_sign_in_account(provider.info())?;
+    let manager = provider.auth_manager()?;
+    let reason = tokio::task::spawn_blocking(move || manager.named_sign_in_unavailable())
+        .await
+        .ok()
+        .flatten()?;
+    Some(CodexErr::Fatal(format!(
+        "{}: {reason}",
+        provider.info().name
+    )))
+}
+
+async fn try_unauthorized_recovery(
     transport: TransportError,
     auth_recovery: &mut Option<UnauthorizedRecovery>,
     session_telemetry: &SessionTelemetry,
@@ -5458,7 +7012,52 @@ async fn handle_unauthorized(
         debug.auth_error_code.as_deref(),
     );
 
-    Err(provider.map_api_error(ApiError::Transport(transport)))
+    Err(with_missing_openai_credentials_hint(
+        provider.map_api_error(ApiError::Transport(transport)),
+        provider,
+    ))
+}
+
+/// Names what to set when OpenAI rejects a request that carried no credential (#365).
+const MISSING_OPENAI_CREDENTIALS_MESSAGE: &str = "OpenAI rejected the request because no OpenAI \
+    credential was found. Set OPENAI_API_KEY (`corbanu exec` also reads CODEX_API_KEY, which \
+    takes precedence), or sign in with `corbanu login`";
+/// The same, when `forced_login_method = "chatgpt"` turns the key variables off.
+const MISSING_OPENAI_SIGN_IN_MESSAGE: &str = "OpenAI rejected the request because no ChatGPT \
+    sign-in was found. This configuration requires one: run `corbanu login`";
+
+fn with_missing_openai_credentials_hint(err: CodexErr, provider: &SharedModelProvider) -> CodexErr {
+    let info = provider.info();
+    let uses_openai_login_only = info.requires_openai_auth
+        && info.env_key.is_none()
+        && info.experimental_bearer_token.is_none()
+        && info.auth.is_none()
+        && info.aws.is_none();
+    let manager = provider.auth_manager();
+    let has_auth = manager
+        .as_ref()
+        .is_some_and(|manager| manager.auth_cached().is_some());
+    let message = if manager
+        .as_ref()
+        .is_some_and(|manager| !manager.openai_api_key_env_enabled())
+    {
+        MISSING_OPENAI_SIGN_IN_MESSAGE
+    } else {
+        MISSING_OPENAI_CREDENTIALS_MESSAGE
+    };
+    match err.details() {
+        codex_protocol::error::CodexErrorDetails::UnexpectedStatus(unexpected)
+            if uses_openai_login_only
+                && !has_auth
+                && unexpected.status == StatusCode::UNAUTHORIZED
+                && unexpected.user_message.is_none() =>
+        {
+            let mut unexpected = unexpected.clone();
+            unexpected.user_message = Some(message.to_string());
+            CodexErr::UnexpectedStatus(unexpected)
+        }
+        _ => err,
+    }
 }
 
 fn api_error_http_status(error: &ApiError) -> Option<u16> {
@@ -5617,3 +7216,21 @@ impl WebsocketTelemetry for ApiTelemetry {
 #[cfg(test)]
 #[path = "client_tests.rs"]
 mod tests;
+
+/// The level in force for `thread_id`: the session's own level or the
+/// stricter one its policy tree holds (Aggressive when that is unreadable).
+/// See [`ModelClient::live_level`].
+pub(crate) fn live_level_of(
+    ingress_level: codex_security_policy::SecurityLevel,
+    policy: Option<&crate::security::EffectivePolicyView>,
+    thread_id: ThreadId,
+) -> codex_security_policy::SecurityLevel {
+    use codex_security_policy::SecurityLevel;
+    let live = match policy {
+        None => SecurityLevel::Permissive,
+        Some(policy) => policy
+            .snapshot_for_agent(thread_id)
+            .map_or(SecurityLevel::Aggressive, |snapshot| snapshot.level),
+    };
+    ingress_level.max(live)
+}

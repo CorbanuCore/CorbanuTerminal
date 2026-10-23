@@ -1,0 +1,1 @@
+%0	pid=28623	size=120x40	command=codex-tui	dead=0	status=

@@ -3,4 +3,9 @@ load("//:defs.bzl", "codex_rust_crate")
 codex_rust_crate(
     name = "aws-auth",
     crate_name = "codex_aws_auth",
+    # The log-sink tests capture process-wide tracing state; other tests on
+    # parallel libtest threads in the same process can make their events go
+    # missing. Cargo CI runs each test in its own process (nextest), so run
+    # them one at a time here.
+    unit_test_args = ["--test-threads=1"],
 )

@@ -1,0 +1,73 @@
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:     loading   /model to change                 │
+│ directory: <repo-root>/…/before1/ws │
+╰───────────────────────────────────────────────────────╯
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.3 Flash via zai default · <run>/ws · Corbanu Terminal · TPS: -- tok/s
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:     glm-5.3-flash   /model to change           │
+│ directory: <repo-root>/…/before1/ws │
+╰───────────────────────────────────────────────────────╯
+
+
+› Run exactly this shell command once, unchanged, and wait for it to finish: touch cmd-started.txt && sleep 45 && touch ran-after-kill-switch.txt && echo
+  FINISHED
+
+
+• Ran touch cmd-started.txt && sleep 45 && touch ran-after-kill-switch.txt && echo FINISHED
+  └ FINISHED
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Ran the command once, unchanged. It finished successfully in about 45 seconds and printed:
+
+  FINISHED
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› What is 2+2?
+
+
+• 4
+
+
+› What is 3+3?
+
+
+• 6
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.3 Flash via zai default · <run>/ws · Corbanu Terminal · TPS: 5.0 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

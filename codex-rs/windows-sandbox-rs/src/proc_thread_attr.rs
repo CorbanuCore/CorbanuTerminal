@@ -9,12 +9,14 @@ use windows_sys::Win32::System::Threading::UpdateProcThreadAttribute;
 
 const PROC_THREAD_ATTRIBUTE_HANDLE_LIST: usize = 0x0002_0002;
 const PROC_THREAD_ATTRIBUTE_JOB_LIST: usize = 0x0002_000D;
+const PROC_THREAD_ATTRIBUTE_PARENT_PROCESS: usize = 0x0002_0000;
 const PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE: usize = 0x0002_0016;
 
 pub struct ProcThreadAttributeList {
     buffer: Vec<u8>,
     handle_list: Vec<HANDLE>,
     job_list: Vec<HANDLE>,
+    parent_process: Box<HANDLE>,
 }
 
 impl ProcThreadAttributeList {
@@ -40,6 +42,7 @@ impl ProcThreadAttributeList {
             buffer,
             handle_list: Vec::new(),
             job_list: Vec::new(),
+            parent_process: Box::new(0),
         })
     }
 
@@ -65,6 +68,23 @@ impl ProcThreadAttributeList {
         // SAFETY: `value` points to `self.handle_list`, which remains alive
         // while the attribute list can reference it, and `size` covers that slice.
         unsafe { self.update(PROC_THREAD_ATTRIBUTE_HANDLE_LIST, value, size) }
+    }
+
+    /// The new process's parent: it inherits handles (those in the handle
+    /// list are then values in `process`'s table), token and job from
+    /// `process`, which needs `PROCESS_CREATE_PROCESS` access.
+    pub fn set_parent_process(&mut self, process: HANDLE) -> io::Result<()> {
+        *self.parent_process = process;
+        let value = std::ptr::from_mut::<HANDLE>(&mut *self.parent_process).cast();
+        // SAFETY: `value` points to the boxed handle, which stays at the same
+        // address while the attribute list can reference it.
+        unsafe {
+            self.update(
+                PROC_THREAD_ATTRIBUTE_PARENT_PROCESS,
+                value,
+                std::mem::size_of::<HANDLE>(),
+            )
+        }
     }
 
     pub fn set_job(&mut self, job: HANDLE) -> io::Result<()> {

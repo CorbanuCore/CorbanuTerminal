@@ -2,6 +2,7 @@ mod auth;
 mod catalog;
 mod error;
 mod mantle;
+mod named_account;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -30,10 +31,12 @@ use crate::provider::ProviderAccountResult;
 use crate::provider::ProviderAccountState;
 use crate::provider::ProviderCapabilities;
 use auth::resolve_provider_auth as resolve_bedrock_provider_auth;
+pub use catalog::model_presets as amazon_bedrock_model_presets;
 pub(crate) use catalog::static_model_catalog;
 use catalog::with_default_only_service_tier;
 use mantle::bedrock_mantle_runtime_base_url;
 pub use mantle::is_supported_amazon_bedrock_region;
+use named_account::NamedBedrockAccount;
 
 /// Runtime provider for Amazon Bedrock's OpenAI-compatible Mantle endpoint.
 #[derive(Clone, Debug)]
@@ -41,6 +44,8 @@ pub(crate) struct AmazonBedrockModelProvider {
     pub(crate) info: ModelProviderInfo,
     pub(crate) aws: ModelProviderAwsAuthInfo,
     auth_manager: Option<Arc<AuthManager>>,
+    /// PF-84-S06: the named account (an AWS profile) this provider uses.
+    named_account: Option<NamedBedrockAccount>,
 }
 
 impl AmazonBedrockModelProvider {
@@ -48,6 +53,10 @@ impl AmazonBedrockModelProvider {
         provider_info: ModelProviderInfo,
         auth_manager: Option<Arc<AuthManager>>,
     ) -> Self {
+        let account_home = auth_manager
+            .as_ref()
+            .map(|auth_manager| auth_manager.codex_home().to_path_buf());
+        let named_account = NamedBedrockAccount::for_provider(&provider_info, account_home);
         let auth_manager = auth_manager_for_provider(auth_manager, &provider_info);
         let aws = provider_info
             .aws
@@ -60,10 +69,15 @@ impl AmazonBedrockModelProvider {
             info: provider_info,
             aws,
             auth_manager,
+            named_account,
         }
     }
 
+    /// A named account never uses the managed Bedrock key.
     fn managed_auth(&self) -> Option<BedrockApiKeyAuth> {
+        if self.named_account.is_some() {
+            return None;
+        }
         self.auth_manager
             .as_ref()
             .and_then(|auth_manager| auth_manager.auth_cached())
@@ -99,6 +113,9 @@ impl AmazonBedrockModelProvider {
         if let Some(base_url) = self.info.base_url.clone() {
             return Ok(Some(base_url));
         }
+        if let Some(account) = self.named_account.as_ref() {
+            return Ok(Some(mantle::base_url(&account.region(&self.aws).await?)?));
+        }
         let managed_auth = self.managed_auth();
         Ok(Some(
             bedrock_mantle_runtime_base_url(managed_auth.as_ref(), &self.aws).await?,
@@ -109,6 +126,9 @@ impl AmazonBedrockModelProvider {
         if self.info.has_command_auth() {
             let auth = self.auth().await;
             return resolve_configured_provider_auth(auth.as_ref(), &self.info);
+        }
+        if let Some(account) = self.named_account.as_ref() {
+            return Ok(auth::sigv4_auth_provider(account.context(&self.aws).await?));
         }
         let managed_auth = self.managed_auth();
         resolve_bedrock_provider_auth(managed_auth.as_ref(), &self.aws).await

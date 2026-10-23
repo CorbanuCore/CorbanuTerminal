@@ -1,0 +1,15 @@
+######## switch to default on CAND: TUI on named `chat`, forced_login_method=chatgpt, default login = API key
+default login before: auth.json a2695992fdf5
+-- turn on chat:
+   {"t": 1791796088.011, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "named", "gen": 1, "expired": false}, "model": null}
+-- after Use default account for this session:
+--
+• mock: chatgpt named gen1
+■ Failed to start a fresh session through the app server: thread/start failed during TUI bootstrap: thread/start failed: The default OpenAI login cannot be used: ChatGPT
+login is required, but an API key is currently being used. It was left unchanged; sign in with `corbanu login`, or choose a named account with `--account` or /providers.
+(code -32600)
+■ The new session did not start, so no session runs on openai account `default`; the account selection was not changed.
+› Improve documentation in @filename
+  gpt-5.4 default · $S/ws · Corbanu Terminal · TPS: 35.3 tok/s
+default login after: auth.json a2695992fdf5 (unchanged)
+-- mock requests carrying the default key: 0

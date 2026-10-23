@@ -1,0 +1,48 @@
+Attempt, components and original price
+Requested UTC day: 2026-10-15
+Provider: kimi
+Model: kimi-k3
+Billing: Pay per use
+Estimated cost: $0.032100
+Tokens: 10,500 tokens
+—— Details ——
+Billed cost: kimi doesn't report its charges, so any cost here is an estimate — check kimi's bill.
+Request: 791ada43-43d6-43db-b5c6-c70534539413
+Attempt: 498011ec-c5a3-48fc-ae79-f599b1131d86
+Thread: 01a13ce5-5bdb-7962-98b0-f6d30278000c
+Turn: 01a13ce5-7a6a-7500-ae0f-8cdc23d8eb54
+Account: default
+Opaque scope: e57de1fe-517b-492c-a98e-2e74474ec0a9
+Arithmetic dialect: Inclusive
+Admission time: 2026-10-15T00:10:34.885Z
+Retry predecessor: none
+Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+Estimated token cost for recorded attempts: $0.032100
+Billing basis: pay per use
+Input: 10000
+Noncached input (derived for inclusive input): 832 (derived)
+Cache read: 2000
+Cache write: 7168
+Output: 500
+Reasoning (subset, not separately billed): unknown — no retained numeric evidence
+Total (not separately billed): 10500
+Noncached input cost: $0.002496; exact USD 0.002496
+Cache read cost: $0.000600; exact USD 0.0006
+Cache write cost: $0.021504; exact USD 0.021504
+Output cost: $0.007500; exact USD 0.0075
+Known subtotal exact USD: 0.0321
+Price ID: e744e350-6b2f-4fd5-909f-f86359b98beb
+Price source: NativeCatalog; reference d2593c06-86a4-5b5a-adfc-bf3c490111d8
+Price currency/unit: Usd / PerMillionTokens
+Price observed/approved: 2026-10-15T00:10:34.885Z / 2026-10-15T00:10:34.885Z
+Price effective interval: [2026-10-15T00:10:34.885Z, unbounded)
+Noncached input rate: 3 USD per million tokens
+Cache read rate: 0.3 USD per million tokens
+Cache write rate: 3 USD per million tokens
+Output rate: 15 USD per million tokens
+Evidence revision 2; source 1dafaed7-101f-48b5-af7a-f4c77d719bec; sequence 2; presence patch
+{"input":10000,"read":2000,"write":7168,"output":500,"total":10500}
+Snapshot is not current; newer activity is unverified
+Back
+Refresh
+Close

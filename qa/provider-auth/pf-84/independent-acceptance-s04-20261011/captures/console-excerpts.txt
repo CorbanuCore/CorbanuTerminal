@@ -1,0 +1,55 @@
+Verbatim output copied from the tester's terminal during the run (home hZ, Z.AI). These outputs were not
+written to files at the time. The later re-runs (esc-rerun.log, migration-rerun.log, vault-index.txt)
+were saved directly.
+
+===== z1 onboarding, Add another account, name step: typed "Bad_Name", Enter
+invalid account name: use 1-32 lowercase letters, digits or '-', starting with a letter or digit
+
+===== z1 onboarding, key step: pasted a synthetic value, Esc -> back to the name step; then `corbanu account list`
+No named accounts. Every provider uses its default account.
+
+===== z1 onboarding: `obfake` saved, then the same name again with another value
+✓ Saved zai account `obfake`. Use it with `--account obfake` or choose it in /providers.
+Could not save zai account `obfake`: invalid credential label: zai already has an account `obfake`
+
+===== z2 /providers add `fake`: pasted the value, Esc; then `corbanu account list`
+zai	obfake	api_key
+
+===== z2 Esc in account actions, Rename (typed "renamed") and Remove confirmation; shasum config.toml local.age before/after
+HASHES_UNCHANGED
+zai	fake	api_key
+zai	obfake	api_key
+
+===== z2 Make default on `fake`; config.toml tail
+[provider_accounts]
+zai = "fake"
+
+===== z3 after "Use default account for this session" (pong); config.toml still
+[provider_accounts]
+zai = "fake"
+
+===== z3 Rename fake -> spare (fake was the default for new sessions)
+[provider_accounts]
+zai = "spare"
+zai	obfake	api_key
+zai	spare	api_key
+
+===== z3 Remove spare -> "Replace with `obfake`"
+[provider_accounts]
+zai = "obfake"
+zai	obfake	api_key
+
+===== z3 Remove obfake -> "Replace with `default`"; config.toml
+[provider_accounts]
+No named accounts. Every provider uses its default account.
+
+===== z4 /providers Add another account with an empty value + Enter; then `corbanu account list`
+No named accounts. Every provider uses its default account.
+
+===== c3 `corbanu account list` after onboarding added work (real token) and fake (synthetic)
+claude-plan	fake	claude_oauth_token
+claude-plan	work	claude_oauth_token
+
+===== exec on hC2 (OpenAI API key login)
+-m gpt-5.4 -c model_provider="openai"                 -> pong
+-m gpt-5.4 -c model_provider="openai" --account work  -> Error: --account openai:work: provider `openai` does not support named accounts yet (rc=1)

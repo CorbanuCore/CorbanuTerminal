@@ -1,0 +1,140 @@
+# guest: 26.6.2 (25G83) arm64, 8 CPUs, 16 GB
+
+## SIP
+$ csrutil status
+System Integrity Protection status: enabled.
+rc=0
+
+## Authenticated root / sealed system volume
+$ csrutil authenticated-root status; diskutil info / | grep -E 'Sealed|Snapshot:'
+Authenticated Root status: enabled
+   Sealed:                    Broken
+rc=0
+
+## Gatekeeper
+$ spctl --status
+assessments enabled
+rc=0
+
+## Copied binary signature (no quarantine after SSH copy)
+$ codesign --verify --strict -v ~/qa/bin/corbanu; xattr ~/qa/bin/corbanu
+/Users/admin/qa/bin/corbanu: valid on disk
+/Users/admin/qa/bin/corbanu: satisfies its Designated Requirement
+rc=0
+
+## Seatbelt: denied write (expect Operation not permitted)
+$ sandbox-exec -p '(version 1)(allow default)(deny file-write* (subpath "/private/tmp/qa-sbx/denied"))(deny file-read* (literal "/private/tmp/qa-sbx/allowed/secret"))' /usr/bin/touch /private/tmp/qa-sbx/denied/x
+touch: /private/tmp/qa-sbx/denied/x: Operation not permitted
+rc=1
+
+## Seatbelt: allowed write (positive control)
+$ sandbox-exec -p '(version 1)(allow default)(deny file-write* (subpath "/private/tmp/qa-sbx/denied"))(deny file-read* (literal "/private/tmp/qa-sbx/allowed/secret"))' /usr/bin/touch /private/tmp/qa-sbx/allowed/x && ls /private/tmp/qa-sbx/allowed/x
+/private/tmp/qa-sbx/allowed/x
+rc=0
+
+## Seatbelt: denied read (expect Operation not permitted)
+$ sandbox-exec -p '(version 1)(allow default)(deny file-write* (subpath "/private/tmp/qa-sbx/denied"))(deny file-read* (literal "/private/tmp/qa-sbx/allowed/secret"))' /bin/cat /private/tmp/qa-sbx/allowed/secret
+cat: /private/tmp/qa-sbx/allowed/secret: Operation not permitted
+rc=1
+
+## Seatbelt: sandbox denial logged by the kernel
+$ log show --last 2m --style compact --predicate 'sender == "Sandbox"' 2>/dev/null | grep -c deny
+232
+rc=0
+
+## Corbanu sandbox (default read-only policy): write outside the cwd (expect denied)
+$ cd /private/tmp/qa-sbx && ~/qa/bin/corbanu sandbox -- /usr/bin/touch /Users/admin/qa-outside-write; ls /Users/admin/qa-outside-write
+touch: /Users/admin/qa-outside-write: Operation not permitted
+ls: /Users/admin/qa-outside-write: No such file or directory
+rc=1
+
+## Corbanu sandbox: network (expect blocked)
+$ cd /private/tmp/qa-sbx && ~/qa/bin/corbanu sandbox -- /usr/bin/curl -sS -m 5 -o /dev/null https://example.com
+curl: (6) Could not resolve host: example.com
+rc=6
+
+## Corbanu sandbox: read inside the cwd (positive control)
+$ cd /private/tmp/qa-sbx && ~/qa/bin/corbanu sandbox -- /bin/cat /private/tmp/qa-sbx/allowed/secret
+synthetic
+rc=0
+
+## Keychain services: create + unlock a throwaway keychain (explicit path)
+$ security create-keychain -p '<throwaway>' /tmp/qa-kc/throwaway.keychain-db && security unlock-keychain -p '<throwaway>' /tmp/qa-kc/throwaway.keychain-db && security show-keychain-info /tmp/qa-kc/throwaway.keychain-db
+Keychain "/tmp/qa-kc/throwaway.keychain-db" lock-on-sleep timeout=300s
+rc=0
+
+## Keychain services: store and read back a synthetic item
+$ security add-generic-password -a qa -s qa-tart-synthetic -w synthetic-not-a-secret /tmp/qa-kc/throwaway.keychain-db && security find-generic-password -a qa -s qa-tart-synthetic -w /tmp/qa-kc/throwaway.keychain-db
+synthetic-not-a-secret
+rc=0
+
+## Keychain services: delete the throwaway keychain
+$ security delete-keychain /tmp/qa-kc/throwaway.keychain-db; ls /tmp/qa-kc
+rc=0
+
+## Login keychain file present (not opened)
+$ ls -l ~/Library/Keychains/ | sed -n '1,5p'
+total 80
+drwx------  6 admin  staff    192 Aug 18 16:25 A3563E4D-769F-501D-AE02-EB1E49615E00
+-rw-r--r--  1 admin  staff  38916 Oct 16 11:09 login.keychain-db
+rc=0
+
+## TCC daemons
+$ pgrep -lx tccd
+159 tccd
+rc=0
+
+## TCC: system TCC.db readable as root over SSH? (authorization denied = no Full Disk Access for SSH)
+$ sudo /usr/bin/sqlite3 '/Library/Application Support/com.apple.TCC/TCC.db' 'select service, client, auth_value from access' 2>&1 | head -8
+kTCCServiceSystemPolicyAllFiles|/System/Library/PrivateFrameworks/VoiceShortcuts.framework/Versions/A/Support/siriactionsd|0
+kTCCServicePostEvent|com.apple.screensharing.agent|2
+kTCCServiceScreenCapture|com.apple.screensharing.agent|2
+kTCCServiceSystemPolicyAllFiles|/usr/libexec/sshd-keygen-wrapper|2
+kTCCServiceDeveloperTool|com.apple.Terminal|0
+rc=0
+
+## TCC: own protected folders over SSH (expect Operation not permitted without FDA)
+$ ls ~/Desktop ~/Documents ~/Downloads ~/Library/Mail 2>&1
+/Users/admin/Desktop:
+
+/Users/admin/Documents:
+
+/Users/admin/Downloads:
+
+/Users/admin/Library/Mail:
+V10
+rc=0
+
+## TCC: another user's protected folder via sudo (unprivileged user)
+$ cd /tmp && sudo -u qatcc ls /Users/qatcc/Documents && echo listed
+listed
+rc=0
+
+## TCC: user without consent reading admin's Desktop
+$ cd /tmp && sudo -u qatcc ls /Users/admin/Desktop
+ls: /Users/admin/Desktop: Permission denied
+rc=1
+
+## TCC: Apple Events to Finder from SSH (expect -1743 not authorized, or a hang without a GUI session)
+$ perl -e 'alarm 20; exec @ARGV' osascript -e 'tell application "Finder" to get name of startup disk' || echo exit=$?
+33:37: execution error: An error of type -10810 has occurred. (-10810)
+exit=1
+rc=0
+
+## GUI session
+$ stat -f 'console owner: %Su' /dev/console; who
+console owner: root
+rc=0
+
+## Host shares (expect none)
+$ mount | grep -ci virtiofs; ls '/Volumes/My Shared Files' 2>&1
+0
+ls: /Volumes/My Shared Files: No such file or directory
+rc=1
+
+## Network: guest address and the host's bridge (host SSH reachable?)
+$ ipconfig getifaddr en0; nc -z -G 3 192.168.64.1 22 && echo host-ssh-open || echo host-ssh-closed
+192.168.64.24
+Connection to 192.168.64.1 port 22 [tcp/ssh] succeeded!
+host-ssh-open
+rc=0

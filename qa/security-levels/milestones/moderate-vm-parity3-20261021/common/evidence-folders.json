@@ -1,0 +1,75 @@
+{
+ "folders": [
+  {
+   "evidence_folder": "T09-tart-d141-20261021T211329Z",
+   "forwarded": 61,
+   "non_200": 0,
+   "session_error": 0,
+   "tunnel_connects": 1,
+   "tunnel_ssh_exits": 0
+  },
+  {
+   "evidence_folder": "T17-tart1-20261021T193200Z",
+   "forwarded": 75,
+   "non_200": 0,
+   "session_error": 0,
+   "tunnel_connects": 1,
+   "tunnel_ssh_exits": 0
+  },
+  {
+   "evidence_folder": "T17-tart2-20261021T200336Z",
+   "forwarded": 69,
+   "non_200": 0,
+   "session_error": 0,
+   "tunnel_connects": 1,
+   "tunnel_ssh_exits": 0
+  },
+  {
+   "evidence_folder": "T17-tart3-20261021T203658Z",
+   "forwarded": 66,
+   "non_200": 0,
+   "session_error": 0,
+   "tunnel_connects": 1,
+   "tunnel_ssh_exits": 0
+  },
+  {
+   "evidence_folder": "T18-tart1-20261021T195049Z",
+   "forwarded": 46,
+   "non_200": 0,
+   "session_error": 0,
+   "tunnel_connects": 1,
+   "tunnel_ssh_exits": 0
+  },
+  {
+   "evidence_folder": "T18-tart2-20261021T202100Z",
+   "forwarded": 52,
+   "non_200": 0,
+   "session_error": 0,
+   "tunnel_connects": 1,
+   "tunnel_ssh_exits": 0
+  },
+  {
+   "evidence_folder": "T18-tart3-20261021T205157Z",
+   "forwarded": 50,
+   "non_200": 0,
+   "session_error": 0,
+   "tunnel_connects": 1,
+   "tunnel_ssh_exits": 0
+  },
+  {
+   "evidence_folder": "utm",
+   "forwarded": 388,
+   "non_200": 0,
+   "session_error": 0,
+   "tunnel_connects": 1,
+   "tunnel_ssh_exits": 0
+  }
+ ],
+ "host_relay": {
+  "requests": 808,
+  "non_200": 0,
+  "other_events": {
+   "started": 1
+  }
+ }
+}

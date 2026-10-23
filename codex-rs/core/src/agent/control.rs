@@ -48,7 +48,9 @@ use codex_protocol::protocol::TurnEnvironmentSelection;
 use codex_protocol::user_input::UserInput;
 use codex_security_policy::PolicyPrincipal;
 use codex_security_policy::PrincipalKind;
+#[cfg(test)]
 use codex_security_policy::RevocationState;
+#[cfg(test)]
 use codex_security_policy::SecurityLevel;
 use codex_security_policy::SecuritySettings;
 use codex_thread_store::LoadThreadHistoryParams;
@@ -194,12 +196,36 @@ impl AgentControl {
         self.session_id
     }
 
+    #[cfg(test)]
     pub(crate) fn with_effective_security_policy(
-        mut self,
+        self,
         level: SecurityLevel,
         root_thread_id: ThreadId,
         inherits_from_spawn_parent: bool,
     ) -> Result<Self, SecurityPolicyError> {
+        self.with_recovered_security_policy(
+            crate::security::recovery::Recovery {
+                level,
+                revocations: RevocationState::new(),
+                unreadable: None,
+                home: None,
+            },
+            root_thread_id,
+            inherits_from_spawn_parent,
+        )
+    }
+
+    /// PF-23-S03: start from the recovered durable state (the stricter level
+    /// and the stored revocations; Aggressive and the kill switch when it was
+    /// unreadable).
+    pub(crate) fn with_recovered_security_policy(
+        mut self,
+        recovery: crate::security::recovery::Recovery,
+        root_thread_id: ThreadId,
+        inherits_from_spawn_parent: bool,
+    ) -> Result<Self, SecurityPolicyError> {
+        let level = recovery.level;
+        let home = recovery.home.clone();
         if self.security_policy.is_initialized()? {
             // Resuming an already-bound root on the same control plane must preserve its
             // binding. Treating it as a new auxiliary agent appends the same principal to its
@@ -228,7 +254,7 @@ impl AgentControl {
         let persisted = PersistedHumanSecurityState::new(
             SecuritySettings::new(level),
             human_authority,
-            RevocationState::new(),
+            recovery.revocations,
         )?;
         let controller = TrustedSecurityController::initialize(
             &self.security_policy,
@@ -237,10 +263,18 @@ impl AgentControl {
             self.session_id,
             if inherits_from_spawn_parent {
                 EffectivePolicyInitialization::DetachedSpawnedAgent
+            } else if recovery.unreadable.is_some() {
+                EffectivePolicyInitialization::UnreadableState
             } else {
                 EffectivePolicyInitialization::Root
             },
         )?;
+        if let Some(home) = home {
+            // Register, then read again: a commit saved between the first
+            // read and the registration is not missed.
+            self.security_policy.register_home(&home);
+            controller.catch_up(&crate::security::recovery::recover(&home, level));
+        }
         self.trusted_security_controller = Some(controller);
         Ok(self)
     }
@@ -349,27 +383,30 @@ impl AgentControl {
         })
     }
 
-    /// Send rich user input items to an existing agent thread.
+    /// Send rich user input items from the agent `sender` to an existing agent thread.
     pub(crate) async fn send_input(
         &self,
         agent_id: ThreadId,
+        sender: Option<ThreadId>,
         input: Vec<UserInput>,
         parent_turn_id: Option<String>,
     ) -> CodexResult<String> {
         let state = self.upgrade()?;
         self.ensure_execution_capacity_for_turn_start(agent_id, /*starts_turn*/ true)
             .await?;
-        self.send_input_after_capacity_check(agent_id, &state, input, parent_turn_id)
+        self.send_input_after_capacity_check(agent_id, sender, &state, input, parent_turn_id)
             .await
     }
 
     async fn send_input_after_capacity_check(
         &self,
         agent_id: ThreadId,
+        sender: Option<ThreadId>,
         state: &Arc<ThreadManagerState>,
         input: Vec<UserInput>,
         parent_turn_id: Option<String>,
     ) -> CodexResult<String> {
+        Box::pin(register_agent_input_origin(state, agent_id, sender, &input)).await;
         self.handle_thread_request_result(
             agent_id,
             state,
@@ -410,44 +447,6 @@ impl AgentControl {
             crate::agent_communication::logging_enabled().then(|| communication.clone());
         let result = self
             .send_persisted_inter_agent_communication(agent_id, communication, parent_turn_id)
-            .await;
-        if let (Some(communication), Ok(communication_id)) =
-            (communication_for_log, result.as_ref())
-        {
-            crate::agent_communication::emit_agent_communication_send(
-                communication_id,
-                &context,
-                &communication,
-                agent_id,
-            );
-        }
-        result
-    }
-
-    #[cfg_attr(not(test), allow(dead_code))]
-    async fn submit_inter_agent_communication(
-        &self,
-        agent_id: ThreadId,
-        state: &Arc<ThreadManagerState>,
-        communication: InterAgentCommunication,
-        context: AgentCommunicationContext,
-        parent_turn_id: Option<String>,
-    ) -> CodexResult<String> {
-        let communication_for_log =
-            crate::agent_communication::logging_enabled().then(|| communication.clone());
-        let parent_turn_id = parent_turn_id.filter(|_| communication.trigger_turn);
-        let result = self
-            .handle_thread_request_result(
-                agent_id,
-                state,
-                state
-                    .send_op(
-                        agent_id,
-                        Op::InterAgentCommunication { communication },
-                        parent_turn_id,
-                    )
-                    .await,
-            )
             .await;
         if let (Some(communication), Ok(communication_id)) =
             (communication_for_log, result.as_ref())
@@ -531,6 +530,18 @@ impl AgentControl {
 
     pub(crate) fn is_root_thread(&self, agent_id: ThreadId) -> bool {
         self.state.agent_id_for_path(&AgentPath::root()) == Some(agent_id)
+    }
+
+    /// Whether `thread_id` is loaded and is the root of its own tree: a thread a client
+    /// started (such as a pane the person opened), not a spawned or internal agent.
+    pub(crate) async fn is_loaded_root_thread(&self, thread_id: ThreadId) -> bool {
+        let Ok(state) = self.upgrade() else {
+            return false;
+        };
+        state
+            .get_thread(thread_id)
+            .await
+            .is_ok_and(|thread| !thread.session_source.is_non_root_agent())
     }
 
     pub(crate) fn ensure_agent_known(&self, agent_id: ThreadId) -> CodexResult<AgentMetadata> {
@@ -723,6 +734,18 @@ impl AgentControl {
             return None;
         };
         Some(thread.config_snapshot().await)
+    }
+
+    /// The live session of `thread_id`, if this thread manager holds it. Used
+    /// to attribute paid work done for a conversation that is not persisted
+    /// itself (PF-60-S06).
+    pub(crate) async fn live_session(
+        &self,
+        thread_id: ThreadId,
+    ) -> Option<Arc<crate::session::session::Session>> {
+        let state = self.upgrade().ok()?;
+        let thread = state.get_thread(thread_id).await.ok()?;
+        Some(Arc::clone(&thread.session))
     }
 
     pub(crate) async fn resolve_agent_reference(
@@ -990,7 +1013,7 @@ impl AgentControl {
                 return;
             };
             parent_thread
-                .inject_user_message_without_turn(message)
+                .inject_agent_result_without_turn(message)
                 .await;
         });
     }
@@ -1377,6 +1400,37 @@ fn non_empty_bounded_message(message: String, max_chars: usize) -> Option<String
         Some(preview)
     }
 }
+/// PF-30-S02 lineage. Text one agent hands another arrives as `Op::UserInput`,
+/// which the receiver would otherwise record with human standing. Mark the
+/// exact input on the receiver before submitting it; its prompt seam then
+/// records it with the sender's standing: host only while every item in the
+/// sender's history had standing, otherwise agent data. An unknown sender
+/// counts as agent data. Only the receiver's `source_envelopes` mode records
+/// anything; otherwise a no-op.
+async fn register_agent_input_origin(
+    state: &Arc<ThreadManagerState>,
+    agent_id: ThreadId,
+    sender: Option<ThreadId>,
+    input: &[UserInput],
+) {
+    use crate::security::ingress::MessageOrigin;
+    let Ok(receiver) = state.get_thread(agent_id).await else {
+        return;
+    };
+    let client = receiver.session.services.model_client();
+    if !client.source_envelopes_enabled() {
+        return;
+    }
+    let origin = match sender {
+        Some(sender) => match state.get_thread(sender).await {
+            Ok(sender) => sender.session.agent_handoff_origin().await,
+            Err(_) => MessageOrigin::External(codex_protocol::provenance::SourceKind::ChildAgent),
+        },
+        None => MessageOrigin::External(codex_protocol::provenance::SourceKind::ChildAgent),
+    };
+    client.mark_agent_input(input, origin);
+}
+
 #[cfg(test)]
 #[path = "control_tests.rs"]
 mod tests;

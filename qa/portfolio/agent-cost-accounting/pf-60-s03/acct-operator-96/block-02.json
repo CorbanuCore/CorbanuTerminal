@@ -1,0 +1,33 @@
+{
+  "block": 2,
+  "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-operator-96/target/audit-copy",
+  "command": [
+    "bash",
+    "--noprofile",
+    "--norc",
+    "-x",
+    "-c",
+    "set -eu\nq=qa/portfolio/agent-cost-accounting/pf-60-s03\nrc=0\npython3 -B \"$q/acct-inventory-79/verify_acceptance.py\" || rc=$?\nprintf 'Acceptance exit: %s (expected 2)\\n' \"$rc\"\ntest \"$rc\" -eq 2\npython3 -B \"$q/acct-inventory-79/check_verifier.py\"\npython3 -B \"$q/acct-selfcheck-84/check_current_tip.py\"\n"
+  ],
+  "note_sha256": "632c78b084d7145d5dc406e0d8a96e0d12eea30a4d85a46129526928abd76140",
+  "script_sha256": "550d4e3c9c25ae2e262d09960a492b891e910174731a47099901deb7365df53c",
+  "exit": 0,
+  "elapsed_seconds": 8.087613821029663,
+  "log_sha256": "5e851d07cf4424d7ab68e8fb65dbcc9bc2db037a41c9a2b21b109b0b13659a9f",
+  "environment_keys": [
+    "CARGO_HOME",
+    "CARGO_TERM_COLOR",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_TERMINAL_PROMPT",
+    "HOME",
+    "LC_ALL",
+    "PATH",
+    "PYTHONDONTWRITEBYTECODE",
+    "RUSTUP_HOME",
+    "TERM",
+    "TMPDIR"
+  ],
+  "fresh_shell": true,
+  "shell_variables_from_previous_block": false
+}

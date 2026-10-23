@@ -1,0 +1,98 @@
+{
+ "note": "Model-visible tool sets observed by the mediator over the whole third run (names only; no bodies). Executor (corbanu exec) and product (TUI) requests share the mediator; per-run windows are in runs/*/mediator-window.jsonl. Full log: common/mediator-final.jsonl.gz.",
+ "observed_tool_sets": [
+  {
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "structured_edit",
+    "structured_write",
+    "view_image",
+    "spawn_agent_v1",
+    "send_input_v1",
+    "wait_agent_v1",
+    "close_agent_v1",
+    "get_goal",
+    "create_goal",
+    "update_goal"
+   ],
+   "requests": 2304
+  },
+  {
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "structured_edit",
+    "structured_write",
+    "view_image",
+    "spawn_agent",
+    "send_message",
+    "followup_task",
+    "wait_agent",
+    "interrupt_agent",
+    "list_agents",
+    "get_goal",
+    "create_goal",
+    "update_goal"
+   ],
+   "requests": 13
+  },
+  {
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "structured_edit",
+    "structured_write",
+    "view_image",
+    "get_goal",
+    "create_goal",
+    "update_goal"
+   ],
+   "requests": 12
+  },
+  {
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "view_image",
+    "spawn_agent_v1",
+    "send_input_v1",
+    "wait_agent_v1",
+    "close_agent_v1"
+   ],
+   "requests": 1
+  },
+  {
+   "tools": [
+    "web_search",
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "structured_edit",
+    "structured_write",
+    "view_image",
+    "get_goal",
+    "create_goal",
+    "update_goal"
+   ],
+   "requests": 1
+  }
+ ],
+ "paths": {
+  "/api/paas/v4/chat/completions": 2326,
+  "/api/anthropic/v1/messages": 5
+ },
+ "models": {
+  "glm-5.3-flash": 2329,
+  "glm-5.2": 2
+ }
+}

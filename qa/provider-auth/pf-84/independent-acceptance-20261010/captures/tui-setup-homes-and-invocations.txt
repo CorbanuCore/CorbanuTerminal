@@ -1,0 +1,53 @@
+=== home s02/hG config.toml
+   | model = "glm-5.3-flash"
+   | model_provider = "zai"
+   | suppress_unstable_features_warning = true
+   | 
+   | [features]
+   | named_accounts = true
+   | 
+   | [projects."/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/work"]
+   | trust_level = "trusted"
+=== home s02/hG account list
+   | zai	fake	api_key
+   | zai	main	api_key
+=== home s02/hZ config.toml
+   | model = "glm-5.3-flash"
+   | model_provider = "zai"
+   | suppress_unstable_features_warning = true
+   | 
+   | [features]
+   | named_accounts = true
+=== home s02/hZ account list
+   | zai	fake	api_key
+   | zai	main	api_key
+=== home s02/hS config.toml
+   | model = "glm-5.3-flash"
+   | model_provider = "zai"
+   | suppress_unstable_features_warning = true
+   | 
+   | [features]
+   | named_accounts = true
+   | security_levels = true
+   | protected_mode_preflight = true
+   | 
+   | [projects."/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/work"]
+   | trust_level = "trusted"
+=== home s02/hS account list
+   | zai	aggr2	api_key
+   | zai	shellacct	api_key
+=== home s02/hS security_level.toml
+   | version = 1
+   | level = "aggressive"
+=== TUI invocations (all: env -i, CORBANU_TEST_NO_NATIVE_KEYRING=1, cwd $S/work, --no-alt-screen, private tmux socket)
+t0   home hZ (named main/fake only, no default key): corbanu-main -c provider_accounts.zai="main"            -> onboarding blocks (#417)
+t1   home hG: tui-run.sh t1 $S/s02/hG "<pong prompt>" <expect> -c 'provider_accounts.zai="main"'            -> pong
+t2   home hG: tui-run.sh t2 ... -c 'provider_accounts.zai="fake"'                                           -> 401 + hint (#416)
+t3   home hG: tui-run.sh t3 ... -c 'provider_accounts.zai="ghost"'                                          -> fails closed
+t4   home hG: tui-run.sh t4 ... --disable named_accounts -c 'provider_accounts.zai="fake"'                  -> ignored warning + pong
+t5   home hG: t5.sh (-s danger-full-access -a never; agent runs scripts/s01/worker-{doctor,exec}.sh)
+vault-list   home hG: corbanu-main, then "/vault list"
+aggressive   home hS: /security -> Aggressive saved (security_level.toml), then relaunched with features security_levels + protected_mode_preflight;
+             "!printf fake… | corbanu account add zai shellacct" (user shell) and an agent command "… account add zai agentacct" (approved)
+Home hG history: created + onboarded (Z.AI default key via masked entry) by the pre-PF-84 build 44b527f11f; migration.sh ran;
+then named accounts main (real) and fake were added for the TUI runs. hS: default key pasted in onboarding, named `main` added.

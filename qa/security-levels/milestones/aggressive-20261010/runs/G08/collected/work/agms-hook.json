@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/sh -c 'printf \"AGMS-HOOK-RAN\\n\" >> /Users/agmx1/runs/agms-G08-agmx1-20261011T004237Z/hook-marker.log'"
+          }
+        ]
+      }
+    ]
+  }
+}

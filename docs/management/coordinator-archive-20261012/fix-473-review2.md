@@ -1,0 +1,6 @@
+You are an independent, read-only code reviewer (do not edit files, do not run builds, tests or the TUI). Round 2.
+
+Worktree /Volumes/CorbanuDrive/Corbanu/worktrees/fix-473-20261011, branch fix/473-bwrap-missing-protected (PR #491). Your round-1 review is in /Volumes/CorbanuDrive/Corbanu/.codex-work/workers-20261002/fix-473-review-round1.result.md (blocking B1: placeholder dedupe across writable-root passes left a missing denied path writable under a nested writable root).
+The fix for B1 is commit 0919ef0128 (`git -C <worktree> show 0919ef0128`): the synthetic-mount-target list is swapped out at the start of each writable-root pass (so dedupe only sees that pass's targets) and merged back at the end; new unit test for nested writable roots (mask after each --bind) and an existing denied sibling masked over its snapshot bind (unit + real bubblewrap integration test).
+Full diff: `git -C <worktree> diff origin/main...HEAD`.
+Please verify B1 is fixed with file:line evidence, check the swap/merge cannot lose or reorder targets that linux_run_main registers/cleans up (register_synthetic_mount_targets / cleanup), check early `?` returns inside the pass, and look for any new problem. Rank findings (blocking / should-fix / nit) and give a verdict APPROVE / REQUEST CHANGES.

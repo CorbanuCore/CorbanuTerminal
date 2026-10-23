@@ -2,7 +2,7 @@
 sprint_id: "PF-24-S01"
 title: "Security command and profile view"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-24"
 execution_order: 34
 owner: "/root/security_ui"
@@ -26,7 +26,7 @@ updated: 2026-09-04
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md)
 - Feature: `PF-24`
 - Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
 - Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”

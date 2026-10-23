@@ -1,0 +1,60 @@
+{
+ "bin": "corbanu-final4",
+ "sessions": 10,
+ "turns": 3,
+ "tool_calls": 4,
+ "wall_seconds": 27.2,
+ "warmup_seconds": 24.9,
+ "execs": 30,
+ "failed_execs": 0,
+ "requests": 150,
+ "client_gap_ms": {
+  "n": 120,
+  "p50": 85.3,
+  "p90": 222.0,
+  "p99": 570.8,
+  "max": 573.3,
+  "mean": 128.8
+ },
+ "lock_wait_ms": {
+  "n": 572,
+  "p50": 1.0,
+  "p90": 572.0,
+  "p99": 5396.0,
+  "max": 5416.0,
+  "mean": 275.8
+ },
+ "lock_hold_ms": {
+  "n": 474,
+  "p50": 3.0,
+  "p90": 5.0,
+  "p99": 18.0,
+  "max": 82.0,
+  "mean": 3.2
+ },
+ "holds_over_250ms_by_site": {},
+ "bad_stderr_lines": 29,
+ "bad_examples": [
+  "2026-10-12T01:13:43.275670Z  WARN codex_state::runtime::provider_request_fallback: state DB unavailable; the provider request throttle uses this process's state operation=\"adopt legacy provider request key\" reason=Busy error=error returned from database: (code: 5) database is locked: (code: 5) datab",
+  "2026-10-12T01:13:43.275719Z  WARN codex_state::runtime::provider_request_fallback: state DB unavailable; the provider request throttle uses this process's state operation=\"adopt legacy provider request key\" reason=Busy error=error returned from database: (code: 5) database is locked: (code: 5) datab",
+  "2026-10-12T01:13:43.289669Z  WARN codex_state::runtime::provider_request_fallback: state DB unavailable; the provider request throttle uses this process's state operation=\"adopt legacy provider request key\" reason=Busy error=error returned from database: (code: 5) database is locked: (code: 5) datab",
+  "2026-10-12T01:13:43.293565Z  WARN codex_state::runtime::provider_request_fallback: state DB unavailable; the provider request throttle uses this process's state operation=\"adopt legacy provider request key\" reason=Busy error=error returned from database: (code: 5) database is locked: (code: 5) datab",
+  "2026-10-12T01:13:43.307584Z  WARN codex_state::runtime::provider_request_fallback: state DB unavailable; the provider request throttle uses this process's state operation=\"adopt legacy provider request key\" reason=Busy error=error returned from database: (code: 5) database is locked: (code: 5) datab",
+  "2026-10-12T01:13:43.311071Z  WARN codex_state::runtime::provider_request_fallback: state DB unavailable; the provider request throttle uses this process's state operation=\"adopt legacy provider request key\" reason=Busy error=error returned from database: (code: 5) database is locked: (code: 5) datab",
+  "2026-10-12T01:13:43.321561Z  WARN codex_state::runtime::provider_request_fallback: state DB unavailable; the provider request throttle uses this process's state operation=\"adopt legacy provider request key\" reason=Busy error=error returned from database: (code: 5) database is locked: (code: 5) datab",
+  "2026-10-12T01:13:43.325361Z  WARN codex_state::runtime::provider_request_fallback: state DB unavailable; the provider request throttle uses this process's state operation=\"adopt legacy provider request key\" reason=Busy error=error returned from database: (code: 5) database is locked: (code: 5) datab",
+  "2026-10-12T01:13:43.339759Z  WARN codex_state::runtime::provider_request_fallback: state DB unavailable; the provider request throttle uses this process's state operation=\"adopt legacy provider request key\" reason=Busy error=error returned from database: (code: 5) database is locked: (code: 5) datab",
+  "2026-10-12T01:13:51.159290Z  WARN codex_thread_store::local::update_thread_metadata: state db update_thread_metadata failed for 01a12dac-1ec9-7b43-9b2f-45cbe79ab6da: thread-store internal error: failed to update thread metadata for 01a12dac-1ec9-7b43-9b2f-45cbe79ab6da: error returned from database: "
+ ],
+ "exec_seconds": {
+  "n": 30,
+  "p50": 4.7,
+  "p90": 19.0,
+  "p99": 19.0,
+  "max": 19.0,
+  "mean": 9.0
+ },
+ "lock_held_by_another_process_s": 20.0,
+ "ledger_attempts_recorded": 150,
+ "records_still_saved_for_a_later_writer": 0
+}

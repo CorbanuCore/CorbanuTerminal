@@ -1,0 +1,66 @@
+# PF-60-S04: reopening a conversation shows the same recorded totals. A real Kimi Code K3 turn, /cost, then a new
+# conversation and /resume back to the first one: /cost reads the same requests and tokens from the ledger. (The
+# process restart and kill paths are in the qualification record; this video shows the reopen a user does.)
+id = "pf60s04-restart-history"
+feature = "/cost before and after reopening a conversation with /resume: the same recorded totals"
+expected = "The provider line (requests and tokens) after /resume is identical to the one before; nothing is recounted or lost."
+model = "k3"
+provider = "kimi-code"
+rows = 46
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+KIMI_API_KEY = "provider/kimi_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with the single word READY."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*READY\\W*$"
+timeout = 180
+compress = 3
+# The turn ends after its completion check, a few seconds after the answer; /new and /resume wait for it.
+[[steps]]
+run = "sleep 45"
+timeout = 60
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Kimi Code K3 — Covered by your subscription"
+[[steps]]
+pause = 4
+[[steps]]
+key = "Escape"
+[[steps]]
+type = "/new"
+[[steps]]
+key = "Enter"
+[[steps]]
+pause = 1
+[[steps]]
+type = "/resume"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Resume a previous session"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*READY\\W*$"
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Kimi Code K3 — Covered by your subscription"
+[[steps]]
+pause = 5

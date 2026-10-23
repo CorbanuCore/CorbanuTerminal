@@ -1,0 +1,25 @@
+# guard_slot checks after review round 3 (2026-10-16): start one Tart clone, then call guard_slot again; UTM "macOS 3" up throughout.
+## TART=/Volumes/CorbanuDrive/Corbanu/.codex-work/tart-bin/tart.app/Contents/MacOS/tart
+2026-10-16T12:38:15Z slot ok (guests running: 1; UTM: 1; Tart: 0)
+tart running: 1; process: 39204 /Volumes/CorbanuDrive/Corbanu/.codex-work/tart-bin/tar
+2026-10-16T12:38:24Z ERROR: a Tart VM is already running; these scripts run one at a time
+guard refused as expected
+cleaned
+## TART=tart
+2026-10-16T12:38:25Z slot ok (guests running: 1; UTM: 1; Tart: 0)
+tart running: 1; process: 39434 tart run --no-graphics --no-audio --no-clipboard qa-gu
+2026-10-16T12:38:33Z ERROR: a Tart VM is already running; these scripts run one at a time
+guard refused as expected
+cleaned
+## After review round 4: lib.sh helpers with a stand-in pgrep (no VM started)
+# pgrep exit 1 (nothing matches, e.g. a host with no other guest): vm_pids empty, guard passes
+vm_pids ok: []
+tart_running=[0]
+2026-10-16T12:41:36Z slot ok (guests running: 0; UTM: 0; Tart: 0)
+guard passed
+# pgrep exit 3 (pgrep itself fails): the guard refuses
+2026-10-16T12:41:44Z ERROR: pgrep failed (3)
+tart_running=[?]
+2026-10-16T12:41:44Z ERROR: pgrep failed (3)
+2026-10-16T12:41:44Z ERROR: pgrep failed (3)
+exit=1

@@ -1,0 +1,32 @@
+===== f1-flagoff-rows
+ 1. OpenAI          Not configured · unavailable
+  2. Claude Account  Not configured · unavailable
+  3. Corbanu API     Not configured · unavailable
+  4. Anthropic       Not configured · unavailable
+  5. Ambient         Not configured · unavailable
+  6. Kimi Code       Not configured · unavailable
+  7. Z.AI            Enabled · configured · current
+  8. DeepSeek        Not configured · unavailable
+ 9. OpenRouter      Not configured · unavailable
+ 10. Meta        Not configured · unavailable
+ 11. Baseten    Not configured · unavailable
+ 12. Vercel     Not configured · unavailable
+ 13. Amazon Bedrock  Not configured · unavailable
+ 14. Ollama          Enabled · configured
+ 15. LM Studio       Enabled · configured
+
+===== f1-flagoff-zai-actions
+  Z.AI
+  Enabled · configured · current
+  Credentials are present; a successful request is needed to verify access.
+  Deactivation keeps the managed credential; this screen never deletes it.
+› 1. Deactivate            Choose an exact usable replacement first; credentials are kept.
+  2. Replace with API key  API key
+  Press enter to confirm or esc to go back
+
+===== f2-flagoff-config-ignored
+› Reply with exactly the word pong and nothing else.
+• pong
+› Summarize recent commits
+  Z.AI GLM 5.3 Flash via zai default · $S/work · Corbanu Terminal · TPS: 0.9 tok/s
+

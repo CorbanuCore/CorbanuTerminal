@@ -60,13 +60,17 @@ const ANALYTICS_EVENTS_FLUSH_TIMEOUT: Duration = Duration::from_secs(25);
 const ANALYTICS_EVENT_DEDUPE_MAX_KEYS: usize = 4096;
 
 pub(crate) enum AnalyticsEventsQueueMessage {
-    Fact(Box<AnalyticsFact>),
+    /// A fact and (#658) the sign-in it was recorded under, resolved when it
+    /// was recorded rather than when it is sent; `None`: none may be used.
+    Fact(Box<AnalyticsFact>, Option<Arc<AuthManager>>),
     Flush(oneshot::Sender<()>),
 }
 
 #[derive(Clone)]
 pub(crate) struct AnalyticsEventsQueue {
     pub(crate) sender: mpsc::Sender<AnalyticsEventsQueueMessage>,
+    /// Resolves the sign-in of each recorded fact (#658).
+    pub(crate) auth_manager: Option<Arc<AuthManager>>,
     pub(crate) app_used_emitted_keys: Arc<Mutex<HashSet<(String, String)>>>,
     pub(crate) plugin_used_emitted_keys: Arc<Mutex<HashSet<(String, String)>>>,
 }
@@ -137,8 +141,8 @@ impl AnalyticsEventsQueue {
         tokio::spawn(async move {
             let mut reducer = AnalyticsReducer::default();
             while let Some(input) = receiver.recv().await {
-                let input = match input {
-                    AnalyticsEventsQueueMessage::Fact(input) => *input,
+                let (input, sign_in) = match input {
+                    AnalyticsEventsQueueMessage::Fact(input, sign_in) => (*input, sign_in),
                     AnalyticsEventsQueueMessage::Flush(done_tx) => {
                         let _ = done_tx.send(());
                         continue;
@@ -146,20 +150,25 @@ impl AnalyticsEventsQueue {
                 };
                 let mut events = Vec::new();
                 reducer.ingest(input, &mut events).await;
-                send_track_events(&auth_manager, &destination, events).await;
+                send_track_events_as(sign_in, &destination, events).await;
             }
         });
         Self {
             sender,
+            auth_manager: Some(auth_manager),
             app_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
             plugin_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
     fn try_send(&self, input: AnalyticsFact) {
+        let sign_in = self
+            .auth_manager
+            .as_ref()
+            .and_then(AuthManager::for_session);
         if self
             .sender
-            .try_send(AnalyticsEventsQueueMessage::Fact(Box::new(input)))
+            .try_send(AnalyticsEventsQueueMessage::Fact(Box::new(input), sign_in))
             .is_err()
         {
             //TODO: add a metric for this
@@ -614,8 +623,19 @@ impl AnalyticsEventsClient {
     }
 }
 
+#[cfg(test)]
 async fn send_track_events(
-    auth_manager: &AuthManager,
+    auth_manager: &Arc<AuthManager>,
+    destination: &AnalyticsEventsDestination,
+    events: Vec<TrackEventRequest>,
+) {
+    send_track_events_as(auth_manager.for_session(), destination, events).await;
+}
+
+/// Sends `events` with `sign_in`: the sign-in the process's user sessions ran
+/// on when they were recorded (#658); nothing is sent without one.
+async fn send_track_events_as(
+    sign_in: Option<Arc<AuthManager>>,
     destination: &AnalyticsEventsDestination,
     mut events: Vec<TrackEventRequest>,
 ) {
@@ -623,7 +643,10 @@ async fn send_track_events(
         return;
     }
 
-    let Some(auth) = auth_manager.auth().await else {
+    let Some(sign_in) = sign_in else {
+        return;
+    };
+    let Some(auth) = sign_in.auth().await else {
         return;
     };
     if auth.is_api_key_auth() {

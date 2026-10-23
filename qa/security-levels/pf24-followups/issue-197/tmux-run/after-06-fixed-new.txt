@@ -1,0 +1,62 @@
+
+╭───────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                 │
+│                                               │
+│ model:     loading   /model to change         │
+│ directory: <run>/workspace │
+╰───────────────────────────────────────────────╯
+
+
+› Summarize recent commits
+
+  Z.AI GLM 5.2 via zai standard · <run>/workspace · Corbanu Terminal · TPS: -- tok/s
+
+╭───────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                 │
+│                                               │
+│ model:     glm-5.2   /model to change         │
+│ directory: <run>/workspace │
+╰───────────────────────────────────────────────╯
+
+/status
+
+╭─────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                      │
+│                                                                                     │
+│  Model:                Z.AI GLM 5.2                                                 │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4                          │
+│  Directory:            <run>/workspace                           │
+│  Permissions:          Next turn: Profile corbanu-aggressive (workspace, untrusted) │
+│  Security:             Aggressive active (/security)                                │
+│  Agents.md:            <none>                                                       │
+│  Account:              Z.AI API key configured                                      │
+│  Collaboration mode:   Default                                                      │
+│  Session:              01a1115b-6c14-7b02-a208-8dd968601aa4                         │
+│                                                                                     │
+│  Token usage:          0 total  (0 input + 0 output)                                │
+│  Limits:               data not available yet                                       │
+╰─────────────────────────────────────────────────────────────────────────────────────╯
+
+■ Failed to start a fresh session through the app server: thread/start failed during TUI bootstrap: thread/start failed:
+error creating thread: Fatal error: failed to load rules: /private<run>/home/rules/mine.rules:2:
+starlark error: error: Parse error: unexpected new line, expected expression (problem is on or around line 2). A rules
+file that does not parse stops new threads while strict_rules is on (security level Aggressive); fix or remove it, then
+start a new thread. (code -32603)
+
+
+› Run the shell command: corbanu vault list
+
+
+╭───────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                 │
+│                                               │
+│ model:     glm-5.2   /model to change         │
+│ directory: <run>/workspace │
+╰───────────────────────────────────────────────╯
+
+To continue this session, run corbanu resume 01a1115b-6c14-7b02-a208-8dd968601aa4
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.2 via zai standard · <run>/workspace · Corbanu Terminal · TPS: -- tok/s

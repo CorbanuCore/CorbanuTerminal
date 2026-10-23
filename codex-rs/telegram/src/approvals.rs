@@ -84,7 +84,9 @@ impl PendingApproval {
             PendingApprovalKind::Command(params) => {
                 let mut lines = vec!["Approval requested for command execution.".to_string()];
                 if let Some(command) = &params.command {
-                    lines.push(format!("<pre><code>{}</code></pre>", escape_html(command)));
+                    // Telegram keeps chat history on its servers (#398).
+                    let command = codex_log_guard::redact_credentials(command);
+                    lines.push(format!("<pre><code>{}</code></pre>", escape_html(&command)));
                 }
                 if let Some(reason) = &params.reason {
                     lines.push(format!("Reason: {}", escape_html(reason)));

@@ -1,0 +1,21 @@
+[
+  {
+    "audit": "independent-audit.json",
+    "exit": 0,
+    "cases": 26,
+    "checks": "Numeric pages, token measures, chosen windows, timezone equality and offset rejection"
+  },
+  {
+    "audit": "supplemental epoch/raw/compact audit first attempt",
+    "exit": 1,
+    "failure": "re.PatternError: unterminated character set at position 2",
+    "cause": "Double-escaped bracket regex in new QA audit",
+    "correction": "Parse the already-labelled epoch interval with literal delimiters; no capture or product change"
+  },
+  {
+    "audit": "independent-audit-final.json",
+    "exit": 0,
+    "cases": 26,
+    "checks": "Prior checks plus epoch interval equality, four raw attempt memberships and four compact aggregate costs/counts/all seven metrics"
+  }
+]

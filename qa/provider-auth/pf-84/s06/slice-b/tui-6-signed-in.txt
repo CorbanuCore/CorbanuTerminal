@@ -1,0 +1,40 @@
+│  Account usage:        work · no usage yet                                               │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly: pong
+
+
+⚠ MCP client for `codex_apps` failed to start: MCP startup failed: handshaking with MCP server failed: Send message
+  error Transport
+  [rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rm
+  cp_client::http_client_adapter::StreamableHttpClientAdapter>>] error: unexpected server response: HTTP 404: , when
+  send initialize request
+
+⚠ MCP startup incomplete (failed: codex_apps)
+
+• openai-mock: authorized as work (token gen 3)
+
+• To sign in openai account `tui`, open http://127.0.0.1:31285/codex/device and enter code MOCK-0001. Waiting for the
+sign-in…
+
+• Signed in openai account `tui` (ChatGPT sign-in · t…@example.com · Plus). Use it from /providers, `--account tui` or a
+spawn `account`.
+
+
+  Providers
+  Configure providers and control whether they are eligible for use.
+  Configured means credentials are present, not verified by the provider.
+
+› 1. OpenAI · default  Enabled · configured · current · default for new sessions
+  2. OpenAI · bad      Named account · ChatGPT sign-in · b…@example.com · Plus · fp 3b861fede2b6
+  3. OpenAI · tui      Named account · ChatGPT sign-in · t…@example.com · Plus · fp ef7ac94e5609
+  4. OpenAI · twin     Named account · ChatGPT sign-in · w…@example.com · Plus · fp f171c7302316
+  5. OpenAI · work     Named account · ChatGPT sign-in · w…@example.com · Plus · fp ac1c4fab2856 · this session
+  6. Claude Account    Not configured · unavailable
+  7. Corbanu API       Not configured · unavailable
+  8. Anthropic         Not configured · unavailable
+
+  r recover credentials · Enter manage · Esc back
+  Press enter to confirm or esc to go back

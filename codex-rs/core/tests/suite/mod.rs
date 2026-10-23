@@ -35,17 +35,34 @@ pub static CODEX_ALIASES_TEMP_DIR: Option<TestBinaryDispatchGuard> = {
 
 #[cfg(not(target_os = "windows"))]
 mod abort_tasks;
+mod accounting_anthropic;
+mod accounting_anthropic_recovery;
+mod accounting_chat;
+mod accounting_chat_recovery;
+mod accounting_code_review;
+mod accounting_responses;
+mod accounting_responses_recovery;
+#[path = "accounting_responses_ws.rs"]
+mod accounting_responses_ws;
+#[path = "accounting_responses_ws_recovery.rs"]
+mod accounting_responses_ws_recovery;
+#[path = "accounting_responses_ws_support.rs"]
+mod accounting_responses_ws_support;
+mod accounting_side_forks;
 mod additional_context;
 mod agent_execution;
 mod agent_websocket;
 mod agents_md;
+mod aggressive_refusals;
 mod anthropic_payload_limit;
 mod apply_patch_cli;
 #[cfg(not(target_os = "windows"))]
 mod approvals;
+mod approved_command_ends;
 mod audio_truncation;
 mod auto_review;
 mod catalog_permission_messages;
+mod chat_tool_limit;
 mod cli_stream;
 mod client;
 mod client_websockets;
@@ -57,6 +74,7 @@ mod compact;
 mod compact_remote;
 mod compact_remote_parity;
 mod compact_resume_fork;
+mod cross_provider_history;
 mod current_time_reminder;
 mod deprecation_notice;
 mod exec;
@@ -73,11 +91,37 @@ mod hooks;
 #[cfg(not(target_os = "windows"))]
 mod hooks_mcp;
 mod image_rollout;
+mod issue_1087;
+mod issue_1139;
+mod issue_443;
+mod issue_445;
+mod issue_505;
+mod issue_506;
+mod issue_507;
+mod issue_507_switch_off;
+mod issue_584;
+mod issue_620_622;
+mod issue_623;
+mod issue_626;
+mod issue_736_740;
+mod issue_747;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod issue_748;
+mod issue_766;
+#[cfg(target_os = "linux")]
+mod issue_826;
+mod issue_826_explained;
+mod issue_840;
+mod issue_874;
+mod issue_891_d48_known_tools;
+mod issue_891_one_run;
 mod items;
 mod json_result;
 mod live_cli;
+mod log_redaction;
 mod mcp_auth_elicitation;
 mod mcp_auth_refresh;
+mod mcp_chat_completions;
 #[cfg(unix)]
 mod mcp_refresh_cleanup;
 mod mcp_startup_refresh_http_proxy;
@@ -96,17 +140,21 @@ mod multi_agent_resume;
 #[cfg(unix)]
 mod multi_exec_server_sandbox;
 mod network_approval;
+mod openai_api_key_env_notice;
 mod openai_file_mcp;
 mod otel;
 mod override_updates;
 mod pending_input;
 mod permissions_messages;
 mod personality;
+mod pf_23_s01;
+mod pf_25_s01;
 mod plugins;
 mod prompt_cache_key;
 mod prompt_caching;
 mod prompt_debug_tests;
 mod provenance;
+mod provider_throttle;
 mod quota_exceeded;
 mod realtime_conversation;
 mod realtime_initial_items;
@@ -131,6 +179,7 @@ mod rollout_budget;
 mod rollout_list_find;
 mod safety_buffering;
 mod safety_check_downgrade;
+mod sandbox_denied_at_start;
 mod search_tool;
 mod shell_command;
 mod shell_serialization;
@@ -140,9 +189,11 @@ mod skills;
 mod skills_extension;
 mod spawn_agent_description;
 mod sqlite_state;
+mod state_db_throttle_fallback;
 mod stream_error_allows_next_turn;
 mod stream_no_completed;
 mod subagent_notifications;
+mod test_codex_cwd;
 mod token_budget;
 mod tool_harness;
 mod tool_parallelism;

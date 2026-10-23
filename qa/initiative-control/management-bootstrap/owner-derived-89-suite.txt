@@ -1,0 +1,75 @@
+..............................................................................................................................................Refresh complete; live writeback disabled
+Verified export activated; private server refreshed; timer activation unchanged
+...............................................................................Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+....................../opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 429: 'Too Many Requests'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+.....................................................................................................................................................................................usage: python -m unittest [-h]
+
+Fixed guest runtime. Requires parent-enforced containment; provides no host
+isolation.
+
+options:
+  -h, --help  show this help message and exit
+Synthetic retained evidence: /private/tmp/isolated-transport-tests-06au8wh5
+........................................................................................E............................................................................................../opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/re/_parser.py:261: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107a91990>
+  def get(self):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/re/_parser.py:261: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1080fce50>
+  def get(self):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+......................................................................................................................{"reason":"TimeoutExpired","state":"ERROR"}
+{"reason":"TimeoutExpired","state":"ERROR"}
+{"fixture_only":true,"manager":"empty","routing":"deferred","state":"ACTIVE","states":["RECOVERING","READY","ACTIVE"]}
+Refresh complete; live writeback disabled
+...................../opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 500: 'Internal Server Error'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+............/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 429: 'Too Many Requests'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+..................................................................
+======================================================================
+ERROR: test_hold_row_shape_for_missing_and_resolved_action (test_owner_daemon.ActivationVisibilityTests.test_hold_row_shape_for_missing_and_resolved_action)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 637, in test_hold_row_shape_for_missing_and_resolved_action
+    with self.c.mutation("fixture", {}) as (_, state):
+         ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 148, in __exit__
+    next(self.gen)
+    ~~~~^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/coordinator.py", line 108, in mutation
+    self._archive_actions(db, state)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/coordinator.py", line 123, in _archive_actions
+    terminal = sorted((a for a in state["actions"].values()
+                       if a["workstream"] == stream and a["status"] in TERMINAL),
+                      key=lambda a: a["sequence"])
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/coordinator.py", line 124, in <genexpr>
+    if a["workstream"] == stream and a["status"] in TERMINAL),
+       ~^^^^^^^^^^^^^^
+KeyError: 'workstream'
+
+----------------------------------------------------------------------
+Ran 824 tests in 441.069s
+
+FAILED (errors=1)
+Verified publication: manager @ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa · bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb · 2026-09-17T16:04:01+00:00
+Verified publication: manager @ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa · bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb · 2026-09-17T16:04:01+00:00

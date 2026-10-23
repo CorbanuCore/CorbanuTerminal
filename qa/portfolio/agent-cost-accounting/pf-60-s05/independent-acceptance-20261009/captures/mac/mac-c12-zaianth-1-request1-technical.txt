@@ -1,0 +1,66 @@
+$
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     glm-5.2   /model to change                    │
+│ directory: <corbanu-root>/tmp/…/work/repo │
+╰──────────────────────────────────────────────────────────╯
+
+  Reply with exactly: first
+• first
+  Attempt, components and original price
+  Requested UTC day: 2026-10-09
+  Provider: Z.AI Anthropic
+  Model: Z.AI GLM 5.2
+  Billing: Covered by your subscription (not billed per request)
+  Same work at API prices: not available
+  Tokens: 1+ tokens
+  Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+  usage page.
+  —— Details ——
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Request: 50d2a3dc-2ec8-4c21-9f14-12597a2342a7
+  Attempt: 93d84f67-87b5-47fb-a5b3-a9af19a75be8
+  Thread: 01a120c5-c38b-74c1-9e09-57791029fb89
+  Turn: 01a120c5-c52e-7520-ab96-e718d137d427
+  Provider: zai-anthropic
+  Model: glm-5.2
+  Opaque scope: 03cc5cfc-a771-4786-b834-fe1e48bda75b
+  Arithmetic dialect: NativeAnthropic
+  Admission time: 2026-10-09T13:06:34.624Z
+  Retry predecessor: none
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  No recorded attempt here was billed per token.
+  Subscription capacity: 1 of 1 attempts, not billed per token
+  Plan consumption: unavailable — no plan rate or token total for 1 of 1 plan attempts
+  Same tokens at API rates: unavailable — the catalogue states no API price for 1 of 1 plan attempts
+  Plan rate at dispatch: not stated by the vendor
+  Billing basis: subscription
+  Input: unknown — no retained numeric evidence
+  Noncached input (derived for inclusive input): 9908
+  Cache read: 0 (reported)
+  Cache write: unknown — no retained numeric evidence
+  Output: 1
+  Reasoning (subset, not separately billed): unknown — no retained numeric evidence
+  Total (not separately billed): unknown — no retained numeric evidence
+  Noncached input cost: unknown — rate unavailable
+  Cache read cost: $0.000000; exact USD 0
+  Cache write cost: unknown — no retained numeric evidence
+  Output cost: unknown — rate unavailable
+  Known subtotal exact USD: none — subscription work is not billed per token
+  Price ID: c91aedf8-26c7-402e-9239-7e4e62e2a559
+  Price source: NativeCatalog; reference a8d411f2-33af-5b25-9876-3f2c5f4fea4a
+  Price currency/unit: Usd / PerMillionTokens
+  Price observed/approved: 2026-10-09T13:06:34.624Z / 2026-10-09T13:06:34.624Z
+  Price effective interval: [2026-10-09T13:06:34.624Z, unbounded)
+  Rate unavailable for Noncached input
+  Rate unavailable for Cache read
+  Rate unavailable for Cache write
+  Rate unavailable for Output
+  Evidence revision 1; source ef3720e4-ee52-4579-b525-d18f7962059b; sequence 1; presence patch {"input":0,"output":0}
+  Evidence revision 6; source ef3720e4-ee52-4579-b525-d18f7962059b; sequence 6; presence patch {"input":9908,"read":0,"output":1}
+  Snapshot is not current; newer activity is unverified
+  Back
+  Refresh
+  Close

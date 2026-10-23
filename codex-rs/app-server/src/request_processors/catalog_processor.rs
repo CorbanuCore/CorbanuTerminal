@@ -345,7 +345,7 @@ impl CatalogRequestProcessor {
             }
             None => self.load_latest_config(/*fallback_cwd*/ None).await?,
         };
-        let auth = self.auth_manager.auth().await;
+        let auth = self.auth_manager.session_auth().await;
         let workspace_codex_plugins_enabled = self
             .workspace_codex_plugins_enabled(&config, auth.as_ref())
             .await;
@@ -500,7 +500,7 @@ impl CatalogRequestProcessor {
         };
 
         let config = self.load_latest_config(/*fallback_cwd*/ None).await?;
-        let auth = self.auth_manager.auth().await;
+        let auth = self.auth_manager.session_auth().await;
         let workspace_codex_plugins_enabled = self
             .workspace_codex_plugins_enabled(&config, auth.as_ref())
             .await;
@@ -606,7 +606,7 @@ impl CatalogRequestProcessor {
             cwds
         };
 
-        let auth = self.auth_manager.auth().await;
+        let auth = self.auth_manager.session_auth().await;
         let plugins_manager = self.thread_manager.plugins_manager();
         let mut data = Vec::new();
         for cwd in cwds {

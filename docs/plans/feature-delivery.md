@@ -2,7 +2,9 @@
 
 Main integration status: this contract is imported from the reviewed operations
 source. The referenced `scripts/initiative_control/` tooling is not yet ported
-to main; PF-80-S01 owns that bounded port and final-tree qualification. Until
+to remote main; it is integrated and tested on the local receiving branch at
+`0415a00dc3d3ee55a96662920c3eedbc0f0d4838`. PF-80-S01 owns the remaining
+native and human/live qualification. Until a separately authorized main landing,
 then, references below are a contract, not runnable-main evidence or approval.
 
 Travis Good's 2026-09-10 delivery decision supplements, but never replaces,
@@ -50,7 +52,9 @@ human must accept the final affected experience. No automated check is bulletpro
 
 ## Sequential ownership
 
-Each of up to three active initiatives has one reserved sprint and one named
-integration owner. Builders may not self-approve their own changes. Independent
+Each of up to three active initiatives has one named integration owner and one
+reserved sprint, except a plan that declares lanes: since 2026-10-06 the P0
+security plan may reserve up to three, one per lane (see
+[sprint concurrency](../sprints/index.md#bounded-parallel-implementation)). Builders may not self-approve their own changes. Independent
 review/testing supports the same sprint; shared-file writes are serialized.
 Blocked work retains a slot until the manager records a safe handoff.

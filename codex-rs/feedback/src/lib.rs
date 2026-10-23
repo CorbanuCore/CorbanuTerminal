@@ -213,6 +213,10 @@ impl CodexFeedback {
             .with_filter(
                 Targets::new()
                     .with_default(Level::TRACE)
+                    // Events bridged from the `log` crate, such as the websocket
+                    // handshake request with its `Authorization` header. The
+                    // logs DB drops them too.
+                    .with_target("log", LevelFilter::OFF)
                     .with_target("codex_api::responses_websocket_timing", LevelFilter::OFF)
                     .with_target("codex_core::post_sampling_token_estimate", LevelFilter::OFF),
             )
@@ -289,8 +293,21 @@ pub struct FeedbackWriter {
 
 impl Write for FeedbackWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        // #380: no credential header, whatever library logged it.
+        let redacted = codex_log_guard::redact_credentials_bytes(buf);
+        // PF-28-S01: feedback uploads never carry a managed secret.
+        let gated = codex_secret_broker::output_gate::active().and_then(|gate| {
+            gate.scrub_bytes(
+                codex_secret_broker::output_gate::OutputSink::Diagnostic,
+                &redacted,
+            )
+        });
         let mut guard = self.inner.ring.lock().map_err(|_| io::ErrorKind::Other)?;
-        guard.push_bytes(buf);
+        guard.push_bytes(
+            gated
+                .as_ref()
+                .map_or(redacted.as_ref(), |(bytes, _)| bytes.as_slice()),
+        );
         Ok(buf.len())
     }
 
@@ -396,6 +413,11 @@ pub struct FeedbackUploadOptions<'a> {
 }
 
 impl FeedbackSnapshot {
+    /// Captured log bytes, as they would be attached to an upload.
+    pub fn log_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
     pub fn feedback_diagnostics(&self) -> &FeedbackDiagnostics {
         &self.feedback_diagnostics
     }
@@ -592,6 +614,13 @@ impl FeedbackSnapshot {
                         .map(|s| s.to_string_lossy().to_string())
                         .unwrap_or_else(|| "extra-log.log".to_string())
                 });
+            // Older builds wrote sandboxed command lines verbatim (#398), and
+            // one may still be writing to the current day's file.
+            let data = if filename == WINDOWS_SANDBOX_LOG_ATTACHMENT_FILENAME {
+                codex_log_guard::redact_credentials_bytes(&data).into_owned()
+            } else {
+                data
+            };
             let content_type = match Path::new(&filename)
                 .extension()
                 .and_then(|extension| extension.to_str())
@@ -728,10 +757,14 @@ mod tests {
             .set_default();
 
         tracing::trace!(target: "codex_api::responses_websocket_timing", payload = "secret");
+        // `tracing-log` forwards `log` records (tungstenite's handshake request,
+        // with its `Authorization` header) under the target `log`.
+        tracing::trace!(target: "log", "Request: Authorization: Bearer fake-log-bridge-token");
         tracing::trace!(target: "codex_feedback_test", "retained");
 
         let logs = String::from_utf8(fb.snapshot(/*session_id*/ None).bytes).unwrap();
         assert!(!logs.contains("secret"));
+        assert!(!logs.contains("fake-log-bridge-token"));
         assert!(logs.contains("retained"));
     }
 

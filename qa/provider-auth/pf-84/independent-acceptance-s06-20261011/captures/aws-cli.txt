@@ -1,0 +1,545 @@
+## candidate a22fdb903d bin=$CAND; HOME=$S/fh-a1; CORBANU_HOME=$S/homes/a1
+3ca269c124ece2c3c679e7abf0df1fbc26df091a12e05e9361a61e3807739d50  $S/fh-a1/.aws/config
+326c0021bafdeb90a139169e5c84a4e780a0febd24367146bcf407bf6ac3e0a5  $S/fh-a1/.aws/credentials
+
+## A1 add / validation / list / rename (no decoys yet)
+$ run $CAND $S/homes/a1 account add amazon-bedrock work --kind aws-profile --value work
+Saved amazon-bedrock account `work` (aws_profile).
+[exit 0]
+$ run $CAND $S/homes/a1 account add amazon-bedrock alt --kind aws-profile --value other
+Saved amazon-bedrock account `alt` (aws_profile).
+[exit 0]
+$ run $CAND $S/homes/a1 account add amazon-bedrock bad1 --kind aws-profile --value not a profile
+Error: invalid AWS profile name: use 1-64 letters, digits or '-', '_', '.', '+', '@', starting with a letter or digit
+[exit 1]
+$ run $CAND $S/homes/a1 account add amazon-bedrock bad2 --kind aws-profile --value -leadingdash
+error: unexpected argument '-l' found
+
+  tip: to pass '-l' as a value, use '-- -l'
+
+Usage: corbanu account add [OPTIONS] <PROVIDER> <NAME>
+
+For more information, try '--help'.
+[exit 2]
+$ run $CAND $S/homes/a1 account add amazon-bedrock bad3 --kind aws-profile --value aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+Error: invalid AWS profile name: use 1-64 letters, digits or '-', '_', '.', '+', '@', starting with a letter or digit
+[exit 1]
+$ run $CAND $S/homes/a1 account add amazon-bedrock bad4 --kind aws-profile
+Error: this kind needs --value
+[exit 1]
+(stdin-only attempt: secret-looking value on stdin, no --value)
+$ run $CAND $S/homes/a1 account add amazon-bedrock bad5 --kind aws-profile
+Error: this kind needs --value
+[exit 1]
+(api-key kind for Bedrock: should it be accepted?)
+$ run $CAND $S/homes/a1 account add amazon-bedrock keyacct --kind api-key
+Error: provider `amazon-bedrock` does not take `--kind api-key` accounts
+[exit 1]
+$ run $CAND $S/homes/a1 account add amazon-bedrock gone --kind aws-profile --value nosuchprofile
+Saved amazon-bedrock account `gone` (aws_profile).
+[exit 0]
+$ run $CAND $S/homes/a1 account add amazon-bedrock noreg --kind aws-profile --value noregion
+Saved amazon-bedrock account `noreg` (aws_profile).
+[exit 0]
+$ run $CAND $S/homes/a1 account add amazon-bedrock envsrc --kind aws-profile --value envsrc
+Saved amazon-bedrock account `envsrc` (aws_profile).
+[exit 0]
+$ run $CAND $S/homes/a1 account add amazon-bedrock imds --kind aws-profile --value imdssrc
+Saved amazon-bedrock account `imds` (aws_profile).
+[exit 0]
+$ run $CAND $S/homes/a1 account add amazon-bedrock ecs --kind aws-profile --value ecssrc
+Saved amazon-bedrock account `ecs` (aws_profile).
+[exit 0]
+$ run $CAND $S/homes/a1 account add amazon-bedrock proc --kind aws-profile --value proc
+Saved amazon-bedrock account `proc` (aws_profile).
+[exit 0]
+$ run $CAND $S/homes/a1 account add amazon-bedrock procfail --kind aws-profile --value procfail
+Saved amazon-bedrock account `procfail` (aws_profile).
+[exit 0]
+$ run $CAND $S/homes/a1 account add amazon-bedrock chain --kind aws-profile --value chain
+Saved amazon-bedrock account `chain` (aws_profile).
+[exit 0]
+$ run $CAND $S/homes/a1 account add amazon-bedrock sso --kind aws-profile --value sso
+Saved amazon-bedrock account `sso` (aws_profile).
+[exit 0]
+$ run $CAND $S/homes/a1 account add amazon-bedrock ssonc --kind aws-profile --value ssonocache
+Saved amazon-bedrock account `ssonc` (aws_profile).
+[exit 0]
+$ run $CAND $S/homes/a1 account add amazon-bedrock spare --kind aws-profile --value work
+Saved amazon-bedrock account `spare` (aws_profile).
+[exit 0]
+$ run $CAND $S/homes/a1 account rename amazon-bedrock spare renamed
+Renamed amazon-bedrock account `spare` to `renamed`.
+[exit 0]
+$ run $CAND $S/homes/a1 account list amazon-bedrock
+amazon-bedrock	alt	aws_profile	profile other
+amazon-bedrock	chain	aws_profile	profile chain
+amazon-bedrock	ecs	aws_profile	profile ecssrc
+amazon-bedrock	envsrc	aws_profile	profile envsrc
+amazon-bedrock	gone	aws_profile	profile nosuchprofile
+amazon-bedrock	imds	aws_profile	profile imdssrc
+amazon-bedrock	noreg	aws_profile	profile noregion
+amazon-bedrock	proc	aws_profile	profile proc
+amazon-bedrock	procfail	aws_profile	profile procfail
+amazon-bedrock	renamed	aws_profile	profile work
+amazon-bedrock	sso	aws_profile	profile sso
+amazon-bedrock	ssonc	aws_profile	profile ssonocache
+amazon-bedrock	work	aws_profile	profile work
+[exit 0]
+$ run $CAND $S/homes/a1 account list
+amazon-bedrock	alt	aws_profile	profile other
+amazon-bedrock	chain	aws_profile	profile chain
+amazon-bedrock	ecs	aws_profile	profile ecssrc
+amazon-bedrock	envsrc	aws_profile	profile envsrc
+amazon-bedrock	gone	aws_profile	profile nosuchprofile
+amazon-bedrock	imds	aws_profile	profile imdssrc
+amazon-bedrock	noreg	aws_profile	profile noregion
+amazon-bedrock	proc	aws_profile	profile proc
+amazon-bedrock	procfail	aws_profile	profile procfail
+amazon-bedrock	renamed	aws_profile	profile work
+amazon-bedrock	sso	aws_profile	profile sso
+amazon-bedrock	ssonc	aws_profile	profile ssonocache
+amazon-bedrock	work	aws_profile	profile work
+[exit 0]
+(stored value of work's label, read back with the candidate's own vault helper: a profile name only)
+$ run $CAND $S/homes/a1 vault auth-helper provider/amazon-bedrock/accounts/work/aws_profile
+work[exit 0]
+
+## A2 signing: decoys set (env keys, AWS_PROFILE=other, bearer env, IMDS/ECS/STS/web-identity at the mock)
+-- mock lines so far: 0
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --account work Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-2c10-7542-8cba-0bad779bfa68
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a1/config.toml.
+corbanu
+mock: sigv4 AKIDWORKPROFILE us-west-2
+tokens used
+129
+mock: sigv4 AKIDWORKPROFILE us-west-2
+[exit 0]
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --account alt Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-2e7a-7ea2-8881-2496d9369f27
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a1/config.toml.
+corbanu
+mock: sigv4 AKIDOTHERPROFILE us-west-2
+tokens used
+129
+mock: sigv4 AKIDOTHERPROFILE us-west-2
+[exit 0]
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --account renamed Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-30f0-7783-82e9-ce71db7d4516
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a1/config.toml.
+corbanu
+mock: sigv4 AKIDWORKPROFILE us-west-2
+tokens used
+129
+mock: sigv4 AKIDWORKPROFILE us-west-2
+[exit 0]
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --account proc Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-334b-74b3-a526-3abb97122df2
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a1/config.toml.
+corbanu
+mock: sigv4 AKIDPROCESSHELPER us-west-2
+tokens used
+129
+mock: sigv4 AKIDPROCESSHELPER us-west-2
+[exit 0]
+-- mock lines so far: 4
+
+## A2 role chain and SSO (endpoints overridden only through the profile's services section)
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --account chain Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-35bc-7e61-8b7a-9846b20a8953
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a1/config.toml.
+corbanu
+mock: sigv4 ASIAROLECHAIN us-west-2 +session
+tokens used
+129
+mock: sigv4 ASIAROLECHAIN us-west-2 +session
+[exit 0]
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --account sso Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-3832-7763-b965-910c52b9b060
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a1/config.toml.
+corbanu
+mock: sigv4 ASIASSOPROFILE us-west-2 +session
+tokens used
+129
+mock: sigv4 ASIASSOPROFILE us-west-2 +session
+[exit 0]
+-- mock lines so far: 12
+
+## A7 default account (today's chain) with the same decoys: bearer env expected to win
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-3a1c-76d3-863c-e71d8b72d1a8
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a1/config.toml.
+corbanu
+mock: bearer envbearer
+tokens used
+129
+mock: bearer envbearer
+[exit 0]
+(default without the bearer env)
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-3b45-7b61-9e37-6bf2cfb602d4
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a1/config.toml.
+corbanu
+mock: sigv4 AKIDENVDECOY us-west-2 +session
+tokens used
+129
+mock: sigv4 AKIDENVDECOY us-west-2 +session
+[exit 0]
+(--account default explicit)
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --account default Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-3cd7-7331-917d-360904cadbe1
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a1/config.toml.
+corbanu
+mock: bearer envbearer
+tokens used
+129
+mock: bearer envbearer
+[exit 0]
+-- mock lines so far: 15
+
+## A3 refusals: each must send no request to the mock (counted per run)
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --account gone Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-3e88-7252-bd0a-fe51085080d2
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a1/config.toml.
+ERROR: Fatal error: account `gone` of provider `amazon-bedrock` uses AWS profile `nosuchprofile`, which cannot be used: failed to load AWS credentials: the credentials provider was not properly configured: ProfileFile provider could not be built: profile `nosuchprofile` was not defined: could not find source profile nosuchprofile referenced from the root profile. Check that the profile is in ~/.aws/config or ~/.aws/credentials (or the files AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE name) and that its credentials work; for an SSO profile run `aws sso login --profile nosuchprofile`. Corbanu never falls back to another profile or to environment credentials.
+ERROR: Fatal error: account `gone` of provider `amazon-bedrock` uses AWS profile `nosuchprofile`, which cannot be used: failed to load AWS credentials: the credentials provider was not properly configured: ProfileFile provider could not be built: profile `nosuchprofile` was not defined: could not find source profile nosuchprofile referenced from the root profile. Check that the profile is in ~/.aws/config or ~/.aws/credentials (or the files AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE name) and that its credentials work; for an SSO profile run `aws sso login --profile nosuchprofile`. Corbanu never falls back to another profile or to environment credentials.
+[exit 1]
+-- requests during --account gone: 0
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --account noreg Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-40f8-7430-a408-b5e50587ff8f
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a1/config.toml.
+corbanu
+mock: sigv4 AKIDNOREGION us-west-2
+tokens used
+129
+mock: sigv4 AKIDNOREGION us-west-2
+[exit 0]
+-- requests during --account noreg: 1
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --account envsrc Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-437b-7090-9c4c-c63e273dc981
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a1/config.toml.
+ERROR: Fatal error: account `envsrc` of provider `amazon-bedrock` uses AWS profile `envsrc`, which cannot be used: `credential_source = Environment` is not allowed for a named account: it would use environment, instance or container credentials; give the profile its own keys, a `source_profile`, SSO or `credential_process`. Corbanu never falls back to another profile or to environment credentials.
+ERROR: Fatal error: account `envsrc` of provider `amazon-bedrock` uses AWS profile `envsrc`, which cannot be used: `credential_source = Environment` is not allowed for a named account: it would use environment, instance or container credentials; give the profile its own keys, a `source_profile`, SSO or `credential_process`. Corbanu never falls back to another profile or to environment credentials.
+[exit 1]
+-- requests during --account envsrc: 0
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --account imds Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-45ee-7e11-a68e-c52f68e49488
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a1/config.toml.
+ERROR: Fatal error: account `imds` of provider `amazon-bedrock` uses AWS profile `imdssrc`, which cannot be used: `credential_source = Ec2InstanceMetadata` is not allowed for a named account: it would use environment, instance or container credentials; give the profile its own keys, a `source_profile`, SSO or `credential_process`. Corbanu never falls back to another profile or to environment credentials.
+ERROR: Fatal error: account `imds` of provider `amazon-bedrock` uses AWS profile `imdssrc`, which cannot be used: `credential_source = Ec2InstanceMetadata` is not allowed for a named account: it would use environment, instance or container credentials; give the profile its own keys, a `source_profile`, SSO or `credential_process`. Corbanu never falls back to another profile or to environment credentials.
+[exit 1]
+-- requests during --account imds: 0
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --account ecs Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-485b-7313-b8d8-9a5b9a31b435
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a1/config.toml.
+ERROR: Fatal error: account `ecs` of provider `amazon-bedrock` uses AWS profile `ecssrc`, which cannot be used: `credential_source = EcsContainer` is not allowed for a named account: it would use environment, instance or container credentials; give the profile its own keys, a `source_profile`, SSO or `credential_process`. Corbanu never falls back to another profile or to environment credentials.
+ERROR: Fatal error: account `ecs` of provider `amazon-bedrock` uses AWS profile `ecssrc`, which cannot be used: `credential_source = EcsContainer` is not allowed for a named account: it would use environment, instance or container credentials; give the profile its own keys, a `source_profile`, SSO or `credential_process`. Corbanu never falls back to another profile or to environment credentials.
+[exit 1]
+-- requests during --account ecs: 0
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --account procfail Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-4a73-75c0-b200-3289ac5638a3
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a1/config.toml.
+ERROR: Fatal error: account `procfail` of provider `amazon-bedrock` uses AWS profile `procfail`, which cannot be used: failed to load AWS credentials: an error occurred while loading credentials: Error retrieving credentials: external process exited with code exit status: 3. (helper output withheld). Check that the profile is in ~/.aws/config or ~/.aws/credentials (or the files AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE name) and that its credentials work; for an SSO profile run `aws sso login --profile procfail`. Corbanu never falls back to another profile or to environment credentials.
+ERROR: Fatal error: account `procfail` of provider `amazon-bedrock` uses AWS profile `procfail`, which cannot be used: failed to load AWS credentials: an error occurred while loading credentials: Error retrieving credentials: external process exited with code exit status: 3. (helper output withheld). Check that the profile is in ~/.aws/config or ~/.aws/credentials (or the files AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE name) and that its credentials work; for an SSO profile run `aws sso login --profile procfail`. Corbanu never falls back to another profile or to environment credentials.
+[exit 1]
+-- requests during --account procfail: 0
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --account ssonc Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-4ce7-7fa2-ac37-66637c174cf9
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a1/config.toml.
+ERROR: Fatal error: account `ssonc` of provider `amazon-bedrock` uses AWS profile `ssonocache`, which cannot be used: failed to load AWS credentials: an error occurred while loading credentials: an error occurred while loading an access token: failed to load the cached SSO token. Check that the profile is in ~/.aws/config or ~/.aws/credentials (or the files AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE name) and that its credentials work; for an SSO profile run `aws sso login --profile ssonocache`. Corbanu never falls back to another profile or to environment credentials.
+ERROR: Fatal error: account `ssonc` of provider `amazon-bedrock` uses AWS profile `ssonocache`, which cannot be used: failed to load AWS credentials: an error occurred while loading credentials: an error occurred while loading an access token: failed to load the cached SSO token. Check that the profile is in ~/.aws/config or ~/.aws/credentials (or the files AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE name) and that its credentials work; for an SSO profile run `aws sso login --profile ssonocache`. Corbanu never falls back to another profile or to environment credentials.
+[exit 1]
+-- requests during --account ssonc: 0
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --account ghost Reply with exactly: pong
+Reading additional input from stdin...
+Error: thread/start: thread/start failed: account `ghost` of provider `amazon-bedrock` is not configured; add it with `corbanu account add amazon-bedrock ghost --kind aws-profile --value <profile>` or pick another with `--account` (see `corbanu account list`) (code -32600)
+[exit 1]
+-- requests during --account ghost: 0
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --account keyacct Reply with exactly: pong
+Reading additional input from stdin...
+Error: thread/start: thread/start failed: account `keyacct` of provider `amazon-bedrock` is not configured; add it with `corbanu account add amazon-bedrock keyacct --kind aws-profile --value <profile>` or pick another with `--account` (see `corbanu account list`) (code -32600)
+[exit 1]
+-- requests during --account keyacct: 0
+
+## A5 region: config aws.region (us-west-2) wins over the profile's (alt: eu-central-1). See alt above.
+(override per run: -c model_providers.amazon-bedrock.aws.region=ap-northeast-1)
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --account alt -c model_providers.amazon-bedrock.aws.region="ap-northeast-1" Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-51b4-7d80-ba36-038d8be7aa69
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a1/config.toml.
+corbanu
+mock: sigv4 AKIDOTHERPROFILE ap-northeast-1
+tokens used
+129
+mock: sigv4 AKIDOTHERPROFILE ap-northeast-1
+[exit 0]
+
+## flag off
+$ run $CAND $S/homes/a1 exec --skip-git-repo-check -C $S/ws --disable named_accounts --account work Reply with exactly: pong
+Error: --account amazon-bedrock:work: named accounts need the `named_accounts` feature (`--enable named_accounts`); `--account default` uses the default credentials
+[exit 1]
+$ run $CAND $S/homes/a1 account list --disable named_accounts
+Error: named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts`
+[exit 1]
+-- requests during flag-off: 0
+
+## remove
+$ run $CAND $S/homes/a1 account remove amazon-bedrock renamed
+Removed amazon-bedrock account `renamed`.
+[exit 0]
+$ run $CAND $S/homes/a1 account list amazon-bedrock
+amazon-bedrock	alt	aws_profile	profile other
+amazon-bedrock	chain	aws_profile	profile chain
+amazon-bedrock	ecs	aws_profile	profile ecssrc
+amazon-bedrock	envsrc	aws_profile	profile envsrc
+amazon-bedrock	gone	aws_profile	profile nosuchprofile
+amazon-bedrock	imds	aws_profile	profile imdssrc
+amazon-bedrock	noreg	aws_profile	profile noregion
+amazon-bedrock	proc	aws_profile	profile proc
+amazon-bedrock	procfail	aws_profile	profile procfail
+amazon-bedrock	sso	aws_profile	profile sso
+amazon-bedrock	ssonc	aws_profile	profile ssonocache
+amazon-bedrock	work	aws_profile	profile work
+[exit 0]
+3ca269c124ece2c3c679e7abf0df1fbc26df091a12e05e9361a61e3807739d50  $S/fh-a1/.aws/config
+326c0021bafdeb90a139169e5c84a4e780a0febd24367146bcf407bf6ac3e0a5  $S/fh-a1/.aws/credentials
+
+## mock log (fallback sources: aws-imds/aws-ecs/aws-sts/aws-sso lines)
+{"t": 1791780334.929, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780335.547, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDOTHERPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780336.181, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780336.792, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDPROCESSHELPER", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780337.408, "ev": "aws-sts", "action": "AssumeRole", "role": "arn:aws:iam::222222222222:role/chain", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "sts", "session_token": false}}
+{"t": 1791780337.408, "ev": "aws-sts", "action": "AssumeRole", "role": "arn:aws:iam::222222222222:role/chain", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "sts", "session_token": false}}
+{"t": 1791780337.42, "ev": "aws-sts", "action": "AssumeRole", "role": "arn:aws:iam::222222222222:role/chain", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "sts", "session_token": false}}
+{"t": 1791780337.429, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "ASIAROLECHAIN", "region": "us-west-2", "service": "bedrock-mantle", "session_token": true}, "model": "openai.gpt-5.4"}
+{"t": 1791780338.043, "ev": "aws-sso", "role": "Dev", "account": "333333333333", "bearer": true}
+{"t": 1791780338.048, "ev": "aws-sso", "role": "Dev", "account": "333333333333", "bearer": true}
+{"t": 1791780338.061, "ev": "aws-sso", "role": "Dev", "account": "333333333333", "bearer": true}
+{"t": 1791780338.073, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "ASIASSOPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": true}, "model": "openai.gpt-5.4"}
+{"t": 1791780338.343, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "bearer", "canary": "envbearer"}, "model": "openai.gpt-5.4"}
+{"t": 1791780338.703, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDENVDECOY", "region": "us-west-2", "service": "bedrock-mantle", "session_token": true}, "model": "openai.gpt-5.4"}
+{"t": 1791780339.041, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "bearer", "canary": "envbearer"}, "model": "openai.gpt-5.4"}
+{"t": 1791780340.285, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDNOREGION", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780344.563, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDOTHERPROFILE", "region": "ap-northeast-1", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}

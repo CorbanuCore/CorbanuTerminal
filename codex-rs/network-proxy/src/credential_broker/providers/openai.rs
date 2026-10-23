@@ -22,7 +22,12 @@ pub(super) static PROVIDER: CredentialProvider = CredentialProvider {
     request_header,
     request_header_value,
     insert_request_header,
+    allows_path,
 };
+
+fn allows_path(_host: &str, path: &str) -> bool {
+    path.starts_with("/v1/")
+}
 
 fn dummy_value(real_value: &str) -> String {
     shaped_dummy_value(

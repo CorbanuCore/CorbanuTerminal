@@ -1,4 +1,5 @@
 mod config;
+mod named_profile;
 mod signing;
 
 use std::time::SystemTime;
@@ -35,7 +36,9 @@ pub struct AwsSignedRequest {
 }
 
 /// Errors returned by credential loading or SigV4 signing.
-#[derive(Debug, Error)]
+/// `Debug` prints [`AwsAuthError::detailed_message`], so a `{error:?}` in a
+/// log line cannot carry a credential helper's stderr (#548).
+#[derive(Error)]
 pub enum AwsAuthError {
     #[error("AWS service name must not be empty")]
     EmptyService,
@@ -43,6 +46,14 @@ pub enum AwsAuthError {
     MissingCredentialsProvider,
     #[error("AWS SDK config did not resolve a region")]
     MissingRegion,
+    #[error(
+        "AWS profile `{0}` sets no region, or is not defined in the AWS config files; set `region` in that profile or `aws.region` for the provider"
+    )]
+    MissingProfileRegion(String),
+    #[error(
+        "`credential_source = {0}` is not allowed for a named account: it would use environment, instance or container credentials; give the profile its own keys, a `source_profile`, SSO or `credential_process`"
+    )]
+    RefusedCredentialSource(String),
     #[error("failed to load AWS credentials: {0}")]
     Credentials(#[from] aws_credential_types::provider::error::CredentialsError),
     #[error("request URL is not a valid URI: {0}")]
@@ -89,6 +100,27 @@ impl AwsAuthContext {
         })
     }
 
+    /// PF-84-S06: credentials and region from `profile` only, never from
+    /// environment keys, `AWS_PROFILE` or another profile. Credentials are
+    /// resolved once here (and again for each signature), so a missing or
+    /// broken profile fails before any request.
+    pub async fn load_named_profile(
+        profile: &str,
+        region_override: Option<String>,
+        service: &str,
+    ) -> Result<Self, AwsAuthError> {
+        named_profile::load_named_profile(profile, region_override, service, /*files*/ None).await
+    }
+
+    /// PF-84-S06: the region a named profile uses (`region_override`, then
+    /// the profile's `region`), without resolving credentials.
+    pub async fn named_profile_region(
+        profile: &str,
+        region_override: Option<String>,
+    ) -> Result<String, AwsAuthError> {
+        named_profile::named_profile_region(profile, region_override, /*files*/ None).await
+    }
+
     pub fn region(&self) -> &str {
         &self.region
     }
@@ -111,7 +143,38 @@ impl AwsAuthContext {
     }
 }
 
+impl std::fmt::Debug for AwsAuthError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.detailed_message())
+    }
+}
+
 impl AwsAuthError {
+    /// This error and its sources, for messages that must say why (the
+    /// SDK's top-level credential errors are terse). A `credential_process`
+    /// helper's stderr, which the SDK copies into its error after `Stderr:`,
+    /// is cut off: it may hold anything. Other sources report names, file
+    /// locations and service errors, not file contents.
+    pub fn detailed_message(&self) -> String {
+        const HELPER_OUTPUT: &str = "Stderr:";
+        let mut message = self.to_string();
+        let mut source = std::error::Error::source(self);
+        while let Some(error) = source {
+            let mut text = error.to_string();
+            if let Some(index) = text.find(HELPER_OUTPUT) {
+                text.truncate(index);
+                text.push_str("(helper output withheld)");
+            }
+            if !message.contains(&text) {
+                message.push_str(": ");
+                message.push_str(&text);
+            }
+            source = error.source();
+        }
+        // Other SDK credential errors can quote what they failed to parse.
+        codex_log_guard::redact_credentials(&message).into_owned()
+    }
+
     /// Returns whether retrying the outbound request can reasonably recover from this auth error.
     pub fn is_retryable(&self) -> bool {
         match self {
@@ -123,6 +186,8 @@ impl AwsAuthError {
             AwsAuthError::EmptyService
             | AwsAuthError::MissingCredentialsProvider
             | AwsAuthError::MissingRegion
+            | AwsAuthError::MissingProfileRegion(_)
+            | AwsAuthError::RefusedCredentialSource(_)
             | AwsAuthError::InvalidUri(_)
             | AwsAuthError::BuildHttpRequest(_)
             | AwsAuthError::InvalidHeaderValue(_)
@@ -244,6 +309,86 @@ mod tests {
             signing::header_value(&signed.headers, "x-amz-security-token"),
             Some("session-token".to_string())
         );
+    }
+
+    /// Every event as the logs database and `/feedback` capture them
+    /// (TRACE for every target, no `RUST_LOG` needed).
+    #[derive(Clone, Default)]
+    struct CaptureAll(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl std::io::Write for CaptureAll {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl CaptureAll {
+        fn subscriber(&self) -> impl tracing::Subscriber + Send + Sync + use<> {
+            use tracing_subscriber::Layer;
+            use tracing_subscriber::layer::SubscriberExt;
+            let writer = self.clone();
+            tracing_subscriber::registry().with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(move || writer.clone())
+                    .with_ansi(false)
+                    .with_filter(
+                        tracing_subscriber::filter::Targets::new()
+                            .with_default(tracing::Level::TRACE),
+                    ),
+            )
+        }
+
+        fn contains(&self, needle: &str) -> bool {
+            String::from_utf8_lossy(&self.0.lock().unwrap()).contains(needle)
+        }
+    }
+
+    /// #380 review: aws-sigv4 logs the canonical request, session token
+    /// included, at TRACE on every signed request.
+    #[tokio::test]
+    async fn guarded_sinks_never_see_the_session_token() {
+        const SESSION_TOKEN: &str = "fake-aws-session-token-380-7c2d41";
+        let sign = || async {
+            test_context(Some(SESSION_TOKEN))
+                .sign_at(
+                    test_request(),
+                    UNIX_EPOCH + Duration::from_secs(1_700_000_000),
+                )
+                .await
+                .expect("request should sign")
+        };
+
+        // Parallel tests without a subscriber can register these callsites
+        // as `never`: sign once so they exist, then rebuild their interest.
+        sign().await;
+        tracing::callsite::rebuild_interest_cache();
+
+        let unguarded = CaptureAll::default();
+        {
+            let _default = tracing::subscriber::set_default(unguarded.subscriber());
+            sign().await;
+        }
+        assert!(
+            unguarded.contains(SESSION_TOKEN),
+            "control: aws-sigv4 should log the token at TRACE"
+        );
+
+        let guarded = CaptureAll::default();
+        let signed = {
+            let _default =
+                tracing::subscriber::set_default(codex_log_guard::guard(guarded.subscriber()));
+            sign().await
+        };
+        assert_eq!(
+            signing::header_value(&signed.headers, "x-amz-security-token"),
+            Some(SESSION_TOKEN.to_string())
+        );
+        assert!(!guarded.contains(SESSION_TOKEN), "session token was logged");
     }
 
     #[tokio::test]

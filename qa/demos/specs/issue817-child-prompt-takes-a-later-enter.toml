@@ -1,0 +1,98 @@
+# Issue #817 (AGG-R14): a prompt shown when the one above it is answered takes an Enter pressed seconds later.
+id = "issue817-child-prompt-takes-a-later-enter"
+feature = "#817: a deliberate Enter answers a prompt once its first second has passed"
+expected = "Under Aggressive the parent's wait_agent question and its child's prompt for sleep 60; echo finished > ks-child.txt arrive together, one waiting under the other. Enter answers the first; the second shows, and an Enter 11 s later answers it: no notice asks for arrow keys first, and the child's command runs and writes ks-child.txt."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 140
+rows = 50
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 8.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Z.AI GLM 5.3 Flash via zai"
+timeout = 60
+compress = 2
+[[steps]]
+pause = 2.0
+[[steps]]
+type = "Spawn a child agent and have it run: sleep 60; echo finished > ks-child.txt"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)Another request is waiting; it shows after you answer this one.*(Would you like to run the following command\\?|Allow `wait_agent)"
+timeout = 240
+compress = 2
+[[steps]]
+run = "tmux -L \"$(ls -t \"${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)\" | grep '^demo-issue817-child-prompt-takes-a-later-enter-' | head -1)\" capture-pane -p -t demo > {run}/817-first-prompt.txt"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)\\A(?!.*Another request is waiting)(?!.*(?:This is a new request|Keys pressed as this request appeared)).*(Would you like to run the following command\\?.*sleep 60; echo finished > ks-child\\.txt|\\(1 unanswered\\)\\s*Allow `wait_agent)"
+timeout = 30
+[[steps]]
+run = "tmux -L \"$(ls -t \"${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)\" | grep '^demo-issue817-child-prompt-takes-a-later-enter-' | head -1)\" capture-pane -p -t demo > {run}/817-second-prompt.txt"
+[[steps]]
+pause = 11.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)\\A(?!.*Would you like to run the following command)(?!.*\\(1 unanswered\\)).*Waiting for 01[0-9a-f-]+\\s+└ Wakes on a child report"
+timeout = 15
+[[steps]]
+run = "tmux -L \"$(ls -t \"${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)\" | grep '^demo-issue817-child-prompt-takes-a-later-enter-' | head -1)\" capture-pane -p -t demo > {run}/817-answered.txt"
+[[steps]]
+run = "for i in $(seq 1 80); do if test -e '{workspace}/ks-child.txt'; then echo \"ks-child.txt written: $(cat '{workspace}/ks-child.txt')\"; exit 0; fi; sleep 1; done; echo 'ks-child.txt not written'; exit 1"
+timeout = 90
+[[steps]]
+wait = "(?s)Wakes on a child report.*?\\n\\s*• \\S"
+timeout = 120
+compress = 2
+[[steps]]
+run = "tmux -L \"$(ls -t \"${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)\" | grep '^demo-issue817-child-prompt-takes-a-later-enter-' | head -1)\" capture-pane -p -t demo > {run}/817-child-ran.txt"
+[[steps]]
+pause = 4.0

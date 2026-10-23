@@ -1,0 +1,63 @@
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     loading   /model to change                   │
+│ directory: /Volumes/CorbanuDrive/…/pf84acc-scratch/work │
+╰─────────────────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/work · Corbanu Terminal · TPS: -- tok/s
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     glm-5.3-flash   /model to change             │
+│ directory: /Volumes/CorbanuDrive/…/pf84acc-scratch/work │
+╰─────────────────────────────────────────────────────────╯
+
+Credentials (3)
+  • provider/zai/accounts/fake/api_key  [api-key]  zai
+      created 2026-10-10T11:01:56Z  updated 2026-10-10T11:01:56Z
+  • provider/zai/accounts/main/api_key  [api-key]  zai
+      created 2026-10-10T11:01:55Z  updated 2026-10-10T11:01:55Z
+  • provider/zai_api_key  [api-key]  ZAI_API_KEY
+      created 2026-10-10T10:56:23Z  updated 2026-10-10T10:56:23Z
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/work · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

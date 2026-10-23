@@ -1,0 +1,14 @@
+{
+  "commit": "ae5981d2d7d762dfd6d54e0ac0967729bf88f082",
+  "tree": "834f57388066d33c27fdee6e3b234dec7fa0b0e6",
+  "package": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package",
+  "manifest": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package-manifest.json",
+  "manifest_sha256": "32529d0a894503c021ff756ebc27a75555ab05ed2ec63dc47dc0d9d7bb878024",
+  "archive_sha256": null,
+  "live_harness_updated": false,
+  "live_harness_verdict": "source pin mismatch",
+  "proposed_patch_verdict": "accepted by unchanged verify_package with proposed source pin",
+  "original_fixtures_sha256": "d226303c0d6ab16f37713dc70e3faaf66ddd6c3b4e73696f72e3bc1d2f78af11",
+  "proposed_fixtures_sha256": "6481ac1f3d6dee53d952802da9a2787c986f6e8481d8a31c8e78adec351da3c4",
+  "patch_sha256": "e405b52bc50e6af51404131b5045347b4011e144876c6c1f80919851924fec0d"
+}

@@ -1,0 +1,50 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     k3   /model to change            │
+│ directory: ~/corbanu-rtx/pf60s04-ia/work/ws │
+╰─────────────────────────────────────────────╯
+
+
+› My favourite colour is teal and I prefer short answers. Reply with the single word NOTED.
+
+
+• NOTED
+
+■ Conversation interrupted - tell the model what to do differently. Something went wrong? Hit `/feedback` to report the issue.
+
+
+  Request
+  Requested UTC day: 2026-10-10
+
+› Provider: Kimi Code
+  Model: Kimi Code K3
+  Billing: Covered by your subscription (not billed per request)
+  Same work at API prices: not available
+  Tokens: tokens not reported
+  Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+  usage page.
+  —— Details ——
+
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

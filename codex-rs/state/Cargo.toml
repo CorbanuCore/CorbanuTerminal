@@ -7,10 +7,13 @@ license.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
+codex-log-guard = { workspace = true }
 codex-protocol = { workspace = true }
+codex-secret-broker = { workspace = true }
 codex-utils-absolute-path = { workspace = true }
 libsqlite3-sys = { workspace = true }
 log = { workspace = true }
+regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
@@ -25,6 +28,9 @@ url = { workspace = true }
 codex-git-utils = { workspace = true }
 pretty_assertions = { workspace = true }
 scopeguard = { workspace = true }
+
+[target.'cfg(unix)'.dev-dependencies]
+libc = { workspace = true }
 
 [lints]
 workspace = true

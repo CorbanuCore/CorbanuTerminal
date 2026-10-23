@@ -1,0 +1,34 @@
+
+› reply with the single word side
+
+• side
+
+■ Editing previous prompts is unavailable in side conversations.
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Z.AI GLM 5.3 Flash                                                │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account work                │
+│  Directory:            /tmp/f555proj                                                     │
+│  Permissions:          Next turn: Workspace (Ask for approval)                           │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Z.AI API key configured                                           │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12e43-b799-7b92-a051-abdcafa4fb52                              │
+│                                                                                          │
+│  Token usage:          32K total  (31.9K input + 53 output)                              │
+│  Context window:       100% left (14K used / 950K)                                       │
+│  Account usage:        account         input  cached input  output  reasoning            │
+│                        work (active)       0             0       0          0            │
+│                        personal       22,322         5,952      41         34            │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+› Will this algorithm scale well?
+
+  Z.AI GLM 5.3 Flash via zai default · /tmp/f555proj · Corbanu Terminal · TPS: 12.4 … Side from main thread · ctrl + / to switch · ctrl + c to close
+

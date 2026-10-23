@@ -407,3 +407,47 @@ fn apply_mitm_hook_actions_replaces_authorization_header() {
         Some(&HeaderValue::from_static("req_123"))
     );
 }
+
+#[tokio::test]
+async fn pf_33_s02_guard_refuses_open_tunnel_after_host_is_denied() {
+    for guarded in [false, true] {
+        let app_state = Arc::new(network_proxy_state_for_policy({
+            let mut network = NetworkProxyConfig::default();
+            network.set_allowed_domains(vec!["example.com".to_string()]);
+            network.set_url_destination_policy(guarded);
+            network
+        }));
+        let ctx = policy_ctx(
+            app_state.clone(),
+            NetworkMode::Full,
+            "example.com",
+            /*target_port*/ 443,
+        );
+        // The tunnel was authorized; the host is denied afterwards.
+        app_state.add_denied_domain("example.com").await.unwrap();
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri("/next?token=secret")
+            .header(HOST, "example.com")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = mitm_blocking_response(&req, &ctx).await.unwrap();
+
+        if !guarded {
+            // Flag off keeps today's behaviour for an open tunnel.
+            assert!(response.is_none());
+            continue;
+        }
+        let response = response.expect("denied host must be refused on the open tunnel");
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            response.headers().get("x-proxy-error").unwrap(),
+            "blocked-by-destination-policy"
+        );
+        let blocked = app_state.drain_blocked().await.unwrap();
+        assert_eq!(blocked.len(), 1);
+        assert_eq!(blocked[0].reason, "destination_policy:host_denied");
+        assert_eq!(blocked[0].host, "example.com");
+    }
+}

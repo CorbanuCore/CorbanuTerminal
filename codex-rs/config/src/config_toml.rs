@@ -307,6 +307,12 @@ pub struct ConfigToml {
     #[serde(default, deserialize_with = "deserialize_model_providers")]
     pub model_providers: HashMap<String, ModelProviderInfo>,
 
+    /// PF-84 (`named_accounts` feature): the account each provider uses,
+    /// keyed by provider id, for example `zai = "work"`. Unlisted providers
+    /// and `"default"` use today's credentials.
+    #[serde(default)]
+    pub provider_accounts: Option<BTreeMap<String, String>>,
+
     /// Maximum number of bytes to include from an AGENTS.md project doc file.
     #[serde(default = "default_project_doc_max_bytes")]
     pub project_doc_max_bytes: Option<usize>,
@@ -364,6 +370,14 @@ pub struct ConfigToml {
     /// core only accepts it so strict config validation does not reject it.
     #[serde(default)]
     pub telegram: Option<BTreeMap<String, JsonValue>>,
+
+    /// When `true`, a `.rules` exec-policy file that fails to parse stops the
+    /// session from starting instead of falling back to requirements-only
+    /// rules with a warning, and `forbidden` rules also match, best effort,
+    /// wrapped forms of a command (`env …`, `sh -c '…'`, a path to or another
+    /// case of the program, options before a subcommand). This is name
+    /// matching, not a containment boundary. Defaults to `false`.
+    pub strict_rules: Option<bool>,
 
     /// When set to `true`, `AgentReasoning` events will be hidden from the
     /// UI/output. Defaults to `false`.
@@ -493,6 +507,12 @@ pub struct ConfigToml {
 
     /// Suppress warnings about unstable (under development) features.
     pub suppress_unstable_features_warning: Option<bool>,
+
+    /// When `true`, reopening a conversation (resume, restart, `/side` or any
+    /// other fork) does not send the paid warm-up request that primes the
+    /// model's cache; the first reply after reopening may be slower. Defaults
+    /// to `false`.
+    pub skip_reopen_warmup: Option<bool>,
 
     /// Compatibility-only settings retained so legacy `ghost_snapshot`
     /// config still loads.
@@ -951,14 +971,17 @@ fn project_config_for_lookup_key(
 pub fn validate_reserved_model_provider_ids(
     model_providers: &HashMap<String, ModelProviderInfo>,
 ) -> Result<(), String> {
+    // An entry that only declares `billing` adjusts the built-in provider
+    // rather than replacing it.
     let mut conflicts = model_providers
-        .keys()
-        .filter(|key| {
+        .iter()
+        .filter(|(key, provider)| {
             key.as_str() != AMAZON_BEDROCK_PROVIDER_ID
                 && key.as_str() != AMBIENT_PROVIDER_ID
                 && RESERVED_MODEL_PROVIDER_IDS.contains(&key.as_str())
+                && !provider.is_billing_override_only()
         })
-        .map(|key| format!("`{key}`"))
+        .map(|(key, _)| format!("`{key}`"))
         .collect::<Vec<_>>();
     conflicts.sort_unstable();
     if conflicts.is_empty() {
@@ -1010,7 +1033,13 @@ pub fn validate_model_providers(
                     "model_providers.{key}: provider aws is only supported for `{AMAZON_BEDROCK_PROVIDER_ID}`"
                 ));
             }
-            if provider.name.trim().is_empty() {
+            // A built-in provider may be named with only `billing` set.
+            let built_in_billing = provider.is_billing_override_only()
+                && codex_model_provider_info::built_in_model_providers(
+                    /*openai_base_url*/ None,
+                )
+                .contains_key(codex_model_provider_info::canonical_provider_id(key));
+            if provider.name.trim().is_empty() && !built_in_billing {
                 return Err(format!(
                     "model_providers.{key}: provider name must not be empty"
                 ));

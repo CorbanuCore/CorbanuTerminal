@@ -1,0 +1,9 @@
+
+
+› Reply with exactly the word pong and nothing else.
+
+■ contained Claude panes need Claude Code 2.1.292 or later; found 2.1.92. Update Claude Code and try again.
+
+› Explain this codebase
+
+  Opus 5.5 Claude Plan · <runs>/old-before/ws · Corbanu Terminal · TPS: -- tok/s · Claude …

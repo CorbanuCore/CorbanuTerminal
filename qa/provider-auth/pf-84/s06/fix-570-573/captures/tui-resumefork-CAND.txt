@@ -1,0 +1,24 @@
+######## resume/fork of a named thread on CAND (corbanu-cand); forced_login_method=chatgpt added after the first session
+-- 1. first session on account chat (no restriction yet)
+-- mock lines for this turn:
+   {"t": 1791796139.693, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "chat", "gen": 1, "expired": false}, "model": null}
+default login before resume: auth.json a2695992fdf5
+-- 2. corbanu resume --last (no --account)
+-- mock lines for this turn:
+   {"t": 1791796170.288, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "chat", "gen": 1, "expired": false}, "model": null}
+default login after resume: auth.json a2695992fdf5
+│  Model provider:       OpenAI - http://127.0.0.1:34744/v1 · account chat                 │
+│  Account:              ChatGPT sign-in · c…@example.com · Plus (account chat)            │
+-- 3. corbanu fork --last --account chat
+• Thread forked from 01a12f5f-28e7-7f52-b45e-7ac4d2051716
+-- mock lines for this turn:
+   {"t": 1791796205.244, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "chat", "gen": 1, "expired": false}, "model": null}
+default login after fork --account chat: auth.json a2695992fdf5
+-- 4. corbanu fork --last (no --account): documented limit, default sign-in screen expected
+> 1. Sign in with ChatGPT
+     Usage included with Plus, Pro, Business, and Enterprise plans
+  2. Sign in with Device Code
+     Sign in from another device with a one-time code
+  API key login is disabled by this workspace. Sign in with ChatGPT to continue.
+  Use ↑/↓ to choose · Press enter to continue
+default login after fork (no --account): auth.json a2695992fdf5

@@ -1,0 +1,13 @@
+› Run exactly this shell command once, unchanged: security find-generic-password -s probe
+• Running security find-generic-password -s probe
+  Would you like to run the following command?
+  Environment: local
+  Reason: Security level Aggressive keeps the macOS keychain out of reach of agent commands: if you approve, `security` runs, but it
+  cannot reach the keychain service, so it cannot read, add or change keychain items (it reports them as not found, or an error), and this
+  cannot be granted, not even once. To allow it, a person can switch to Permissive in /security (it applies after a restart).
+  $ security find-generic-password -s probe
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for commands that start with `security find-generic-password -s probe`
+  3. No, and tell Corbanu Terminal what to do differently (esc)
+  A letter in brackets only highlights its option; enter confirms it. Options that last beyond this request: choose with ↑/↓, then enter.
+  Press enter to confirm or esc to cancel

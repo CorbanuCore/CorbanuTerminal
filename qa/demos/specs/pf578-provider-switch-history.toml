@@ -1,0 +1,98 @@
+# #578: after OpenAI -> Z.AI GLM 5.3 Flash -> OpenAI in one session, OpenAI keeps answering.
+# Before the fix every OpenAI turn after the GLM turn failed with
+# "404 Item with id 'rs_…' not found … store is set to false": the GLM turn's reasoning item
+# was sent to OpenAI as an item reference. Real providers: OpenAI with the key from the
+# `openai-api-key` vault label, GLM with `provider/zai_api_key` (never shown). Record with
+#   export CORBANU_TEST_NO_NATIVE_KEYRING=1
+#   python3 scripts/demo_video.py record qa/demos/specs/pf578-provider-switch-history.toml \
+#     --bin <candidate> --sprint ISSUE-578 --publish
+id = "pf578-provider-switch-history"
+feature = "#578: OpenAI keeps answering after a mid-session switch to GLM and back"
+expected = "OpenAI answers, then GLM 5.3 Flash, then OpenAI answers twice more: GLM's reasoning is no longer sent to OpenAI as an item it never stored."
+model = "gpt-5.4-mini"
+provider = "openai"
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "read-only"
+cli_auth_credentials_store = "file"
+"""
+
+[credentials]
+OPENAI_API_KEY = "openai-api-key"
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with exactly: openai-one"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "• openai-one"
+timeout = 90
+compress = 2
+[[steps]]
+type = "/model"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Use Left/Right to switch providers"
+[[steps]]
+key = "Right"
+[[steps]]
+wait = "\\[Z\\.AI\\]"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Reasoning Level for Z.AI GLM 5.3 Flash"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Model changed to Z.AI GLM 5.3 Flash"
+[[steps]]
+type = "Reply with exactly: glm-two"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "• glm-two"
+timeout = 90
+compress = 2
+[[steps]]
+type = "/model"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Use Left/Right to switch providers"
+[[steps]]
+key = "Left"
+[[steps]]
+wait = "\\[OpenAI\\]"
+[[steps]]
+type = "6"
+[[steps]]
+wait = "Select Reasoning Level for GPT-5.6-Luna"
+[[steps]]
+type = "1"
+[[steps]]
+wait = "Model changed to GPT-5.6-Luna"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Reply with exactly: openai-three"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "• openai-three"
+timeout = 90
+compress = 2
+[[steps]]
+type = "Reply with exactly: openai-four"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "• openai-four"
+timeout = 90
+compress = 2
+[[steps]]
+pause = 3.5

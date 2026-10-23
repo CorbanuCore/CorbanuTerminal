@@ -1,0 +1,3 @@
+[
+  "   0: \u001b[91mFailed to start a fresh session through the app server: thread/start failed during TUI bootstrap: thread/start transport error: in-process app-server request timed out after 30 seconds\u001b[0m"
+]

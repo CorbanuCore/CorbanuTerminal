@@ -8,4 +8,8 @@ codex_rust_crate(
         "src/assets/success_legacy.html",
     ],
     crate_name = "codex_login",
+    # Like vault and secrets: the provider-key vault tests derive keys with
+    # production-cost scrypt, unoptimized under Bazel fastbuild. The target
+    # took 255-265 s on cold CI runners and then timed out at 300 s.
+    unit_test_timeout = "long",
 )

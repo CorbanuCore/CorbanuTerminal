@@ -51,7 +51,7 @@ with tempfile.TemporaryDirectory(prefix='.pf27t-', dir='/home/travis') as temp:
             f'export TMPDIR={shlex.quote(temp)}; '
         )
         command(env + 'flock /home/travis/security-round5/locks/build.lock '
-                'just test -p codex-secret-broker-service --features synthetic-fixture '
+                'just test -p codex-secret-broker-service -p codex-secret-broker-fixture '
                 '--retries 0 --test-threads 4; printf "\\nsynthetic-exit=%s\\n" "$?"')
         lifecycle = wait_for('synthetic-exit=0')
         assert '6 tests run: 6 passed' in lifecycle

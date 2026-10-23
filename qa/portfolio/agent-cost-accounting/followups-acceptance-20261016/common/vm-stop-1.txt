@@ -1,0 +1,12 @@
+ag-admin removed
+Shutdown NOW!
+                                                                               
+*** FINAL System shutdown message from agent@Neos-Virtual-Machine.local ***  
+
+System going down IMMEDIATELY                                                  
+
+                                                                               
+
+System shutdown time has arrived
+Connection to 192.168.64.3 closed by remote host.
+status after clean shutdown: stopped 2026-10-16T08:06:19Z

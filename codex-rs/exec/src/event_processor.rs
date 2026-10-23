@@ -26,6 +26,10 @@ pub(crate) trait EventProcessor {
     fn process_warning(&mut self, message: String) -> CodexStatus;
 
     fn print_final_output(&mut self) {}
+
+    /// PF-84 (#480): the account (`<provider>:<name>`) a resumed thread runs
+    /// on, which can differ from the one this exec's config selects.
+    fn set_provider_account(&mut self, _config: &Config, _account: &str) {}
 }
 
 pub(crate) fn handle_last_message(last_agent_message: Option<&str>, output_file: &Path) {

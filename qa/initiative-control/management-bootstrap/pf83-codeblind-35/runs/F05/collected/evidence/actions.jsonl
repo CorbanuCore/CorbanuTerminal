@@ -1,0 +1,109 @@
+{"time_ns": 1791248060207727000, "utc": "2026-10-06T00:54:20Z", "requested": "start", "args": []}
+{"time_ns": 1791248062247254000, "utc": "2026-10-06T00:54:22Z", "executed": "start", "argv": ["/opt/pf83/bin/pf83-product", "zai"]}
+{"time_ns": 1791248064511548000, "utc": "2026-10-06T00:54:24Z", "requested": "key", "args": ["1"]}
+{"time_ns": 1791248064517794000, "utc": "2026-10-06T00:54:24Z", "executed": "key", "key": "1", "pty_offset": 1558}
+{"time_ns": 1791248065755661000, "utc": "2026-10-06T00:54:25Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791248065762415000, "utc": "2026-10-06T00:54:25Z", "executed": "key", "key": "Enter", "pty_offset": 4807}
+{"time_ns": 1791248067985529000, "utc": "2026-10-06T00:54:27Z", "requested": "screen", "args": ["INIT"]}
+{"time_ns": 1791248071107987000, "utc": "2026-10-06T00:54:31Z", "requested": "screen", "args": ["STATE1"]}
+{"time_ns": 1791248075115432000, "utc": "2026-10-06T00:54:35Z", "requested": "text", "args": ["Write the text \"probe-marker-f05\" to a new file called probe1.txt in the current directory."]}
+{"time_ns": 1791248075123082000, "utc": "2026-10-06T00:54:35Z", "executed": "text", "text": "Write the text \"probe-marker-f05\" to a new file called probe1.txt in the current directory.", "pty_offset": 4949}
+{"time_ns": 1791248076190726000, "utc": "2026-10-06T00:54:36Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791248076197577000, "utc": "2026-10-06T00:54:36Z", "executed": "key", "key": "Enter", "pty_offset": 5249}
+{"time_ns": 1791248079430682000, "utc": "2026-10-06T00:54:39Z", "requested": "screen", "args": ["PROBE1"]}
+{"time_ns": 1791248082647077000, "utc": "2026-10-06T00:54:42Z", "requested": "fixture", "args": ["AFTER_PROBE1"]}
+{"time_ns": 1791248085859726000, "utc": "2026-10-06T00:54:45Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791248085866365000, "utc": "2026-10-06T00:54:45Z", "executed": "text", "text": "/permissions", "pty_offset": 29176}
+{"time_ns": 1791248086925633000, "utc": "2026-10-06T00:54:46Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791248086932349000, "utc": "2026-10-06T00:54:46Z", "executed": "key", "key": "Enter", "pty_offset": 29423}
+{"time_ns": 1791248089182059000, "utc": "2026-10-06T00:54:49Z", "requested": "screen", "args": ["PERM_CMD"]}
+{"time_ns": 1791248094282573000, "utc": "2026-10-06T00:54:54Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791248094289127000, "utc": "2026-10-06T00:54:54Z", "executed": "key", "key": "Escape", "pty_offset": 30414}
+{"time_ns": 1791248096528693000, "utc": "2026-10-06T00:54:56Z", "requested": "screen", "args": ["AFTER_ESC"]}
+{"time_ns": 1791248112024229000, "utc": "2026-10-06T00:55:12Z", "requested": "text", "args": ["Create a new file at the path ../outside-marker-f05a.txt (relative to the current workspace directory, so it lands in the parent fixture directory) containing exactly the text: f05a-outside-probe"]}
+{"time_ns": 1791248112031841000, "utc": "2026-10-06T00:55:12Z", "executed": "text", "text": "Create a new file at the path ../outside-marker-f05a.txt (relative to the current workspace directory, so it lands in the parent fixture directory) containing exactly the text: f05a-outside-probe", "pty_offset": 30917}
+{"time_ns": 1791248113096188000, "utc": "2026-10-06T00:55:13Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791248113102848000, "utc": "2026-10-06T00:55:13Z", "executed": "key", "key": "Enter", "pty_offset": 31780}
+{"time_ns": 1791248118315616000, "utc": "2026-10-06T00:55:18Z", "requested": "screen", "args": ["PROBE_OUTSIDE"]}
+{"time_ns": 1791248127197685000, "utc": "2026-10-06T00:55:27Z", "requested": "screen", "args": ["PENDING_APPROVAL"]}
+{"time_ns": 1791248132698737000, "utc": "2026-10-06T00:55:32Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791248132705580000, "utc": "2026-10-06T00:55:32Z", "executed": "text", "text": "/permissions", "pty_offset": 69145}
+{"time_ns": 1791248134768674000, "utc": "2026-10-06T00:55:34Z", "requested": "screen", "args": ["TRY_TYPE"]}
+{"time_ns": 1791248139532348000, "utc": "2026-10-06T00:55:39Z", "requested": "fixture", "args": ["AFTER_INADVERTENT"]}
+{"time_ns": 1791248142869374000, "utc": "2026-10-06T00:55:42Z", "requested": "key", "args": ["C-c"]}
+{"time_ns": 1791248142876695000, "utc": "2026-10-06T00:55:42Z", "executed": "key", "key": "C-c", "pty_offset": 83440}
+{"time_ns": 1791248144117381000, "utc": "2026-10-06T00:55:44Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791248144124976000, "utc": "2026-10-06T00:55:44Z", "executed": "key", "key": "Escape", "pty_offset": 83630}
+{"time_ns": 1791248145370965000, "utc": "2026-10-06T00:55:45Z", "requested": "screen", "args": ["CLEARED"]}
+{"time_ns": 1791248176349623000, "utc": "2026-10-06T00:56:16Z", "requested": "text", "args": ["Create a new file at the path ../outside-marker-f05b.txt (relative to the current workspace directory, so it lands in the parent fixture directory) containing exactly the text: f05b-outside-probe"]}
+{"time_ns": 1791248176356824000, "utc": "2026-10-06T00:56:16Z", "executed": "text", "text": "Create a new file at the path ../outside-marker-f05b.txt (relative to the current workspace directory, so it lands in the parent fixture directory) containing exactly the text: f05b-outside-probe", "pty_offset": 83822}
+{"time_ns": 1791248177417954000, "utc": "2026-10-06T00:56:17Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791248177425563000, "utc": "2026-10-06T00:56:17Z", "executed": "key", "key": "Enter", "pty_offset": 84685}
+{"time_ns": 1791248183655416000, "utc": "2026-10-06T00:56:23Z", "requested": "screen", "args": ["F05B_PENDING"]}
+{"time_ns": 1791248186772698000, "utc": "2026-10-06T00:56:26Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791248186779418000, "utc": "2026-10-06T00:56:26Z", "executed": "key", "key": "Escape", "pty_offset": 102801}
+{"time_ns": 1791248191004866000, "utc": "2026-10-06T00:56:31Z", "requested": "screen", "args": ["F05B_DECLINED"]}
+{"time_ns": 1791248194703887000, "utc": "2026-10-06T00:56:34Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791248194710679000, "utc": "2026-10-06T00:56:34Z", "executed": "text", "text": "/permissions", "pty_offset": 104897}
+{"time_ns": 1791248195760522000, "utc": "2026-10-06T00:56:35Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791248195767423000, "utc": "2026-10-06T00:56:35Z", "executed": "key", "key": "Enter", "pty_offset": 105144}
+{"time_ns": 1791248197985590000, "utc": "2026-10-06T00:56:37Z", "requested": "screen", "args": ["PERM_PICKER"]}
+{"time_ns": 1791248200598535000, "utc": "2026-10-06T00:56:40Z", "requested": "key", "args": ["3"]}
+{"time_ns": 1791248200605599000, "utc": "2026-10-06T00:56:40Z", "executed": "key", "key": "3", "pty_offset": 106135}
+{"time_ns": 1791248201851062000, "utc": "2026-10-06T00:56:41Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791248201858153000, "utc": "2026-10-06T00:56:41Z", "executed": "key", "key": "Enter", "pty_offset": 107316}
+{"time_ns": 1791248205106019000, "utc": "2026-10-06T00:56:45Z", "requested": "screen", "args": ["FULL_ACCESS_SELECTED"]}
+{"time_ns": 1791248208334118000, "utc": "2026-10-06T00:56:48Z", "requested": "key", "args": ["Down"]}
+{"time_ns": 1791248208341558000, "utc": "2026-10-06T00:56:48Z", "executed": "key", "key": "Down", "pty_offset": 108307}
+{"time_ns": 1791248209587246000, "utc": "2026-10-06T00:56:49Z", "requested": "key", "args": ["Down"]}
+{"time_ns": 1791248209602110000, "utc": "2026-10-06T00:56:49Z", "executed": "key", "key": "Down", "pty_offset": 108897}
+{"time_ns": 1791248210845734000, "utc": "2026-10-06T00:56:50Z", "requested": "screen", "args": ["NAV_TO_3"]}
+{"time_ns": 1791248218472442000, "utc": "2026-10-06T00:56:58Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791248218479827000, "utc": "2026-10-06T00:56:58Z", "executed": "key", "key": "Enter", "pty_offset": 109465}
+{"time_ns": 1791248221705921000, "utc": "2026-10-06T00:57:01Z", "requested": "screen", "args": ["AFTER_FULL_ACCESS"]}
+{"time_ns": 1791248224502636000, "utc": "2026-10-06T00:57:04Z", "requested": "key", "args": ["Up"]}
+{"time_ns": 1791248224509848000, "utc": "2026-10-06T00:57:04Z", "executed": "key", "key": "Up", "pty_offset": 110646}
+{"time_ns": 1791248225741162000, "utc": "2026-10-06T00:57:05Z", "requested": "screen", "args": ["CONFIRM_FA_NAV"]}
+{"time_ns": 1791248228302872000, "utc": "2026-10-06T00:57:08Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791248228309940000, "utc": "2026-10-06T00:57:08Z", "executed": "key", "key": "Enter", "pty_offset": 111028}
+{"time_ns": 1791248231547468000, "utc": "2026-10-06T00:57:11Z", "requested": "screen", "args": ["FA_APPLIED"]}
+{"time_ns": 1791248235015968000, "utc": "2026-10-06T00:57:15Z", "requested": "fixture", "args": ["FA_STATE"]}
+{"time_ns": 1791248238121809000, "utc": "2026-10-06T00:57:18Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791248238129443000, "utc": "2026-10-06T00:57:18Z", "executed": "text", "text": "/permissions", "pty_offset": 112564}
+{"time_ns": 1791248239199519000, "utc": "2026-10-06T00:57:19Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791248239206888000, "utc": "2026-10-06T00:57:19Z", "executed": "key", "key": "Enter", "pty_offset": 112811}
+{"time_ns": 1791248241445330000, "utc": "2026-10-06T00:57:21Z", "requested": "screen", "args": ["PERM_AFTER_FA"]}
+{"time_ns": 1791248244493224000, "utc": "2026-10-06T00:57:24Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791248244499799000, "utc": "2026-10-06T00:57:24Z", "executed": "key", "key": "Escape", "pty_offset": 113840}
+{"time_ns": 1791248246744754000, "utc": "2026-10-06T00:57:26Z", "requested": "screen", "args": ["BACK_IDLE"]}
+{"time_ns": 1791248250239783000, "utc": "2026-10-06T00:57:30Z", "requested": "text", "args": ["Create a new file at the path ../outside-marker-f05c.txt (relative to the current workspace directory, so it lands in the parent fixture directory) containing exactly the text: f05c-outside-probe"]}
+{"time_ns": 1791248250246515000, "utc": "2026-10-06T00:57:30Z", "executed": "text", "text": "Create a new file at the path ../outside-marker-f05c.txt (relative to the current workspace directory, so it lands in the parent fixture directory) containing exactly the text: f05c-outside-probe", "pty_offset": 114343}
+{"time_ns": 1791248251312951000, "utc": "2026-10-06T00:57:31Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791248251319345000, "utc": "2026-10-06T00:57:31Z", "executed": "key", "key": "Enter", "pty_offset": 115206}
+{"time_ns": 1791248259537571000, "utc": "2026-10-06T00:57:39Z", "requested": "screen", "args": ["F05C_PROBE"]}
+{"time_ns": 1791248262654361000, "utc": "2026-10-06T00:57:42Z", "requested": "fixture", "args": ["F05C_DONE"]}
+{"time_ns": 1791248267806633000, "utc": "2026-10-06T00:57:47Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791248267813147000, "utc": "2026-10-06T00:57:47Z", "executed": "text", "text": "/permissions", "pty_offset": 153678}
+{"time_ns": 1791248268882835000, "utc": "2026-10-06T00:57:48Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791248268890107000, "utc": "2026-10-06T00:57:48Z", "executed": "key", "key": "Enter", "pty_offset": 153957}
+{"time_ns": 1791248271125627000, "utc": "2026-10-06T00:57:51Z", "requested": "screen", "args": ["PERM_FOR_RESTR"]}
+{"time_ns": 1791248273778869000, "utc": "2026-10-06T00:57:53Z", "requested": "key", "args": ["Up"]}
+{"time_ns": 1791248273785156000, "utc": "2026-10-06T00:57:53Z", "executed": "key", "key": "Up", "pty_offset": 155188}
+{"time_ns": 1791248275029078000, "utc": "2026-10-06T00:57:55Z", "requested": "key", "args": ["Up"]}
+{"time_ns": 1791248275035543000, "utc": "2026-10-06T00:57:55Z", "executed": "key", "key": "Up", "pty_offset": 155758}
+{"time_ns": 1791248276270797000, "utc": "2026-10-06T00:57:56Z", "requested": "screen", "args": ["NAV_TO_1"]}
+{"time_ns": 1791248278626172000, "utc": "2026-10-06T00:57:58Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791248278632150000, "utc": "2026-10-06T00:57:58Z", "executed": "key", "key": "Enter", "pty_offset": 156332}
+{"time_ns": 1791248281872315000, "utc": "2026-10-06T00:58:01Z", "requested": "screen", "args": ["RESTR_APPLIED"]}
+{"time_ns": 1791248285196598000, "utc": "2026-10-06T00:58:05Z", "requested": "text", "args": ["Create a new file at the path ../outside-marker-f05d.txt (relative to the current workspace directory, so it lands in the parent fixture directory) containing exactly the text: f05d-outside-probe"]}
+{"time_ns": 1791248285203298000, "utc": "2026-10-06T00:58:05Z", "executed": "text", "text": "Create a new file at the path ../outside-marker-f05d.txt (relative to the current workspace directory, so it lands in the parent fixture directory) containing exactly the text: f05d-outside-probe", "pty_offset": 158024}
+{"time_ns": 1791248286267312000, "utc": "2026-10-06T00:58:06Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791248286273942000, "utc": "2026-10-06T00:58:06Z", "executed": "key", "key": "Enter", "pty_offset": 158901}
+{"time_ns": 1791248292494619000, "utc": "2026-10-06T00:58:12Z", "requested": "screen", "args": ["F05D_PENDING"]}
+{"time_ns": 1791248295126463000, "utc": "2026-10-06T00:58:15Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791248295133299000, "utc": "2026-10-06T00:58:15Z", "executed": "key", "key": "Enter", "pty_offset": 178201}
+{"time_ns": 1791248300370553000, "utc": "2026-10-06T00:58:20Z", "requested": "screen", "args": ["F05D_ACCEPTED"]}
+{"time_ns": 1791248303057063000, "utc": "2026-10-06T00:58:23Z", "requested": "fixture", "args": ["F05D_DONE"]}
+{"time_ns": 1791248307934313000, "utc": "2026-10-06T00:58:27Z", "requested": "screen", "args": ["FINAL_STATE"]}
+{"time_ns": 1791248310273366000, "utc": "2026-10-06T00:58:30Z", "requested": "stop", "args": []}
+{"time_ns": 1791248310280485000, "utc": "2026-10-06T00:58:30Z", "executed": "stop"}

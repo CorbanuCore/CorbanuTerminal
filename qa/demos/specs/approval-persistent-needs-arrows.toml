@@ -1,0 +1,63 @@
+# #174 follow-up: a "don't ask again" approval is chosen only with the arrow keys.
+id = "approval-persistent-needs-arrows"
+feature = "Persistent approvals need the arrow keys"
+expected = "The p key and Enter do not choose \"don't ask again\"; the prompt explains why. Down then Enter saves the rule and the command runs."
+model = "glm-5.2"
+provider = "zai"
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run exactly this one shell command, requesting escalated permissions: touch ../outside/marker.txt"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Options that last beyond this request: choose with"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 4.0
+
+[[steps]]
+key = "p"
+[[steps]]
+wait = "so its key does not choose it"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+pause = 2.5
+
+[[steps]]
+key = "Down"
+[[steps]]
+wait = "› 2\\. Yes, and don't ask again"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "You approved Corbanu to always run commands that start with"
+timeout = 60
+[[steps]]
+wait = "(?m)^• (Done|The|Ran|Created|I )"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "!ls ../outside"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "└ marker\\.txt"
+[[steps]]
+pause = 3.0

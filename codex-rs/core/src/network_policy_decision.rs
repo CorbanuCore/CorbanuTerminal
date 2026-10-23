@@ -57,6 +57,13 @@ pub(crate) fn denied_network_policy_message(blocked: &BlockedRequest) -> Option<
         return Some("Network access was blocked by policy.".to_string());
     }
 
+    // PF-33-S01: name the URL destination policy and its value-free reason code.
+    if let Some(code) = blocked.reason.strip_prefix("destination_policy:") {
+        return Some(format!(
+            "Network access to \"{host}\" was blocked by the URL destination policy ({code})."
+        ));
+    }
+
     let detail = match blocked.reason.as_str() {
         "denied" => "domain is explicitly denied by policy and cannot be approved from this prompt",
         "not_allowed" => "domain is not on the allowlist for the current sandbox mode",

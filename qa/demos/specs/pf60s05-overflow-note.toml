@@ -1,0 +1,48 @@
+# PF-60-S05 option B: the overflow note appears only where subscription work appears. A real pay-per-use
+# GLM 5.2 turn on Z.AI's general route shows no note in /cost; after a real subscription request on Z.AI's
+# coding-plan route (run off screen with corbanu exec in the same home), /cost shows that work and the note.
+id = "pf60s05-overflow-note"
+feature = "The overflow note appears only with subscription work (pay-per-use turn first, then a coding-plan request run off screen)"
+expected = "First /cost: pay per use with an estimated cost and no overflow note. Second /cost: the coding-plan request is listed as subscription work and the note says paid usage beyond a plan isn't visible here and is never counted as spent."
+model = "glm-5.2"
+provider = "zai"
+rows = 44
+cols = 170
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with the single word READY."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*READY\\W*$"
+timeout = 120
+compress = 3
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Pay per use"
+[[steps]]
+pause = 4
+[[steps]]
+key = "Escape"
+[[steps]]
+run = '''"{bin}" exec --skip-git-repo-check -s read-only -m glm-5.2 -c 'model_provider="zai-anthropic"' "Reply with the single word PLAN." > plan-exec.txt 2>&1'''
+timeout = 180
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Paid usage beyond a plan"
+[[steps]]
+pause = 5

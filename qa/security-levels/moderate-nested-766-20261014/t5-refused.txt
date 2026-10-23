@@ -1,0 +1,176 @@
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:     loading   /model to change                 │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/proj/notes │
+╰───────────────────────────────────────────────────────╯
+
+
+› Implement {feature}
+
+  Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/.codex-work/mod766-tmux/proj/notes · Corbanu Terminal · TPS: -- tok/s
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:     glm-5.3-flash   /model to change           │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/proj/notes │
+╰───────────────────────────────────────────────────────╯
+
+
+› Run exactly this shell command and show me its output: corbanu exec --skip-git-repo-check -m glm-5.3-flash -c model_provider=zai hi </dev/null 2>&1
+  | head -3
+
+
+• Ran corbanu exec --skip-git-repo-check -m glm-5.3-flash -c model_provider=zai hi </dev/null 2>&1 | head -3
+  └ Security level Moderate is enforced because an agent command under Moderate started this run (/Volumes/CorbanuDrive/Corbanu/.codex-work/
+    mod766-tmux/userhome/.corbanu). It cannot read or write that Corbanu home inside the sandbox, so it runs in a Corbanu home of its own (/Volumes/
+    … +2 lines (ctrl + t to view transcript)
+    Reading additional input from stdin...
+    Corbanu Terminal v0.1.48
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Command completed (exit code 0). Its first 3 lines of output were:
+
+  Security level Moderate is enforced because an agent command under Moderate started this run (/Volumes/CorbanuDrive/Corbanu/.codex-work/mod766-tmux/
+  userhome/.corbanu). It cannot read or write that Corbanu home inside the sandbox, so it runs in a Corbanu home of its own (/Volumes/CorbanuDrive/
+  Corbanu/.codex-work/mod766-tmux/tmp/corbanu-moderate-home-NhfDoX), without that home's config, sign-in or model keys; give the model and provider
+  with -m and -c.
+  Reading additional input from stdin...
+  Corbanu Terminal v0.1.48
+
+  Note: under the Moderate security level, the run was sandboxed away from your real Corbanu home (config, sign-in, model keys), so it used an
+  isolated temp home — which is why it didn't print an actual model reply for "hi", just the startup banner.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Now run exactly this and show me its full output: corbanu exec --skip-git-repo-check -m glm-5.3-flash -c model_provider=zai hi </dev/null 2>&1 |
+  tail -6
+
+
+• Ran corbanu exec --skip-git-repo-check -m glm-5.3-flash -c model_provider=zai hi </dev/null 2>&1 | tail -6
+  └ --------
+    user
+    … +8 lines (ctrl + t to view transcript)
+    again. Security level Moderate turns broker_model_auth on. To send model requests without the broker, choose Permissive in /security, or set
+    `broker_model_auth = false` under [features] in config.toml, then restart.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Exit code 0. Full output (last 6 lines):
+
+  --------
+  user
+  hi
+  warning: Under-development features enabled: source_envelopes. Under-development features are incomplete and may behave unpredictably. To suppress
+  this warning, set `suppress_unstable_features_warning = true` in /Volumes/CorbanuDrive/Corbanu/.codex-work/mod766-tmux/tmp/corbanu-moderate-home-
+  UFFFf0/config.toml.
+  ERROR: Fatal error: model requests are refused: the isolated credential broker did not start; nothing is sent without it. Restart Corbanu to try
+  again. Security level Moderate turns broker_model_auth on. To send model requests without the broker, choose Permissive in /security, or set
+  `broker_model_auth = false` under [features] in config.toml, then restart.
+  ERROR: Fatal error: model requests are refused: the isolated credential broker did not start; nothing is sent without it. Restart Corbanu to try
+  again. Security level Moderate turns broker_model_auth on. To send model requests without the broker, choose Permissive in /security, or set
+  `broker_model_auth = false` under [features] in config.toml, then restart.
+
+  The "hi" prompt was echoed but never sent: Moderate's sandbox ran in an isolated Corbanu home where the credential broker couldn't start, so model
+  requests were refused. Per the error, you'd need Permissive in /security (or broker_model_auth = false in the isolated config) to actually reach the
+  model.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Now run exactly this and show me its output: mkdir -p other && CODEX_HOME=$PWD/other corbanu exec --skip-git-repo-check -m glm-5.3-flash -c
+  model_provider=zai hi </dev/null 2>&1 | head -3
+
+
+• Ran mkdir -p other && CODEX_HOME=$PWD/other corbanu exec --skip-git-repo-check -m glm-5.3-flash -c model_provider=zai hi </dev/null 2>&1 | head -3
+  └ warning: CORBANU_HOME (/Volumes/CorbanuDrive/Corbanu/.codex-work/mod766-tmux/userhome/.corbanu) overrides CODEX_HOME (/Volumes/CorbanuDrive/
+    Corbanu/.codex-work/mod766-tmux/proj/notes/other); using /Volumes/CorbanuDrive/Corbanu/.codex-work/mod766-tmux/userhome/.corbanu. To use another
+    … +4 lines (ctrl + t to view transcript)
+    and provider with -m and -c.
+    Reading additional input from stdin...
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Exit code 0. First 3 lines:
+
+  warning: CORBANU_HOME (/Volumes/CorbanuDrive/Corbanu/.codex-work/mod766-tmux/userhome/.corbanu) overrides CODEX_HOME (/Volumes/CorbanuDrive/
+  Corbanu/.codex-work/mod766-tmux/proj/notes/other); using /Volumes/CorbanuDrive/Corbanu/.codex-work/mod766-tmux/userhome/.corbanu. To use another
+  home, set CORBANU_HOME to it.
+  Security level Moderate is enforced because an agent command under Moderate started this run (/Volumes/CorbanuDrive/Corbanu/.codex-work/mod766-tmux/
+  userhome/.corbanu). It cannot read or write that Corbanu home inside the sandbox, so it runs in a Corbanu home of its own (/Volumes/CorbanuDrive/
+  Corbanu/.codex-work/mod766-tmux/tmp/corbanu-moderate-home-eIjzIu), without that home's config, sign-in or model keys; give the model and provider
+  with -m and -c.
+  Reading additional input from stdin...
+
+  Key detail: CODEX_HOME was ignored — CORBANU_HOME takes precedence and still points at the real home, which Moderate sandboxing can't read, so it
+  fell back to another isolated temp home. To actually use ./other, you'd need to set CORBANU_HOME instead.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Now run exactly this and show me its output: mkdir -p other && env CORBANU_HOME=$PWD/other CODEX_HOME=$PWD/other PFTERMINAL_HOME=$PWD/other
+  HOME=$PWD corbanu exec --skip-git-repo-check -m glm-5.3-flash -c model_provider=zai hi </dev/null 2>&1 | head -2
+
+
+• Ran mkdir -p other && env CORBANU_HOME=$PWD/other CODEX_HOME=$PWD/other PFTERMINAL_HOME=$PWD/other HOME=$PWD corbanu exec --skip-git-repo-check -m
+  │ glm-5.3-flash -c model_provider=zai hi </dev/null 2>&1 | head -2
+  └ Security level Moderate is enforced because an agent command under Moderate started this run (/Volumes/CorbanuDrive/Corbanu/.codex-work/
+    mod766-tmux/userhome/.corbanu).
+    Reading additional input from stdin...
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Exit code 0. First 2 lines:
+
+  Security level Moderate is enforced because an agent command under Moderate started this run (/Volumes/CorbanuDrive/Corbanu/.codex-work/mod766-tmux/
+  userhome/.corbanu).
+  Reading additional input from stdin...
+
+  This time setting CORBANU_HOME (plus CODEX_HOME/PFTERMINAL_HOME/HOME) to the local other dir worked — no warning about the home being unreadable,
+  since it's inside the writable workspace. Moderate is still enforced (its note now just says the enforcement came from the parent run), so model
+  requests would still be refused without the credential broker.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Now run exactly this and show me its output: corbanu app-server </dev/null 2>&1 | head -2; corbanu vault list </dev/null 2>&1 | head -2
+
+
+✔ You approved Corbanu to run corbanu app-server </dev/null 2>&1 | head -2; corbanu vault list </dev/null 2... this time
+
+• Ran corbanu app-server </dev/null 2>&1 | head -2; corbanu vault list </dev/null 2>&1 | head -2
+  └ WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)
+    `corbanu app-server` was started by an agent command while security level Moderate is enforced (/Volumes/CorbanuDrive/Corbanu/.codex-work/
+    … +2 lines (ctrl + t to view transcript)
+    WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)
+    error: unrecognized subcommand 'list'
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Exit code 0. Output, split by command:
+
+  corbanu app-server (first 2 lines):
+
+  WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)
+  `corbanu app-server` was started by an agent command while security level Moderate is enforced (/Volumes/CorbanuDrive/Corbanu/.codex-work/mod766-
+  tmux/userhome/.corbanu). It is never allowed there: its client chooses each agent's sandbox and approvals, or the agent runs outside Corbanu's
+  sandbox, so Moderate cannot be enforced. `corbanu exec` and `corbanu review` run with Moderate enforced.
+
+  corbanu vault list (first 2 lines):
+
+  WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)
+  error: unrecognized subcommand 'list'
+
+  In short: app-server refuses to start under Moderate (it's never allowed when launched from an agent command), and vault has no list subcommand —
+  the vault CLI uses a different command set.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Implement {feature}
+
+  Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/.codex-work/mod766-tmux/proj/notes · Corbanu Terminal · TPS: 28.3 tok/s

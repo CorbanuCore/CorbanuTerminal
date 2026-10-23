@@ -1,0 +1,10 @@
+2026-10-16T11:39:05Z clone qa-case-G15-20261016T113905Z
+2026-10-16T11:39:16Z ssh ready 192.168.64.30
+2026-10-16T11:39:19Z sealed
+2026-10-16T11:39:29Z staged
+2026-10-16T11:39:35Z provisioned
+2026-10-16T11:40:46Z gate "ok": true; smoke 1
+2026-10-16T11:41:50Z executor start agms-G15-agmx1-20261016T114046Z
+2026-10-16T11:49:11Z executor end exit=0
+2026-10-16T11:49:12Z collected
+2026-10-16T11:49:15Z deleted

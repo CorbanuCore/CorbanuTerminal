@@ -1,0 +1,9 @@
+test_documented_adapter_emits_gate_record_and_preserves_frozen_inputs (test_owner_preflight_98.Preflight98Tests.test_documented_adapter_emits_gate_record_and_preserves_frozen_inputs) ... ok
+test_missing_sidecar_can_be_added_after_real_fixture_replacement (test_owner_preflight_98.Preflight98Tests.test_missing_sidecar_can_be_added_after_real_fixture_replacement) ... ok
+test_resolved_tmux_passes_without_following_or_opening_auth (test_owner_preflight_98.Preflight98Tests.test_resolved_tmux_passes_without_following_or_opening_auth) ... ok
+test_sidecar_does_not_retrofit_a_flat_prepared_action (test_owner_preflight_98.Preflight98Tests.test_sidecar_does_not_retrofit_a_flat_prepared_action) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.227s
+
+OK

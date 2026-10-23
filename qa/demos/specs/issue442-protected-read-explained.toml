@@ -1,0 +1,74 @@
+# #442 (milestone AGG-09, Travis's decision 2026-10-11): under Aggressive,
+# reads of protected credential files such as .env are never grantable, not
+# even once. When the sandbox denies one, the product says so where it
+# failed: it names the level, says it cannot be granted and how to change it.
+# The milestone's feature flags; the level is chosen in /security.
+id = "issue442-protected-read-explained"
+feature = "#442: a denied .env read under Aggressive is explained, never granted"
+expected = "With Aggressive active, the agent's `cat .env` is denied by the sandbox and a warning says Aggressive blocked access to it, that it cannot be granted, not even once, and that Permissive in /security allows it."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+".env" = "# synthetic test value, not a real credential\nDEMO_SETTING=synthetic-442\n"
+"notes.txt" = "buy coffee\nreview budget\n"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Aggressive\\?"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+timeout = 60
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "Run exactly this shell command once, even if you expect it to be blocked (the sandbox decides): cat .env"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)Run exactly this shell command once.*blocked\\s+access\\s+to(?:(?!Working).)*\n› "
+timeout = 240
+compress = 3
+[[steps]]
+pause = 4.0

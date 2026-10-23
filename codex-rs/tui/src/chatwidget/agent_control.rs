@@ -132,7 +132,7 @@ mod tests {
         );
         assert!(operations.try_recv().is_ok());
         // A replayed delivery is already acknowledged even after the turn ends.
-        chat.bottom_pane.set_task_running(false);
+        chat.bottom_pane.set_task_running(/*running*/ false);
         std::fs::write(&inbox, work).expect("redelivery");
         chat.poll_agent_control(directory.path())
             .expect("replay poll");

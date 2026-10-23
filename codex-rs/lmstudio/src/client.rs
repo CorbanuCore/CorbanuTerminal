@@ -83,7 +83,7 @@ impl LMStudioClient {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| io::Error::other(format!("Request failed: {e}")))?;
+            .map_err(|e| io::Error::other(format!("Request failed: {}", e.redacted_message())))?;
 
         if response.status().is_success() {
             tracing::info!("Successfully loaded model '{model}'");
@@ -99,12 +99,10 @@ impl LMStudioClient {
     // Return the list of models available on the LM Studio server.
     pub async fn fetch_models(&self) -> io::Result<Vec<String>> {
         let url = format!("{}/models", self.base_url.trim_end_matches('/'));
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| io::Error::other(format!("Request failed: {e}")))?;
+        let response =
+            self.client.get(&url).send().await.map_err(|e| {
+                io::Error::other(format!("Request failed: {}", e.redacted_message()))
+            })?;
 
         if response.status().is_success() {
             let json: serde_json::Value = response.json().await.map_err(|e| {

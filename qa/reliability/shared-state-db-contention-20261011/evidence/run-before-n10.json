@@ -1,0 +1,73 @@
+{
+ "bin": "corbanu-before",
+ "sessions": 10,
+ "turns": 3,
+ "tool_calls": 4,
+ "wall_seconds": 213.4,
+ "execs": 30,
+ "failed_execs": 0,
+ "requests": 150,
+ "client_gap_ms": {
+  "n": 120,
+  "p50": 10012.3,
+  "p90": 22904.1,
+  "p99": 30761.6,
+  "max": 34571.4,
+  "mean": 11085.4
+ },
+ "lock_wait_ms": {
+  "n": 1645,
+  "p50": 23.0,
+  "p90": 2868.0,
+  "p99": 5243.0,
+  "max": 5272.0,
+  "mean": 786.1
+ },
+ "lock_hold_ms": {
+  "n": 1580,
+  "p50": 93.0,
+  "p90": 302.0,
+  "p99": 417.0,
+  "max": 11422.0,
+  "mean": 124.0
+ },
+ "holds_over_250ms_by_site": {
+  "state/src/runtime/accounting_store.rs:483:22": {
+   "n": 366,
+   "p50": 299.0,
+   "p90": 348.0,
+   "p99": 2215.0,
+   "max": 11422.0,
+   "mean": 386.4
+  },
+  "state/src/runtime/accounting_store.rs:639:22": {
+   "n": 3,
+   "p50": 636.0,
+   "p90": 4207.0,
+   "p99": 4207.0,
+   "max": 4207.0,
+   "mean": 1734.3
+  }
+ },
+ "bad_stderr_lines": 78,
+ "bad_examples": [
+  "2026-10-11T20:43:58.428507Z  WARN codex_thread_store::local::update_thread_metadata: state db update_thread_metadata failed for 01a12cb4-ef25-7c70-aaf1-c4792da9d66c: thread-store internal error: failed to update thread metadata for 01a12cb4-ef25-7c70-aaf1-c4792da9d66c: error returned from database: ",
+  "2026-10-11T20:43:58.536188Z  WARN codex_core::accounting: accounting: state DB busy; retrying step=\"open accounting store\" retries=1 waited_ms=5361 cause=error returned from database: (code: 5) database is locked: (code: 5) database is locked",
+  "2026-10-11T20:43:58.540629Z  WARN codex_core::accounting: accounting: state DB busy; retrying step=\"open accounting store\" retries=1 waited_ms=5387 cause=error returned from database: (code: 5) database is locked: (code: 5) database is locked",
+  "2026-10-11T20:43:59.100015Z  WARN codex_core::accounting: accounting: state DB busy; retrying step=\"open accounting store\" retries=1 waited_ms=5243 cause=error returned from database: (code: 5) database is locked: (code: 5) database is locked",
+  "2026-10-11T20:43:59.163856Z  WARN codex_thread_store::local::update_thread_metadata: state db update_thread_metadata failed for 01a12cb4-efbe-7770-b5d0-c92a0a402df1: thread-store internal error: failed to update thread metadata for 01a12cb4-efbe-7770-b5d0-c92a0a402df1: error returned from database: ",
+  "2026-10-11T20:43:59.230279Z  WARN codex_state::busy_retry: state DB busy; retrying operation=\"check provider request cooldown\" retries=1 waited_ms=5272 error=error returned from database: (code: 5) database is locked: (code: 5) database is locked",
+  "2026-10-11T20:43:59.961800Z  WARN codex_state::busy_retry: state DB busy; retrying operation=\"check provider request cooldown\" retries=1 waited_ms=5261 error=error returned from database: (code: 5) database is locked: (code: 5) database is locked",
+  "2026-10-11T20:43:59.965953Z  WARN codex_core::accounting: accounting: state DB busy; retrying step=\"open accounting store\" retries=1 waited_ms=5263 cause=error returned from database: (code: 5) database is locked: (code: 5) database is locked",
+  "2026-10-11T20:44:01.234696Z  WARN codex_thread_store::local::update_thread_metadata: state db update_thread_metadata failed for 01a12cb4-ef3f-7ad3-99ac-bc70083fb6f0: thread-store internal error: failed to update thread metadata for 01a12cb4-ef3f-7ad3-99ac-bc70083fb6f0: error returned from database: ",
+  "2026-10-11T20:44:03.689747Z  WARN codex_core::accounting: accounting: state DB busy; retrying step=\"open accounting store\" retries=1 waited_ms=5244 cause=error returned from database: (code: 5) database is locked: (code: 5) database is locked"
+ ],
+ "exec_seconds": {
+  "n": 30,
+  "p50": 72.3,
+  "p90": 94.4,
+  "p99": 117.1,
+  "max": 117.1,
+  "mean": 64.4
+ }
+}

@@ -1,0 +1,11 @@
+# TUI launch: corbanu --account ghost (home h1, real default key in env)
+account `ghost` of provider `zai` is not configured; add it with `corbanu account add zai ghost` or pick another with `--account` (see `corbanu account list`)
+EXITED-1
+
+# TUI on default, spawn with account ghost
+› Use your spawn agent tool (not the shell) to start one sub-agent with account "ghost" and the task: Reply with exactly the word pong. Report the result in one line. Do
+  not retry with another account.
+• Spawn failed: account "ghost" is not configured (configured: default, fake, work).
+› Improve documentation in @filename
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: 13.1 tok/s
+ledger attempts before=16 after=18; attempts naming ghost: 0

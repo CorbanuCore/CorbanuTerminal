@@ -1,0 +1,50 @@
+$ /cost
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     vercel/moonshotai/kimi-k3   /model to change  │
+│ directory: <corbanu-root>/tmp/…/work/repo │
+╰──────────────────────────────────────────────────────────╯
+
+  Reply with exactly: first
+• first
+  Cost — this conversation
+  Requested UTC day: 2026-10-09
+  Today (UTC) in this conversation:
+  • Vercel · Vercel Kimi K3 — Pay per use. 1 request, 12,225 tokens. Billed by Vercel: $0.037207.
+  No other conversation recorded requests on this day.
+  Next step for requests with incomplete usage: check the bill from Vercel. Their provider did not report every token count, so the estimate is missing or
+  only a lower bound.
+  Estimates use published prices; billed figures are what the provider stated with each response.
+  Select a provider below to see its requests.
+  —— Details ——
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Known estimated token cost: $0.000540 + unknown costs
+  Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: $0.037207 — as stated by the provider with each response
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z)
+  Read at: 2026-10-09T13:47:52.886Z; ledger current to: 2026-10-09T13:47:19.093Z (33793 ms behind)
+  Retention: request detail kept since 2026-07-11T13:47:52.886Z; daily totals kept since 2025-10-10; oldest recorded day in this conversation 2026-10-09
+  Known subtotal exact USD: 0.00054
+  Input: 12,189
+  Noncached input (derived for inclusive input): not reported (1 attempt)
+  Cache read: 0
+  Cache write: not reported (1 attempt)
+  Output: 36
+  Reasoning (subset, not separately billed): 22
+  Total (not separately billed): 12,225
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Unknown parent population: 0 attempts, excluded from root total
+  —— Open ——
+  → Vercel · Vercel Kimi K3 — billed $0.037207 (1 request)
+  → Request 1 · Vercel · Vercel Kimi K3 · billed $0.037207
+  → Root's own attempts (1 attempt)
+  → Descendant attempts (none)
+  → Unknown provider/model attribution (none)
+  → Unknown parent population (none)
+  Refresh
+  Close

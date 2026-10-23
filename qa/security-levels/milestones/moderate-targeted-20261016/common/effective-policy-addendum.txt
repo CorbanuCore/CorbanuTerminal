@@ -1,0 +1,10 @@
+# Addendum to effective-policy.txt (written after evidence checks r1 and r2; effective-policy.txt itself is unchanged
+# since the isolation receipts were written, so the receipts' policy hash still matches)
+
+- Lane wipes (runs/*/wipe-*.txt): "0 entries left" in every wipe. The "processes" count is `ps` for the lane's uid at
+  wipe time; the processes were not identified further, as in the first run. restore.sh and kill-lane-procs.sh ended
+  every lane process at the end (kill-lane-procs-end.out: 0).
+- gate/agent-egress.txt: its first line (301) is the HTTP status of the coordinator account's own `curl` to
+  https://api.z.ai/ (the command is in the qual-mod2 log, not in a record script); the coordinator account is the one
+  the mediator runs as. Executors have no route to api.z.ai except through the mediator (per-uid pf rules,
+  policy-root-start.txt).

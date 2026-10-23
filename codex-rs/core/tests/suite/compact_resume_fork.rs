@@ -32,6 +32,7 @@ use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_sse_once_match;
 use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
+use core_test_support::rollback_thread;
 use core_test_support::test_codex::local_selections;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
@@ -452,14 +453,7 @@ async fn snapshot_rollback_past_compaction_replays_append_only_history() -> Resu
     compact_conversation(&base).await;
     user_turn(&base, EDITED_AFTER_COMPACT).await;
 
-    base.submit(Op::ThreadRollback { num_turns: 1 })
-        .await
-        .expect("submit thread rollback");
-    let rollback_event =
-        wait_for_event(&base, |ev| matches!(ev, EventMsg::ThreadRolledBack(_))).await;
-    let EventMsg::ThreadRolledBack(rollback_event) = rollback_event else {
-        panic!("expected thread rolled back event");
-    };
+    let rollback_event = rollback_thread(&base, /*num_turns*/ 1).await?;
     assert_eq!(rollback_event.num_turns, 1);
 
     user_turn(&base, AFTER_ROLLBACK).await;
@@ -566,16 +560,7 @@ async fn snapshot_rollback_followup_turn_trims_context_updates() -> Result<()> {
 
     user_turn(&conversation, TURN_TWO_USER).await;
 
-    conversation
-        .submit(Op::ThreadRollback { num_turns: 1 })
-        .await?;
-    let rollback_event = wait_for_event(&conversation, |ev| {
-        matches!(ev, EventMsg::ThreadRolledBack(_))
-    })
-    .await;
-    let EventMsg::ThreadRolledBack(rollback_event) = rollback_event else {
-        panic!("expected thread rolled back event");
-    };
+    let rollback_event = rollback_thread(&conversation, /*num_turns*/ 1).await?;
     assert_eq!(rollback_event.num_turns, 1);
 
     user_turn(&conversation, FOLLOWUP_USER).await;

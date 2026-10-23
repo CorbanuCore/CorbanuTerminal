@@ -1,0 +1,31 @@
+# tui-providers-cost: bin=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s05-indep-acc-20261011/debug/corbanu home=$S/homes/hc args: 
+--- /status ---
+› Write tests for @filename
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: -- tok/s
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.3-flash   /model to change          │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s05acc/ws │
+╰──────────────────────────────────────────────────────╯
+⚠ Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set
+  `suppress_unstable_features_warning = true` in $S/homes/hc/config.toml.
+› Write tests for @filename
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: -- tok/s
+--- /cost ---
+  Cost — this conversation
+  Requested UTC day: 2026-10-11
+› Today (UTC) in this conversation: no recorded requests.
+  Other conversations on this day, not included above: 5 requests in 4 conversations.
+  • Claude Plan · account cp · Claude Opus 5.5 Plan — Covered by your subscription (not billed per request). 1 request, 8,492 tokens. Same work at API prices:
+  $0.067968.
+  • Claude Plan · account cpfake · Claude Opus 5.5 Plan — Covered by your subscription (not billed per request). 1 request, tokens not reported. Same work at API
+  prices: not available.
+  • OpenAI · account default · gpt-5.4 — Pay per use. 2 requests, 20,399 tokens. Estimated cost: $0.051272 (rounded).
+  • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 1 request, tokens not reported. Estimated cost: not available — usage incomplete.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+--- exit ---
+╰──────────────────────────────────────────────────────╯
+To continue this session, run corbanu resume 01a12b3c-7208-7261-8353-bb018a82c1e9
+EXITED-0

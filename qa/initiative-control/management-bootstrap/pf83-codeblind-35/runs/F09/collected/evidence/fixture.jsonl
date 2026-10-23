@@ -1,0 +1,7 @@
+{"time_ns": 1791248980826046000, "utc": "2026-10-06T01:09:40Z", "label": "F01_after_probe1", "files": {"events.txt": "", "input.txt": "permission-test\n", "workspace/marker1.txt": "probe-1-done\n"}}
+{"time_ns": 1791249019749482000, "utc": "2026-10-06T01:10:19Z", "label": "F02_check_events", "files": {"events.txt": "", "input.txt": "permission-test\n", "workspace/marker1.txt": "probe-1-done\n"}}
+{"time_ns": 1791249053179447000, "utc": "2026-10-06T01:10:53Z", "label": "F03_after_probeB", "files": {"events.txt": "probe-B-fa\n", "input.txt": "permission-test\n", "workspace/marker1.txt": "probe-1-done\n"}}
+{"time_ns": 1791249091200711000, "utc": "2026-10-06T01:11:31Z", "label": "F04_after_probeC", "files": {"events.txt": "probe-B-fa\nprobe-C-restricted\n", "input.txt": "permission-test\n", "workspace/marker1.txt": "probe-1-done\n"}}
+{"time_ns": 1791249101396656000, "utc": "2026-10-06T01:11:41Z", "label": "F05_final", "files": {"events.txt": "probe-B-fa\nprobe-C-restricted\n", "input.txt": "permission-test\n", "workspace/marker1.txt": "probe-1-done\n"}}
+{"time_ns": 1791249131190505000, "utc": "2026-10-06T01:12:11Z", "label": "F06_after_probeD", "files": {"events.txt": "probe-B-fa\nprobe-C-restricted\nprobe-D-curturn\n", "input.txt": "permission-test\n", "workspace/marker1.txt": "probe-1-done\n"}}
+{"time_ns": 1791249139994324000, "utc": "2026-10-06T01:12:19Z", "label": "F07_final_state", "files": {"events.txt": "probe-B-fa\nprobe-C-restricted\nprobe-D-curturn\n", "input.txt": "permission-test\n", "workspace/marker1.txt": "probe-1-done\n"}}

@@ -1,0 +1,60 @@
+Source: https://developers.openai.com/api/docs/pricing, fetched 2026-10-14 06:47Z with curl (table data embedded in the page).
+USD per 1M tokens. 4 values = input, cached input, cache writes, output; 3 values = input, cached input, output ('-' = not offered).
+Rows for the models the catalogue prices (and gpt-6.1-sol), per tier table in page order.
+
+gpt-6-astra | standard | 10 1 12.5 50
+gpt-6.1-sol | standard | 2 0.1 2.5 10
+gpt-6-luna | standard | 0.1 0.01 0.125 0.5
+gpt-6-sol | standard | 2 0.2 2.5 10
+gpt-5.6-sol | standard | 4 0.4 5 20
+gpt-5.6-terra | standard | 2 0.2 2.5 12
+gpt-5.6-luna | standard | 0.2 0.02 0.25 1.2
+gpt-5.5 (<272K context length) | standard | 5 0.5 - 30
+gpt-5.4 (<272K context length) | standard | 2.5 0.25 - 15
+gpt-5.4-mini | standard | 0.75 0.075 4.5
+gpt-5.2 | standard | 1.75 0.175 14
+gpt-6-astra | batch | 5 0.5 6.25 25
+gpt-6.1-sol | batch | 1 0.05 1.25 5
+gpt-6-luna | batch | 0.05 0.005 0.0625 0.25
+gpt-6-sol | batch | 1 0.1 1.25 5
+gpt-5.6-sol | batch | 2 0.2 2.5 10
+gpt-5.6-terra | batch | 1 0.1 1.25 6
+gpt-5.6-luna | batch | 0.1 0.01 0.125 0.6
+gpt-5.5 (<272K context length) | batch | 2.5 0.25 - 15
+gpt-5.4 (<272K context length) | batch | 1.25 0.13 - 7.5
+gpt-5.4-mini | batch | 0.375 0.0375 2.25
+gpt-5.2 | batch | 0.875 0.0875 7
+gpt-6-astra | flex | 5 0.5 6.25 25
+gpt-6.1-sol | flex | 1 0.05 1.25 5
+gpt-6-luna | flex | 0.05 0.005 0.0625 0.25
+gpt-6-sol | flex | 1 0.1 1.25 5
+gpt-5.6-sol | flex | 2 0.2 2.5 10
+gpt-5.6-terra | flex | 1 0.1 1.25 6
+gpt-5.6-luna | flex | 0.1 0.01 0.125 0.6
+gpt-5.5 (<272K context length) | flex | 2.5 0.25 - 15
+gpt-5.4 (<272K context length) | flex | 1.25 0.13 - 7.5
+gpt-5.4-mini | flex | 0.375 0.0375 2.25
+gpt-5.2 | flex | 0.875 0.0875 7
+gpt-6-astra | fast | 20 2 25 100
+gpt-6.1-sol | fast | 4 0.2 5 20
+gpt-6-luna | fast | 0.2 0.02 0.25 1
+gpt-6-sol | fast | 4 0.4 5 20
+gpt-5.6-sol | fast | 8 0.8 10 40
+gpt-5.6-terra | fast | 4 0.4 5 24
+gpt-5.6-luna | fast | 0.4 0.04 0.5 2.4
+gpt-5.5 (<272K context length) | fast | 12.5 1.25 - 75
+gpt-5.4 (<272K context length) | fast | 5 0.5 - 30
+gpt-5.4-mini | fast | 1.5 0.15 9
+gpt-5.2 | fast | 3.5 0.35 28
+gpt-6-astra | ultrafast | 60 6 75 300
+gpt-6.1-sol | ultrafast | 12 0.6 15 60
+
+Page note: GPT-5.6 Sol’s promotional pricing is available at least through November 21, 2026.
+
+Source: https://developers.openai.com/api/docs/models/gpt-5.6-sol, fetched 2026-10-14 06:50Z.
+1,050,000 context window 128,000 max output tokens Feb 16, 2
+Text tokens Per 1M tokens Input $4.00 Cached input $0.40 Output $20.00 Quick comparison Input Cached input Output GPT-5.5 $ 5.00 GPT-5.6 Sol $ 4.00 GPT-5.4 $ 2.50 GPT-5.6 Sol costs $4 per million input tokens and $20 per million output tokens, a 20% reduction in input pricing and a 33% reduction in output pricing. GPT-5.6 Sol’s promotional pricing is available at least through November 21, 2026. Prompts with >272K input tokens are priced at 2x input and 1.5x output for the full request. Cache writes are billed at 1.25x the uncached input token rate.
+
+Source: https://developers.openai.com/api/docs/models/gpt-6.1-sol, fetched 2026-10-14 06:50Z.
+1,050,000 context window 128,000 max output tokens Apr 30, 2
+Text tokens Per 1M tokens Input $2.00 Cached input $0.10 Cache writes $2.50 Output $10.00 Cached input tokens are priced at 5% of the uncached input token rate. Cache writes are billed at 1.25x the uncached input token rate. Prompts with more than 272K input tokens are priced at 2x input and cache rates and 1.5x output for the full request. Fast mode prices are 2x Standard. Batch and Flex prices are 50% lower than Standard. Ultrafast mode prices are 6x Standard. Regional processing adds a 10% premium where available.

@@ -1,5 +1,17 @@
 use crate::certs::ManagedMitmCa;
 use crate::config::NetworkMode;
+use crate::credential_broker::CredentialRouting;
+use crate::credential_broker::response_scrub;
+use crate::destination;
+use crate::destination::DenialSite;
+use crate::destination::DestinationDenial;
+use crate::destination::DestinationGuard;
+use crate::destination::HostPatterns;
+use crate::destination::RedirectLedger;
+use crate::destination::RedirectScope;
+use crate::destination::SystemResolver;
+use crate::destination::is_redirect_response;
+use crate::destination::request_has_body;
 use crate::mitm_hook::HookEvaluation;
 use crate::mitm_hook::MitmHookActions;
 use crate::policy::normalize_host;
@@ -66,6 +78,8 @@ pub struct MitmState {
     upstream_tls_root_store: Arc<rustls::RootCertStore>,
     inspect: bool,
     max_body_bytes: usize,
+    /// PF-33-S01 redirect chains relayed through this proxy.
+    redirects: RedirectLedger,
 }
 
 pub(crate) struct MitmUpstreamConfig {
@@ -170,6 +184,7 @@ impl MitmState {
             upstream_tls_root_store,
             inspect: MITM_INSPECT_BODIES,
             max_body_bytes: MITM_MAX_BODY_BYTES,
+            redirects: RedirectLedger::default(),
         })
     }
 
@@ -295,8 +310,73 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
     let method = req.method().as_str().to_string();
     let path = path_and_query(req.uri());
     let log_path = path_for_log(req.uri());
+    let authority = authority_header_value(&target_host, target_port);
+    let app_state = &request_ctx.policy.app_state;
+
+    // PF-33-S01: authorize the full URL, method and DNS answers, and place the
+    // request in its client's redirect chain.
+    let destination = if destination::guard_enabled(app_state).await? {
+        let url = format!("https://{authority}{path}");
+        let client = req
+            .extensions()
+            .get::<SocketInfo>()
+            .map(|info| info.peer_addr().to_string());
+        let chain_client = format!(
+            "{}|{}",
+            app_state.execution_id().unwrap_or_default(),
+            req.extensions()
+                .get::<SocketInfo>()
+                .map(|info| info.peer_addr().ip().to_string())
+                .unwrap_or_default()
+        );
+        // PF-33-S02: an upstream proxy would resolve and connect on its own,
+        // so the checked answers could not be pinned.
+        if request_ctx.upstream.has_upstream_proxy() {
+            let site = DenialSite {
+                host: &target_host,
+                port: target_port,
+                method: Some(&method),
+                protocol: "https",
+                client,
+                fail_command: false,
+            };
+            let denial = DestinationDenial::UpstreamProxy;
+            return Ok(destination::blocked(app_state, &denial, site).await);
+        }
+        match DestinationGuard::protected()
+            .authorize_request(
+                &url,
+                &method,
+                &chain_client,
+                &mitm.redirects,
+                &SystemResolver,
+            )
+            .await
+        {
+            Ok(authorized) => Some((authorized, client)),
+            Err(denial) => {
+                let site = DenialSite {
+                    host: &target_host,
+                    port: target_port,
+                    method: Some(&method),
+                    protocol: "https",
+                    client,
+                    fail_command: false,
+                };
+                return Ok(destination::blocked(app_state, &denial, site).await);
+            }
+        }
+    } else {
+        None
+    };
 
     let (mut parts, body) = req.into_parts();
+    let has_body = request_has_body(&parts.headers);
+    if let Some((authorized, _)) = destination.as_ref() {
+        authorized.strip_cross_origin_credentials(&mut parts.headers);
+        // PF-33-S02: the connector dials only these checked answers.
+        parts.extensions.insert(authorized.pinned_peers());
+    }
     if request_ctx
         .policy
         .app_state
@@ -306,7 +386,7 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
         warn!("scoped credential request denied: authorization hook collision");
         return Ok(blocked_text_response(REASON_POLICY_DENIED));
     }
-    if let Err(error) = request_ctx.policy.app_state.inject_request_credentials(
+    let routing = match request_ctx.policy.app_state.route_request_credentials(
         "https",
         &target_host,
         target_port,
@@ -314,11 +394,41 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
         &path,
         &mut parts.headers,
     ) {
-        warn!("scoped credential request denied: {error}");
+        Ok(routing) => routing,
+        Err(error) => {
+            warn!("scoped credential request denied: {error}");
+            return Ok(blocked_text_response(REASON_POLICY_DENIED));
+        }
+    };
+    #[cfg(any(unix, windows))]
+    if matches!(routing, CredentialRouting::Brokered(_))
+        && hook_actions_touch_authorization(hook_actions.as_ref())
+    {
+        warn!("brokered credential request denied: authorization hook collision");
         return Ok(blocked_text_response(REASON_POLICY_DENIED));
     }
     apply_mitm_hook_actions(&mut parts.headers, hook_actions.as_ref());
-    let authority = authority_header_value(&target_host, target_port);
+    // PF-28-S02: values injected here (credential or hook) are scrubbed from
+    // the response the agent receives; the isolated broker scrubs its own.
+    let reflection = if app_state.credential_response_gate() {
+        let injected = match &routing {
+            CredentialRouting::Direct(gate) => gate.clone(),
+            #[cfg(any(unix, windows))]
+            CredentialRouting::Brokered(_) => None,
+        };
+        match response_scrub::with_hook_values(injected, hook_actions.as_ref()) {
+            Ok(reflection) => reflection,
+            Err(error) => {
+                warn!("credentialed request denied: response gate unavailable: {error}");
+                return Ok(blocked_text_response(REASON_POLICY_DENIED));
+            }
+        }
+    } else {
+        None
+    };
+    if reflection.is_some() {
+        response_scrub::request_identity_body(&mut parts.headers);
+    }
     parts.uri = build_https_uri(&authority, &path)?;
     parts
         .headers
@@ -341,7 +451,58 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
     };
 
     let upstream_req = Request::from_parts(parts, body);
-    let upstream_resp = request_ctx.upstream.serve(upstream_req).await?;
+    let mut upstream_resp = match routing {
+        CredentialRouting::Direct(_) => request_ctx.upstream.serve(upstream_req).await?,
+        #[cfg(any(unix, windows))]
+        CredentialRouting::Brokered(route) => match route.forward(upstream_req).await {
+            Ok(response) => response,
+            Err(error) => {
+                // Fail closed: the proxy holds no raw value to fall back to.
+                warn!("brokered credential request failed: {error}");
+                return Ok(text_response(
+                    StatusCode::BAD_GATEWAY,
+                    "credential broker unavailable",
+                ));
+            }
+        },
+    };
+    if let Some((authorized, client)) = destination
+        && is_redirect_response(upstream_resp.status().as_u16(), upstream_resp.headers())
+    {
+        let status = upstream_resp.status().as_u16();
+        let checked = match HostPatterns::current(app_state).await {
+            Ok(hosts) => {
+                DestinationGuard::protected()
+                    .check_response(
+                        &authorized,
+                        has_body,
+                        status,
+                        upstream_resp.headers_mut(),
+                        RedirectScope {
+                            hosts: &hosts,
+                            ledger: &mitm.redirects,
+                            resolver: &SystemResolver,
+                        },
+                    )
+                    .await
+            }
+            Err(err) => return Err(err.context("read host policy for redirect check")),
+        };
+        if let Err(denial) = checked {
+            let site = DenialSite {
+                host: &target_host,
+                port: target_port,
+                method: Some(&method),
+                protocol: "https-redirect",
+                client,
+                fail_command: false,
+            };
+            return Ok(destination::blocked(app_state, &denial, site).await);
+        }
+    }
+    if let Some(gate) = &reflection {
+        upstream_resp = response_scrub::scrub_response(gate, upstream_resp);
+    }
     respond_with_inspection(
         upstream_resp,
         inspect,
@@ -397,13 +558,29 @@ async fn evaluate_mitm_policy(
 
     // CONNECT already handled allowlist/denylist + decider policy. Re-check local/private
     // resolution here to defend against DNS rebinding between CONNECT and inner HTTPS requests.
-    if matches!(
-        policy
-            .app_state
-            .host_blocked(&policy.target_host, policy.target_port)
-            .await?,
-        HostBlockDecision::Blocked(HostBlockReason::NotAllowedLocal)
-    ) {
+    let host_decision = policy
+        .app_state
+        .host_blocked(&policy.target_host, policy.target_port)
+        .await?;
+    // PF-33-S02: under the destination guard, a host denied after its tunnel
+    // opened is refused on the open tunnel too, not only on the next CONNECT.
+    if host_decision == HostBlockDecision::Blocked(HostBlockReason::Denied)
+        && destination::guard_enabled(&policy.app_state).await?
+    {
+        let site = DenialSite {
+            host: &policy.target_host,
+            port: policy.target_port,
+            method: Some(&method),
+            protocol: "https",
+            client,
+            fail_command: false,
+        };
+        let denial = DestinationDenial::HostDeniedAfterConnect;
+        return Ok(MitmPolicyDecision::Block(
+            destination::blocked(&policy.app_state, &denial, site).await,
+        ));
+    }
+    if host_decision == HostBlockDecision::Blocked(HostBlockReason::NotAllowedLocal) {
         let reason = HostBlockReason::NotAllowedLocal.as_str();
         let _ = policy
             .app_state

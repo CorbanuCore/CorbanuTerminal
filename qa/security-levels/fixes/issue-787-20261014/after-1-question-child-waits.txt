@@ -1,0 +1,50 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     glm-5.3-flash   /model to change              │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/…3Z/workspace │
+╰──────────────────────────────────────────────────────────╯
+
+
+› Spawn a child agent and have it run exactly this command: sleep 60; echo finished > ks-child.txt. Then wait for the child agent to
+  finish.
+
+
+• Spawned 01a13b2f-acca-7883-9470-097a778962a1 (glm-5.3-flash max)
+  └ Run exactly this command: sleep 60; echo finished > ks-child.txt
+
+  ! Another request is waiting; it shows after you answer this one.
+
+  Question 1/1 (1 unanswered)
+  Allow `wait_agent_v1`? Security level: this is a tool the security level has not classified after untrusted content entered the session.
+  Approve only if you asked for it; a cached or automatic approval does not count.
+
+  › 1. Allow once  Run this one call; ask again next time.
+    2. Cancel      Do not run it.
+
+  tab to add notes | enter to submit answer | esc to interrupt
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

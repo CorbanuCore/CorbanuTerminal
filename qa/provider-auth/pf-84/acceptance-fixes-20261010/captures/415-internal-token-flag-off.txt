@@ -1,0 +1,7 @@
+== before internal-claude-oauth-token --account fake --disable named_accounts: exit=0 stdout-sha12=c29ec33958e4
+== before internal-claude-oauth-token --disable named_accounts (CORBANU_PROVIDER_ACCOUNT=fake): exit=0 stdout-sha12=c29ec33958e4
+== after internal-claude-oauth-token --account fake --disable named_accounts: exit=1 stdout-sha12=<empty>
+   | Error: Claude account `fake` was requested, but named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts`
+== after internal-claude-oauth-token --disable named_accounts (CORBANU_PROVIDER_ACCOUNT=fake): exit=1 stdout-sha12=<empty>
+   | Error: Claude account `fake` was requested, but named accounts are off; enable them with `[features] named_accounts = true` or `--enable named_accounts`
+   (sha12 of the fake account's token: c29ec33958e4)

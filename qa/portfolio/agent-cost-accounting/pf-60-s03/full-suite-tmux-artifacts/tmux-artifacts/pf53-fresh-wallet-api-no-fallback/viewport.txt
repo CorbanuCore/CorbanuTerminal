@@ -1,0 +1,44 @@
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                         │
+│                                                       │
+│ model:     gpt-5.4   /model to change                 │
+│ directory: /Volumes/…/worktrees/acct-inspect-20260915 │
+╰───────────────────────────────────────────────────────╯
+
+• Created Solana wallet 7LxbxQDuCpM63fiC2RihTeSYjMkimMTfrxehc8uQqjSm. The recovery material is shown only in the secure view.
+
+• Wallet unlocked for 5 minute(s).
+
+
+  Set up providers
+  Configure more than one provider, then choose Done.
+
+  Search providers
+› OpenAI — account                Not configured
+  OpenAI — API key                Not configured
+  Claude Account — account        Not configured
+  Corbanu API — queue after Done  Not configured
+  Anthropic — API key             Not configured
+  Ambient — API key               Not configured
+  Kimi Code — API key             Not configured
+  Z.AI — API key                  Not configured
+
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

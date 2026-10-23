@@ -1,0 +1,47 @@
+# #245: Permissive is unchanged: an additional read permission request is
+# asked for and, once approved, the command runs as before.
+id = "issue245-permissive-additional-read-unchanged"
+feature = "#245: Permissive additional read permissions are unchanged"
+expected = "Under Permissive (with permission requests on), the agent asks to read a dummy file under ~/.ssh as an additional permission; the approval shows it, and after approval the command prints the dummy file."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+exec_permission_approvals = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+run = "mkdir -p \"$HOME/.ssh\" && printf 'dummy file, not a key\\n' > \"$HOME/.ssh/dummy_id_245\" && echo \"$HOME\""
+capture = "h"
+
+[[steps]]
+type = "Call your shell tool exactly once to run: cat ~/.ssh/dummy_id_245 -- with sandbox_permissions set to with_additional_permissions and additional_permissions set to {\"file_system\":{\"read\":[\"{h}/.ssh/dummy_id_245\"]}}. Then report the result."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?i)Would you like to run"
+timeout = 240
+compress = 3
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "dummy file, not a key"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 3.0

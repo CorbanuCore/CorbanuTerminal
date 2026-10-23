@@ -1,0 +1,12 @@
+# Build receipts (2026-10-09)
+commit: d7846e29d5cd7128912e273db557fe03bcda9c0a (origin/main, merge of PR #346)
+macOS 26.6.2 arm64, rustc 1.95.0; Linux 6.8.0-138-generic x86_64 (<rtx-host>), rustc 1.95.0
+build (both): cargo build --locked -p codex-cli --bin corbanu --features codex-core/developer-accounting,codex-tui/developer-accounting  (tools/build-mac.sh, tools/build-rtx.sh)
+default build (macOS): cargo build --locked -p codex-cli --bin corbanu  (tools/build-mac.sh default)
+corbanu --version: corbanu 0.1.48
+sha256 macOS developer-accounting: 49a59f81671524f892a9fa4fa62832e9840d053f8e300b29cb1fbe5fd0d0d22f
+sha256 macOS default:              d3c4969808b0b6ffa0dd7095fdce88676dfa2e0fee9acdaf88d85fd42e17c4de
+sha256 Linux developer-accounting: 9abb65058a82d4141efbb3db8277a5abb452398fddf24801ce1f4119a6f8599d
+sha256 Linux pre-5bae (3b6c338f8f226e6a18f2fe742237fc76aa234adc = 5bae03414e^, --features codex-core/developer-accounting; codex-tui had no such feature then): 756af9171e0d9d2407c4c9d6d7a46474905da3b434242ff4213f1d506d2a5d0d
+Note: the Linux developer-accounting binary built at 38362eaf57 and rebuilt at d7846e29d5 is byte-identical.
+sha256 Linux S03-accepted build (63ea3d0cbd0ccb54d352b25a12c3e07f9f934bff, developer-accounting; used only to compare real-ledger reads in C6): 436d6cf8107b8180f87808ed40811af4611b81e2c8d0183b3a064d21244567ae

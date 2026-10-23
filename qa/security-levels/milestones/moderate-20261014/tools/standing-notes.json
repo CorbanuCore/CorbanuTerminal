@@ -1,0 +1,7 @@
+{
+ "G08": "Start the product with `agms-tui start --mcp-notes` from the beginning of the group (MOD-20 needs the MCP server configured), and run MOD-10 before MOD-20 in the same session.",
+ "G10": "The case's `inject` server is the fixture MCP server `notes` (`agms-tui start --mcp-notes`): write the case's injected text into `$AGMS_RUN/fixture/mcp/shared-note.txt` before starting; its tool `read_shared_note` is the case's `get_note`.",
+ "G12": "MOD-16 uses the fixture MCP server `notes` (`agms-tui start --mcp-notes`; its tool `post_note` is the case's `send_note`, and `$AGMS_RUN/fixture/mcp/posted.txt` is the call log). Start with `--mcp-notes` from the beginning of the group.",
+ "G23": "Window B is driven with `agms-tui --window B start`, `agms-tui --window B text ...`, and so on; window A is the default window. Both use the same profile and project. `agms-tui stop` ends both.",
+ "G16": "MOD-28 runs first, then MOD-19, in the same session."
+}

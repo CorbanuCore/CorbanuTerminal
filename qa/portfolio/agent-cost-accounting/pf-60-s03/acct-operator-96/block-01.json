@@ -1,0 +1,33 @@
+{
+  "block": 1,
+  "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916",
+  "command": [
+    "bash",
+    "--noprofile",
+    "--norc",
+    "-x",
+    "-c",
+    "set -eu\nq=qa/portfolio/agent-cost-accounting/pf-60-s03\ncandidate=$(git rev-parse HEAD)\nprintf 'Candidate: %s\\n' \"$candidate\"\ngit status --porcelain --untracked-files=all\naudit=\"$PWD/$q/acct-operator-96/target/audit-copy\"\ngit check-ignore -v \"$audit\"\ngit clone --no-local --no-checkout . \"$audit\"\ngit -C \"$audit\" checkout --detach \"$candidate\"\ngit -C \"$audit\" update-ref refs/heads/integrate/management-workstreams-20260911 \"$candidate\"\nprintf 'Run every remaining block from: %s\\n' \"$audit\"\n"
+  ],
+  "note_sha256": "632c78b084d7145d5dc406e0d8a96e0d12eea30a4d85a46129526928abd76140",
+  "script_sha256": "c5711a9762808c3f64c8f3def1c5174c8d6aed11f1b44e07c4e7d4989625656b",
+  "exit": 0,
+  "elapsed_seconds": 9.291002750396729,
+  "log_sha256": "2900946acf77f3e39b21a7f557f725475e0f066e3f125a629a42ba8005647f6c",
+  "environment_keys": [
+    "CARGO_HOME",
+    "CARGO_TERM_COLOR",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_TERMINAL_PROMPT",
+    "HOME",
+    "LC_ALL",
+    "PATH",
+    "PYTHONDONTWRITEBYTECODE",
+    "RUSTUP_HOME",
+    "TERM",
+    "TMPDIR"
+  ],
+  "fresh_shell": true,
+  "shell_variables_from_previous_block": false
+}

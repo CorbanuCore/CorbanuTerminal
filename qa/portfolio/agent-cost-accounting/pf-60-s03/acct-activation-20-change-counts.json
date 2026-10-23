@@ -1,0 +1,14 @@
+{
+  "production_config_additions": 45,
+  "production_config_deletions": 1,
+  "production_config_changed_lines": 46,
+  "rust_test_additions": 177,
+  "python_test_program_additions": 185,
+  "test_program_additions_total": 362,
+  "qa_text_evidence_files": 30,
+  "qa_text_evidence_lines": 7897,
+  "raw_terminal_files": 2,
+  "raw_terminal_bytes": 25595,
+  "excluded": "This self-describing count file, ignored local binary artifact directory, and Python bytecode. Generated evidence counts include the return document.",
+  "retained_existing_tests": true
+}

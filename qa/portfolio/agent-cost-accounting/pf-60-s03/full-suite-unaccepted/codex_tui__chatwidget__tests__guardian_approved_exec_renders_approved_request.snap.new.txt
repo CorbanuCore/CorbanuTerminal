@@ -1,0 +1,17 @@
+---
+source: tui/src/chatwidget/tests/guardian.rs
+assertion_line: 205
+expression: normalize_snapshot_paths(term.backend().vt100().screen().contents())
+---
+
+
+
+
+
+✔ Auto-reviewer approved codex to run rm -f /tmp/guardian-approved.sqlite this
+  time
+
+
+› Ask Corbanu Terminal to do anything
+
+  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Terminal · TPS: -- tok/s

@@ -670,7 +670,7 @@ WHERE id = ? AND memory_mode != 'polluted'
         let thread_id = thread_id.to_string();
         let worker_id = worker_id.to_string();
 
-        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut tx = crate::runtime::db_lock::begin_immediate(&self.pool).await?;
 
         let existing_output = sqlx::query(
             r#"
@@ -1071,7 +1071,7 @@ WHERE kind = ? AND job_key = ?
         let ownership_token = Uuid::new_v4().to_string();
         let worker_id = worker_id.to_string();
 
-        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut tx = crate::runtime::db_lock::begin_immediate(&self.pool).await?;
 
         let existing_job = sqlx::query(
             r#"

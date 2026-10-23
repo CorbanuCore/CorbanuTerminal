@@ -1,0 +1,53 @@
+## enrolment (values on stdin)
+Saved zai account `real` (api_key).
+Saved zai account `fake` (api_key).
+Saved kimi-code account `alt` (api_key).
+Saved kimi-code account `kfake` (api_key).
+Saved claude-plan account `cp` (claude_oauth_token).
+Saved claude-plan account `cpfake` (claude_oauth_token).
+Reading API key from stdin...
+Successfully logged in
+Reading API key from stdin...
+Signed in OpenAI account `real` (OpenAI API key).
+Reading API key from stdin...
+Signed in OpenAI account `fake` (OpenAI API key).
+claude-plan	cp	claude_oauth_token
+claude-plan	cpfake	claude_oauth_token
+kimi-code	alt	api_key
+kimi-code	kfake	api_key
+openai	fake	chatgpt_auth	OpenAI API key
+openai	real	chatgpt_auth	OpenAI API key
+zai	fake	api_key
+zai	real	api_key
+auth.json (default = fake API key): bba486da6be26d5c
+
+## OpenAI gpt-5.4
+=== oa-real: exec -m gpt-5.4 -c model_provider="openai" --account real  -> exit=0 reply 'pong' usage {"cache_write_input_tokens": 0, "cached_input_tokens": 0, "input_tokens": 11797, "output_tokens": 16, "reasoning_output_tokens": 9}  
+=== oa-fake: exec -m gpt-5.4 -c model_provider="openai" --account fake [env OPENAI_API_KEY,CODEX_API_KEY = REAL key from openai-api-key] -> exit=1 error unexpected status 401 Unauthorized: {
+  "error": {
+    "messa, url: wss://api.openai.com/v1/responses, cf-ray: a4938794b90d4b91-DFW, request id: req_f25a9b28df914b85bed49c70e8aa91fe, auth error: 401, auth error code: invalid_api_key turn.failed unexpected status 401 Unauthorized: {
+  "error": {
+    "messa, url: wss://api.openai.com/v1/responses, cf-ray: a4938794b90d4b91-DFW, request id: req_f25a9b28df914b85bed49c70e8aa91fe, auth error: 401, auth error code: invalid_api_key  
+=== oa-default: exec -m gpt-5.4 -c model_provider="openai"  -> exit=1 error unexpected status 401 Unauthorized: {
+  "error": {
+    "m, url: wss://api.openai.com/v1/responses, cf-ray: a493879dffea6b76-DFW, request id: req_08bc06a127204fcfa3e7022ae47da68f, auth error: 401, auth error code: invalid_api_key turn.failed unexpected status 401 Unauthorized: {
+  "error": {
+    "m, url: wss://api.openai.com/v1/responses, cf-ray: a493879dffea6b76-DFW, request id: req_08bc06a127204fcfa3e7022ae47da68f, auth error: 401, auth error code: invalid_api_key  
+=== oa-ghost: exec -m gpt-5.4 -c model_provider="openai" --account ghost [env OPENAI_API_KEY = REAL key from openai-api-key] -> exit=1  Error: thread/start: thread/start failed: account `ghost` of provider `openai` is not signed in; sign in with `corbanu login --account ghost` or pick another with `--account` (see `corbanu account list`) (code -32600) 
+auth.json after: bba486da6be26d5c
+
+## Z.AI glm-5.3-flash
+=== zai-real: exec --account real  -> exit=0 reply 'pong' usage {"cache_write_input_tokens": 0, "cached_input_tokens": 1280, "input_tokens": 7422, "output_tokens": 3, "reasoning_output_tokens": 0}  
+=== zai-fake: exec --account fake [env ZAI_API_KEY = REAL key from provider/zai_api_key] -> exit=1 error unexpected status 401 Unauthorized: Authentication Failed, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 310889e1-beff-4900-937e-44a6eb5639fe turn.failed unexpected status 401 Unauthorized: Authentication Failed, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 310889e1-beff-4900-937e-44a6eb5639fe  
+=== zai-default: exec  [env ZAI_API_KEY = REAL key from provider/zai_api_key] -> exit=0 reply 'pong' usage {"cache_write_input_tokens": 0, "cached_input_tokens": 7360, "input_tokens": 7422, "output_tokens": 3, "reasoning_output_tokens": 0}  
+
+## Kimi k3 (kimi-code)
+=== kimi-alt: exec -m kimi-k3 -c model_provider="kimi-code" --account alt  -> exit=0 reply 'pong' usage {"cache_write_input_tokens": 0, "cached_input_tokens": 1024, "input_tokens": 11254, "output_tokens": 130, "reasoning_output_tokens": 77}  
+=== kimi-kfake: exec -m kimi-k3 -c model_provider="kimi-code" --account kfake [env KIMI_API_KEY = REAL key from provider/kimi_api_key] -> exit=1 error unexpected status 401 Unauthorized: The API Key appears to be invalid or may have expired. Please verify your credentials and try again., url: https://api.kimi.com/coding/v1/chat/completions, cf-ray: a49388314b64c4c4-PHX turn.failed unexpected status 401 Unauthorized: The API Key appears to be invalid or may have expired. Please verify your credentials and try again., url: https://api.kimi.com/coding/v1/chat/completions, cf-ray: a49388314b64c4c4-PHX  
+
+## Claude Plan
+=== cp: exec -m claude-opus-5-5-plan -c model_provider="claude-plan" --account cp  -> exit=0 reply 'pong' usage {"cache_write_input_tokens": 9823, "cached_input_tokens": 0, "input_tokens": 9827, "output_tokens": 4, "reasoning_output_tokens": 0}  
+=== cpfake: exec -m claude-opus-5-5-plan -c model_provider="claude-plan" --account cpfake  -> exit=1 error unexpected status 401 Unauthorized: Invalid bearer token, url: https://api.anthropic.com/v1/messages, cf-ray: a4938868edc6e5de-DFW turn.failed unexpected status 401 Unauthorized: Invalid bearer token, url: https://api.anthropic.com/v1/messages, cf-ray: a4938868edc6e5de-DFW  
+
+## flag off: named OpenAI refused, default unchanged
+=== oa-flagoff: exec -m gpt-5.4 -c model_provider="openai" --account real --disable named_accounts  -> exit=1  Error: --account openai:real: named accounts need the `named_accounts` feature (`--enable named_accounts`); `--account default` uses the default credentials 

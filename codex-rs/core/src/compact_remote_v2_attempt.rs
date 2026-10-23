@@ -66,7 +66,7 @@ pub(super) async fn run_remote_compact_v2_attempt(
     let trace_input_history = compaction_trace
         .is_enabled()
         .then(|| history.raw_items().to_vec());
-    let mut input = history.for_prompt(&turn_context.model_info.input_modalities);
+    let mut input = history.for_turn_prompt(turn_context);
     let tool_router = &step_context.tool_router;
     input.push(ResponseItem::CompactionTrigger {});
     let prompt = Prompt {
@@ -76,6 +76,8 @@ pub(super) async fn run_remote_compact_v2_attempt(
         base_instructions,
         output_schema: None,
         output_schema_strict: true,
+        producer: Some(turn_context.output_producer()),
+        flat_tool_names: tool_router.flat_tool_names().clone(),
     };
 
     let window_id = sess.current_window_id().await;
@@ -95,6 +97,27 @@ pub(super) async fn run_remote_compact_v2_attempt(
         Some(client_session) => client_session,
         None => owned_client_session.insert(sess.services.new_model_client_session()),
     };
+    // Attach for both shapes. A standalone compaction is where operator `/compact`
+    // lands on providers that support remote compaction; an inline auto-compaction
+    // borrows the turn's session, but its call sites sit outside the turn's own
+    // sampling scope, so those slots are empty and nothing in flight is displaced.
+    // Skipping the borrowed case - the first version of this - left every
+    // auto-compaction unrecorded. Best effort: a compaction that cannot be
+    // recorded must still run.
+    let accounting = match crate::accounting::attach_turn(
+        sess,
+        turn_context.as_ref(),
+        client_session,
+        crate::accounting::compaction_turn_label(&turn_context.sub_id),
+    )
+    .await
+    {
+        Ok(scopes) => Some(scopes),
+        Err(error) => {
+            tracing::warn!(%error, "accounting: remote compaction proceeding unrecorded");
+            None
+        }
+    };
     let compaction_output_result = run_remote_compaction_request_v2(
         sess,
         turn_context.as_ref(),
@@ -103,6 +126,7 @@ pub(super) async fn run_remote_compact_v2_attempt(
         &responses_metadata,
     )
     .await;
+    crate::accounting::warn_if_unrecorded(sess, turn_context, accounting.as_ref()).await;
     trace_attempt.record_result(
         compaction_output_result
             .as_ref()

@@ -1,0 +1,10 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.14s
+────────────
+ Nextest run ID 7bc29e57-61fe-48cd-a3b5-5a6596078a6a with nextest profile: local
+    Starting 3 tests across 1 binary (8 tests skipped)
+        PASS [   0.002s] (1/3) codex-linux-pidfd-spawn spawn::tests::pf27_rejects_non_cloexec_image
+        PASS [   0.029s] (2/3) codex-linux-pidfd-spawn spawn::tests::pf27_rejects_unbounded_fd_actions
+        PASS [   0.002s] (3/3) codex-linux-pidfd-spawn spawn::tests::pf27_rejects_unsealed_fd_without_spawning
+────────────
+     Summary [   0.033s] 3 tests run: 3 passed, 8 skipped

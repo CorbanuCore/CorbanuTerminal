@@ -1,0 +1,15 @@
+---
+source: tui/src/security/current_tests.rs
+assertion_line: 846
+expression: "seen.join(\"\\n\")"
+---
+labels: BeforeRestart { sandbox_kept: Some("commands can write to the current folder"), widenable: false, network_off: true, web_search_off: false, environment: false, broker: false }
+no labels: BeforeRestart { sandbox_kept: None, widenable: false, network_off: false, web_search_off: false, environment: false, broker: false }
+network on: BeforeRestart { sandbox_kept: Some("commands can write to the current folder"), widenable: false, network_off: false, web_search_off: false, environment: false, broker: false }
+permission requests: BeforeRestart { sandbox_kept: Some("commands can write to the current folder"), widenable: true, network_off: false, web_search_off: false, environment: false, broker: false }
+never with permission requests: BeforeRestart { sandbox_kept: Some("commands can write to the current folder"), widenable: true, network_off: false, web_search_off: false, environment: false, broker: false }
+own settings: BeforeRestart { sandbox_kept: Some("commands can write to the current folder"), widenable: false, network_off: true, web_search_off: true, environment: true, broker: true }
+protected launch with a secret set: BeforeRestart { sandbox_kept: Some("commands can write to the current folder"), widenable: false, network_off: true, web_search_off: true, environment: false, broker: false }
+named profile: BeforeRestart { sandbox_kept: Some("profile locked: commands can write to the current folder"), widenable: false, network_off: true, web_search_off: false, environment: false, broker: false }
+no sandbox: BeforeRestart { sandbox_kept: None, widenable: false, network_off: false, web_search_off: false, environment: false, broker: false }
+external sandbox: BeforeRestart { sandbox_kept: None, widenable: false, network_off: false, web_search_off: false, environment: false, broker: false }

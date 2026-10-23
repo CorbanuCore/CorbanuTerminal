@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -10,8 +12,6 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::ensure;
 use core_test_support::responses;
-use sha2::Digest;
-use sha2::Sha256;
 use tempfile::tempdir;
 use uuid::Uuid;
 use wiremock::Mock;
@@ -20,6 +20,8 @@ use wiremock::ResponseTemplate;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
+use crate::support::file_hash::sha256_file;
+use crate::support::secret_scan;
 use crate::support::tmux::CommandSpec;
 use crate::support::tmux::SessionSpec;
 use crate::support::tmux::TerminalSize;
@@ -97,11 +99,15 @@ async fn corbanu_env_alias_restart(index: usize) -> Result<()> {
         let locks = Arc::clone(&locks);
         async move {
             loop {
-                let (stream, _) = listener.accept().await.unwrap();
+                let (stream, _) = listener.accept().await.expect("accept mock daemon");
                 let (read, mut write) = tokio::io::split(stream);
                 let mut line = String::new();
-                BufReader::new(read).read_line(&mut line).await.unwrap();
-                let request: serde_json::Value = serde_json::from_str(&line).unwrap();
+                BufReader::new(read)
+                    .read_line(&mut line)
+                    .await
+                    .expect("read mock daemon request");
+                let request: serde_json::Value =
+                    serde_json::from_str(&line).expect("parse mock daemon request");
                 let response = match request["type"].as_str() {
                     Some("ping") => serde_json::json!({"type": "pong"}),
                     Some("protocol_version") if compatible.load(Ordering::SeqCst) => {
@@ -122,7 +128,7 @@ async fn corbanu_env_alias_restart(index: usize) -> Result<()> {
                 write
                     .write_all(format!("{response}\n").as_bytes())
                     .await
-                    .unwrap();
+                    .expect("write mock daemon response");
             }
         }
     });
@@ -142,7 +148,7 @@ async fn corbanu_env_alias_restart(index: usize) -> Result<()> {
         let session = tmux.new_session(
             SessionSpec::new(
                 "env-alias",
-                TerminalSize::new(160, 50),
+                TerminalSize::new(/*columns*/ 160, /*rows*/ 50),
                 command
                     .arg("-c")
                     .arg("analytics.enabled=false")
@@ -430,7 +436,7 @@ async fn tmux_fresh_wallet_api_key_success_activates_without_restart() -> Result
     pane.send_secret_literal(&passphrase)?;
     pane.send_key(TmuxKey::Enter)?;
     pane.wait_stable_contains("Create API key", READY_TIMEOUT)?;
-    let before_key_creation = pane.capture_scrollback_tail(4_000)?;
+    let before_key_creation = pane.capture_scrollback_tail(/*lines*/ 4_000)?;
     ensure!(
         !before_key_creation.contains("inactive or unavailable"),
         "deferred Corbanu setup attempted model selection before key creation:\n{before_key_creation}"
@@ -449,7 +455,7 @@ async fn tmux_fresh_wallet_api_key_success_activates_without_restart() -> Result
         ],
     )
     .await?;
-    let scrollback = pane.capture_scrollback_tail(4_000)?;
+    let scrollback = pane.capture_scrollback_tail(/*lines*/ 4_000)?;
     ensure!(
         !scrollback.contains("inactive or unavailable"),
         "newly stored Corbanu API key was not activated in the current process:\n{config}\nredacted terminal scrollback:\n{scrollback}"
@@ -621,6 +627,147 @@ async fn tmux_locked_wallet_api_unlocks_and_cancels() -> Result<()> {
     Ok(())
 }
 
+/// #461: onboarding text fields take every printable key. Values typed key by key (as a
+/// non-bracketed paste or typing arrives) that contain `q`, even as the first character, must
+/// not quit the TUI and spill the rest of a secret onto the shell.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_onboarding_text_fields_type_q_without_quitting() -> Result<()> {
+    if !TmuxServer::should_run("PF-84 #461 onboarding text fields type q")? {
+        return Ok(());
+    }
+    let repo_root = codex_utils_cargo_bin::repo_root()?;
+    let binary = codex_binary(&repo_root)?;
+    let home = tempdir()?;
+    let server = MockServer::start().await;
+    write_config(home.path(), &repo_root, &server.uri())?;
+    let config_path = home.path().join("config.toml");
+    let mut config = fs::read_to_string(&config_path)?;
+    config.push_str("\n[features]\nnamed_accounts = true\n");
+    fs::write(&config_path, config)?;
+
+    let tmux = TmuxServer::start("pf84_461_onboarding_q")?;
+    register_evidence(&tmux, home.path(), &binary)?;
+    let session = tmux.new_session(session_spec(
+        "pf84-461-onboarding-q",
+        &binary,
+        &repo_root,
+        home.path(),
+    ))?;
+    let pane = session.primary_pane();
+    pane.wait_stable_contains("Provider: OpenAI Codex Account", READY_TIMEOUT)?;
+
+    // The default-key field, with `q` as its first character.
+    let default_key = format!("q{}", synthetic_canary("q-default"));
+    configure_api_key(pane, "Provider: Z.AI API Key", &default_key)?;
+    ensure!(session.is_running(), "typing the default key quit the TUI");
+
+    select_label(pane, "Provider: Z.AI")?;
+    // The chooser's "> Z.AI" header defeats `select_label`; the action is one row down.
+    pane.wait_stable_contains("> Use configured credentials", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Down)?;
+    pane.wait_stable_contains("> Add another account", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Name it:", READY_TIMEOUT)?;
+    pane.send_literal("qa-quota")?;
+    pane.wait_stable_contains("qa-quota", READY_TIMEOUT)?;
+    ensure!(session.is_running(), "typing the account name quit the TUI");
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("never shown.", READY_TIMEOUT)?;
+
+    let account_key = format!("q{}-qqq", synthetic_canary("q-account"));
+    pane.send_secret_literal(&account_key)?;
+    let masked = account_key.chars().count();
+    pane.wait_stable_until("the whole masked value", READY_TIMEOUT, |capture| {
+        capture.matches('•').count() >= masked
+    })?;
+    ensure!(session.is_running(), "typing the account key quit the TUI");
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("--account qa-quota", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Choose a provider account", READY_TIMEOUT)?;
+    select_label(pane, "Done")?;
+    wait_chat_ready(pane)?;
+
+    let scrollback = pane.capture_scrollback_tail(/*lines*/ 4_000)?;
+    for canary in [default_key.as_str(), account_key.as_str()] {
+        ensure!(
+            !scrollback.contains(canary.strip_prefix('q').unwrap_or(canary)),
+            "a typed secret appeared in the terminal"
+        );
+        ensure!(
+            !tree_contains_except_custody(home.path(), canary.as_bytes())?,
+            "a typed secret appeared in plain text under the isolated home"
+        );
+    }
+    exit_tui(pane)?;
+    session.wait_for_exit(READY_TIMEOUT)?;
+    Ok(())
+}
+
+/// #462: when config already names the provider, onboarding opens on that provider's key
+/// entry. Saving the key must continue to chat instead of looping back to key entry.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_preset_provider_key_entry_continues_to_chat() -> Result<()> {
+    if !TmuxServer::should_run("PF-84 #462 preset provider onboarding")? {
+        return Ok(());
+    }
+    let repo_root = codex_utils_cargo_bin::repo_root()?;
+    let binary = codex_binary(&repo_root)?;
+    let home = tempdir()?;
+    // Nothing listens here, so the provider never looks reachable before its setup completes;
+    // a reachable endpoint let a status refresh hide the loop. No request is made.
+    write_config(home.path(), &repo_root, "http://127.0.0.1:9")?;
+    let config_path = home.path().join("config.toml");
+    let config = fs::read_to_string(&config_path)?
+        .replace("model = \"gpt-5.4\"", "model = \"pf84-preset\"")
+        // A built-in API-key provider (Kimi, Z.AI) named in config forces the API path;
+        // the loopback provider stands in for it without a real endpoint.
+        .replace(
+            "model_provider = \"openai\"",
+            "model_provider = \"pf53-loopback\"\nforced_login_method = \"api\"",
+        );
+    fs::write(&config_path, config)?;
+
+    let tmux = TmuxServer::start("pf84_462_preset_provider")?;
+    register_evidence(&tmux, home.path(), &binary)?;
+    let session = tmux.new_session(session_spec(
+        "pf84-462-preset-provider",
+        &binary,
+        &repo_root,
+        home.path(),
+    ))?;
+    let pane = session.primary_pane();
+    pane.wait_stable_contains("Use your PF53 Loopback API key", READY_TIMEOUT)?;
+    // Type at a person's pace: background provider discovery finishes first, as it does for a
+    // person. When it finished after the save instead, its refresh hid the loop.
+    std::thread::sleep(Duration::from_secs(3));
+    let key = synthetic_canary("preset");
+    pane.send_secret_literal(&key)?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("API key configured", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Enter)?;
+    let after_save = pane.wait_stable_until(
+        "chat, or the key-entry loop, after the key is saved",
+        READY_TIMEOUT,
+        |capture| {
+            capture.contains("/model to change")
+                || capture.contains("Provide your PF53 Loopback API key")
+        },
+    )?;
+    ensure!(
+        !after_save.contains("Provide your PF53 Loopback API key"),
+        "onboarding looped back to key entry:\n{after_save}"
+    );
+    wait_chat_ready(pane)?;
+    ensure!(
+        !tree_contains_except_custody(home.path(), key.as_bytes())?,
+        "the saved key appeared in plain text under the isolated home"
+    );
+    exit_tui(pane)?;
+    session.wait_for_exit(READY_TIMEOUT)?;
+    Ok(())
+}
+
 fn configure_api_key(pane: &TmuxPane<'_>, label: &str, secret: &str) -> Result<()> {
     select_label(pane, label)?;
     pane.wait_stable_contains("never adds it to chat.", READY_TIMEOUT)?;
@@ -757,10 +904,16 @@ fn canary_tree_scan_skips_unix_sockets_and_scans_regular_files() -> Result<()> {
     let canary = synthetic_canary("walker");
     let _socket = UnixListener::bind(directory.path().join("wallet-daemon.sock"))?;
 
-    assert!(!tree_contains(directory.path(), canary.as_bytes())?);
+    assert!(!tree_contains_except_custody(
+        directory.path(),
+        canary.as_bytes()
+    )?);
 
     fs::write(directory.path().join("observable.log"), canary.as_bytes())?;
-    assert!(tree_contains(directory.path(), canary.as_bytes())?);
+    assert!(tree_contains_except_custody(
+        directory.path(),
+        canary.as_bytes()
+    )?);
     Ok(())
 }
 
@@ -795,7 +948,7 @@ fn exit_tui(pane: &TmuxPane<'_>) -> Result<()> {
 fn session_spec(name: &str, binary: &Path, repo_root: &Path, home: &Path) -> SessionSpec {
     SessionSpec::new(
         name,
-        TerminalSize::new(140, 44),
+        TerminalSize::new(/*columns*/ 140, /*rows*/ 44),
         CommandSpec::new(binary)
             .env("CODEX_HOME", home)
             .env("CORBANU_HOME", home)
@@ -824,7 +977,7 @@ fn session_spec_with_gateway(
 ) -> SessionSpec {
     SessionSpec::new(
         name,
-        TerminalSize::new(140, 44),
+        TerminalSize::new(/*columns*/ 140, /*rows*/ 44),
         CommandSpec::new(binary)
             .env("CODEX_HOME", home)
             .env("CORBANU_HOME", home)
@@ -1052,7 +1205,7 @@ trust_level = "trusted"
 }
 
 fn register_evidence(tmux: &TmuxServer, home: &Path, binary: &Path) -> Result<()> {
-    let hash = binary_sha256(binary)?;
+    let hash = sha256_file(binary)?;
     fs::write(
         home.join("binary.sha256"),
         format!("{hash}  {}\n", binary.display()),
@@ -1061,30 +1214,6 @@ fn register_evidence(tmux: &TmuxServer, home: &Path, binary: &Path) -> Result<()
     tmux.register_artifact("config.toml", home.join("config.toml"));
     tmux.register_artifact("codex-tui.log", home.join("log/codex-tui.log"));
     Ok(())
-}
-
-fn binary_sha256(binary: &Path) -> Result<String> {
-    // Debug binaries can exceed a gigabyte. Use a streaming system hash instead
-    // of loading the whole binary and hashing it in unoptimized test code.
-    for (program, arguments) in [("sha256sum", &[][..]), ("shasum", &["-a", "256"][..])] {
-        let output = match std::process::Command::new(program)
-            .args(arguments)
-            .arg(binary)
-            .output()
-        {
-            Ok(output) if output.status.success() => output,
-            _ => continue,
-        };
-        if let Some(hash) = std::str::from_utf8(&output.stdout)
-            .ok()
-            .and_then(|text| text.split_whitespace().next())
-            && hash.len() == 64
-            && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
-        {
-            return Ok(hash.to_string());
-        }
-    }
-    Ok(format!("{:x}", Sha256::digest(fs::read(binary)?)))
 }
 
 async fn mount_corbanu_api_gateway(server: &MockServer) {
@@ -1186,12 +1315,12 @@ async fn capture_success_evidence(
     canaries: &[&str],
 ) -> Result<()> {
     let viewport = pane.capture_viewport()?;
-    let scrollback = pane.capture_scrollback_tail(4_000)?;
+    let scrollback = pane.capture_scrollback_tail(/*lines*/ 4_000)?;
     let directory = PathBuf::from("target/tmux-artifacts").join(format!("pf53-{scenario}"));
     fs::create_dir_all(&directory)?;
     fs::write(directory.join("viewport.txt"), &viewport)?;
     fs::write(directory.join("scrollback.txt"), &scrollback)?;
-    let binary_hash = binary_sha256(binary)?;
+    let binary_hash = sha256_file(binary)?;
     fs::write(
         directory.join("binary.sha256"),
         format!("{binary_hash}  {}\n", binary.display()),
@@ -1219,7 +1348,7 @@ async fn capture_success_evidence(
             "secret canary appeared in observable isolated-home files"
         );
         ensure!(
-            !tree_contains(&directory, needle)?,
+            !tree_contains_except_custody(&directory, needle)?,
             "secret canary appeared in emitted success artifacts"
         );
     }
@@ -1230,37 +1359,11 @@ fn synthetic_canary(label: &str) -> String {
     format!("pf53-{label}-{}", Uuid::new_v4())
 }
 
+/// Custody files keep their secret by design; every other file must not contain it.
 fn tree_contains_except_custody(root: &Path, needle: &[u8]) -> Result<bool> {
-    if root.file_name().and_then(|name| name.to_str()) == Some("provider_auth.json") {
-        return Ok(false);
-    }
-    tree_contains(root, needle)
-}
-
-fn tree_contains(root: &Path, needle: &[u8]) -> Result<bool> {
-    let metadata = match fs::symlink_metadata(root) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(error) => return Err(error.into()),
-    };
-    let file_type = metadata.file_type();
-    if file_type.is_symlink() {
-        return Ok(false);
-    }
-    if file_type.is_file() {
-        let bytes = fs::read(root)?;
-        return Ok(bytes.windows(needle.len()).any(|window| window == needle));
-    }
-    if !file_type.is_dir() {
-        return Ok(false);
-    }
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
-        if tree_contains_except_custody(&entry.path(), needle)? {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+    secret_scan::tree_contains(root, needle, &|path| {
+        path.file_name().and_then(|name| name.to_str()) == Some("provider_auth.json")
+    })
 }
 
 fn response(text: &str) -> String {

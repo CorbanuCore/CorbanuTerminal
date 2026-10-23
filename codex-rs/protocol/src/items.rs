@@ -168,6 +168,7 @@ pub enum CommandExecutionStatus {
     Completed,
     Failed,
     Declined,
+    Refused,
 }
 
 impl From<ExecCommandStatus> for CommandExecutionStatus {
@@ -176,6 +177,7 @@ impl From<ExecCommandStatus> for CommandExecutionStatus {
             ExecCommandStatus::Completed => Self::Completed,
             ExecCommandStatus::Failed => Self::Failed,
             ExecCommandStatus::Declined => Self::Declined,
+            ExecCommandStatus::Refused => Self::Refused,
         }
     }
 }
@@ -306,6 +308,11 @@ pub struct CollabAgentToolCallItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub reasoning_effort: Option<ReasoningEffortConfig>,
+    /// The named account the spawned agent uses (`default` included), only
+    /// while named accounts are on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub provider_account: Option<String>,
     #[serde(default)]
     pub agents_states: HashMap<ThreadId, AgentStatus>,
 }

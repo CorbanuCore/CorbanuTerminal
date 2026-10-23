@@ -27,6 +27,7 @@ use codex_config::CloudConfigBundleLoader;
 use codex_config::LoaderOverrides;
 use codex_core::config::Config;
 use codex_core::config::ConfigBuilder;
+use codex_core::config::ConfigOverrides;
 use codex_exec_server::EnvironmentManager;
 use codex_feedback::CodexFeedback;
 use codex_login::AuthManager;
@@ -94,7 +95,8 @@ fn init_test_tracing() -> &'static TestTracing {
         global::set_text_map_propagator(TraceContextPropagator::new());
         let subscriber =
             tracing_subscriber::registry().with(tracing_opentelemetry::layer().with_tracer(tracer));
-        tracing::subscriber::set_global_default(subscriber)
+        codex_log_guard::guard(subscriber)
+            .try_init()
             .expect("global tracing subscriber should only be installed once");
         TestTracing { exporter, provider }
     })
@@ -108,6 +110,7 @@ fn request_from_client_request(request: ClientRequest) -> JSONRPCRequest {
 struct TracingHarness {
     _server: MockServer,
     _codex_home: TempDir,
+    _cwd: TempDir,
     processor: Arc<MessageProcessor>,
     outgoing_rx: mpsc::Receiver<crate::outgoing_message::OutgoingEnvelope>,
     session: Arc<ConnectionSessionState>,
@@ -118,7 +121,9 @@ impl TracingHarness {
     async fn new() -> Result<Self> {
         let server = create_mock_responses_server_repeating_assistant("Done").await;
         let codex_home = TempDir::new()?;
-        let config = Arc::new(build_test_config(codex_home.path(), &server.uri()).await?);
+        let cwd = TempDir::new()?;
+        let config =
+            Arc::new(build_test_config(codex_home.path(), cwd.path(), &server.uri()).await?);
         let (processor, outgoing_rx) = build_test_processor(config).await;
         let tracing = init_test_tracing();
         tracing.exporter.reset();
@@ -126,6 +131,7 @@ impl TracingHarness {
         let mut harness = Self {
             _server: server,
             _codex_home: codex_home,
+            _cwd: cwd,
             processor,
             outgoing_rx,
             session: Arc::new(ConnectionSessionState::new()),
@@ -209,7 +215,9 @@ impl TracingHarness {
     }
 }
 
-async fn build_test_config(codex_home: &Path, server_uri: &str) -> Result<Config> {
+/// Built for the temporary working folder `cwd`: without one it would be
+/// built for the test process's own folder, the crate's source tree (#1138).
+async fn build_test_config(codex_home: &Path, cwd: &Path, server_uri: &str) -> Result<Config> {
     write_mock_responses_config_toml(
         codex_home,
         server_uri,
@@ -221,7 +229,12 @@ async fn build_test_config(codex_home: &Path, server_uri: &str) -> Result<Config
     )?;
 
     Ok(ConfigBuilder::default()
+        .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
         .codex_home(codex_home.to_path_buf())
+        .harness_overrides(ConfigOverrides {
+            cwd: Some(cwd.to_path_buf()),
+            ..Default::default()
+        })
         .build()
         .await?)
 }

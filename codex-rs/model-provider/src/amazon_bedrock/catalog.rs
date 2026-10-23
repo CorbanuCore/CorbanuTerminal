@@ -54,6 +54,17 @@ pub(crate) fn static_model_catalog() -> ModelsResponse {
     })
 }
 
+/// PF-84-S06 (#572): Bedrock's built-in models as picker presets, so a
+/// session on another provider can offer a switch to Bedrock.
+pub fn model_presets() -> Vec<codex_protocol::openai_models::ModelPreset> {
+    static_model_catalog()
+        .models
+        .into_iter()
+        .map(codex_protocol::openai_models::ModelPreset::from)
+        .filter(|preset| preset.show_in_picker)
+        .collect()
+}
+
 pub(crate) fn with_default_only_service_tier(mut catalog: ModelsResponse) -> ModelsResponse {
     for model in &mut catalog.models {
         // Amazon Bedrock currently only supports the implicit "default" tier for GPT models.

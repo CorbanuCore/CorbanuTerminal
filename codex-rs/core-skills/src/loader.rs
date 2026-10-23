@@ -54,12 +54,32 @@ use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use tokio::sync::Semaphore;
 use toml::Value as TomlValue;
 use tracing::error;
 
 // TODO(anp): Tune this eight-scan limit after revisiting byte-based backpressure.
 pub const MAX_CONCURRENT_ROOT_SCANS: usize = 8;
+
+/// When set, discovery skips the user-home root (`$HOME/.agents/skills`).
+static IGNORE_USER_HOME_SKILLS: AtomicBool = AtomicBool::new(false);
+
+/// Test harnesses call this so the developer's own `$HOME/.agents/skills` never
+/// reaches a test (#888), as this crate's unit tests already do by passing no
+/// home folder. It is process-wide and in memory only: nothing changes `HOME`,
+/// and child processes are unaffected. Production code must not call it.
+pub fn ignore_user_home_skills_for_tests(ignore: bool) {
+    IGNORE_USER_HOME_SKILLS.store(ignore, Ordering::Relaxed);
+}
+
+fn user_home_dir() -> Option<AbsolutePathBuf> {
+    if IGNORE_USER_HOME_SKILLS.load(Ordering::Relaxed) {
+        return None;
+    }
+    home_dir().and_then(|path| AbsolutePathBuf::from_absolute_path_checked(path).ok())
+}
 
 #[derive(Debug, Deserialize)]
 struct SkillFrontmatter {
@@ -244,8 +264,7 @@ pub(crate) async fn skill_roots(
     plugin_skill_roots: Vec<PluginSkillRoot>,
     extra_skill_roots: Vec<AbsolutePathBuf>,
 ) -> Vec<SkillRoot> {
-    let home_dir =
-        home_dir().and_then(|path| AbsolutePathBuf::from_absolute_path_checked(path).ok());
+    let home_dir = user_home_dir();
     skill_roots_with_home_dir(
         fs,
         config_layer_stack,
@@ -469,11 +488,24 @@ async fn find_project_root(
         .map(|(ancestor, marker_path)| async move {
             let marker_path_uri = PathUri::from_abs_path(&marker_path);
             let result = fs.get_metadata(&marker_path_uri, /*sandbox*/ None).await;
-            (ancestor, marker_path, result)
+            // A `.git` directory only marks a checkout when it contains `HEAD`;
+            // the Linux sandbox leaves empty `.git` mount targets in writable roots.
+            let is_incomplete_git_dir = match &result {
+                Ok(metadata) if metadata.is_directory && marker_path.ends_with(".git") => fs
+                    .get_metadata(
+                        &PathUri::from_abs_path(&marker_path.join("HEAD")),
+                        /*sandbox*/ None,
+                    )
+                    .await
+                    .is_err(),
+                _ => false,
+            };
+            (ancestor, marker_path, result, is_incomplete_git_dir)
         })
         .buffered(MAX_CONCURRENT_ANCESTOR_PROBES);
-    while let Some((ancestor, marker_path, result)) = results.next().await {
+    while let Some((ancestor, marker_path, result, is_incomplete_git_dir)) = results.next().await {
         match result {
+            Ok(_) if is_incomplete_git_dir => {}
             Ok(_) => return ancestor,
             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
             Err(err) => {

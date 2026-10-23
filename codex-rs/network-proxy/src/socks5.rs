@@ -1,6 +1,11 @@
 use crate::attribution::BindConnectionAttribution;
 use crate::config::NetworkMode;
 use crate::connect_policy::TargetCheckedTcpConnector;
+use crate::destination;
+use crate::destination::DenialSite;
+use crate::destination::DestinationDenial;
+use crate::destination::DestinationGuard;
+use crate::destination::SystemResolver;
 use crate::mitm;
 use crate::network_policy::BlockDecisionAuditEventArgs;
 use crate::network_policy::NetworkDecision;
@@ -354,6 +359,35 @@ async fn handle_socks5_tcp(
         }
     }
 
+    // PF-33-S01: SOCKS exposes only the authority; it must still pass the
+    // destination policy against current DNS answers.
+    let destination_guard = destination::guard_enabled(&app_state)
+        .await
+        .map_err(|err| {
+            error!("failed to read destination policy: {err}");
+            io::Error::other("proxy error")
+        })?;
+    if destination_guard
+        && let Err(denial) = DestinationGuard::protected()
+            .authorize_tunnel(&host, port, &SystemResolver)
+            .await
+    {
+        let site = DenialSite {
+            host: &host,
+            port,
+            method: None,
+            protocol: "socks5",
+            client: client.clone(),
+            fail_command: true,
+        };
+        destination::record_denial(&app_state, &denial, site).await;
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("destination policy denied the request ({})", denial.code()),
+        )
+        .into());
+    }
+
     let host_mitm_requirement = match app_state.host_mitm_requirement(&host).await {
         Ok(requirement) => requirement,
         Err(err) => {
@@ -376,6 +410,12 @@ async fn handle_socks5_tcp(
             HostMitmRequirement::Tls => SocksMitmMode::DetectTls,
             HostMitmRequirement::Always => SocksMitmMode::Enabled,
         }
+    };
+    // PF-33-S01: intercept every guarded tunnel (see the CONNECT path).
+    let socks_mitm_mode = if destination_guard {
+        SocksMitmMode::Enabled
+    } else {
+        socks_mitm_mode
     };
     let unsupported_hook_protocol =
         host_mitm_requirement == HostMitmRequirement::Always && !socks5_tcp_target_is_https;
@@ -689,6 +729,32 @@ async fn inspect_socks5_udp(
         }
     }
 
+    // PF-33-S01: public retrieval is HTTPS over TCP, so the guard refuses every
+    // UDP relay (QUIC, DNS and other datagrams).
+    match destination::guard_enabled(&state).await {
+        Ok(false) => {}
+        Ok(true) => {
+            let denial = DestinationDenial::UdpRelay;
+            let site = DenialSite {
+                host: &host,
+                port,
+                method: None,
+                protocol: "socks5-udp",
+                client: client.clone(),
+                fail_command: true,
+            };
+            destination::record_denial(&state, &denial, site).await;
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("destination policy denied the request ({})", denial.code()),
+            ));
+        }
+        Err(err) => {
+            error!("failed to read destination policy: {err}");
+            return Err(io::Error::other("proxy error"));
+        }
+    }
+
     match state.network_mode().await {
         Ok(NetworkMode::Limited) => {
             emit_socks_block_decision_audit_event(
@@ -871,6 +937,83 @@ mod tests {
             state: state.clone(),
         });
         Arc::new(NetworkProxyState::with_reloader(state, reloader))
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn pf_33_s01_socks_tunnel_passes_the_destination_policy() {
+        let mut config = NetworkProxyConfig {
+            enabled: true,
+            mode: NetworkMode::Full,
+            ..NetworkProxyConfig::default()
+        };
+        config.set_allowed_domains(vec!["93.184.216.34".to_string()]);
+        // Field only: no MITM CA is created in this test.
+        config.url_destination_policy = true;
+        let state = state_for_settings(config);
+        for (authority, reason) in [
+            (
+                "93.184.216.34:8443",
+                "destination_policy:scheme_port_or_method",
+            ),
+            ("93.184.216.34:443", "mitm_required"),
+        ] {
+            let mut request =
+                TcpRequest::new(HostWithPort::try_from(authority).expect("valid authority"));
+            request.extensions_mut().insert(state.clone());
+            let result = handle_socks5_tcp(
+                request,
+                TargetCheckedTcpConnector::new(state.clone()),
+                /*policy_decider*/ None,
+                /*environment_id*/ None,
+            )
+            .await;
+            assert!(result.is_err(), "{authority} should be refused");
+            let blocked = state.drain_blocked().await.expect("blocked");
+            assert_eq!(
+                blocked.last().map(|entry| entry.reason.as_str()),
+                Some(reason),
+                "{authority}"
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn pf_33_s01_socks_udp_is_refused_under_the_guard() {
+        for (guard, refused) in [(false, false), (true, true)] {
+            let mut config = NetworkProxyConfig {
+                enabled: true,
+                mode: NetworkMode::Full,
+                ..NetworkProxyConfig::default()
+            };
+            config.set_allowed_domains(vec!["93.184.216.34".to_string()]);
+            config.url_destination_policy = guard;
+            let state = state_for_settings(config);
+            let request = RelayRequest {
+                direction: RelayDirection::South,
+                server_address: SocketAddress::new(
+                    IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34)),
+                    443,
+                ),
+                payload: Default::default(),
+                extensions: Extensions::new(),
+            };
+            let result = inspect_socks5_udp(
+                request,
+                state.clone(),
+                /*policy_decider*/ None,
+                /*environment_id*/ None,
+            )
+            .await;
+            assert_eq!(result.is_err(), refused, "guard={guard}");
+            let blocked = state.drain_blocked().await.expect("blocked");
+            assert_eq!(
+                blocked
+                    .iter()
+                    .any(|entry| entry.reason == "destination_policy:udp_relay"),
+                refused,
+                "guard={guard}"
+            );
+        }
     }
 
     #[tokio::test(flavor = "current_thread")]

@@ -1,0 +1,184 @@
+{"t": 1791877478.196, "ev": "device-usercode"}
+{"t": 1791877478.201, "ev": "sign-in", "user": "deflt"}
+{"t": 1791877478.297, "ev": "device-usercode"}
+{"t": 1791877478.299, "ev": "sign-in", "user": "work"}
+{"t": 1791877479.091, "ev": "device-usercode"}
+{"t": 1791877479.094, "ev": "sign-in", "user": "play"}
+{"t": 1791877480.077, "ev": "device-usercode"}
+{"t": 1791877480.081, "ev": "sign-in", "user": "work~2"}
+{"t": 1791877481.089, "ev": "device-usercode"}
+{"t": 1791877481.091, "ev": "sign-in", "user": "deflt~2"}
+{"t": 1791877482.183, "ev": "device-usercode"}
+{"t": 1791877482.187, "ev": "sign-in", "user": "bad"}
+{"t": 1791877516.985, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791877517.098, "ev": "refresh", "user": "work", "frm": 1, "to": 2}
+{"t": 1791877517.103, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791877517.511, "ev": "refresh", "user": "play", "frm": 1, "to": 2}
+{"t": 1791877517.512, "ev": "refresh", "user": "work", "frm": 2, "to": 3}
+{"t": 1791877518.387, "ev": "refresh", "user": "work", "frm": 3, "to": 4}
+{"t": 1791877518.388, "ev": "refresh", "user": "play", "frm": 2, "to": 3}
+{"t": 1791877518.786, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "work", "gen": 4, "expired": false}}
+{"t": 1791877519.177, "ev": "refresh", "user": "work", "frm": 4, "to": 5}
+{"t": 1791877519.177, "ev": "refresh", "user": "play", "frm": 3, "to": 4}
+{"t": 1791877519.583, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "work", "gen": 5, "expired": false}}
+{"t": 1791877519.959, "ev": "refresh", "user": "work", "frm": 5, "to": 6}
+{"t": 1791877519.959, "ev": "refresh", "user": "play", "frm": 4, "to": 5}
+{"t": 1791877519.96, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "play", "gen": 4, "expired": false}}
+{"t": 1791877520.803, "ev": "refresh", "user": "work", "frm": 6, "to": 7}
+{"t": 1791877520.803, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "play", "gen": 5, "expired": false}}
+{"t": 1791877521.181, "ev": "refresh", "user": "play", "frm": 5, "to": 6}
+{"t": 1791877521.558, "ev": "refresh", "user": "work", "frm": 7, "to": 8}
+{"t": 1791877521.943, "ev": "refresh", "user": "play", "frm": 6, "to": 7}
+{"t": 1791877521.944, "ev": "refresh", "user": "work", "frm": 8, "to": 9}
+{"t": 1791877522.693, "ev": "refresh", "user": "play", "frm": 7, "to": 8}
+{"t": 1791877522.694, "ev": "refresh", "user": "work", "frm": 9, "to": 10}
+{"t": 1791877523.444, "ev": "refresh", "user": "play", "frm": 8, "to": 9}
+{"t": 1791877523.446, "ev": "refresh", "user": "work", "frm": 10, "to": 11}
+{"t": 1791877524.184, "ev": "refresh", "user": "play", "frm": 9, "to": 10}
+{"t": 1791877524.184, "ev": "refresh", "user": "work", "frm": 11, "to": 12}
+{"t": 1791877524.923, "ev": "refresh", "user": "play", "frm": 10, "to": 11}
+{"t": 1791877525.292, "ev": "refresh", "user": "work", "frm": 12, "to": 13}
+{"t": 1791877525.292, "ev": "refresh", "user": "play", "frm": 11, "to": 12}
+{"t": 1791877526.058, "ev": "refresh", "user": "work", "frm": 13, "to": 14}
+{"t": 1791877526.059, "ev": "refresh", "user": "play", "frm": 12, "to": 13}
+{"t": 1791877526.835, "ev": "refresh", "user": "work", "frm": 14, "to": 15}
+{"t": 1791877526.836, "ev": "refresh", "user": "play", "frm": 13, "to": 14}
+{"t": 1791877527.59, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work", "gen": 15, "expired": false}}
+{"t": 1791877527.591, "ev": "refresh", "user": "work", "frm": 15, "to": 16}
+{"t": 1791877527.592, "ev": "refresh", "user": "play", "frm": 14, "to": 15}
+{"t": 1791877528.341, "ev": "refresh", "user": "work", "frm": 16, "to": 17}
+{"t": 1791877528.342, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "play", "gen": 15, "expired": false}}
+{"t": 1791877528.343, "ev": "refresh", "user": "play", "frm": 15, "to": 16}
+{"t": 1791877529.076, "ev": "refresh", "user": "work", "frm": 17, "to": 18}
+{"t": 1791877529.078, "ev": "refresh", "user": "play", "frm": 16, "to": 17}
+{"t": 1791877529.464, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work", "gen": 18, "expired": false}}
+{"t": 1791877529.846, "ev": "refresh", "user": "work", "frm": 18, "to": 19}
+{"t": 1791877529.847, "ev": "refresh", "user": "play", "frm": 17, "to": 18}
+{"t": 1791877530.638, "ev": "refresh", "user": "work", "frm": 19, "to": 20}
+{"t": 1791877530.638, "ev": "refresh", "user": "play", "frm": 18, "to": 19}
+{"t": 1791877530.639, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "play", "gen": 18, "expired": false}}
+{"t": 1791877531.418, "ev": "refresh", "user": "work", "frm": 20, "to": 21}
+{"t": 1791877531.42, "ev": "refresh", "user": "play", "frm": 19, "to": 20}
+{"t": 1791877532.2, "ev": "refresh", "user": "work", "frm": 21, "to": 22}
+{"t": 1791877532.201, "ev": "refresh", "user": "play", "frm": 20, "to": 21}
+{"t": 1791877532.989, "ev": "refresh", "user": "work", "frm": 22, "to": 23}
+{"t": 1791877532.991, "ev": "refresh", "user": "play", "frm": 21, "to": 22}
+{"t": 1791877533.765, "ev": "refresh", "user": "work", "frm": 23, "to": 24}
+{"t": 1791877533.765, "ev": "refresh", "user": "play", "frm": 22, "to": 23}
+{"t": 1791877534.547, "ev": "refresh", "user": "work", "frm": 24, "to": 25}
+{"t": 1791877534.549, "ev": "refresh", "user": "play", "frm": 23, "to": 24}
+{"t": 1791877535.337, "ev": "refresh", "user": "work", "frm": 25, "to": 26}
+{"t": 1791877535.339, "ev": "refresh", "user": "play", "frm": 24, "to": 25}
+{"t": 1791877536.137, "ev": "refresh", "user": "work", "frm": 26, "to": 27}
+{"t": 1791877536.14, "ev": "refresh", "user": "play", "frm": 25, "to": 26}
+{"t": 1791877536.915, "ev": "refresh", "user": "work", "frm": 27, "to": 28}
+{"t": 1791877536.916, "ev": "refresh", "user": "play", "frm": 26, "to": 27}
+{"t": 1791877537.711, "ev": "refresh", "user": "work", "frm": 28, "to": 29}
+{"t": 1791877537.712, "ev": "refresh", "user": "play", "frm": 27, "to": 28}
+{"t": 1791877538.477, "ev": "refresh", "user": "work", "frm": 29, "to": 30}
+{"t": 1791877538.477, "ev": "refresh", "user": "play", "frm": 28, "to": 29}
+{"t": 1791877539.719, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "work", "gen": 30, "expired": false}, "model": null}
+{"t": 1791877540.369, "ev": "refresh", "user": "play", "frm": 29, "to": 30}
+{"t": 1791877540.938, "ev": "refresh", "user": "play", "frm": 30, "to": 31}
+{"t": 1791877540.975, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "play", "gen": 30, "expired": false}, "model": null}
+{"t": 1791877550.833, "ev": "refresh", "user": "work", "frm": 30, "to": 31}
+{"t": 1791877550.834, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791877551.156, "ev": "refresh", "user": "work", "frm": 31, "to": 32}
+{"t": 1791877551.435, "ev": "refresh", "user": "work", "frm": 32, "to": 33}
+{"t": 1791877551.436, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "work", "gen": 32, "expired": false}}
+{"t": 1791877551.712, "ev": "refresh", "user": "work", "frm": 33, "to": 34}
+{"t": 1791877552.058, "ev": "refresh", "user": "work", "frm": 34, "to": 35}
+{"t": 1791877552.326, "ev": "refresh", "user": "work", "frm": 35, "to": 36}
+{"t": 1791877552.603, "ev": "refresh", "user": "work", "frm": 36, "to": 37}
+{"t": 1791877552.881, "ev": "refresh", "user": "work", "frm": 37, "to": 38}
+{"t": 1791877553.138, "ev": "refresh", "user": "work", "frm": 38, "to": 39}
+{"t": 1791877553.393, "ev": "refresh", "user": "work", "frm": 39, "to": 40}
+{"t": 1791877553.644, "ev": "refresh", "user": "work", "frm": 40, "to": 41}
+{"t": 1791877553.895, "ev": "refresh", "user": "work", "frm": 41, "to": 42}
+{"t": 1791877554.16, "ev": "refresh", "user": "work", "frm": 42, "to": 43}
+{"t": 1791877554.423, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work", "gen": 43, "expired": false}}
+{"t": 1791877554.423, "ev": "refresh", "user": "work", "frm": 43, "to": 44}
+{"t": 1791877554.678, "ev": "refresh", "user": "work", "frm": 44, "to": 45}
+{"t": 1791877554.944, "ev": "refresh", "user": "work", "frm": 45, "to": 46}
+{"t": 1791877555.22, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work", "gen": 46, "expired": false}}
+{"t": 1791877555.221, "ev": "refresh", "user": "work", "frm": 46, "to": 47}
+{"t": 1791877555.471, "ev": "refresh", "user": "work", "frm": 47, "to": 48}
+{"t": 1791877555.724, "ev": "refresh", "user": "work", "frm": 48, "to": 49}
+{"t": 1791877555.972, "ev": "refresh", "user": "work", "frm": 49, "to": 50}
+{"t": 1791877556.235, "ev": "refresh", "user": "work", "frm": 50, "to": 51}
+{"t": 1791877556.497, "ev": "refresh", "user": "work", "frm": 51, "to": 52}
+{"t": 1791877556.776, "ev": "refresh", "user": "work", "frm": 52, "to": 53}
+{"t": 1791877557.064, "ev": "refresh", "user": "work", "frm": 53, "to": 54}
+{"t": 1791877557.352, "ev": "refresh", "user": "work", "frm": 54, "to": 55}
+{"t": 1791877557.644, "ev": "refresh", "user": "work", "frm": 55, "to": 56}
+{"t": 1791877557.926, "ev": "refresh", "user": "work", "frm": 56, "to": 57}
+{"t": 1791877558.208, "ev": "refresh", "user": "work", "frm": 57, "to": 58}
+{"t": 1791877558.524, "ev": "refresh", "user": "work", "frm": 58, "to": 59}
+{"t": 1791877558.549, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "work", "gen": 58, "expired": false}, "model": null}
+{"t": 1791877559.353, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791877559.354, "ev": "refresh", "user": "work~2", "frm": 1, "to": 2}
+{"t": 1791877559.723, "ev": "refresh", "user": "work~2", "frm": 2, "to": 3}
+{"t": 1791877560.192, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "work~2", "gen": 3, "expired": false}}
+{"t": 1791877560.193, "ev": "refresh", "user": "work~2", "frm": 3, "to": 4}
+{"t": 1791877560.466, "ev": "refresh", "user": "work~2", "frm": 4, "to": 5}
+{"t": 1791877560.851, "ev": "refresh", "user": "work~2", "frm": 5, "to": 6}
+{"t": 1791877561.132, "ev": "refresh", "user": "work~2", "frm": 6, "to": 7}
+{"t": 1791877561.425, "ev": "refresh", "user": "work~2", "frm": 7, "to": 8}
+{"t": 1791877561.75, "ev": "refresh", "user": "work~2", "frm": 8, "to": 9}
+{"t": 1791877562.02, "ev": "refresh", "user": "work~2", "frm": 9, "to": 10}
+{"t": 1791877562.292, "ev": "refresh", "user": "work~2", "frm": 10, "to": 11}
+{"t": 1791877562.66, "ev": "refresh", "user": "work~2", "frm": 11, "to": 12}
+{"t": 1791877562.933, "ev": "refresh", "user": "work~2", "frm": 12, "to": 13}
+{"t": 1791877563.289, "ev": "refresh", "user": "work~2", "frm": 13, "to": 14}
+{"t": 1791877563.604, "ev": "refresh", "user": "work~2", "frm": 14, "to": 15}
+{"t": 1791877563.914, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work~2", "gen": 15, "expired": false}}
+{"t": 1791877563.914, "ev": "refresh", "user": "work~2", "frm": 15, "to": 16}
+{"t": 1791877564.194, "ev": "refresh", "user": "work~2", "frm": 16, "to": 17}
+{"t": 1791877564.479, "ev": "refresh", "user": "work~2", "frm": 17, "to": 18}
+{"t": 1791877564.746, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work~2", "gen": 18, "expired": false}}
+{"t": 1791877564.746, "ev": "refresh", "user": "work~2", "frm": 18, "to": 19}
+{"t": 1791877565.038, "ev": "refresh", "user": "work~2", "frm": 19, "to": 20}
+{"t": 1791877565.307, "ev": "refresh", "user": "work~2", "frm": 20, "to": 21}
+{"t": 1791877565.588, "ev": "refresh", "user": "work~2", "frm": 21, "to": 22}
+{"t": 1791877565.851, "ev": "refresh", "user": "work~2", "frm": 22, "to": 23}
+{"t": 1791877566.131, "ev": "refresh", "user": "work~2", "frm": 23, "to": 24}
+{"t": 1791877566.393, "ev": "refresh", "user": "work~2", "frm": 24, "to": 25}
+{"t": 1791877566.677, "ev": "refresh", "user": "work~2", "frm": 25, "to": 26}
+{"t": 1791877566.945, "ev": "refresh", "user": "work~2", "frm": 26, "to": 27}
+{"t": 1791877567.21, "ev": "refresh", "user": "work~2", "frm": 27, "to": 28}
+{"t": 1791877567.472, "ev": "refresh", "user": "work~2", "frm": 28, "to": 29}
+{"t": 1791877567.761, "ev": "refresh", "user": "work~2", "frm": 29, "to": 30}
+{"t": 1791877568.019, "ev": "refresh", "user": "work~2", "frm": 30, "to": 31}
+{"t": 1791877568.034, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "work~2", "gen": 30, "expired": false}, "model": null}
+{"t": 1791877568.489, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791877569.392, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "keyacct"}, "model": "gpt-5.4"}
+{"t": 1791877569.799, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791877570.89, "ev": "responses-401", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "fakekey"}, "model": "gpt-5.4"}
+{"t": 1791877571.822, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791877571.823, "ev": "refresh-rejected", "user": "bad", "why": "expired"}
+{"t": 1791877571.847, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "bad", "gen": 1, "expired": true}}
+{"t": 1791877572.71, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "bad", "gen": 1, "expired": true}}
+{"t": 1791877572.728, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "bad", "gen": 1, "expired": true}}
+{"t": 1791877572.83, "ev": "responses-401", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "bad", "gen": 1, "expired": true}, "model": null}
+{"t": 1791877572.898, "ev": "responses-401", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "bad", "gen": 1, "expired": true}, "model": null}
+{"t": 1791877573.254, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791877573.733, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791877574.37, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791877575.76, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "keyacct"}, "model": "gpt-5.4"}
+{"t": 1791877576.632, "ev": "device-usercode"}
+{"t": 1791877576.638, "ev": "sign-in", "user": "play2"}
+{"t": 1791877577.238, "ev": "revoke", "user": "play", "kind": "refresh_token"}
+{"t": 1791877578.252, "ev": "device-usercode"}
+{"t": 1791877578.258, "ev": "sign-in", "user": "play2~2"}
+{"t": 1791877579.831, "ev": "revoke", "user": "play2~2", "kind": "refresh_token"}
+{"t": 1791877581.527, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791877583.71, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791877583.713, "ev": "refresh", "user": "work~2", "frm": 31, "to": 32}
+{"t": 1791877584.024, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "work~2", "gen": 32, "expired": false}}
+{"t": 1791877584.027, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "work~2", "gen": 32, "expired": false}}
+{"t": 1791877584.72, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work~2", "gen": 32, "expired": false}}
+{"t": 1791877584.765, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work~2", "gen": 32, "expired": false}}
+{"t": 1791877584.931, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "work~2", "gen": 32, "expired": false}, "model": null}
+{"t": 1791877585.776, "ev": "revoke", "user": "work~2", "kind": "refresh_token"}
+{"t": 1791877587.009, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791877587.95, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "codexenv"}, "model": "gpt-5.4"}

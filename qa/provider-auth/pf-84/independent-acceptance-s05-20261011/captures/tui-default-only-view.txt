@@ -1,0 +1,31 @@
+# tui-default-only-view: bin=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s05-indep-acc-20261011/debug/corbanu home=$S/homes/hm args: --enable named_accounts
+--- /status ---
+› Summarize recent commits
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: -- tok/s
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.3-flash   /model to change          │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s05acc/ws │
+╰──────────────────────────────────────────────────────╯
+⚠ Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set
+  `suppress_unstable_features_warning = true` in $S/homes/hm/config.toml.
+› Summarize recent commits
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: -- tok/s
+--- /cost ---
+  Cost — this conversation
+  Requested UTC day: 2026-10-11
+› Today (UTC) in this conversation: no recorded requests.
+  Other conversations on this day, not included above: 6 requests in 6 conversations.
+  • Z.AI · Z.AI GLM 5.3 Flash — Pay per use. 6 requests, 39,916 tokens. Estimated cost: $0.004583 (rounded).
+  Other conversations' estimated cost: $0.004583 (rounded).
+  To see those requests, open that conversation with /resume and run /cost there.
+  Costs are estimates from published prices; Z.AI doesn't report its charges — check Z.AI's bill.
+  —— Details ——
+  No recorded attempts in this conversation or its subagents; collection coverage unknown.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+--- exit ---
+╰──────────────────────────────────────────────────────╯
+To continue this session, run corbanu resume 01a12b40-c25b-7eb0-a9f9-1f6c8445b42a
+EXITED-0

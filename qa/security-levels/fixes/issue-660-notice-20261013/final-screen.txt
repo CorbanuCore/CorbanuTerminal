@@ -1,0 +1,17 @@
+• Spawned Corbanu Terminal Nazgul pane Angmar and bound it as the Nazgul root. glm-5.3-flash; no task was started.
+• Spawned Corbanu Terminal Troll pane Burzum. glm-5.3-flash; no task was started.
+• A task for Burzum [troll] waits: the security kill switch is on. Turning it off starts nothing: the task goes with that pane's next turn, when
+someone types in it or it gets new work.
+• Nothing restarted. A task waits for each of these panes and goes with that pane's next turn, when someone types in it or it gets new work: `Burzum
+[troll]`.
+  Spawn Status
+  Nazgul -> Troll -> Orc hierarchy.
+  Search spawned work
+  Nazgul
+› Nazgul: Angmar [nazgul]        Root role binding; idle; 01a137bb-5eca-7c83-9a27-815b93a6997f; same user pane listed above.
+  Trolls
+  • Burzum [troll]               idle; current task: Create a file named codex-task.txt in the workspace containing the single line pf660-codex-
+                                 task.
+    Send task to Burzum [troll]  Start a turn in this pane.
+    No Orcs for this Troll yet
+  Press enter to confirm or esc to go back

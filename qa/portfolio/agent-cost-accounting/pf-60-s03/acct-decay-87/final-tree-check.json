@@ -1,0 +1,23 @@
+{
+  "base": "dfd5c09bfd2b37eeaa3e00443b176e34d0c991a9",
+  "proposed_snapshot": "44fd2e25f9a86b5d8854d00743432e3bbb5e266c",
+  "compared_files_sha256": {
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py": "f64435d28a5d95885ea80c8c59c143596de2b904e76d1f1ad362031e74ab8f9d",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/check_verifier.py": "11b567aa9c76c9311e762a5cb14e0214b1e2ca67c326a7205d42ba4780928afa",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-selfcheck-84/check_current_tip.py": "416552c69f06b2101739a38b4925ab6da85672f6898d2795cc1ed6f4bdb77c2a",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-decay-87/refresh_inventory.py": "4f78318d048af90ab2cae5e199b371f0d3f29587a95b3871a1cbe3b7cb88f543",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/finalize.py": "062f20be40b0bd2504c384c38bb0c6e7270ffce932c0aa3ca79f0dae4bbe0b07",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md": "024f0e09067d63bf8ce91df5dec9abdef3c37819ecdf96c36367f7a3dd9ad80b",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/scope.json": "6f81ad1a2ce0665c35969e9c44240026952f4a9fa5c454a6a60371afe46a294b",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/inventory-correction.json": "201fcf414997e3cb869bbcc06656fd25a13db109b276cf180347e4318e772bb5"
+  },
+  "command": [
+    "python3",
+    "-B",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py"
+  ],
+  "exit": 2,
+  "stderr_empty": true,
+  "stdout_matches_proposed_control": true,
+  "stdout_sha256": "26bb51aac77d506d3a042ec7716964d67239c1f33e77d5bb2aba4c4867e5e197"
+}

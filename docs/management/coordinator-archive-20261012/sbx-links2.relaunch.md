@@ -1,0 +1,18 @@
+RECOVERY NOTE (coordinator, 2026-10-12T11:07:16Z): your previous run of this brief hung at ~11:01Z when a transient macOS
+access error broke the claude-plan auth helper (not your fault). Your full transcript is /Volumes/CorbanuDrive/Corbanu/.codex-work/workers-20261002/sbx-links2.log.died-20261012T1107 — read its last
+~400 lines (and grep it for PR numbers, worktrees and glitch dirs) to recover your state before doing anything else.
+Then FINISH economically — Claude credits are low this week and the coordinator is doing an orderly pause:
+- get your open PR(s) green and merged per the rules below (re-run a failed job once with `gh run rerun <id> --failed` if it
+  is the known intermittent Linux core-security test `pf_23_s01_typing_a_protected_command_into_a_running_shell_needs_the_human`);
+- push any unpushed finished work as a PR; do not start new scope beyond this brief; skip optional extras (videos only if
+  the brief requires them for a user-visible change already made);
+- leave nothing uncommitted: every worktree you own must end merged or pushed as an open PR (say which in the report);
+- clean up targets/worktrees of merged work; write your report as in sec-common.md.
+
+You are a security worker. Read /Volumes/CorbanuDrive/Corbanu/.codex-work/workers-20261002/sec-common.md (binding; Linux work on glitch, `ssh glitch`, max -j10), sec-sbx2.result.md in that folder, then issues #535 and #536 (incl. the 2026-10-12 owner-decision comments) and merged PRs #511, #532, #533.
+
+Owner decisions (Travis, 2026-10-12):
+- #535: a writable root that is a link whose real location lies (strictly) inside another root's read-only path is NOT a grant — exclude it on both macOS (Seatbelt) and Linux (bwrap): the read-only path stays read-only through it (option B). Explain the exclusion where it bites (warning at launch or on the permission request).
+- #536: at EVERY level, Permissive included, refuse to use as a writable root a link that was created after the session started, or a link that points outside the roots that hold it (the "configured but missing root later created as a link" escape). Detect TOCTOU-safely (record each writable root's real path/identity at session start; re-validate per command; refuse with a clear message).
+Regression tests with real `sandbox-exec` on macOS and real bwrap on glitch (fail before / pass after) for each; prove that ordinary workspaces, worktrees and `/tmp` → `/private/tmp` style aliases still work at every level (incl. Permissive) with tests. Focused tests incl. the core security CI selection with TMPDIR=/tmp and default; macOS clippy and Linux clippy -D warnings on glitch; one independent Opus 5.5 High read-only review per PR via installed `corbanu exec` (iterate to APPROVE); a tmux check with the fresh debug binary in a disposable home (CORBANU_TEST_NO_NATIVE_KEYRING=1) on GLM 5.3 Flash (`-m glm-5.3-flash -c model_provider="zai"`; key via `ZAI_API_KEY="$(env -u CORBANU_TEST_NO_NATIVE_KEYRING -u CORBANU_HOME -u CODEX_HOME -u PFTERMINAL_HOME ~/.local/bin/corbanu vault auth-helper provider/zai_api_key)"`; never print it) reproducing the #536 escape before/after at Permissive. Concurrent workers touching the sandbox: agg-dec2, sec-misc (#579 bwrap) — merge origin/main often, note overlaps. Do heavy builds on glitch where possible.
+New worktrees off origin/main under /Volumes/CorbanuDrive/Corbanu/worktrees/. Merge only when ALL checks are green, never with checks pending (`gh pr merge N --merge --match-head-commit <sha>`; never force-push; never rm -f; never pkill broadly). These are owner-approved, so merging is allowed even though #536 changes Permissive. Close issues with evidence. Remove build targets when done. Report as in sec-common.md.

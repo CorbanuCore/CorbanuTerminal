@@ -42,6 +42,8 @@ use core_test_support::responses::sse_completed;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::stdio_server_bin;
+use core_test_support::streaming_sse::StreamingSseChunk;
+use core_test_support::streaming_sse::start_streaming_sse_server;
 use core_test_support::test_codex::local;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
@@ -919,6 +921,152 @@ async fn get_context_remaining_returns_token_budget_remaining_fragment() -> Resu
         requests[2].function_call_output_content_and_success(call_id),
         Some((Some(remaining_context), None))
     );
+
+    Ok(())
+}
+
+/// #564: tool calls start as soon as their item arrives, before
+/// `response.completed` carries the response's usage. `get_context_remaining`
+/// waits for that usage, so it counts the tokens of the response that called
+/// it however late `response.completed` arrives.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn get_context_remaining_counts_the_calling_responses_usage() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let call_id = "remaining-call";
+    let (completed_gate_tx, completed_gate_rx) = tokio::sync::oneshot::channel();
+    let (server, _) = start_streaming_sse_server(vec![
+        vec![
+            StreamingSseChunk {
+                gate: None,
+                body: sse(vec![
+                    ev_response_created("resp-1"),
+                    ev_function_call(call_id, "get_context_remaining", "{}"),
+                ]),
+            },
+            StreamingSseChunk {
+                gate: Some(completed_gate_rx),
+                body: sse(vec![ev_completed_with_tokens(
+                    "resp-1", /*total_tokens*/ 2_500,
+                )]),
+            },
+        ],
+        vec![StreamingSseChunk {
+            gate: None,
+            body: sse(vec![
+                ev_response_created("resp-2"),
+                ev_assistant_message("msg-2", "done"),
+                ev_completed("resp-2"),
+            ]),
+        }],
+    ])
+    .await;
+    let mut builder = test_codex().with_config(|config| {
+        config.model_context_window = Some(10_000);
+        config
+            .features
+            .enable(Feature::TokenBudget)
+            .expect("test config should allow token budget");
+    });
+    let test = builder.build_with_streaming_server(&server).await?;
+
+    test.codex
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: "check remaining context".into(),
+                text_elements: Vec::new(),
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: ThreadSettingsOverrides::default(),
+        })
+        .await?;
+    // The call has arrived and started; its response's usage comes later.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let _ = completed_gate_tx.send(());
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+
+    let requests = server.requests().await;
+    assert_eq!(requests.len(), 2);
+    let follow_up: Value = serde_json::from_slice(&requests[1])?;
+    let output = follow_up["input"]
+        .as_array()
+        .and_then(|items| {
+            items
+                .iter()
+                .find(|item| item["type"] == "function_call_output" && item["call_id"] == call_id)
+        })
+        .map(|item| item["output"].clone());
+    assert_eq!(
+        output,
+        Some(json!("You have 6500 tokens left in this context window."))
+    );
+    server.shutdown().await;
+
+    Ok(())
+}
+
+/// #564: when a response's stream ends without `response.completed`, a
+/// `get_context_remaining` call waiting for its usage is released, so the
+/// turn retries instead of hanging.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn get_context_remaining_does_not_wait_for_a_response_that_never_completes() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let call_id = "remaining-call";
+    let (server, _) = start_streaming_sse_server(vec![
+        // Ends without `response.completed`.
+        vec![StreamingSseChunk {
+            gate: None,
+            body: sse(vec![
+                ev_response_created("resp-1"),
+                ev_function_call(call_id, "get_context_remaining", "{}"),
+            ]),
+        }],
+        vec![StreamingSseChunk {
+            gate: None,
+            body: sse(vec![
+                ev_response_created("resp-2"),
+                ev_assistant_message("msg-2", "done"),
+                ev_completed("resp-2"),
+            ]),
+        }],
+    ])
+    .await;
+    let mut builder = test_codex().with_config(|config| {
+        config.model_context_window = Some(10_000);
+        config.model_provider.request_max_retries = Some(0);
+        config.model_provider.stream_max_retries = Some(1);
+        config.model_provider.stream_idle_timeout_ms = Some(2_000);
+        config
+            .features
+            .enable(Feature::TokenBudget)
+            .expect("test config should allow token budget");
+    });
+    let test = builder.build_with_streaming_server(&server).await?;
+
+    test.codex
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: "check remaining context".into(),
+                text_elements: Vec::new(),
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: ThreadSettingsOverrides::default(),
+        })
+        .await?;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+    assert_eq!(server.requests().await.len(), 2, "the response is retried");
+    server.shutdown().await;
 
     Ok(())
 }

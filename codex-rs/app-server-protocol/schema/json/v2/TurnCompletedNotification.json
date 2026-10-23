@@ -341,7 +341,8 @@
         "inProgress",
         "completed",
         "failed",
-        "declined"
+        "declined",
+        "refused"
       ],
       "type": "string"
     },
@@ -1178,6 +1179,13 @@
             },
             "prompt": {
               "description": "Prompt text sent as part of the collab tool call, when available.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "providerAccount": {
+              "description": "The named account the spawned agent uses (`default` included), only while named accounts are on.",
               "type": [
                 "string",
                 "null"

@@ -132,6 +132,8 @@ pub enum ScopedCredentialInjectionError {
     ResolutionFailed,
     #[error("credential request must be dispatched by the isolated broker")]
     IsolatedBrokerRequired,
+    #[error("isolated credential broker is unavailable")]
+    IsolatedBrokerUnavailable,
 }
 
 /// Secret-free result returned by the isolated broker transport.

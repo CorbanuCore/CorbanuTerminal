@@ -1,0 +1,13 @@
+== after: config names kimi-code; after saving the key and pressing Enter
+  Welcome to Corbanu Terminal, your crypto-native AI terminal
+> You are in /Volumes/CorbanuDrive/Corbanu/tmp/pf84fix/work
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt injection. Trusting the
+  directory allows project-local config, hooks, and exec policies to load.
+› 1. Yes, continue
+  2. No, quit
+  Press enter to continue
+-- after trusting the directory
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/pf84fix/work │
+╰─────────────────────────────────────────────────────────╯
+› Implement {feature}
+  Kimi Code K3 via kimi-code default · /Volumes/CorbanuDrive/Corbanu/tmp/pf84fix/work · Corbanu Terminal · TPS: -- tok/s

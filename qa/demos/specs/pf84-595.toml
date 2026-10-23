@@ -1,0 +1,90 @@
+# PF-84 #595: forced_login_method = "chatgpt" rules out the default login (an OpenAI API key). A
+# local app-server daemon already runs in the home. The TUI on named ChatGPT account `chat` reuses
+# it (/status shows `Remote: unix://…`). auth.json is left unchanged, which is checked off screen
+# against its hash from before launch. A new session on the default account is refused by the daemon
+# with the reason. Before #595 such a TUI logged the default login out at startup.
+# Local mock issuer + Responses, fake tokens only.
+#
+# A reused daemon cannot adopt `-c` overrides, so the TUI only reuses it without them. The recorder
+# always adds `-c log_dir=…`, so record through a wrapper that drops that one argument. The home's
+# socket path must also stay under the macOS limit (104 bytes), so use a short --out:
+#   printf '#!/bin/bash\na=(); s=0; for x in "$@"; do if [ $s = 1 ]; then s=0; case "$x" in log_dir=*) continue;; esac; a+=(-c "$x"); continue; fi; [ "$x" = -c ] && { s=1; continue; }; a+=("$x"); done\nexec %s "${a[@]}"\n' "$CARGO_TARGET_DIR/debug/corbanu" > "$CARGO_TARGET_DIR/debug/corbanu-nolog" && chmod +x "$CARGO_TARGET_DIR/debug/corbanu-nolog"
+#   PF84_QA=$PWD/qa/provider-auth/pf-84/s06/scripts python3 scripts/demo_video.py record \
+#     qa/demos/specs/pf84-595.toml --bin "$CARGO_TARGET_DIR/debug/corbanu-nolog" --sprint PF-84-S06 \
+#     --out "$HOME/d" --publish
+# Afterwards stop the daemon and the mock: kill "$(cat <run>/logs/daemon.pid)" "$(cat <run>/logs/mock.pid)".
+id = "pf84-595"
+feature = "PF-84 #595: a TUI reusing a running local daemon never logs out the default login"
+expected = "Under forced_login_method=chatgpt the session on account chat reuses the local daemon (Remote: unix://…) and is authorized as chat; a new session on the default (API-key) login is refused with the reason, and auth.json is unchanged."
+model = "gpt-5.4"
+args = ["--account", "chat"]
+setup_timeout = 90
+setup = """(nohup python3 "${PF84_QA:?set PF84_QA to qa/provider-auth/pf-84/s06/scripts}/mock_openai.py" --port 38595 --log {logs}/mock-openai.jsonl > /dev/null 2>&1 & echo $! > {logs}/mock.pid)
+sleep 1
+printf 'sk-fake-default' | {bin} login --with-api-key > /dev/null 2>&1
+curl -s -X POST -H 'content-type: application/json' -d '{"user":"chat","ttl":3600}' http://127.0.0.1:38595/_next_user > /dev/null
+{bin} login --account chat --device-auth --experimental_issuer http://127.0.0.1:38595 2>&1 | tail -1
+printf 'forced_login_method = "chatgpt"\\n' | cat - "$CODEX_HOME/config.toml" > "$CODEX_HOME/config.new" && mv "$CODEX_HOME/config.new" "$CODEX_HOME/config.toml"
+shasum -a 256 "$CODEX_HOME/auth.json" > {logs}/auth-before.sha256
+(nohup {bin} app-server --listen unix:// > {logs}/daemon.log 2>&1 & echo $! > {logs}/daemon.pid)
+for i in $(seq 1 100); do [ -S "$CODEX_HOME/app-server-control/app-server-control.sock" ] && break; sleep 0.2; done
+test -S "$CODEX_HOME/app-server-control/app-server-control.sock" && echo "daemon listening"
+"""
+config = """
+model_provider = "openai"
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "read-only"
+openai_base_url = "http://127.0.0.1:38595/v1"
+chatgpt_base_url = "http://127.0.0.1:38595/backend-api/"
+cli_auth_credentials_store = "file"
+[features]
+named_accounts = true
+"""
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Remote: +unix://"
+[[steps]]
+pause = 3.0
+[[steps]]
+type = "Reply with exactly: pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "authorized as chat"
+compress = 2
+[[steps]]
+pause = 1.5
+[[steps]]
+type = "/providers"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "› +1\\. OpenAI · default"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Start a new session on the default account"
+[[steps]]
+key = "Down"
+repeat = 4
+[[steps]]
+wait = "› +5\\. Start a new session on the default account"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Press enter to confirm or esc to go back"
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "The default OpenAI login cannot be used"
+[[steps]]
+run = "shasum -a 256 -c {logs}/auth-before.sha256"
+[[steps]]
+pause = 4.0

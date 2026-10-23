@@ -1,0 +1,39 @@
+# PF-60-S09 AC2 (#402): one real image generation through the TUI on an OpenAI API key, then /cost. The image request
+# (gpt-image-2) is recorded at OpenAI's published image rates: input x $5/M + output x $30/M (2026-10-09 table).
+id = "pf60s09-image-cost"
+feature = "Image generation on an OpenAI API key is recorded and priced at published image rates (#402)"
+expected = "After the model generates one small image, /cost lists a gpt-image-2 request, pay per use, with its estimated cost; the technical page shows input and output tokens priced at $5/M and $30/M."
+model = "gpt-6-luna"
+provider = "openai"
+rows = 46
+cols = 150
+setup = "printenv OPENAI_API_KEY | {bin} login --with-api-key"
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+OPENAI_API_KEY = "openai-api-key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Use your image generation tool to create one small, simple image: a plain red square on a white background. Use the lowest quality and smallest size. Then reply DONE."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Generated Image"
+timeout = 240
+compress = 3
+[[steps]]
+wait = "(?m)^\\W*DONE\\W*$"
+timeout = 120
+compress = 2
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "gpt-image-2 — Pay per use\\. 1 request, [0-9,]+ tokens\\. Estimated cost: \\$[0-9.]+"
+[[steps]]
+pause = 5

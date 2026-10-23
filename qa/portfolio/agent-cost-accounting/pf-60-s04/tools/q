@@ -1,0 +1,15 @@
+#!/bin/bash
+# local. usage: q start <session> <home> <cwd> [args]   (keys resolved here, piped over ssh stdin)
+#        q <session> <op> [args]                         (drv.sh)
+#        q sh "<remote command>"
+RTX=<rtx-user>@<rtx-host>; Q='$HOME/corbanu-rtx/pf60s04-qual'
+V(){ env -u CORBANU_TEST_NO_NATIVE_KEYRING -u CORBANU_HOME -u CODEX_HOME -u PFTERMINAL_HOME ~/.local/bin/corbanu vault auth-helper "$1" < /dev/null; }
+echo "$(date -u +%FT%TZ) $(printf '%q ' "$@")" >> "$(dirname "$0")/steps.log"
+case $1 in
+  start) shift; args=$(printf '%q ' "$@")
+    { printf '%s\n' "$(V provider/zai_api_key)"; printf '%s\n' "$(V provider/kimi_api_key)"; printf '%s\n' "$(V claude-plan-test-token)"; printf '%s\n' "$(V openai-api-key)"; printf '%s\n' "$(V provider/deepseek_api_key)"; } \
+      | ssh -o BatchMode=yes $RTX "NO_OPENAI_ENV=$NO_OPENAI_ENV RUST_LOG=$RUST_LOG bash $Q/start.sh $args" ;;
+  login) printf '%s\n' "$(V openai-api-key)" | ssh -o BatchMode=yes $RTX "bash $Q/login.sh $2" ;;
+  sh) shift; ssh -o BatchMode=yes $RTX "$*" ;;
+  *) args=$(printf '%q ' "$@"); ssh -o BatchMode=yes $RTX "bash $Q/drv.sh $args" ;;
+esac

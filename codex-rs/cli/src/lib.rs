@@ -1,6 +1,7 @@
 pub(crate) mod debug_sandbox;
 mod exit_status;
 pub(crate) mod login;
+mod named_login;
 
 use clap::Args;
 use clap::Parser;
@@ -21,6 +22,10 @@ pub use login::run_login_with_chatgpt;
 pub use login::run_login_with_device_code;
 pub use login::run_login_with_device_code_fallback_to_browser;
 pub use login::run_logout;
+pub use named_login::NamedLoginMethod;
+pub use named_login::run_named_account_login;
+pub use named_login::run_named_account_login_status;
+pub use named_login::run_named_account_logout;
 
 #[derive(Debug, Default, Args)]
 pub struct SandboxStateArgs {

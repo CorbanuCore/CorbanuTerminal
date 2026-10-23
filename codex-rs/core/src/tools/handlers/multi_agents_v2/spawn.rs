@@ -5,6 +5,8 @@ use crate::agent::next_thread_spawn_depth;
 use crate::agent::role::DEFAULT_ROLE_NAME;
 use crate::agent_communication::AgentCommunicationContext;
 use crate::agent_communication::AgentCommunicationKind;
+use crate::tools::handlers::multi_agents_account::apply_spawn_agent_account;
+use crate::tools::handlers::multi_agents_account::spawned_account_name;
 use crate::tools::handlers::multi_agents_spec::SpawnAgentToolOptions;
 use crate::tools::handlers::multi_agents_spec::create_spawn_agent_tool_v2;
 use crate::tools::handlers::multi_agents_v2::message_tool::message_content;
@@ -174,6 +176,30 @@ async fn handle_spawn_agent(
     if child_runtime_was_selected {
         ensure_spawn_runtime_eligible(&session, &config).await?;
     }
+    let target_provider_id = config.model_provider_id.clone();
+    let ensure_encoding = |target: &codex_model_provider_info::ModelProviderInfo| {
+        ensure_message_encoding_matches_target(
+            ConfiguredRuntime::from_provider(&turn.config.model_provider_id, turn.provider.info()),
+            crate::tools::collaboration_wire::message_source_provider_id(turn.as_ref()),
+            &source,
+            ConfiguredRuntime::from_provider(&target_provider_id, target),
+            encoding,
+            "spawn_agent",
+            PLAINTEXT_SPAWN_AGENT_TOOL,
+        )
+    };
+    // #1144: an account the encrypted payload cannot follow is refused
+    // before the Aggressive approval is asked.
+    apply_spawn_agent_account(
+        &session,
+        turn.as_ref(),
+        &call_id,
+        &mut config,
+        args.account.as_deref(),
+        &ensure_encoding,
+    )
+    .await?;
+    let resolved_account = spawned_account_name(&config);
     let resolved_model_provider = config.model_provider_id.clone();
     let resolved_model = config
         .model
@@ -182,14 +208,7 @@ async fn handle_spawn_agent(
     let resolved_reasoning_effort = config.model_reasoning_effort.clone();
     let resolved_service_tier = config.service_tier.clone();
 
-    ensure_message_encoding_matches_target(
-        &turn.config.model_provider_id,
-        &source,
-        &resolved_model_provider,
-        encoding,
-        "spawn_agent",
-        PLAINTEXT_SPAWN_AGENT_TOOL,
-    )?;
+    ensure_encoding(&config.model_provider)?;
     let source = match encoding {
         CollaborationMessageEncoding::ProviderNative => source,
         CollaborationMessageEncoding::PlaintextAdapter => {
@@ -206,7 +225,7 @@ async fn handle_spawn_agent(
         new_agent_path.clone(),
         message,
         &source,
-        &turn.config.model_provider_id,
+        crate::tools::collaboration_wire::message_source_provider_id(turn.as_ref()),
         /*trigger_turn*/ true,
     );
     let context = AgentCommunicationContext::new(AgentCommunicationKind::Spawn, session.thread_id);
@@ -271,6 +290,7 @@ async fn handle_spawn_agent(
             task_name,
             nickname,
             model_provider: resolved_model_provider,
+            account: resolved_account,
             model: resolved_model,
             reasoning_effort: resolved_reasoning_effort,
             service_tier: resolved_service_tier,
@@ -297,6 +317,7 @@ struct SpawnAgentArgs {
     task_name: String,
     agent_type: Option<String>,
     model_provider: Option<String>,
+    account: Option<String>,
     model: Option<String>,
     reasoning_effort: Option<ReasoningEffort>,
     service_tier: Option<String>,
@@ -348,6 +369,9 @@ pub(crate) enum SpawnAgentResult {
         task_name: String,
         nickname: Option<String>,
         model_provider: String,
+        /// PF-84: the child's named account, when named accounts are on.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        account: Option<String>,
         model: String,
         reasoning_effort: Option<ReasoningEffort>,
         service_tier: Option<String>,

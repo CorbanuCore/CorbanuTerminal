@@ -1,3 +1,51 @@
+mod broker_containment;
+#[cfg(windows)]
+mod windows_broker_token;
+#[cfg(windows)]
+mod windows_handle_holder;
+#[cfg(windows)]
+mod windows_process_access;
+#[cfg(windows)]
+mod windows_protected_spawn;
+#[cfg(windows)]
+mod windows_thread_creation;
+
+pub use broker_containment::BrokerContainment;
+pub use broker_containment::broker_seatbelt_profile;
+pub use broker_containment::broker_seatbelt_profile_with_files;
+pub use broker_containment::contain_credential_broker;
+pub use broker_containment::contain_credential_broker_with_files;
+#[cfg(windows)]
+pub use windows_broker_token::current_capability_sid_strings;
+#[cfg(windows)]
+pub use windows_broker_token::current_token_is_broker_token;
+#[cfg(windows)]
+pub use windows_handle_holder::HandleHolder;
+#[cfg(windows)]
+pub use windows_process_access::current_user_sid_string;
+#[cfg(windows)]
+pub use windows_process_access::process_dacl_sddl;
+#[cfg(windows)]
+pub use windows_process_access::restrict_current_process_access;
+#[cfg(windows)]
+pub use windows_process_access::thread_callback_registered;
+#[cfg(windows)]
+pub use windows_process_access::thread_dacl_sddl;
+#[cfg(windows)]
+pub use windows_process_access::thread_protection_failures;
+#[cfg(windows)]
+pub use windows_protected_spawn::PROTECTED_SPAWNER_PID_ENV;
+#[cfg(windows)]
+pub use windows_protected_spawn::ProtectedChild;
+#[cfg(windows)]
+pub use windows_protected_spawn::protected_spawner_pid;
+#[cfg(windows)]
+pub use windows_protected_spawn::spawn_protected;
+#[cfg(windows)]
+pub use windows_thread_creation::protect_new_objects_by_default;
+#[cfg(windows)]
+pub use windows_thread_creation::thread_creation_protected;
+
 #[cfg(unix)]
 use std::ffi::OsString;
 

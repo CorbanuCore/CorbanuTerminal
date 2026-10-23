@@ -1,0 +1,5 @@
+{"time_ns": 1791248082647913000, "utc": "2026-10-06T00:54:42Z", "label": "AFTER_PROBE1", "files": {"events.txt": "", "input.txt": "permission-test\n", "workspace/probe1.txt": "probe-marker-f05\n"}}
+{"time_ns": 1791248139534424000, "utc": "2026-10-06T00:55:39Z", "label": "AFTER_INADVERTENT", "files": {"events.txt": "", "input.txt": "permission-test\n", "outside-marker-f05a.txt": "f05a-outside-probe"}}
+{"time_ns": 1791248235016892000, "utc": "2026-10-06T00:57:15Z", "label": "FA_STATE", "files": {"events.txt": "", "input.txt": "permission-test\n"}}
+{"time_ns": 1791248262655043000, "utc": "2026-10-06T00:57:42Z", "label": "F05C_DONE", "files": {"events.txt": "", "input.txt": "permission-test\n", "outside-marker-f05c.txt": "f05c-outside-probe"}}
+{"time_ns": 1791248303057766000, "utc": "2026-10-06T00:58:23Z", "label": "F05D_DONE", "files": {"events.txt": "", "input.txt": "permission-test\n", "outside-marker-f05d.txt": "f05d-outside-probe"}}

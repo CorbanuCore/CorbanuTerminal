@@ -46,6 +46,7 @@ use crate::auth::AuthHeaders;
 pub use crate::auth::agent_identity::AgentIdentityAuth;
 pub use crate::auth::agent_identity::AgentIdentityAuthError;
 pub use crate::auth::bedrock_api_key::BedrockApiKeyAuth;
+use crate::auth::named_chatgpt::NamedChatgptAccount;
 pub use crate::auth::personal_access_token::PersonalAccessTokenAuth;
 pub use crate::auth::storage::AgentIdentityAuthRecord;
 pub use crate::auth::storage::AgentIdentityStorage;
@@ -205,6 +206,9 @@ impl PartialEq for CodexAuth {
 #[derive(Debug, Clone)]
 pub struct ApiKeyAuth {
     api_key: String,
+    /// The environment variable the key was read from, when it did not come
+    /// from Corbanu's own storage.
+    env_var: Option<&'static str>,
 }
 
 #[derive(Debug, Clone)]
@@ -242,7 +246,8 @@ static NEXT_DUMMY_AUTH_ID: AtomicU64 = AtomicU64::new(1);
 static PROVIDER_API_KEY_STORAGE_REVISION: AtomicU64 = AtomicU64::new(1);
 static NEXT_PROVIDER_AUTH_TEMP_ID: AtomicU64 = AtomicU64::new(1);
 
-fn provider_api_key_storage_revision() -> u64 {
+/// In-process revision of stored provider keys; bumped by every write or delete.
+pub fn provider_api_key_storage_revision() -> u64 {
     PROVIDER_API_KEY_STORAGE_REVISION.load(Ordering::Acquire)
 }
 
@@ -309,6 +314,32 @@ impl CodexAuth {
         keyring_backend_kind: AuthKeyringBackendKind,
         agent_identity_authapi_base_url: Option<&str>,
         auth_route_config: &AuthRouteConfig,
+    ) -> std::io::Result<Self> {
+        Self::from_auth_dot_json_with_storage(
+            codex_home,
+            auth_dot_json,
+            auth_credentials_store_mode,
+            chatgpt_base_url,
+            keyring_backend_kind,
+            agent_identity_authapi_base_url,
+            auth_route_config,
+            /*storage*/ None,
+        )
+        .await
+    }
+
+    /// Like [`Self::from_auth_dot_json`]; `storage` (a named account's vault
+    /// store, PF-84-S06) replaces the store a ChatGPT login refreshes into.
+    #[allow(clippy::too_many_arguments)]
+    async fn from_auth_dot_json_with_storage(
+        codex_home: &Path,
+        auth_dot_json: AuthDotJson,
+        auth_credentials_store_mode: AuthCredentialsStoreMode,
+        chatgpt_base_url: Option<&str>,
+        keyring_backend_kind: AuthKeyringBackendKind,
+        agent_identity_authapi_base_url: Option<&str>,
+        auth_route_config: &AuthRouteConfig,
+        storage: Option<Arc<dyn AuthStorageBackend>>,
     ) -> std::io::Result<Self> {
         let auth_mode = auth_dot_json.resolved_mode();
         if auth_mode == AuthMode::ApiKey {
@@ -383,11 +414,13 @@ impl CodexAuth {
 
         match auth_mode {
             AuthMode::Chatgpt => {
-                let storage = create_auth_storage(
-                    codex_home.to_path_buf(),
-                    storage_mode,
-                    keyring_backend_kind,
-                );
+                let storage = storage.unwrap_or_else(|| {
+                    create_auth_storage(
+                        codex_home.to_path_buf(),
+                        storage_mode,
+                        keyring_backend_kind,
+                    )
+                });
                 Ok(Self::Chatgpt(ChatgptAuth { state, storage }))
             }
             AuthMode::ChatgptAuthTokens => Ok(Self::ChatgptAuthTokens(ChatgptAuthTokens { state })),
@@ -805,7 +838,30 @@ impl CodexAuth {
     pub fn from_api_key(api_key: &str) -> Self {
         Self::ApiKey(ApiKeyAuth {
             api_key: api_key.to_owned(),
+            env_var: None,
         })
+    }
+
+    /// An API key read from `env_var` rather than from stored credentials.
+    pub fn from_api_key_env(api_key: &str, env_var: &'static str) -> Self {
+        Self::ApiKey(ApiKeyAuth {
+            api_key: api_key.to_owned(),
+            env_var: Some(env_var),
+        })
+    }
+
+    /// The environment variable an API key login was read from, if any.
+    pub fn api_key_env_var(&self) -> Option<&'static str> {
+        match self {
+            Self::ApiKey(auth) => auth.env_var,
+            _ => None,
+        }
+    }
+
+    /// Whether this is the ambient `OPENAI_API_KEY` fallback. Model providers
+    /// send it only on the first-party OpenAI auth path.
+    pub fn is_openai_api_key_env_fallback(&self) -> bool {
+        self.api_key_env_var() == Some(OPENAI_API_KEY_ENV_VAR)
     }
 }
 
@@ -880,12 +936,47 @@ fn persist_agent_identity_record(
     let mut guard = auth_dot_json
         .lock()
         .map_err(|_| std::io::Error::other("failed to lock auth state"))?;
-    let mut auth = storage
-        .load()?
-        .or_else(|| guard.clone())
-        .ok_or_else(|| std::io::Error::other("auth data is not available"))?;
-    auth.agent_identity = Some(AgentIdentityStorage::Record(record));
-    storage.save(&auth)?;
+    // D171 (#1311): a named account's record (and its private key) is written
+    // only onto the stored sign-in of the ChatGPT account and user it was made
+    // for, in one vault step, and never brings back an account another process
+    // removed.
+    let named = storage.is_named_account();
+    let updated = storage.update(&mut |auth| {
+        let stored_binding = auth.tokens.as_ref().map(|tokens| {
+            (
+                tokens.account_id.as_deref(),
+                tokens.id_token.chatgpt_user_id.as_deref(),
+            )
+        });
+        let record_binding = (
+            Some(record.account_id.as_str()),
+            Some(record.chatgpt_user_id.as_str()),
+        );
+        if named && stored_binding != Some(record_binding) {
+            return Err(std::io::Error::other(
+                "the named account's sign-in changed; its agent identity was not saved",
+            ));
+        }
+        auth.agent_identity = Some(AgentIdentityStorage::Record(record.clone()));
+        Ok(())
+    })?;
+    let auth = match updated {
+        Some(auth) => auth,
+        None if named => {
+            return Err(std::io::Error::other(
+                "the named account has no sign-in (it may have been removed or signed out); \
+                 its agent identity was not saved",
+            ));
+        }
+        None => {
+            let mut auth = guard
+                .clone()
+                .ok_or_else(|| std::io::Error::other("auth data is not available"))?;
+            auth.agent_identity = Some(AgentIdentityStorage::Record(record));
+            storage.save(&auth)?;
+            auth
+        }
+    };
     *guard = Some(auth);
     Ok(())
 }
@@ -893,6 +984,30 @@ fn persist_agent_identity_record(
 pub const OPENAI_API_KEY_ENV_VAR: &str = "OPENAI_API_KEY";
 pub const CODEX_API_KEY_ENV_VAR: &str = "CODEX_API_KEY";
 pub const CODEX_ACCESS_TOKEN_ENV_VAR: &str = "CODEX_ACCESS_TOKEN";
+
+/// Shown once per session when a request is authorised by the `OPENAI_API_KEY`
+/// fallback, and again whenever the credential in use switches back to it.
+pub const OPENAI_API_KEY_ENV_FALLBACK_NOTICE: &str = "Using OPENAI_API_KEY from your \
+    environment — billed per use to that API key. Sign in or unset it to change.";
+
+/// Whether `OPENAI_API_KEY` is the last-resort OpenAI credential.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OpenAiApiKeyEnv {
+    /// Used only when no external or stored OpenAI credential exists.
+    Fallback,
+    /// Not read: storage-only loads, and configs that require ChatGPT login.
+    Ignore,
+}
+
+impl OpenAiApiKeyEnv {
+    fn for_forced_login_method(forced_login_method: Option<ForcedLoginMethod>) -> Self {
+        if forced_login_method == Some(ForcedLoginMethod::Chatgpt) {
+            Self::Ignore
+        } else {
+            Self::Fallback
+        }
+    }
+}
 
 pub fn read_openai_api_key_from_env() -> Option<String> {
     env::var(OPENAI_API_KEY_ENV_VAR)
@@ -914,6 +1029,9 @@ pub fn read_codex_access_token_from_env() -> Option<String> {
 }
 
 fn auth_uses_api_key_from_env(auth: &CodexAuth) -> bool {
+    if auth.api_key_env_var().is_some() {
+        return true;
+    }
     let Some(api_key) = auth.api_key() else {
         return false;
     };
@@ -1290,6 +1408,17 @@ pub fn provider_api_key_from_auth_storage(
     legacy_provider_key(codex_home, provider_key_id)
 }
 
+/// Classify the configured OpenAI credential without exposing its secret or
+/// handing callers a long-lived [`AuthManager`].
+pub async fn openai_auth_metadata_from_config(
+    config: &impl AuthManagerConfig,
+    enable_codex_api_key_env: bool,
+) -> OpenAiAuthMetadata {
+    AuthManager::shared_from_config(config, enable_codex_api_key_env)
+        .await
+        .openai_auth_metadata()
+}
+
 /// Inspect provider-key storage without revealing or decrypting the credential.
 pub fn provider_api_key_metadata_from_auth_storage(
     codex_home: &Path,
@@ -1546,9 +1675,76 @@ async fn enforce_login_restrictions_with_agent_identity_authapi_base_url(
     config: &AuthConfig,
     agent_identity_authapi_base_url: Option<&str>,
 ) -> std::io::Result<()> {
-    let Some(auth) = load_auth(
+    let Some(auth) = load_auth_for_restrictions(config, agent_identity_authapi_base_url).await?
+    else {
+        return Ok(());
+    };
+    match login_restriction_violation(
+        &auth,
+        config.forced_login_method,
+        config.forced_chatgpt_workspace_id.as_deref(),
+    ) {
+        None => Ok(()),
+        Some(LoginRestrictionViolation::Method(reason)) => {
+            let message = format!("{reason} Logging out.");
+            if auth_uses_api_key_from_env(&auth) {
+                return Err(std::io::Error::other(message));
+            }
+            logout_and_continue(
+                &config.codex_home,
+                message,
+                config.auth_credentials_store_mode,
+                config.keyring_backend_kind,
+            )
+        }
+        Some(LoginRestrictionViolation::Workspace(reason)) => logout_with_message(
+            &config.codex_home,
+            format!("{reason} Logging out."),
+            config.auth_credentials_store_mode,
+            config.keyring_backend_kind,
+        ),
+    }
+}
+
+/// PF-84-S06 (#570): set when this process skipped the startup enforcement
+/// of the login restrictions on the default login, because its session runs
+/// (or a resumed or forked thread may run) on a named account.
+static DEFAULT_LOGIN_LEFT_UNENFORCED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// PF-84-S06 (#570): records that this process left the default login in
+/// place instead of enforcing the login restrictions on it at startup. Every
+/// default-login manager [`AuthManager::shared_from_config`] builds afterwards
+/// treats a login the restrictions rule out as absent, and a thread on the
+/// default login is refused while it is ruled out. Call before any manager
+/// is built.
+pub fn leave_default_login_unenforced() {
+    DEFAULT_LOGIN_LEFT_UNENFORCED.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// PF-84-S06 (#595): whether this process left the default login in place
+/// (see [`leave_default_login_unenforced`]). An app server reports it at
+/// initialize, so a client reusing it knows a ruled-out default login is
+/// neither logged out nor used there.
+pub fn default_login_left_unenforced() -> bool {
+    DEFAULT_LOGIN_LEFT_UNENFORCED.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+fn default_login_unusable_message(reason: &str) -> String {
+    format!(
+        "The default OpenAI login cannot be used: {reason} It was left unchanged; sign in with \
+         `corbanu login`, or choose a named account with `--account` or /providers."
+    )
+}
+
+async fn load_auth_for_restrictions(
+    config: &AuthConfig,
+    agent_identity_authapi_base_url: Option<&str>,
+) -> std::io::Result<Option<CodexAuth>> {
+    load_auth_with_openai_api_key_env(
         &config.codex_home,
         /*enable_codex_api_key_env*/ true,
+        OpenAiApiKeyEnv::for_forced_login_method(config.forced_login_method),
         config.auth_credentials_store_mode,
         /*forced_chatgpt_workspace_id*/ None,
         config.chatgpt_base_url.as_deref(),
@@ -1556,12 +1752,30 @@ async fn enforce_login_restrictions_with_agent_identity_authapi_base_url(
         agent_identity_authapi_base_url,
         &config.auth_route_config,
     )
-    .await?
-    else {
-        return Ok(());
-    };
+    .await
+}
 
-    if let Some(required_method) = config.forced_login_method {
+/// How a login breaks the configured login restrictions. A wrong method is
+/// logged out and the session continues; a wrong workspace ends it.
+enum LoginRestrictionViolation {
+    Method(String),
+    Workspace(String),
+}
+
+impl LoginRestrictionViolation {
+    fn reason(&self) -> &str {
+        match self {
+            Self::Method(reason) | Self::Workspace(reason) => reason,
+        }
+    }
+}
+
+fn login_restriction_violation(
+    auth: &CodexAuth,
+    forced_login_method: Option<ForcedLoginMethod>,
+    forced_chatgpt_workspace_id: Option<&[String]>,
+) -> Option<LoginRestrictionViolation> {
+    if let Some(required_method) = forced_login_method {
         let method_violation = match (required_method, auth.auth_mode()) {
             (ForcedLoginMethod::Api, AuthMode::ApiKey)
             | (ForcedLoginMethod::Api, AuthMode::BedrockApiKey) => None,
@@ -1574,82 +1788,55 @@ async fn enforce_login_restrictions_with_agent_identity_authapi_base_url(
             | (ForcedLoginMethod::Api, AuthMode::ChatgptAuthTokens)
             | (ForcedLoginMethod::Api, AuthMode::Headers)
             | (ForcedLoginMethod::Api, AuthMode::AgentIdentity)
-            | (ForcedLoginMethod::Api, AuthMode::PersonalAccessToken) => Some(
-                "API key login is required, but ChatGPT is currently being used. Logging out."
-                    .to_string(),
-            ),
+            | (ForcedLoginMethod::Api, AuthMode::PersonalAccessToken) => {
+                Some("API key login is required, but ChatGPT is currently being used.")
+            }
             (ForcedLoginMethod::Chatgpt, AuthMode::ApiKey)
-            | (ForcedLoginMethod::Chatgpt, AuthMode::BedrockApiKey) => Some(
-                "ChatGPT login is required, but an API key is currently being used. Logging out."
-                    .to_string(),
+            | (ForcedLoginMethod::Chatgpt, AuthMode::BedrockApiKey) => {
+                Some("ChatGPT login is required, but an API key is currently being used.")
+            }
+        };
+        if let Some(reason) = method_violation {
+            return Some(LoginRestrictionViolation::Method(reason.to_string()));
+        }
+    }
+
+    let expected_account_ids = forced_chatgpt_workspace_id?;
+    let chatgpt_account_id = match auth {
+        CodexAuth::ApiKey(_) | CodexAuth::Headers(_) | CodexAuth::BedrockApiKey(_) => {
+            return None;
+        }
+        CodexAuth::AgentIdentity(_) | CodexAuth::PersonalAccessToken(_) => auth.get_account_id(),
+        CodexAuth::Chatgpt(_) | CodexAuth::ChatgptAuthTokens(_) => match auth.get_token_data() {
+            Ok(data) => data.id_token.chatgpt_account_id,
+            Err(err) => {
+                return Some(LoginRestrictionViolation::Workspace(format!(
+                    "Failed to load ChatGPT credentials while enforcing workspace restrictions: {err}."
+                )));
+            }
+        },
+    };
+
+    // workspace is the external identifier for account id.
+    let chatgpt_account_id = chatgpt_account_id.as_deref();
+    if chatgpt_account_id.is_some_and(|actual| {
+        expected_account_ids
+            .iter()
+            .any(|expected| expected == actual)
+    }) {
+        return None;
+    }
+    let expected_workspaces = expected_account_ids.join(", ");
+    Some(LoginRestrictionViolation::Workspace(
+        match chatgpt_account_id {
+            Some(actual) => format!(
+                "Login is restricted to workspace(s) {expected_workspaces}, but current credentials belong to {actual}."
             ),
-        };
-
-        if let Some(message) = method_violation {
-            if auth_uses_api_key_from_env(&auth) {
-                return Err(std::io::Error::other(message));
-            }
-            return logout_and_continue(
-                &config.codex_home,
-                message,
-                config.auth_credentials_store_mode,
-                config.keyring_backend_kind,
-            );
-        }
-    }
-
-    if let Some(expected_account_ids) = config.forced_chatgpt_workspace_id.as_deref() {
-        let chatgpt_account_id = match &auth {
-            CodexAuth::ApiKey(_) | CodexAuth::Headers(_) | CodexAuth::BedrockApiKey(_) => {
-                return Ok(());
-            }
-            CodexAuth::AgentIdentity(_) | CodexAuth::PersonalAccessToken(_) => {
-                auth.get_account_id()
-            }
-            CodexAuth::Chatgpt(_) | CodexAuth::ChatgptAuthTokens(_) => {
-                let token_data = match auth.get_token_data() {
-                    Ok(data) => data,
-                    Err(err) => {
-                        return logout_with_message(
-                            &config.codex_home,
-                            format!(
-                                "Failed to load ChatGPT credentials while enforcing workspace restrictions: {err}. Logging out."
-                            ),
-                            config.auth_credentials_store_mode,
-                            config.keyring_backend_kind,
-                        );
-                    }
-                };
-                token_data.id_token.chatgpt_account_id
-            }
-        };
-
-        // workspace is the external identifier for account id.
-        let chatgpt_account_id = chatgpt_account_id.as_deref();
-        if !chatgpt_account_id.is_some_and(|actual| {
-            expected_account_ids
-                .iter()
-                .any(|expected| expected == actual)
-        }) {
-            let expected_workspaces = expected_account_ids.join(", ");
-            let message = match chatgpt_account_id {
-                Some(actual) => format!(
-                    "Login is restricted to workspace(s) {expected_workspaces}, but current credentials belong to {actual}. Logging out."
-                ),
-                None => format!(
-                    "Login is restricted to workspace(s) {expected_workspaces}, but current credentials lack a workspace identifier. Logging out."
-                ),
-            };
-            return logout_with_message(
-                &config.codex_home,
-                message,
-                config.auth_credentials_store_mode,
-                config.keyring_backend_kind,
-            );
-        }
-    }
-
-    Ok(())
+            None => format!(
+                "Login is restricted to workspace(s) {expected_workspaces}, but current credentials lack a workspace identifier."
+            ),
+        },
+    ))
 }
 
 fn logout_with_message(
@@ -1734,6 +1921,7 @@ fn logout_all_stores(
     Ok(removed_ephemeral || removed_managed || removed_provider)
 }
 
+/// Loads auth without the `OPENAI_API_KEY` fallback.
 #[allow(clippy::too_many_arguments)]
 async fn load_auth(
     codex_home: &Path,
@@ -1745,13 +1933,53 @@ async fn load_auth(
     agent_identity_authapi_base_url: Option<&str>,
     auth_route_config: &AuthRouteConfig,
 ) -> std::io::Result<Option<CodexAuth>> {
-    // API key via env var takes precedence over any other auth method.
+    load_auth_with_openai_api_key_env(
+        codex_home,
+        enable_codex_api_key_env,
+        OpenAiApiKeyEnv::Ignore,
+        auth_credentials_store_mode,
+        forced_chatgpt_workspace_id,
+        chatgpt_base_url,
+        keyring_backend_kind,
+        agent_identity_authapi_base_url,
+        auth_route_config,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn load_auth_with_openai_api_key_env(
+    codex_home: &Path,
+    enable_codex_api_key_env: bool,
+    openai_api_key_env: OpenAiApiKeyEnv,
+    auth_credentials_store_mode: AuthCredentialsStoreMode,
+    forced_chatgpt_workspace_id: Option<&[String]>,
+    chatgpt_base_url: Option<&str>,
+    keyring_backend_kind: AuthKeyringBackendKind,
+    agent_identity_authapi_base_url: Option<&str>,
+    auth_route_config: &AuthRouteConfig,
+) -> std::io::Result<Option<CodexAuth>> {
+    // Precedence (docs/authentication.md, "OpenAI API keys"): CODEX_API_KEY
+    // (exec only), then external or stored OpenAI credentials, then
+    // OPENAI_API_KEY. A shell-exported OPENAI_API_KEY therefore never replaces
+    // a ChatGPT sign-in or a saved key, so it can't switch the billing basis.
     if enable_codex_api_key_env && let Some(api_key) = read_codex_api_key_from_env() {
-        return Ok(Some(CodexAuth::from_api_key(api_key.as_str())));
+        return Ok(Some(CodexAuth::from_api_key_env(
+            api_key.as_str(),
+            CODEX_API_KEY_ENV_VAR,
+        )));
     }
     if enable_codex_api_key_env && let Some(api_key) = read_ambient_api_key_from_env() {
-        return Ok(Some(CodexAuth::from_api_key(api_key.as_str())));
+        return Ok(Some(CodexAuth::from_api_key_env(
+            api_key.as_str(),
+            AMBIENT_API_KEY_ENV_VAR,
+        )));
     }
+    let openai_api_key_env_auth = || match openai_api_key_env {
+        OpenAiApiKeyEnv::Fallback => read_openai_api_key_from_env()
+            .map(|api_key| CodexAuth::from_api_key_env(api_key.as_str(), OPENAI_API_KEY_ENV_VAR)),
+        OpenAiApiKeyEnv::Ignore => None,
+    };
 
     // External ChatGPT auth tokens live in the in-memory (ephemeral) store. Always check this
     // first so external auth takes precedence over any persisted credentials.
@@ -1801,7 +2029,7 @@ async fn load_auth(
 
     // If the caller explicitly requested ephemeral auth, there is no persisted fallback.
     if auth_credentials_store_mode == AuthCredentialsStoreMode::Ephemeral {
-        return Ok(None);
+        return Ok(openai_api_key_env_auth());
     }
 
     // Fall back to the configured persistent store (file/keyring/auto) for managed auth.
@@ -1818,7 +2046,7 @@ async fn load_auth(
             keyring_backend_kind,
         )? {
             Some(auth) => auth,
-            None => return Ok(None),
+            None => return Ok(openai_api_key_env_auth()),
         },
     };
 
@@ -1873,29 +2101,47 @@ pub fn legacy_codex_home_for_product_home(codex_home: &Path) -> Option<PathBuf> 
 }
 
 // Persist refreshed tokens into auth storage and update last_refresh.
+// D171 (#1311): read and saved in one step, and for a named account only onto
+// the stored sign-in that was refreshed (`refreshed_from` is its refresh
+// token), so a removal or a new sign-in by another process meanwhile is kept.
 fn persist_tokens(
     storage: &Arc<dyn AuthStorageBackend>,
+    refreshed_from: &str,
     id_token: Option<String>,
     access_token: Option<String>,
     refresh_token: Option<String>,
 ) -> std::io::Result<AuthDotJson> {
-    let mut auth_dot_json = storage
-        .load()?
-        .ok_or(std::io::Error::other("Token data is not available."))?;
-
-    let tokens = auth_dot_json.tokens.get_or_insert_with(TokenData::default);
-    if let Some(id_token) = id_token {
-        tokens.id_token = parse_chatgpt_jwt_claims(&id_token).map_err(std::io::Error::other)?;
-    }
-    if let Some(access_token) = access_token {
-        tokens.access_token = access_token;
-    }
-    if let Some(refresh_token) = refresh_token {
-        tokens.refresh_token = refresh_token;
-    }
-    auth_dot_json.last_refresh = Some(Utc::now());
-    storage.save(&auth_dot_json)?;
-    Ok(auth_dot_json)
+    let id_token = id_token
+        .map(|id_token| parse_chatgpt_jwt_claims(&id_token).map_err(std::io::Error::other))
+        .transpose()?;
+    let named = storage.is_named_account();
+    storage
+        .update(&mut |auth_dot_json| {
+            if named
+                && auth_dot_json
+                    .tokens
+                    .as_ref()
+                    .is_none_or(|tokens| tokens.refresh_token != refreshed_from)
+            {
+                return Err(std::io::Error::other(
+                    "the named account's sign-in changed while it was refreshed; \
+                     the refreshed tokens were not saved",
+                ));
+            }
+            let tokens = auth_dot_json.tokens.get_or_insert_with(TokenData::default);
+            if let Some(id_token) = id_token.clone() {
+                tokens.id_token = id_token;
+            }
+            if let Some(access_token) = access_token.clone() {
+                tokens.access_token = access_token;
+            }
+            if let Some(refresh_token) = refresh_token.clone() {
+                tokens.refresh_token = refresh_token;
+            }
+            auth_dot_json.last_refresh = Some(Utc::now());
+            Ok(())
+        })?
+        .ok_or(std::io::Error::other("Token data is not available."))
 }
 
 // Requests refreshed ChatGPT OAuth tokens from the auth service using a refresh token.
@@ -2350,6 +2596,7 @@ pub struct AuthManager {
     inner: RwLock<CachedAuth>,
     auth_change_tx: watch::Sender<u64>,
     enable_codex_api_key_env: bool,
+    openai_api_key_env: OpenAiApiKeyEnv,
     auth_credentials_store_mode: AuthCredentialsStoreMode,
     keyring_backend_kind: AuthKeyringBackendKind,
     forced_chatgpt_workspace_id: RwLock<Option<Vec<String>>>,
@@ -2361,6 +2608,28 @@ pub struct AuthManager {
     external_auth: RwLock<Option<Arc<dyn ExternalAuth>>>,
     provider_api_key_cache: RwLock<ProviderApiKeyCache>,
     auth_route_config: AuthRouteConfig,
+    /// PF-84-S06: the named sign-in account this manager serves. It loads,
+    /// refreshes and logs out only that account's vault store, never the
+    /// default login, the environment or the ephemeral store.
+    named_account: Option<NamedChatgptAccount>,
+    /// D171 (#1286): for a named-account manager, its vault handle (kept so
+    /// the decrypted store stays cached) and the store marker last seen
+    /// holding the account.
+    named_store: Option<named_account::NamedAccountStore>,
+    /// The login method the configuration requires (`forced_login_method` as
+    /// configured, not the API-key-only onboarding default a third-party
+    /// session provider implies); a named account's sign-in of the other
+    /// kind is refused.
+    forced_login_method: Option<ForcedLoginMethod>,
+    /// For a named-account manager, the manager of the default login it was
+    /// created from (providers without a named account go back to it).
+    base_manager: Option<Arc<AuthManager>>,
+    /// PF-84-S06 (#570): the session runs on a named sign-in account, so the
+    /// default login was not checked (and logged out) at startup; one the
+    /// login restrictions rule out is treated as absent instead.
+    hide_restricted_default_login: bool,
+    /// Why the default login is hidden right now, if it is.
+    hidden_default_login_reason: RwLock<Option<String>>,
 }
 
 #[derive(Debug)]
@@ -2407,6 +2676,27 @@ pub trait AuthManagerConfig {
 
     /// Returns route-selection settings for auth-owned clients.
     fn auth_route_config(&self) -> AuthRouteConfig;
+
+    /// Returns the login method the configuration requires, if any. A required
+    /// ChatGPT login stops `OPENAI_API_KEY` from being used as a fallback.
+    fn forced_login_method(&self) -> Option<ForcedLoginMethod> {
+        None
+    }
+
+    /// The login method the configuration itself requires (`forced_login_method`
+    /// as configured). Unlike [`AuthManagerConfig::forced_login_method`] it
+    /// omits the API-key-only default a third-party session provider implies
+    /// for onboarding, which must not refuse a named OpenAI account (#571).
+    fn configured_forced_login_method(&self) -> Option<ForcedLoginMethod> {
+        self.forced_login_method()
+    }
+
+    /// PF-84-S06 (#570): whether the session runs on a named OpenAI sign-in
+    /// account. Its startup then leaves the default login alone, so the
+    /// default login's manager must not use one the restrictions rule out.
+    fn runs_on_named_sign_in_account(&self) -> bool {
+        false
+    }
 }
 
 impl Debug for AuthManager {
@@ -2444,7 +2734,8 @@ impl AuthManager {
     /// Create a new manager loading the initial auth using the provided
     /// preferred auth method. Errors loading auth are swallowed; `auth()` will
     /// simply return `None` in that case so callers can treat it as an
-    /// unauthenticated state.
+    /// unauthenticated state. `OPENAI_API_KEY` is not read; model sessions use
+    /// [`AuthManager::shared_from_config`], which adds it as a fallback.
     pub async fn new(
         codex_home: PathBuf,
         enable_codex_api_key_env: bool,
@@ -2454,11 +2745,36 @@ impl AuthManager {
         keyring_backend_kind: AuthKeyringBackendKind,
         auth_route_config: AuthRouteConfig,
     ) -> Self {
+        Self::new_with_openai_api_key_env(
+            codex_home,
+            enable_codex_api_key_env,
+            OpenAiApiKeyEnv::Ignore,
+            auth_credentials_store_mode,
+            forced_chatgpt_workspace_id,
+            chatgpt_base_url,
+            keyring_backend_kind,
+            auth_route_config,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn new_with_openai_api_key_env(
+        codex_home: PathBuf,
+        enable_codex_api_key_env: bool,
+        openai_api_key_env: OpenAiApiKeyEnv,
+        auth_credentials_store_mode: AuthCredentialsStoreMode,
+        forced_chatgpt_workspace_id: Option<Vec<String>>,
+        chatgpt_base_url: Option<String>,
+        keyring_backend_kind: AuthKeyringBackendKind,
+        auth_route_config: AuthRouteConfig,
+    ) -> Self {
         let agent_identity_authapi_base_url =
             agent_identity_authapi_base_url(chatgpt_base_url.as_deref()).ok();
-        let managed_auth = load_auth(
+        let managed_auth = load_auth_with_openai_api_key_env(
             &codex_home,
             enable_codex_api_key_env,
+            openai_api_key_env,
             auth_credentials_store_mode,
             forced_chatgpt_workspace_id.as_deref(),
             chatgpt_base_url.as_deref(),
@@ -2478,6 +2794,7 @@ impl AuthManager {
             }),
             auth_change_tx,
             enable_codex_api_key_env,
+            openai_api_key_env,
             auth_credentials_store_mode,
             keyring_backend_kind,
             forced_chatgpt_workspace_id: RwLock::new(forced_chatgpt_workspace_id),
@@ -2488,6 +2805,12 @@ impl AuthManager {
             agent_identity_bootstrap_cooldown: Mutex::default(),
             external_auth: RwLock::new(None),
             provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
+            named_account: None,
+            named_store: None,
+            forced_login_method: None,
+            base_manager: None,
+            hide_restricted_default_login: false,
+            hidden_default_login_reason: RwLock::new(None),
             auth_route_config,
         }
     }
@@ -2505,6 +2828,7 @@ impl AuthManager {
             inner: RwLock::new(cached),
             auth_change_tx,
             enable_codex_api_key_env: false,
+            openai_api_key_env: OpenAiApiKeyEnv::Ignore,
             auth_credentials_store_mode: AuthCredentialsStoreMode::File,
             keyring_backend_kind: AuthKeyringBackendKind::default(),
             forced_chatgpt_workspace_id: RwLock::new(None),
@@ -2515,6 +2839,12 @@ impl AuthManager {
             agent_identity_bootstrap_cooldown: Mutex::default(),
             external_auth: RwLock::new(None),
             provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
+            named_account: None,
+            named_store: None,
+            forced_login_method: None,
+            base_manager: None,
+            hide_restricted_default_login: false,
+            hidden_default_login_reason: RwLock::new(None),
             auth_route_config: crate::test_support::transport_default_auth_route_config(),
         })
     }
@@ -2531,6 +2861,7 @@ impl AuthManager {
             inner: RwLock::new(cached),
             auth_change_tx,
             enable_codex_api_key_env: false,
+            openai_api_key_env: OpenAiApiKeyEnv::Ignore,
             auth_credentials_store_mode: AuthCredentialsStoreMode::File,
             keyring_backend_kind: AuthKeyringBackendKind::default(),
             forced_chatgpt_workspace_id: RwLock::new(None),
@@ -2541,6 +2872,12 @@ impl AuthManager {
             agent_identity_bootstrap_cooldown: Mutex::default(),
             external_auth: RwLock::new(None),
             provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
+            named_account: None,
+            named_store: None,
+            forced_login_method: None,
+            base_manager: None,
+            hide_restricted_default_login: false,
+            hidden_default_login_reason: RwLock::new(None),
             auth_route_config: crate::test_support::transport_default_auth_route_config(),
         })
     }
@@ -2561,6 +2898,7 @@ impl AuthManager {
             inner: RwLock::new(cached),
             auth_change_tx,
             enable_codex_api_key_env: false,
+            openai_api_key_env: OpenAiApiKeyEnv::Ignore,
             auth_credentials_store_mode: AuthCredentialsStoreMode::File,
             keyring_backend_kind: AuthKeyringBackendKind::default(),
             forced_chatgpt_workspace_id: RwLock::new(None),
@@ -2575,6 +2913,12 @@ impl AuthManager {
             agent_identity_bootstrap_cooldown: Mutex::default(),
             external_auth: RwLock::new(None),
             provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
+            named_account: None,
+            named_store: None,
+            forced_login_method: None,
+            base_manager: None,
+            hide_restricted_default_login: false,
+            hidden_default_login_reason: RwLock::new(None),
             auth_route_config: crate::test_support::transport_default_auth_route_config(),
         })
     }
@@ -2587,6 +2931,16 @@ impl AuthManager {
         config: ModelProviderAuthInfo,
         cache_policy: ExternalBearerCachePolicy,
     ) -> Arc<Self> {
+        Self::external_bearer_only_for_account(config, cache_policy, /*account*/ None)
+    }
+
+    /// PF-84: like [`Self::external_bearer_only_with_cache_policy`], for a
+    /// named account the command receives in `CORBANU_PROVIDER_ACCOUNT`.
+    pub fn external_bearer_only_for_account(
+        config: ModelProviderAuthInfo,
+        cache_policy: ExternalBearerCachePolicy,
+        account: Option<super::external_bearer::ExternalBearerAccount>,
+    ) -> Arc<Self> {
         let (auth_change_tx, _auth_change_rx) = watch::channel(0);
         Arc::new(Self {
             codex_home: PathBuf::from("non-existent"),
@@ -2596,6 +2950,7 @@ impl AuthManager {
             }),
             auth_change_tx,
             enable_codex_api_key_env: false,
+            openai_api_key_env: OpenAiApiKeyEnv::Ignore,
             auth_credentials_store_mode: AuthCredentialsStoreMode::File,
             keyring_backend_kind: AuthKeyringBackendKind::default(),
             forced_chatgpt_workspace_id: RwLock::new(None),
@@ -2607,8 +2962,15 @@ impl AuthManager {
             external_auth: RwLock::new(Some(Arc::new(BearerTokenRefresher::new(
                 config,
                 cache_policy,
+                account,
             )) as Arc<dyn ExternalAuth>)),
             provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
+            named_account: None,
+            named_store: None,
+            forced_login_method: None,
+            base_manager: None,
+            hide_restricted_default_login: false,
+            hidden_default_login_reason: RwLock::new(None),
             // External bearer auth refreshes by running the provider's command and never makes
             // auth-owned HTTP requests, so this route is intentionally inert.
             auth_route_config: AuthRouteConfig::from_http_client_factory(HttpClientFactory::new(
@@ -2618,7 +2980,30 @@ impl AuthManager {
     }
 
     /// Current cached auth (clone) without attempting a refresh.
+    ///
+    /// D171 (#1286): a named account's sign-in is dropped once the account
+    /// was removed or signed out (by any process); [`AuthManager::auth`]
+    /// picks up a later sign-in.
     pub fn auth_cached(&self) -> Option<CodexAuth> {
+        loop {
+            match self.held_named_sign_in() {
+                named_account::HeldSignIn::Current => {}
+                named_account::HeldSignIn::Changed => self.reload_named_sign_in_sync(),
+                named_account::HeldSignIn::Gone { epoch } => {
+                    if !self.clear_named_sign_in_if_unchanged(epoch) {
+                        // The replacement may itself have been removed since
+                        // it was installed. Check it before returning it.
+                        continue;
+                    }
+                }
+            }
+            return self.auth_cached_unchecked();
+        }
+    }
+
+    /// The cached auth as it is, for the guarded reloads that compare it with
+    /// the stored one.
+    fn auth_cached_unchecked(&self) -> Option<CodexAuth> {
         self.inner
             .read()
             .ok()
@@ -2645,6 +3030,13 @@ impl AuthManager {
     /// a guarded reload and then refreshes only if the on-disk auth is unchanged.
     #[instrument(level = "trace", skip_all)]
     pub async fn auth(&self) -> Option<CodexAuth> {
+        // A named account loads lazily, and picks up a sign-in added later.
+        // D171 (#1286): `auth_cached` drops a sign-in held in memory once the
+        // account was removed or replaced (by any process), so the next
+        // request is refused with its recovery or runs on the new sign-in.
+        if self.named_account.is_some() && self.auth_cached().is_none() {
+            self.reload().await;
+        }
         if self.has_external_auth() {
             self.reload().await;
             return self.auth_cached();
@@ -2655,6 +3047,10 @@ impl AuthManager {
             && let Err(err) = self.refresh_token().await
         {
             tracing::error!("Failed to refresh token: {}", err);
+            // D171: a named account removed meanwhile is not used.
+            if self.named_account.is_some() {
+                return self.auth_cached();
+            }
             return Some(auth);
         }
         self.auth_cached()
@@ -2754,7 +3150,7 @@ impl AuthManager {
         }
 
         tracing::info!("Reloading auth for account {expected_account_id}");
-        let cached_before_reload = self.auth_cached();
+        let cached_before_reload = self.auth_cached_unchecked();
         let auth_changed =
             !Self::auths_equal_for_refresh(cached_before_reload.as_ref(), new_auth.as_ref());
         self.set_cached_auth(new_auth);
@@ -2817,7 +3213,11 @@ impl AuthManager {
     }
 
     async fn load_auth(&self) -> Option<CodexAuth> {
+        if self.named_account.is_some() {
+            return self.load_named_account_auth().await;
+        }
         if let Some(external_auth) = self.external_auth() {
+            self.clear_hidden_default_login_reason();
             return match self.resolve_external_auth(&external_auth).await {
                 Ok(auth) => Some(auth),
                 Err(err) => {
@@ -2828,9 +3228,10 @@ impl AuthManager {
         }
 
         let forced_chatgpt_workspace_id = self.forced_chatgpt_workspace_id();
-        load_auth(
+        let auth = load_auth_with_openai_api_key_env(
             &self.codex_home,
             self.enable_codex_api_key_env,
+            self.openai_api_key_env,
             self.auth_credentials_store_mode,
             forced_chatgpt_workspace_id.as_deref(),
             self.chatgpt_base_url.as_deref(),
@@ -2840,28 +3241,78 @@ impl AuthManager {
         )
         .await
         .ok()
-        .flatten()
+        .flatten();
+        self.without_restricted_default_login(auth)
+    }
+
+    /// PF-84-S06 (#570): whether this default-login manager treats a login
+    /// the restrictions rule out as absent, because the process left it in
+    /// place at startup (see [`leave_default_login_unenforced`]).
+    pub fn hides_restricted_default_login(&self) -> bool {
+        self.hide_restricted_default_login && self.named_account.is_none()
+    }
+
+    /// PF-84-S06 (#570): why the default login this manager hides cannot be
+    /// used, while it hides one. Requests on the default login are refused
+    /// with it instead of being sent without credentials.
+    pub fn hidden_default_login_reason(&self) -> Option<String> {
+        self.hidden_default_login_reason
+            .read()
+            .ok()
+            .and_then(|reason| reason.clone())
+    }
+
+    /// PF-84-S06 (#570): drops a default login the login restrictions rule
+    /// out when this process left it in place for a named-account session.
+    fn without_restricted_default_login(&self, auth: Option<CodexAuth>) -> Option<CodexAuth> {
+        if !self.hides_restricted_default_login() {
+            return auth;
+        }
+        let forced_workspace = self.forced_chatgpt_workspace_id();
+        let reason = auth.as_ref().and_then(|auth| {
+            login_restriction_violation(auth, self.forced_login_method, forced_workspace.as_deref())
+                .map(|violation| default_login_unusable_message(violation.reason()))
+        });
+        if let Some(reason) = &reason {
+            tracing::warn!("the default login is not used in this process: {reason}");
+        }
+        let hidden = reason.is_some();
+        if let Ok(mut current) = self.hidden_default_login_reason.write() {
+            *current = reason;
+        }
+        if hidden { None } else { auth }
     }
 
     fn set_cached_auth(&self, new_auth: Option<CodexAuth>) -> bool {
         if let Ok(mut guard) = self.inner.write() {
-            let previous = guard.auth.as_ref();
-            let changed = !AuthManager::auths_equal(previous, new_auth.as_ref());
-            let auth_changed_for_refresh =
-                !Self::auths_equal_for_refresh(previous, new_auth.as_ref());
-            self.clear_provider_api_key_cache();
-            if auth_changed_for_refresh {
-                guard.permanent_refresh_failure = None;
-            }
-            tracing::info!("Reloaded auth, changed: {changed}");
-            guard.auth = new_auth;
-            if auth_changed_for_refresh {
-                self.auth_change_tx.send_modify(|revision| *revision += 1);
-            }
-            changed
+            self.replace_cached_auth(&mut guard, new_auth)
         } else {
             false
         }
+    }
+
+    /// Replaces auth while the caller holds the cache write lock, including
+    /// invalidation and notification for every guarded cache update.
+    fn replace_cached_auth(&self, cached: &mut CachedAuth, new_auth: Option<CodexAuth>) -> bool {
+        let previous = cached.auth.as_ref();
+        let changed = !AuthManager::auths_equal(previous, new_auth.as_ref());
+        let auth_changed_for_refresh = !Self::auths_equal_for_refresh(previous, new_auth.as_ref());
+        self.clear_provider_api_key_cache();
+        if auth_changed_for_refresh {
+            cached.permanent_refresh_failure = None;
+        }
+        tracing::info!("Reloaded auth, changed: {changed}");
+        cached.auth = new_auth;
+        // #1326: every cache installation invalidates earlier observations,
+        // including a reinstall of the same credentials after removal.
+        // Equality still controls the return value and refresh notifications.
+        if let Some(store) = self.named_store.as_ref() {
+            store.forget();
+        }
+        if auth_changed_for_refresh {
+            self.auth_change_tx.send_modify(|revision| *revision += 1);
+        }
+        changed
     }
 
     pub async fn set_external_auth(
@@ -2879,7 +3330,14 @@ impl AuthManager {
         if let Ok(mut external_auth) = self.external_auth.write()
             && external_auth.take().is_some()
         {
+            self.clear_hidden_default_login_reason();
             self.set_cached_auth(/*new_auth*/ None);
+        }
+    }
+
+    fn clear_hidden_default_login_reason(&self) {
+        if let Ok(mut reason) = self.hidden_default_login_reason.write() {
+            *reason = None;
         }
     }
 
@@ -2941,16 +3399,26 @@ impl AuthManager {
         config: &impl AuthManagerConfig,
         enable_codex_api_key_env: bool,
     ) -> Arc<Self> {
-        Self::shared(
+        let mut manager = Self::new_with_openai_api_key_env(
             config.codex_home(),
             enable_codex_api_key_env,
+            OpenAiApiKeyEnv::for_forced_login_method(config.forced_login_method()),
             config.cli_auth_credentials_store_mode(),
             config.forced_chatgpt_workspace_id(),
             Some(config.chatgpt_base_url()),
             config.auth_keyring_backend_kind(),
             config.auth_route_config(),
         )
-        .await
+        .await;
+        manager.forced_login_method = config.configured_forced_login_method();
+        manager.hide_restricted_default_login =
+            config.runs_on_named_sign_in_account() || default_login_left_unenforced();
+        if manager.hide_restricted_default_login
+            && let Ok(mut cached) = manager.inner.write()
+        {
+            cached.auth = manager.without_restricted_default_login(cached.auth.take());
+        }
+        Arc::new(manager)
     }
 
     pub fn unauthorized_recovery(self: &Arc<Self>) -> UnauthorizedRecovery {
@@ -2995,7 +3463,8 @@ impl AuthManager {
                 REFRESH_TOKEN_UNKNOWN_MESSAGE.to_string(),
             ))
         })?;
-        let auth_before_reload = self.auth_cached();
+        // D171: as held, so another process's refresh is picked up below.
+        let auth_before_reload = self.auth_cached_unchecked();
         if auth_before_reload
             .as_ref()
             .is_some_and(|auth| auth.is_api_key_auth() || auth.is_personal_access_token_auth())
@@ -3071,6 +3540,20 @@ impl AuthManager {
                 | CodexAuth::BedrockApiKey(_) => Ok(()),
             }
         };
+        // PF-84-S06: a named account's refresh failure names how to recover it.
+        let result = match (result, self.named_account.as_ref()) {
+            (Err(RefreshTokenError::Permanent(error)), Some(account)) => {
+                Err(RefreshTokenError::Permanent(RefreshTokenFailedError::new(
+                    error.reason,
+                    format!(
+                        "{} (account `{}`: sign in again with `corbanu login --account {}`; \
+                         the default login is unchanged)",
+                        error.message, account.name, account.name
+                    ),
+                )))
+            }
+            (result, _) => result,
+        };
         if let Err(RefreshTokenError::Permanent(error)) = &result {
             self.record_permanent_refresh_failure_if_unchanged(&attempted_auth, error);
         }
@@ -3082,6 +3565,9 @@ impl AuthManager {
     /// reloads the in‑memory auth cache so callers immediately observe the
     /// unauthenticated state.
     pub async fn logout(&self) -> std::io::Result<bool> {
+        if let Some(result) = self.logout_named_account(/*revoke*/ false).await {
+            return result;
+        }
         let removed = logout_all_stores(
             &self.codex_home,
             self.auth_credentials_store_mode,
@@ -3095,6 +3581,9 @@ impl AuthManager {
     }
 
     pub async fn logout_all_credentials(&self) -> std::io::Result<bool> {
+        if let Some(result) = self.logout_named_account(/*revoke*/ false).await {
+            return result;
+        }
         let removed = logout_all_stores(
             &self.codex_home,
             self.auth_credentials_store_mode,
@@ -3106,6 +3595,9 @@ impl AuthManager {
     }
 
     pub async fn logout_with_revoke(&self) -> std::io::Result<bool> {
+        if let Some(result) = self.logout_named_account(/*revoke*/ true).await {
+            return result;
+        }
         let auth_dot_json = self
             .auth_cached()
             .and_then(|auth| auth.get_current_auth_json());
@@ -3135,12 +3627,19 @@ impl AuthManager {
         self.auth_cached().as_ref().map(CodexAuth::auth_mode)
     }
 
+    /// Whether `OPENAI_API_KEY` is read as the last-resort OpenAI credential.
+    pub fn openai_api_key_env_enabled(&self) -> bool {
+        self.openai_api_key_env == OpenAiApiKeyEnv::Fallback
+    }
+
     /// Inspect the primary OpenAI auth boundary without returning credential material.
     pub fn openai_auth_metadata(&self) -> OpenAiAuthMetadata {
         let Some(auth) = self.auth_cached() else {
             return OpenAiAuthMetadata::Missing;
         };
-        if self.enable_codex_api_key_env && auth_uses_api_key_from_env(&auth) {
+        if auth.api_key_env_var().is_some()
+            || (self.enable_codex_api_key_env && auth_uses_api_key_from_env(&auth))
+        {
             return OpenAiAuthMetadata::EnvironmentApiKey;
         }
         if auth.is_external_chatgpt_tokens() {
@@ -3157,6 +3656,20 @@ impl AuthManager {
             AuthMode::Headers | AuthMode::AgentIdentity => OpenAiAuthMetadata::ExternallyManaged,
             AuthMode::BedrockApiKey => OpenAiAuthMetadata::Unsupported,
         }
+    }
+
+    /// PF-84: the API key of one named account (vault only, uncached, no
+    /// environment or default-account fallback).
+    pub fn provider_account_api_key(
+        &self,
+        provider_id: &str,
+        account_name: &str,
+    ) -> std::io::Result<Option<String>> {
+        super::provider_key_vault::provider_account_api_key(
+            &self.codex_home,
+            provider_id,
+            account_name,
+        )
     }
 
     pub fn provider_api_key(&self, provider_key_id: &str) -> std::io::Result<Option<String>> {
@@ -3267,6 +3780,7 @@ impl AuthManager {
             .map_err(RefreshTokenError::Transient)?;
         }
 
+        self.clear_hidden_default_login_reason();
         self.set_cached_auth(Some(auth));
         Ok(())
     }
@@ -3292,10 +3806,12 @@ impl AuthManager {
         auth: &ChatgptAuth,
         refresh_token: String,
     ) -> Result<(), RefreshTokenError> {
-        let refresh_response = request_chatgpt_token_refresh(refresh_token, auth.client()).await?;
+        let refresh_response =
+            request_chatgpt_token_refresh(refresh_token.clone(), auth.client()).await?;
 
         persist_tokens(
             auth.storage(),
+            &refresh_token,
             refresh_response.id_token,
             refresh_response.access_token,
             refresh_response.refresh_token,
@@ -3306,6 +3822,14 @@ impl AuthManager {
         Ok(())
     }
 }
+
+#[path = "manager_named_account.rs"]
+mod named_account;
+
+#[path = "manager_session_account.rs"]
+mod session_account;
+pub use session_account::SessionSignIn;
+pub use session_account::SessionSignInRegistration;
 
 #[cfg(test)]
 #[path = "auth_tests.rs"]

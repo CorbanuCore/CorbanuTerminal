@@ -1,0 +1,33 @@
+# cand-zai: /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s05-indep-acc-20261011/debug/corbanu home=$S/homes/h4 via=mitm provider=zai
+zai	a	api_key
+zai	b	api_key
+=== b1: exec --account b -> exit=1 in 4.4s; reply=
+    mock requests so far (label,status): 
+    stderr: warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/h
+    stderr: ERROR: rate limited by provider (429 Too Many Requests). Wait before continuing; immediate retry may fail again
+    stderr: ERROR: rate limited by provider (429 Too Many Requests). Wait before continuing; immediate retry may fail again
+=== a1: exec --account a -> exit=0 in 1.0s; reply=pong
+    mock requests so far (label,status): 
+    stderr: pong
+    stderr: tokens used
+    stderr: 1,007
+=== d1: exec  -> exit=0 in 0.3s; reply=pong
+    mock requests so far (label,status): 
+    stderr: pong
+    stderr: tokens used
+    stderr: 1,007
+=== b2: exec --account b -> exit=1 in 4.0s; reply=
+    mock requests so far (label,status): 
+    stderr: warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/h
+    stderr: ERROR: rate limited by provider (429 Too Many Requests). Wait before continuing; immediate retry may fail again
+    stderr: ERROR: rate limited by provider (429 Too Many Requests). Wait before continuing; immediate retry may fail again
+=== a2: exec --account a -> exit=0 in 1.0s; reply=pong
+    mock requests so far (label,status): 
+    stderr: pong
+    stderr: tokens used
+    stderr: 1,007
+--- provider_request_state ---
+provider_id|model|key_fingerprint|cooldown|last_status|consecutive_429_count
+zai|glm-5.3-flash|account:a|none||0
+zai|glm-5.3-flash|account:b|none||0
+zai|glm-5.3-flash|env:ZAI_API_KEY:348c6be394d03dcd|none||0

@@ -5,7 +5,6 @@ use crate::chatwidget::wallet_menu::WalletPlanStatus;
 use crate::chatwidget::wallet_menu::title_case_plan;
 use crate::chatwidget::wallet_render::WalletTextStyle;
 use crate::chatwidget::wallet_render::push_wallet_text;
-use zeroize::Zeroizing;
 
 const WALLET_PLAN_USAGE_VIEW_ID: &str = "wallet-plan-usage";
 
@@ -49,29 +48,24 @@ impl ChatWidget {
 }
 
 async fn load_plan_usage(
-    key: Option<Zeroizing<String>>,
+    key: Option<super::wallet_http::CorbanuAccountKey>,
 ) -> Result<WalletPlanUsageOverview, String> {
     let key = key.ok_or_else(|| {
         "Corbanu Plan is disconnected. Reconnect it from /wallet to view usage.".to_string()
     })?;
     let gateway = gateway_client()?;
-    let account_request = gateway
-        .client
-        .get(format!("{}/v1/account", gateway.origin))
-        .bearer_auth(key.as_str())
-        .send();
+    let account_request = super::wallet_http::account_get(&gateway, "/v1/account", &key);
     let catalog_request = gateway
         .client
         .get(format!("{}/v1/plans", gateway.origin))
         .send();
     let (account, catalog) = tokio::join!(account_request, catalog_request);
     let account = account.map_err(|error| format!("plan usage is unavailable: {error}"))?;
-    if !account.status().is_success() {
-        return Err(format!("plan usage returned HTTP {}", account.status()));
+    if !account.status.is_success() {
+        return Err(format!("plan usage returned HTTP {}", account.status));
     }
     let status = account
         .json::<WalletPlanStatus>()
-        .await
         .map_err(|error| format!("plan usage was malformed: {error}"))?;
     let plan_prices_usdc = match catalog {
         Ok(response) if response.status().is_success() => response

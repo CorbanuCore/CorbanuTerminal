@@ -1,0 +1,26 @@
+│ permissions: YOLO mode                                 │
+╰────────────────────────────────────────────────────────╯
+▌ Add a Amazon Bedrock account
+▌
+▌ Account name: lowercase letters, digits or '-' (for example work)
+Press enter to confirm or esc to go back
+│ permissions: YOLO mode                                 │
+╰────────────────────────────────────────────────────────╯
+▌ Amazon Bedrock account `tuialt`
+▌
+▌ AWS profile name from ~/.aws/config (SSO: run aws sso login yourself)
+Press enter to confirm or esc to go back
+▌ Amazon Bedrock account `tuialt`
+▌
+▌ bad profile!
+Press enter to confirm or esc to go back
+  12. Meta                      Not configured · unavailable
+  13. Baseten                   Not configured · unavailable
+  14. Vercel                    Not configured · unavailable
+› 15. Amazon Bedrock · default  Not configured · unavailable · this session · default for new sessions
+  r recover credentials · Enter manage · Esc back
+  Press enter to confirm or esc to go back
+■ invalid AWS profile name: use 1-64 letters, digits or '-', '_', '.', '+', '@', starting with a letter or digit
+■ invalid AWS profile name: use 1-64 letters, digits or '-', '_', '.', '+', '@', starting with a letter or digit
+• Saved amazon-bedrock account `tuialt`. Use it from /providers, `--account tuialt` or a spawn `account`.
+› 15. Amazon Bedrock · default  Not configured · unavailable · this session · default for new sessions

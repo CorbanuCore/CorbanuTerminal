@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a120ba-a290-7ff3-b524-0399b0339d5c"}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 403 Forbidden: {\"error\":\"please check the api-key you provided\"}, url: https://inference.baseten.co/v1/messages"}
+{"type":"turn.failed","error":{"message":"unexpected status 403 Forbidden: {\"error\":\"please check the api-key you provided\"}, url: https://inference.baseten.co/v1/messages"}}

@@ -121,7 +121,7 @@ impl McpRequestProcessor {
             timeout_secs,
         } = params;
 
-        let auth = self.auth_manager.auth().await;
+        let auth = self.auth_manager.session_auth().await;
         let (mcp_config, runtime_context) = match thread_id.as_deref() {
             Some(thread_id) => {
                 let (_, thread) = self.load_thread(thread_id).await?;
@@ -252,7 +252,7 @@ impl McpRequestProcessor {
             None => (self.load_latest_config(/*fallback_cwd*/ None).await?, None),
         };
         let mcp_manager = self.thread_manager.mcp_manager();
-        let auth = self.auth_manager.auth().await;
+        let auth = self.auth_manager.session_auth().await;
         let (mcp_config, runtime_context) = match thread {
             Some(thread) => thread.runtime_mcp_config_and_context(&config).await,
             None => {
@@ -415,7 +415,7 @@ impl McpRequestProcessor {
         let mcp_config = mcp_manager.runtime_config(&config).await;
         let codex_apps_tools_cache = mcp_manager.codex_apps_tools_cache();
         let tool_catalog_cache = mcp_manager.tool_catalog_cache();
-        let auth = self.auth_manager.auth().await;
+        let auth = self.auth_manager.session_auth().await;
         let environment_manager = self.thread_manager.environment_manager();
         // This threadless resource-read path has no turn cwd or turn-selected
         // environment. Use config cwd only as the local stdio fallback; named

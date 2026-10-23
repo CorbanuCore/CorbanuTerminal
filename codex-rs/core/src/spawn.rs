@@ -60,8 +60,10 @@ pub(crate) async fn spawn_child_async(request: SpawnChildRequest<'_>) -> std::io
         mut env,
     } = request;
 
+    // Never log environment values: they routinely carry API keys (#179).
     trace!(
-        "spawn_child_async: {program:?} {args:?} {arg0:?} {cwd:?} {network_sandbox_policy:?} {stdio_policy:?} {env:?}"
+        "spawn_child_async: {program:?} {args:?} {arg0:?} {cwd:?} {network_sandbox_policy:?} {stdio_policy:?} env_names={:?}",
+        sorted_env_names(&env)
     );
 
     let mut cmd = Command::new(&program);
@@ -123,4 +125,10 @@ pub(crate) async fn spawn_child_async(request: SpawnChildRequest<'_>) -> std::io
     }
 
     cmd.kill_on_drop(true).spawn()
+}
+
+fn sorted_env_names(env: &HashMap<String, String>) -> Vec<&str> {
+    let mut names: Vec<&str> = env.keys().map(String::as_str).collect();
+    names.sort_unstable();
+    names
 }

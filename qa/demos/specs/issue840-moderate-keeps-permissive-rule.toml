@@ -1,0 +1,90 @@
+# Issue #840 (MOD-08, D6): a "don't ask again" rule saved under Permissive still skips the prompt under Moderate; the command stays in the sandbox.
+id = "issue840-moderate-keeps-permissive-rule"
+feature = "Moderate keeps \"don't ask again\" rules saved under Permissive"
+expected = "Under Permissive the person allows an outside write with \"don't ask again\" and it runs. After confirming Moderate in /security, the same command runs again with no prompt, inside the sandbox: the write is refused (Operation not permitted) and the file keeps one line."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+source_envelopes = true
+secret_output_gate = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+wait = "model:\\s+glm-5\\.3-flash"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this shell command with sandbox_permissions set to require_escalated (justification: write the notes): echo perm-rule >> ../outside/notes.txt"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "don't ask again"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "approved Corbanu to always run[\\s\\S]*\\n› "
+timeout = 180
+compress = 3
+[[steps]]
+run = "test \"$(cat {outside}/notes.txt)\" = perm-rule && echo 'Permissive: outside/notes.txt has one line'"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Moderate\\?"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Down"
+repeat = 40
+[[steps]]
+wait = "enter confirm and save"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active now in this session"
+[[steps]]
+pause = 2.5
+[[steps]]
+key = "Escape"
+[[steps]]
+pause = 0.5
+[[steps]]
+type = "Run exactly this shell command with sandbox_permissions set to require_escalated (justification: write the notes): echo perm-rule >> ../outside/notes.txt"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Operation not permitted(?:(?!Working).)*\\n› "
+timeout = 180
+compress = 3
+[[steps]]
+pause = 1.0
+[[steps]]
+run = "test \"$(cat {outside}/notes.txt)\" = perm-rule && echo 'Moderate: no prompt, still one line'"
+[[steps]]
+pause = 3.0

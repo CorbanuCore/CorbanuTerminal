@@ -120,6 +120,28 @@ pub enum CodexErrorInfo {
     Other,
 }
 
+impl CodexErrorInfo {
+    /// Whether the provider rejected the request's credential (HTTP 401).
+    pub fn is_credential_rejection(&self) -> bool {
+        matches!(
+            self,
+            Self::Unauthorized
+                | Self::HttpConnectionFailed {
+                    http_status_code: Some(401)
+                }
+                | Self::ResponseStreamConnectionFailed {
+                    http_status_code: Some(401)
+                }
+                | Self::ResponseStreamDisconnected {
+                    http_status_code: Some(401)
+                }
+                | Self::ResponseTooManyFailedAttempts {
+                    http_status_code: Some(401)
+                }
+        )
+    }
+}
+
 impl From<CoreCodexErrorInfo> for CodexErrorInfo {
     fn from(value: CoreCodexErrorInfo) -> Self {
         match value {

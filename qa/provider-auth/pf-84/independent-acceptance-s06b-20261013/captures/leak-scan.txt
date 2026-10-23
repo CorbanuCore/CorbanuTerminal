@@ -1,0 +1,106 @@
+scanned 73627 files under $S/homes, $S/fakehome, $S/logs, $EV, $S/fh-b1, $S/fh-b4, $S/fh-dm, $S/fh-hm, $S/fh-t1, $S/fh-t2, $S/fh-z
+
+[REAL key REAL_CLAUDE_PLAN_TOKEN] 0 files
+
+[REAL key REAL_CLAUDE_PLAN_TOKEN frag@8 (12 chars)] 0 files
+
+[REAL key REAL_CLAUDE_PLAN_TOKEN frag@end (12 chars)] 0 files
+
+[REAL key REAL_CLAUDE_PLAN_TOKEN frag@mid (12 chars)] 0 files
+
+[REAL key REAL_KIMI_KEY] 0 files
+
+[REAL key REAL_KIMI_KEY frag@8 (12 chars)] 0 files
+
+[REAL key REAL_KIMI_KEY frag@end (12 chars)] 0 files
+
+[REAL key REAL_KIMI_KEY frag@mid (12 chars)] 0 files
+
+[REAL key REAL_OPENAI_KEY] 0 files
+
+[REAL key REAL_OPENAI_KEY frag@8 (12 chars)] 0 files
+
+[REAL key REAL_OPENAI_KEY frag@end (12 chars)] 0 files
+
+[REAL key REAL_OPENAI_KEY frag@mid (12 chars)] 0 files
+
+[REAL key REAL_ZAI_KEY] 0 files
+
+[REAL key REAL_ZAI_KEY frag@8 (12 chars)] 0 files
+
+[REAL key REAL_ZAI_KEY frag@end (12 chars)] 0 files
+
+[REAL key REAL_ZAI_KEY frag@mid (12 chars)] 0 files
+
+[named/default OpenAI API-key canaries (sk-canary-*, sk-fake-*, sk-tuiadd-*)] 19 files
+    $EV/README.md
+    $EV/captures/tB-16-forced-tui.txt
+    $EV/scripts/b_cli.sh
+    $EV/scripts/b_forced.sh
+    $EV/scripts/carry_b.sh
+    $EV/scripts/leakscan.py
+    $EV/scripts/real.sh
+    $EV/scripts/rs_suite.sh
+    $EV/scripts/tui_setup.sh
+    $EV/scripts/z_setup.sh
+    $S/homes/dm/auth.json
+    $S/homes/f1/auth.json
+    $S/homes/f10/auth.json
+    $S/homes/f11/auth.json
+    $S/homes/f2/auth.json
+    $S/homes/o1/auth.json
+    $S/homes/o2/auth.json
+    $S/homes/o3/auth.json
+    $S/homes/r1/auth.json
+
+[env decoys (sk-envdecoy-, sk-codexenv-, CODEX_ACCESS_TOKEN JWT header eyJhbGciOiAibm9uZSJ9)] 6 files
+    $EV/captures/tui-invocations.txt
+    $EV/scripts/b_cli.sh
+    $EV/scripts/b_forced.sh
+    $EV/scripts/leakscan.py
+    $EV/scripts/tui_setup.sh
+    $S/logs/tui-invocations.txt
+
+[ChatGPT refresh tokens of NAMED accounts (rt.<user>.<gen>)] 1 files
+    $EV/scripts/b_cli.sh
+
+[ChatGPT refresh tokens of DEFAULT logins (rt.deflt./rt.legacy./rt.tuidefault.)] 9 files
+    $EV/scripts/leakscan.py
+    $S/homes/b1/auth.json
+    $S/homes/f5/auth.json
+    $S/homes/f6/auth.json
+    $S/homes/f7/auth.json
+    $S/homes/f8/auth.json
+    $S/homes/f9/auth.json
+    $S/homes/hm/auth.json
+    $S/homes/t2/auth.json
+
+[mock JWT header (eyJhbGciOiAibm9uZSIs), in any token] 9 files
+    $EV/scripts/leakscan.py
+    $S/homes/b1/auth.json
+    $S/homes/f5/auth.json
+    $S/homes/f6/auth.json
+    $S/homes/f7/auth.json
+    $S/homes/f8/auth.json
+    $S/homes/f9/auth.json
+    $S/homes/hm/auth.json
+    $S/homes/t2/auth.json
+
+[fake AWS secrets / bearer env canary (fakesecret-, fakebearer-env-)] 7 files
+    $EV/captures/tui-invocations.txt
+    $EV/scripts/aws_setup.sh
+    $EV/scripts/leakscan.py
+    $EV/scripts/tui_setup.sh
+    $S/fh-t1/.aws/credentials
+    $S/fh-t1/proc.sh
+    $S/logs/tui-invocations.txt
+
+## per-value split (grep -rlF over $S/homes, $S/logs, $S/fakehome, $S/fh-*): named-account keys vs default-login keys
+sk-canary-keyacct: 
+sk-fake-S6B: 
+sk-fake-tui-S6B: 
+sk-tuiadd-S6B: 
+sk-fake-named-S6BFAKE: 
+qa-fake-zai-personal.S6BFAKE: 
+sk-canary-defaultkey: $S/homes/dm/auth.json $S/homes/f1/auth.json $S/homes/f10/auth.json $S/homes/f11/auth.json $S/homes/f2/auth.json $S/homes/o1/auth.json $S/homes/o2/auth.json $S/homes/o3/auth.json 
+sk-fake-default-S6BFAKE: $S/homes/r1/auth.json 

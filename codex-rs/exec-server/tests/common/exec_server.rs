@@ -29,7 +29,8 @@ use tokio_tungstenite::tungstenite::Message;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_RETRY_INTERVAL: Duration = Duration::from_millis(25);
-const EVENT_TIMEOUT: Duration = Duration::from_secs(5);
+// An upper bound only: cold, loaded Bazel CI runners have exceeded 5s.
+const EVENT_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub(crate) struct ExecServerHarness {
     _codex_home: TempDir,

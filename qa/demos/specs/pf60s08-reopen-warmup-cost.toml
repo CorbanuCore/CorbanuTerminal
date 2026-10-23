@@ -1,0 +1,62 @@
+# PF-60-S08 / #403 (Travis, 2026-10-14, option C): reopening an OpenAI conversation sends a paid warm-up request that
+# primes the model's cache. Opening /side forks (reopens) the conversation: Corbanu says the warm-up was sent and how
+# to skip it, and /cost lists it as a "Reopen warm-up" with its cost. One real OpenAI API-key turn on GPT-6 Luna.
+id = "pf60s08-reopen-warmup-cost"
+feature = "Reopen warm-up shown on reopen and in /cost, with a setting to skip it (#403)"
+expected = "Opening /side forks the conversation: a notice says a warm-up request was sent and names skip_reopen_warmup; /cost lists 'Reopen warm-up: 1 request' with its cost, and the request page names its kind."
+model = "gpt-6-luna"
+provider = "openai"
+rows = 46
+cols = 150
+setup = "printenv OPENAI_API_KEY | {bin} login --with-api-key"
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+OPENAI_API_KEY = "openai-api-key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with the single word OK."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*OK\\W*$"
+timeout = 120
+compress = 3
+[[steps]]
+type = "/side"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Reopening or forking this conversation sent a warm-up request"
+timeout = 60
+[[steps]]
+pause = 5
+[[steps]]
+key = "C-c"
+[[steps]]
+pause = 1
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Reopen warm-up: 1 request"
+[[steps]]
+pause = 4
+[[steps]]
+key = "Up"
+repeat = 7
+[[steps]]
+wait = "› → Request 3 · Reopen warm-up"
+[[steps]]
+pause = 1
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Kind: Reopen warm-up"
+[[steps]]
+pause = 4

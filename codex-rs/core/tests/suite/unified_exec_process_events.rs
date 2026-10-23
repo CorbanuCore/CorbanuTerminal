@@ -531,6 +531,7 @@ timeout = 900
         })
         .await?;
     let mut saw_exec_command_begin = false;
+    let mut exec_command_end = None;
     if !managed_network {
         loop {
             let event = timeout(Duration::from_secs(5), test.codex.next_event())
@@ -540,6 +541,9 @@ timeout = 900
             match event {
                 EventMsg::ExecCommandBegin(event) if event.call_id == CALL_ID => {
                     saw_exec_command_begin = true;
+                }
+                EventMsg::ExecCommandEnd(event) if event.call_id == CALL_ID => {
+                    exec_command_end = Some(event);
                 }
                 EventMsg::TurnComplete(_) => break,
                 _ => {}
@@ -593,12 +597,16 @@ timeout = 900
             assert_eq!(process_read_requests, 0, "unexpected compatibility read");
         }
         PushedExecScenario::DirectDenied => {
-            assert!(!saw_exec_command_begin);
+            // Issue #443: a command the sandbox stopped as it started is
+            // still shown: begin, then end with its exit code.
+            assert!(saw_exec_command_begin);
+            assert_eq!(exec_command_end.map(|end| end.exit_code), Some(1));
             assert!(output.contains("Process exited with code 1"));
             assert_eq!(process_read_requests, 0, "unexpected compatibility read");
         }
         PushedExecScenario::LegacyExit => {
-            assert!(!saw_exec_command_begin);
+            assert!(saw_exec_command_begin);
+            assert_eq!(exec_command_end.map(|end| end.exit_code), Some(1));
             assert!(output.contains("Process exited with code 1"));
             assert_eq!(process_read_requests, 1, "expected compatibility read");
         }

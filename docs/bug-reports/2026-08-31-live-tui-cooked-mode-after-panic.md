@@ -56,7 +56,7 @@ tty: /dev/pts/14
 
 The visible sequence was:
 
-1. The user submitted `is this workign`.
+1. The user submitted `is this workign`. <!-- codespell:ignore workign -->
 2. The model ran `fly status -a tasknodeofficial-dev` successfully.
 3. The model ran `fly logs -a tasknodeofficial-dev ...` successfully.
 4. The user interrupted the turn.

@@ -276,7 +276,7 @@ pub unsafe fn get_logon_sid_bytes(h_token: HANDLE) -> Result<Vec<u8>> {
     Err(anyhow!("Logon SID not present on token"))
 }
 
-unsafe fn get_user_sid_bytes(h_token: HANDLE) -> Result<Vec<u8>> {
+pub(crate) unsafe fn get_user_sid_bytes(h_token: HANDLE) -> Result<Vec<u8>> {
     let mut needed: u32 = 0;
     GetTokenInformation(h_token, TokenUser, std::ptr::null_mut(), 0, &mut needed);
     if needed == 0 {
@@ -477,6 +477,14 @@ unsafe fn create_token_with_caps_from(
     entries[logon_idx + 1].Attributes = 0;
 
     let mut new_token: HANDLE = 0;
+    // WRITE_RESTRICTED: restricting SIDs are only consulted for write accesses.
+    // Observed on Windows (#158): generic-write rights, DELETE, and WRITE_DAC are
+    // restricted, but FILE_DELETE_CHILD is not. NTFS lets a caller delete or move
+    // an object it lacks DELETE on when the parent grants FILE_DELETE_CHILD, so a
+    // parent that grants the user full control lets the sandbox delete or move
+    // children that capability-SID ACEs protect. Legacy sessions close that route
+    // with Low integrity outside writable roots (`integrity.rs`) and with
+    // Everyone deny ACEs for protected paths inside them (`deny_delete_child_route`).
     let flags = DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED;
     let ok = CreateRestrictedToken(
         base_token,

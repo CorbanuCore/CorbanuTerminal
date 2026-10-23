@@ -9,6 +9,7 @@ use anyhow::Context;
 use anyhow::bail;
 use clap::Parser;
 use codex_core_api::AbsolutePathBuf;
+use codex_core_api::AccountingMode;
 use codex_core_api::AltScreenMode;
 use codex_core_api::ApprovalsReviewer;
 use codex_core_api::Arg0DispatchPaths;
@@ -16,6 +17,7 @@ use codex_core_api::AskForApproval;
 use codex_core_api::AuthCredentialsStoreMode;
 use codex_core_api::AuthManager;
 use codex_core_api::AutoCompactTokenLimitScope;
+use codex_core_api::BrokerModelAuthOrigin;
 use codex_core_api::CodexAppsToolsCache;
 use codex_core_api::CodexHomeUserInstructionsProvider;
 use codex_core_api::CodexThread;
@@ -185,6 +187,7 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
         .clone();
 
     let mut config = Config {
+        accounting: AccountingMode::Disabled,
         config_layer_stack: ConfigLayerStack::default(),
         startup_warnings: Vec::new(),
         bypass_hook_trust: false,
@@ -198,6 +201,8 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
         model_provider,
         personality: None,
         security_level: SecurityLevel::Permissive,
+        broker_model_auth_origin: BrokerModelAuthOrigin::Config,
+        provider_account_override: None,
         permissions: Permissions::from_approval_and_profile(
             Constrained::allow_any(AskForApproval::Never),
             Constrained::allow_any(PermissionProfile::read_only()),
@@ -206,6 +211,7 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
         custom_permission_profiles: Vec::new(),
         approvals_reviewer: ApprovalsReviewer::User,
         enforce_residency: Constrained::allow_any(/*initial_value*/ None),
+        strict_rules: false,
         hide_agent_reasoning: false,
         show_raw_agent_reasoning: false,
         base_instructions: None,
@@ -295,6 +301,7 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
         experimental_thread_store: ThreadStoreConfig::Local,
         forced_chatgpt_workspace_id: None,
         forced_login_method: None,
+        configured_forced_login_method: None,
         web_search_mode: Constrained::allow_any(WebSearchMode::Disabled),
         web_search_config: None,
         experimental_request_user_input_enabled: true,
@@ -309,6 +316,8 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
         current_time_reminder: None,
         features: Default::default(),
         suppress_unstable_features_warning: false,
+        skip_reopen_warmup: false,
+        reopened_by_prompt_edit: false,
         active_project: ProjectConfig { trust_level: None },
         notices: Notice::default(),
         check_for_update_on_startup: false,

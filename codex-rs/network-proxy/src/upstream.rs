@@ -30,7 +30,7 @@ use std::time::Instant;
 use tracing::info;
 use tracing::warn;
 
-#[cfg(target_os = "macos")]
+#[cfg(unix)]
 use rama_unix::client::UnixConnector;
 
 #[derive(Clone, Default)]
@@ -149,11 +149,39 @@ impl UpstreamClient {
         )
     }
 
-    #[cfg(target_os = "macos")]
+    /// Whether HTTPS requests would leave through an upstream proxy from the
+    /// environment. The destination guard refuses those (PF-33-S02).
+    pub(crate) fn has_upstream_proxy(&self) -> bool {
+        self.proxy_config
+            .proxy_for_protocol(/*is_secure*/ true)
+            .is_some()
+    }
+
+    #[cfg(unix)]
     pub(crate) fn unix_socket(path: &str) -> Self {
         let connector = build_unix_connector(path);
         Self {
             connector,
+            proxy_config: ProxyConfig::default(),
+        }
+    }
+
+    /// PF-27-S06: HTTP over the credential broker's data pipe, one fresh
+    /// connection per request, each checked to be served by `broker_pid`.
+    /// The broker must prove it holds `mac`'s key on each connection;
+    /// `squatted` is set when only another server answered (#390).
+    #[cfg(windows)]
+    pub(crate) fn named_pipe(
+        name: &str,
+        broker_pid: u32,
+        mac: std::sync::Arc<codex_secret_broker::BrokerChannelMac>,
+        squatted: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    ) -> Self {
+        let transport = crate::credential_broker::isolated::pipe::PipeConnector::new(
+            name, broker_pid, mac, squatted,
+        );
+        Self {
+            connector: HttpConnector::new(transport).boxed(),
             proxy_config: ProxyConfig::default(),
         }
     }
@@ -273,7 +301,7 @@ fn build_http_connector(
 #[path = "upstream_tests.rs"]
 mod tests;
 
-#[cfg(target_os = "macos")]
+#[cfg(unix)]
 fn build_unix_connector(
     path: &str,
 ) -> BoxService<

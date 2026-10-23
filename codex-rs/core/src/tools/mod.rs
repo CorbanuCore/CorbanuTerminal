@@ -1,8 +1,10 @@
 mod approvals;
 pub(crate) mod code_mode;
+mod collaboration_wire;
 pub(crate) mod context;
 pub(crate) mod events;
 mod executed_tool_calls;
+pub(crate) mod flat_tool_names;
 pub(crate) mod handlers;
 pub(crate) mod hook_names;
 pub(crate) mod hosted_spec;
@@ -16,6 +18,7 @@ pub(crate) mod runtimes;
 pub(crate) mod sandboxing;
 pub(crate) mod spec_plan;
 pub(crate) mod tool_dispatch_trace;
+pub(crate) mod writable_root_notices;
 
 use std::borrow::Cow;
 

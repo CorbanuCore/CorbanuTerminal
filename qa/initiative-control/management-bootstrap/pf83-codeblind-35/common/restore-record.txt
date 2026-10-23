@@ -1,0 +1,87 @@
+[restore] lo0: lo0 (skip)
+[restore] anchor matches original: yes
+[restore] per-user rules left: 0
+[restore] accounts left: 0  group: absent
+[restore] sudoers.d:   /opt/pf83: absent
+[restore] /Users/neo 750
+[restore] /Users/neo_1 755
+[restore] /private/tmp/.s.PGSQL.5432 777
+[restore] mount_virtiofs: mount_virtiofs: fs_tag share not found
+[restore] virtiofs mounted: 0
+[restore] pf83-allow-zai.sh restored: yes
+[restore] campaign dirs left:        0
+[restore] processes for removed uids:        3
+[restore] done
+  602 65044 /usr/sbin/distnoted
+  603 65046 /usr/sbin/distnoted
+  604 65048 /usr/sbin/distnoted
+residual uid processes:        0
+/dev/disk0 on <share> (AppleVirtIOFS, local, nodev, nosuid, automounted)
+       6
+       6
+       6
+0
+find: /private/var/folders/9v/vvt1pqbn3nj5_r8rxlj5bcg00000gn/0/com.apple.ScreenTimeAgent/Store: Operation not permitted
+find: /private/var/folders/9v/vvt1pqbn3nj5_r8rxlj5bcg00000gn/0/com.apple.lockoutagent: Operation not permitted
+find: /private/var/folders/9v/vvt1pqbn3nj5_r8rxlj5bcg00000gn/0/com.apple.LaunchServices.dv: Operation not permitted
+find: /private/var/folders/9v/vvt1pqbn3nj5_r8rxlj5bcg00000gn/0/com.apple.ScreenTimeAgent/Store: Operation not permitted
+find: /private/var/folders/9v/vvt1pqbn3nj5_r8rxlj5bcg00000gn/0/com.apple.lockoutagent: Operation not permitted
+find: /private/var/folders/9v/vvt1pqbn3nj5_r8rxlj5bcg00000gn/0/com.apple.LaunchServices.dv: Operation not permitted
+find: /private/var/folders/9v/vvt1pqbn3nj5_r8rxlj5bcg00000gn/0/com.apple.ScreenTimeAgent/Store: Operation not permitted
+find: /private/var/folders/9v/vvt1pqbn3nj5_r8rxlj5bcg00000gn/0/com.apple.lockoutagent: Operation not permitted
+find: /private/var/folders/9v/vvt1pqbn3nj5_r8rxlj5bcg00000gn/0/com.apple.LaunchServices.dv: Operation not permitted
+uid 602 files:        6 procs:        0
+uid 603 files:        6 procs:        0
+uid 604 files:        6 procs:        0
+No ALTQ support in kernel
+ALTQ related functions disabled
+lo0 (skip)
+No ALTQ support in kernel
+ALTQ related functions disabled
+0
+       0
+opt-absent
+/Users/neo 750
+/Users/neo_1 755
+/private/tmp/.s.PGSQL.5432 777
+/private/tmp/pf83-allow-zai.sh 644
+0
+0
+0
+1
+602 Directory 192 /private/var/folders/gw/c78zk5jj5_zcjv24rzfpxh480000kt
+602 Directory 96 <folders>/0
+602 Directory 96 <folders>/T
+602 Directory 64 <folders>/T/com.apple.trustd
+602 Directory 64 <folders>/C
+602 Directory 64 <folders>/X
+603 Directory 192 /private/var/folders/4y/bspfyc1n0298g4s41x_dhskr0000kv
+603 Directory 96 <folders>/0
+603 Directory 96 <folders>/T
+603 Directory 64 <folders>/T/com.apple.trustd
+603 Directory 64 <folders>/C
+603 Directory 64 <folders>/X
+604 Directory 192 /private/var/folders/jz/zlcfg89d5kg74dxlp8zkc4vm0000kw
+604 Directory 96 <folders>/0
+604 Directory 96 <folders>/T
+604 Directory 64 <folders>/T/com.apple.trustd
+604 Directory 64 <folders>/C
+604 Directory 64 <folders>/X
+
+## Post-restore egress re-measurement (agent@guest, 2026-10-06T02:07:58Z)
+uname: Neos-Virtual-Machine.local 26.2
+api.z.ai HTTPS status: 301
+github.com curl rc: 6
+raw.githubusercontent.com curl rc: 6
+codeload.github.com curl rc: 6
+pf83 accounts: 0
+/opt/pf83: absent
+files owned by uid 602-604 in /private/tmp and /Users/Shared: 0
+campaign dirs in agent home: 0
+
+## Pre-campaign baselines (recorded by provision.sh in restore-state/ at 2026-10-06T00:31:56Z, read back before restore)
+/Users/neo 750 neo:staff
+/Users/neo_1 755 neo2:staff
+/private/tmp/.s.PGSQL.5432 777
+VirtIOFS: /dev/disk0 on <host share> (AppleVirtIOFS, local, nodev, nosuid, automounted)
+corbanu.pf83 anchor: original copy restored byte-identical (cmp yes, above)

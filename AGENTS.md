@@ -2,8 +2,8 @@
 
 | Field             | Value                                                                                                                    |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Policy version    | 1.6                                                                                                                      |
-| Updated           | 2026-09-10                                                                                                               |
+| Policy version    | 1.7                                                                                                                      |
+| Updated           | 2026-09-12                                                                                                               |
 | Policy owner      | Lead developer, as assigned in the [product roles table](docs/corbanu-product-spec.md#ownership-and-decision-rights)     |
 | Product authority | The decision roles in the product specification                                                                          |
 | Amendment rule    | Changes to product scope or hard release gates require the product decision process defined in the product specification |
@@ -89,6 +89,24 @@ from plan prose.
 - Plans maintain a sprint execution map for every feature. Run
   `python3 docs/sprints/check.py` before implementation handoff and in CI.
 
+## Automated-test credential isolation
+
+Use `just test` for ordinary Rust tests, including manager, scheduled and
+subagent verification runs. Read [safe automated tests](docs/development/test-isolation.md)
+before launching a test campaign. Fixture children must not inherit live profile
+aliases or access the operator's native credential store. A native prompt or
+live-profile read stops successor/retry dispatch and invalidates that run; never
+ask the operator to authorize test binaries against their personal Keychain.
+Native/packaged credential qualification requires the separate isolated lane.
+
+A disposable `HOME` or profile does not stop third-party binaries (for example
+Claude Code) from querying the operator's login keychain through macOS
+services. Run them for tests or evidence only inside a sandbox that denies the
+keychain services (`com.apple.SecurityServer`, `com.apple.securityd.xpc`,
+`com.apple.securityd.systemkeychain`). Every `security` command names an
+explicit throwaway keychain path; never run it against the default or login
+keychain.
+
 ## Interactive product proof
 
 A user-facing interactive feature is not complete until the final built
@@ -124,6 +142,16 @@ For non-user-facing work, record a reasoned not-applicable decision.
 - Freeze its original, prioritized starting-state/action/observable-result cases
   before comparing them with implementation tests. Preserve ambiguities and
   subsequent amendments; do not coach it toward a preferred answer.
+- September 12, 2026 amendment authorized by Travis: acceptance execution must
+  use a separate fresh-context, code-blind agent, not the implementer, with only
+  frozen human cases, neutral navigation instructions and the exact read-only
+  binary package/assets. A binary-only working directory or prompt restriction
+  alone is insufficient: enforce filesystem, tool, process/IPC and network
+  boundaries; deny repository/history/prior findings and real credential access.
+  Record negative access probes from the actual executor and its children,
+  positive package/PTY controls, isolated per-run state and mediated inference.
+  Missing enforcement blocks applicable functional handoff, not unrelated
+  internal implementation. Never bypass a tool denial to complete a test.
 - Map every proposed case to execution evidence or an explicit disposition.
   Exercise the exact packaged candidate through real keys and representative
   fresh/existing profiles on applicable platforms. Screenshots alone cannot
@@ -133,11 +161,70 @@ For non-user-facing work, record a reasoned not-applicable decision.
   and recorded acceptance by product authority, not unilateral deletion by the
   implementing agent. A human may explicitly agree to limited testing around
   a named prerequisite; preserve that limitation rather than calling it passed.
+- The evidence reviewer must be independent of both implementer and executor;
+  the original designer may review. Preserve raw attempts, timeouts, fixture
+  defects and separate fresh replays; corrections never overwrite old results.
+  Internal-only stages need a reasoned, integrator-accepted N/A with the later
+  functional gate named. Unit tests cannot qualify an affected user workflow.
 - Normally use one independent design pass and one brief evidence check, both
   charged to the existing per-track review budget (default maximum five total,
   including code/external reviews). Do not reset the budget for this step.
-  Further reviews require the existing critical-finding exception or an explicit
-  human budget amendment; a spent budget is not permission to skip the gate.
+  Record execution sessions/cost separately; execution is mandatory test work,
+  not an additional opinion review. Going over the budget needs the explicit
+  authorization described in review budget extensions below; a spent budget
+  never waives a required gate.
+
+### Review budget extensions
+
+Owner decision, October 14, 2026 (Travis): going over a review or
+evidence-check budget needs explicit authorization from Travis or from the
+coordinator; Travis delegated that discretion to the coordinator. Workers and
+integrators may never self-authorize an extension. This applies to code,
+security, code-blind design and evidence reviews.
+
+- To ask for one, stop the review loop and send the coordinator (or Travis)
+  the reason, scope and what is at stake. Do not run the extra review while
+  waiting.
+- Record each authorization (who granted it, scope, purpose, prior usage,
+  additional allowance and result) in the existing review ledger and a tracking
+  issue. Never erase earlier passes or disguise an extension as a reset.
+- Without an authorization, record the last verdict honestly and stop that loop.
+- Security reviews remain coordinated through the existing security owner,
+  without duplicate workers or resuming work paused for another reason.
+
+History: Travis's September 12, 2026 delegation, which let the named
+integration owner authorize additional scoped reviews, is superseded as of
+October 14, 2026. Extensions recorded under it before that date stay as history.
+
+When earlier reviews have no substantive unresolved issue, move to the next
+required test, integration or assignment instead of seeking more opinions on
+unchanged code. Record cosmetic/nonblocking observations as follow-ups. Do not
+waive correctness/security findings, independence, actual test evidence,
+dependencies, product decisions, human acceptance or external-action permissions.
+Scope-break and convergence rules remain.
+
+### Model for adversarial functional cases
+
+User-authorized process amendment, October 2, 2026. Functional cases that ask
+the product to run boundary probes (permission, sandbox and security cases such
+as PF-83 F01-F11) run the product under test on GLM 5.2 (`-m glm-5.2 -c
+model_provider="zai"`). GPT-5.6-Sol refused PF-83 F05-F11 outright as a
+cybersecurity request. GLM 5.2 attempted F01, F02 and F05-F11 in the sealed
+guest (increment-33), with one intermittent refusal recorded in F05.
+
+- Record every model refusal verbatim as a result. A retry must resubmit the
+  frozen case wording unchanged; a changed prompt is a separate, labelled
+  attempt, never the case's verdict.
+- Another model needs a recorded reason, and a refusal count from the same
+  cases, before it replaces GLM 5.2.
+- Credentials reach an isolated guest only through the owner-approved path for
+  that guest; never print or log them.
+
+Owner amendment, October 10, 2026: GLM 5.2 used Z.AI credit too fast, so these
+cases, per-sprint GLM tmux runs and GLM worker fallbacks now use GLM 5.3 Flash
+(`-m glm-5.3-flash -c model_provider="zai"`). Record Flash refusals the same
+way. Use GLM 5.2 only with a recorded reason, such as Flash being unable to
+complete a case. Evidence recorded on GLM 5.2 before this date stays valid.
 
 Use [the workflow and artifact templates](qa/code-blind-functional/README.md)
 and its handoff checker. The checker validates traceability, not the truth of
@@ -180,6 +267,12 @@ The release owner named in `qa/release/<version>/` is accountable for collecting
 evidence and auditing change classifications. Classification disputes go to
 product authority.
 
+Release-preparation checklist:
+
+- Move entries from `qa/release/unreleased/RELEASE_NOTES.md` into
+  `qa/release/<version>/RELEASE_NOTES.md`, preserving existing version notes,
+  then clear only the transferred entries from the unreleased file.
+
 Absent an explicit release instruction from a human with release authority, a
 release candidate is qualified when its record shows:
 
@@ -214,17 +307,17 @@ useful enough to present directly to a user.
 
 ## Resolved ambiguities
 
-| Previous conflict                                                          | Resolution                                                                                                                                                                 |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Active-plan cap versus urgent fixes                                        | The limit applies to product initiatives. Routine work and bounded fixes do not consume a slot; they cannot introduce new scope.                                           |
-| Active-plan cap versus a release train                                     | A release record aggregates work and does not consume an active-plan slot.                                                                                                 |
-| Finished-only docs versus a roadmap in `docs/`                             | Feature docs are finished-only; the status-labeled product specification is the sole exception.                                                                            |
-| Corbanu docs versus the inherited “docs live elsewhere” rule               | That upstream rule is not adopted. Root `docs/` is the official Corbanu documentation tree.                                                                                |
-| Feature-specific repository applicability versus testing both repositories | A feature uses applicable repos; every release suite includes a generic real workflow in both.                                                                             |
-| Automated tests versus true-TUI proof                                      | Both are required for affected interactive behavior; neither substitutes for the other.                                                                                    |
-| Formatting after tests                                                     | Fix and formatting tools run before final affected tests and TUI qualification.                                                                                            |
-| Fixed local paths versus cross-platform support                            | Repository locations are inputs recorded by the plan/release record, never personal absolute paths in policy.                                                              |
-| Exact Markdown anchors versus durable product linkage                      | Heading text plus a requirement excerpt identifies the product decision; anchors are optional navigation.                                                                  |
+| Previous conflict                                                          | Resolution                                                                                                                                                                                                                                  |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Active-plan cap versus urgent fixes                                        | The limit applies to product initiatives. Routine work and bounded fixes do not consume a slot; they cannot introduce new scope.                                                                                                            |
+| Active-plan cap versus a release train                                     | A release record aggregates work and does not consume an active-plan slot.                                                                                                                                                                  |
+| Finished-only docs versus a roadmap in `docs/`                             | Feature docs are finished-only; the status-labeled product specification is the sole exception.                                                                                                                                             |
+| Corbanu docs versus the inherited “docs live elsewhere” rule               | That upstream rule is not adopted. Root `docs/` is the official Corbanu documentation tree.                                                                                                                                                 |
+| Feature-specific repository applicability versus testing both repositories | A feature uses applicable repos; every release suite includes a generic real workflow in both.                                                                                                                                              |
+| Automated tests versus true-TUI proof                                      | Both are required for affected interactive behavior; neither substitutes for the other.                                                                                                                                                     |
+| Formatting after tests                                                     | Fix and formatting tools run before final affected tests and TUI qualification.                                                                                                                                                             |
+| Fixed local paths versus cross-platform support                            | Repository locations are inputs recorded by the plan/release record, never personal absolute paths in policy.                                                                                                                               |
+| Exact Markdown anchors versus durable product linkage                      | Heading text plus a requirement excerpt identifies the product decision; anchors are optional navigation.                                                                                                                                   |
 | Missing competitor infrastructure versus benchmark success                 | A due run without all three auditable lanes is incomplete and must be disclosed. It does not override an explicit release instruction from a human with release authority. Competitor task failure on a functioning lane is a valid result. |
-| Plan detail versus executable work                                         | Plans own feature contracts and acceptance; sprints own mechanical code tasks. No product-initiative implementation starts without a single-feature current sprint.        |
-| Completed sprints versus documentation clutter                             | Completed and cancelled sprint records move to the excluded archive. Current sprint navigation contains only unfinished work.                                              |
+| Plan detail versus executable work                                         | Plans own feature contracts and acceptance; sprints own mechanical code tasks. No product-initiative implementation starts without a single-feature current sprint.                                                                         |
+| Completed sprints versus documentation clutter                             | Completed and cancelled sprint records move to the excluded archive. Current sprint navigation contains only unfinished work.                                                                                                               |

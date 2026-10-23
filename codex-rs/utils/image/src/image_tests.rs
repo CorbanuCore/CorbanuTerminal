@@ -362,3 +362,28 @@ async fn bounds_cache_by_encoded_byte_size() {
     assert!(cache.get(&key(2)).is_some());
     assert!(cache.get(&key(3)).is_none());
 }
+
+#[test]
+fn base64_image_dimensions_reads_headers_without_full_decode() {
+    for format in [ImageFormat::Png, ImageFormat::Jpeg, ImageFormat::WebP] {
+        let image = ImageBuffer::from_pixel(2048, 37, Rgba([20u8, 40, 60, 255]));
+        let bytes = if format == ImageFormat::Jpeg {
+            let rgb = DynamicImage::ImageRgba8(image).to_rgb8();
+            let mut encoded = Cursor::new(Vec::new());
+            DynamicImage::ImageRgb8(rgb)
+                .write_to(&mut encoded, format)
+                .expect("encode jpeg");
+            encoded.into_inner()
+        } else {
+            image_bytes(&image, format)
+        };
+        let encoded = BASE64_STANDARD.encode(&bytes);
+        assert_eq!(
+            base64_image_dimensions(&encoded),
+            Some((2048, 37)),
+            "{format:?}"
+        );
+    }
+    assert_eq!(base64_image_dimensions("cG5n"), None);
+    assert_eq!(base64_image_dimensions("not base64!"), None);
+}

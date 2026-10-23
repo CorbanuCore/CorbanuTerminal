@@ -410,15 +410,54 @@ mod tests {
         insta::assert_snapshot!("command_popup_app", format!("{buf:?}"));
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
     fn default_command_popup_items_snapshot() {
         let mut popup = CommandPopup::new(CommandPopupFlags::default(), Vec::new());
         popup.on_composer_text_change("/".to_string());
 
-        let commands = popup
-            .filtered_items()
+        // Commands whose presence or description depends on the platform or
+        // the build, each with whether this build shows it. They are checked
+        // here and left out of the snapshot, so the snapshot is the same on
+        // every platform and build: it used to run only on macOS, where no CI
+        // job runs TUI tests, and went stale unnoticed (#901).
+        let build_dependent = [
+            (
+                SlashCommand::App,
+                cfg!(any(target_os = "macos", target_os = "windows")),
+            ),
+            (SlashCommand::SandboxReadRoot, cfg!(target_os = "windows")),
+            (SlashCommand::Rollout, cfg!(debug_assertions)),
+            (SlashCommand::TestApproval, cfg!(debug_assertions)),
+            (SlashCommand::Cost, cfg!(feature = "developer-accounting")),
+            (SlashCommand::Usage, true),
+        ];
+        let items = popup.filtered_items();
+        for (command, shown) in build_dependent {
+            assert_eq!(
+                items.contains(&CommandItem::Builtin(command)),
+                shown,
+                "/{}",
+                command.command()
+            );
+        }
+        // /usage is always shown; only its description depends on the build,
+        // so both wordings are spelled out here on purpose.
+        assert_eq!(
+            SlashCommand::Usage.description(),
+            if cfg!(feature = "developer-accounting") {
+                "view recorded request cost, account usage, or use a rate-limit reset"
+            } else {
+                "view account usage or use a rate-limit reset"
+            }
+        );
+
+        let commands = items
             .into_iter()
+            .filter(|item| {
+                !build_dependent
+                    .iter()
+                    .any(|(command, _)| *item == CommandItem::Builtin(*command))
+            })
             .map(|item| {
                 let command = item.command();
                 let description = item.description();

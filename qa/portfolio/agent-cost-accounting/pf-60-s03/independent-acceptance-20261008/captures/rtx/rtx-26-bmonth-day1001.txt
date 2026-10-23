@@ -1,0 +1,24 @@
+$ /usage requests 2026-10-01
+  Cost — this conversation
+  Requested UTC day: 2026-10-01
+  This conversation on 2026-10-01 (UTC):
+  • Z.AI · Z.AI GLM 5.2 — Pay per use. 34 requests, 220,862 tokens. Estimated cost: $0.082922 (rounded).
+  No other conversation recorded requests on this day.
+  Costs are estimates from published prices; your provider's bill is the final amount.
+  Select a provider below to see its requests.
+  —— Details ——
+  Estimated token cost for recorded attempts: $0.082922 (rounded)
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  ↑↓ scroll · Enter open · Esc back/close
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-01T00:00:00.000Z, 2026-10-02T00:00:00.000Z)
+  Read at: 2026-10-08T11:51:33.656Z; ledger current to: 2026-10-08T11:24:32.708Z (1620948 ms behind)
+--- last screen:
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-01T00:00:00.000Z, 2026-10-02T00:00:00.000Z)
+› Read at: 2026-10-08T11:51:33.656Z; ledger current to: 2026-10-08T11:24:32.708Z (1620948 ms behind)
+  ↑↓ scroll · Enter open · Esc back/close

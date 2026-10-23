@@ -1,0 +1,142 @@
+[
+  {
+    "kind": "root",
+    "index": 0,
+    "model": "gpt-5.6-sol",
+    "path": "/v1/responses",
+    "service_tier": null,
+    "input": 100,
+    "cached": 20,
+    "output": 10,
+    "reasoning": 4,
+    "real_utc": "2026-09-17T08:37:15.794155+00:00",
+    "fixture_utc": "2026-08-30T23:00:00Z",
+    "emission": 0,
+    "rates_per_million": [
+      "5",
+      ".5",
+      "30"
+    ],
+    "exact_usd": "0.00071"
+  },
+  {
+    "kind": "root",
+    "index": 1,
+    "model": "gpt-5.6-sol",
+    "path": "/v1/responses",
+    "service_tier": null,
+    "input": 101,
+    "cached": 20,
+    "output": 10,
+    "reasoning": 4,
+    "real_utc": "2026-09-17T08:37:15.985214+00:00",
+    "fixture_utc": "2026-08-30T23:00:00Z",
+    "emission": 1,
+    "rates_per_million": [
+      "5",
+      ".5",
+      "30"
+    ],
+    "exact_usd": "0.000715"
+  },
+  {
+    "kind": "child",
+    "index": 0,
+    "model": "gpt-5.6-sol",
+    "path": "/v1/responses",
+    "service_tier": null,
+    "input": 80,
+    "cached": 10,
+    "output": 6,
+    "reasoning": 2,
+    "real_utc": "2026-09-17T08:37:16.067780+00:00",
+    "fixture_utc": "2026-08-30T23:00:00Z",
+    "emission": 2,
+    "rates_per_million": [
+      "5",
+      ".5",
+      "30"
+    ],
+    "exact_usd": "0.000535"
+  },
+  {
+    "kind": "root",
+    "index": 2,
+    "model": "gpt-5.6-sol",
+    "path": "/v1/responses",
+    "service_tier": null,
+    "input": 102,
+    "cached": 20,
+    "output": 10,
+    "reasoning": 4,
+    "real_utc": "2026-09-17T08:37:19.586235+00:00",
+    "fixture_utc": "2026-08-31T00:00:00Z",
+    "emission": 3,
+    "rates_per_million": [
+      "5",
+      ".5",
+      "30"
+    ],
+    "exact_usd": "0.00072"
+  },
+  {
+    "kind": "root",
+    "index": 3,
+    "model": "gpt-5.6-terra",
+    "path": "/v1/responses",
+    "service_tier": null,
+    "input": 103,
+    "cached": 20,
+    "output": 10,
+    "reasoning": 4,
+    "real_utc": "2026-09-17T08:37:23.040729+00:00",
+    "fixture_utc": "2026-08-31T23:00:00Z",
+    "emission": 4,
+    "rates_per_million": [
+      "2.5",
+      ".25",
+      "15"
+    ],
+    "exact_usd": "0.0003625"
+  },
+  {
+    "kind": "root",
+    "index": 4,
+    "model": "gpt-5.6-terra",
+    "path": "/v1/responses",
+    "service_tier": null,
+    "input": 104,
+    "cached": 20,
+    "output": 10,
+    "reasoning": 4,
+    "real_utc": "2026-09-17T08:37:26.520041+00:00",
+    "fixture_utc": "2026-09-01T00:00:00Z",
+    "emission": 5,
+    "rates_per_million": [
+      "2.5",
+      ".25",
+      "15"
+    ],
+    "exact_usd": "0.000365"
+  },
+  {
+    "kind": "orphan",
+    "index": 0,
+    "model": "gpt-5.6-sol",
+    "path": "/v1/responses",
+    "service_tier": null,
+    "input": 40,
+    "cached": 5,
+    "output": 4,
+    "reasoning": 1,
+    "real_utc": "2026-09-17T08:37:29.970239+00:00",
+    "fixture_utc": "2026-09-01T00:00:00Z",
+    "emission": 6,
+    "rates_per_million": [
+      "5",
+      ".5",
+      "30"
+    ],
+    "exact_usd": "0.0002975"
+  }
+]

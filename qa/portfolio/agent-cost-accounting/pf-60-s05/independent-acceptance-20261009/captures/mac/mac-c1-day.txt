@@ -1,0 +1,51 @@
+$ /cost
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     glm-5.2   /model to change                    │
+│ directory: <corbanu-root>/tmp/…/work/repo │
+╰──────────────────────────────────────────────────────────╯
+
+  Cost — this conversation
+  Requested UTC day: 2026-10-09
+  Today (UTC) in this conversation: no recorded requests.
+  Other conversations on this day, not included above: 19 requests in 19 conversations.
+  • Amazon Bedrock · openai.gpt-5.4 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
+  • Ambient · test-model — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
+  • Anthropic · Claude Opus 5.5 — Pay per use. 1 request, tokens not reported. Estimated cost: not available — usage incomplete.
+  • Baseten · test-model — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
+  • Baseten Anthropic · OpenRouter Grok 4.7 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
+  • DeepSeek · DeepSeek V4.1 Flash (Direct) — Pay per use. 1 request, tokens not reported. Estimated cost: not available — usage incomplete.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  • Kimi Code · Kimi Code K3 — Covered by your subscription (not billed per request). 1 request, tokens not reported. Same work at API prices: not
+  available.
+  • gpt-oss · mock-model — Local (runs on your own machine). 1 request, 107 tokens. No charge.
+  • Meta · test-model — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
+  • OpenRouter · Ambient GLM 5.2 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
+  • OpenRouter Anthropic · OpenRouter Grok 4.7 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
+  • Corbanu API · test-model — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
+  • Corbanu API · OpenRouter Grok 4.7 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
+  • Vercel · Vercel Kimi K3 — Pay per use. 1 request, tokens not reported. Estimated cost: not available — usage incomplete.
+  • Vercel Anthropic · OpenRouter Grok 4.7 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
+  • Vercel Anthropic Fast · OpenRouter Grok 4.7 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
+  • Z.AI · Z.AI GLM 5.2 — Pay per use. 1 request, tokens not reported. Estimated cost: not available — usage incomplete.
+  • Z.AI Anthropic · Z.AI GLM 5.2 — Covered by your subscription (not billed per request). 1 request, tokens not reported. Same work at API prices: not
+  Other conversations' pay per use — estimated cost: not available (11 attempts had no price, 4 had incomplete usage); subscription — same work at API
+  prices: not available; local — no charge.
+  To see those requests, open that conversation with /resume and run /cost there.
+  Next step for requests with no price: check the bill from OpenRouter, Ambient, Meta, OpenRouter Anthropic, Corbanu API, Vercel Anthropic, Vercel Anthropic
+  Fast, Amazon Bedrock, Baseten Anthropic and Baseten. No published price covers them, so no cost is shown for them here.
+  Next step for requests with incomplete usage: check the bill from Anthropic, Vercel, DeepSeek and Z.AI. Their provider did not report every token count,
+  so the estimate is missing or only a lower bound.
+  Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+  usage page.
+  Costs are estimates from published prices; Amazon Bedrock, Ambient, Anthropic, Baseten, Baseten Anthropic, DeepSeek, Meta, OpenRouter Anthropic, Vercel
+  Anthropic, Vercel Anthropic Fast and Z.AI don't report their charges and OpenRouter, Corbanu API and Vercel stated no charge for this work — check their
+  bills.
+  —— Details ——
+  No recorded attempts in this conversation or its subagents; collection coverage unknown.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z)

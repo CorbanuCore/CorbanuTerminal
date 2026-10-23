@@ -1,0 +1,4 @@
+version = 2
+saved_at = 1791935503254
+activated_at = 1791935503564
+findings = ["env-file-99a113275afc", "environment-variable-e11ed2ed3b6e", "transcript-07f3122f00c8", "transcript-96230712a2c3", "transcript-a6a6cb9f12c6", "transcript-bd4a3024f48e", "transcript-e28f0d51467b", "vault-store-491501a0fa4a"]

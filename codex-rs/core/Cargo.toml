@@ -12,6 +12,10 @@ path = "src/lib.rs"
 name = "codex-write-config-schema"
 path = "src/bin/config_schema.rs"
 
+[features]
+# Developer qualification only. Never enable in distributed builds.
+developer-accounting = []
+
 [lints]
 workspace = true
 
@@ -42,6 +46,7 @@ codex-extension-items = { workspace = true }
 codex-features = { workspace = true }
 codex-feedback = { workspace = true }
 codex-file-system = { workspace = true }
+codex-log-guard = { workspace = true }
 codex-login = { workspace = true }
 codex-memories-read = { workspace = true }
 codex-mcp = { workspace = true }
@@ -66,6 +71,7 @@ codex-rollout-trace = { workspace = true }
 codex-rmcp-client = { workspace = true }
 codex-sandboxing = { workspace = true }
 codex-security-audit = { workspace = true }
+codex-security-level = { workspace = true }
 codex-security-policy = { workspace = true }
 codex-secret-broker = { workspace = true }
 codex-browser-isolation = { workspace = true }
@@ -96,6 +102,7 @@ iana-time-zone = { workspace = true }
 image = { workspace = true, features = ["jpeg", "png", "webp"] }
 indexmap = { workspace = true }
 libc = { workspace = true }
+notify = { workspace = true }
 once_cell = { workspace = true }
 rand = { workspace = true }
 regex-lite = { workspace = true }
@@ -143,13 +150,18 @@ openssl-sys = { workspace = true, features = ["vendored"] }
 [target.'cfg(unix)'.dependencies]
 codex-shell-escalation = { workspace = true }
 
+[target.'cfg(windows)'.dependencies]
+codex-process-hardening = { workspace = true }
+
 [dev-dependencies]
 assert_cmd = { workspace = true }
 assert_matches = { workspace = true }
+codex-agent-identity = { workspace = true }
 codex-exec-server-test-support = { workspace = true }
 codex-image-generation-extension = { workspace = true }
 codex-home = { workspace = true }
 codex-keyring-store = { workspace = true }
+codex-memories-extension = { workspace = true }
 codex-otel = { workspace = true }
 codex-skills-extension = { workspace = true }
 codex-test-binary-support = { workspace = true }
@@ -168,15 +180,31 @@ opentelemetry_sdk = { workspace = true, features = [
     "metrics",
 ] }
 serial_test = { workspace = true }
+sqlx = { workspace = true }
 tempfile = { workspace = true }
 test-log = { workspace = true }
+tracing-log = { workspace = true }
 tracing-opentelemetry = { workspace = true }
-tracing-subscriber = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tracing-test = { workspace = true, features = ["no-env-filter"] }
 walkdir = { workspace = true }
 wiremock = { workspace = true }
 zstd = { workspace = true }
 
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Threading",
+] }
+
 [package.metadata.cargo-shear]
 ignored = ["openssl-sys"]
-ignored-paths = ["tests/remote_env_windows/*.rs"]
+ignored-paths = [
+    "tests/remote_env_windows/*.rs",
+    # Registration seams: declared modules that intentionally hold only docs.
+    "src/security/confidentiality/mod.rs",
+    "src/security/taint/mod.rs",
+    "src/security/ui_events.rs",
+]

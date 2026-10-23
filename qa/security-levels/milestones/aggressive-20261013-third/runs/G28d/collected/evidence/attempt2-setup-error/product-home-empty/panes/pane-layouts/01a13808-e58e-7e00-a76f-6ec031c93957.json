@@ -1,0 +1,24 @@
+{
+  "format_version": 2,
+  "checksum": "f5a5f01fe216f77bb15a96712f6d0041a45d30d80659b4ba7148f691a773d544",
+  "layout": {
+    "version": 2,
+    "codex_thread_id": "01a13808-e58e-7e00-a76f-6ec031c93957",
+    "codex_user_pane_ids": [],
+    "active_user_pane_id": "codex-main",
+    "spawn_nazgul_pane_id": null,
+    "spawn_nazgul_rebind_required": false,
+    "claude_pane_ids": [],
+    "spawn_parent_by_node": {},
+    "spawn_native_runtime_by_node": {},
+    "spawn_native_endpoint_by_node": {},
+    "spawn_crew": null,
+    "orchestrate_whips": {},
+    "orchestrate_next_whip_seq": 0,
+    "spawn_pending_dispatches": {},
+    "spawn_next_dispatch_seq": 1,
+    "spawn_processed_dispatch_seq_ids": [],
+    "spawn_processed_dispatch_origin_ids": [],
+    "spawn_accepted_delivery_ids": []
+  }
+}

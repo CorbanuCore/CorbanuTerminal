@@ -1,0 +1,83 @@
+---
+source: tui/src/bottom_pane/security_inspector_tests.rs
+expression: "render(&inspector(facts, stale_now), 100)"
+---
+Security inspector (read only)
+▲ Aggressive degraded: Secretless launch, Model key broker, Live policy, Output gate
+Observed 120s ago: stale, press r to refresh
+
+Level
+  Saved: Aggressive [configured: /security]
+  Core config: Permissive [configured: config layers]
+  [set] Active this run: Aggressive; rows marked "checked at launch" passed the launch check
+      (runtime controls below show what is observed now) [resolved: launch check]
+  [unobserved] Live policy: not running for this session here (not started yet, or a remote app
+      server); next start Aggressive [stored state]
+
+This session
+  [set] Sandbox: session value 0 [resolved: session config, checked at launch]
+  [set] Approvals: session value 1 [resolved: session config, checked at launch]
+  [set] Network: session value 2 [resolved: session config, checked at launch]
+  [set] Vault: session value 3 [resolved: session config, checked at launch]
+  [set] Model keys: session value 4 [resolved: session config]
+  [set] Child agents: session value 5 [resolved: session config, checked at launch]
+  [set] Sandbox backend: macOS Seatbelt [resolved: platform]
+  [set] Egress destinations: proxy destination policy on (url_destination_policy) [resolved:
+      features]
+
+Runtime controls
+  [degraded] Secretless launch: armed, but Core's process hardening failed: protected launches are
+      refused [observed: this process]
+  [off] Output gate: off (secret_output_gate) [observed: this process]
+  [degraded] Model key broker: no broker is running; provider keys are not sent [observed: this
+      process]
+  [off] Network credential broker: off (isolated_credential_broker) [resolved: features]
+  [on] Untrusted content: labelled; session tainted (2 batches): protected actions need your fresh
+      approval. Taint is kept with the conversation and stays on resume [observed: session]
+  [set] Protected boundary: preflight clean at launch; earlier conversations are not resumed
+      [resolved: launch preflight]
+
+Grants
+  Held: none: no live policy for this session [observed: Core policy]
+  [on] Protected reads: never granted under Aggressive, not even once: credential files
+      (.env, .env.* and .envrc files, also ones created later; not .env.example, .env.sample
+      or .env.template; SSH, cloud and CLI tokens) and Corbanu's sign-in, vault, config and history
+      stay unreadable to agent commands; switch to Permissive in /security to allow them. On Linux
+      and Windows a command is stopped when such a file appears while it runs; a process already
+      waiting for that file can read it in the moment before the stop [resolved: level]
+  [on] Grant once: lets one command write files that run code later, which Aggressive otherwise
+      keeps read-only, and only inside the current folder: git hooks and config kept outside a .git
+      folder (a hooks folder set with core.hooksPath, such as Husky's .husky, or a git folder with
+      another name), and, when the current folder holds your home folder, your shell and git start-
+      up files (such as .zshrc, .profile, .gitconfig and .local/bin), login agents and services,
+      and .claude settings. Nothing else changes: credential files and Corbanu's sign-in, vault,
+      config and history stay unreadable; Corbanu's own files and the project's .git, .codex
+      and .agents stay read-only; other folders and the network stay closed. [resolved: level]
+
+Agents
+  [set] Nested agents: refuse (default): agent commands that start another agent (`corbanu exec`,
+      `review`, `resume`, `fork`, a new session, `app-server` or `mcp-server`) are refused while
+      Aggressive is enforced [configured: /security]
+
+Not contained
+  [not contained] MCP servers: docs run outside the OS sandbox with the environment allowlist;
+      allowed because you configured or started it [resolved: config]
+  [off] Hooks: off (codex_hooks) [resolved: features]
+  [not contained] `!` shell commands: run outside the OS sandbox with the environment allowlist;
+      allowed because you configured or started it [fixed]
+  [not contained] App-server command/exec: runs outside the OS sandbox with the environment
+      allowlist; allowed because you configured or started it [fixed]
+
+Not available
+  [not available] Financial preview and approvals: not available in this build (PF-38, PF-39)
+      [fixed]
+  [not available] Isolated retrieval: not available in this build (PF-31) [fixed]
+  [not available] Screened search routing: not available in this build (PF-32) [fixed]
+  [not available] Brokered browser login: not available in this build (PF-37) [fixed]
+  [not available] Quarantine: not available in this build (PF-34) [fixed]
+  [not available] Untrusted-content detectors: not available in this build (PF-35, PF-36) [fixed]
+  [not available] Agent Sweep: not available in this build (PF-40) [fixed]
+
+Recent denials
+  None: nothing refused in this process [observed: this process]
+↑/↓ scroll · r refresh · esc back to /security

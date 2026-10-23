@@ -1,0 +1,6 @@
+---
+source: core/src/security/tainted_action_refusal_tests.rs
+expression: "output.join(\"\\n\")"
+---
+Not run: Security level Moderate: this is credential access after untrusted content entered the session, so it needs your approval, and approvals are off (approval_policy = never). Review the action and turn approval prompts on (/permissions, or approval_policy in config.toml) before asking again. Other security protections still apply.
+Not run: Security level Aggressive: this is credential access after untrusted content entered the session, so it needs your approval, and approvals are off (approval_policy = never). Review the action and turn approval prompts on (/permissions, or approval_policy in config.toml) before asking again. Other security protections still apply. Under security level Aggressive, credential files, the vault and the Corbanu home stay unreadable to agent commands even if you approve, and that is never granted, not even once; to allow it, switch to Permissive in /security (it applies after a restart).

@@ -1,0 +1,45 @@
+• Ran curl -sS -m 8 -o /dev/null -w "%{http_code}" https://example.com/
+  └ curl: (6) Could not resolve host: example.com
+    000
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Ran the command exactly as given. Output:
+
+  curl: (6) Could not resolve host: example.com
+  000
+
+  Exit code: 6. The sandbox's network access is restricted, so DNS lookup for example.com failed and curl reported HTTP code 000.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Run exactly this command and show its output: printf x > ../outside-host-check.txt; ls -l ../outside-host-check.txt
+
+
+✔ You approved Corbanu to run printf x > ../outside-host-check.txt; ls -l ../outside-host-check.txt this time
+
+• Ran printf x > ../outside-host-check.txt; ls -l ../outside-host-check.txt
+  └ /bin/bash: ../outside-host-check.txt: Operation not permitted
+    ls: ../outside-host-check.txt: No such file or directory
+
+⚠ Security level Aggressive blocks writing `../outside-host-check.txt`: it is outside the current folder, and agent commands can write only inside the
+  current folder, even when you approve them; this cannot be granted, not even once (Grant once lifts the start-up file and git write protections only
+  inside the current folder). To allow it, a person can switch to Permissive in /security (it applies after a restart).
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Ran the command exactly as given. Output:
+
+  /bin/bash: ../outside-host-check.txt: Operation not permitted
+  ls: ../outside-host-check.txt: No such file or directory
+
+  Exit code: 1. The write was blocked by the sandbox's security level: the parent directory is outside the current workspace, and agent commands can
+  only write inside the current folder — this restriction can't be overridden even with approval.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Summarize recent commits
+
+  Z.AI GLM 5.3 Flash via zai default · ~/run/fixture/workspace · Corbanu Ter…

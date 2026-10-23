@@ -1,0 +1,132 @@
+
+== A1 add, list, rename (profile name is metadata, validated, shown in clear)
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu account add amazon-bedrock work --kind aws-profile --value work
+Saved amazon-bedrock account `work` (aws_profile).
+[exit 0]
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu account add amazon-bedrock bad --kind aws-profile --value not a profile
+Error: invalid AWS profile name: use 1-64 letters, digits or '-', '_', '.', '+', '@', starting with a letter or digit
+[exit 1]
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu account add amazon-bedrock spare --kind aws-profile --value other
+Saved amazon-bedrock account `spare` (aws_profile).
+[exit 0]
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu account rename amazon-bedrock spare alt
+Renamed amazon-bedrock account `spare` to `alt`.
+[exit 0]
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu account add amazon-bedrock gone --kind aws-profile --value nosuchprofile
+Saved amazon-bedrock account `gone` (aws_profile).
+[exit 0]
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu account list amazon-bedrock
+amazon-bedrock	alt	aws_profile	profile other
+amazon-bedrock	gone	aws_profile	profile nosuchprofile
+amazon-bedrock	work	aws_profile	profile work
+[exit 0]
+
+== A2 named account signs with its profile only (env keys, AWS_PROFILE, bearer token set)
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu exec --skip-git-repo-check -C /tmp/tmp.SnRbCLioJY/ws --account work Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: /tmp/tmp.SnRbCLioJY/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12dc7-336e-70b1-b049-725a775eb41c
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /tmp/tmp.SnRbCLioJY/corbanu/config.toml.
+corbanu
+bedrock-mock: signed by AKIDWORKPROFILE
+tokens used
+107
+bedrock-mock: signed by AKIDWORKPROFILE
+[exit 0]
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu exec --skip-git-repo-check -C /tmp/tmp.SnRbCLioJY/ws --account alt Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: /tmp/tmp.SnRbCLioJY/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12dc7-3627-7153-968a-5ec7590aa179
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /tmp/tmp.SnRbCLioJY/corbanu/config.toml.
+corbanu
+bedrock-mock: signed by AKIDOTHERPROFILE
+tokens used
+107
+bedrock-mock: signed by AKIDOTHERPROFILE
+[exit 0]
+
+== default account keeps today's chain (AWS_BEARER_TOKEN_BEDROCK wins)
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu exec --skip-git-repo-check -C /tmp/tmp.SnRbCLioJY/ws Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: /tmp/tmp.SnRbCLioJY/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12dc7-385b-7c81-b8a7-2f2ccdb2c823
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /tmp/tmp.SnRbCLioJY/corbanu/config.toml.
+corbanu
+bedrock-mock: signed by bearer
+tokens used
+107
+bedrock-mock: signed by bearer
+[exit 0]
+
+== A3 missing profile refused before any request; unconfigured account refused at start
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu exec --skip-git-repo-check -C /tmp/tmp.SnRbCLioJY/ws --account gone Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: /tmp/tmp.SnRbCLioJY/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12dc7-3acf-7e22-8a8a-4fe6a49d4577
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /tmp/tmp.SnRbCLioJY/corbanu/config.toml.
+ERROR: Fatal error: account `gone` of provider `amazon-bedrock` uses AWS profile `nosuchprofile`, which cannot be used: failed to load AWS credentials: the credentials provider was not properly configured: ProfileFile provider could not be built: profile `nosuchprofile` was not defined: could not find source profile nosuchprofile referenced from the root profile. Check that the profile is in ~/.aws/config or ~/.aws/credentials (or the files AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE name) and that its credentials work; for an SSO profile run `aws sso login --profile nosuchprofile`. Corbanu never falls back to another profile or to environment credentials.
+ERROR: Fatal error: account `gone` of provider `amazon-bedrock` uses AWS profile `nosuchprofile`, which cannot be used: failed to load AWS credentials: the credentials provider was not properly configured: ProfileFile provider could not be built: profile `nosuchprofile` was not defined: could not find source profile nosuchprofile referenced from the root profile. Check that the profile is in ~/.aws/config or ~/.aws/credentials (or the files AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE name) and that its credentials work; for an SSO profile run `aws sso login --profile nosuchprofile`. Corbanu never falls back to another profile or to environment credentials.
+[exit 1]
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu exec --skip-git-repo-check -C /tmp/tmp.SnRbCLioJY/ws --account nope Reply with exactly: pong
+Reading additional input from stdin...
+Error: thread/start: thread/start failed: account `nope` of provider `amazon-bedrock` is not configured; add it with `corbanu account add amazon-bedrock nope --kind aws-profile --value <profile>` or pick another with `--account` (see `corbanu account list`) (code -32600)
+[exit 1]
+mock requests during A3: 0
+
+== flag off: named account refused
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu exec --skip-git-repo-check -C /tmp/tmp.SnRbCLioJY/ws --disable named_accounts --account work Reply with exactly: pong
+Error: --account amazon-bedrock:work: named accounts need the `named_accounts` feature (`--enable named_accounts`); `--account default` uses the default credentials
+[exit 1]
+
+== account remove
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu account remove amazon-bedrock alt
+Removed amazon-bedrock account `alt`.
+[exit 0]
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu account list amazon-bedrock
+amazon-bedrock	gone	aws_profile	profile nosuchprofile
+amazon-bedrock	work	aws_profile	profile work
+[exit 0]

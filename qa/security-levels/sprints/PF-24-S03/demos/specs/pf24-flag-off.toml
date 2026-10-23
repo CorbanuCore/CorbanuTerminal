@@ -1,0 +1,30 @@
+# Flag off: /security is the unchanged read-only view.
+id = "pf24-flag-off"
+feature = "Flag off: /security unchanged"
+expected = "Without the security_levels flag, /security shows the same read-only profile view as before and nothing is saved."
+model = "glm-5.2"
+provider = "zai"
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "!ls ../home | grep -c security_level || true"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "└ 0"
+[[steps]]
+pause = 1.5
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Security profiles — read only"
+[[steps]]
+pause = 4.0

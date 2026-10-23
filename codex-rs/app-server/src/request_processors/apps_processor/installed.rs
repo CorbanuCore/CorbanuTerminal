@@ -49,7 +49,12 @@ impl AppsRequestProcessor {
             let config = self
                 .load_apps_installed_config(params.thread_id.as_deref())
                 .await?;
-            let auth = self.auth_manager.auth().await;
+            // #658: the account the session runs on.
+            let session_auth_manager = self.auth_manager.for_session();
+            let auth = match &session_auth_manager {
+                Some(auth_manager) => auth_manager.auth().await,
+                None => None,
+            };
             let apps_enabled = config
                 .features
                 .apps_enabled_for_auth(auth.as_ref().is_some_and(CodexAuth::uses_codex_backend));
@@ -87,8 +92,9 @@ impl AppsRequestProcessor {
                     );
                     let cancellation_token = CancellationToken::new();
                     let codex_apps_auth_manager =
-                        host_owned_codex_apps_enabled(&mcp_config, auth.as_ref())
-                            .then(|| Arc::clone(&self.auth_manager));
+                        session_auth_manager.clone().filter(|_| {
+                            host_owned_codex_apps_enabled(&mcp_config, auth.as_ref())
+                        });
                     let runtime = McpRuntime::new(McpRuntimeInput {
                         config: Arc::clone(&mcp_config),
                         plugins_available: false,

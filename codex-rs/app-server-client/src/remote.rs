@@ -34,6 +34,7 @@ use codex_app_server_protocol::JSONRPCRequest;
 use codex_app_server_protocol::JSONRPCResponse;
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::Result as JsonRpcResult;
+use codex_app_server_protocol::RuledOutDefaultLoginPolicy;
 use codex_app_server_protocol::ServerNotification;
 use codex_app_server_protocol::ServerRequest;
 use codex_uds::UnixStream;
@@ -174,6 +175,7 @@ pub struct RemoteAppServerClient {
     pending_events: VecDeque<AppServerEvent>,
     server_version: Option<String>,
     codex_home: Option<String>,
+    ruled_out_default_login: Option<RuledOutDefaultLoginPolicy>,
     worker_handle: tokio::task::JoinHandle<()>,
 }
 
@@ -212,6 +214,13 @@ impl RemoteAppServerClient {
         self.codex_home.as_deref()
     }
 
+    /// PF-84-S06 (#595): the login restrictions under which the server
+    /// leaves a ruled-out default login in place and refuses to use it, when
+    /// it does (see `InitializeResponse::ruled_out_default_login`).
+    pub fn ruled_out_default_login(&self) -> Option<&RuledOutDefaultLoginPolicy> {
+        self.ruled_out_default_login.as_ref()
+    }
+
     async fn connect_with_stream<S>(
         channel_capacity: usize,
         endpoint: String,
@@ -222,7 +231,12 @@ impl RemoteAppServerClient {
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let mut stream = stream;
-        let (pending_events, server_version, codex_home) = initialize_remote_connection(
+        let RemoteInitialize {
+            pending_events,
+            server_version,
+            codex_home,
+            ruled_out_default_login,
+        } = initialize_remote_connection(
             &mut stream,
             &endpoint,
             initialize_params,
@@ -500,6 +514,7 @@ impl RemoteAppServerClient {
             pending_events: pending_events.into(),
             server_version,
             codex_home,
+            ruled_out_default_login,
             worker_handle,
         })
     }
@@ -611,6 +626,7 @@ impl RemoteAppServerClient {
             pending_events: _pending_events,
             server_version: _server_version,
             codex_home: _codex_home,
+            ruled_out_default_login: _ruled_out_default_login,
             worker_handle,
         } = self;
         let mut worker_handle = worker_handle;
@@ -800,7 +816,7 @@ async fn initialize_remote_connection<S>(
     endpoint: &str,
     params: InitializeParams,
     initialize_timeout: Duration,
-) -> IoResult<(Vec<AppServerEvent>, Option<String>, Option<String>)>
+) -> IoResult<RemoteInitialize>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -808,6 +824,7 @@ where
     let mut pending_events = Vec::new();
     let mut server_version = None;
     let mut codex_home = None;
+    let mut ruled_out_default_login = None;
     write_jsonrpc_message(
         stream,
         JSONRPCMessage::Request(jsonrpc_request_from_client_request(
@@ -845,6 +862,11 @@ where
                                 .and_then(serde_json::Value::as_str)
                                 .filter(|codex_home| !codex_home.is_empty())
                                 .map(str::to_string);
+                            ruled_out_default_login = response
+                                .result
+                                .get("ruledOutDefaultLogin")
+                                .cloned()
+                                .and_then(|policy| serde_json::from_value(policy).ok());
                             break Ok(());
                         }
                         JSONRPCMessage::Error(error) if error.id == initialize_request_id => {
@@ -937,7 +959,19 @@ where
     )
     .await?;
 
-    Ok((pending_events, server_version, codex_home))
+    Ok(RemoteInitialize {
+        pending_events,
+        server_version,
+        codex_home,
+        ruled_out_default_login,
+    })
+}
+
+struct RemoteInitialize {
+    pending_events: Vec<AppServerEvent>,
+    server_version: Option<String>,
+    codex_home: Option<String>,
+    ruled_out_default_login: Option<RuledOutDefaultLoginPolicy>,
 }
 
 fn app_server_event_from_notification(notification: JSONRPCNotification) -> Option<AppServerEvent> {
@@ -1029,6 +1063,7 @@ mod tests {
             pending_events: VecDeque::new(),
             server_version: None,
             codex_home: None,
+            ruled_out_default_login: None,
             worker_handle,
         };
 

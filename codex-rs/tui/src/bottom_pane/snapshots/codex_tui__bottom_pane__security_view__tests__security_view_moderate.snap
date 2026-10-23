@@ -11,8 +11,9 @@ Protected modes are blocked; required controls are not qualified.
 > Moderate
   Aggressive
 
-Planned: isolate credentials, treat external content as untrusted, protect
-sensitive data, preview protected actions, and support audit and revocation. Not
-available yet.
+Protection around untrusted content and secrets while normal work continues:
+commands stay in the sandbox, credential and Corbanu files are protected, and
+protected actions after untrusted content need a person's fresh approval. Chosen
+in /security with the security_levels feature.
 
 ↑/↓ explore · enter inspect · esc close

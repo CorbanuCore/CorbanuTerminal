@@ -1,0 +1,38 @@
+│                                                                                               │
+│  Token usage:          6.14K total  (6.12K input + 15 output)                                 │
+│  Context window:       100% left (7.42K used / 950K)                                          │
+│  Account usage:        personal · 6,124 input · 1,280 cached input · 15 output (11 reasoning) │
+│  Limits:               data not available yet                                                 │
+╰───────────────────────────────────────────────────────────────────────────────────────────────╯
+■ This conversation ran on zai account `work` and resumes on it: account `work` of provider `zai` is not configured; add it or pick another account in `/providers`
+› Reply with exactly the word after
+• after
+/status
+╭───────────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                                │
+│                                                                                               │
+│  Model:                Z.AI GLM 5.3 Flash                                                     │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account personal                 │
+│  Directory:            $S/ws                   │
+│  Permissions:          Next turn: Full Access                                                 │
+│  Security:             Requested Permissive; effective protection unverified (/security)      │
+│  Agents.md:            <none>                                                                 │
+│  Account:              Z.AI API key configured                                                │
+│  Collaboration mode:   Default                                                                │
+│  Session:              01a1345a-26a8-7d43-807c-6c91d819408d                                   │
+│                                                                                               │
+│  Token usage:          6.22K total  (6.19K input + 32 output)                                 │
+│  Context window:       100% left (7.44K used / 950K)                                          │
+│  Account usage:        personal · 6,191 input · 8,640 cached input · 32 output (25 reasoning) │
+│  Limits:               data not available yet                                                 │
+╰───────────────────────────────────────────────────────────────────────────────────────────────╯
+  Z.AI
+  Enabled · configured · current
+  Credentials are present; a successful request is needed to verify access.
+  Deactivation keeps the managed credential; this screen never deletes it.
+› 1. Deactivate                                   Choose an exact usable replacement first; credentials are kept.
+  2. Replace with API key                         API key
+  3. Add another account                          Name it, then paste its key or token into masked entry.
+  4. Use default account for this session         Start a new session whose requests use this provider's default account.
+  5. Make `default` the default for new sessions  New sessions use this provider's default account again.
+  Press enter to confirm or esc to go back

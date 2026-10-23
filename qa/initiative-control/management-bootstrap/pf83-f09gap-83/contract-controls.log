@@ -1,0 +1,17 @@
+test_complete_blocked_coverage_is_recordable (test_contract.ContractCounterexamples.test_complete_blocked_coverage_is_recordable) ... ok
+test_f07_acceptance_without_id_is_rejected (test_contract.ContractCounterexamples.test_f07_acceptance_without_id_is_rejected) ... ok
+test_f07_approval_fields_are_indispensable (test_contract.ContractCounterexamples.test_f07_approval_fields_are_indispensable) ... ok
+test_f07_approved_and_silent_effects_are_distinguishable (test_contract.ContractCounterexamples.test_f07_approved_and_silent_effects_are_distinguishable) ... ok
+test_f09_missing_continuation_is_rejected (test_contract.ContractCounterexamples.test_f09_missing_continuation_is_rejected) ... ok
+test_f09_new_turn_disguised_as_continuation_is_rejected (test_contract.ContractCounterexamples.test_f09_new_turn_disguised_as_continuation_is_rejected) ... ok
+test_f09_probe_before_selection_or_after_end_is_rejected (test_contract.ContractCounterexamples.test_f09_probe_before_selection_or_after_end_is_rejected) ... ok
+test_f09_retroactive_restriction_remains_recordable_failure (test_contract.ContractCounterexamples.test_f09_retroactive_restriction_remains_recordable_failure) ... ok
+test_meta_validation (test_contract.ContractCounterexamples.test_meta_validation) ... ok
+test_missing_result_and_erased_original_branch_are_rejected (test_contract.ContractCounterexamples.test_missing_result_and_erased_original_branch_are_rejected) ... ok
+test_unknown_and_wrong_case_branches_are_rejected (test_contract.ContractCounterexamples.test_unknown_and_wrong_case_branches_are_rejected) ... ok
+test_unspecified_blocker_and_unapproved_disposition_are_rejected (test_contract.ContractCounterexamples.test_unspecified_blocker_and_unapproved_disposition_are_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.074s
+
+OK

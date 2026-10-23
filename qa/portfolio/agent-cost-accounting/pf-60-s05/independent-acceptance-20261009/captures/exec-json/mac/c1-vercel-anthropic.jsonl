@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"01a120b9-1367-7510-a11f-b3b5ae5b7ba3"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Model metadata for `test-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."}}
+{"type":"item.completed","item":{"id":"item_1","type":"error","message":"Skill descriptions were shortened to fit the 2% skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest."}}
+{"type":"turn.started"}
+{"type":"error","message":"test-model does not support Vercel reasoning effort `none`; use "}
+{"type":"turn.failed","error":{"message":"test-model does not support Vercel reasoning effort `none`; use "}}

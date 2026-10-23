@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"01a120b9-dfe0-7ed1-b972-34ed081eac8b"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Skill descriptions were shortened to fit the 2% skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest."}}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 401 Unauthorized: Invalid bearer token, url: https://bedrock-mantle.us-east-1.api.aws/openai/v1/responses, request id: req_p7v372dkcw7ev2zhtqvnfklvvqwxhpgn27wqgp4cc2a5xtg2tbda"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: Invalid bearer token, url: https://bedrock-mantle.us-east-1.api.aws/openai/v1/responses, request id: req_p7v372dkcw7ev2zhtqvnfklvvqwxhpgn27wqgp4cc2a5xtg2tbda"}}

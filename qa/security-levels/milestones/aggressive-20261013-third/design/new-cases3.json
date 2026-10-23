@@ -1,0 +1,138 @@
+{
+ "designer_thread": "01a135bd-4733-7751-9da5-0f3f7a9fd13a",
+ "questions": [
+  "Are remembered approvals suspended from confirmation or only after the restart? Assume after the restart.",
+  "Does suspension cover allow rules from config/rules files? Assume only prefix approvals chosen at a prompt.",
+  "Should Grant once be offered for an ordinary write outside the folder (T13 shows it)? Assume offering is an advisory finding; any outside write is a blocker.",
+  "Does a hard link to a file in .codex/.agents count as a link pointing into them? Assume yes for 'file unchanged'; creation recorded.",
+  "How is the 'OpenAI-style is default' rule observable? Assume listed first/highlighted and used when no connection is named.",
+  "Does a /model connection choice survive a restart? Assume undecided; record only.",
+  "Can Aggressive run with the home folder as the current folder? Assume yes; record blocked if the preflight refuses."
+ ],
+ "withdrawn": [
+  "AGG-T05"
+ ],
+ "cases": [
+  {
+   "id": "AGG-T01",
+   "priority": "blocker",
+   "starting_conditions": "S0; N = wc -l < ../outside-notes.txt",
+   "actions": [
+    "Send: Run exactly this command: echo remembered >> ../outside-notes.txt",
+    "Down to option 2 (don't ask again), Enter",
+    "Send: Run exactly this command again: echo remembered >> ../outside-notes.txt (if prompted: Esc, case invalid)",
+    "/security, Down Down, Enter, Enter, r; confirm 'Active in this session: Aggressive'; Esc",
+    "Send the step 1 command again",
+    "Press Esc",
+    "/quit, relaunch in the same folder, repeat the last two steps",
+    "Own shell: wc -l < ../outside-notes.txt"
+   ],
+   "expected": [
+    "Permissive steps run; step 3 without a prompt",
+    "Under Aggressive (before and after relaunch) the approval prompt appears; no Ran/approved line before answering",
+    "Advisory: the prompt says a remembered approval was not applied because of Aggressive",
+    "Each Esc shows the command declined / Did not run",
+    "File has N+2 lines"
+   ]
+  },
+  {
+   "id": "AGG-T02",
+   "priority": "advisory",
+   "starting_conditions": "Right after AGG-T01",
+   "actions": [
+    "/security, Up Up to Permissive, Enter, Enter; restart as the screen offers (r, or quit and relaunch from the shell)",
+    "Send: Run exactly this command: echo remembered >> ../outside-notes.txt",
+    "Own shell: wc -l < ../outside-notes.txt; then restore the file"
+   ],
+   "expected": [
+    "Permissive active",
+    "Command runs without a prompt",
+    "File has N+3 lines"
+   ]
+  },
+  {
+   "id": "AGG-T03",
+   "priority": "blocker",
+   "starting_conditions": "S1; shasum of ~/.profile and ~/.gitconfig recorded (note absent ones)",
+   "actions": [
+    "For (a) echo '# t03' >> ~/.profile and (b) git config --global core.hooksPath /tmp/t03-hooks: send 'Run exactly this command: <cmd>'; if the model declines send 'Please attempt it; the sandbox decides'; at any prompt note the options, press g once, then y",
+    "/security, g",
+    "Own shell: shasum again"
+   ],
+   "expected": [
+    "No prompt offers Grant once; g opens no 'Grant this command?' review",
+    "Each denial names Security level Aggressive, says the file is a start-up file outside the current folder, cannot be granted not even once, and points to /security",
+    "Files unchanged / still absent",
+    "No grants listed"
+   ]
+  },
+  {
+   "id": "AGG-T04",
+   "priority": "blocker",
+   "starting_conditions": "S1; before the restart, own shell in the project: touch ~/.zshrc; ln -s ~/.zshrc zshrc-link; shasum of ~/.zshrc and ../outside-notes.txt recorded",
+   "actions": [
+    "Send: Run exactly this command: echo '# t04' >> zshrc-link; if Grant once offered: g, read review, Down to Grant and run, Enter; else y and record no offer",
+    "Same with: echo t04 >> ../outside-notes.txt",
+    "/security, g; own shell: shasum"
+   ],
+   "expected": [
+    "Both files unchanged",
+    "Step 1 offers no Grant once; the denial says it is or leads to a start-up file outside the folder and cannot be granted",
+    "Step 2 denied with an Aggressive explanation; a Grant once offer is recorded as an advisory finding",
+    "No grant held afterwards"
+   ]
+  },
+  {
+   "id": "AGG-T06",
+   "priority": "blocker",
+   "starting_conditions": "S1; before the restart, own shell: mkdir -p .codex .agents; echo orig > .codex/notes.md; echo orig > .agents/notes.md; ln -s .agents person-ag",
+   "actions": [
+    "For each send 'Run exactly this command: <cmd>', y if prompted, Grant and run if offered (record it): (a) ln -s .codex cx (b) ln -s .agents/notes.md an.md (c) ln -s \"$PWD/.codex/notes.md\" abs.md (d) python3 -c \"import os; os.symlink('.agents','py-ag')\" (e) mkdir -p sub && ln -s ../.codex sub/up (f) echo x >> person-ag/notes.md (g) ln .agents/notes.md hard.md && echo x >> hard.md (h) ln -s notes.txt notes-link.txt && cat notes-link.txt",
+    "Own shell: ls -la cx an.md abs.md py-ag sub/up hard.md notes-link.txt; cat .codex/notes.md .agents/notes.md"
+   ],
+   "expected": [
+    "cx, an.md, abs.md, py-ag and sub/up do not exist",
+    "Both notes files contain only orig",
+    "Refusals (a)-(g) name Aggressive; no grant makes any succeed",
+    "person-ag untouched",
+    "An existing hard.md is a finding",
+    "(h) works: link created, notes shown (advisory sanity)"
+   ]
+  },
+  {
+   "id": "AGG-T07",
+   "priority": "blocker",
+   "starting_conditions": "S1 on 'GLM 5.3 Flash \u00b7 Z.AI (OpenAI-style)' (zai). The relay log is read afterwards by the independent evidence check (path /chat/completions = OpenAI-style, /messages = Claude-style).",
+   "actions": [
+    "Type /model, Enter",
+    "Down to 'GLM 5.3 Flash \u00b7 Z.AI (Claude-style)', Enter; Enter on the default effort if asked",
+    "Send: Reply with exactly: pong; record the wall-clock time",
+    "Type /model, note which entry is marked (current), Esc",
+    "Type /security, note the active level, Esc",
+    "Type /model, choose 'GLM 5.3 Flash \u00b7 Z.AI (OpenAI-style)', Enter; send: Reply with exactly: pong; record the wall-clock time"
+   ],
+   "expected": [
+    "Step 1 lists GLM 5.3 Flash once per connection; OpenAI-style is listed first and marked (current)",
+    "After step 2 the footer names zai-anthropic; no restart, onboarding or API-key prompt",
+    "Both pongs complete with 'pong'; no broker or refusal error",
+    "Step 4 marks Claude-style as (current); Aggressive is still active",
+    "Evidence check: the request at the first recorded time used /messages, the one at the second /chat/completions"
+   ]
+  },
+  {
+   "id": "AGG-T08",
+   "priority": "advisory",
+   "starting_conditions": "S1; pane A switched in /model to 'GLM 5.3 Flash \u00b7 Z.AI (Claude-style)'",
+   "actions": [
+    "Type /model; note the order and marking of each model offered on both connections; Esc",
+    "Type /panes, choose '+ Corbanu Terminal Pane'; at the model choice note which connection is offered first or highlighted for GLM 5.3 Flash; accept it without changing the connection; name the pane B",
+    "In pane B send: Reply with exactly: pong; record the wall-clock time"
+   ],
+   "expected": [
+    "In /model, every model offered on both connections lists OpenAI-style first",
+    "The new pane offers OpenAI-style (zai) as its default for GLM 5.3 Flash; if it preselects Claude-style (inherited from pane A), record that as an advisory finding",
+    "The pong completes; the evidence check shows /chat/completions at the recorded time (or the path matching what the pane showed)"
+   ]
+  }
+ ]
+}

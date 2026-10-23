@@ -1,0 +1,4 @@
+account `work` of provider `zai` is not configured; add it with `corbanu account add zai work` or pick another with `--account` (see `corbanu account list`)
+EXITED-1
+Reply with exactly the word ping
+/status

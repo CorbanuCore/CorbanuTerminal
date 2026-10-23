@@ -1,0 +1,10 @@
+Sun Sep 13 02:36:45 UTC 2026
+c51d2d6aa76da780868bcf83c2738a6c0149a73c
+dc3ce10ff45c20c371db67b7b75e2b2317b31165
+ded15fd917dc517b933c0a637821d28f9e3300ba
+5ecff077dbbbf7887a61c03a8e9aa354f002e1ed
+59ba145dc8178ae9680914943e8ba12c23c37d17ac4cc4a05a423539cbda1a6f  /home/travis/security-round5/evidence/pf27-adapter-20260912/profile-final/hold
+cc821a2ee024b3f17a9073de108a6212e5f2c34f77818715b775c59f880477ca  /home/travis/security-round5/evidence/pf27-adapter-20260912/profile-final/inspect
+f6ca8e3368dcbc8e5ba92bbbc7860ee825628b9470ac53116c6c3f6996bef3f0  /home/travis/security-round5/evidence/pf27-static-probe-20260912/linkage-retry/candidate/codex-protected-root-probe
+836d74a13c910359ab71abe90523b682211445d355e5c4851164423910d7d555  /home/travis/security-round5/evidence/pf27-sealed-20260912/verified/candidate/codex-protected-root-probe
+37fb0d7c5fd7e09ca23e9a5b1901b77786b87dfe8a869e191452c571bda7081d  /home/travis/security-round5/evidence/pf27-static-probe-20260912/uapi-retry/candidate/codex-protected-root-probe

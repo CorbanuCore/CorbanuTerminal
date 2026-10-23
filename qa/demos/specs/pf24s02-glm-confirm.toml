@@ -1,0 +1,82 @@
+# PF-24-S02 (GLM 5.2 pass): confirming Aggressive applies Core's protected-path rules to the running session at once (GLM 5.2).
+id = "pf24s02-glm-confirm"
+feature = "Confirm raises Core's level for GLM's next command"
+expected = "GLM reads a file in the hidden Corbanu home under Permissive. After /security, Aggressive and Enter, Core's level is Aggressive in this session and the same read by GLM gets Operation not permitted."
+model = "glm-5.2"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "!printf 'shipped-%s\\n' v2-canary > {home}/team-notes.txt && echo seeded"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "seeded"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this command and quote its output: cat \"$(printf '../ho%s/team-notes.txt' me)\""
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "shipped-v2-canary"
+timeout = 240
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Core's level is Aggressive now in this session"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Escape"
+[[steps]]
+pause = 0.5
+[[steps]]
+type = "Run exactly this command and quote its output: cat \"$(printf '../ho%s/team-notes.txt' me)\""
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "[Oo]peration not permitted"
+timeout = 240
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+[[steps]]
+pause = 4.0

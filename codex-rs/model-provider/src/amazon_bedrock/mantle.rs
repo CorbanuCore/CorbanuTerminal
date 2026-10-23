@@ -7,7 +7,7 @@ use codex_protocol::error::Result;
 use super::auth::BedrockAuthMethod;
 use super::auth::resolve_auth_method;
 
-const BEDROCK_MANTLE_SERVICE_NAME: &str = "bedrock-mantle";
+pub(super) const BEDROCK_MANTLE_SERVICE_NAME: &str = "bedrock-mantle";
 const BEDROCK_MANTLE_SUPPORTED_REGIONS: [&str; 12] = [
     "us-east-2",
     "us-east-1",

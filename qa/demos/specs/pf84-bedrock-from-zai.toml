@@ -1,0 +1,91 @@
+# PF-84 #572: a Z.AI session whose Bedrock requests use named AWS-profile account `work`
+# (`[provider_accounts]`; the Bedrock default account is not configured). With the account in the
+# vault, /model offers Bedrock's models (before #572: none), and the switched request is signed by
+# work's profile key AKIDWORKPROFILE. Fake ~/.aws files in the disposable HOME, local mock Bedrock
+# endpoint (qa/provider-auth/pf-84/s06/scripts/mock_bedrock.py), fake Z.AI key file (no Z.AI request).
+# Record with
+#   printf fake-zai-key > /tmp/pf84-fake-zai-key
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-bedrock-from-zai.toml \
+#     --bin <candidate> --sprint PF-84-S06 --credential ZAI_API_KEY=file:/tmp/pf84-fake-zai-key --publish
+id = "pf84-bedrock-from-zai"
+feature = "PF-84 #572: a named Bedrock account reached from a Z.AI session"
+expected = "After Bedrock account work (AWS profile work) is added, /model in the Z.AI session offers Bedrock's models; GPT-5.4 via amazon-bedrock is signed by AKIDWORKPROFILE and /status names account work."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+model_provider = "zai"
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "read-only"
+[features]
+named_accounts = true
+[provider_accounts]
+amazon-bedrock = "work"
+[model_providers.amazon-bedrock]
+base_url = "http://127.0.0.1:38466/openai/v1"
+[model_providers.amazon-bedrock.aws]
+region = "us-west-2"
+"""
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+run = """mkdir -p "$HOME/.aws"
+printf '[default]\\nregion = eu-west-1\\n[profile work]\\nregion = us-west-2\\n' > "$HOME/.aws/config"
+printf '[default]\\naws_access_key_id = AKIDDEFAULTPROFILE\\naws_secret_access_key = fake-default\\n[work]\\naws_access_key_id = AKIDWORKPROFILE\\naws_secret_access_key = fake-work\\n' > "$HOME/.aws/credentials"
+(nohup python3 {run}/../../../../provider-auth/pf-84/s06/scripts/mock_bedrock.py --port 38466 --log {logs}/mock-bedrock.jsonl > /dev/null 2>&1 &)
+sleep 1
+{bin} account add amazon-bedrock work --kind aws-profile --value work 2>&1 | tail -1"""
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/providers"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Configure providers"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Escape"
+[[steps]]
+type = "/model"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Model and Effort"
+[[steps]]
+key = "Right"
+[[steps]]
+wait = "GPT-5\\.4 via amazon-bedrock"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Down"
+repeat = 5
+[[steps]]
+wait = "› +6\\. GPT-5\\.4 via amazon-bedrock"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Reasoning Level"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Model changed to GPT-5\\.4"
+[[steps]]
+type = "Reply with exactly: pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "signed by AKIDWORKPROFILE"
+compress = 2
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "account work"
+[[steps]]
+pause = 4.0

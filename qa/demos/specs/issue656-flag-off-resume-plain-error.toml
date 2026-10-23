@@ -1,0 +1,35 @@
+# #656: with named_accounts off, resuming a conversation recorded on a named account is refused with one
+# plain ERROR line, like the other launch refusals (it used to print a raw error report with Location and
+# backtrace hints). Local mock Responses server, fake API keys only. Record with
+#   python3 scripts/demo_video.py record qa/demos/specs/issue656-flag-off-resume-plain-error.toml \
+#     --bin <candidate> --sprint PF-84-S06 --publish
+id = "issue656-flag-off-resume-plain-error"
+feature = "PF-84 #656: a refused resume prints one plain ERROR line"
+expected = "A conversation on named account work is resumed with --disable named_accounts: the launch ends with a single 'ERROR: Could not resume session …' line naming the fix, no Location or backtrace lines."
+model = "gpt-5.4"
+provider = "openai"
+args = ["resume", "--last", "--disable", "named_accounts"]
+setup = """(nohup python3 {run}/../../../../provider-auth/pf-84/s06/scripts/mock_openai.py --port 38466 --log {logs}/mock-openai.jsonl > /dev/null 2>&1 &)
+sleep 1
+printf 'sk-fake-default' | {bin} login --with-api-key > /dev/null 2>&1
+printf 'sk-fake-work' | {bin} login --account work --with-api-key 2>&1 | tail -1
+# An interactive conversation on account work (resume --last lists interactive sessions only).
+tmux -L issue656-setup new-session -d -x 120 -y 30 "TERM=xterm-256color {bin} -C {workspace} -m gpt-5.4 --account work 'Reply with exactly: pong'"
+for i in $(seq 1 40); do tmux -L issue656-setup capture-pane -p | grep -q 'authorized as' && break; sleep 0.5; done
+tmux -L issue656-setup capture-pane -p | grep 'authorized as'
+sleep 1; tmux -L issue656-setup kill-server"""
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "read-only"
+openai_base_url = "http://127.0.0.1:38466/v1"
+chatgpt_base_url = "http://127.0.0.1:38466/backend-api/"
+[features]
+named_accounts = true
+"""
+
+[[steps]]
+wait = "ERROR: Could not resume session"
+timeout = 60
+[[steps]]
+pause = 5.0

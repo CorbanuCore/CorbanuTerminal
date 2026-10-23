@@ -151,7 +151,7 @@ impl Session {
             return;
         };
         loop {
-            let auth = self.services.auth_manager.auth_cached();
+            let auth = self.services.auth_manager().auth_cached();
             if self
                 .services
                 .plugins_manager
@@ -171,7 +171,7 @@ impl Session {
                 refresh: &self.mcp_refresh,
                 published: false,
             };
-            let auth = self.services.auth_manager.auth().await;
+            let auth = self.services.auth_manager().auth().await;
             self.services
                 .plugins_manager
                 .set_auth_mode(auth.as_ref().map(CodexAuth::api_auth_mode));
@@ -225,7 +225,7 @@ impl Session {
             .acquire()
             .await
             .map_err(|_| anyhow::anyhow!("MCP runtime refresh semaphore closed"))?;
-        let auth = self.services.auth_manager.auth().await;
+        let auth = self.services.auth_manager().auth().await;
         self.services
             .plugins_manager
             .set_auth_mode(auth.as_ref().map(CodexAuth::api_auth_mode));
@@ -585,7 +585,7 @@ impl Session {
             error!("MCP runtime refresh semaphore closed");
             return;
         };
-        let auth = self.services.auth_manager.auth().await;
+        let auth = self.services.auth_manager().auth().await;
         self.services
             .plugins_manager
             .set_auth_mode(auth.as_ref().map(CodexAuth::api_auth_mode));

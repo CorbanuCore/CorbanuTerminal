@@ -2,11 +2,16 @@
 //!
 //! This module converts agent approval requests (exec/apply-patch/MCP
 //! elicitation) into a list-selection view with action-specific options and
-//! shortcuts. It owns two important contracts:
+//! shortcuts. It owns three important contracts:
 //!
 //! 1. Selection always emits an explicit decision event back to the app.
 //! 2. MCP elicitation keeps `Esc` mapped to `Cancel`, even with custom
 //!    keybindings, so dismissal never silently becomes "continue without info".
+//! 3. Typed or pasted text never answers a request: a decision key only
+//!    highlights its option until Enter (see `approval_typing_guard`).
+//! 4. Options that last beyond this request ("don't ask again", session
+//!    scope) are chosen only by navigating to them and pressing Enter; no
+//!    character, digit or chord shortcut selects them.
 //!
 //! This module does not evaluate whether an action is safe to run; it only
 //! presents choices and routes user decisions.
@@ -22,6 +27,10 @@ use crate::app_event_sender::AppEventSender;
 use crate::approval_events::ApprovalResponseDestination;
 use crate::bottom_pane::BottomPaneView;
 use crate::bottom_pane::CancellationEvent;
+use crate::bottom_pane::approval_typing_guard::Confirm;
+use crate::bottom_pane::approval_typing_guard::Notice;
+use crate::bottom_pane::approval_typing_guard::TypingGuard;
+use crate::bottom_pane::bottom_pane_view::next_shown_request_generation;
 use crate::bottom_pane::list_selection_view::ListSelectionView;
 use crate::bottom_pane::list_selection_view::SelectionItem;
 use crate::bottom_pane::list_selection_view::SelectionViewParams;
@@ -39,6 +48,7 @@ use crate::keymap::primary_binding;
 use crate::render::highlight::highlight_bash_to_lines;
 use crate::render::renderable::ColumnRenderable;
 use crate::render::renderable::Renderable;
+use crate::security::grant_view::GrantReview;
 use codex_app_server_protocol::AdditionalPermissionProfile;
 use codex_app_server_protocol::CommandExecutionApprovalDecision;
 use codex_app_server_protocol::FileChangeApprovalDecision;
@@ -51,6 +61,7 @@ use codex_app_server_protocol::NetworkApprovalContext;
 use codex_app_server_protocol::NetworkApprovalProtocol;
 use codex_app_server_protocol::NetworkPolicyRuleAction;
 use codex_app_server_protocol::RequestId;
+use codex_features::Feature;
 use codex_features::Features;
 use codex_protocol::ThreadId;
 use codex_protocol::request_permissions::PermissionGrantScope;
@@ -67,6 +78,7 @@ use ratatui::style::Stylize;
 use ratatui::text::Line;
 use ratatui::text::Span;
 use ratatui::widgets::Paragraph;
+use ratatui::widgets::Widget;
 use ratatui::widgets::Wrap;
 
 /// Request coming from the agent that needs user approval.
@@ -181,6 +193,15 @@ pub(crate) struct ApprovalOverlay {
     features: Features,
     approval_keymap: ApprovalKeymap,
     list_keymap: ListKeymap,
+    typing_guard: TypingGuard,
+    /// The user navigated the list since the current request appeared, so
+    /// the highlighted row may be an option that lasts beyond it.
+    navigated: bool,
+    /// PF-25-S01: the grant review of the current command, when open.
+    grant_review: Option<GrantReview>,
+    /// #787: counts the requests shown here (see
+    /// [`BottomPaneView::shown_request_generation`]).
+    shown_generation: u64,
 }
 
 impl ApprovalOverlay {
@@ -202,8 +223,14 @@ impl ApprovalOverlay {
             features,
             approval_keymap,
             list_keymap,
+            typing_guard: TypingGuard::default(),
+            navigated: false,
+            grant_review: None,
+            shown_generation: 0,
         };
         view.set_current(request);
+        // The first request has not replaced anything.
+        view.typing_guard.reset();
         view
     }
 
@@ -230,6 +257,10 @@ impl ApprovalOverlay {
 
     fn set_current(&mut self, request: ApprovalRequest) {
         self.current_complete = false;
+        self.navigated = false;
+        self.grant_review = None;
+        self.shown_generation = next_shown_request_generation();
+        self.typing_guard.on_new_request();
         let header = build_header(&request);
         let (options, params) = Self::build_options(
             &request,
@@ -247,18 +278,24 @@ impl ApprovalOverlay {
     fn build_options(
         request: &ApprovalRequest,
         header: Box<dyn Renderable>,
-        _features: &Features,
+        features: &Features,
         approval_keymap: &ApprovalKeymap,
         list_keymap: &ListKeymap,
     ) -> (Vec<ApprovalOption>, SelectionViewParams) {
         let (options, title) = match request {
             ApprovalRequest::Exec(request) => (
-                exec_options(
-                    &request.available_decisions,
-                    request.network_approval_context.as_ref(),
-                    request.additional_permissions.as_ref(),
-                    approval_keymap,
-                ),
+                {
+                    let mut options = exec_options(
+                        &request.available_decisions,
+                        request.network_approval_context.as_ref(),
+                        request.additional_permissions.as_ref(),
+                        approval_keymap,
+                    );
+                    if grant_offer(request, features).is_some() {
+                        options.push(grant_option());
+                    }
+                    options
+                },
                 request.network_approval_context.as_ref().map_or_else(
                     || "Would you like to run the following command?".to_string(),
                     |network_approval_context| {
@@ -293,16 +330,25 @@ impl ApprovalOverlay {
             .iter()
             .map(|opt| SelectionItem {
                 name: opt.label.clone(),
-                display_shortcut: opt.shortcuts.first().copied(),
+                // Persistent options have no shortcut; showing one would invite it.
+                display_shortcut: opt.shortcuts.first().copied().filter(|_| !opt.persistent),
                 dismiss_on_select: false,
                 ..Default::default()
             })
             .collect();
 
+        // Enter on an untouched prompt must never choose a persistent option.
+        let initial_selected_idx = options.iter().position(|opt| !opt.persistent);
+        let footer_note = Some(options_hint(
+            list_keymap,
+            options.iter().any(|opt| opt.persistent),
+        ));
         let params = SelectionViewParams {
+            footer_note,
             footer_hint: Some(approval_footer_hint(request, approval_keymap, list_keymap)),
             items,
             header,
+            initial_selected_idx,
             ..Default::default()
         };
 
@@ -318,6 +364,19 @@ impl ApprovalOverlay {
         };
         if let Some(request) = self.current_request.as_ref() {
             match (request, &option.decision) {
+                (ApprovalRequest::Exec(request), ApprovalDecision::SecurityGrant) => {
+                    // Open the review; the request stays open until the
+                    // person confirms there or answers here.
+                    match grant_offer(request, &self.features) {
+                        Some(offer) => self.grant_review = Some(GrantReview::new(offer)),
+                        None => self.app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
+                            history_cell::new_error_event(
+                                "This grant is no longer offered (the request ended or the security state changed). Nothing was granted.".to_string(),
+                            ),
+                        ))),
+                    }
+                    return;
+                }
                 (ApprovalRequest::Exec(request), ApprovalDecision::Command(decision)) => {
                     self.handle_exec_decision(&request.id, &request.command, decision.clone());
                 }
@@ -539,11 +598,11 @@ impl ApprovalOverlay {
         self.done = true;
     }
 
-    /// Apply approval-specific shortcuts before delegating to list navigation.
+    /// Apply shortcuts that open another view of the current request.
     ///
-    /// `open_fullscreen` is handled here because it is orthogonal to list item
-    /// selection and should work regardless of current highlighted row.
-    fn try_handle_shortcut(&mut self, key_event: &KeyEvent) -> bool {
+    /// They are orthogonal to list item selection and work regardless of the
+    /// highlighted row.
+    fn try_handle_view_shortcut(&mut self, key_event: &KeyEvent) -> bool {
         if key_event.kind == KeyEventKind::Press
             && self.approval_keymap.open_fullscreen.is_pressed(*key_event)
             && let Some(request) = self.current_request.as_ref()
@@ -562,39 +621,355 @@ impl ApprovalOverlay {
                 .send(AppEvent::SelectAgentThread(request.thread_id()));
             return true;
         }
+        false
+    }
+
+    /// Apply approval-specific chord shortcuts before delegating to list navigation.
+    fn try_handle_shortcut(&mut self, key_event: &KeyEvent) -> bool {
+        if self.try_handle_view_shortcut(key_event) {
+            return true;
+        }
 
         if self.list_keymap.cancel.is_pressed(*key_event) {
             self.cancel_current_request();
             return true;
         }
 
+        match self.option_for_shortcut(*key_event) {
+            Some(KeyTarget::OneShot(idx)) => {
+                // A held chord repeats; it must not answer each queued request in turn.
+                if key_event.kind == KeyEventKind::Press {
+                    self.apply_selection(idx);
+                }
+                true
+            }
+            Some(KeyTarget::Persistent) => {
+                self.typing_guard.on_persistent_key();
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// The option a shortcut key is bound to. A key bound to a one-shot option
+    /// selects it even if a persistent option shares the key; a key bound
+    /// only to persistent options selects nothing.
+    fn option_for_shortcut(&self, key_event: KeyEvent) -> Option<KeyTarget> {
+        let bound = |opt: &ApprovalOption| opt.shortcuts.iter().any(|s| s.is_press(key_event));
         if let Some(idx) = self
             .options
             .iter()
-            .position(|opt| opt.shortcuts.iter().any(|s| s.is_press(*key_event)))
+            .position(|opt| !opt.persistent && bound(opt))
         {
-            self.apply_selection(idx);
-            true
-        } else {
-            false
+            return Some(KeyTarget::OneShot(idx));
         }
+        self.options
+            .iter()
+            .any(|opt| opt.persistent && bound(opt))
+            .then_some(KeyTarget::Persistent)
+    }
+
+    /// Deliberate navigation: arrow, Page, Home and End keys, plus any
+    /// configured list-navigation key that is neither a character nor a chord.
+    /// Characters and chords such as Ctrl+N or Ctrl+J (a raw newline) could be
+    /// composer editing, so they count as typed text instead.
+    fn is_deliberate_navigation(&self, key_event: KeyEvent) -> bool {
+        if key_hint::is_plain_text_key_event(key_event)
+            || key_hint::has_ctrl_or_alt(key_event.modifiers)
+        {
+            return false;
+        }
+        let keymap = &self.list_keymap;
+        matches!(
+            key_event.code,
+            KeyCode::Up
+                | KeyCode::Down
+                | KeyCode::PageUp
+                | KeyCode::PageDown
+                | KeyCode::Home
+                | KeyCode::End
+        ) || [
+            &keymap.move_up,
+            &keymap.move_down,
+            &keymap.page_up,
+            &keymap.page_down,
+            &keymap.jump_top,
+            &keymap.jump_bottom,
+        ]
+        .into_iter()
+        .any(|bindings| bindings.is_pressed(key_event))
+    }
+
+    /// Accept keys that cannot be typed text. A character accept binding
+    /// would let a typed word confirm an armed option, so Enter stands in
+    /// when no other accept key is configured.
+    fn is_accept(&self, key_event: KeyEvent) -> bool {
+        let mut bindings = self
+            .list_keymap
+            .accept
+            .iter()
+            .filter(|binding| !matches!(binding.parts(), (KeyCode::Char(_), _)))
+            .peekable();
+        if bindings.peek().is_none() {
+            return key_event.code == KeyCode::Enter
+                && !key_hint::has_ctrl_or_alt(key_event.modifiers);
+        }
+        bindings.any(|binding| binding.is_press(key_event))
+    }
+
+    /// Route a plain character. Characters never answer the prompt: a decision
+    /// key highlights its option for Enter, and anything else is typed text.
+    fn handle_text_key(&mut self, key_event: KeyEvent) {
+        if self.typing_guard.accepts_commands() {
+            if self.try_handle_view_shortcut(&key_event) {
+                // The next keys may be the rest of a word.
+                self.typing_guard.on_command_key();
+                return;
+            }
+            // A character cancel binding only declines, which is always safe.
+            if self.list_keymap.cancel.is_pressed(key_event) {
+                self.cancel_current_request();
+                return;
+            }
+        }
+        let target = self.option_for_shortcut(key_event).or_else(|| {
+            let KeyCode::Char(c) = key_event.code else {
+                return None;
+            };
+            let idx = (c.to_digit(/*radix*/ 10)? as usize).checked_sub(1)?;
+            let option = self.options.get(idx)?;
+            Some(if option.persistent {
+                KeyTarget::Persistent
+            } else {
+                KeyTarget::OneShot(idx)
+            })
+        });
+        let option = match target {
+            Some(KeyTarget::Persistent) => {
+                self.typing_guard.on_persistent_key();
+                return;
+            }
+            Some(KeyTarget::OneShot(idx)) => Some(idx),
+            None => None,
+        };
+        if let Some(idx) = self.typing_guard.on_text_key(option) {
+            self.list.highlight(idx);
+        }
+    }
+
+    fn typed_text_notice(&self, width: u16) -> Vec<Line<'static>> {
+        let Some(notice) = self.typing_guard.notice() else {
+            return Vec::new();
+        };
+        let keymap = &self.list_keymap;
+        let up = non_text_key_label(&keymap.move_up, "↑");
+        let down = non_text_key_label(&keymap.move_down, "↓");
+        let accept = non_text_key_label(&keymap.accept, "enter");
+        let cancel = non_text_key_label(&keymap.cancel, "esc");
+        let text = match notice {
+            Notice::TypedText => format!(
+                "Typed text is not sent while this request is open. Use {up}/{down} and {accept} \
+                 to answer, or {cancel} to cancel. Slash commands such as /permissions work \
+                 after you answer."
+            ),
+            Notice::NavigateFirst => {
+                format!("Choose an option with {up}/{down}, then {accept}; {cancel} cancels.")
+            }
+            Notice::PersistentNeedsArrows => format!(
+                "That option lasts beyond this request, so its key does not choose it. \
+                 Highlight it with {up}/{down}, then press {accept}; {cancel} cancels."
+            ),
+            Notice::EarlyKeys => format!(
+                "Keys pressed as this request appeared were ignored. Choose an option with \
+                 {up}/{down}, then {accept}; {cancel} cancels."
+            ),
+        };
+        let wrap_width = usize::from(width.saturating_sub(4)).max(1);
+        std::iter::once(Line::from(""))
+            .chain(
+                textwrap::wrap(&text, wrap_width)
+                    .into_iter()
+                    .map(|line| Line::from(vec!["  ".into(), line.into_owned().cyan()])),
+            )
+            .collect()
+    }
+}
+
+impl ApprovalOverlay {
+    /// PF-25-S01: keys while the grant review is open. Arrow keys move
+    /// between "Back" and "Grant and run"; Enter on "Grant and run" records
+    /// the grant shown and approves the command; Enter on "Back" and Esc go
+    /// back to the approval. A held key never confirms.
+    fn handle_grant_review_key(&mut self, key_event: KeyEvent) {
+        if key_event.kind != KeyEventKind::Press {
+            return;
+        }
+        if self.list_keymap.cancel.is_pressed(key_event) {
+            self.close_grant_review();
+            return;
+        }
+        let navigate = matches!(key_event.code, KeyCode::Up | KeyCode::Down)
+            && key_event.modifiers == KeyModifiers::NONE;
+        let accept = self.is_accept(key_event);
+        let Some(review) = self.grant_review.as_mut() else {
+            return;
+        };
+        if key_event.code == KeyCode::Char('u') && key_event.modifiers == KeyModifiers::NONE {
+            review.toggle_uses();
+            return;
+        }
+        if navigate {
+            review.toggle_row();
+            return;
+        }
+        if !accept {
+            return;
+        }
+        if !review.grant_selected() {
+            self.close_grant_review();
+            return;
+        }
+        // The request first: a grant is recorded only for the approval
+        // that is answered here.
+        let Some(ApprovalRequest::Exec(request)) = self.current_request.clone() else {
+            return;
+        };
+        let Some(confirmed) = review.confirm() else {
+            return;
+        };
+        let command = review.command().to_vec();
+        let expires = chrono::DateTime::from_timestamp(confirmed.expires_at_unix_seconds, 0)
+            .map(|time| {
+                time.with_timezone(&chrono::Local)
+                    .format("%H:%M")
+                    .to_string()
+            })
+            .unwrap_or_default();
+        self.app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
+            history_cell::PlainHistoryCell::new(vec![
+                vec![
+                    "✔ ".green(),
+                    "You granted ".into(),
+                    crate::legacy_core::security_grant::escape_controls(&strip_bash_lc_and_escape(
+                        &command,
+                    ))
+                    .bold(),
+                    format!(" permission to write hooks and start-up files (expires {expires})")
+                        .into(),
+                ]
+                .into(),
+            ]),
+        )));
+        self.handle_exec_decision(
+            &request.id,
+            &request.command,
+            CommandExecutionApprovalDecision::Accept,
+        );
+        self.grant_review = None;
+        self.current_complete = true;
+        self.advance_queue();
+    }
+
+    /// Back to the approval, nothing granted. #817: it shows anew, so the
+    /// bottom pane drops keys for its first second (#787).
+    fn close_grant_review(&mut self) {
+        self.grant_review = None;
+        self.shown_generation = next_shown_request_generation();
+        self.typing_guard.on_request_changed();
     }
 }
 
 impl BottomPaneView for ApprovalOverlay {
+    fn answers_request(&self) -> bool {
+        true
+    }
+
     fn handle_key_event(&mut self, key_event: KeyEvent) {
+        if key_event.kind == KeyEventKind::Release {
+            return;
+        }
+        if self.grant_review.is_some() {
+            self.handle_grant_review_key(key_event);
+            return;
+        }
+        if self.is_accept(key_event) {
+            // A held Enter repeats; only a fresh press confirms.
+            if key_event.kind == KeyEventKind::Repeat {
+                return;
+            }
+            match self.typing_guard.on_confirm() {
+                Confirm::Option(idx) => self.apply_selection(idx),
+                Confirm::Highlighted => {
+                    let Some(idx) = BottomPaneView::selected_index(&self.list) else {
+                        return;
+                    };
+                    if self.navigated || self.options.get(idx).is_some_and(|o| !o.persistent) {
+                        self.apply_selection(idx);
+                    } else {
+                        // Only reachable when every option is persistent.
+                        self.typing_guard.on_persistent_key();
+                    }
+                }
+                Confirm::Blocked => {}
+            }
+            return;
+        }
+        if key_hint::is_plain_text_key_event(key_event) {
+            if key_event.kind == KeyEventKind::Repeat {
+                self.typing_guard.on_typed_input();
+            } else {
+                self.handle_text_key(key_event);
+            }
+            return;
+        }
         if self.try_handle_shortcut(&key_event) {
             return;
         }
-        self.list.handle_key_event(key_event);
-        if let Some(idx) = self.list.take_last_selected_index() {
-            self.apply_selection(idx);
+        if self.is_deliberate_navigation(key_event) {
+            self.typing_guard.reset();
+            self.navigated = true;
+            self.list.handle_key_event(key_event);
+        } else {
+            self.typing_guard.on_typed_input();
         }
+    }
+
+    fn handle_paste(&mut self, _pasted: String) -> bool {
+        self.typing_guard.on_typed_input();
+        true
+    }
+
+    /// #523: back from under another prompt or view. #817: the bottom pane
+    /// drops keys until it is drawn again and for a second after (#787),
+    /// so a double or held Enter meant for that view answers nothing; a
+    /// later Enter does.
+    fn on_revealed(&mut self) {
+        // An open grant review goes back to the approval: keys meant for the
+        // view above must not reach it.
+        self.grant_review = None;
+        self.typing_guard.on_request_changed();
+    }
+
+    fn shown_request_generation(&self) -> u64 {
+        self.shown_generation
+    }
+
+    /// #787: as when revealed, and an open grant review goes back to the
+    /// approval: the dropped keys may have been meant to answer it.
+    fn on_early_input(&mut self) {
+        self.grant_review = None;
+        self.typing_guard.on_early_input();
     }
 
     fn on_ctrl_c(&mut self) -> CancellationEvent {
         self.cancel_current_request();
         CancellationEvent::Handled
+    }
+
+    /// Esc in the grant review goes back to the approval; it must not reach
+    /// the pane's cancel path, which would decline the command.
+    fn prefer_esc_to_handle_key_event(&self) -> bool {
+        self.grant_review.is_some()
     }
 
     fn is_complete(&self) -> bool {
@@ -620,16 +995,82 @@ impl BottomPaneView for ApprovalOverlay {
 
 impl Renderable for ApprovalOverlay {
     fn desired_height(&self, width: u16) -> u16 {
-        self.list.desired_height(width)
+        if let Some(review) = &self.grant_review {
+            return u16::try_from(review.lines(width.saturating_sub(2)).len() + 1)
+                .unwrap_or(u16::MAX);
+        }
+        let notice_height = u16::try_from(self.typed_text_notice(width).len()).unwrap_or(u16::MAX);
+        self.list
+            .desired_height(width)
+            .saturating_add(notice_height)
     }
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
-        self.list.render(area, buf);
+        if let Some(review) = &self.grant_review {
+            let area = Rect {
+                x: area.x.saturating_add(1),
+                y: area.y.saturating_add(1),
+                width: area.width.saturating_sub(2),
+                height: area.height.saturating_sub(1),
+            };
+            review.set_visible_height(area.width, area.height);
+            Widget::render(Paragraph::new(review.lines(area.width)), area, buf);
+            return;
+        }
+        let notice = self.typed_text_notice(area.width);
+        let notice_height = u16::try_from(notice.len())
+            .unwrap_or(u16::MAX)
+            .min(area.height);
+        let list_area = Rect {
+            height: area.height - notice_height,
+            ..area
+        };
+        self.list.render(list_area, buf);
+        if notice_height > 0 {
+            let notice_area = Rect {
+                y: list_area.bottom(),
+                height: notice_height,
+                ..area
+            };
+            Widget::render(Paragraph::new(notice), notice_area, buf);
+        }
     }
 
     fn cursor_pos(&self, area: Rect) -> Option<(u16, u16)> {
+        if self.grant_review.is_some() {
+            return None;
+        }
         self.list.cursor_pos(area)
     }
+}
+
+/// Label of the first binding that cannot be typed text (neither a character
+/// nor a chord), so the prompt names only keys that work here.
+fn non_text_key_label(bindings: &[KeyBinding], fallback: &str) -> String {
+    bindings
+        .iter()
+        .find(|binding| {
+            let (code, modifiers) = binding.parts();
+            !matches!(code, KeyCode::Char(_)) && !key_hint::has_ctrl_or_alt(modifiers)
+        })
+        .map_or_else(|| fallback.to_string(), KeyBinding::display_label)
+}
+
+/// #444: a letter shown in brackets, such as "(y)", only highlights its
+/// option (contract 3), so "Yes, proceed (y)" must not read as if y answers.
+/// Esc and chord shortcuts still answer at once; they are not letters.
+fn options_hint(list_keymap: &ListKeymap, persistent: bool) -> Line<'static> {
+    let up = non_text_key_label(&list_keymap.move_up, "↑");
+    let down = non_text_key_label(&list_keymap.move_down, "↓");
+    let accept = non_text_key_label(&list_keymap.accept, "enter");
+    let mut hint =
+        format!("A letter in brackets only highlights its option; {accept} confirms it.");
+    if persistent {
+        hint.push_str(&format!(
+            " Options that last beyond this request: choose with {up}/{down}, then {accept}."
+        ));
+    }
+    Line::from(hint).dim()
 }
 
 fn approval_footer_hint(
@@ -802,6 +1243,8 @@ fn build_header(request: &ApprovalRequest) -> Box<dyn Renderable> {
 #[derive(Clone)]
 enum ApprovalDecision {
     Command(CommandExecutionApprovalDecision),
+    /// PF-25-S01: open the grant review of this command.
+    SecurityGrant,
     FileChange(FileChangeApprovalDecision),
     Permissions(PermissionsDecision),
     McpElicitation(McpServerElicitationAction),
@@ -820,6 +1263,17 @@ struct ApprovalOption {
     label: String,
     decision: ApprovalDecision,
     shortcuts: Vec<KeyBinding>,
+    /// The option lasts beyond this request ("don't ask again", session
+    /// scope). Only navigation and Enter choose it, never a shortcut key.
+    persistent: bool,
+}
+
+/// What a shortcut key refers to.
+enum KeyTarget {
+    /// An option that answers only this request.
+    OneShot(usize),
+    /// Only options that last beyond this request; the key chooses nothing.
+    Persistent,
 }
 
 fn command_decision_to_review_decision(
@@ -843,6 +1297,48 @@ fn command_decision_to_review_decision(
     }
 }
 
+/// PF-25-S01: the grant Core offers for this command approval, if any. Only
+/// with `security_levels` on, under a live Aggressive policy in this process.
+fn grant_offer(
+    request: &ExecApprovalRequest,
+    features: &Features,
+) -> Option<crate::legacy_core::security_grant::GrantOffer> {
+    if !features.enabled(Feature::SecurityLevels)
+        || !request
+            .available_decisions
+            .contains(&CommandExecutionApprovalDecision::Accept)
+    {
+        return None;
+    }
+    #[cfg(test)]
+    let offer = grant_tests::TEST_OFFER
+        .with(|offer| offer.borrow().clone())
+        .or_else(|| crate::legacy_core::security_grant::offer(request.thread_id, &request.id));
+    #[cfg(not(test))]
+    let offer = crate::legacy_core::security_grant::offer(request.thread_id, &request.id);
+    // The review shows Core's copy of the command; it must be the one this
+    // approval shows.
+    offer.filter(|offer| same_command(&offer.command, &request.command))
+}
+
+/// Whether `shown` (from the approval request, possibly re-split from one
+/// string) is Core's `command`.
+fn same_command(command: &[String], shown: &[String]) -> bool {
+    command == shown
+        || shown
+            == [shlex::try_join(command.iter().map(String::as_str))
+                .unwrap_or_else(|_| command.join(" "))]
+}
+
+fn grant_option() -> ApprovalOption {
+    ApprovalOption {
+        label: "Grant once: also let it write hooks and start-up files (review first)".to_string(),
+        decision: ApprovalDecision::SecurityGrant,
+        shortcuts: vec![key_hint::plain(KeyCode::Char('g'))],
+        persistent: false,
+    }
+}
+
 fn exec_options(
     available_decisions: &[CommandExecutionApprovalDecision],
     network_approval_context: Option<&NetworkApprovalContext>,
@@ -860,6 +1356,7 @@ fn exec_options(
                 },
                 decision: ApprovalDecision::Command(CommandExecutionApprovalDecision::Accept),
                 shortcuts: keymap.approve.clone(),
+                persistent: false,
             }),
             CommandExecutionApprovalDecision::AcceptWithExecpolicyAmendment {
                 execpolicy_amendment,
@@ -879,6 +1376,7 @@ fn exec_options(
                         },
                     ),
                     shortcuts: keymap.approve_for_prefix.clone(),
+                    persistent: true,
                 })
             }
             CommandExecutionApprovalDecision::AcceptForSession => Some(ApprovalOption {
@@ -893,6 +1391,7 @@ fn exec_options(
                     CommandExecutionApprovalDecision::AcceptForSession,
                 ),
                 shortcuts: keymap.approve_for_session.clone(),
+                persistent: true,
             }),
             CommandExecutionApprovalDecision::ApplyNetworkPolicyAmendment {
                 network_policy_amendment,
@@ -915,17 +1414,20 @@ fn exec_options(
                         },
                     ),
                     shortcuts,
+                    persistent: true,
                 })
             }
             CommandExecutionApprovalDecision::Decline => Some(ApprovalOption {
                 label: "No, continue without running it".to_string(),
                 decision: ApprovalDecision::Command(CommandExecutionApprovalDecision::Decline),
                 shortcuts: keymap.deny.clone(),
+                persistent: false,
             }),
             CommandExecutionApprovalDecision::Cancel => Some(ApprovalOption {
                 label: "No, and tell Corbanu Terminal what to do differently".to_string(),
                 decision: ApprovalDecision::Command(CommandExecutionApprovalDecision::Cancel),
                 shortcuts: keymap.decline.clone(),
+                persistent: false,
             }),
         })
         .collect()
@@ -1032,16 +1534,19 @@ fn patch_options(keymap: &ApprovalKeymap) -> Vec<ApprovalOption> {
             label: "Yes, proceed".to_string(),
             decision: ApprovalDecision::FileChange(FileChangeApprovalDecision::Accept),
             shortcuts: keymap.approve.clone(),
+            persistent: false,
         },
         ApprovalOption {
             label: "Yes, and don't ask again for these files".to_string(),
             decision: ApprovalDecision::FileChange(FileChangeApprovalDecision::AcceptForSession),
             shortcuts: keymap.approve_for_session.clone(),
+            persistent: true,
         },
         ApprovalOption {
             label: "No, and tell Corbanu Terminal what to do differently".to_string(),
             decision: ApprovalDecision::FileChange(FileChangeApprovalDecision::Cancel),
             shortcuts: keymap.decline.clone(),
+            persistent: false,
         },
     ]
 }
@@ -1059,6 +1564,7 @@ fn permissions_options(keymap: &ApprovalKeymap) -> Vec<ApprovalOption> {
             label: "Yes, grant these permissions for this turn".to_string(),
             decision: ApprovalDecision::Permissions(PermissionsDecision::GrantForTurn),
             shortcuts: keymap.approve.clone(),
+            persistent: false,
         },
         ApprovalOption {
             label: "Yes, grant for this turn with strict auto review".to_string(),
@@ -1066,16 +1572,19 @@ fn permissions_options(keymap: &ApprovalKeymap) -> Vec<ApprovalOption> {
                 PermissionsDecision::GrantForTurnWithStrictAutoReview,
             ),
             shortcuts: vec![key_hint::plain(KeyCode::Char('r'))],
+            persistent: false,
         },
         ApprovalOption {
             label: "Yes, grant these permissions for this session".to_string(),
             decision: ApprovalDecision::Permissions(PermissionsDecision::GrantForSession),
             shortcuts: keymap.approve_for_session.clone(),
+            persistent: true,
         },
         ApprovalOption {
             label: "No, continue without permissions".to_string(),
             decision: ApprovalDecision::Permissions(PermissionsDecision::Deny),
             shortcuts: deny_shortcuts,
+            persistent: false,
         },
     ]
 }
@@ -1107,19 +1616,26 @@ fn elicitation_options(keymap: &ApprovalKeymap) -> Vec<ApprovalOption> {
             label: "Yes, provide the requested info".to_string(),
             decision: ApprovalDecision::McpElicitation(McpServerElicitationAction::Accept),
             shortcuts: keymap.approve.clone(),
+            persistent: false,
         },
         ApprovalOption {
             label: "No, but continue without it".to_string(),
             decision: ApprovalDecision::McpElicitation(McpServerElicitationAction::Decline),
             shortcuts: decline_shortcuts,
+            persistent: false,
         },
         ApprovalOption {
             label: "Cancel this request".to_string(),
             decision: ApprovalDecision::McpElicitation(McpServerElicitationAction::Cancel),
             shortcuts: cancel_shortcuts,
+            persistent: false,
         },
     ]
 }
+
+#[cfg(test)]
+#[path = "approval_overlay_grant_tests.rs"]
+mod grant_tests;
 
 #[cfg(test)]
 mod tests {
@@ -1140,6 +1656,12 @@ mod tests {
 
     fn absolute_path(path: &str) -> AbsolutePathBuf {
         AbsolutePathBuf::from_absolute_path(path).expect("absolute path")
+    }
+
+    /// Answer with a decision key: it highlights its option and Enter confirms.
+    fn press_and_confirm(view: &mut ApprovalOverlay, code: KeyCode) {
+        view.handle_key_event(KeyEvent::new(code, KeyModifiers::NONE));
+        view.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     }
 
     fn render_overlay_lines(view: &ApprovalOverlay, width: u16) -> String {
@@ -1340,7 +1862,7 @@ mod tests {
         let tx = AppEventSender::new(tx);
         let mut view = make_overlay(make_exec_request(), tx, Features::with_defaults());
         assert!(!view.is_complete());
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+        press_and_confirm(&mut view, KeyCode::Char('y'));
         // We expect at least one thread-scoped approval op message in the queue.
         let mut saw_op = false;
         while let Ok(ev) = rx.try_recv() {
@@ -1375,7 +1897,7 @@ mod tests {
             Features::with_defaults(),
         );
 
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+        press_and_confirm(&mut view, KeyCode::Char('d'));
 
         let mut saw_denied = false;
         while let Ok(ev) = rx.try_recv() {
@@ -1424,7 +1946,15 @@ mod tests {
             Features::with_defaults(),
         );
 
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+        // "Block this host in the future" lasts beyond this request, so its
+        // key chooses nothing; the arrow keys and Enter do.
+        press_and_confirm(&mut view, KeyCode::Char('d'));
+        assert!(
+            rx.try_recv().is_err(),
+            "`d` must not block the host forever"
+        );
+        press(&mut view, KeyCode::Down, KeyModifiers::NONE);
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
 
         let mut saw_deny = false;
         while let Ok(ev) = rx.try_recv() {
@@ -1537,6 +2067,8 @@ mod tests {
         ));
         assert!(rx.try_recv().is_err());
 
+        // The unbound `o` counted as typed text; navigating clears that.
+        view.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         view.handle_key_event(KeyEvent::new(
             KeyCode::Char('x'),
             /*modifiers*/ KeyModifiers::NONE,
@@ -1601,7 +2133,8 @@ mod tests {
             tx,
             Features::with_defaults(),
         );
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
+        press(&mut view, KeyCode::Down, KeyModifiers::NONE);
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
         let mut saw_op = false;
         while let Ok(ev) = rx.try_recv() {
             if let AppEvent::SubmitThreadOp {
@@ -1625,6 +2158,342 @@ mod tests {
             saw_op,
             "expected approval decision to emit an op with command prefix"
         );
+    }
+
+    fn make_prefix_exec_request() -> ApprovalRequest {
+        ApprovalRequest::Exec(ExecApprovalRequest {
+            thread_id: ThreadId::new(),
+            thread_label: None,
+            id: "test".to_string(),
+            environment_id: None,
+            command: vec!["touch".to_string(), "/outside/marker".to_string()],
+            reason: None,
+            available_decisions: vec![
+                CommandExecutionApprovalDecision::Accept,
+                CommandExecutionApprovalDecision::AcceptWithExecpolicyAmendment {
+                    execpolicy_amendment: ExecPolicyAmendment {
+                        command: vec!["touch".to_string(), "/outside/marker".to_string()],
+                    },
+                },
+                CommandExecutionApprovalDecision::Cancel,
+            ],
+            network_approval_context: None,
+            additional_permissions: None,
+        })
+    }
+
+    fn type_text(view: &mut ApprovalOverlay, text: &str) {
+        for ch in text.chars() {
+            view.handle_key_event(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE));
+        }
+    }
+
+    fn press(view: &mut ApprovalOverlay, code: KeyCode, modifiers: KeyModifiers) {
+        view.handle_key_event(KeyEvent::new(code, modifiers));
+    }
+
+    fn exec_decisions(rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> Vec<String> {
+        let mut decisions = Vec::new();
+        while let Ok(ev) = rx.try_recv() {
+            if let AppEvent::SubmitThreadOp {
+                op: Op::ExecApproval { decision, .. },
+                ..
+            } = ev
+            {
+                decisions.push(format!("{decision:?}"));
+            }
+        }
+        decisions
+    }
+
+    /// PF-83 F05 finding (#174): typing `/permissions` into an open prompt
+    /// approved it with "don't ask again" through the `p` shortcut.
+    #[test]
+    fn typed_text_never_answers_the_prompt() {
+        let typed: [&[(KeyCode, KeyModifiers)]; 7] = [
+            // `/permissions` then Enter, twice.
+            &[
+                (KeyCode::Char('/'), KeyModifiers::NONE),
+                (KeyCode::Char('p'), KeyModifiers::NONE),
+            ],
+            // A word that starts with a decision key, however slowly typed.
+            &[
+                (KeyCode::Char('p'), KeyModifiers::NONE),
+                (KeyCode::Char('e'), KeyModifiers::NONE),
+            ],
+            // Two decision keys.
+            &[
+                (KeyCode::Char('y'), KeyModifiers::NONE),
+                (KeyCode::Char('p'), KeyModifiers::NONE),
+            ],
+            // A decision key corrected with Backspace.
+            &[
+                (KeyCode::Char('p'), KeyModifiers::NONE),
+                (KeyCode::Backspace, KeyModifiers::NONE),
+            ],
+            // A decision key pressed twice.
+            &[
+                (KeyCode::Char('2'), KeyModifiers::NONE),
+                (KeyCode::Char('2'), KeyModifiers::NONE),
+            ],
+            // Composer chords after a decision key: history and a raw newline
+            // (Ctrl+J) must not make Enter accept.
+            &[
+                (KeyCode::Char('y'), KeyModifiers::NONE),
+                (KeyCode::Char('n'), KeyModifiers::CONTROL),
+            ],
+            &[
+                (KeyCode::Char('y'), KeyModifiers::NONE),
+                (KeyCode::Char('j'), KeyModifiers::CONTROL),
+            ],
+        ];
+        for keys in typed {
+            let (tx, mut rx) = unbounded_channel::<AppEvent>();
+            let mut view = make_overlay(
+                make_prefix_exec_request(),
+                AppEventSender::new(tx),
+                Features::with_defaults(),
+            );
+            for (code, modifiers) in keys {
+                press(&mut view, *code, *modifiers);
+            }
+            press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+            press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+
+            assert_eq!(exec_decisions(&mut rx), Vec::<String>::new(), "{keys:?}");
+            assert!(!view.is_complete(), "{keys:?}");
+        }
+    }
+
+    #[test]
+    fn typed_text_shows_how_to_answer_then_explicit_selection_works() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+        type_text(&mut view, "/permissions");
+
+        assert_snapshot!(
+            "approval_overlay_typed_text_notice",
+            render_overlay_lines(&view, /*width*/ 80)
+        );
+
+        // Navigating is deliberate: it clears the notice and Enter selects.
+        press(&mut view, KeyCode::Down, KeyModifiers::NONE);
+        press(&mut view, KeyCode::Up, KeyModifiers::NONE);
+        assert!(!render_overlay_lines(&view, /*width*/ 80).contains("Typed text"));
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(exec_decisions(&mut rx), vec!["Accept".to_string()]);
+    }
+
+    #[test]
+    fn decision_key_highlights_and_waits_for_enter() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+
+        press(&mut view, KeyCode::Char('3'), KeyModifiers::NONE);
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+        assert!(render_overlay_lines(&view, /*width*/ 80).contains("› 3. No"));
+
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(exec_decisions(&mut rx), vec!["Cancel".to_string()]);
+    }
+
+    /// A key armed on one request does not carry over to the next: its Enter
+    /// confirms the next request's own highlighted row. #817: the next one
+    /// shows anew, so the bottom pane drops keys in its first second (#787).
+    #[test]
+    fn armed_key_does_not_carry_over_to_the_next_request() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+        let ApprovalRequest::Exec(mut second) = make_prefix_exec_request() else {
+            unreachable!("exec request");
+        };
+        second.id = "second".to_string();
+        view.enqueue_request(ApprovalRequest::Exec(second));
+        let first = view.shown_request_generation();
+
+        press(&mut view, KeyCode::Char('3'), KeyModifiers::NONE);
+        // Another client resolves the first request before Enter arrives.
+        assert!(
+            view.dismiss_resolved_request(&ResolvedAppServerRequest::ExecApproval {
+                id: "test".to_string(),
+            })
+        );
+        assert_ne!(view.shown_request_generation(), first);
+        assert!(render_overlay_lines(&view, /*width*/ 80).contains("› 1. Yes"));
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+
+        assert_eq!(exec_decisions(&mut rx), vec!["Accept".to_string()]);
+    }
+
+    /// A held Enter never answers the next request. #817: a double Enter is
+    /// the bottom pane's to drop, since the next request shows anew (#787);
+    /// the prompt asks for nothing more.
+    #[test]
+    fn held_enter_does_not_answer_the_next_request() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+        let ApprovalRequest::Exec(mut second) = make_prefix_exec_request() else {
+            unreachable!("exec request");
+        };
+        second.id = "second".to_string();
+        view.enqueue_request(ApprovalRequest::Exec(second));
+        let first = view.shown_request_generation();
+
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+        view.handle_key_event(KeyEvent::new_with_kind(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+            KeyEventKind::Repeat,
+        ));
+
+        assert_eq!(exec_decisions(&mut rx), vec!["Accept".to_string()]);
+        assert_ne!(view.shown_request_generation(), first);
+        let lines = render_overlay_lines(&view, /*width*/ 80);
+        assert!(!lines.contains("new request"), "{lines}");
+        press(&mut view, KeyCode::Char('3'), KeyModifiers::NONE);
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(exec_decisions(&mut rx), vec!["Cancel".to_string()]);
+    }
+
+    #[test]
+    fn character_accept_binding_cannot_confirm_typed_text() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut keymap = crate::keymap::RuntimeKeymap::defaults();
+        keymap.list.accept = vec![key_hint::plain(KeyCode::Char(' '))];
+        let mut view = make_overlay_with_keymap(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+            keymap.approval,
+            keymap.list,
+        );
+
+        // "2 things": `2` arms the "don't ask again" option; Space must not confirm it.
+        type_text(&mut view, "2 things");
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+    }
+
+    #[test]
+    fn uppercase_and_chords_are_typed_text() {
+        for (code, modifiers) in [
+            (KeyCode::Char('Y'), KeyModifiers::SHIFT),
+            (KeyCode::Char('n'), KeyModifiers::CONTROL),
+        ] {
+            let (tx, mut rx) = unbounded_channel::<AppEvent>();
+            let mut view = make_overlay(
+                make_prefix_exec_request(),
+                AppEventSender::new(tx),
+                Features::with_defaults(),
+            );
+
+            press(&mut view, code, modifiers);
+
+            // Ctrl+N edits the composer elsewhere; here it neither moves the
+            // highlight nor lets Enter confirm.
+            assert!(render_overlay_lines(&view, /*width*/ 80).contains("› 1. Yes"));
+            press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+            assert_eq!(exec_decisions(&mut rx), Vec::<String>::new(), "{code:?}");
+        }
+    }
+
+    #[test]
+    fn typed_text_does_not_grant_requested_permissions() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_permissions_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+
+        type_text(&mut view, "/permissions");
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+
+        assert!(
+            std::iter::from_fn(|| rx.try_recv().ok())
+                .all(|event| !matches!(event, AppEvent::SubmitThreadOp { .. })),
+            "typed text must not answer a permissions request"
+        );
+    }
+
+    #[test]
+    fn held_chord_shortcut_does_not_answer_queued_requests() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut keymap = crate::keymap::RuntimeKeymap::defaults();
+        keymap.approval.approve = vec![key_hint::ctrl(KeyCode::Char('y'))];
+        let mut view = make_overlay_with_keymap(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+            keymap.approval,
+            keymap.list,
+        );
+        let ApprovalRequest::Exec(mut second) = make_prefix_exec_request() else {
+            unreachable!("exec request");
+        };
+        second.id = "second".to_string();
+        view.enqueue_request(ApprovalRequest::Exec(second));
+
+        press(&mut view, KeyCode::Char('y'), KeyModifiers::CONTROL);
+        view.handle_key_event(KeyEvent::new_with_kind(
+            KeyCode::Char('y'),
+            KeyModifiers::CONTROL,
+            KeyEventKind::Repeat,
+        ));
+
+        assert_eq!(exec_decisions(&mut rx), vec!["Accept".to_string()]);
+    }
+
+    #[test]
+    fn open_thread_key_then_decision_key_and_enter_does_not_answer() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let ApprovalRequest::Exec(mut request) = make_prefix_exec_request() else {
+            unreachable!("exec request");
+        };
+        request.thread_label = Some("Robie [explorer]".to_string());
+        let mut view = make_overlay(
+            ApprovalRequest::Exec(request),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+
+        // "op" then Enter: `o` opens the source thread; `p` must not arm a grant.
+        type_text(&mut view, "op");
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+    }
+
+    #[test]
+    fn paste_then_enter_does_not_answer_the_prompt() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+
+        assert!(view.handle_paste("please continue".to_string()));
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
     }
 
     #[test]
@@ -1659,11 +2528,409 @@ mod tests {
             tx,
             Features::with_defaults(),
         );
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+        press_and_confirm(&mut view, KeyCode::Char('d'));
 
         assert!(
             rx.try_recv().is_err(),
             "unexpected approval event emitted for hidden network deny shortcut"
+        );
+    }
+
+    fn exec_request_with(decisions: Vec<CommandExecutionApprovalDecision>) -> ApprovalRequest {
+        let network = decisions.iter().any(|decision| {
+            matches!(
+                decision,
+                CommandExecutionApprovalDecision::ApplyNetworkPolicyAmendment { .. }
+            )
+        });
+        ApprovalRequest::Exec(ExecApprovalRequest {
+            thread_id: ThreadId::new(),
+            thread_label: None,
+            id: "test".to_string(),
+            environment_id: None,
+            command: vec!["curl".to_string(), "https://example.com".to_string()],
+            reason: None,
+            available_decisions: decisions,
+            network_approval_context: network.then(|| NetworkApprovalContext {
+                host: "example.com".to_string(),
+                protocol: NetworkApprovalProtocol::Https,
+            }),
+            additional_permissions: None,
+        })
+    }
+
+    fn network_amendment(action: NetworkPolicyRuleAction) -> CommandExecutionApprovalDecision {
+        CommandExecutionApprovalDecision::ApplyNetworkPolicyAmendment {
+            network_policy_amendment: NetworkPolicyAmendment {
+                host: "example.com".to_string(),
+                action,
+            },
+        }
+    }
+
+    fn make_patch_request() -> ApprovalRequest {
+        let mut changes = HashMap::new();
+        changes.insert(
+            PathBuf::from("notes.txt"),
+            FileChange::Add {
+                content: "hello\n".to_string(),
+            },
+        );
+        ApprovalRequest::ApplyPatch(ApplyPatchApprovalRequest {
+            thread_id: ThreadId::new(),
+            thread_label: None,
+            id: "test".to_string(),
+            reason: None,
+            cwd: absolute_path("/tmp"),
+            changes,
+            response_destination: ApprovalResponseDestination::Thread,
+        })
+    }
+
+    /// A prompt type with options that last beyond the request.
+    struct PersistentPrompt {
+        name: &'static str,
+        request: ApprovalRequest,
+        /// Keys bound to those options: shortcut letters and row numbers.
+        keys: Vec<char>,
+        /// Each persistent row and a fragment of the decision it sends.
+        rows: Vec<(usize, &'static str)>,
+    }
+
+    fn persistent_prompts() -> Vec<PersistentPrompt> {
+        vec![
+            PersistentPrompt {
+                name: "exec prefix",
+                request: make_prefix_exec_request(),
+                keys: vec!['p', '2'],
+                rows: vec![(1, "AcceptWithExecpolicyAmendment")],
+            },
+            PersistentPrompt {
+                name: "exec session",
+                request: exec_request_with(vec![
+                    CommandExecutionApprovalDecision::Accept,
+                    CommandExecutionApprovalDecision::AcceptForSession,
+                    CommandExecutionApprovalDecision::Cancel,
+                ]),
+                keys: vec!['a', '2'],
+                rows: vec![(1, "AcceptForSession")],
+            },
+            PersistentPrompt {
+                name: "network host",
+                request: exec_request_with(vec![
+                    CommandExecutionApprovalDecision::Accept,
+                    CommandExecutionApprovalDecision::AcceptForSession,
+                    network_amendment(NetworkPolicyRuleAction::Allow),
+                    network_amendment(NetworkPolicyRuleAction::Deny),
+                    CommandExecutionApprovalDecision::Cancel,
+                ]),
+                keys: vec!['a', 'p', 'd', '2', '3', '4'],
+                rows: vec![
+                    (1, "AcceptForSession"),
+                    (2, "action: Allow"),
+                    (3, "action: Deny"),
+                ],
+            },
+            PersistentPrompt {
+                name: "patch",
+                request: make_patch_request(),
+                keys: vec!['a', '2'],
+                rows: vec![(1, "AcceptForSession")],
+            },
+            PersistentPrompt {
+                name: "permissions",
+                request: make_permissions_request(),
+                keys: vec!['a', '3'],
+                rows: vec![(2, "Session")],
+            },
+        ]
+    }
+
+    fn submitted_ops(rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> Vec<String> {
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .filter_map(|event| match event {
+                AppEvent::SubmitThreadOp { op, .. } => Some(format!("{op:?}")),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Travis's decision on #187 follow-up 2: a letter or digit never
+    /// chooses an option that lasts beyond the request. A terminal without
+    /// bracketed paste delivers a pasted `p` and newline as these same key
+    /// presses: the key, then Enter.
+    #[test]
+    fn persistent_option_key_chooses_nothing() {
+        for PersistentPrompt {
+            name,
+            request,
+            keys,
+            ..
+        } in persistent_prompts()
+        {
+            for key in keys {
+                let (tx, mut rx) = unbounded_channel::<AppEvent>();
+                let mut view = make_overlay(
+                    request.clone(),
+                    AppEventSender::new(tx),
+                    Features::with_defaults(),
+                );
+
+                press(&mut view, KeyCode::Char(key), KeyModifiers::NONE);
+
+                let rendered = render_overlay_lines(&view, /*width*/ 100);
+                assert!(rendered.contains("› 1. Yes"), "{name} {key}: {rendered}");
+                assert!(
+                    rendered.contains("lasts beyond this request"),
+                    "{name} {key}: {rendered}"
+                );
+                press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+                press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+                assert_eq!(submitted_ops(&mut rx), Vec::<String>::new(), "{name} {key}");
+                assert!(!view.is_complete(), "{name} {key}");
+            }
+        }
+    }
+
+    /// A bracketed paste of a persistent option's key and a newline arrives
+    /// as one event, then Enter.
+    #[test]
+    fn bracketed_paste_of_persistent_key_and_newline_chooses_nothing() {
+        for PersistentPrompt {
+            name,
+            request,
+            keys,
+            ..
+        } in persistent_prompts()
+        {
+            for key in keys {
+                let (tx, mut rx) = unbounded_channel::<AppEvent>();
+                let mut view = make_overlay(
+                    request.clone(),
+                    AppEventSender::new(tx),
+                    Features::with_defaults(),
+                );
+                view.handle_paste(format!("{key}\n"));
+                press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+                assert_eq!(submitted_ops(&mut rx), Vec::<String>::new(), "{name} {key}");
+            }
+        }
+    }
+
+    #[test]
+    fn arrows_and_enter_choose_persistent_options() {
+        for PersistentPrompt {
+            name,
+            request,
+            rows,
+            ..
+        } in persistent_prompts()
+        {
+            for (row, expected) in rows {
+                let (tx, mut rx) = unbounded_channel::<AppEvent>();
+                let mut view = make_overlay(
+                    request.clone(),
+                    AppEventSender::new(tx),
+                    Features::with_defaults(),
+                );
+                // Earlier keys, typed or persistent, do not stop the arrows.
+                press(&mut view, KeyCode::Char('a'), KeyModifiers::NONE);
+                for _ in 0..row {
+                    press(&mut view, KeyCode::Down, KeyModifiers::NONE);
+                }
+                press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+
+                let ops = submitted_ops(&mut rx);
+                assert_eq!(ops.len(), 1, "{name} row {row}: {ops:?}");
+                assert!(ops[0].contains(expected), "{name} row {row}: {ops:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn chord_bound_to_persistent_option_chooses_nothing() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut keymap = crate::keymap::RuntimeKeymap::defaults();
+        keymap.approval.approve_for_prefix = vec![key_hint::ctrl(KeyCode::Char('p'))];
+        let mut view = make_overlay_with_keymap(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+            keymap.approval,
+            keymap.list,
+        );
+
+        press(&mut view, KeyCode::Char('p'), KeyModifiers::CONTROL);
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+    }
+
+    #[test]
+    fn held_chord_bound_to_persistent_option_chooses_nothing() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut keymap = crate::keymap::RuntimeKeymap::defaults();
+        keymap.approval.approve_for_prefix = vec![key_hint::ctrl(KeyCode::Char('p'))];
+        let mut view = make_overlay_with_keymap(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+            keymap.approval,
+            keymap.list,
+        );
+
+        press(&mut view, KeyCode::Char('p'), KeyModifiers::CONTROL);
+        for _ in 0..3 {
+            view.handle_key_event(KeyEvent::new_with_kind(
+                KeyCode::Char('p'),
+                KeyModifiers::CONTROL,
+                KeyEventKind::Repeat,
+            ));
+        }
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+    }
+
+    fn second_prefix_request() -> ApprovalRequest {
+        let ApprovalRequest::Exec(mut second) = make_prefix_exec_request() else {
+            unreachable!("exec request");
+        };
+        second.id = "second".to_string();
+        ApprovalRequest::Exec(second)
+    }
+
+    #[test]
+    fn persistent_key_on_the_next_queued_request_chooses_nothing() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+        view.enqueue_request(second_prefix_request());
+        press_and_confirm(&mut view, KeyCode::Char('y'));
+        assert_eq!(exec_decisions(&mut rx), vec!["Accept".to_string()]);
+
+        press_and_confirm(&mut view, KeyCode::Char('p'));
+        press_and_confirm(&mut view, KeyCode::Char('2'));
+
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+        assert!(render_overlay_lines(&view, /*width*/ 80).contains("› 1. Yes"));
+    }
+
+    /// A persistent option's key pressed for one request does not carry over
+    /// to the next. Typing that goes on across the swap ("py") is the bottom
+    /// pane's to drop, since the next request shows anew (#787, #817:
+    /// `tests/issue_817.rs`).
+    #[test]
+    fn persistent_key_then_request_dismissed_does_not_carry_over() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+        view.enqueue_request(second_prefix_request());
+        let first = view.shown_request_generation();
+
+        press(&mut view, KeyCode::Char('p'), KeyModifiers::NONE);
+        // Another client answers the first request.
+        assert!(
+            view.dismiss_resolved_request(&ResolvedAppServerRequest::ExecApproval {
+                id: "test".to_string(),
+            })
+        );
+        assert_ne!(view.shown_request_generation(), first);
+        let lines = render_overlay_lines(&view, /*width*/ 80);
+        assert!(!lines.contains("lasts beyond this request"), "{lines}");
+
+        // Navigation then Enter answers the request now shown.
+        press(&mut view, KeyCode::Down, KeyModifiers::NONE);
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+        let decisions = exec_decisions(&mut rx);
+        assert_eq!(decisions.len(), 1, "{decisions:?}");
+        assert!(
+            decisions[0].starts_with("AcceptWithExecpolicyAmendment"),
+            "{decisions:?}"
+        );
+    }
+
+    /// Enter on an untouched prompt whose only options are persistent
+    /// refuses and explains; navigation then Enter chooses.
+    #[test]
+    fn enter_refuses_an_untouched_persistent_only_prompt() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            exec_request_with(vec![CommandExecutionApprovalDecision::AcceptForSession]),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+        assert!(render_overlay_lines(&view, /*width*/ 80).contains("lasts beyond this request"));
+
+        press(&mut view, KeyCode::Down, KeyModifiers::NONE);
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(
+            exec_decisions(&mut rx),
+            vec!["AcceptForSession".to_string()]
+        );
+    }
+
+    #[test]
+    fn key_shared_with_a_one_shot_option_still_chooses_the_one_shot_option() {
+        // `d` is bound to both "No, continue" and "block this host in the future".
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            exec_request_with(vec![
+                CommandExecutionApprovalDecision::Accept,
+                network_amendment(NetworkPolicyRuleAction::Deny),
+                CommandExecutionApprovalDecision::Decline,
+            ]),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+
+        press_and_confirm(&mut view, KeyCode::Char('d'));
+
+        assert_eq!(exec_decisions(&mut rx), vec!["Decline".to_string()]);
+    }
+
+    /// Enter on an untouched prompt confirms the highlighted row, which is
+    /// never a persistent option even when one is listed first.
+    #[test]
+    fn enter_on_untouched_prompt_never_chooses_a_persistent_option() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            exec_request_with(vec![
+                CommandExecutionApprovalDecision::AcceptForSession,
+                CommandExecutionApprovalDecision::Cancel,
+            ]),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+
+        assert_eq!(exec_decisions(&mut rx), vec!["Cancel".to_string()]);
+    }
+
+    #[test]
+    fn persistent_option_key_notice_snapshot() {
+        let (tx, _rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+
+        press(&mut view, KeyCode::Char('p'), KeyModifiers::NONE);
+
+        assert_snapshot!(
+            "approval_overlay_persistent_key_notice",
+            render_overlay_lines(&view, /*width*/ 80)
         );
     }
 
@@ -1880,12 +3147,14 @@ mod tests {
     }
 
     #[test]
-    fn permissions_session_shortcut_submits_session_scope() {
+    fn permissions_session_choice_submits_session_scope() {
         let (tx, mut rx) = unbounded_channel::<AppEvent>();
         let tx = AppEventSender::new(tx);
         let mut view = make_overlay(make_permissions_request(), tx, Features::with_defaults());
 
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        press(&mut view, KeyCode::Down, KeyModifiers::NONE);
+        press(&mut view, KeyCode::Down, KeyModifiers::NONE);
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
 
         let mut saw_op = false;
         while let Ok(ev) = rx.try_recv() {
@@ -1920,7 +3189,7 @@ mod tests {
             keymap.list,
         );
 
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        press_and_confirm(&mut view, KeyCode::Char('x'));
 
         let mut saw_op = false;
         while let Ok(ev) = rx.try_recv() {
@@ -1948,7 +3217,7 @@ mod tests {
         let tx = AppEventSender::new(tx);
         let mut view = make_overlay(make_permissions_request(), tx, Features::with_defaults());
 
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
+        press_and_confirm(&mut view, KeyCode::Char('r'));
 
         let mut saw_op = false;
         while let Ok(ev) = rx.try_recv() {
@@ -2213,10 +3482,11 @@ mod tests {
             })
             .collect();
         let expected = vec![
-            "✔ You approved codex to run".to_string(),
-            "  git add tui/src/render/".to_string(),
-            "  mod.rs tui/src/render/".to_string(),
-            "  renderable.rs this time".to_string(),
+            "✔ You approved Corbanu to".to_string(),
+            "  run git add tui/src/".to_string(),
+            "  render/mod.rs tui/src/".to_string(),
+            "  render/renderable.rs this".to_string(),
+            "  time".to_string(),
         ];
         assert_eq!(rendered, expected);
     }
@@ -2270,7 +3540,7 @@ mod tests {
             Features::with_defaults(),
         );
 
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+        press_and_confirm(&mut view, KeyCode::Char('y'));
 
         let mut decision = None;
         while let Ok(event) = rx.try_recv() {
@@ -2283,7 +3553,7 @@ mod tests {
         assert_eq!(
             render_history_cell_lines(decision.as_ref(), /*width*/ 80),
             vec![
-                "✔ You approved codex network access to https://example.com:8443 this time"
+                "✔ You approved Corbanu network access to https://example.com:8443 this time"
                     .to_string(),
             ]
         );
@@ -2360,7 +3630,7 @@ mod tests {
             keymap.approval,
             keymap.list,
         );
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+        press_and_confirm(&mut view, KeyCode::Char('n'));
         let mut n_decision = None;
         while let Ok(ev) = rx.try_recv() {
             if let AppEvent::SubmitThreadOp {

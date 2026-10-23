@@ -5,7 +5,20 @@ name: Bazel
 
 on:
   workflow_call:
+    inputs:
+      cold_bazel:
+        description: >-
+          Run the cold Linux Bazel test, clippy and release-verify jobs. Without
+          a remote cache they take close to 180 minutes, so blocking PR CI
+          skips them and nightly-ci.yml runs them.
+        type: boolean
+        default: false
   workflow_dispatch:
+    inputs:
+      cold_bazel:
+        description: Run the cold Linux Bazel test, clippy and release-verify jobs.
+        type: boolean
+        default: true
 
 concurrency:
   # Cancel previous actions from the same PR or branch except 'main' branch.
@@ -13,13 +26,18 @@ concurrency:
   group: concurrency-group::${{ github.workflow }}::${{ github.event.pull_request.number > 0 && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}${{ github.ref_name == 'main' && format('::{0}', github.run_id) || ''}}
   cancel-in-progress: ${{ github.ref_name != 'main' }}
 
+# Read-only token: none of these jobs call the GitHub API.
+permissions:
+  contents: read
+
 jobs:
   test:
+    if: ${{ inputs.cold_bazel }}
     # Non-Linux Bazel coverage is disabled until working runners are available.
     # See docs/ci.md for the restoration plan.
     # Cold local builds compile V8 transitively and can exceed 90 minutes when
     # remote execution is unavailable.
-    timeout-minutes: 180
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
@@ -62,6 +80,38 @@ jobs:
         shell: bash
         run: ./scripts/check-module-bazel-lock.sh
 
+      # Every rules_rust toolchain archive is pinned (#1032). Runs after the
+      # lockfile check, so its Bazel calls can't touch the lockfile first.
+      - name: Check Rust toolchain MODULE.bazel checksums
+        if: matrix.os == 'ubuntu-24.04' && matrix.target == 'x86_64-unknown-linux-gnu'
+        shell: bash
+        run: python3 .github/scripts/rust_toolchain_bazel_sha256s.py --check
+
+      # The Linux sandbox tests (landlock/bwrap) create user and network
+      # namespaces; Ubuntu 24.04 runners restrict them by default. Same step as
+      # rust-ci-full-nextest-platform.yml.
+      - name: Enable unprivileged user namespaces (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo sysctl -w kernel.unprivileged_userns_clone=1
+          if sudo sysctl -a 2>/dev/null | grep -q '^kernel.apparmor_restrict_unprivileged_userns'; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+
+      # Without a remote cache the gnu job's outputs (Wine-exec and V8 included)
+      # filled the runner's disk on nightly-ci (2026-10-12 and -13: "No space
+      # left on device" in hundreds of tests, #636). Drop preinstalled SDKs
+      # this job never uses.
+      - name: Free runner disk space (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          df -h /
+          for dir in /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost; do
+            if [[ -d "$dir" ]]; then sudo rm -r -- "$dir"; fi
+          done
+          df -h /
+
       - name: bazel test //...
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
@@ -102,10 +152,11 @@ jobs:
           path: ${{ runner.temp }}/bazel-execution-logs
           if-no-files-found: ignore
 
-      # Save the job-scoped Bazel repository cache after cache misses. Keep the
-      # upload non-fatal so cache service issues never fail the job itself.
+      # Save the job-scoped Bazel repository cache after cache misses, on main
+      # only (#636). Keep the upload non-fatal so cache service issues never
+      # fail the job itself.
       - name: Save bazel repository cache
-        if: always() && !cancelled() && steps.prepare_bazel.outputs.repository-cache-hit != 'true'
+        if: always() && !cancelled() && steps.prepare_bazel.outputs.repository-cache-hit != 'true' && github.ref == 'refs/heads/main'
         continue-on-error: true
         uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
@@ -251,7 +302,7 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
 
       - name: Build and smoke-test product binaries
         shell: pwsh
@@ -299,11 +350,11 @@ jobs:
           fi
 
   test-windows-native-main:
-    # Native Windows Bazel tests are slower and frequently approach the
-    # 30-minute PR budget. Run this only for post-merge commits to main and give
-    # it a larger timeout.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    timeout-minutes: 40
+    # Native Windows Bazel tests build everything cold without a remote cache
+    # (~25 min) and then run ~400 tests, so they run nightly with the other
+    # cold Bazel jobs (nightly-ci.yml) instead of on every push to main.
+    if: ${{ inputs.cold_bazel }}
+    timeout-minutes: 360
     runs-on: windows-2022
     name: Bazel test on windows-latest for x86_64-pc-windows-gnullvm (native main)
     environment:
@@ -339,6 +390,11 @@ jobs:
 
           bazel_test_args=(
             test
+            # #691: the intermittent login test gets one automatic re-run
+            # (Bazel re-runs the whole target and reports it FLAKY). Owner
+            # decision 2026-10-15; if it fails both attempts again, add it to
+            # .bazelrc's windows-native-tests skip list.
+            --flaky_test_attempts=//codex-rs/login:login-unit-tests@2
             --test_tag_filters=-argument-comment-lint
             --test_verbose_timeout_warnings
             --build_metadata=COMMIT_SHA=${GITHUB_SHA}
@@ -362,10 +418,11 @@ jobs:
           path: ${{ runner.temp }}/bazel-execution-logs
           if-no-files-found: ignore
 
-      # Save the job-scoped Bazel repository cache after cache misses. Keep the
-      # upload non-fatal so cache service issues never fail the job itself.
+      # Save the job-scoped Bazel repository cache after cache misses, on main
+      # only (#636). Keep the upload non-fatal so cache service issues never
+      # fail the job itself.
       - name: Save bazel repository cache
-        if: always() && !cancelled() && steps.prepare_bazel.outputs.repository-cache-hit != 'true'
+        if: always() && !cancelled() && steps.prepare_bazel.outputs.repository-cache-hit != 'true' && github.ref == 'refs/heads/main'
         continue-on-error: true
         uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
@@ -377,7 +434,8 @@ jobs:
         uses: ./.github/actions/check-clean-worktree
 
   clippy:
-    timeout-minutes: 180
+    if: ${{ inputs.cold_bazel }}
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
@@ -404,6 +462,18 @@ jobs:
         with:
           target: ${{ matrix.target }}
           cache-scope: bazel-${{ github.job }}
+
+      # Same as the test job (#636): a toolchain bump misses the exact
+      # repository cache and these cold builds then filled the disk (#1027).
+      - name: Free runner disk space (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          df -h /
+          for dir in /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost; do
+            if [[ -d "$dir" ]]; then sudo rm -r -- "$dir"; fi
+          done
+          df -h /
 
       - name: bazel build --config=clippy lint targets
         env:
@@ -457,10 +527,11 @@ jobs:
           path: ${{ runner.temp }}/bazel-execution-logs
           if-no-files-found: ignore
 
-      # Save the job-scoped Bazel repository cache after cache misses. Keep the
-      # upload non-fatal so cache service issues never fail the job itself.
+      # Save the job-scoped Bazel repository cache after cache misses, on main
+      # only (#636). Keep the upload non-fatal so cache service issues never
+      # fail the job itself.
       - name: Save bazel repository cache
-        if: always() && !cancelled() && steps.prepare_bazel.outputs.repository-cache-hit != 'true'
+        if: always() && !cancelled() && steps.prepare_bazel.outputs.repository-cache-hit != 'true' && github.ref == 'refs/heads/main'
         continue-on-error: true
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
@@ -472,7 +543,8 @@ jobs:
         uses: ./.github/actions/check-clean-worktree
 
   verify-release-build:
-    timeout-minutes: 180
+    if: ${{ inputs.cold_bazel }}
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
@@ -497,6 +569,18 @@ jobs:
         with:
           target: ${{ matrix.target }}
           cache-scope: bazel-${{ github.job }}
+
+      # Same as the test job (#636): a toolchain bump misses the exact
+      # repository cache and these cold builds then filled the disk (#1027).
+      - name: Free runner disk space (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          df -h /
+          for dir in /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost; do
+            if [[ -d "$dir" ]]; then sudo rm -r -- "$dir"; fi
+          done
+          df -h /
 
       - name: bazel build verify-release-build targets
         env:
@@ -567,10 +651,11 @@ jobs:
           path: ${{ runner.temp }}/bazel-execution-logs
           if-no-files-found: ignore
 
-      # Save the job-scoped Bazel repository cache after cache misses. Keep the
-      # upload non-fatal so cache service issues never fail the job itself.
+      # Save the job-scoped Bazel repository cache after cache misses, on main
+      # only (#636). Keep the upload non-fatal so cache service issues never
+      # fail the job itself.
       - name: Save bazel repository cache
-        if: always() && !cancelled() && steps.prepare_bazel.outputs.repository-cache-hit != 'true'
+        if: always() && !cancelled() && steps.prepare_bazel.outputs.repository-cache-hit != 'true' && github.ref == 'refs/heads/main'
         continue-on-error: true
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:

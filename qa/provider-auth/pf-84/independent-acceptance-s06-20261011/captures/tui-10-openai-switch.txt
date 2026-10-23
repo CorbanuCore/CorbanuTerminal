@@ -1,0 +1,12 @@
+╰────────────────────────────────────────────────────────╯
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:       glm-5.3-flash   /model to change          │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06acc/ws │
+│ permissions: YOLO mode                                 │
+╰────────────────────────────────────────────────────────╯
+To continue this session, run corbanu resume 01a12e81-fa5c-7531-a246-5438f853d621
+• New session: requests to openai use account `work`.
+› Implement {feature}
+  Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/.codex-work/s06acc/ws · Corbanu Terminal · TPS: -- tok/s

@@ -1,0 +1,23 @@
+---
+source: tui/src/status/tests.rs
+expression: rendered
+---
+/status
+
+╭────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v<V>)                                                            │
+│                                                                                        │
+│  Model:            glm-5.3-flash (reasoning none, summaries auto)                      │
+│  Model provider:   Z.AI · account default                                              │
+│  Directory: [[workspace]]                                                              │
+│  Permissions:      Next turn: Custom (workspace with network access, Ask for approval) │
+│  Security:         Requested Permissive; effective protection unverified (/security)   │
+│  Agents.md:        <none>                                                              │
+│  Account:          Z.AI API key configured                                             │
+│                                                                                        │
+│  Token usage:      41.3K total  (35.1K input + 6.25K output)                           │
+│  Account usage:    account            input  cached input  output  reasoning           │
+│                    default (active)  28,100        12,000   6,015        300           │
+│                    work               7,000             0     232          0           │
+│  Limits:           data not available yet                                              │
+╰────────────────────────────────────────────────────────────────────────────────────────╯

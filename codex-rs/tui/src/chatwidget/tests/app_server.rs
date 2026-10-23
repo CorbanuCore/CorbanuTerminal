@@ -61,6 +61,7 @@ fn configured_thread_session(thread_id: ThreadId) -> crate::session_state::Threa
         message_history: None,
         network_proxy: None,
         rollout_path: None,
+        provider_account: None,
     }
 }
 
@@ -526,6 +527,7 @@ async fn collab_spawn_end_shows_requested_model_and_effort() {
                 prompt: Some("Explore the repo".to_string()),
                 model: Some("gpt-5".to_string()),
                 reasoning_effort: Some(ReasoningEffortConfig::High),
+                provider_account: None,
                 agents_states: HashMap::new(),
             },
         }),
@@ -545,6 +547,7 @@ async fn collab_spawn_end_shows_requested_model_and_effort() {
                 prompt: Some("Explore the repo".to_string()),
                 model: None,
                 reasoning_effort: None,
+                provider_account: None,
                 agents_states: HashMap::from([(
                     spawned_thread_id.to_string(),
                     AppServerCollabAgentState {
@@ -787,6 +790,49 @@ async fn live_app_server_warning_notification_renders_message() {
 }
 
 #[tokio::test]
+async fn openai_api_key_env_fallback_notice_renders_as_warning() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    chat.handle_server_notification(
+        ServerNotification::Warning(WarningNotification {
+            thread_id: Some("thread-1".to_string()),
+            message: codex_login::OPENAI_API_KEY_ENV_FALLBACK_NOTICE.to_string(),
+        }),
+        /*replay_kind*/ None,
+    );
+
+    let cells = drain_insert_history(&mut rx);
+    assert_eq!(cells.len(), 1, "expected one notice history cell");
+    assert_chatwidget_snapshot!(
+        "openai_api_key_env_fallback_notice",
+        lines_to_single_string(&cells[0]),
+    );
+}
+
+/// #1139 (D94, MOD-11): the warning core sends when Moderate's sandbox
+/// stops a write into the project's `.git` names the level and the way
+/// forward in the transcript (text from core's `git_write_explanation`).
+#[tokio::test]
+async fn moderate_git_folder_write_warning_renders_the_level() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    chat.handle_server_notification(
+        ServerNotification::Warning(WarningNotification {
+            thread_id: Some("thread-1".to_string()),
+            message: "Security level Moderate blocked writing `.git/hooks/pre-commit`: under Moderate, agent commands always run inside the sandbox, even when you approve them, and the sandbox keeps the project's .git folder (git hooks and config) read-only. To make this change, a person can run the command in their own terminal, or switch to Permissive in /security (it applies after a restart), where an approved command can run outside the sandbox.".to_string(),
+        }),
+        /*replay_kind*/ None,
+    );
+
+    let cells = drain_insert_history(&mut rx);
+    assert_eq!(cells.len(), 1, "expected one warning history cell");
+    assert_chatwidget_snapshot!(
+        "moderate_git_folder_write_warning",
+        lines_to_single_string(&cells[0]),
+    );
+}
+
+#[tokio::test]
 async fn live_app_server_guardian_warning_notification_renders_message() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
 
@@ -810,6 +856,7 @@ async fn live_app_server_guardian_warning_notification_renders_message() {
 #[tokio::test]
 async fn live_app_server_config_warning_prefixes_summary() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.thread_id = Some(ThreadId::new());
 
     chat.handle_server_notification(
         ServerNotification::ConfigWarning(ConfigWarningNotification {
@@ -828,6 +875,62 @@ async fn live_app_server_config_warning_prefixes_summary() {
         rendered.contains("Invalid configuration; using defaults."),
         "expected config warning summary, got {rendered}"
     );
+}
+
+/// #419: a config warning that arrives before the session header is shown
+/// after it (a startup redraw cannot hide it), and the session's repeat of
+/// the same warning is not shown a second time.
+#[tokio::test]
+async fn startup_config_warning_is_shown_once_after_the_session_header() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    let summary = "`[provider_accounts]` is ignored because the `named_accounts` feature is off";
+    chat.handle_server_notification(
+        ServerNotification::ConfigWarning(ConfigWarningNotification {
+            summary: summary.to_string(),
+            details: None,
+            path: None,
+            range: None,
+        }),
+        /*replay_kind*/ None,
+    );
+    assert!(drain_insert_history(&mut rx).is_empty());
+
+    chat.handle_thread_session(crate::session_state::ThreadSessionState {
+        thread_id: ThreadId::new(),
+        forked_from_id: None,
+        fork_parent_title: None,
+        thread_name: None,
+        model: "test-model".to_string(),
+        model_provider_id: "test-provider".to_string(),
+        service_tier: None,
+        approval_policy: AskForApproval::Never,
+        approvals_reviewer: ApprovalsReviewer::User,
+        permission_profile: PermissionProfile::read_only(),
+        active_permission_profile: None,
+        cwd: test_path_buf("/home/user/project").abs(),
+        runtime_workspace_roots: Vec::new(),
+        instruction_source_paths: Vec::new(),
+        reasoning_effort: Some(ReasoningEffortConfig::default()),
+        collaboration_mode: None,
+        personality: None,
+        message_history: None,
+        network_proxy: None,
+        rollout_path: None,
+        provider_account: None,
+    });
+    chat.handle_server_notification(
+        ServerNotification::Warning(codex_app_server_protocol::WarningNotification {
+            thread_id: None,
+            message: summary.to_string(),
+        }),
+        /*replay_kind*/ None,
+    );
+    let warnings = drain_insert_history(&mut rx)
+        .iter()
+        .map(|cell| lines_to_single_string(cell))
+        .filter(|text| text.contains(summary))
+        .count();
+    assert_eq!(warnings, 1);
 }
 
 #[tokio::test]
@@ -1018,6 +1121,7 @@ async fn live_app_server_collab_wait_items_render_history() {
                 prompt: None,
                 model: None,
                 reasoning_effort: None,
+                provider_account: None,
                 agents_states: HashMap::new(),
             },
         }),
@@ -1041,6 +1145,7 @@ async fn live_app_server_collab_wait_items_render_history() {
                 prompt: None,
                 model: None,
                 reasoning_effort: None,
+                provider_account: None,
                 agents_states: HashMap::from([
                     (
                         receiver_thread_id.to_string(),
@@ -1092,6 +1197,7 @@ async fn live_app_server_collab_spawn_completed_renders_requested_model_and_effo
                 prompt: Some("Explore the repo".to_string()),
                 model: Some("gpt-5".to_string()),
                 reasoning_effort: Some(ReasoningEffortConfig::High),
+                provider_account: None,
                 agents_states: HashMap::new(),
             },
         }),
@@ -1112,6 +1218,7 @@ async fn live_app_server_collab_spawn_completed_renders_requested_model_and_effo
                 prompt: Some("Explore the repo".to_string()),
                 model: Some("gpt-5".to_string()),
                 reasoning_effort: Some(ReasoningEffortConfig::High),
+                provider_account: None,
                 agents_states: HashMap::from([(
                     spawned_thread_id.to_string(),
                     AppServerCollabAgentState {

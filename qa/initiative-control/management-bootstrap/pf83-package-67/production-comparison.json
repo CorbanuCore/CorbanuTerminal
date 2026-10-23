@@ -1,0 +1,240 @@
+[
+  {
+    "path": "codex-rs/app-server-protocol/schema/json/codex_app_server_protocol.schemas.json",
+    "frozen_sha256": "d3da6af9a26270a43f61bff31f67c56f9d75b68bafc9740d01c667c1d8f7f647",
+    "checkout_sha256": "d3da6af9a26270a43f61bff31f67c56f9d75b68bafc9740d01c667c1d8f7f647",
+    "built_source_sha256": "d3da6af9a26270a43f61bff31f67c56f9d75b68bafc9740d01c667c1d8f7f647",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/app-server-protocol/schema/json/codex_app_server_protocol.v2.schemas.json",
+    "frozen_sha256": "8d69da934937b952b2a27ceb1662edf966b56b6b303045f3c14d29f1a8c57efe",
+    "checkout_sha256": "8d69da934937b952b2a27ceb1662edf966b56b6b303045f3c14d29f1a8c57efe",
+    "built_source_sha256": "8d69da934937b952b2a27ceb1662edf966b56b6b303045f3c14d29f1a8c57efe",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/app-server-protocol/schema/precomputed/app-server-exports-experimental.json.zst",
+    "frozen_sha256": "e208b950ecf381512016e4bc8fd54d8bd46e020565cd7beacd9e241d5c71ce2c",
+    "checkout_sha256": "e208b950ecf381512016e4bc8fd54d8bd46e020565cd7beacd9e241d5c71ce2c",
+    "built_source_sha256": "e208b950ecf381512016e4bc8fd54d8bd46e020565cd7beacd9e241d5c71ce2c",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/app-server-protocol/schema/precomputed/app-server-exports-stable.json.zst",
+    "frozen_sha256": "b348764d7c34c6e5adc4760f073a00a99a63621dddf65206ac126b50b714a3a2",
+    "checkout_sha256": "b348764d7c34c6e5adc4760f073a00a99a63621dddf65206ac126b50b714a3a2",
+    "built_source_sha256": "b348764d7c34c6e5adc4760f073a00a99a63621dddf65206ac126b50b714a3a2",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/app-server-protocol/schema/typescript/v2/ThreadSettingsUpdateOutcome.ts",
+    "frozen_sha256": "9b2e5a04bcacbbf7511cc2ebcf20c2e25aeae20e2a1c6a26c173aba28acb9a1e",
+    "checkout_sha256": "9b2e5a04bcacbbf7511cc2ebcf20c2e25aeae20e2a1c6a26c173aba28acb9a1e",
+    "built_source_sha256": "9b2e5a04bcacbbf7511cc2ebcf20c2e25aeae20e2a1c6a26c173aba28acb9a1e",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/app-server-protocol/schema/typescript/v2/index.ts",
+    "frozen_sha256": "de4d07da1d7839f188617cf5e5d96f71c2b0508c7f106614a85887476f88bff6",
+    "checkout_sha256": "de4d07da1d7839f188617cf5e5d96f71c2b0508c7f106614a85887476f88bff6",
+    "built_source_sha256": "de4d07da1d7839f188617cf5e5d96f71c2b0508c7f106614a85887476f88bff6",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/app-server-protocol/src/protocol/v2/thread.rs",
+    "frozen_sha256": "0942f01f3b5987ef7c4021d8517613be8f41367ab63135b7ccaaceb0aee9eb53",
+    "checkout_sha256": "0942f01f3b5987ef7c4021d8517613be8f41367ab63135b7ccaaceb0aee9eb53",
+    "built_source_sha256": "0942f01f3b5987ef7c4021d8517613be8f41367ab63135b7ccaaceb0aee9eb53",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/app-server/README.md",
+    "frozen_sha256": "42ca64f28fe8cbac226ffce1705aa1f23774424c95c32f10c611300a8cac894f",
+    "checkout_sha256": "42ca64f28fe8cbac226ffce1705aa1f23774424c95c32f10c611300a8cac894f",
+    "built_source_sha256": "42ca64f28fe8cbac226ffce1705aa1f23774424c95c32f10c611300a8cac894f",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/app-server/src/bespoke_event_handling.rs",
+    "frozen_sha256": "1e4cd026370957358b8a0d2fed73128a9cf6d0aa622cd31bb12d303ea9675f6b",
+    "checkout_sha256": "1e4cd026370957358b8a0d2fed73128a9cf6d0aa622cd31bb12d303ea9675f6b",
+    "built_source_sha256": "1e4cd026370957358b8a0d2fed73128a9cf6d0aa622cd31bb12d303ea9675f6b",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/app-server/src/lib.rs",
+    "frozen_sha256": "9993e42831e728b06449f83da0d3315c3a8622de7c7d2e1dc5e9b978977d746d",
+    "checkout_sha256": "9993e42831e728b06449f83da0d3315c3a8622de7c7d2e1dc5e9b978977d746d",
+    "built_source_sha256": "9993e42831e728b06449f83da0d3315c3a8622de7c7d2e1dc5e9b978977d746d",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/app-server/src/request_processors/turn_processor.rs",
+    "frozen_sha256": "28dfbd1998a3c975de2f695843725b58a8e0b73c365aef7fca88f5a03292217d",
+    "checkout_sha256": "28dfbd1998a3c975de2f695843725b58a8e0b73c365aef7fca88f5a03292217d",
+    "built_source_sha256": "28dfbd1998a3c975de2f695843725b58a8e0b73c365aef7fca88f5a03292217d",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/app-server/src/settings_confirmation.rs",
+    "frozen_sha256": "d5e9fdec936ffc4b8f146cb441200a50c7d6907953f04518b4b8969fa16879c1",
+    "checkout_sha256": "d5e9fdec936ffc4b8f146cb441200a50c7d6907953f04518b4b8969fa16879c1",
+    "built_source_sha256": "d5e9fdec936ffc4b8f146cb441200a50c7d6907953f04518b4b8969fa16879c1",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/app-server/src/thread_state.rs",
+    "frozen_sha256": "d2be1fea01470835a1fd69a1c88b4aacbe5a9d09cdadde20b824b70852f12d96",
+    "checkout_sha256": "d2be1fea01470835a1fd69a1c88b4aacbe5a9d09cdadde20b824b70852f12d96",
+    "built_source_sha256": "d2be1fea01470835a1fd69a1c88b4aacbe5a9d09cdadde20b824b70852f12d96",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/core/src/codex_thread.rs",
+    "frozen_sha256": "5466396d3c7c83686300f3a4c8018e3a646a24666e48d030415414f79d346d3f",
+    "checkout_sha256": "5466396d3c7c83686300f3a4c8018e3a646a24666e48d030415414f79d346d3f",
+    "built_source_sha256": "5466396d3c7c83686300f3a4c8018e3a646a24666e48d030415414f79d346d3f",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/core/src/session/handlers.rs",
+    "frozen_sha256": "83609a7c7d32ed6c1118d7552a1f104deefded6cc0e00c02ed03eaabb60f4a59",
+    "checkout_sha256": "83609a7c7d32ed6c1118d7552a1f104deefded6cc0e00c02ed03eaabb60f4a59",
+    "built_source_sha256": "83609a7c7d32ed6c1118d7552a1f104deefded6cc0e00c02ed03eaabb60f4a59",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/core/src/session/inject.rs",
+    "frozen_sha256": "9bbcc1ffcc0a82ad01625ec4b025f046353ff6f4b6ae4b03efc589d15ba3a4d6",
+    "checkout_sha256": "9bbcc1ffcc0a82ad01625ec4b025f046353ff6f4b6ae4b03efc589d15ba3a4d6",
+    "built_source_sha256": "9bbcc1ffcc0a82ad01625ec4b025f046353ff6f4b6ae4b03efc589d15ba3a4d6",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/core/src/session/input_queue.rs",
+    "frozen_sha256": "f5074c3df786f96bdf3adaa14ab4412fcb8ab5164f466647111e101c69434469",
+    "checkout_sha256": "f5074c3df786f96bdf3adaa14ab4412fcb8ab5164f466647111e101c69434469",
+    "built_source_sha256": "f5074c3df786f96bdf3adaa14ab4412fcb8ab5164f466647111e101c69434469",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/core/src/session/mod.rs",
+    "frozen_sha256": "75dd04620eb4c5bf6d61f4a1992d411bb0e049d276d6d1f44daf4c18a1002192",
+    "checkout_sha256": "75dd04620eb4c5bf6d61f4a1992d411bb0e049d276d6d1f44daf4c18a1002192",
+    "built_source_sha256": "75dd04620eb4c5bf6d61f4a1992d411bb0e049d276d6d1f44daf4c18a1002192",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/core/src/tasks/mod.rs",
+    "frozen_sha256": "29c5f4d702db6583bea8cc33bea0922e28866f5dc4c16127399ee42716497c30",
+    "checkout_sha256": "29c5f4d702db6583bea8cc33bea0922e28866f5dc4c16127399ee42716497c30",
+    "built_source_sha256": "29c5f4d702db6583bea8cc33bea0922e28866f5dc4c16127399ee42716497c30",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/ext/goal/src/runtime.rs",
+    "frozen_sha256": "72c16e0a02fd20f1f32b2a43f84408dac367bae15e7d1048dddca4ccacb0114b",
+    "checkout_sha256": "72c16e0a02fd20f1f32b2a43f84408dac367bae15e7d1048dddca4ccacb0114b",
+    "built_source_sha256": "72c16e0a02fd20f1f32b2a43f84408dac367bae15e7d1048dddca4ccacb0114b",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/tui/src/app.rs",
+    "frozen_sha256": "941c761e9dabfa5eeb0d55424efcb32c0bc618065d43a7ebd80273d2b4a7e8c5",
+    "checkout_sha256": "941c761e9dabfa5eeb0d55424efcb32c0bc618065d43a7ebd80273d2b4a7e8c5",
+    "built_source_sha256": "941c761e9dabfa5eeb0d55424efcb32c0bc618065d43a7ebd80273d2b4a7e8c5",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/tui/src/app/config_persistence.rs",
+    "frozen_sha256": "27189b296bd0490005a7520945f659f3d4bd89956617687c7b6b9303e03e0dc2",
+    "checkout_sha256": "27189b296bd0490005a7520945f659f3d4bd89956617687c7b6b9303e03e0dc2",
+    "built_source_sha256": "27189b296bd0490005a7520945f659f3d4bd89956617687c7b6b9303e03e0dc2",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/tui/src/app/event_dispatch.rs",
+    "frozen_sha256": "29a2eb4160416fd76c3fb32a25705ab322fa94ae7da4186c878489f554d19a77",
+    "checkout_sha256": "29a2eb4160416fd76c3fb32a25705ab322fa94ae7da4186c878489f554d19a77",
+    "built_source_sha256": "29a2eb4160416fd76c3fb32a25705ab322fa94ae7da4186c878489f554d19a77",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/tui/src/app/permission_confirmation.rs",
+    "frozen_sha256": "e3a1573d15cd80297c25e36f9b7e8c03f1ff9c92bed26fa0cb4f5bbdcd6fc3c9",
+    "checkout_sha256": "e3a1573d15cd80297c25e36f9b7e8c03f1ff9c92bed26fa0cb4f5bbdcd6fc3c9",
+    "built_source_sha256": "e3a1573d15cd80297c25e36f9b7e8c03f1ff9c92bed26fa0cb4f5bbdcd6fc3c9",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/tui/src/app/thread_routing.rs",
+    "frozen_sha256": "3ca8cd25a056de3ce5363c7ecc986eb2365ecc67f54af81068b7ebb24d2f1451",
+    "checkout_sha256": "3ca8cd25a056de3ce5363c7ecc986eb2365ecc67f54af81068b7ebb24d2f1451",
+    "built_source_sha256": "3ca8cd25a056de3ce5363c7ecc986eb2365ecc67f54af81068b7ebb24d2f1451",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/tui/src/app_event.rs",
+    "frozen_sha256": "e02b4548da5608f48c1cf6a667c9ff13d50cf32b7c89e0f19bd3040936eec51f",
+    "checkout_sha256": "e02b4548da5608f48c1cf6a667c9ff13d50cf32b7c89e0f19bd3040936eec51f",
+    "built_source_sha256": "e02b4548da5608f48c1cf6a667c9ff13d50cf32b7c89e0f19bd3040936eec51f",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/tui/src/app_server_session.rs",
+    "frozen_sha256": "8ecdf3c14a69b85fc9c0b2d2f98b0286568745e495c71815bebfd0d33e0ddaeb",
+    "checkout_sha256": "8ecdf3c14a69b85fc9c0b2d2f98b0286568745e495c71815bebfd0d33e0ddaeb",
+    "built_source_sha256": "8ecdf3c14a69b85fc9c0b2d2f98b0286568745e495c71815bebfd0d33e0ddaeb",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/tui/src/chatwidget/command_lifecycle.rs",
+    "frozen_sha256": "c001079a4ffed65a2909a91dc0f4f02838e04347a6f84012f5327b585fdbe8f0",
+    "checkout_sha256": "c001079a4ffed65a2909a91dc0f4f02838e04347a6f84012f5327b585fdbe8f0",
+    "built_source_sha256": "c001079a4ffed65a2909a91dc0f4f02838e04347a6f84012f5327b585fdbe8f0",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/tui/src/chatwidget/input_restore.rs",
+    "frozen_sha256": "c4665f354a1d6afb1190c1299753cae8203a2eba19cbbebb1c1ac55d31752d76",
+    "checkout_sha256": "c4665f354a1d6afb1190c1299753cae8203a2eba19cbbebb1c1ac55d31752d76",
+    "built_source_sha256": "c4665f354a1d6afb1190c1299753cae8203a2eba19cbbebb1c1ac55d31752d76",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/tui/src/chatwidget/permission_popups.rs",
+    "frozen_sha256": "939a4f0ec21feb4af756211f38ec3264892cce4a7143fe6e79a41597bbfa8e7e",
+    "checkout_sha256": "939a4f0ec21feb4af756211f38ec3264892cce4a7143fe6e79a41597bbfa8e7e",
+    "built_source_sha256": "939a4f0ec21feb4af756211f38ec3264892cce4a7143fe6e79a41597bbfa8e7e",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/tui/src/chatwidget/settings.rs",
+    "frozen_sha256": "16d2b8ec609c17cadd5ad4de2a761dac728c6d07286a11bfcd9eda36e9ac46e2",
+    "checkout_sha256": "16d2b8ec609c17cadd5ad4de2a761dac728c6d07286a11bfcd9eda36e9ac46e2",
+    "built_source_sha256": "16d2b8ec609c17cadd5ad4de2a761dac728c6d07286a11bfcd9eda36e9ac46e2",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/tui/src/exec_cell/model.rs",
+    "frozen_sha256": "96838288303c9742cb755c9c99b3227f461392772715a513c6969bd53b30befb",
+    "checkout_sha256": "96838288303c9742cb755c9c99b3227f461392772715a513c6969bd53b30befb",
+    "built_source_sha256": "96838288303c9742cb755c9c99b3227f461392772715a513c6969bd53b30befb",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/tui/src/exec_cell/render.rs",
+    "frozen_sha256": "37b180476494a0d9534ce004b3ef2985806d780361716ec65ecef7985a25f1a0",
+    "checkout_sha256": "37b180476494a0d9534ce004b3ef2985806d780361716ec65ecef7985a25f1a0",
+    "built_source_sha256": "37b180476494a0d9534ce004b3ef2985806d780361716ec65ecef7985a25f1a0",
+    "matches": true
+  },
+  {
+    "path": "codex-rs/tui/src/status/card.rs",
+    "frozen_sha256": "9814de2ad76a48c9512b04b61988771eeb8296394a4fd7dde7e6c24cc30786c4",
+    "checkout_sha256": "9814de2ad76a48c9512b04b61988771eeb8296394a4fd7dde7e6c24cc30786c4",
+    "built_source_sha256": "9814de2ad76a48c9512b04b61988771eeb8296394a4fd7dde7e6c24cc30786c4",
+    "matches": true
+  }
+]

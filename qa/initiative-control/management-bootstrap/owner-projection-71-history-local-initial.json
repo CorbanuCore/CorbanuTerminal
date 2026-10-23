@@ -1,0 +1,65 @@
+{
+  "root": "/Volumes/CorbanuDrive/Corbanu/.codex-work/initiative-control.oGQGyA",
+  "publications": [
+    {
+      "generation": "build-azdfz347",
+      "published_at": "2026-09-10T08:39:51+00:00",
+      "tree_digest": "887b97211b126279f386aec30ac590a085122f610d264e6e4b8b0793768e1f55",
+      "feed_revision": null,
+      "input_status": null,
+      "open_count": null,
+      "slack": null,
+      "card_ids": [],
+      "manifest_sha256": "fc47b30c765fa24538fd7c07b74ab1df8325a288283b0ce53abd0ec76f10da1c",
+      "page_sha256": "42f46551377df8e19584eeac28d276cd2e81bd05e9bae3c7164142b7e4736b7e",
+      "matching_exports": []
+    }
+  ],
+  "exports": [
+    {
+      "artifact": "export.JoSg9O/source/decision-feed.json",
+      "sha256": "73762cc8b04e45690b7003135ee85679a95720675a3d12a8e19f1b172a770f8d",
+      "tree_digest": "7a11f1e6f117fbc05c207541c3e727252da9786eca1afd5b808cbd454e5fa5c7",
+      "collected_at": "2026-09-17T11:00:51+00:00",
+      "input_status": "valid",
+      "feed_revision": 161,
+      "decisions": 20,
+      "revisions": 53,
+      "slack_status": "invalid",
+      "projected_rows": 0,
+      "missing_latest": null,
+      "missing_revisions": null,
+      "slack_bytes": null
+    },
+    {
+      "artifact": "export.Sb2lX5/source/decision-feed.json",
+      "sha256": "82f3d9b28818acf988ed6fd92a3995bb333cf9d0236d04bfd58df2dbef761351",
+      "tree_digest": "7a11f1e6f117fbc05c207541c3e727252da9786eca1afd5b808cbd454e5fa5c7",
+      "collected_at": "2026-09-17T10:45:12+00:00",
+      "input_status": "valid",
+      "feed_revision": 160,
+      "decisions": 20,
+      "revisions": 53,
+      "slack_status": "invalid",
+      "projected_rows": 0,
+      "missing_latest": null,
+      "missing_revisions": null,
+      "slack_bytes": null
+    },
+    {
+      "artifact": "export.aT9ma9/source/decision-feed.json",
+      "sha256": "d554bcf71c61cb15016a68d389b5bb305241ccde5571698046b9550925df0961",
+      "tree_digest": "7a11f1e6f117fbc05c207541c3e727252da9786eca1afd5b808cbd454e5fa5c7",
+      "collected_at": "2026-09-17T11:34:12+00:00",
+      "input_status": "valid",
+      "feed_revision": 162,
+      "decisions": 20,
+      "revisions": 53,
+      "slack_status": "invalid",
+      "projected_rows": 0,
+      "missing_latest": null,
+      "missing_revisions": null,
+      "slack_bytes": null
+    }
+  ]
+}

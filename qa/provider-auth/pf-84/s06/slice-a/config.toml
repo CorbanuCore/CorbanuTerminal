@@ -1,0 +1,12 @@
+model = "openai.gpt-5.4"
+model_provider = "amazon-bedrock"
+[features]
+named_accounts = true
+[model_providers.amazon-bedrock]
+base_url = "http://127.0.0.1:34300/openai/v1"
+[model_providers.amazon-bedrock.aws]
+region = "us-west-2"
+[projects."/tmp/tmp.SnRbCLioJY/ws"]
+trust_level = "trusted"
+[provider_accounts]
+"amazon-bedrock" = "prod"

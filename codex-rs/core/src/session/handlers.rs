@@ -289,7 +289,14 @@ pub(super) async fn user_input_or_turn_inner(
             )
             .await;
         }
-        Err(SteerInputError::ActiveTurnNotSteerable { .. }) => {
+        Err(
+            err @ (SteerInputError::AuthorizationChanged(_)
+            | SteerInputError::ActiveTurnNotSteerable { .. }),
+        ) => {
+            let items = match err {
+                SteerInputError::AuthorizationChanged(items) => items,
+                _ => items,
+            };
             #[cfg(test)]
             active_turn_not_steerable_defer_hook_for_test().await;
 
@@ -298,6 +305,7 @@ pub(super) async fn user_input_or_turn_inner(
                     items.clone(),
                     additional_context.clone(),
                     client_user_message_id.clone(),
+                    current_context.final_output_json_schema.clone(),
                 )
                 .await
             {
@@ -305,6 +313,20 @@ pub(super) async fn user_input_or_turn_inner(
                     current_context.session_telemetry.user_prompt(&items);
                 }
                 Err(SteerInputError::NoActiveTurn(items)) => {
+                    let Ok(current_context) = sess
+                        .new_turn_with_sub_id(
+                            sub_id.clone(),
+                            SessionSettingsUpdate {
+                                final_output_json_schema: Some(
+                                    current_context.final_output_json_schema.clone(),
+                                ),
+                                ..Default::default()
+                            },
+                        )
+                        .await
+                    else {
+                        return;
+                    };
                     if let Some(id) = parent_turn_id {
                         current_context.turn_metadata_state.set_parent_turn_id(id);
                     }
@@ -403,7 +425,7 @@ pub async fn inter_agent_communication(
     let trigger_turn = communication.trigger_turn;
     sess.input_queue
         .enqueue_mailbox_communication_for_session(
-            &sess.active_turn,
+            sess,
             communication,
             parent_turn_id.filter(|_| trigger_turn),
         )
@@ -492,22 +514,60 @@ pub async fn exec_approval(
     decision: ReviewDecision,
 ) {
     let event_turn_id = turn_id.unwrap_or_else(|| approval_id.clone());
+    let mut stale_amendment = false;
     if let ReviewDecision::ApprovedExecpolicyAmendment {
         proposed_execpolicy_amendment,
     } = &decision
     {
-        match sess
-            .persist_execpolicy_amendment(proposed_execpolicy_amendment)
-            .await
-        {
-            Ok(()) => {
+        // #945: only an answer to an open prompt may save a rule. One with no
+        // open prompt (its turn ended) is dropped by `notify_approval` anyway.
+        let persisted = match sess.pending_approval_shown_under(&approval_id).await {
+            Some(shown_under) => Some(
+                sess.persist_execpolicy_amendment(proposed_execpolicy_amendment, shown_under)
+                    .await,
+            ),
+            None => {
+                tracing::warn!(
+                    "not saving a \"don't ask again\" rule for {approval_id}: no prompt is open"
+                );
+                None
+            }
+        };
+        match persisted {
+            None => {}
+            // #945: the prompt was shown before a security transition. The
+            // rule is not saved; D50 (#1001): nor does the answer approve the
+            // command, which is asked about again under the new level.
+            Some(Ok(None)) => {
+                let message = "The security level changed while this approval was open, so \
+                               \"don't ask again\" was not saved and the answer was not used."
+                    .to_string();
+                sess.send_event_raw(Event {
+                    id: event_turn_id.clone(),
+                    msg: EventMsg::Warning(WarningEvent { message }),
+                })
+                .await;
+                stale_amendment = true;
+            }
+            Some(Ok(Some(crate::exec_policy::AmendmentScope::Saved))) => {
                 sess.record_execpolicy_amendment_message(
                     &event_turn_id,
                     proposed_execpolicy_amendment,
                 )
                 .await;
             }
-            Err(err) => {
+            Some(Ok(Some(crate::exec_policy::AmendmentScope::Session))) => {
+                let message = "This command contains a credential, so the approval applies to \
+                               this session only and was not saved to your rules."
+                    .to_string();
+                let warning = EventMsg::Warning(WarningEvent { message });
+                sess.send_event_raw(Event {
+                    id: event_turn_id.clone(),
+                    msg: warning,
+                })
+                .await;
+            }
+            Some(Err(err)) => {
                 let message = format!("Failed to apply execpolicy amendment: {err}");
                 tracing::warn!("{message}");
                 let warning = EventMsg::Warning(WarningEvent { message });
@@ -519,6 +579,11 @@ pub async fn exec_approval(
             }
         }
     }
+    let decision = if stale_amendment {
+        ReviewDecision::Approved
+    } else {
+        decision
+    };
     match decision {
         ReviewDecision::Abort => {
             sess.interrupt_task().await;
@@ -729,6 +794,8 @@ async fn shutdown_session_runtime(sess: &Arc<Session>) {
         sess.services.mcp_runtime.shutdown().await;
     }
     sess.guardian_review_session.shutdown().await;
+    // PF-23-S03: run end revokes this session's brokered credentials.
+    crate::security::transition::RevocationSink::revoke(sess.as_ref());
 
     crate::hook_runtime::run_session_end_hooks(sess).await;
 }
@@ -776,6 +843,8 @@ pub async fn shutdown(sess: &Arc<Session>, sub_id: String) -> bool {
         };
         sess.send_event_raw(event).await;
     }
+    // #872: nothing writes this thread's items after its shutdown.
+    crate::home_access::note_thread_ended(sess.thread_id());
 
     let event = Event {
         id: sub_id,
@@ -832,7 +901,41 @@ pub(super) async fn submission_loop(
 ) {
     // To break out of this loop, send Op::Shutdown.
     let mut shutdown_received = false;
-    while let Ok(sub) = rx_sub.recv().await {
+    loop {
+        let sub = tokio::select! {
+            sub = rx_sub.recv() => match sub {
+                Ok(sub) => sub,
+                Err(_) => break,
+            },
+            (input, final_output_json_schema) = sess.input_queue.next_interrupted_deferred_input() => {
+                let (op, client_user_message_id) = match input {
+                    TurnInput::UserInput { content, client_id } => (Op::UserInput {
+                        items: content,
+                        final_output_json_schema,
+                        responsesapi_client_metadata: None,
+                        additional_context: Default::default(),
+                        thread_settings: Default::default(),
+                    }, client_id),
+                    TurnInput::ResponseItem(item) => {
+                        if let Err(items) = sess.inject_extension_if_running(vec![item]).await {
+                            let context = sess.new_default_turn().await;
+                            sess.record_conversation_items(&context, &items).await;
+                        }
+                        continue;
+                    }
+                    TurnInput::InterAgentCommunication(communication) => (
+                        Op::InterAgentCommunication { communication }, None,
+                    ),
+                };
+                Submission {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    op,
+                    parent_turn_id: None,
+                    client_user_message_id,
+                    trace: None,
+                }
+            }
+        };
         debug!(?sub, "Submission");
         let dispatch_span = submission_dispatch_span(&sub);
         let should_exit = async {
@@ -998,6 +1101,7 @@ pub(super) async fn submission_loop(
         {
             warn!("failed to shutdown thread persistence after submission channel closed: {err}");
         }
+        crate::home_access::note_thread_ended(sess.thread_id());
     }
     debug!("Agent loop exited");
 }

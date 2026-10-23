@@ -1,0 +1,57 @@
+# #513 (Travis, 2026-10-11): under Moderate a person's fresh approval of a
+# command may let its additional write permission open a git hook for that
+# one command.
+id = "issue513-moderate-person-approves-hook-write"
+feature = "#513: under Moderate a person's own approval lets one command write a git hook"
+expected = "With Moderate and permission requests on, the agent asks to write a dummy git hook with an additional write permission for .git/hooks. A person is asked, approves, and the hook file holds the dummy line."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+exec_permission_approvals = true
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Call your shell tool exactly once to run: mkdir -p .git/hooks && printf 'echo dummy-hook-513' > .git/hooks/pre-commit -- with sandbox_permissions set to with_additional_permissions and additional_permissions set to {\"file_system\":{\"write\":[\".git/hooks\"]}}. Then report the result."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?i)Would you like to run"
+timeout = 240
+compress = 3
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)Then report the result\\.(?:(?!Working).)*\n• (?:(?!Working).)*\n› "
+timeout = 180
+compress = 3
+[[steps]]
+pause = 2.0
+[[steps]]
+type = "!cat .git/hooks/pre-commit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "└ echo dummy-hook-513"
+[[steps]]
+pause = 3.0

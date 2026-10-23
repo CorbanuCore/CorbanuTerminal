@@ -25,7 +25,7 @@ pub fn apply_rollout_item(
         RolloutItem::InterAgentCommunication(_)
         | RolloutItem::InterAgentCommunicationMetadata { .. } => {}
         RolloutItem::Compacted(_) => {}
-        RolloutItem::WorldState(_) => {}
+        RolloutItem::WorldState(_) | RolloutItem::SourceOrigin(_) => {}
     }
     if metadata.model_provider.is_empty() {
         metadata.model_provider = default_provider.to_string();
@@ -52,7 +52,8 @@ pub fn rollout_item_affects_thread_metadata(item: &RolloutItem) -> bool {
         | RolloutItem::InterAgentCommunication(_)
         | RolloutItem::InterAgentCommunicationMetadata { .. }
         | RolloutItem::Compacted(_)
-        | RolloutItem::WorldState(_) => false,
+        | RolloutItem::WorldState(_)
+        | RolloutItem::SourceOrigin(_) => false,
     }
 }
 
@@ -433,6 +434,7 @@ mod tests {
                 file_system_sandbox_policy: None,
                 model: "gpt-5".to_string(),
                 model_provider: None,
+                provider_account: None,
                 comp_hash: None,
                 personality: None,
                 collaboration_mode: None,
@@ -440,6 +442,7 @@ mod tests {
                 multi_agent_mode: None,
                 realtime_active: None,
                 effort: None,
+                security_level: None,
                 summary: codex_protocol::config_types::ReasoningSummary::Auto,
             }),
             "test-provider",
@@ -480,6 +483,7 @@ mod tests {
                 file_system_sandbox_policy: None,
                 model: "gpt-5".to_string(),
                 model_provider: None,
+                provider_account: None,
                 comp_hash: None,
                 personality: None,
                 collaboration_mode: None,
@@ -487,6 +491,7 @@ mod tests {
                 multi_agent_mode: None,
                 realtime_active: None,
                 effort: None,
+                security_level: None,
                 summary: codex_protocol::config_types::ReasoningSummary::Auto,
             }),
             "test-provider",
@@ -523,6 +528,7 @@ mod tests {
                 file_system_sandbox_policy: None,
                 model: "gpt-5".to_string(),
                 model_provider: None,
+                provider_account: None,
                 comp_hash: None,
                 personality: None,
                 collaboration_mode: None,
@@ -530,6 +536,7 @@ mod tests {
                 multi_agent_mode: None,
                 realtime_active: None,
                 effort: Some(ReasoningEffort::High),
+                security_level: None,
                 summary: codex_protocol::config_types::ReasoningSummary::Auto,
             }),
             "test-provider",
@@ -563,6 +570,7 @@ mod tests {
                 file_system_sandbox_policy: None,
                 model: "gpt-5".to_string(),
                 model_provider: None,
+                provider_account: None,
                 comp_hash: None,
                 personality: None,
                 collaboration_mode: None,
@@ -570,6 +578,7 @@ mod tests {
                 multi_agent_mode: None,
                 realtime_active: None,
                 effort: Some(ReasoningEffort::High),
+                security_level: None,
                 summary: codex_protocol::config_types::ReasoningSummary::Auto,
             }),
             "test-provider",

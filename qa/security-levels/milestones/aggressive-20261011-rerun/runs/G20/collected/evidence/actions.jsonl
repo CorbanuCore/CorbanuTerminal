@@ -1,0 +1,42 @@
+{"time_ns": 1791797490641442000, "utc": "2026-10-12T09:31:30Z", "requested": "fixture", "args": ["PRE_CASE"]}
+{"time_ns": 1791797490714422000, "utc": "2026-10-12T09:31:30Z", "requested": "start", "args": []}
+{"time_ns": 1791797492767660000, "utc": "2026-10-12T09:31:32Z", "executed": "start", "argv": ["/opt/agms/bin/agms-product", "zai", "glm-5.3-flash"]}
+{"time_ns": 1791797499552085000, "utc": "2026-10-12T09:31:39Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791797499558822000, "utc": "2026-10-12T09:31:39Z", "executed": "key", "key": "Enter", "pty_offset": 1556}
+{"time_ns": 1791797499758615000, "utc": "2026-10-12T09:31:39Z", "requested": "wait", "args": ["Permissive|Permissions|security", "30"]}
+{"time_ns": 1791797530217368000, "utc": "2026-10-12T09:32:10Z", "executed": "wait", "pattern": "Permissive|Permissions|security", "matched": false}
+{"time_ns": 1791797530265259000, "utc": "2026-10-12T09:32:10Z", "requested": "screen", "args": ["INITIAL"]}
+{"time_ns": 1791797545004815000, "utc": "2026-10-12T09:32:25Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791797545014764000, "utc": "2026-10-12T09:32:25Z", "executed": "text", "text": "/permissions", "pty_offset": 5151}
+{"time_ns": 1791797545078707000, "utc": "2026-10-12T09:32:25Z", "requested": "screen", "args": ["BEFORE_PERMISSIONS_ENTER"]}
+{"time_ns": 1791797545168740000, "utc": "2026-10-12T09:32:25Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791797545180965000, "utc": "2026-10-12T09:32:25Z", "executed": "key", "key": "Enter", "pty_offset": 5393}
+{"time_ns": 1791797545420641000, "utc": "2026-10-12T09:32:25Z", "requested": "wait", "args": ["permissions|security|Permissive|Full Access", "30"]}
+{"time_ns": 1791797545434243000, "utc": "2026-10-12T09:32:25Z", "executed": "wait", "pattern": "permissions|security|Permissive|Full Access", "matched": true}
+{"time_ns": 1791797545498256000, "utc": "2026-10-12T09:32:25Z", "requested": "screen", "args": ["PERMISSIONS_BEFORE_SELECT"]}
+{"time_ns": 1791797552091167000, "utc": "2026-10-12T09:32:32Z", "requested": "key", "args": ["3"]}
+{"time_ns": 1791797552099793000, "utc": "2026-10-12T09:32:32Z", "executed": "key", "key": "3", "pty_offset": 6379}
+{"time_ns": 1791797552303959000, "utc": "2026-10-12T09:32:32Z", "requested": "wait", "args": ["Enable full access|Full Access|Update Model Permissions", "20"]}
+{"time_ns": 1791797552310835000, "utc": "2026-10-12T09:32:32Z", "executed": "wait", "pattern": "Enable full access|Full Access|Update Model Permissions", "matched": true}
+{"time_ns": 1791797552349692000, "utc": "2026-10-12T09:32:32Z", "requested": "screen", "args": ["FULL_ACCESS_CONFIRMATION"]}
+{"time_ns": 1791797557443525000, "utc": "2026-10-12T09:32:37Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791797557452562000, "utc": "2026-10-12T09:32:37Z", "executed": "key", "key": "Enter", "pty_offset": 7557}
+{"time_ns": 1791797557670705000, "utc": "2026-10-12T09:32:37Z", "requested": "wait", "args": ["Update Model Permissions|Ask for approval|Enable full access", "20"]}
+{"time_ns": 1791797557678920000, "utc": "2026-10-12T09:32:37Z", "executed": "wait", "pattern": "Update Model Permissions|Ask for approval|Enable full access", "matched": true}
+{"time_ns": 1791797557722414000, "utc": "2026-10-12T09:32:37Z", "requested": "screen", "args": ["AFTER_CANCEL"]}
+{"time_ns": 1791797567432843000, "utc": "2026-10-12T09:32:47Z", "requested": "key", "args": ["Escape"]}
+{"time_ns": 1791797567446510000, "utc": "2026-10-12T09:32:47Z", "executed": "key", "key": "Escape", "pty_offset": 8787}
+{"time_ns": 1791797567646891000, "utc": "2026-10-12T09:32:47Z", "requested": "wait", "args": ["Improve documentation", "10"]}
+{"time_ns": 1791797567655238000, "utc": "2026-10-12T09:32:47Z", "executed": "wait", "pattern": "Improve documentation", "matched": true}
+{"time_ns": 1791797567694165000, "utc": "2026-10-12T09:32:47Z", "requested": "screen", "args": ["PROMPT_AFTER_CANCEL"]}
+{"time_ns": 1791797567757014000, "utc": "2026-10-12T09:32:47Z", "requested": "text", "args": ["/permissions"]}
+{"time_ns": 1791797567764419000, "utc": "2026-10-12T09:32:47Z", "executed": "text", "text": "/permissions", "pty_offset": 9291}
+{"time_ns": 1791797567820673000, "utc": "2026-10-12T09:32:47Z", "requested": "screen", "args": ["BEFORE_REOPEN_ENTER"]}
+{"time_ns": 1791797567884801000, "utc": "2026-10-12T09:32:47Z", "requested": "key", "args": ["Enter"]}
+{"time_ns": 1791797567891812000, "utc": "2026-10-12T09:32:47Z", "executed": "key", "key": "Enter", "pty_offset": 9537}
+{"time_ns": 1791797568109848000, "utc": "2026-10-12T09:32:48Z", "requested": "wait", "args": ["Update Model Permissions|Ask for approval", "20"]}
+{"time_ns": 1791797568121493000, "utc": "2026-10-12T09:32:48Z", "executed": "wait", "pattern": "Update Model Permissions|Ask for approval", "matched": true}
+{"time_ns": 1791797568173601000, "utc": "2026-10-12T09:32:48Z", "requested": "screen", "args": ["REOPENED_PERMISSIONS"]}
+{"time_ns": 1791797585780085000, "utc": "2026-10-12T09:33:05Z", "requested": "fixture", "args": ["POST_CASE"]}
+{"time_ns": 1791797585823002000, "utc": "2026-10-12T09:33:05Z", "requested": "stop", "args": []}
+{"time_ns": 1791797585830668000, "utc": "2026-10-12T09:33:05Z", "executed": "stop"}

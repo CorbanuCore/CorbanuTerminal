@@ -1,0 +1,13 @@
+Freeze precondition from the amendment review ("on_timeout: stop inside an if branch ends the whole driver"), checked by
+the integrator on the host at 2026-10-14T23:55Z with h/agms-drive (paths pointed at a scratch folder, /bin/cat as the
+"product"; no candidate involved). Driver T2: if(then: if(then: mark "inner", wait "(?!)" 1 s stop), mark "SHOULD NOT
+REACH 1"), mark "SHOULD NOT REACH 2". Log:
+2026-10-14T23:55:29.181Z #1 start [] -> rc=0
+2026-10-14T23:55:29.235Z #2 if "(?s)\\A(?!.*nothing-here)" -> then
+2026-10-14T23:55:29.284Z #3 if "(?s)\\A" -> then
+2026-10-14T23:55:29.284Z #4 mark MARK inner
+2026-10-14T23:55:30.355Z #5 wait "(?!)" 1s -> TIMEOUT
+2026-10-14T23:55:30.355Z DRIVER-STOPPED at step #5: wait timed out (on_timeout=stop)
+2026-10-14T23:55:30.355Z DRIVER-END stopped early
+An earlier run of the same check (23:55:15Z) used the inner regex "." and took the else branch on the blank screen (no
+DOTALL), so it did not exercise the halt; it is reported here and was replaced by "(?s)\A".

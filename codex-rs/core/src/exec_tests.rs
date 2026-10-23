@@ -569,10 +569,7 @@ fn windows_restricted_token_rejects_split_only_filesystem_policies() {
             &temp_dir.path().abs(),
             WindowsSandboxLevel::RestrictedToken,
         ),
-        Some(
-            "windows unelevated restricted-token sandbox cannot enforce split filesystem read restrictions directly; refusing to run unsandboxed"
-                .to_string()
-        )
+        Some(codex_sandboxing::UNELEVATED_READ_ROOTS_REFUSAL.to_string())
     );
 }
 
@@ -669,7 +666,7 @@ fn windows_restricted_token_supports_full_read_split_write_read_carveouts() {
             read_roots_override: None,
             read_roots_include_platform_defaults: false,
             write_roots_override: None,
-            additional_deny_read_paths: vec![],
+            additional_deny_read: Default::default(),
             additional_deny_write_paths: expected_deny_write_paths,
         }))
     );
@@ -718,10 +715,7 @@ fn windows_restricted_token_rejects_unreadable_split_carveouts() {
             &cwd,
             WindowsSandboxLevel::RestrictedToken,
         ),
-        Err(
-            "windows unelevated restricted-token sandbox cannot enforce deny-read restrictions directly; refusing to run unsandboxed"
-                .to_string()
-        )
+        Err(codex_sandboxing::UNELEVATED_DENY_READ_REFUSAL.to_string())
     );
 }
 
@@ -757,7 +751,7 @@ fn windows_elevated_supports_split_restricted_read_roots() {
             read_roots_override: Some(vec![expected_docs]),
             read_roots_include_platform_defaults: false,
             write_roots_override: None,
-            additional_deny_read_paths: vec![],
+            additional_deny_read: Default::default(),
             additional_deny_write_paths: vec![],
         }))
     );
@@ -811,7 +805,7 @@ fn windows_elevated_supports_split_write_read_carveouts() {
             read_roots_override: None,
             read_roots_include_platform_defaults: false,
             write_roots_override: None,
-            additional_deny_read_paths: vec![],
+            additional_deny_read: Default::default(),
             additional_deny_write_paths: vec![
                 codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(expected_docs)
                     .expect("absolute docs"),
@@ -914,12 +908,12 @@ fn windows_elevated_supports_unreadable_split_carveouts() {
             read_roots_override: None,
             read_roots_include_platform_defaults: false,
             write_roots_override: None,
-            additional_deny_read_paths: vec![
+            additional_deny_read: codex_windows_sandbox::DenyReadTargets::from_exact_paths([
                 codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(
                     expected_blocked.clone(),
                 )
                 .expect("absolute blocked"),
-            ],
+            ]),
             additional_deny_write_paths: vec![
                 codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(expected_blocked)
                     .expect("absolute blocked"),
@@ -975,10 +969,24 @@ fn windows_elevated_supports_unreadable_globs() {
             read_roots_override: None,
             read_roots_include_platform_defaults: false,
             write_roots_override: None,
-            additional_deny_read_paths: vec![
-                codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(secret)
-                    .expect("absolute secret"),
-            ],
+            additional_deny_read: {
+                let mut targets = codex_windows_sandbox::DenyReadTargets::default();
+                targets.add(
+                    codex_windows_sandbox::DenyReadRule::Glob(
+                        temp_dir
+                            .path()
+                            .join("**")
+                            .join("*.env")
+                            .to_string_lossy()
+                            .into_owned(),
+                    ),
+                    vec![
+                        codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(secret)
+                            .expect("absolute secret"),
+                    ],
+                );
+                targets
+            },
             additional_deny_write_paths: vec![],
         }))
     );
@@ -1219,6 +1227,14 @@ async fn process_exec_tool_call_respects_cancellation_token() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn cancellation_termination_grace_period_stays_50_ms_outside_test_overrides() {
+    assert_eq!(
+        cancellation_termination_grace_period(),
+        Duration::from_millis(50)
+    );
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn process_exec_tool_call_cancellation_allows_sigterm_cleanup() -> Result<()> {
@@ -1228,6 +1244,9 @@ async fn process_exec_tool_call_cancellation_allows_sigterm_cleanup() -> Result<
     let descendant_pid_marker = temp_dir.path().join("descendant-pid");
     // The parent handles TERM and records cleanup, while a TERM-ignoring child
     // proves cancellation still escalates any survivors in the process group.
+    // The parent waits on its sleep with `wait`, which a trapped TERM interrupts at
+    // once. Waiting on a foreground sleep would defer the trap until that sleep
+    // exits, and a sleep forked as TERM arrives may never receive it.
     let command = vec![
         "/bin/sh".to_string(),
         "-c".to_string(),
@@ -1235,7 +1254,7 @@ async fn process_exec_tool_call_cancellation_allows_sigterm_cleanup() -> Result<
 printf '%s' "$!" > "$DESCENDANT_PID_MARKER"
 trap 'printf cleaned > "$CLEANUP_MARKER"; exit 0' TERM
 printf ready > "$READY_MARKER"
-while :; do sleep 1; done"#
+while :; do sleep 1 & wait $!; done"#
             .to_string(),
     ];
     let cwd = codex_utils_absolute_path::AbsolutePathBuf::current_dir()?;
@@ -1279,16 +1298,24 @@ while :; do sleep 1; done"#
         arg0: None,
     };
 
+    // The trap only has to run before the grace period ends. Production's 50 ms
+    // (pinned by `cancellation_termination_grace_period_stays_50_ms_outside_test_overrides`)
+    // can expire first on a loaded runner, leaving the cleanup marker empty
+    // (#349), so this exec gets 2 s; the 5 s bound still covers readiness, the
+    // grace period and the escalation.
     let result = timeout(
         Duration::from_secs(5),
-        process_exec_tool_call(
-            params,
-            &PermissionProfile::Disabled,
-            &cwd,
-            std::slice::from_ref(&cwd),
-            &None,
-            /*use_legacy_landlock*/ false,
-            /*stdout_stream*/ None,
+        CANCELLATION_TERMINATION_GRACE_PERIOD_OVERRIDE.scope(
+            Duration::from_secs(2),
+            process_exec_tool_call(
+                params,
+                &PermissionProfile::Disabled,
+                &cwd,
+                std::slice::from_ref(&cwd),
+                &None,
+                /*use_legacy_landlock*/ false,
+                /*stdout_stream*/ None,
+            ),
         ),
     )
     .await

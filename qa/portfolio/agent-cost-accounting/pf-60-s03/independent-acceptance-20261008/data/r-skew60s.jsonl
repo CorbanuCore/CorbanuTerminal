@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a115e9-3f49-7691-bcd1-7109b1ce6911"}
+{"type":"turn.started"}
+{"type":"error","message":"Fatal error: Native Anthropic accounting failed; request stopped without a repair send"}
+{"type":"turn.failed","error":{"message":"Fatal error: Native Anthropic accounting failed; request stopped without a repair send"}}

@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a120bd-f32f-7272-aa4a-e4ff71fe2011"}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 401 Unauthorized: The API Key appears to be invalid or may have expired. Please verify your credentials and try again., url: https://api.kimi.com/coding/v1/chat/completions, cf-ray: a47d8df3aeafdf0b-SEA"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: The API Key appears to be invalid or may have expired. Please verify your credentials and try again., url: https://api.kimi.com/coding/v1/chat/completions, cf-ray: a47d8df3aeafdf0b-SEA"}}

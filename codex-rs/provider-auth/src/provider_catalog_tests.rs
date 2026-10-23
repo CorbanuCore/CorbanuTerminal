@@ -131,6 +131,27 @@ fn built_in_wire_siblings_share_one_api_key_setup_identity() {
     );
 }
 
+/// #653: the OpenAI-style connection of a shared setup comes first, whatever
+/// the names, so callers taking the first one get the default connection.
+#[test]
+fn openai_style_connection_of_a_shared_setup_comes_first() {
+    let mut claude_style = custom_api_key_provider("Shared", "SHARED_ROUTE_KEY");
+    claude_style.wire_api = codex_model_provider_info::WireApi::Anthropic;
+    let mut openai_style = custom_api_key_provider("Shared", "SHARED_ROUTE_KEY");
+    openai_style.wire_api = codex_model_provider_info::WireApi::Chat;
+    let catalog = ProviderCatalog::from_runtime_providers(&HashMap::from([
+        ("a-claude".to_string(), claude_style),
+        ("b-openai".to_string(), openai_style),
+    ]));
+    assert_eq!(
+        catalog.entries()[0].runtime_provider_ids,
+        vec![
+            ProviderRuntimeId("b-openai".to_string()),
+            ProviderRuntimeId("a-claude".to_string()),
+        ]
+    );
+}
+
 #[test]
 fn custom_env_key_providers_are_adjacent_deduplicated_and_deterministic() {
     let alpha = custom_api_key_provider("Alpha", "SHARED_API_KEY");
@@ -209,10 +230,11 @@ fn corbanu_runtime_aliases_deduplicate_without_leaking_legacy_catalog_identity()
                 id: ProviderCatalogId(CORBANU_PLAN_PROVIDER_ID.to_string()),
                 display_name: "Corbanu API".to_string(),
                 runtime_provider_ids: vec![
+                    // OpenAI-style connections first (#653).
                     ProviderRuntimeId(CORBANU_PLAN_PROVIDER_ID.to_string()),
-                    ProviderRuntimeId(CORBANU_PLAN_ANTHROPIC_PROVIDER_ID.to_string()),
                     ProviderRuntimeId(CORBANU_TERMINAL_PLAN_PROVIDER_ID.to_string()),
                     ProviderRuntimeId(PFTERMINAL_PLAN_PROVIDER_ID.to_string()),
+                    ProviderRuntimeId(CORBANU_PLAN_ANTHROPIC_PROVIDER_ID.to_string()),
                     ProviderRuntimeId(PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID.to_string()),
                 ],
                 setup_capabilities: ProviderSetupCapabilities::one(

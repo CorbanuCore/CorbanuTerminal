@@ -1,12 +1,12 @@
 //! Pure destination-policy decisions for PF-33-S03.
 //!
-//! This module deliberately opens no sockets and is not registered in the
-//! network-proxy runtime. Callers must supply the complete DNS answer set they
-//! observed; filtering that set is a security-significant contract violation.
-//! Redirect decisions cover one hop, so consumers must retain chain history and
-//! enforce hop limits. Real resolver, connected-peer, retry, pool, proxy,
+//! This module deliberately opens no sockets. Its runtime consumer is
+//! `destination.rs` (PF-33-S01). Callers must supply the complete DNS answer
+//! set they observed; filtering that set is a security-significant contract
+//! violation. Redirect decisions cover one hop, so consumers must retain chain
+//! history and enforce hop limits. Connected-peer pinning, pool, proxy,
 //! operator-specific translation-prefix, and alternate-egress enforcement
-//! belongs to PF-33-S01/S02.
+//! belongs to PF-33-S02.
 
 use std::collections::BTreeSet;
 use std::net::IpAddr;
@@ -811,7 +811,9 @@ fn is_public_ipv6(address: Ipv6Addr) -> bool {
         && !(segments[0] == 0x3fff && segments[1] & 0xf000 == 0)
 }
 
-fn is_intrinsically_private_name(host: &str) -> bool {
+/// Names that are private by construction (single label or a reserved/local
+/// suffix). Consumers may refuse them before any resolver sees the name.
+pub fn is_intrinsically_private_name(host: &str) -> bool {
     if !host.contains('.') {
         return true;
     }

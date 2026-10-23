@@ -199,6 +199,19 @@ async fn apply_role_to_config_inner(
     // root -> Troll -> Orc). Rebuilding from persisted layers must not collapse that effective
     // runtime limit back to the upstream default when a role file is applied.
     next_config.agent_max_depth = config.agent_max_depth;
+    // PF-84: the rebuilt layers only know `[provider_accounts]`; a child that
+    // stays on its parent's provider keeps the parent's live account (from
+    // `--account`, resume or a spawn `account`).
+    if next_config.model_provider_id == config.model_provider_id {
+        let account = config.model_provider.account.clone();
+        if let Some(provider) = next_config
+            .model_providers
+            .get_mut(&next_config.model_provider_id)
+        {
+            provider.account = account.clone();
+        }
+        next_config.model_provider.account = account;
+    }
     *config = next_config;
     Ok(())
 }
@@ -276,7 +289,7 @@ mod reload {
         let config_layer_stack = build_config_layer_stack(config, &role_layer_toml)?;
         let merged_config = deserialize_effective_config(config, &config_layer_stack)?;
 
-        let next_config = Config::load_config_with_layer_stack(
+        let mut next_config = Config::load_config_with_layer_stack(
             LOCAL_FS.as_ref(),
             merged_config,
             overrides,
@@ -284,6 +297,54 @@ mod reload {
             config_layer_stack,
         )
         .await?;
+        next_config.accounting.clone_from(&config.accounting);
+        // Overlay explicit role fields onto the embedding's runtime provider,
+        // including nested settings. A whole-provider copy loses role overrides;
+        // copying selected fields would lose the next supported provider setting.
+        let accounting_wire = match &config.accounting {
+            crate::config::AccountingMode::Provider { .. } => Some(config.model_provider.wire_api),
+            crate::config::AccountingMode::DirectAnthropic { .. }
+                if config.model_provider_id == "anthropic" =>
+            {
+                Some(codex_model_provider_info::WireApi::Anthropic)
+            }
+            crate::config::AccountingMode::DirectOpenAiResponsesHttp { .. }
+            | crate::config::AccountingMode::DirectOpenAiResponses { .. }
+                if config.model_provider_id == "openai" =>
+            {
+                Some(codex_model_provider_info::WireApi::Responses)
+            }
+            crate::config::AccountingMode::DirectOpenAiChat { .. }
+                if config.model_provider_id == "openai" =>
+            {
+                Some(codex_model_provider_info::WireApi::Chat)
+            }
+            _ => None,
+        };
+        if next_config.model_provider_id == config.model_provider_id
+            && let Some(accounting_wire) = accounting_wire
+        {
+            let mut provider = TomlValue::try_from(&config.model_provider)?;
+            if let Some(overlay) = role_layer_toml
+                .get("model_providers")
+                .and_then(|providers| providers.get(&config.model_provider_id))
+            {
+                codex_config::merge_toml_values(&mut provider, overlay);
+            }
+            let provider: codex_model_provider_info::ModelProviderInfo = provider.try_into()?;
+            provider.validate().map_err(anyhow::Error::msg)?;
+            // An explicit wire change cannot bypass the bound Messages adapter.
+            // Endpoint changes remain visible to its existing pre-send rejection.
+            anyhow::ensure!(
+                provider.wire_api == accounting_wire,
+                "this role changes the provider's wire_api, which developer accounting cannot follow; \
+                 remove wire_api from the role's [model_providers] overlay"
+            );
+            next_config
+                .model_providers
+                .insert(config.model_provider_id.clone(), provider.clone());
+            next_config.model_provider = provider;
+        }
         Ok(next_config)
     }
 

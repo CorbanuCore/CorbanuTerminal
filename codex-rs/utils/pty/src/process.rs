@@ -95,6 +95,9 @@ pub(crate) enum PtyMasterHandle {
 pub struct PtyHandles {
     pub _slave: Option<Box<dyn SlavePty + Send>>,
     pub(crate) _master: PtyMasterHandle,
+    /// Dropping it stops the output reader (#780, `spawn_pty_reader`).
+    #[cfg(unix)]
+    pub(crate) _reader_stop: std::io::PipeWriter,
 }
 
 impl fmt::Debug for PtyHandles {
@@ -245,6 +248,16 @@ impl ProcessHandle {
     /// Attempts to kill the child and abort helper tasks.
     pub fn terminate(&self) {
         self.request_terminate();
+
+        // #780: a PTY reader runs on a blocking thread, which aborting its
+        // task does not stop. Dropping the handles stops it (`_reader_stop`)
+        // and closes the master, which hangs up the terminal. Stopping the
+        // reader alone is not enough: on macOS a killed process still waits
+        // in its last close of the terminal until its output is read.
+        #[cfg(unix)]
+        if let Ok(mut handles) = self._pty_handles.lock() {
+            handles.take();
+        }
 
         if let Ok(mut h) = self.reader_handle.lock()
             && let Some(handle) = h.take()

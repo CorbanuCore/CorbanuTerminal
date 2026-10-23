@@ -1,0 +1,5 @@
+{"t": 1791769392.376, "path": "/openai/v1/responses", "model": "openai.gpt-5.4", "signed_by": "AKIDWORKPROFILE", "region": "us-west-2"}
+{"t": 1791769393.088, "path": "/openai/v1/responses", "model": "openai.gpt-5.4", "signed_by": "AKIDOTHERPROFILE", "region": "us-west-2"}
+{"t": 1791769393.526, "path": "/openai/v1/responses", "model": "openai.gpt-5.4", "signed_by": "bearer", "region": null}
+{"t": 1791769402.475, "path": "/openai/v1/responses", "model": "openai.gpt-5.4", "signed_by": "AKIDWORKPROFILE", "region": "us-west-2"}
+{"t": 1791769424.716, "path": "/openai/v1/responses", "model": "openai.gpt-5.4", "signed_by": "AKIDOTHERPROFILE", "region": "us-west-2"}

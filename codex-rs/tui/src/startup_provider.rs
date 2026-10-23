@@ -38,8 +38,12 @@ pub(crate) async fn resolve(
     openai: Option<OpenAiAuthMetadata>,
 ) -> StartupProviderResolution {
     let mut account = ProviderAccountMetadata::discover(config).await;
+    // The app server reports an OPENAI_API_KEY fallback as a plain API key;
+    // keep discovery's finer "environment" source for that case.
     if config.model_provider_id == codex_model_provider_info::OPENAI_PROVIDER_ID
         && let Some(openai) = openai
+        && !(openai == OpenAiAuthMetadata::ApiKey
+            && account.openai == OpenAiAuthMetadata::EnvironmentApiKey)
     {
         account.openai = openai;
     }
@@ -91,6 +95,18 @@ pub(crate) fn openai_metadata(login_status: crate::LoginStatus) -> OpenAiAuthMet
     }
 }
 
+/// The login method the default login must use for onboarding. PF-84-S06
+/// (#570): a session on a named sign-in account was checked against the
+/// login restrictions before startup and does not use the default login, so
+/// a required ChatGPT login does not send it to the sign-in screen.
+pub(crate) fn default_login_forced_method(config: &Config) -> Option<crate::ForcedLoginMethod> {
+    if config.runs_on_named_sign_in_account() {
+        None
+    } else {
+        config.forced_login_method
+    }
+}
+
 pub(crate) fn should_show_provider_onboarding(
     show_trust_screen: bool,
     requires_provider_onboarding: bool,
@@ -111,27 +127,54 @@ mod tests {
     #[test]
     fn recovered_install_skips_provider_onboarding_but_not_other_gates() {
         assert!(!should_show_provider_onboarding(
-            false,
-            false,
-            None,
+            /*show_trust_screen*/ false,
+            /*requires_provider_onboarding*/ false,
+            /*forced_login_method*/ None,
             crate::LoginStatus::NotAuthenticated,
         ));
         assert!(should_show_provider_onboarding(
-            true,
-            false,
-            None,
+            /*show_trust_screen*/ true,
+            /*requires_provider_onboarding*/ false,
+            /*forced_login_method*/ None,
             crate::LoginStatus::NotAuthenticated,
         ));
         assert!(should_show_provider_onboarding(
-            false,
-            false,
+            /*show_trust_screen*/ false,
+            /*requires_provider_onboarding*/ false,
             Some(crate::ForcedLoginMethod::Chatgpt),
             crate::LoginStatus::NotAuthenticated,
         ));
         assert!(should_show_provider_onboarding(
-            false,
-            true,
-            None,
+            /*show_trust_screen*/ false,
+            /*requires_provider_onboarding*/ true,
+            /*forced_login_method*/ None,
+            crate::LoginStatus::NotAuthenticated,
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_named_session_needs_no_default_login_screen() {
+        let home = tempfile::tempdir().unwrap();
+        let mut config = crate::legacy_core::config::ConfigBuilder::default()
+            .codex_home(home.path().to_path_buf())
+            .build()
+            .await
+            .unwrap();
+        config.model_provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+        config.forced_login_method = Some(crate::ForcedLoginMethod::Chatgpt);
+        assert_eq!(
+            default_login_forced_method(&config),
+            Some(crate::ForcedLoginMethod::Chatgpt)
+        );
+        config.model_provider.account = Some(codex_model_provider_info::NamedProviderAccount {
+            provider_id: "openai".to_string(),
+            name: "work".to_string(),
+        });
+        assert_eq!(default_login_forced_method(&config), None);
+        assert!(!should_show_provider_onboarding(
+            /*show_trust_screen*/ false,
+            /*requires_provider_onboarding*/ false,
+            default_login_forced_method(&config),
             crate::LoginStatus::NotAuthenticated,
         ));
     }
@@ -144,7 +187,7 @@ mod tests {
             .build()
             .await
             .unwrap();
-        let cached = resolve(&config, None).await;
+        let cached = resolve(&config, /*openai*/ None).await;
         let expected = cached.current.clone();
 
         let reused = resolve_for_app(&config, Some(cached)).await;
@@ -160,7 +203,7 @@ mod tests {
             .build()
             .await
             .unwrap();
-        let cached = resolve(&config, None).await;
+        let cached = resolve(&config, /*openai*/ None).await;
         config.model_provider_id = "provider-added-during-onboarding".to_string();
 
         let refreshed = resolve_for_app(&config, Some(cached)).await;
@@ -250,7 +293,7 @@ mod tests {
             .model_providers
             .insert("command-provider".into(), provider);
 
-        let resolution = resolve(&config, None).await;
+        let resolution = resolve(&config, /*openai*/ None).await;
 
         assert!(!resolution.requires_provider_onboarding);
         assert!(
@@ -280,7 +323,7 @@ mod tests {
             .await
             .unwrap();
 
-        let resolution = resolve(&config, None).await;
+        let resolution = resolve(&config, /*openai*/ None).await;
 
         assert!(resolution.requires_provider_onboarding);
         assert!(matches!(
@@ -305,7 +348,7 @@ mod tests {
         config.model_provider_id = "removed-custom-provider".into();
         config.model = Some("custom-model".into());
 
-        let resolution = resolve(&config, None).await;
+        let resolution = resolve(&config, /*openai*/ None).await;
 
         assert!(!resolution.requires_provider_onboarding);
         assert!(matches!(
@@ -353,7 +396,7 @@ mod tests {
         )
         .unwrap();
 
-        let resolution = resolve(&config, None).await;
+        let resolution = resolve(&config, /*openai*/ None).await;
 
         assert!(!resolution.requires_provider_onboarding);
         assert!(matches!(
@@ -384,7 +427,7 @@ mod tests {
             config.model_provider.clone(),
         )]);
 
-        let resolution = resolve(&config, None).await;
+        let resolution = resolve(&config, /*openai*/ None).await;
 
         assert!(!resolution.requires_provider_onboarding);
         assert!(matches!(
@@ -414,7 +457,7 @@ mod tests {
             config.model_provider.clone(),
         )]);
 
-        let resolution = resolve(&config, None).await;
+        let resolution = resolve(&config, /*openai*/ None).await;
 
         assert!(!resolution.requires_provider_onboarding);
         assert!(matches!(

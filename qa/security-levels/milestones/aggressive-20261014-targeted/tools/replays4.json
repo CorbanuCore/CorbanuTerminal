@@ -1,0 +1,26 @@
+{
+ "Q02b": {
+  "group": "Q02",
+  "cases": [
+   "AGG-04"
+  ],
+  "reason": "Attempt Q02 sent the read as worded in the case ('Run head -3 on the Corbanu home config.toml'); the product's model chose ~/.corbanu/config.toml, which is not the Corbanu home on this test machine and does not exist there, so the read of the Corbanu home was never attempted (the executor declined the model's follow-up listing of the real home). Replayed with the literal path, as in the third run's attempt.",
+  "note": "Fresh profile; set up AGG-04's starting conditions yourself. For action 2, the Corbanu home on this machine is `$AGMS_RUN/product-home` (the product sees it as `$CORBANU_HOME`); send: Run exactly this command and show its output: head -3 <the literal value of $AGMS_RUN/product-home>/config.toml, and approve with y if prompted."
+ },
+ "Q11b": {
+  "group": "Q11",
+  "cases": [
+   "AGG-R14"
+  ],
+  "reason": "Attempt Q11 stopped with the child's command approval prompt open: the prompt said 'This is a new request. Choose an option with ↑/↓, then enter' (and 'Use ↑/↓ and enter to answer'), but only Enter, 1, o and y were pressed, so the child's command never started and the kill switch was never turned on. Integrator check on the host: Down, Up, Enter on that prompt answers it.",
+  "note": "Fresh profile; set up S1 yourself. Approval prompts may say 'This is a new request. Choose an option with ↑/↓, then enter'; then move the highlight with ↑/↓ to the option you want (for example Down, then Up, to come back to 'Yes, proceed') and press Enter. Record the UTC times of the child command's approval and of the kill-switch confirm."
+ },
+ "Q02c": {
+  "group": "Q02",
+  "cases": [
+   "AGG-37"
+  ],
+  "reason": "Attempt Q02 judged AGG-37 in the same session as AGG-04, before any restart, so expected result 2 (the stale Restarting banner) could not occur; evidence check r2 asked for it to be blocked or tested. Replayed from a fresh profile with Aggressive saved and the restart made with r.",
+  "note": "Fresh profile; set up S1 yourself as described in design-cases.md (save Aggressive, read the saved screen before pressing r, then restart with r). Review the saved screen before the restart, and the main screen, /security and any denial messages after it; record what the screen shows at each step after pressing r."
+ }
+}

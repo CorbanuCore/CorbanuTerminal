@@ -14,4 +14,4 @@ expression: "render_snapshot(&view, Rect::new(0, 0, 72, view.desired_height(72))
 
   › 1. I finished
     2. Back
-  Use tab / ↑ ↓ to move, enter to select, esc to close
+  Use ↑ ↓ to move, enter to select, esc to close

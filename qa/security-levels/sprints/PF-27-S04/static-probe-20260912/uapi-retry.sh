@@ -63,7 +63,7 @@ export X86_64_UNKNOWN_LINUX_MUSL_OPENSSL_STATIC=1
 cd "$repo/codex-rs"
 printf '%s BUILD START\n' "$(date -Is)"
 set +e
-cargo build --locked --target x86_64-unknown-linux-musl -p codex-secret-broker-service --features synthetic-fixture --bin codex-protected-root-probe > "$out/build.log" 2>&1
+cargo build --locked --target x86_64-unknown-linux-musl -p codex-secret-broker-fixture --bin codex-protected-root-probe > "$out/build.log" 2>&1
 build_result=$?
 set -e
 printf '%s\n' "$build_result" > "$out/build.exit"

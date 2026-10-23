@@ -1,0 +1,21 @@
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.3-flash   /model to change          │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s05acc/ws │
+╰──────────────────────────────────────────────────────╯
+⚠ Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set
+  `suppress_unstable_features_warning = true` in $S/homes/h6/config.toml.
+› Reply with exactly the word pong and nothing else.
+• pong
+• Context compacted
+⚠ Heads up: Long threads and multiple compactions can cause the model to be less accurate. Start a new thread when possible to keep threads small and targeted.
+› Reply with exactly the word pong and nothing else.
+• pong
+› Improve documentation in @filename
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: 40.2 tok/s
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account work                │
+│  Session:              01a12b4d-fb47-7cc1-82c1-db830fb0c915                              │
+Token usage: total=17,760 input=17,055 (+ 1,152 cached) output=705 (reasoning 122)
+To continue this session, run corbanu resume 01a12b4d-fb47-7cc1-82c1-db830fb0c915
+EXITED-0

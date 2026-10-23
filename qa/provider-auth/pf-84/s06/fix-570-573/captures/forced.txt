@@ -1,0 +1,59 @@
+
+======== BASE (corbanu-base)
+
+### 1 BASE, default=API key, forced chatgpt, --account chat (named ChatGPT)
+   default login before: auth.json a2695992fdf5
+[exit 0]
+mock: chatgpt named gen1
+   default login after:  auth.json ABSENT (logged out)
+   mock: {"t": 1791795980.666, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "named", "gen": 1, "expired": false}, "model": null}
+
+### 5 BASE, default=ChatGPT, forced api, --account key (named API key)
+   default login before: auth.json 85fd4cb76e3c
+[exit 0]
+mock: bearer keyacct
+   default login after:  auth.json ABSENT (logged out)
+   mock: {"t": 1791795983.511, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "keyacct"}, "model": "gpt-5.4"}
+
+### 7 BASE, default=ChatGPT (ws-main), forced workspace ws-other, --account key
+   default login before: auth.json 0fd8f3007d9b
+Login is restricted to workspace(s) ws-other, but current credentials belong to ws-main. Logging out.
+[exit 1]
+   default login after:  auth.json ABSENT (logged out)
+
+### 3 BASE, default=API key, forced chatgpt, default session (unchanged behaviour expected)
+   default login before: auth.json a2695992fdf5
+[exit 0]
+mock: none 
+   default login after:  auth.json ABSENT (logged out)
+   mock: {"t": 1791795987.496, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "none"}, "model": "gpt-5.4"}
+
+======== CAND (corbanu-cand)
+
+### 1 CAND, default=API key, forced chatgpt, --account chat (named ChatGPT)
+   default login before: auth.json a2695992fdf5
+[exit 0]
+mock: chatgpt named gen1
+   default login after:  auth.json a2695992fdf5 (unchanged)
+   mock: {"t": 1791795990.032, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "named", "gen": 1, "expired": false}, "model": null}
+
+### 5 CAND, default=ChatGPT, forced api, --account key (named API key)
+   default login before: auth.json e6b93e2da5bc
+[exit 0]
+mock: bearer keyacct
+   default login after:  auth.json e6b93e2da5bc (unchanged)
+   mock: {"t": 1791795992.93, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "keyacct"}, "model": "gpt-5.4"}
+
+### 7 CAND, default=ChatGPT (ws-main), forced workspace ws-other, --account key
+   default login before: auth.json c601aa29b4f2
+[exit 0]
+mock: bearer keyacct
+   default login after:  auth.json c601aa29b4f2 (unchanged)
+   mock: {"t": 1791795995.692, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "keyacct"}, "model": "gpt-5.4"}
+
+### 3 CAND, default=API key, forced chatgpt, default session (unchanged behaviour expected)
+   default login before: auth.json a2695992fdf5
+[exit 0]
+mock: none 
+   default login after:  auth.json ABSENT (logged out)
+   mock: {"t": 1791795998.04, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "none"}, "model": "gpt-5.4"}

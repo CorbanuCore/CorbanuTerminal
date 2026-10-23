@@ -1,0 +1,107 @@
+# Issue #740 (AGG-T04, AGG-11): under Aggressive, Grant once is not offered where it can never apply.
+id = "issue740-no-grant-where-useless"
+feature = "#740: no Grant once for writes it can never lift"
+expected = "Under Aggressive, a write outside the current folder and a write to the project's .git hooks are offered no Grant once, and the prompt and the denial say why."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 140
+rows = 50
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Z.AI GLM 5.3 Flash via zai"
+timeout = 60
+compress = 2
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this shell command once, unchanged: echo t04 >> ../outside/notes.txt"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Press enter to confirm"
+timeout = 180
+compress = 2
+[[steps]]
+wait = "it is outside the current folder"
+[[steps]]
+pause = 4.0
+[[steps]]
+run = "tmux -L \"$(ls -t \"${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)\" | grep '^demo-issue740-no-grant-where-useless-' | head -1)\" capture-pane -p -t demo > {run}/prompt-740-outside.txt"
+[[steps]]
+key = "y"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)You approved.*⚠ Security level Aggressive blocks writing.*─{10}.*\\n• "
+timeout = 120
+compress = 2
+[[steps]]
+pause = 3.5
+[[steps]]
+type = "Run exactly this shell command once, unchanged: printf x > .git/hooks/pre-commit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Press enter to confirm"
+timeout = 180
+compress = 2
+[[steps]]
+wait = "agent commands cannot write it"
+[[steps]]
+pause = 4.0
+[[steps]]
+run = "tmux -L \"$(ls -t \"${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)\" | grep '^demo-issue740-no-grant-where-useless-' | head -1)\" capture-pane -p -t demo > {run}/prompt-740-git.txt"
+[[steps]]
+key = "y"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)printf x.*You approved.*Security level Aggressive blocks writing `.git.*─{10}.*\\n• "
+timeout = 120
+compress = 2
+[[steps]]
+pause = 3.5

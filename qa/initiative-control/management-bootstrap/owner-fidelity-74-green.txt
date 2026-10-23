@@ -1,0 +1,39 @@
+test_resolved_decision_slack_line_survives_omission_with_slack_on (test_decision_feed.SlackProjectionTests.test_resolved_decision_slack_line_survives_omission_with_slack_on) ... ERROR
+test_resolved_decision_slack_line_survives_omission_with_slack_off (test_decision_feed.SlackProjectionTests.test_resolved_decision_slack_line_survives_omission_with_slack_off) ... ERROR
+test_historical_resolutions_also_retain_their_answered_revisions (test_decision_feed.ProjectionRegressionTests.test_historical_resolutions_also_retain_their_answered_revisions) ... ok
+test_omitted_settled_history_is_distinct_from_unavailable_status (test_attention.DecisionRenderingTests.test_omitted_settled_history_is_distinct_from_unavailable_status) ... ok
+test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) ... ok
+test_busy_coordinator_returns_partial_status_through_cli (test_owner_daemon.ActivationVisibilityTests.test_busy_coordinator_returns_partial_status_through_cli) ... ok
+
+======================================================================
+ERROR: test_resolved_decision_slack_line_survives_omission_with_slack_on (test_decision_feed.SlackProjectionTests.test_resolved_decision_slack_line_survives_omission_with_slack_on)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_feed.py", line 824, in test_resolved_decision_slack_line_survives_omission_with_slack_on
+    self.check_resolved_decision_after_omission(True)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_feed.py", line 838, in check_resolved_decision_after_omission
+    d.save_fixture(self.feed_root, changed, d.digest(self.feed), NOW)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 274, in save_fixture
+    raise Invalid() from None
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+======================================================================
+ERROR: test_resolved_decision_slack_line_survives_omission_with_slack_off (test_decision_feed.SlackProjectionTests.test_resolved_decision_slack_line_survives_omission_with_slack_off)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_feed.py", line 827, in test_resolved_decision_slack_line_survives_omission_with_slack_off
+    self.check_resolved_decision_after_omission(False)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_feed.py", line 838, in check_resolved_decision_after_omission
+    d.save_fixture(self.feed_root, changed, d.digest(self.feed), NOW)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 274, in save_fixture
+    raise Invalid() from None
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+----------------------------------------------------------------------
+Ran 6 tests in 1.477s
+
+FAILED (errors=2)

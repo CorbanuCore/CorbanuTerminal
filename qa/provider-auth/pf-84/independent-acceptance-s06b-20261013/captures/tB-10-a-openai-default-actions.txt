@@ -1,0 +1,16 @@
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       glm-5.3-flash   /model to change           │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+  OpenAI
+  Enabled · configured
+  Credentials are present; a successful request is needed to verify access.
+  Environment-backed credential: deactivate here; unset it outside Corbanu.
+› 1. Deactivate                   Exclude this provider from use; credentials are kept.
+  2. Replace with OpenAI account  OpenAI account
+  3. Replace with API key         API key
+  4. Add another account          Name it, then sign in with ChatGPT or paste an OpenAI API key.
+  Press enter to confirm or esc to go back

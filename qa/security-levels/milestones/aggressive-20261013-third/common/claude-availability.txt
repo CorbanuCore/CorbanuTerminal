@@ -1,0 +1,5 @@
+# Claude Code availability in guest "macOS 3" (coordinator, as 'agent'). Command:
+#   for c in claude ~/.local/bin/claude /opt/homebrew/bin/claude /usr/local/bin/claude; do command -v $c && echo "found $c"; done; ls /opt/homebrew/bin | grep -i -c claude; date -u
+# Output (no 'found' line = not installed; then the Homebrew match count and the time):
+0
+2026-10-13T17:18:01Z

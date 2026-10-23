@@ -1,0 +1,73 @@
+
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     loading   /model to change                    │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/507/before/ws │
+╰──────────────────────────────────────────────────────────╯
+
+
+› Improve documentation in @filename
+
+  Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/.codex-work/workers-20261002/agg-dec-c/runs/507/before/ws · Corbanu Terminal · TPS: -- tok…
+
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     glm-5.3-flash   /model to change              │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/507/before/ws │
+╰──────────────────────────────────────────────────────────╯
+
+
+› Run exactly this shell command once, unchanged, and wait for it to finish: sleep 45 && touch ran-after-kill-switch.txt && echo FINISHED
+
+
+■ Not sent: the security kill switch is on, so Corbanu sends nothing to the model, and this message was not kept. To turn it off, open /security, press g,
+choose "Turn the kill switch off" and confirm.
+
+
+› What is 2+2?
+
+
+■ Not sent: the security kill switch is on, so Corbanu sends nothing to the model, and this message was not kept. To turn it off, open /security, press g,
+choose "Turn the kill switch off" and confirm.
+
+Grants and kill switch
+Core's level: Aggressive · Kill switch: on
+
+Turn the kill switch off?
+Turns are sent to the model again, protected actions can be approved again and grants can be issued. Revoked grants and approvals do not come back.
+The level stays Aggressive: turning the kill switch off never lowers it.
+
+  Back (the kill switch stays on)
+› Turn the kill switch off
+
+↑/↓ choose · enter confirm · esc cancel, nothing changes
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -2,8 +2,6 @@
 
 use codex_protocol::models::AdditionalPermissionProfile;
 use codex_protocol::models::ResponseItem;
-use codex_sandboxing::policy_transforms::merge_permission_profiles;
-use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 
@@ -16,6 +14,7 @@ use crate::session::PreviousTurnSettings;
 use crate::session::session::SessionConfiguration;
 use crate::session::time_reminder::CurrentTimeReminderState;
 use crate::session_startup_prewarm::SessionStartupPrewarmHandle;
+use codex_protocol::protocol::AccountTokenUsage;
 use codex_protocol::protocol::RateLimitSnapshot;
 use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::TokenUsageInfo;
@@ -41,8 +40,17 @@ pub(crate) struct SessionState {
     pub(crate) current_time_reminder: CurrentTimeReminderState,
     pub(crate) active_connector_selection: HashSet<String>,
     pub(crate) pending_session_start_sources: VecDeque<codex_hooks::SessionStartSource>,
-    granted_permissions_by_environment_id: HashMap<String, AdditionalPermissionProfile>,
+    /// D51 (#1001): bound to the policy marker they were granted under.
+    granted_permissions: super::GrantedPermissions,
     next_turn_is_first: bool,
+    /// Whether the latest model request was authorised by the `OPENAI_API_KEY`
+    /// fallback; the notice is shown only when this turns on.
+    openai_api_key_env_fallback_in_use: bool,
+    /// PF-84: provider-reported usage per (provider, named account), kept only
+    /// while named accounts are on. Names only, never credential material.
+    account_token_usage: Vec<AccountTokenUsage>,
+    /// #688: tools already reported as left out by the tool-count limit.
+    omitted_tools_reported: HashSet<codex_protocol::ToolName>,
 }
 
 impl SessionState {
@@ -73,9 +81,41 @@ impl SessionState {
             current_time_reminder: CurrentTimeReminderState::default(),
             active_connector_selection: HashSet::new(),
             pending_session_start_sources: VecDeque::new(),
-            granted_permissions_by_environment_id: HashMap::new(),
+            granted_permissions: super::GrantedPermissions::default(),
             next_turn_is_first: true,
+            openai_api_key_env_fallback_in_use: false,
+            account_token_usage: Vec::new(),
+            omitted_tools_reported: HashSet::new(),
         }
+    }
+
+    /// Records whether the current request uses the `OPENAI_API_KEY` fallback and
+    /// returns true when it newly does (first use, or a switch back to it).
+    pub(crate) fn note_openai_api_key_env_fallback(&mut self, in_use: bool) -> bool {
+        let newly_in_use = in_use && !self.openai_api_key_env_fallback_in_use;
+        self.openai_api_key_env_fallback_in_use = in_use;
+        newly_in_use
+    }
+
+    /// #688: the tools in `omitted` not reported yet this session.
+    pub(crate) fn unreported_omitted_tools(
+        &self,
+        omitted: &[codex_protocol::ToolName],
+    ) -> Vec<codex_protocol::ToolName> {
+        omitted
+            .iter()
+            .filter(|tool| !self.omitted_tools_reported.contains(*tool))
+            .cloned()
+            .collect()
+    }
+
+    /// #688: records `tools` as reported to the person; each left-out tool
+    /// is reported once per session.
+    pub(crate) fn mark_omitted_tools_reported(
+        &mut self,
+        tools: impl IntoIterator<Item = codex_protocol::ToolName>,
+    ) {
+        self.omitted_tools_reported.extend(tools);
     }
 
     // History helpers
@@ -218,6 +258,27 @@ impl SessionState {
         (self.token_info(), self.latest_rate_limits.clone())
     }
 
+    /// PF-84: adds one request's provider-reported usage to the account that
+    /// served it.
+    pub(crate) fn record_account_token_usage(
+        &mut self,
+        provider_id: &str,
+        account: &str,
+        usage: &TokenUsage,
+    ) {
+        AccountTokenUsage::accumulate(&mut self.account_token_usage, provider_id, account, usage);
+    }
+
+    /// PF-84: this thread's usage per account; `None` until a named-accounts
+    /// session records some, so other sessions' events keep their bytes.
+    pub(crate) fn account_token_usage(&self) -> Option<Vec<AccountTokenUsage>> {
+        (!self.account_token_usage.is_empty()).then(|| self.account_token_usage.clone())
+    }
+
+    pub(crate) fn set_account_token_usage(&mut self, usage: Vec<AccountTokenUsage>) {
+        self.account_token_usage = usage;
+    }
+
     pub(crate) fn set_token_usage_full(&mut self, context_window: i64) {
         self.history.set_token_usage_full(context_window);
     }
@@ -293,25 +354,19 @@ impl SessionState {
         &mut self,
         environment_id: &str,
         permissions: AdditionalPermissionProfile,
-    ) {
-        let granted_permissions = merge_permission_profiles(
-            self.granted_permissions_by_environment_id
-                .get(environment_id),
-            Some(&permissions),
-        );
-        if let Some(granted_permissions) = granted_permissions {
-            self.granted_permissions_by_environment_id
-                .insert(environment_id.to_string(), granted_permissions);
-        }
+        granted_under: super::AuthorityMarker,
+        current: super::AuthorityMarker,
+    ) -> bool {
+        self.granted_permissions
+            .record(environment_id, permissions, granted_under, current)
     }
 
     pub(crate) fn granted_permissions(
-        &self,
+        &mut self,
         environment_id: &str,
+        current: super::AuthorityMarker,
     ) -> Option<AdditionalPermissionProfile> {
-        self.granted_permissions_by_environment_id
-            .get(environment_id)
-            .cloned()
+        self.granted_permissions.get(environment_id, current)
     }
 }
 

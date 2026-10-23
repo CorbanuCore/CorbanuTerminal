@@ -1,0 +1,19 @@
+Approval prompt (no Grant once offered):
+
+Would you like to run the following command?
+Environment: local
+Reason: Security level Aggressive blocks writing `.codex/notes.toml`: agent commands can never write the project's
+.codex and .agents folders (agent settings) or Corbanu's own files, even when you approve them, and this cannot be
+granted, not even once. To allow it, a person can switch to Permissive in /security (it applies after a restart).
+$ printf x > .codex/notes.toml
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for commands that start with `printf x > .codex/notes.toml`
+  3. No, and tell Corbanu Terminal what to do differently (esc)
+
+After approving:
+
+• Ran printf x > .codex/notes.toml
+  └ /bin/bash: .codex/notes.toml: Operation not permitted
+⚠ Security level Aggressive blocks writing `.codex/notes.toml`: agent commands can never write the project's .codex
+  and .agents folders (agent settings) or Corbanu's own files, even when you approve them, and this cannot be granted,
+  not even once. To allow it, a person can switch to Permissive in /security (it applies after a restart).

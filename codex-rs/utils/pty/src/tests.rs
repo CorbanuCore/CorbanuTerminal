@@ -873,6 +873,75 @@ async fn pty_terminate_kills_background_children_in_same_process_group() -> anyh
     Ok(())
 }
 
+/// #780: a process that left the PTY child's process group (as a sandboxed
+/// shell does: bubblewrap's `--new-session` puts it in its own session)
+/// survives `terminate()`'s group kill and keeps the terminal open. The
+/// reader used to block until that process closed it, and a runtime shutting
+/// down waits for blocking tasks, so it hung for as long as that process
+/// lived. `terminate()` must stop the reader regardless.
+#[cfg(unix)]
+#[test]
+fn pty_terminate_stops_the_reader_while_an_escaped_process_holds_the_terminal() -> anyhow::Result<()>
+{
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()?;
+    let escaped = runtime.block_on(async {
+        let env_map: HashMap<String, String> = std::env::vars().collect();
+        let marker = "__codex_escaped_pid:";
+        // Job control gives the background job its own process group.
+        let script = format!("set -m; sleep 30 & echo {marker}$!; wait");
+        let (program, args) = shell_command(&script);
+        let spawned = spawn_pty_process(
+            &program,
+            &args,
+            Path::new("."),
+            &env_map,
+            &None,
+            TerminalSize::default(),
+            &[],
+        )
+        .await?;
+        let (session, mut output_rx, _exit_rx) = combine_spawned_output(spawned);
+        let escaped = wait_for_marker_pid(&mut output_rx, marker, /*timeout_ms*/ 5_000).await;
+        // Its own process group, outside the one `terminate()` kills.
+        let own_group = escaped
+            .as_ref()
+            .is_ok_and(|pid| unsafe { libc::getpgid(*pid) } == *pid);
+        session.terminate();
+        drop(session);
+        let escaped = escaped?;
+        anyhow::ensure!(
+            own_group,
+            "pid {escaped} is not in its own process group, so this test checks nothing"
+        );
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+        anyhow::ensure!(
+            process_exists(escaped)?,
+            "pid {escaped} did not outlive terminate(), so this test checks nothing"
+        );
+        anyhow::Ok(escaped)
+    })?;
+
+    let (stopped_tx, stopped_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        drop(runtime);
+        let _ = stopped_tx.send(());
+    });
+    let stopped = stopped_rx
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .is_ok();
+    unsafe {
+        libc::kill(escaped, libc::SIGKILL);
+    }
+    assert!(
+        stopped,
+        "the runtime waited for the PTY reader while pid {escaped} kept the terminal open"
+    );
+    Ok(())
+}
+
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn pty_spawn_can_preserve_inherited_fds() -> anyhow::Result<()> {

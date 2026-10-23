@@ -1,0 +1,143 @@
+WARNING: proceeding, even though we could not create PATH aliases: CORBANU_HOME points to "$S/homes/x", but that path does not exist
+Manage named accounts per provider (`named_accounts` feature)
+
+Usage: corbanu account [OPTIONS] <COMMAND>
+
+Commands:
+  list    List named accounts: provider, name and kinds (never values)
+  add     Add or replace a named account. Secret values are read from stdin
+  remove  Remove a named account and everything it holds
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+  -c, --config <key=value>
+          Override a configuration value that would otherwise be loaded from
+          `~/.corbanu/config.toml`. Use a dotted path (`foo.bar.baz`) to override nested values. The
+          `value` portion is parsed as TOML. If it fails to parse as TOML, the raw string is used as
+          a literal.
+
+          Examples: - `-c model="o3"` - `-c 'sandbox_permissions=["disk-full-read-access"]'` - `-c
+          shell_environment_policy.inherit=all`
+
+      --enable <FEATURE>
+          Enable a feature (repeatable). Equivalent to `-c features.<name>=true`
+
+      --disable <FEATURE>
+          Disable a feature (repeatable). Equivalent to `-c features.<name>=false`
+
+  -h, --help
+          Print help (see a summary with '-h')
+WARNING: proceeding, even though we could not create PATH aliases: CORBANU_HOME points to "$S/homes/x", but that path does not exist
+List named accounts: provider, name and kinds (never values)
+
+Usage: corbanu account list [OPTIONS] [PROVIDER]
+
+Arguments:
+  [PROVIDER]
+          Only this provider id
+
+Options:
+  -c, --config <key=value>
+          Override a configuration value that would otherwise be loaded from
+          `~/.corbanu/config.toml`. Use a dotted path (`foo.bar.baz`) to override nested values. The
+          `value` portion is parsed as TOML. If it fails to parse as TOML, the raw string is used as
+          a literal.
+
+          Examples: - `-c model="o3"` - `-c 'sandbox_permissions=["disk-full-read-access"]'` - `-c
+          shell_environment_policy.inherit=all`
+
+      --enable <FEATURE>
+          Enable a feature (repeatable). Equivalent to `-c features.<name>=true`
+
+      --disable <FEATURE>
+          Disable a feature (repeatable). Equivalent to `-c features.<name>=false`
+
+  -h, --help
+          Print help (see a summary with '-h')
+WARNING: proceeding, even though we could not create PATH aliases: CORBANU_HOME points to "$S/homes/x", but that path does not exist
+Add or replace a named account. Secret values are read from stdin
+
+Usage: corbanu account add [OPTIONS] <PROVIDER> <NAME>
+
+Arguments:
+  <PROVIDER>
+          Provider id, for example `zai` or `claude-plan`
+
+  <NAME>
+          Account name: 1-32 lowercase letters, digits or '-'
+
+Options:
+  -c, --config <key=value>
+          Override a configuration value that would otherwise be loaded from
+          `~/.corbanu/config.toml`. Use a dotted path (`foo.bar.baz`) to override nested values. The
+          `value` portion is parsed as TOML. If it fails to parse as TOML, the raw string is used as
+          a literal.
+
+          Examples: - `-c model="o3"` - `-c 'sandbox_permissions=["disk-full-read-access"]'` - `-c
+          shell_environment_policy.inherit=all`
+
+      --kind <KIND>
+          What the account holds
+
+          Possible values:
+          - api-key:           A provider API key (stdin)
+          - claude-token:      A Claude subscription token from `claude setup-token` (stdin)
+          - claude-config-dir: The `CLAUDE_CONFIG_DIR` of a Claude Code login (`--value`)
+          - command:           An account of an `auth.command` provider; the command receives its
+            name in `CORBANU_PROVIDER_ACCOUNT`
+
+          [default: api-key]
+
+      --enable <FEATURE>
+          Enable a feature (repeatable). Equivalent to `-c features.<name>=true`
+
+      --value <VALUE>
+          The value for the non-secret `claude-config-dir` kind
+
+      --disable <FEATURE>
+          Disable a feature (repeatable). Equivalent to `-c features.<name>=false`
+
+  -h, --help
+          Print help (see a summary with '-h')
+WARNING: proceeding, even though we could not create PATH aliases: CORBANU_HOME points to "$S/homes/x", but that path does not exist
+Remove a named account and everything it holds
+
+Usage: corbanu account remove [OPTIONS] <PROVIDER> <NAME>
+
+Arguments:
+  <PROVIDER>
+
+
+  <NAME>
+
+
+Options:
+  -c, --config <key=value>
+          Override a configuration value that would otherwise be loaded from
+          `~/.corbanu/config.toml`. Use a dotted path (`foo.bar.baz`) to override nested values. The
+          `value` portion is parsed as TOML. If it fails to parse as TOML, the raw string is used as
+          a literal.
+
+          Examples: - `-c model="o3"` - `-c 'sandbox_permissions=["disk-full-read-access"]'` - `-c
+          shell_environment_policy.inherit=all`
+
+      --enable <FEATURE>
+          Enable a feature (repeatable). Equivalent to `-c features.<name>=true`
+
+      --disable <FEATURE>
+          Disable a feature (repeatable). Equivalent to `-c features.<name>=false`
+
+  -h, --help
+          Print help (see a summary with '-h')
+WARNING: proceeding, even though we could not create PATH aliases: CORBANU_HOME points to "$S/homes/x", but that path does not exist
+  account                     Manage named accounts per provider (`named_accounts` feature)
+  tasknode                    Agent JSON helper for GitHub-linked Task Node terminal sessions
+  telegram                    Run the Telegram connector
+--
+      --account <[PROVIDER:]NAME>
+          Named account for this session (`<name>` for the session's provider, or
+          `<provider>:<name>`). Another provider's account is used by spawned agents and workers on
+          that provider and when you switch to it. Needs the `named_accounts` feature; a missing
+          account is an error, never the default account
+
+  -h, --help

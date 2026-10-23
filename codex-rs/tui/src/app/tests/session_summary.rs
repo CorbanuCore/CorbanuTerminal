@@ -34,6 +34,7 @@ fn test_session(
         message_history: None,
         network_proxy: None,
         rollout_path,
+        provider_account: None,
     }
 }
 

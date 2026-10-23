@@ -1,0 +1,7 @@
+model_auto_compact_token_limit = 14600
+model = "gpt-5.4-mini"
+model_provider = "openai"
+model_reasoning_effort = "low"
+
+[projects."<scratch>/work/repo"]
+trust_level = "trusted"

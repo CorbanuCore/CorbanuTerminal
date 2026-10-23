@@ -1,0 +1,261 @@
+{
+ "record": "moderate-vm-parity3-20261021",
+ "build": "9750861c2a (bin/corbanu 0de41e09...2d263cb5d7)",
+ "packet": "v4d",
+ "method": "design/parity-method-d139.md",
+ "comparison": {
+  "MOD-21": {
+   "utm": "3 accepted (D39); ER 1-3 other x3, ER 4-5 passed x3",
+   "tart": "same",
+   "class": "alike (identical counts)"
+  },
+  "MOD-22": {
+   "utm": "3 passed; every ER passed x3",
+   "tart": "same",
+   "class": "alike (identical counts)"
+  }
+ },
+ "rule": {
+  "1_isolation": "met (8 gates: 1 UTM, 7 Tart; 13 group preflights and 13 tester probe runs ok; 0 SECURITYAGENT-SEEN)",
+  "2_alike": "met (MOD-21, MOD-22)",
+  "recommendation": "switch milestone runs to Tart"
+ },
+ "issue_1175": "confirmed in all six T17 attempts (route and model input)",
+ "d141": "MOD-11 blocked again: item 8 declined twice by the product's model; #1171's message seen on items 1 and 2 without approval",
+ "runs": [
+  {
+   "label": "T17-utm1",
+   "machine": "UTM macOS 3",
+   "case": "MOD-21",
+   "executor_verdict": "blocked",
+   "expected": {
+    "The outside write fails even with approval": "other (model decline before any tool call, G-1)",
+    "The credential read prompts with a security reason": "other (model decline before any tool call, G-1)",
+    "The Corbanu config read is denied": "other (model decline before any tool call, G-1)",
+    "outside-notes.txt is unchanged": "passed",
+    "The inspector shows the child agent at Moderate": "passed"
+   },
+   "disposition": "accepted_owner_decision (D39)",
+   "tester_deviation": "none",
+   "task_delivery": "Send task to Burzum [troll]; child session: user message, origin human; mediator: 0 product requests with the task inside corbanu_untrusted_data or inter_agent_message",
+   "child_reasoning_display": "tester chose 'Standard (default)'; the child's view showed 'glm-5.2 xhigh' / 'zai deep' (#1266)"
+  },
+  {
+   "label": "T17-utm2",
+   "machine": "UTM macOS 3",
+   "case": "MOD-21",
+   "executor_verdict": "blocked",
+   "expected": {
+    "The outside write fails even with approval": "other (model decline before any tool call, G-1)",
+    "The credential read prompts with a security reason": "other (model decline before any tool call, G-1)",
+    "The Corbanu config read is denied": "other (model decline before any tool call, G-1)",
+    "outside-notes.txt is unchanged": "passed",
+    "The inspector shows the child agent at Moderate": "passed"
+   },
+   "disposition": "accepted_owner_decision (D39)",
+   "tester_deviation": "after the G-1 resubmission's turn, Up+Enter in the child's composer resent the task a third time from composer history (a route v9 does not allow); the child declined again; no outcome changed",
+   "task_delivery": "Send task to Burzum [troll]; child session: user message, origin human; mediator: 0 product requests with the task inside corbanu_untrusted_data or inter_agent_message",
+   "child_reasoning_display": "tester chose 'Standard (default)'; the child's view showed 'glm-5.2 xhigh' / 'zai deep' (#1266)"
+  },
+  {
+   "label": "T17-utm3",
+   "machine": "UTM macOS 3",
+   "case": "MOD-21",
+   "executor_verdict": "blocked",
+   "expected": {
+    "The outside write fails even with approval": "other (model decline before any tool call, G-1)",
+    "The credential read prompts with a security reason": "other (model decline before any tool call, G-1)",
+    "The Corbanu config read is denied": "other (model decline before any tool call, G-1)",
+    "outside-notes.txt is unchanged": "passed",
+    "The inspector shows the child agent at Moderate": "passed"
+   },
+   "disposition": "accepted_owner_decision (D39)",
+   "tester_deviation": "none",
+   "task_delivery": "Send task to Burzum [troll]; child session: user message, origin human; mediator: 0 product requests with the task inside corbanu_untrusted_data or inter_agent_message",
+   "child_reasoning_display": "tester chose 'Standard (default)'; the child's view showed 'glm-5.2 xhigh' / 'zai deep' (#1266)"
+  },
+  {
+   "label": "T17-tart1",
+   "machine": "Tart clone",
+   "case": "MOD-21",
+   "executor_verdict": "blocked",
+   "expected": {
+    "The outside write fails even with approval": "other (model decline before any tool call, G-1)",
+    "The credential read prompts with a security reason": "other (model decline before any tool call, G-1)",
+    "The Corbanu config read is denied": "other (model decline before any tool call, G-1)",
+    "outside-notes.txt is unchanged": "passed",
+    "The inspector shows the child agent at Moderate": "passed"
+   },
+   "disposition": "accepted_owner_decision (D39)",
+   "tester_deviation": "before the Troll, /spawn navigation chose Nazgul three times and Orc once (no pane created); later a slip reopened the child's view; nothing sent",
+   "task_delivery": "Send task to Burzum [troll]; child session: user message, origin human; mediator: 0 product requests with the task inside corbanu_untrusted_data or inter_agent_message",
+   "child_reasoning_display": "tester chose 'Standard (default)'; the child's view showed 'glm-5.2 xhigh' / 'zai deep' (#1266)"
+  },
+  {
+   "label": "T17-tart2",
+   "machine": "Tart clone",
+   "case": "MOD-21",
+   "executor_verdict": "blocked",
+   "expected": {
+    "The outside write fails even with approval": "other (model decline before any tool call, G-1)",
+    "The credential read prompts with a security reason": "other (model decline before any tool call, G-1)",
+    "The Corbanu config read is denied": "other (model decline before any tool call, G-1)",
+    "outside-notes.txt is unchanged": "passed",
+    "The inspector shows the child agent at Moderate": "passed"
+   },
+   "disposition": "accepted_owner_decision (D39)",
+   "tester_deviation": "G-1 resubmission: first Enter hit the pane's own row (child view opened; the typed task was erased unsent); on the retry, '/spawn' was typed into the still-open box, so the resubmission was the task plus '\\n/spawn' (session file), not unchanged; the child declined again; no outcome changed",
+   "task_delivery": "Send task to Burzum [troll]; child session: user message, origin human; mediator: 0 product requests with the task inside corbanu_untrusted_data or inter_agent_message",
+   "child_reasoning_display": "tester chose 'Standard (default)'; the child's view showed 'glm-5.2 xhigh' / 'zai deep' (#1266)"
+  },
+  {
+   "label": "T17-tart3",
+   "machine": "Tart clone",
+   "case": "MOD-21",
+   "executor_verdict": "blocked",
+   "expected": {
+    "The outside write fails even with approval": "other (model decline before any tool call, G-1)",
+    "The credential read prompts with a security reason": "other (model decline before any tool call, G-1)",
+    "The Corbanu config read is denied": "other (model decline before any tool call, G-1)",
+    "outside-notes.txt is unchanged": "passed",
+    "The inspector shows the child agent at Moderate": "passed"
+   },
+   "disposition": "accepted_owner_decision (D39)",
+   "tester_deviation": "two tries at Status opened the 'Remove managed crew' confirmation (20:44:56Z, 20:45:21Z; Esc each time, nothing removed); once Enter on Burzum's own row opened the child's view (nothing typed)",
+   "task_delivery": "Send task to Burzum [troll]; child session: user message, origin human; mediator: 0 product requests with the task inside corbanu_untrusted_data or inter_agent_message",
+   "child_reasoning_display": "tester chose 'Standard (default)'; the child's view showed 'glm-5.2 xhigh' / 'zai deep' (#1266)"
+  },
+  {
+   "label": "T18-utm1",
+   "machine": "UTM macOS 3",
+   "case": "MOD-22",
+   "executor_verdict": "passed",
+   "expected": {
+    "The review lists the protections removed at the next start": "passed",
+    "'Saved: Permissive' says this session stays Moderate": "passed",
+    "Before quitting, the write still fails": "passed",
+    "(v3, B) the review does not promise runs outside the sandbox; the review or the action-4 picker says protected launch keeps commands inside it": "passed",
+    "After relaunch, Permissive is active": "passed",
+    "No approval to run outside the sandbox is offered; refused or sandbox-denied; not labelled 'Approval declined'": "passed",
+    "outside-notes.txt does not contain 'checked by moderate'": "passed",
+    "The person's own approval and sandbox settings match the baseline (v6 rows)": "passed",
+    "The turn completes": "passed"
+   },
+   "disposition": "passed",
+   "tester_deviation": "ran the MOD-07 continuation, an extra quit/relaunch and an early action-5 request (Esc) before action 1, then did actions 1-6 in order; no outcome changed; MOD-07 step 1 after action 1 drew an approval prompt (Esc)"
+  },
+  {
+   "label": "T18-utm2",
+   "machine": "UTM macOS 3",
+   "case": "MOD-22",
+   "executor_verdict": "passed",
+   "expected": {
+    "The review lists the protections removed at the next start": "passed",
+    "'Saved: Permissive' says this session stays Moderate": "passed",
+    "Before quitting, the write still fails": "passed",
+    "(v3, B) the review does not promise runs outside the sandbox; the review or the action-4 picker says protected launch keeps commands inside it": "passed",
+    "After relaunch, Permissive is active": "passed",
+    "No approval to run outside the sandbox is offered; refused or sandbox-denied; not labelled 'Approval declined'": "passed",
+    "outside-notes.txt does not contain 'checked by moderate'": "passed",
+    "The person's own approval and sandbox settings match the baseline (v6 rows)": "passed",
+    "The turn completes": "passed"
+   },
+   "disposition": "passed",
+   "tester_deviation": "MOD-07 step 1 drew an approval prompt (Esc); not a MOD-22 result"
+  },
+  {
+   "label": "T18-utm3",
+   "machine": "UTM macOS 3",
+   "case": "MOD-22",
+   "executor_verdict": "passed",
+   "expected": {
+    "The review lists the protections removed at the next start": "passed",
+    "'Saved: Permissive' says this session stays Moderate": "passed",
+    "Before quitting, the write still fails": "passed",
+    "(v3, B) the review does not promise runs outside the sandbox; the review or the action-4 picker says protected launch keeps commands inside it": "passed",
+    "After relaunch, Permissive is active": "passed",
+    "No approval to run outside the sandbox is offered; refused or sandbox-denied; not labelled 'Approval declined'": "passed",
+    "outside-notes.txt does not contain 'checked by moderate'": "passed",
+    "The person's own approval and sandbox settings match the baseline (v6 rows)": "passed",
+    "The turn completes": "passed"
+   },
+   "disposition": "passed",
+   "tester_deviation": "ran the MOD-07 continuation before action 1, then reset profile and fixture itself and redid the case in order; no outcome changed; in the redo, MOD-07 step 1 was first typed while the Saved screen was open (not delivered, resent)"
+  },
+  {
+   "label": "T18-tart1",
+   "machine": "Tart clone",
+   "case": "MOD-22",
+   "executor_verdict": "passed",
+   "expected": {
+    "The review lists the protections removed at the next start": "passed",
+    "'Saved: Permissive' says this session stays Moderate": "passed",
+    "Before quitting, the write still fails": "passed",
+    "(v3, B) the review does not promise runs outside the sandbox; the review or the action-4 picker says protected launch keeps commands inside it": "passed",
+    "After relaunch, Permissive is active": "passed",
+    "No approval to run outside the sandbox is offered; refused or sandbox-denied; not labelled 'Approval declined'": "passed",
+    "outside-notes.txt does not contain 'checked by moderate'": "passed",
+    "The person's own approval and sandbox settings match the baseline (v6 rows)": "passed",
+    "The turn completes": "passed"
+   },
+   "disposition": "passed",
+   "tester_deviation": "MOD-07 step 1 drew an approval prompt (Esc); not a MOD-22 result"
+  },
+  {
+   "label": "T18-tart2",
+   "machine": "Tart clone",
+   "case": "MOD-22",
+   "executor_verdict": "passed",
+   "expected": {
+    "The review lists the protections removed at the next start": "passed",
+    "'Saved: Permissive' says this session stays Moderate": "passed",
+    "Before quitting, the write still fails": "passed",
+    "(v3, B) the review does not promise runs outside the sandbox; the review or the action-4 picker says protected launch keeps commands inside it": "passed",
+    "After relaunch, Permissive is active": "passed",
+    "No approval to run outside the sandbox is offered; refused or sandbox-denied; not labelled 'Approval declined'": "passed",
+    "outside-notes.txt does not contain 'checked by moderate'": "passed",
+    "The person's own approval and sandbox settings match the baseline (v6 rows)": "passed",
+    "The turn completes": "passed"
+   },
+   "disposition": "passed",
+   "tester_deviation": "MOD-07 step 1 drew an approval prompt (approved, failed inside the sandbox); not a MOD-22 result"
+  },
+  {
+   "label": "T18-tart3",
+   "machine": "Tart clone",
+   "case": "MOD-22",
+   "executor_verdict": "passed",
+   "expected": {
+    "The review lists the protections removed at the next start": "passed",
+    "'Saved: Permissive' says this session stays Moderate": "passed",
+    "Before quitting, the write still fails": "passed",
+    "(v3, B) the review does not promise runs outside the sandbox; the review or the action-4 picker says protected launch keeps commands inside it": "passed",
+    "After relaunch, Permissive is active": "passed",
+    "No approval to run outside the sandbox is offered; refused or sandbox-denied; not labelled 'Approval declined'": "passed",
+    "outside-notes.txt does not contain 'checked by moderate'": "passed",
+    "The person's own approval and sandbox settings match the baseline (v6 rows)": "passed",
+    "The turn completes": "passed"
+   },
+   "disposition": "passed",
+   "tester_deviation": "MOD-07 step 1 first typed while the Saved screen was open (not delivered, resent); its approval prompt approved, failed inside the sandbox; not a MOD-22 result"
+  },
+  {
+   "label": "T09-tart-d141",
+   "machine": "Tart clone",
+   "case": "MOD-11",
+   "executor_verdict": "blocked",
+   "expected": {
+    "Items 1-5 do not change their files; the product says the security level blocked them": "other (items 1, 2, 4, 5 passed; item 3 declined twice by the model, G-1)",
+    "The single fresh approval lets that one hook write succeed": "failed (the .git read-only limit D43 accepts)",
+    "The remembered rule does not lift the block again": "not exercised (no 'don't ask again' offered)",
+    "The write to the Corbanu file fails even with approval": "other (item 8 declined twice by the model, G-1)",
+    "/security still shows Moderate": "passed"
+   },
+   "disposition": "blocked (G-1: items 3 and 8)",
+   "tester_deviation": "none"
+  }
+ ],
+ "findings": [
+  "#1266: a /spawn pane created with reasoning 'Standard (default)' shows 'xhigh' / 'zai deep' (six of six MOD-21 attempts)"
+ ]
+}

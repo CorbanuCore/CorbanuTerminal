@@ -1,0 +1,28 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Reply with the single word OK.
+
+
+• OK
+
+
+  Attempt, components and original price
+  Requested UTC day: 2026-10-16
+
+  nothing for cache writes)
+› Cache read: 0 (reported)
+  Cache write: not reported — this price charges nothing for cache writes
+  Output: 52
+  Reasoning (subset, not separately billed): 47
+  Total (not separately billed): 8513
+  Noncached input cost: $0.001269 (rounded); exact USD 0.00126915
+  Cache read cost: $0.000000; exact USD 0
+
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

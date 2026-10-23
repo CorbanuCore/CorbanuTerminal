@@ -1,0 +1,18 @@
+  Request
+  Requested UTC day: 2026-10-08
+  Estimated cost: $0.009351
+  Tokens: 6,585 tokens
+  —— Details ——
+  Request: 1ff9bcc2-c23e-4882-bf7c-ae1f7317378c
+  Estimate versus billed difference: unknown — no settlement evidence
+  Billed cost: unavailable — no settlement evidence
+  Snapshot is not current; newer activity is unverified
+  —— Open ——
+  ↑↓ scroll · Enter open · Esc back/close
+  → Technical details (attempt 1)
+  Back
+  Refresh
+  Close
+  Provider: Z.AI
+  Model: Z.AI GLM 5.2
+  Billing: Pay per use

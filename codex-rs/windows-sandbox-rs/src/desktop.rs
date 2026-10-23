@@ -1,6 +1,8 @@
 use crate::logging;
 use crate::token::get_current_token_for_restriction;
 use crate::token::get_logon_sid_bytes;
+use crate::window_station::WindowAccess;
+use crate::window_station::current_logon_sid;
 use crate::winutil::format_last_error;
 use crate::winutil::to_wide;
 use anyhow::Result;
@@ -56,22 +58,66 @@ const DESKTOP_ALL_ACCESS: u32 = DESKTOP_READOBJECTS
 
 pub struct LaunchDesktop {
     _private_desktop: Option<PrivateDesktop>,
+    /// #345: this process's logon's access to its own non-interactive
+    /// desktop, for commands started there; removed on drop.
+    _window_access: Option<WindowAccess>,
     startup_name: Vec<u16>,
 }
 
 impl LaunchDesktop {
-    pub fn prepare(use_private_desktop: bool, logs_base_dir: Option<&Path>) -> Result<Self> {
+    /// In an interactive session, `Winsta0\Default` or a private desktop in
+    /// `Winsta0`, as before. In an SSH session or a service (a non-interactive
+    /// window station), where a child sent to `Winsta0` fails to start (#341),
+    /// this process's own window station and desktop, or a private desktop in
+    /// that window station (where it is created).
+    ///
+    /// On this process's own non-interactive desktop, this process's logon
+    /// SID gets `DESKTOP_ACCESS` (read and write objects) there while the
+    /// value lives: the commands' restricted tokens have it as a restricting
+    /// SID, unlike the user SID the desktop grants, and fail to start
+    /// without it (#345). The elevated sandbox's runner can't change Core's
+    /// desktop; Core gave the runner's logon that access before starting it.
+    ///
+    /// `low_integrity` (the legacy sandbox, #158): the desktop the command
+    /// starts on gets a Low label, without which a Low-integrity process
+    /// fails to start (`0xC0000142`). The interactive `Winsta0\Default`
+    /// already admits Low-integrity processes.
+    pub fn prepare(
+        use_private_desktop: bool,
+        low_integrity: bool,
+        logs_base_dir: Option<&Path>,
+    ) -> Result<Self> {
+        let own_station = crate::window_station::current_window_station_name()
+            .filter(|name| !crate::window_station::is_interactive_window_station(name));
+        let station = own_station.as_deref().unwrap_or("Winsta0");
         if use_private_desktop {
-            let private_desktop = PrivateDesktop::create(logs_base_dir)?;
-            let startup_name = to_wide(format!("Winsta0\\{}", private_desktop.name));
+            let private_desktop = PrivateDesktop::create(low_integrity, logs_base_dir)?;
+            let startup_name = to_wide(format!("{station}\\{}", private_desktop.name));
             Ok(Self {
                 _private_desktop: Some(private_desktop),
+                _window_access: None,
                 startup_name,
             })
         } else {
+            let (desktop, window_access) = match own_station {
+                Some(_) => {
+                    let desktop = crate::window_station::current_desktop_name()
+                        .unwrap_or_else(|| "Default".to_string());
+                    if low_integrity && let Err(err) = crate::integrity::label_desktop_low(&desktop)
+                    {
+                        logging::debug_log(
+                            &format!("could not label this process's desktop Low: {err:#}"),
+                            logs_base_dir,
+                        );
+                    }
+                    (desktop, grant_own_desktop(logs_base_dir))
+                }
+                None => ("Default".to_string(), None),
+            };
             Ok(Self {
                 _private_desktop: None,
-                startup_name: to_wide("Winsta0\\Default"),
+                _window_access: window_access,
+                startup_name: to_wide(format!("{station}\\{desktop}")),
             })
         }
     }
@@ -81,13 +127,38 @@ impl LaunchDesktop {
     }
 }
 
+static IS_COMMAND_RUNNER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The elevated sandbox's command runner calls this first: Core gave its
+/// logon the access to Core's desktop, which the runner can't change.
+pub fn mark_as_command_runner() {
+    IS_COMMAND_RUNNER.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// See [`LaunchDesktop::prepare`]. A failure is logged, not fatal.
+fn grant_own_desktop(logs_base_dir: Option<&Path>) -> Option<WindowAccess> {
+    if IS_COMMAND_RUNNER.load(std::sync::atomic::Ordering::SeqCst) {
+        return None;
+    }
+    match current_logon_sid().and_then(|sid| WindowAccess::grant_desktop(&sid)) {
+        Ok(access) => access,
+        Err(err) => {
+            logging::debug_log(
+                &format!("could not give this logon its own desktop: {err:#}"),
+                logs_base_dir,
+            );
+            None
+        }
+    }
+}
+
 struct PrivateDesktop {
     handle: isize,
     name: String,
 }
 
 impl PrivateDesktop {
-    fn create(logs_base_dir: Option<&Path>) -> Result<Self> {
+    fn create(low_integrity: bool, logs_base_dir: Option<&Path>) -> Result<Self> {
         let mut rng = SmallRng::from_entropy();
         let name = format!("CodexSandboxDesktop-{:x}", rng.r#gen::<u128>());
         let name_wide = to_wide(&name);
@@ -116,6 +187,11 @@ impl PrivateDesktop {
 
         unsafe {
             if let Err(err) = grant_desktop_access(handle, logs_base_dir) {
+                let _ = CloseDesktop(handle);
+                return Err(err);
+            }
+            // #158: a Low-integrity command can only attach to a Low desktop.
+            if low_integrity && let Err(err) = crate::integrity::label_window_object_low(handle) {
                 let _ = CloseDesktop(handle);
                 return Err(err);
             }

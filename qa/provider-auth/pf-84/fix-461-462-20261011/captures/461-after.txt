@@ -1,0 +1,22 @@
+== after account-name field after typing 'qa-probe'
+  Welcome to Corbanu Terminal, your crypto-native AI terminal
+> Add a Z.AI account
+Name it: lowercase letters, digits or '-' (for example work).
+  qa-probe
+  Press enter to continue · Press esc to go back
+== after account-key field after typing 'abc-q-synthetic-461-secret-tail'
+  Welcome to Corbanu Terminal, your crypto-native AI terminal
+> Z.AI account `probe`
+Paste the API key. It is saved to the vault and never shown.
+  •••••••••••••••••••••••••••••••
+  Press enter to continue · Press esc to go back
+== after default-key field after typing 'qsynthetic-461-default-QQ'
+  Welcome to Corbanu Terminal, your crypto-native AI terminal
+> Use your Z.AI API key
+Paste your ZAI_API_KEY API key. Corbanu stores it in the encrypted vault and never adds it to chat. An existing environment variable takes
+precedence; unset it outside Corbanu to use the saved key.
+╭API key───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│•••••••••••••••••••••••••                                                                                                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+  Press enter to save
+  Press esc to go back

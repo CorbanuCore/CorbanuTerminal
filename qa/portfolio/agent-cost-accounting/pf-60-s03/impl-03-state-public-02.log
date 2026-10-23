@@ -1,0 +1,158 @@
+python3 ../scripts/isolated_rust_tests.py "$@"
+Test isolation: disposable profile; native keyring disabled (debug lane)
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on artifact directory
+warning: field `runtime` is never read
+  --> state/src/runtime/accounting.rs:27:5
+   |
+26 | struct Journal<'a> {
+   |        ------- field in this struct
+27 |     runtime: &'a StateRuntime,
+   |     ^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: methods `begin_attempt`, `append_observation`, and `read_observations` are never used
+   --> state/src/runtime/accounting.rs:49:14
+    |
+ 30 | impl<'a> Journal<'a> {
+    | -------------------- methods in this implementation
+...
+ 49 |     async fn begin_attempt(&self, attempt: &Attempt) -> anyhow::Result<()> {
+    |              ^^^^^^^^^^^^^
+...
+ 54 |     async fn append_observation(
+    |              ^^^^^^^^^^^^^^^^^^
+...
+162 |     async fn read_observations(
+    |              ^^^^^^^^^^^^^^^^^
+
+warning: field `journal` is never read
+  --> state/src/runtime/accounting_estimates.rs:27:5
+   |
+26 | struct EstimateStore<'a> {
+   |        ------------- field in this struct
+27 |     journal: Journal<'a>,
+   |     ^^^^^^^
+
+warning: methods `persist_current` and `read_estimate` are never used
+  --> state/src/runtime/accounting_estimates.rs:50:14
+   |
+30 | impl<'a> EstimateStore<'a> {
+   | -------------------------- methods in this implementation
+...
+50 |     async fn persist_current(
+   |              ^^^^^^^^^^^^^^^
+...
+99 |     async fn read_estimate(
+   |              ^^^^^^^^^^^^^
+
+warning: method `full` is never used
+  --> state/src/runtime/accounting_lifecycle.rs:25:8
+   |
+24 | impl Metric {
+   | ----------- method in this implementation
+25 |     fn full(&self) -> Option<i64> {
+   |        ^^^^
+
+warning: method `full_usd` is never used
+  --> state/src/runtime/accounting_lifecycle.rs:52:8
+   |
+51 | impl DayTotals {
+   | -------------- method in this implementation
+52 |     fn full_usd(&self) -> Option<Decimal> {
+   |        ^^^^^^^^
+
+warning: struct `Lifecycle` is never constructed
+  --> state/src/runtime/accounting_lifecycle.rs:82:8
+   |
+82 | struct Lifecycle<'a> {
+   |        ^^^^^^^^^
+
+warning: methods `refresh_current`, `read_day`, and `delete_recorded_thread` are never used
+   --> state/src/runtime/accounting_lifecycle.rs:103:14
+    |
+ 86 | impl<'a> Lifecycle<'a> {
+    | ---------------------- methods in this implementation
+...
+103 |     async fn refresh_current(&self, id: Uuid) -> anyhow::Result<Current<()>> {
+    |              ^^^^^^^^^^^^^^^
+...
+124 |     async fn read_day(&self, thread: ThreadId, day: i64) -> anyhow::Result<Current<DayTotals>> {
+    |              ^^^^^^^^
+...
+167 |     async fn delete_recorded_thread(&self, thread: ThreadId, as_of_ms: i64) -> anyhow::Result<()> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `maintain_retention` and `read_retained_day` are never used
+  --> state/src/runtime/accounting_retention_atomic.rs:55:14
+   |
+54 | impl Lifecycle<'_> {
+   | ------------------ methods in this implementation
+55 |     async fn maintain_retention(&self, as_of_ms: i64) -> anyhow::Result<()> {
+   |              ^^^^^^^^^^^^^^^^^^
+...
+73 |     pub(in crate::runtime::accounting::pricing::storage::lifecycle) async fn read_retained_day(
+   |                                                                              ^^^^^^^^^^^^^^^^^
+
+warning: method `append_native` is never used
+  --> state/src/runtime/accounting_native.rs:53:49
+   |
+ 8 | impl Journal<'_> {
+   | ---------------- method in this implementation
+...
+53 |     pub(in crate::runtime::accounting) async fn append_native(
+   |                                                 ^^^^^^^^^^^^^
+
+warning: `codex-state` (lib) generated 10 warnings
+   Compiling codex-state v0.1.42 (/Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915/codex-rs/state)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 43.30s
+────────────
+ Nextest run ID 988ddf5c-a1d5-4b0f-8951-2d0a47c5c7ba with nextest profile: local
+    Starting 6 tests across 1 binary (4 tests skipped)
+        PASS [   0.126s] (1/6) codex-state::accounting_store accounting_inspect_public_reads_do_not_write
+        PASS [   0.138s] (2/6) codex-state::accounting_store accounting_inspect_public_delete_and_empty
+        PASS [   0.156s] (3/6) codex-state::accounting_store accounting_inspect_public_reopens_twice
+        PASS [   0.159s] (4/6) codex-state::accounting_store accounting_inspect_public_identity_retry_scope
+        PASS [   0.313s] (5/6) codex-state::accounting_store accounting_inspect_public_literal_partial_goldens
+  TRY 1 FAIL [   0.829s] (───) codex-state::accounting_store accounting_inspect_public_limits_no_truncation
+  stdout ───
+
+    running 1 test
+    test accounting_inspect_public_limits_no_truncation ... FAILED
+
+    failures:
+
+    failures:
+        accounting_inspect_public_limits_no_truncation
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.81s
+
+  stderr ───
+    Error: observation batch too large
+
+  TRY 2 FAIL [   0.767s] (6/6) codex-state::accounting_store accounting_inspect_public_limits_no_truncation
+  stdout ───
+
+    running 1 test
+    test accounting_inspect_public_limits_no_truncation ... FAILED
+
+    failures:
+
+    failures:
+        accounting_inspect_public_limits_no_truncation
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.76s
+
+  stderr ───
+    Error: observation batch too large
+
+────────────
+     Summary [   1.599s] 6 tests run: 5 passed, 1 failed, 4 skipped
+  TRY 2 FAIL [   0.767s] (6/6) codex-state::accounting_store accounting_inspect_public_limits_no_truncation
+error: test run failed
+error: recipe `test` failed on line 82 with exit code 100

@@ -300,6 +300,7 @@ mod tests {
 
     fn test_provider(name: &str) -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: name.to_string(),
             base_url: Some("http://127.0.0.1:8061/api/codex".to_string()),
             env_key: None,
@@ -322,6 +323,7 @@ mod tests {
             requires_openai_auth: false,
             supports_websockets: true,
             supports_standalone_web_search: true,
+            billing: None,
             runtime_policy: Default::default(),
         }
     }

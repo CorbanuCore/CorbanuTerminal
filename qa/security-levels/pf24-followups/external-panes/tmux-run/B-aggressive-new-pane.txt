@@ -1,0 +1,55 @@
+
+
+
+› say hi
+
+
+■ Claude pane provider error. Claude exited with status exit status: 1: error: unknown option '--bare'
+
+• Claude pane turn audit recorded. status: provider-error; mode: session-id; tools: none; terminal_reason: process_exit;
+usage: missing; artifact: <run>/home/panes/claude-
+127725a9-0fec-4ad6-b91d-b7c2c608e1b4/turn-0001.jsonl; audit: /Volumes/CorbanuDrive/Corbanu/.codex-work/workers-20261002/
+r4-runs/panes-a/home/panes/claude-127725a9-0fec-4ad6-b91d-b7c2c608e1b4/turn-0001.audit.json
+To continue this session, run corbanu resume 01a112c8-429b-7d60-bba4-3daf489916f5
+
+[demo] restarting Corbanu Terminal with the same profile...
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.2   /model to change                │
+│ directory: /Volumes/CorbanuDrive/…/panes-a/workspace │
+╰──────────────────────────────────────────────────────╯
+
+/status
+
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                                              │
+│                                                                                                             │
+│  Model:                Z.AI GLM 5.2                                                                         │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4                                                  │
+│  Directory:            <run>/workspace │
+│  Permissions:          Next turn: Profile corbanu-aggressive (workspace, untrusted)                         │
+│  Security:             Aggressive active (/security)                                                        │
+│  Agents.md:            <none>                                                                               │
+│  Account:              Z.AI API key configured                                                              │
+│  Collaboration mode:   Default                                                                              │
+│  Session:              01a112c9-410e-7bd0-8a14-8291440be8b1                                                 │
+│                                                                                                             │
+│  Token usage:          0 total  (0 input + 0 output)                                                        │
+│  Limits:               data not available yet                                                               │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+■ Claude panes are off under security level Aggressive: Claude Code would run outside Corbanu's sandbox with your
+environment and network. Choose Permissive in /security and restart to use them.
+
+
+› Use /skills to list available skills
+
+  Z.AI GLM 5.2 via zai standard · <run>/workspace …
+
+
+
+
+
+
+

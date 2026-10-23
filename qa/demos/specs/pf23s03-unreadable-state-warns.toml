@@ -1,0 +1,42 @@
+# PF-23-S03: unreadable security state is never read as Permissive; the next session warns that Aggressive and the kill switch apply. No model turn (Z.AI balance was empty when recorded).
+id = "pf23s03-unreadable-state-warns"
+feature = "Unreadable security state fails closed and says so"
+expected = "config.toml says Permissive. After security_state.json is corrupted, the next session (/new) warns that it is unreadable and that Aggressive and the kill switch are enforced until it is repaired or removed."
+model = "glm-5.2"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "permissive"
+
+[features]
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "!printf '{\"level\": \"permissive\"' > {home}/security_state.json && echo corrupted"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "corrupted"
+[[steps]]
+pause = 1.5
+[[steps]]
+type = "/new"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "kill switch are enforced"
+timeout = 60
+[[steps]]
+pause = 4.0

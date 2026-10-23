@@ -1,0 +1,21 @@
+### h-r4
+model = "claude-fable-5-1-plan"
+model_provider = "claude-plan"
+service_tier = "default"
+
+[projects."<rtx-scratch>/work/repo"]
+trust_level = "trusted"
+### h-r4p
+model = "claude-fable-5-1-plan"
+model_provider = "claude-plan"
+service_tier = "default"
+
+[projects."<rtx-scratch>/work/repo"]
+trust_level = "trusted"
+### h-lx
+model = "gpt-5.6-luna"
+model_provider = "openai"
+model_reasoning_effort = "low"
+
+[projects."<rtx-scratch>/work/repo"]
+trust_level = "trusted"

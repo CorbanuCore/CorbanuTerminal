@@ -1,0 +1,29 @@
+{
+  "findings": [
+    {
+      "title": "Thread is marked server-owned before the confirm request is even sent (unsupported path)",
+      "body": "`confirm_permissions` inserts the thread into `server_permission_threads` unconditionally, then returns `Unsupported` without sending anything when `thread_settings_update_supported == false`. From then on every `turn/start` for that thread omits `approval_policy`/`approvals_reviewer`/`sandbox_policy`/`permissions` (app_server_session.rs:1329-1339) even though no server-side settings operation was ever requested. On a legacy server that rejects `thread/settings/update`, the TUI previously could still change permissions via per-turn overrides; after a single popup selection it can no longer change them at all for that thread (no override on turn/start, no settings/update), and the only recovery is reconnecting. The guard exists to avoid replaying stale UI values after a real (possibly applied) request; it should only be set when a request is actually dispatched (i.e. inside the `supported` branch).",
+      "priority": "P3",
+      "confidence": 0.55,
+      "category": "bug",
+      "code_location": {
+        "file_path": "codex-rs/tui/src/app_server_session.rs",
+        "line": 1250
+      }
+    },
+    {
+      "title": "Deferred turn leaves the optimistic transcript cell while restoring the prompt to the composer",
+      "body": "`submit_user_message_with_history_and_shell_escape_policy` renders the user message into history before `submit_op` (`render_before_submit`). `defer_turn_for_permission_confirmation` then restores `safety_buffering_prompt` into the composer but does not remove/mark the already-rendered user cell. When the user resubmits after confirmation, the same prompt appears twice in the transcript (once as a never-sent message, once as the real turn). Existing rejection paths at least don't put the text back into the composer, so this duplication is new to this patch. Low severity, but visible in the exact 'submit while confirmation pending' flow the contract asks to preserve.",
+      "priority": "P3",
+      "confidence": 0.5,
+      "category": "bug",
+      "code_location": {
+        "file_path": "codex-rs/tui/src/chatwidget/settings.rs",
+        "line": 11
+      }
+    }
+  ],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "Verified the confirmation pipeline end to end: server registers a per-operation oneshot keyed by a fresh UUID before submitting `Op::ThreadSettings` with that id; Core's `update_thread_settings` always emits `ThreadSettingsApplied` (or `Error`) with that sub id even for unchanged/empty updates, and `apply_bespoke_event_handling` correlates it independently of the deduplicated `thread/settings/updated` notification. A single spawned owner sends exactly one terminal reply (`applied` / request error / `uncertain` on drop, listener replacement, disconnect, or 10s deadline); `set_listener`/`clear_listener`/`remove_connection` clear pendings, and `Ok(None)` correctly suppresses the synchronous response. Legacy `{}` reply is preserved via the untagged enum (Confirmed is tried first). TUI side: no optimistic mutation of config on selection; both reply-first and notification-first orderings converge via `observed`/`applied`; newer observations supersede an older request without reinstalling requested values; adoption writes `self.config` + runtime overrides so `/new`/fresh sessions carry the confirmed restrictive choice; Failed/Uncertain/Unsupported never mutate config; held initial input is restored on non-success and submitted only on matching success without steering/queued auto-send; turn/start during a pending confirmation is deferred with payload and queue preserved and no unauthorized submission. All TUI ops route through the app server, so no direct-core path bypasses the deferral. Lock ordering (manager -> thread state) is consistent with existing code. Remaining findings are low-severity edge behaviors, not blockers.",
+  "overall_confidence": 0.78
+}

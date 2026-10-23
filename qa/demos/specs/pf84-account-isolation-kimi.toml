@@ -1,0 +1,55 @@
+# PF-84-S02: named accounts of one provider resolve only their own key. The
+# GLM coordinator (default Z.AI account) runs `corbanu exec` children on two
+# named kimi-code accounts: `main` holds the real key (stored from the vault
+# helper, never shown) and `fake` holds a fake key, so its 401 proves the
+# account was used and nothing fell back to another key. Record with
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-account-isolation-kimi.toml \
+#     --bin <candidate> --sprint PF-84-S02 --publish
+id = "pf84-account-isolation-kimi"
+feature = "PF-84-S02: named accounts on a second provider (Kimi)"
+expected = "corbanu exec on the named Kimi account main replies pong; on the named account fake (a fake key) it gets a 401 and does not fall back to another key."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+[features]
+named_accounts = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+KIMI_API_KEY = "provider/kimi_api_key"
+
+[fixtures]
+"accounts.sh" = """
+#!/bin/sh
+c=../bin/corbanu
+echo "== corbanu account list =="
+$c account list
+for account in main fake; do
+  echo "== account $account =="
+  RUST_LOG=error $c exec --skip-git-repo-check -c model_provider=kimi-code -m k3 \\
+    -c provider_accounts.kimi-code=$account "Reply with the single word pong" 2>&1 \\
+    | grep -E '^pong|^ERROR' | head -1
+done
+"""
+
+[[steps]]
+run = "mkdir -p {run}/bin && ln -s {bin} {run}/bin/corbanu && printenv KIMI_API_KEY | {bin} account add kimi-code main >/dev/null && printf pf84-fake-kimi-key-0001 | {bin} account add kimi-code fake >/dev/null && echo enrolled"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run `sh accounts.sh` and show me its output verbatim in a code block."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "== account fake ==[\\s\\S]*(401|ERROR)"
+timeout = 240
+compress = 4
+[[steps]]
+pause = 4.0

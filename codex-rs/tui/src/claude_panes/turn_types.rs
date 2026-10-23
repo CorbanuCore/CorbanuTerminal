@@ -11,6 +11,7 @@ use serde_json::Value;
 use tokio::sync::OwnedMutexGuard;
 use tokio_util::sync::CancellationToken;
 
+use super::containment::ClaudeContainment;
 use super::pane::ClaudeCommandMode;
 use super::pane::ClaudePaneTurnStatus;
 use super::pane::ClaudePaneUsageStatus;
@@ -28,6 +29,8 @@ pub(crate) struct ClaudePaneTurnOutput {
     pub(crate) status: ClaudePaneTurnStatus,
     pub(crate) session_id: Option<String>,
     pub(crate) usage_summary: Option<String>,
+    /// What the pane stated the whole turn cost, when it stated it.
+    pub(crate) turn_usage_summary: Option<String>,
     pub(crate) usage_status: ClaudePaneUsageStatus,
     pub(crate) artifact_path: PathBuf,
     pub(crate) audit_path: PathBuf,
@@ -38,6 +41,47 @@ pub(crate) struct ClaudePaneTurnOutput {
     pub(crate) tool_events: Vec<ClaudePaneToolEvent>,
     pub(crate) reasoning_events: Vec<ClaudePaneReasoningEvent>,
     pub(crate) command_mode: ClaudeCommandMode,
+    /// How to record this turn's spend when the pane talked to its provider
+    /// directly, with no bridge in between. `None` when a bridge carried the
+    /// turn - the bridge reports each send itself - or when the profile names
+    /// no account.
+    pub(crate) direct_accounting: Option<PaneDirectAccounting>,
+}
+
+/// A pane turn this process never saw the requests for.
+///
+/// The three direct profiles hand Claude Code the provider's base URL and a
+/// vault credential and let it talk to the provider itself, so there is no
+/// send to observe. What there is, is Claude Code's own report of what the
+/// turn cost, which is the provider's numbers relayed through it - one turn,
+/// one record, rather than the individual requests this client never saw.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PaneDirectAccounting {
+    pub(crate) provider_id: String,
+    pub(crate) base_url: String,
+    pub(crate) model: String,
+}
+
+impl ClaudePaneTurnOutput {
+    /// What to record for this turn, when this process saw none of its sends.
+    ///
+    /// The numbers are the turn's total, as the pane stated it. They are
+    /// deliberately not `usage_summary`, which is the first request's usage
+    /// and exists for the display: a turn-shaped row carrying one request's
+    /// tokens undercounts every aggregate a reader of the ledger computes.
+    ///
+    /// `None` when a bridge carried the turn - the bridge reports each send
+    /// itself, and recording here as well would count the same spend twice -
+    /// or when the turn stated no total.
+    pub(crate) fn direct_turn_record(&self) -> Option<(PaneDirectAccounting, serde_json::Value)> {
+        let accounting = self.direct_accounting.clone()?;
+        let usage = self
+            .turn_usage_summary
+            .as_deref()
+            .and_then(|usage| serde_json::from_str::<serde_json::Value>(usage).ok())
+            .filter(serde_json::Value::is_object)?;
+        Some((accounting, usage))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,6 +128,14 @@ pub(crate) struct ClaudeCommandPlan {
     pub(crate) timeout_ms: Option<u64>,
     pub(crate) deferred_claude_plan_auth: Option<DeferredClaudePlanAuth>,
     pub(crate) bridge: Option<ClaudeBridgePlan>,
+    /// Set only when no bridge carries this turn: with no request to observe,
+    /// the turn is recorded from what the pane reports it cost.
+    pub(crate) direct_accounting: Option<PaneDirectAccounting>,
+    /// Set when the turn runs contained (#218): sandboxed, clean environment.
+    pub(crate) containment: Option<ClaudeContainment>,
+    /// The prompt, sent as Claude Code's first stream-json input message
+    /// rather than in argv, when tool approvals go through Corbanu.
+    pub(crate) stdin_prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -104,6 +156,10 @@ pub(crate) struct ClaudePaneTurnAudit {
     pub(crate) last_progress_elapsed_ms: Option<i64>,
     pub(crate) duration_ms: i64,
     pub(crate) usage: Option<Value>,
+    /// What the pane stated the whole turn cost, which is what the ledger
+    /// records. `usage` above is the first request's, as the display shows it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) turn_usage: Option<Value>,
     pub(crate) usage_status: ClaudePaneUsageStatus,
     pub(crate) terminal_reason: Option<String>,
     pub(crate) status: ClaudePaneTurnStatus,
@@ -191,6 +247,9 @@ pub(crate) struct ClaudeBridgePlan {
     pub(crate) upstream_api_key: Option<String>,
     pub(crate) deferred_vault_secret: Option<DeferredVaultSecret>,
     pub(crate) upstream_model: String,
+    /// The built-in provider whose account these sends bill, reported with
+    /// each send so the operator's ledger can record them.
+    pub(crate) accounting_provider_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -205,12 +264,18 @@ pub(crate) struct DeferredClaudePlanAuth {
     pub(crate) helper_executable: PathBuf,
     pub(crate) cwd: PathBuf,
     pub(crate) claude_config_dir_override: Option<PathBuf>,
+    /// PF-84: the named Claude Plan account `[provider_accounts]` selects;
+    /// `None` is the home's default selection.
+    pub(crate) account: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ClaudeBridgeKind {
     AmbientChat,
     AnthropicPassthrough,
+    /// A direct provider bridged for a contained pane: the key goes upstream
+    /// as both `Authorization: Bearer` and `x-api-key`.
+    AnthropicApiKeyPassthrough,
     AnthropicOauthPassthrough,
 }
 
@@ -247,6 +312,7 @@ impl std::fmt::Debug for ClaudeCommandPlan {
                 "bridge_addr",
                 &self.bridge.as_ref().map(|bridge| bridge.bind_addr),
             )
+            .field("containment", &self.containment)
             .finish()
     }
 }

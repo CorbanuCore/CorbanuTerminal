@@ -1,0 +1,92 @@
+# #442 (Travis's decision 2026-10-11): under Aggressive the project's .codex
+# and .agents are always read-only. "Grant once" says so in its review and
+# no longer lifts them; the write is denied even after a confirmed grant.
+id = "issue442-codex-always-read-only"
+feature = "#442: Grant once never makes the project's .codex writable under Aggressive"
+expected = "With Aggressive active, the agent's write to .codex/notes.toml asks for approval; the Grant once review says .codex and .agents stay read-only, and after Grant and run the write is denied (Operation not permitted)."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 40
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"notes.txt" = "buy coffee\nreview budget\n"
+".codex/README.md" = "project agent settings\n"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Aggressive\\?"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+timeout = 60
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "Run exactly this shell command once, even if you expect it to be blocked: printf x > .codex/notes.toml; echo codex=$?"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Grant once"
+timeout = 240
+compress = 2
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "g"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Grant this command\\?"
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "Down"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)codex=1(?:(?!Working).)*\n› "
+timeout = 240
+compress = 3
+[[steps]]
+pause = 4.0

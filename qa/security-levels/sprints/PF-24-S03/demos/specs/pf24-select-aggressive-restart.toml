@@ -1,0 +1,61 @@
+# Select Aggressive, confirm, restart: the level is active after restart.
+# Uses wrappers/restart-once.sh as --bin so the same profile starts again.
+id = "pf24-select-aggressive-restart"
+feature = "Select Aggressive and restart"
+expected = "After confirming, the picker says Saved and restart is needed. After a real restart /status shows the corbanu-aggressive profile (workspace, untrusted) and 'Aggressive active'."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Aggressive\\?"
+[[steps]]
+pause = 2.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+type = "/exit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "restarting Corbanu Terminal"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Aggressive active"
+[[steps]]
+pause = 4.0

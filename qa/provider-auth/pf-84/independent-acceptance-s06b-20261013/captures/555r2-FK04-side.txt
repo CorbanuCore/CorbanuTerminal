@@ -1,0 +1,32 @@
+
+
+› reply with the single word side
+
+
+• side
+
+/status
+
+╭────────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                             │
+│                                                                                            │
+│  Model:                Z.AI GLM 5.3 Flash                                                  │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account work                  │
+│  Directory:            $S/ws                │
+│  Permissions:          Next turn: Full Access                                              │
+│  Security:             Requested Permissive; effective protection unverified (/security)   │
+│  Agents.md:            <none>                                                              │
+│  Account:              Z.AI API key configured                                             │
+│  Collaboration mode:   Default                                                             │
+│  Session:              01a1347c-a5b7-7dc0-a886-79e04ded6de0                                │
+│                                                                                            │
+│  Token usage:          19.4K total  (19.3K input + 25 output)                              │
+│  Context window:       100% left (7.1K used / 950K)                                        │
+│  Account usage:        work · 11,945 input · 2,560 cached input · 22 output (13 reasoning) │
+│  Limits:               data not available yet                                              │
+╰────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Check recently modified functions for compatibility
+
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Te… Side from main thread · ctrl + / to switch · ctrl + c to close

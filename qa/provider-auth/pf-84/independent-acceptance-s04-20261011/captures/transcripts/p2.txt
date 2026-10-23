@@ -1,0 +1,129 @@
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     loading   /model to change                  │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.3 Flash via zpx default · $S/work · Corbanu Terminal · TPS: -- tok/s
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+/status
+
+╭────────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                             │
+│                                                                                            │
+│  Model:                Z.AI GLM 5.3 Flash                                                  │
+│  Model provider:       Z.AI via canary proxy - http://127.0.0.1:18686/proxy · account work │
+│  Directory:            $S/work                   │
+│  Permissions:          Next turn: Workspace (Ask for approval)                             │
+│  Security:             Requested Permissive; effective protection unverified (/security)   │
+│  Agents.md:            <none>                                                              │
+│  Account:              Z.AI via canary proxy API key configured                            │
+│  Collaboration mode:   Default                                                             │
+│  Session:              01a12a84-7881-7392-8462-9f39a35d89dd                                │
+│                                                                                            │
+│  Token usage:          0 total  (0 input + 0 output)                                       │
+│  Limits:               data not available yet                                              │
+╰────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+Token usage: total=4,768 input=4,765 (+ 768 cached) output=3
+To continue this session, run corbanu resume 01a12a84-7881-7392-8462-9f39a35d89dd
+
+• New session: requests to zpx use account `default`.
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+
+• Saved zpx account `fake`. Use it from /providers, `--account fake` or a spawn `account`.
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+Token usage: total=62 input=29 (+ 5,504 cached) output=33 (reasoning 30)
+To continue this session, run corbanu resume 01a12a85-0991-7dc3-9cfb-3869d22555bb
+
+• New session: requests to zpx use account `fake`.
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+⚠ Z.AI via canary proxy (zpx) account `fake` was rejected. Replace its key with `corbanu account add zpx fake` (reads stdin), or choose another account. The
+  default Z.AI via canary proxy credential is unchanged.
+
+■ unexpected status 401 Unauthorized: canary-proxy: invalid api key, url: http://127.0.0.1:18686/proxy/chat/completions
+
+• Renamed zpx account `main` to `spare`.
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+To continue this session, run corbanu resume 01a12a85-98f9-79d1-a360-40155ddbb0c3
+
+• New session: requests to zpx use account `spare`.
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+Token usage: total=41 input=29 (+ 5,504 cached) output=12 (reasoning 9)
+To continue this session, run corbanu resume 01a12a86-5c20-7593-91a7-c26d049363b4
+
+• New session: requests to zpx use account `work`.
+
+• Removed zpx account `spare`.
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+
+• Removed zpx account `fake`.
+Token usage: total=46 input=29 (+ 5,504 cached) output=17 (reasoning 14)
+To continue this session, run corbanu resume 01a12a87-0ba9-7a80-8f94-03840db5d96d
+TUI_EXITED rc=0

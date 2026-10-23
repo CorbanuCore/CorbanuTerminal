@@ -1,0 +1,215 @@
+"""Fixed synthetic IPC peer and executor; no model or native-agent claim."""
+import base64
+import errno
+import hashlib
+import json
+import os
+from pathlib import Path
+import selectors
+import signal
+import socket
+import sys
+import time
+
+MODE, TOKEN = sys.argv[1:]
+if MODE not in ('peer', 'positive', 'executor', 'probe') or not TOKEN.startswith('attempt-'):
+    raise ValueError('fixed invocation required')
+signal.alarm(450 if MODE == 'peer' else 50)
+ENDPOINTS = {'pathname': (socket.AF_UNIX, '/tmp/' + TOKEN + '.sock'),
+             'abstract': (socket.AF_UNIX, '\0' + TOKEN),
+             'loopback': (socket.AF_INET, ('127.0.0.1', 32189))}
+FLAGS = {'CapEff': '0000000000000000', 'NoNewPrivs': '1', 'Seccomp': '2'}
+LIMITS = {'memory.max': '536870912', 'memory.swap.max': '0',
+          'pids.max': '128', 'cpu.max': '100000 100000'}
+
+
+def status(path='/proc/self/status'):
+    fields = dict(line.split(':', 1) for line in Path(path).read_text().splitlines())
+    return {key: fields[key].strip() for key in ('Name', 'Pid', 'PPid', 'Uid', *FLAGS)}
+
+
+def provenance():
+    return {'pid': os.getpid(), 'ppid': os.getppid(), 'uid': os.getuid(),
+            'machine': os.uname().machine, 'status': status(),
+            'namespaces': {p.name: os.readlink(p) for p in Path('/proc/self/ns').iterdir()},
+            'cgroup': Path('/proc/self/cgroup').read_text(),
+            'limits': {key: Path('/sys/fs/cgroup', key).read_text().strip() for key in LIMITS},
+            'interpreter_sha256': hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest()}
+
+
+def restricted(p):
+    return (p['uid'] == 65534 and p['machine'] == 'aarch64' and p['limits'] == LIMITS
+            and all(p['status'][key] == value for key, value in FLAGS.items()))
+
+
+def connect(family, address):
+    with socket.socket(family) as client:
+        client.settimeout(1)
+        try:
+            client.connect(address)
+        except OSError as exc:
+            return {'errno': exc.errno, 'errno_name': errno.errorcode.get(exc.errno, 'timeout'),
+                    'error': str(exc)}
+        return {'errno': 0, 'errno_name': 'SUCCESS', 'reply': client.recv(4096).decode()}
+
+
+def local_positive(label):
+    results = {}
+    for kind, (family, _) in ENDPOINTS.items():
+        address = ('127.0.0.1', 0) if family == socket.AF_INET else (
+            '\0local-' + label if kind == 'abstract' else '/tmp/local-' + label + '.sock')
+        with socket.socket(family) as server, socket.socket(family) as client:
+            server.settimeout(1)
+            client.settimeout(1)
+            server.bind(address)
+            server.listen(1)
+            client.connect(server.getsockname())
+            accepted, _ = server.accept()
+            with accepted:
+                accepted.sendall(b'local-ok')
+                results[kind] = client.recv(32) == b'local-ok'
+        if kind == 'pathname':
+            os.unlink(address)
+    return results
+
+
+def observations(label):
+    out = {'provenance': provenance(), 'local': local_positive(label),
+           'peer_connect': {key: connect(*value) for key, value in ENDPOINTS.items()}}
+    # A separate live local socket provides a real EACCES control on Linux tmpfs.
+    directory = Path('/tmp/permission-' + label)
+    directory.mkdir()
+    with socket.socket(socket.AF_UNIX) as server:
+        server.bind(str(directory / 'live.sock'))
+        server.listen(1)
+        directory.chmod(0)
+        try:
+            out['permission_control'] = connect(socket.AF_UNIX, str(directory / 'live.sock'))
+        finally:
+            directory.chmod(0o700)
+    (directory / 'live.sock').unlink()
+    directory.rmdir()
+    expected = {'pathname': errno.ENOENT, 'abstract': errno.ECONNREFUSED,
+                'loopback': errno.ECONNREFUSED}
+    out['passed'] = (restricted(out['provenance']) and all(out['local'].values())
+                     and out['permission_control']['errno'] == errno.EACCES
+                     and all(out['peer_connect'][k]['errno'] == v for k, v in expected.items()))
+    return out
+
+
+def peer():
+    with selectors.DefaultSelector() as selector:
+        servers = []
+        try:
+            for family, address in ENDPOINTS.values():
+                server = socket.socket(family)
+                servers.append(server)
+                server.bind(address)
+                server.listen(8)
+                selector.register(server, selectors.EVENT_READ)
+            out = {'provenance': provenance(), 'endpoints': ENDPOINTS, 'token': TOKEN}
+            print(json.dumps(out), flush=True)
+            reply = json.dumps({'token': TOKEN, 'pid': os.getpid()}).encode()
+            until = time.monotonic() + 440
+            while time.monotonic() < until:
+                for key, _ in selector.select(0.2):
+                    accepted, _ = key.fileobj.accept()
+                    with accepted:
+                        accepted.settimeout(1)
+                        accepted.sendall(reply)
+        finally:
+            for server in servers:
+                server.close()
+
+
+def executor():
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch(executable_path='/browser/chrome-linux/chrome',
+            headless=True, timeout=20000, args=['--no-sandbox', '--disable-dev-shm-usage',
+            '--disable-background-networking', '--no-first-run'])
+        try:
+            page = browser.new_page(viewport={'width': 900, 'height': 600})
+            page.set_content('<h1>Synthetic IPC executor</h1><button '
+                'onclick="this.textContent=\'Marked complete\'">Mark complete</button>')
+            page.get_by_role('button', name='Mark complete', exact=True).click(timeout=5000)
+            out = {'ui_text': page.get_by_role('button').inner_text(),
+                   'browser_version': browser.version,
+                   'png_base64': base64.b64encode(page.screenshot(timeout=5000)).decode(),
+                   'parent': observations('parent')}
+            read_fd, write_fd = os.pipe()
+            child = os.fork()
+            if child == 0:
+                os.close(read_fd)
+                signal.alarm(10)
+                try:
+                    result = observations('child')
+                    with os.fdopen(write_fd, 'w') as stream:
+                        json.dump(result, stream)
+                    os._exit(0 if result['passed'] else 1)
+                except BaseException:
+                    os._exit(2)
+            os.close(write_fd)
+            with os.fdopen(read_fd) as stream:
+                out['child'] = json.loads(stream.read(65536))
+            _, out['child_status'] = os.waitpid(child, 0)
+            out['fork_pid'] = child
+            out['browser_processes'] = []
+            for path in Path('/proc').glob('[0-9]*/status'):
+                try:
+                    fields = status(path)
+                    if fields['Name'] in ('chrome', 'chrome_crashpad'):
+                        out['browser_processes'].append(fields)
+                except OSError:
+                    pass
+            out['passed'] = (out['parent']['passed'] and out['child']['passed']
+                and out['child_status'] == 0 and out['child']['provenance']['pid'] == child
+                and out['child']['provenance']['ppid'] == os.getpid()
+                and out['child']['provenance']['namespaces'] == out['parent']['provenance']['namespaces']
+                and out['ui_text'] == 'Marked complete' and bool(out['browser_processes'])
+                and all(set(p['Uid'].split()) == {'65534'} and
+                    all(p[k] == v for k, v in FLAGS.items()) for p in out['browser_processes']))
+        finally:
+            browser.close()
+    return out
+
+
+def probe_existing_browser():
+    # Parent already opened and observed the real candidate in this namespace.
+    # Do not start a second browser merely to prove the same IPC denials.
+    out = {'parent': observations('parent')}
+    read_fd, write_fd = os.pipe()
+    child = os.fork()
+    if child == 0:
+        os.close(read_fd)
+        signal.alarm(10)
+        result = observations('child')
+        with os.fdopen(write_fd, 'w') as stream:
+            json.dump(result, stream)
+        os._exit(0 if result['passed'] else 1)
+    os.close(write_fd)
+    with os.fdopen(read_fd) as stream:
+        out['child'] = json.loads(stream.read(65536))
+    _, out['child_status'] = os.waitpid(child, 0)
+    out['passed'] = bool(out['parent']['passed'] and out['child']['passed']
+        and out['child_status'] == 0 and out['child']['provenance']['pid'] == child
+        and out['child']['provenance']['ppid'] == os.getpid()
+        and out['child']['provenance']['namespaces'] == out['parent']['provenance']['namespaces'])
+    return out
+
+
+if MODE == 'peer':
+    peer()
+else:
+    if MODE == 'positive':
+        result = {'provenance': provenance(),
+                  'connect': {key: connect(*value) for key, value in ENDPOINTS.items()}}
+        result['passed'] = restricted(result['provenance']) and all(
+            v['errno'] == 0 and json.loads(v['reply']) == {'token': TOKEN, 'pid': 1}
+            for v in result['connect'].values())
+    elif MODE == 'probe':
+        result = probe_existing_browser()
+    else:
+        result = executor()
+    print(json.dumps(result), flush=True)
+    raise SystemExit(0 if result['passed'] else 1)

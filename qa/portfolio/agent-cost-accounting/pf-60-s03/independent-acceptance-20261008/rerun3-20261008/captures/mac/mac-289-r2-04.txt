@@ -1,0 +1,6 @@
+  Bucket: [2026-10-12T00:00:00.000Z, 2026-10-19T00:00:00.000Z); effective coverage (requested ∩ aggregate retention ∩ snapshot): not started
+  Not started yet — it starts after this view was read.
+  Back
+  Refresh
+  ↑↓ scroll · Enter open · Esc back/close
+  Close

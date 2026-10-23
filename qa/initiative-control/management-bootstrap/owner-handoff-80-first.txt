@@ -1,0 +1,49 @@
+.F......................................E...................................................F.............F..............................................................................
+======================================================================
+ERROR: test_transport_arm_does_not_launch_or_read_auth (test_owner_daemon.ArmingTests.test_transport_arm_does_not_launch_or_read_auth)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 709, in test_transport_arm_does_not_launch_or_read_auth
+    owner.arm_owner(self.config_path, self.authority)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/owner_daemon.py", line 438, in arm_owner
+    f.require(impact["dispatch_control"] is not None, "dispatch_handoff_required")
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/fable_launcher.py", line 58, in require
+    raise LaunchError(code)
+fable_launcher.LaunchError: dispatch_handoff_required
+
+======================================================================
+FAIL: test_busy_owner_still_reports_coordinator_and_unknown_owner (test_owner_daemon.ActivationVisibilityTests.test_busy_owner_still_reports_coordinator_and_unknown_owner)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 544, in test_busy_owner_still_reports_coordinator_and_unknown_owner
+    self.assertFalse(result["complete"])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_claim_commit_gap_holds_without_adopting_or_launching (test_owner_daemon.WorkerLifecycleTests.test_claim_commit_gap_holds_without_adopting_or_launching)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 994, in test_claim_commit_gap_holds_without_adopting_or_launching
+    with self.assertRaises(SystemExit):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: SystemExit not raised
+
+======================================================================
+FAIL: test_receipt_after_domain_commit_gap_holds_without_duplicate_mutation (test_owner_daemon.WorkerLifecycleTests.test_receipt_after_domain_commit_gap_holds_without_duplicate_mutation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 1007, in test_receipt_after_domain_commit_gap_holds_without_duplicate_mutation
+    with self.assertRaises(SystemExit):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: SystemExit not raised
+
+----------------------------------------------------------------------
+Ran 185 tests in 14.717s
+
+FAILED (failures=3, errors=1)
+{"reason":"TimeoutExpired","state":"ERROR"}
+{"reason":"TimeoutExpired","state":"ERROR"}
+{"fixture_only":true,"manager":"empty","routing":"deferred","state":"ACTIVE","states":["RECOVERING","READY","ACTIVE"]}

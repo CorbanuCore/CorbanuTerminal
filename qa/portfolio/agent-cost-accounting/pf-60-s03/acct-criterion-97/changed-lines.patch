@@ -1,0 +1,113 @@
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md
+index 4b1781ffc..d0b1fa5d0 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md
+@@ -10,4 +10,34 @@ root of the supplied repository. It records HEAD and creates a full-history,
+-detached clone inside ignored scratch space. The destination must not already
+-exist; preserve earlier attempts and use another supplied copy for a new run.
+-Uncommitted edits are not included. Inspect the source status printed here to
+-identify anything omitted; it is not required to be empty.
++detached clone of that commit. It does not copy the working tree.
++
++**Source-status criterion and action.** Inspect the printed status before
++proceeding. An empty status permits cloning. Any staged or unstaged tracked
++change (including additions, deletions, renames and conflicts) must stop this
++run: preserve the change, then either have the integrator commit the intended
++candidate or use a separate clean checkout of the intended commit. Do not
++silently discard changes or call a replay of HEAD a replay of those edits.
++
++Untracked artifacts outside the evidence inventories and replay/build inputs,
++and ignored scratch/cache outputs, may remain only when their omission cannot
++change the claim being checked. Inspect the acceptance record's inventory
++references and its input paths; a path's being ignored or untracked alone is
++not sufficient. If a path is inventoried, supplies code/configuration/evidence,
++is meant to change the candidate, or its relevance is uncertain, stop and
++resolve it with the integrator before rerunning. Missing historical package
++bytes remain unavailable even if a local ignored package exists.
++
++For permissible omissions, preserve the status and record the paths and why
++they are irrelevant in the transcript. Set `REPLAY_OMISSIONS_NOTE` to that
++explanation in the shell running block 1, then rerun that block unchanged.
++The block refuses tracked changes regardless of this explanation and refuses
++untracked/ignored entries without it. Report the result as a replay of the
++printed committed candidate, with listed omissions; never as verification of
++the whole dirty source tree. No omissions means no explanation is needed.
++
++The default destination is ignored scratch under this repository. To relocate
++it or run a second attempt, set `CORBANU_AUDIT_DIR` to a new absolute path in
++the shell running block 1. Preserve the old directory and transcripts; never
++reuse or delete a prior attempt to make this block pass. A destination inside
++the source repository must be ignored. A destination outside it is also valid.
++An edited copy of this operator note may be supplied as an external frozen
++instruction, with its hash recorded; do not copy it over the committed audit
++files or imply that the candidate includes that edit.
+@@ -17,0 +48 @@ q=qa/portfolio/agent-cost-accounting/pf-60-s03
++test "$(git rev-parse --show-toplevel)" = "$PWD"
+@@ -20,3 +51,19 @@ printf 'Candidate: %s\n' "$candidate"
+-git status --porcelain --untracked-files=all
+-audit="$PWD/$q/acct-operator-96/target/audit-copy"
+-git check-ignore -v "$audit"
++git status --porcelain --untracked-files=all --ignored=matching
++if ! git diff --quiet -- || ! git diff --cached --quiet HEAD -- || test -n "$(git ls-files --unmerged)"; then
++    printf '%s\n' 'STOP: tracked source changes; preserve them and resolve the candidate.'
++    exit 1
++fi
++omitted=$(git ls-files --others --exclude-standard --directory; git ls-files --others --ignored --exclude-standard --directory)
++if test -n "$omitted"; then
++    printf 'Omitted paths:\n%s\n' "$omitted"
++    if test -z "${REPLAY_OMISSIONS_NOTE:-}"; then
++        printf '%s\n' 'STOP: classify omissions using the criterion above; record REPLAY_OMISSIONS_NOTE and rerun only if permissible.'
++        exit 1
++    fi
++    printf 'Operator omission assessment: %s\n' "$REPLAY_OMISSIONS_NOTE"
++fi
++audit=${CORBANU_AUDIT_DIR:-"$PWD/$q/acct-criterion-97/target/audit-copy"}
++case "$audit" in /*) ;; *) printf '%s\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac
++test ! -e "$audit"
++test ! -L "$audit"
++case "$audit" in "$PWD"/*) git check-ignore -v "$audit" ;; esac
+@@ -24,0 +72 @@ git -C "$audit" checkout --detach "$candidate"
++audit=$(cd "$audit" && pwd -P)
+@@ -25,0 +74,2 @@ git -C "$audit" update-ref refs/heads/integrate/management-workstreams-20260911
++git -C "$audit" config --local corbanu.replayRoot "$audit"
++git -C "$audit" config --local corbanu.replayCandidate "$candidate"
+@@ -30,2 +80,6 @@ Run **each remaining block from the printed audit-copy root**, in a fresh Bash
+-shell (`bash --noprofile --norc`); no block relies on another block's variables
+-or working-directory changes. The clone's integration ref is deliberately
++shell (`bash --noprofile --norc`). Each block defines its own variables but
++requires you to enter that directory first. Every remaining block checks the
++root and candidate markers written to the clone's local Git config; a wrong
++directory or changed HEAD stops before replay/build/test execution. These are
++accidental-misrouting guards, not an independent authenticity claim.
++The clone's integration ref is deliberately
+@@ -40,0 +95,3 @@ q=qa/portfolio/agent-cost-accounting/pf-60-s03
++test "$(git rev-parse --show-toplevel)" = "$PWD"
++test "$(git config --local --get corbanu.replayRoot)" = "$PWD"
++test "$(git config --local --get corbanu.replayCandidate)" = "$(git rev-parse HEAD)"
+@@ -82 +139 @@ a fully disconnected build. Never copy a Corbanu profile or credential files.
+-These blocks use the same dedicated target under `acct-operator-96/target/`,
++These blocks use the same dedicated target under `acct-criterion-97/target/`,
+@@ -91 +148,4 @@ q=qa/portfolio/agent-cost-accounting/pf-60-s03
+-export CARGO_TARGET_DIR="$PWD/$q/acct-operator-96/target/cargo"
++test "$(git rev-parse --show-toplevel)" = "$PWD"
++test "$(git config --local --get corbanu.replayRoot)" = "$PWD"
++test "$(git config --local --get corbanu.replayCandidate)" = "$(git rev-parse HEAD)"
++export CARGO_TARGET_DIR="$PWD/$q/acct-criterion-97/target/cargo"
+@@ -104 +164,4 @@ q=qa/portfolio/agent-cost-accounting/pf-60-s03
+-export CARGO_TARGET_DIR="$PWD/$q/acct-operator-96/target/cargo"
++test "$(git rev-parse --show-toplevel)" = "$PWD"
++test "$(git config --local --get corbanu.replayRoot)" = "$PWD"
++test "$(git config --local --get corbanu.replayCandidate)" = "$(git rev-parse HEAD)"
++export CARGO_TARGET_DIR="$PWD/$q/acct-criterion-97/target/cargo"
+@@ -114 +177,4 @@ q=qa/portfolio/agent-cost-accounting/pf-60-s03
+-export CARGO_TARGET_DIR="$PWD/$q/acct-operator-96/target/cargo"
++test "$(git rev-parse --show-toplevel)" = "$PWD"
++test "$(git config --local --get corbanu.replayRoot)" = "$PWD"
++test "$(git config --local --get corbanu.replayCandidate)" = "$(git rev-parse HEAD)"
++export CARGO_TARGET_DIR="$PWD/$q/acct-criterion-97/target/cargo"
+@@ -124 +190,4 @@ q=qa/portfolio/agent-cost-accounting/pf-60-s03
+-export CARGO_TARGET_DIR="$PWD/$q/acct-operator-96/target/cargo"
++test "$(git rev-parse --show-toplevel)" = "$PWD"
++test "$(git config --local --get corbanu.replayRoot)" = "$PWD"
++test "$(git config --local --get corbanu.replayCandidate)" = "$(git rev-parse HEAD)"
++export CARGO_TARGET_DIR="$PWD/$q/acct-criterion-97/target/cargo"

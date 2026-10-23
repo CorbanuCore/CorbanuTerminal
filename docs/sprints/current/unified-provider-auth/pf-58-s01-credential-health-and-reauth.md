@@ -2,12 +2,12 @@
 sprint_id: "PF-58-S01"
 title: "Credential-scoped runtime health and keyboard reauthentication"
 status: draft
-plan_file: "docs/plans/proposed/unified-provider-auth.md"
+plan_file: "docs/plans/completed/main-2026-10-14-unified-provider-auth.md"
 plan_feature: "PF-58"
 execution_order: 22
 owner: "Codex /root"
 parallel_lane: "provider-reauth-health"
-write_scope: "codex-rs/.config/nextest.toml, codex-rs/Cargo.lock, MODULE.bazel.lock, codex-rs/keyring-store/, codex-rs/provider-auth/, codex-rs/login/, codex-rs/model-provider/, codex-rs/codex-mcp/, codex-rs/rmcp-client/, codex-rs/tui/, codex-rs/protocol/, codex-rs/app-server-protocol/, codex-rs/app-server/, codex-rs/core/src/session/mcp_runtime.rs, codex-rs/core/src/session/mcp.rs, codex-rs/core/tests/suite/mcp_auth_refresh.rs, docs/plans/active/unified-provider-auth.md, docs/sprints/current/unified-provider-auth/, docs/sprints/index.md, docs/authentication.md, docs/features/model-providers.md, qa/provider-auth/pf-58/, humanTest.html"
+write_scope: "codex-rs/.config/nextest.toml, codex-rs/Cargo.lock, MODULE.bazel.lock, codex-rs/keyring-store/, codex-rs/provider-auth/, codex-rs/login/, codex-rs/model-provider/, codex-rs/codex-mcp/, codex-rs/rmcp-client/, codex-rs/tui/, codex-rs/protocol/, codex-rs/app-server-protocol/, codex-rs/app-server/, codex-rs/core/src/session/mcp_runtime.rs, codex-rs/core/src/session/mcp.rs, codex-rs/core/tests/suite/mcp_auth_refresh.rs, docs/plans/completed/main-2026-10-14-unified-provider-auth.md, docs/sprints/current/unified-provider-auth/, docs/sprints/index.md, docs/authentication.md, docs/features/model-providers.md, qa/provider-auth/pf-58/, humanTest.html"
 integration_gate: "Codex /root audits the credential-specific boundary and scope, formats then tests final source on RTX including true-TMUX and safe synthetic auth failures/recovery, obtains Astra High and Fable5.1 High reviews within five total, and preserves a separate branch/candidate before updating integration or main. No privileged setup or automatic billing-context switch."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
 branch: "feat/provider-reauth-health"
@@ -29,7 +29,7 @@ remaining qualification returns to draft, preserving implementation and the spen
 
 ## Plan linkage
 
-- Plan: [Unified provider auth](../../../plans/proposed/unified-provider-auth.md), feature PF-58.
+- Plan: [Unified provider auth](../../../plans/completed/main-2026-10-14-unified-provider-auth.md), feature PF-58.
 - Product heading: **Shipping MVP — LIVE**; excerpt: “Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat.”
 - User authorized generalizing reauth on 2026-09-05 after the misleading Active label.
 

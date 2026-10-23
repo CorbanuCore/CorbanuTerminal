@@ -1,0 +1,3 @@
+resp_06419c9434298d2c016ac94c48287887d1b tier=auto in=9600 uncached=9600 cached=0 write=0 out=0 usd=0.00192
+resp_06419c9434298d2c016ac94c48a44c87d19 tier=default in=17331 uncached=3 cached=0 write=17328 out=5 usd=0.0043386
+TOTAL usd=0.0062586

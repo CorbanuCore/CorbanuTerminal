@@ -1,0 +1,4 @@
+start 2026-10-14T23:46:24Z
+end 2026-10-14T23:54:26Z
+"thread_id":"01a13ccf-596f-74f2-8980-26697b8e57bd"
+binary: ~/.local/bin/corbanu (installed), -s read-only, claude-opus-5-5-plan on claude-plan, reasoning high, -C review-packet

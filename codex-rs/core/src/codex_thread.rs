@@ -85,6 +85,9 @@ pub struct ThreadConfigSnapshot {
     pub parent_thread_id: Option<ThreadId>,
     pub thread_source: Option<ThreadSource>,
     pub originator: String,
+    /// PF-84: the live account as `<provider>:<name>` (`default` included),
+    /// so workers the client starts for this thread inherit it.
+    pub provider_account: Option<String>,
 }
 
 /// Explains why `CodexThread::try_start_turn_if_idle` rejected an automatic
@@ -100,6 +103,9 @@ pub enum TryStartTurnIfIdleRejectionReason {
     /// Another turn or task is active, or the idle reservation was lost before
     /// the automatic turn could start.
     Busy,
+    /// #507: the security kill switch is on. Automatic idle work (a goal
+    /// continuation) waits for a turn someone starts after it is turned off.
+    KillSwitch,
 }
 
 /// Rejection returned when an extension asks to start automatic idle work but
@@ -217,6 +223,30 @@ pub struct BackgroundTerminalInfo {
 /// Conduit for the bidirectional stream of messages that compose a thread
 /// (formerly called a conversation) in Codex.
 impl CodexThread {
+    /// Record a model request a client outside this process already sent, on
+    /// this thread. Returns whether it was recorded; collection being off is a
+    /// `false`, not an error.
+    pub async fn record_sent_model_request(
+        &self,
+        request: crate::accounting_extensions::SentModelRequest,
+    ) -> bool {
+        crate::accounting_extensions::ExtensionAccounting::new(Arc::downgrade(&self.session))
+            .record_sent_request(request)
+            .await
+    }
+
+    /// Record the paid model requests of an internal worker started on this
+    /// conversation's behalf - memory consolidation, which has no thread of
+    /// its own - under this conversation (PF-60-S04). Apply to the worker's
+    /// start options, so the owner is bound before its first request. Call it
+    /// only on the conversation the worker serves. Ignored for a worker that
+    /// persists a thread of its own.
+    pub fn record_worker_requests_here(&self, worker: &mut crate::StartThreadOptions) {
+        worker
+            .thread_extension_init
+            .insert(crate::accounting::StartedBy(self.session.thread_id));
+    }
+
     pub(crate) fn new(
         session: Arc<Session>,
         io: SessionIo,
@@ -261,6 +291,23 @@ impl CodexThread {
             expected_provider,
         )
         .await
+    }
+
+    /// Debug fixture: attach an existing, same-owner denial-only binding to live sampling.
+    #[cfg(debug_assertions)]
+    #[doc(hidden)]
+    pub fn attach_stage_one_binding_for_fixture(
+        &self,
+        client: &crate::memory_stage_one::StageOneMemoryClient,
+    ) -> Result<(), crate::memory_stage_one::StageOneMemoryDenial> {
+        let binding = client.binding_for_fixture(self.session.thread_id())?;
+        self.session
+            .services
+            .model_client()
+            .as_ref()
+            .clone()
+            .with_stage_one_memory_binding(binding)
+            .map(|_| ())
     }
 
     /// Returns the session telemetry handle for thread-scoped production instrumentation.
@@ -365,6 +412,9 @@ impl CodexThread {
             .session_source
             .get_agent_path()
             .unwrap_or_else(codex_protocol::AgentPath::root);
+        // #1248: set only when the target is the root of another tree, where `author` is a
+        // path in the sender's own tree and would read as one of the recipient's.
+        let mut author_label = None;
         let recipient = match control.ensure_agent_known(target_thread_id) {
             Ok(target) => target.agent_path.ok_or_else(|| {
                 CodexErr::InvalidRequest(format!(
@@ -380,6 +430,17 @@ impl CodexThread {
                     .unwrap_or(codex_protocol::AgentPath::ROOT);
                 codex_protocol::AgentPath::try_from(parent_path)
                     .map_err(CodexErr::InvalidRequest)?
+            }
+            // D106 (#1176): a pane the person opened is the root of its own tree, so this
+            // thread's tree does not know it. A task for it still goes to its mailbox, as
+            // inter-agent data like any other agent message, never as the person's input.
+            Err(_) if control.is_loaded_root_thread(target_thread_id).await => {
+                author_label = Some(cross_tree_author_label(
+                    &author,
+                    self.session_source.get_nickname().as_deref(),
+                    self.session.thread_id(),
+                ));
+                codex_protocol::AgentPath::root()
             }
             Err(err) => return Err(err),
         };
@@ -397,6 +458,7 @@ impl CodexThread {
             content,
             effective_trigger_turn,
         );
+        communication.author_label = author_label;
         if let Some(message_id) = message_id {
             communication.message_id = Some(message_id);
         }
@@ -454,14 +516,14 @@ impl CodexThread {
 
     /// Injects model-visible items into the currently active turn.
     ///
-    /// This is the thread-level bridge to `Session::inject_if_running` for
-    /// callers that only hold a `CodexThread`.
+    /// New work is deferred until the turn boundary if the active task cannot
+    /// admit it under the latest authorization.
     /// It returns the unchanged items when this thread has no active turn.
     pub async fn inject_if_running(
         &self,
         items: Vec<ResponseItem>,
     ) -> Result<(), Vec<ResponseItem>> {
-        self.session.inject_if_running(items).await
+        self.session.inject_extension_if_running(items).await
     }
 
     /// Starts an automatic regular turn with model-visible items only when idle
@@ -599,8 +661,38 @@ impl CodexThread {
         self.session.token_usage_info().await
     }
 
+    /// PF-84: this thread's provider-reported usage per named account, `None`
+    /// unless named accounts recorded some.
+    pub async fn account_token_usage(
+        &self,
+    ) -> Option<Vec<codex_protocol::protocol::AccountTokenUsage>> {
+        self.session.account_token_usage().await
+    }
+
     /// Records a user-role session-prefix message without creating a new user turn boundary.
+    #[cfg(test)]
     pub(crate) async fn inject_user_message_without_turn(&self, message: String) {
+        self.inject_message_without_turn(message, /*origin*/ None)
+            .await;
+    }
+
+    /// A sub-agent's result notification: agent data, never human or host text
+    /// (`source_envelopes`; first registration wins).
+    pub(crate) async fn inject_agent_result_without_turn(&self, message: String) {
+        self.inject_message_without_turn(
+            message,
+            Some(crate::security::ingress::MessageOrigin::External(
+                codex_protocol::provenance::SourceKind::ChildAgent,
+            )),
+        )
+        .await;
+    }
+
+    async fn inject_message_without_turn(
+        &self,
+        message: String,
+        origin: Option<crate::security::ingress::MessageOrigin>,
+    ) {
         let item = ResponseItem::Message {
             id: None,
             role: "user".to_string(),
@@ -608,6 +700,12 @@ impl CodexThread {
             phase: None,
             internal_chat_message_metadata_passthrough: None,
         };
+        if let Some(origin) = origin {
+            self.session
+                .services
+                .model_client()
+                .register_message_origin(std::slice::from_ref(&item), origin);
+        }
         self.session
             .inject_no_new_turn(vec![item], /*current_turn_context*/ None)
             .await;
@@ -718,6 +816,17 @@ impl CodexThread {
 
     pub async fn config_snapshot(&self) -> ThreadConfigSnapshot {
         self.session.thread_config_snapshot().await
+    }
+
+    /// PF-84-S06 (#658): whether a client is attached to this thread. A user
+    /// thread nobody is attached to (one the user left, kept loaded for a
+    /// while) does not count toward the account the process's own backend
+    /// requests use.
+    pub fn set_client_attached(&self, attached: bool) {
+        self.session
+            .services
+            .active_auth
+            .set_user_attached(attached);
     }
 
     /// Returns the files that supplied the thread's loaded model instructions.
@@ -846,3 +955,24 @@ impl CodexThread {
         Ok(elicitations.count)
     }
 }
+
+/// #1248: names an agent in another pane's tree for a recipient whose own paths would read
+/// `author` (often `/root`) as one of its own agents. The thread id keeps it unambiguous and,
+/// unlike a pane's editable name, stable for the message's identity on a retried send.
+fn cross_tree_author_label(
+    author: &codex_protocol::AgentPath,
+    nickname: Option<&str>,
+    source_thread_id: ThreadId,
+) -> String {
+    let nickname = nickname
+        .map(|nickname| format!(" ({nickname:?})"))
+        .unwrap_or_default();
+    format!(
+        "agent {author}{nickname} in another pane's agent tree (thread {source_thread_id}), \
+         not this pane's {author}"
+    )
+}
+
+#[cfg(test)]
+#[path = "codex_thread_tests.rs"]
+mod tests;

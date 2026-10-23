@@ -1,0 +1,76 @@
+Command (from src/codex-rs; the just test recipe, just is not installed on the RTX box):
+  CORBANU_TMUX_REQUIRED=1 CORBANU_TEST_NO_NATIVE_KEYRING=1 python3 ../scripts/isolated_rust_tests.py -p codex-tui --test all tmux --retries 0
+Commit b1e20a8ec6, own CARGO_TARGET_DIR. Result lines:
+        PASS [   0.018s] ( 1/71) codex-tui::all support::tmux_control::tests::unfinished_command_at_eof_fails_the_reader_queue
+        PASS [   0.018s] ( 2/71) codex-tui::all support::tmux_control_protocol::tests::command_blocks_are_correlated_into_complete_results
+        PASS [   0.020s] ( 3/71) codex-tui::all support::tmux_control::tests::parser_error_and_transcript_join_failure_bundle
+        PASS [   0.008s] ( 4/71) codex-tui::all support::tmux_control::tests::queue_limits_bound_event_count_and_retained_bytes
+        PASS [   0.008s] ( 5/71) codex-tui::all support::tmux_control::tests::line_reader_accepts_the_limit_and_rejects_the_next_byte
+        PASS [   0.016s] ( 6/71) codex-tui::all support::tmux_control_protocol::tests::pane_output_decodes_octal_and_preserves_future_fields
+        PASS [   0.016s] ( 7/71) codex-tui::all support::tmux_control_protocol::tests::unknown_notifications_are_preserved
+        PASS [   0.005s] ( 8/71) codex-tui::all support::tmux_control_protocol::tests::malformed_framing_and_escapes_return_structured_errors
+        PASS [   0.029s] ( 9/71) codex-tui::all support::tmux_control_protocol::tests::required_notifications_parse_as_typed_events
+        PASS [   0.007s] (10/71) codex-tui::all support::tmux_control_protocol::tests::line_and_command_output_limits_fail_at_the_boundary
+        PASS [   0.230s] (11/71) codex-tui::all support::tmux::tests::command_failures_include_diagnostics_and_artifacts
+        PASS [   0.268s] (12/71) codex-tui::all support::tmux::tests::panic_unwind_cleans_up_and_writes_artifacts
+        PASS [   0.276s] (13/71) codex-tui::all support::tmux_control::tests::tmux03_control_mode_tracks_two_pane_lifecycle
+        PASS [   0.270s] (14/71) codex-tui::all support::tmux::tests::successful_session_does_not_emit_artifacts
+        PASS [   0.282s] (15/71) codex-tui::all support::tmux::tests::attachment_hint_targets_only_owned_session_and_preserves_cleanup
+        PASS [   0.297s] (16/71) codex-tui::all support::tmux_control::tests::control_wait_timeout_writes_live_transcript
+        PASS [   0.455s] (17/71) codex-tui::all support::tmux::tests::viewport_and_scrollback_are_captured_separately
+        PASS [   0.470s] (18/71) codex-tui::all support::tmux::tests::literal_text_is_distinct_from_named_enter_key
+        PASS [   0.484s] (19/71) codex-tui::all support::tmux::tests::servers_are_isolated_and_cleanup_their_private_sessions
+        PASS [   0.499s] (20/71) codex-tui::all support::tmux::tests::interrupted_test_process_does_not_orphan_tmux
+        PASS [   0.550s] (21/71) codex-tui::all suite::security_profiles::tmux_security_unknown_config_fails_without_permissive_fallback
+        PASS [   0.766s] (22/71) codex-tui::all support::tmux::tests::wait_failures_write_complete_redacted_artifacts
+        PASS [   1.576s] (23/71) codex-tui::all suite::slash_dispatch::tmux_smoke_single_enter_dispatches_slash_command_and_exits_cleanly
+        PASS [   1.674s] (24/71) codex-tui::all suite::output_text_stream::tmux_output_text_delta_before_item_added_stays_live
+        PASS [   1.883s] (25/71) codex-tui::all suite::resize_reflow::tmux03_width_resize_restore_keeps_visible_content_anchored
+        PASS [   1.895s] (26/71) codex-tui::all suite::resize_reflow::tmux_smoke_split_preserves_fresh_session_composer_row_after_resize_reflow
+        PASS [   3.531s] (27/71) codex-tui::all suite::claude_auth::tmux_claude_auth_compatibility_selects_existing_login
+        PASS [   7.245s] (28/71) codex-tui::all suite::claude_auth::tmux_first_run_anthropic_account_selects_claude_login_after_success
+        PASS [  10.822s] (29/71) codex-tui::all suite::memory_stage_one_policy::tmux_memory_worker_policy_canary_permissive_and_protected
+        PASS [  11.479s] (30/71) codex-tui::all suite::security_profiles::tmux_security_profiles_are_observation_only_at_normal_and_narrow_widths
+        PASS [  13.498s] (31/71) codex-tui::all suite::claude_auth::tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume
+        PASS [  67.746s] (32/71) codex-tui::all suite::memory_human_fixture::tmux_memory_human_fixture_rehearsal
+        PASS [  21.498s] (33/71) codex-tui::all suite::multi_provider_onboarding::tmux_configure_many_preserves_first_default_restart_and_request
+        PASS [  12.863s] (34/71) codex-tui::all suite::multi_provider_onboarding::tmux_corbanu_env_aliases_restart_account_read_and_legacy_daemon_recovery
+        PASS [  12.011s] (35/71) codex-tui::all suite::multi_provider_onboarding::tmux_corbanu_env_legacy_alias_restart_and_account_read
+        PASS [  12.073s] (36/71) codex-tui::all suite::multi_provider_onboarding::tmux_corbanu_env_plan_alias_restart_and_account_read
+        PASS [  17.283s] (37/71) codex-tui::all suite::multi_provider_onboarding::tmux_deferred_corbanu_api_cancel_with_fallback_continues_to_chat
+        PASS [  14.068s] (38/71) codex-tui::all suite::multi_provider_onboarding::tmux_fresh_wallet_api_cancel_without_fallback_returns_to_setup
+        PASS [  20.963s] (39/71) codex-tui::all suite::multi_provider_onboarding::tmux_fresh_wallet_api_handoff_preserves_existing_current_provider
+        PASS [  14.913s] (40/71) codex-tui::all suite::multi_provider_onboarding::tmux_fresh_wallet_api_key_success_activates_without_restart
+        PASS [  20.808s] (41/71) codex-tui::all suite::multi_provider_onboarding::tmux_locked_wallet_api_unlocks_and_cancels
+        PASS [  14.592s] (42/71) codex-tui::all suite::multi_provider_onboarding::tmux_only_corbanu_api_cancel_returns_to_shared_provider_list
+        PASS [  30.439s] (43/71) codex-tui::all suite::provider_convergence::tmux_command_auth_is_visible_validated_and_has_no_enrollment_ui
+        PASS [  31.773s] (44/71) codex-tui::all suite::provider_convergence::tmux_custom_environment_provider_converges_across_hosts_picker_and_request
+        PASS [  20.139s] (45/71) codex-tui::all suite::provider_convergence::tmux_duplicate_model_slug_uses_exact_provider_identity
+        PASS [  32.496s] (46/71) codex-tui::all suite::provider_convergence::tmux_exact_replacement_persists_restart_and_request
+        PASS [  20.024s] (47/71) codex-tui::all suite::provider_convergence::tmux_existing_install_upgrade_preserves_current_and_request
+        PASS [  36.019s] (48/71) codex-tui::all suite::provider_convergence::tmux_fresh_a_then_b_preserves_first_success_across_restart
+        PASS [  27.055s] (49/71) codex-tui::all suite::provider_convergence::tmux_inactive_current_cancel_blocks_request_without_switch
+        PASS [  34.406s] (50/71) codex-tui::all suite::provider_convergence::tmux_inactive_noncurrent_is_managed_but_not_pickable_then_reactivates
+        PASS [  37.250s] (51/71) codex-tui::all suite::provider_convergence::tmux_managed_custom_key_survives_restart_and_request
+        PASS [  19.039s] (52/71) codex-tui::all suite::provider_convergence::tmux_missing_profile_current_never_silently_switches
+        PASS [  25.221s] (53/71) codex-tui::all suite::provider_convergence::tmux_native_spawn_picker_and_parent_request_share_exact_custom_runtime
+        PASS [  20.139s] (54/71) codex-tui::all suite::provider_convergence::tmux_permission_reload_preserves_active_runtime_over_saved_default
+        PASS [  20.976s] (55/71) codex-tui::all suite::provider_convergence::tmux_resumed_main_session_retains_exact_runtime_identity
+        PASS [  32.718s] (56/71) codex-tui::all suite::provider_management::reauthentication::tmux_reauth_api_key_failure_cancel_replace_and_same_session_request
+        PASS [  22.731s] (57/71) codex-tui::all suite::provider_management::reauthentication::tmux_reauth_environment_guidance_does_not_offer_vault_override
+        PASS [  24.372s] (58/71) codex-tui::all suite::provider_management::reauthentication::tmux_reauth_openai_account_cancel_then_request_without_model_change
+        PASS [  20.289s] (59/71) codex-tui::all suite::provider_management::reauthentication::tmux_reauth_openai_api_key_environment_preserves_external_ownership
+        PASS [  20.303s] (60/71) codex-tui::all suite::provider_management::reauthentication::tmux_reauth_openai_environment_key_preserves_external_ownership
+        PASS [  20.263s] (61/71) codex-tui::all suite::provider_management::reauthentication_apps::tmux_untrusted_apps_origin_preserves_account_and_healthy_model_route
+        PASS [  20.313s] (62/71) codex-tui::all suite::provider_management::tmux_ambient_model_picker_offers_only_glm
+        PASS [  24.499s] (63/71) codex-tui::all suite::provider_management::tmux_astra_selection_cancel_restart_and_request
+        PASS [  23.859s] (64/71) codex-tui::all suite::provider_management::tmux_current_deactivate_cancel_is_inert
+        PASS [  34.880s] (65/71) codex-tui::all suite::provider_management::tmux_current_exact_replacement_is_persisted_before_deactivation
+        PASS [  23.118s] (66/71) codex-tui::all suite::provider_management::tmux_environment_copy_and_eligibility_never_delete_credentials
+        PASS [  43.200s] (67/71) codex-tui::all suite::provider_management::tmux_noncurrent_deactivate_reactivate_restart_retains_request_credential
+        PASS [  29.497s] (68/71) codex-tui::all suite::provider_management::tmux_pf50_api_key_setup_and_recovery_are_reused
+        PASS [  22.522s] (69/71) codex-tui::all suite::provider_management::tmux_pf51_openai_account_cancel_and_retry_are_correlated
+        PASS [  27.894s] (70/71) codex-tui::all suite::provider_management::tmux_pf52_claude_recovery_cancel_and_retry_are_reused
+        PASS [  31.698s] (71/71) codex-tui::all suite::provider_management::tmux_shared_and_custom_catalog_have_management_status_parity
+     Summary [1005.954s] 71 tests run: 71 passed (1 slow), 24 skipped
+SUITE-EXIT 0

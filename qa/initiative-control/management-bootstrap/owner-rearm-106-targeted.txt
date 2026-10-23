@@ -1,0 +1,48 @@
+test_legacy_quarantine_separates_unknown_history_from_outstanding (test_decision_manager.ManagerTests.test_legacy_quarantine_separates_unknown_history_from_outstanding) ... ok
+test_reviewed_legacy_pruning_stays_unknown_after_unrelated_ingress (test_decision_manager.ManagerTests.test_reviewed_legacy_pruning_stays_unknown_after_unrelated_ingress) ... 
+  test_reviewed_legacy_pruning_stays_unknown_after_unrelated_ingress (test_decision_manager.ManagerTests.test_reviewed_legacy_pruning_stays_unknown_after_unrelated_ingress) (advanced=True) ... FAIL
+test_reviewed_legacy_pruning_stays_unknown_after_unrelated_ingress (test_decision_manager.ManagerTests.test_reviewed_legacy_pruning_stays_unknown_after_unrelated_ingress) ... FAIL
+test_legacy_unknown_is_durable_and_exact_review_does_not_rearm (test_slack_transport.TransportTests.test_legacy_unknown_is_durable_and_exact_review_does_not_rearm) ... FAIL
+test_legacy_unknown_summary_rejects_invalid_counts (test_slack_transport.TransportTests.test_legacy_unknown_summary_rejects_invalid_counts) ... ok
+test_outstanding_quarantine_survives_pruning_then_exact_review_clears_it (test_slack_transport.TransportTests.test_outstanding_quarantine_survives_pruning_then_exact_review_clears_it) ... ok
+
+======================================================================
+FAIL: test_reviewed_legacy_pruning_stays_unknown_after_unrelated_ingress (test_decision_manager.ManagerTests.test_reviewed_legacy_pruning_stays_unknown_after_unrelated_ingress) (advanced=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_manager.py", line 1042, in test_reviewed_legacy_pruning_stays_unknown_after_unrelated_ingress
+    self.assertEqual(surface["state"], "unknown")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'held' != 'unknown'
+- held
++ unknown
+
+
+======================================================================
+FAIL: test_reviewed_legacy_pruning_stays_unknown_after_unrelated_ingress (test_decision_manager.ManagerTests.test_reviewed_legacy_pruning_stays_unknown_after_unrelated_ingress)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_manager.py", line 1049, in test_reviewed_legacy_pruning_stays_unknown_after_unrelated_ingress
+    self.assertIsNone(self.store.read("transport")["hold"])
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'ingress-held' is not None
+
+======================================================================
+FAIL: test_legacy_unknown_is_durable_and_exact_review_does_not_rearm (test_slack_transport.TransportTests.test_legacy_unknown_is_durable_and_exact_review_does_not_rearm)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_slack_transport.py", line 1534, in test_legacy_unknown_is_durable_and_exact_review_does_not_rearm
+    self.assertEqual(s.outstanding_quarantine(self.store.read("transport")), expected)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'count': 1, 'oldest_at': '2026-09-12T12:00:00Z', 'unknown': 128} != {'count': 0, 'oldest_at': None, 'unknown': 128}
+- {'count': 1, 'oldest_at': '2026-09-12T12:00:00Z', 'unknown': 128}
+?           ^               ^^^^^^^^^^^^^^^^^^^^^^
+
++ {'count': 0, 'oldest_at': None, 'unknown': 128}
+?           ^               ^^^^
+
+
+----------------------------------------------------------------------
+Ran 5 tests in 7.174s
+
+FAILED (failures=3)

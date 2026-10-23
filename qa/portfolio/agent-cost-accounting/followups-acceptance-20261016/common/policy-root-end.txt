@@ -1,0 +1,113 @@
+## captured 2026-10-16T08:05:35Z as root
+## pfctl -sI -v (lo0 skip state)
+ALL
+lo0
+## pfctl -a corbanu.pf83 -vsr
+pass out quick on lo0 inet proto tcp from any to 127.0.0.1 port = 18443 user = 610 flags S/SA keep state
+  [ Evaluations: 120231    Packets: 706       Bytes: 152842      States: 0     ]
+  [ Inserted: uid 0 pid 3138 ]
+pass out quick on lo0 inet proto tcp from any to 127.0.0.1 port = 18443 user = 611 flags S/SA keep state
+  [ Evaluations: 2116      Packets: 36338     Bytes: 164251544   States: 0     ]
+  [ Inserted: uid 0 pid 3138 ]
+pass out quick on lo0 inet proto tcp from any to 127.0.0.1 port = 18443 user = 612 flags S/SA keep state
+  [ Evaluations: 1420      Packets: 41869     Bytes: 200895462   States: 0     ]
+  [ Inserted: uid 0 pid 3138 ]
+pass out quick on lo0 inet proto tcp from any to 127.0.0.1 port = 18443 user = 613 flags S/SA keep state
+  [ Evaluations: 612       Packets: 22642     Bytes: 67061869    States: 0     ]
+  [ Inserted: uid 0 pid 3138 ]
+block drop out log quick proto tcp all user = 610
+  [ Evaluations: 54411     Packets: 153       Bytes: 9456        States: 0     ]
+  [ Inserted: uid 0 pid 3138 ]
+block drop out log quick proto tcp all user = 611
+  [ Evaluations: 53739     Packets: 807       Bytes: 50256       States: 0     ]
+  [ Inserted: uid 0 pid 3138 ]
+block drop out log quick proto tcp all user = 612
+  [ Evaluations: 52932     Packets: 810       Bytes: 50400       States: 0     ]
+  [ Inserted: uid 0 pid 3138 ]
+block drop out log quick proto tcp all user = 613
+  [ Evaluations: 52122     Packets: 522       Bytes: 32528       States: 0     ]
+  [ Inserted: uid 0 pid 3138 ]
+block drop out log quick proto udp all user = 610
+  [ Evaluations: 52798     Packets: 0         Bytes: 0           States: 0     ]
+  [ Inserted: uid 0 pid 3138 ]
+block drop out log quick proto udp all user = 611
+  [ Evaluations: 1198      Packets: 0         Bytes: 0           States: 0     ]
+  [ Inserted: uid 0 pid 3138 ]
+block drop out log quick proto udp all user = 612
+  [ Evaluations: 1198      Packets: 0         Bytes: 0           States: 0     ]
+  [ Inserted: uid 0 pid 3138 ]
+block drop out log quick proto udp all user = 613
+  [ Evaluations: 1198      Packets: 0         Bytes: 0           States: 0     ]
+  [ Inserted: uid 0 pid 3138 ]
+pass in quick on en0 inet proto tcp from 192.168.64.1 to (en0) port = 22 flags S/SA keep state
+  [ Evaluations: 115783    Packets: 19967     Bytes: 75629400    States: 8     ]
+  [ Inserted: uid 0 pid 3138 ]
+pass out quick on en0 inet proto tcp from (en0) port = 22 to 192.168.64.1 flags S/SA keep state
+  [ Evaluations: 1177      Packets: 0         Bytes: 0           States: 0     ]
+  [ Inserted: uid 0 pid 3138 ]
+pass out quick on en0 inet proto udp from any port = 68 to 192.168.64.1 port = 67 keep state
+  [ Evaluations: 1289      Packets: 18        Bytes: 5931        States: 0     ]
+  [ Inserted: uid 0 pid 3138 ]
+pass in quick on en0 inet proto icmp from 192.168.64.1 to (en0) icmp-type echoreq keep state
+  [ Evaluations: 1280      Packets: 0         Bytes: 0           States: 0     ]
+  [ Inserted: uid 0 pid 3138 ]
+pass out quick on en0 inet proto tcp from (en0) to <__automatic_d6016d72_0> port = 443 flags S/SA keep state
+  [ Evaluations: 1280      Packets: 316575    Bytes: 444171607   States: 0     ]
+  [ Inserted: uid 0 pid 3138 ]
+block drop log quick on en0 all
+  [ Evaluations: 413       Packets: 413       Bytes: 87152       States: 0     ]
+  [ Inserted: uid 0 pid 3138 ]
+## /etc/sudoers.d/agms-codeblind
+agent ALL=(agmx0,agmx1,agmx2,agmx3) NOPASSWD: ALL
+## accounts
+uid=610(agmx0) gid=610(agmsexec) groups=610(agmsexec),12(everyone),61(localaccounts),701(com.apple.sharepoint.group.1),100(_lpoperator)
+dsAttrTypeNative:IsHidden: 1 NFSHomeDirectory: /Users/agmx0 UserShell: /bin/bash 
+no agmx0 is NOT a member of admin
+uid=611(agmx1) gid=610(agmsexec) groups=610(agmsexec),12(everyone),61(localaccounts),701(com.apple.sharepoint.group.1),100(_lpoperator)
+dsAttrTypeNative:IsHidden: 1 NFSHomeDirectory: /Users/agmx1 UserShell: /bin/bash 
+no agmx1 is NOT a member of admin
+uid=612(agmx2) gid=610(agmsexec) groups=610(agmsexec),12(everyone),61(localaccounts),701(com.apple.sharepoint.group.1),100(_lpoperator)
+dsAttrTypeNative:IsHidden: 1 NFSHomeDirectory: /Users/agmx2 UserShell: /bin/bash 
+no agmx2 is NOT a member of admin
+uid=613(agmx3) gid=610(agmsexec) groups=610(agmsexec),12(everyone),61(localaccounts),701(com.apple.sharepoint.group.1),100(_lpoperator)
+dsAttrTypeNative:IsHidden: 1 NFSHomeDirectory: /Users/agmx3 UserShell: /bin/bash 
+no agmx3 is NOT a member of admin
+## ssh access group
+GroupMembership: agent
+## modes
+/Users/Deleted Users 770 root:admin
+/Users/Shared 777 root:wheel
+/Users/agent 700 agent:staff
+/Users/agmx0 700 agmx0:agmsexec
+/Users/agmx1 700 agmx1:agmsexec
+/Users/agmx2 700 agmx2:agmsexec
+/Users/agmx3 700 agmx3:agmsexec
+/Users/neo 700 neo:staff
+/Users/neo_1 700 neo2:staff
+/opt/homebrew 755 neo2:admin
+/opt/homebrew/bin 750 neo2:admin
+/opt/homebrew/sbin 750 neo2:admin
+/opt/agms 755 root:wheel
+/opt/agms/bin 555 root:wheel
+/opt/agms/etc 555 root:wheel
+/opt/agms/package-files.txt 444 root:wheel
+/opt/agms/packet 555 root:wheel
+/opt/agms/pkg 555 root:wheel
+/opt/agms/pkg/bin/codex-code-mode-host 555 root:wheel
+/opt/agms/pkg/bin/corbanu 555 root:wheel
+/Users/agent/.pf83-auth 700 agent:staff
+/Users/agent/.pf83-auth/auth.json 600 agent:staff
+/Users/agent/.pf83-auth/kimi_api_key 600 agent:staff
+/Users/agent/.pf83-auth/openai_api_key 600 agent:staff
+/Users/agent/.pf83-auth/zai_api_key 600 agent:staff
+## /etc/codex
+ls: /etc/codex: No such file or directory
+## virtiofs
+not mounted
+## listeners
+COMMAND USER NAME
+Python agent 127.0.0.1:18443
+Python agent 127.0.0.1:18601
+Python agent 127.0.0.1:18602
+Python root 127.0.0.1:53
+launchd root *:22

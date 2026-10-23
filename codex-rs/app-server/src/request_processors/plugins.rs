@@ -575,7 +575,7 @@ impl PluginRequestProcessor {
         if !config.features.enabled(Feature::Plugins) {
             return Ok(empty_response());
         }
-        let auth = self.auth_manager.auth().await;
+        let auth = self.auth_manager.session_auth().await;
         if !self
             .workspace_codex_plugins_enabled(&config, auth.as_ref())
             .await
@@ -835,7 +835,7 @@ impl PluginRequestProcessor {
         if !config.features.enabled(Feature::Plugins) {
             return Ok(empty_response());
         }
-        let auth = self.auth_manager.auth().await;
+        let auth = self.auth_manager.session_auth().await;
         if !self
             .workspace_codex_plugins_enabled(&config, auth.as_ref())
             .await
@@ -1032,7 +1032,7 @@ impl PluginRequestProcessor {
 
         let config = self.load_latest_config(config_cwd).await?;
         let plugins_input = config.plugins_config_input();
-        let auth = self.auth_manager.auth().await;
+        let auth = self.auth_manager.session_auth().await;
         plugins_manager.set_auth_mode(auth.as_ref().map(CodexAuth::api_auth_mode));
 
         let plugin = match read_source {
@@ -1228,7 +1228,7 @@ impl PluginRequestProcessor {
             ));
         }
 
-        let auth = self.auth_manager.auth().await;
+        let auth = self.auth_manager.session_auth().await;
         let remote_plugin_service_config = remote_plugin_service_config(&config);
         let remote_skill_detail = codex_core_plugins::remote::fetch_remote_plugin_skill_detail(
             &remote_plugin_service_config,
@@ -1456,7 +1456,7 @@ impl PluginRequestProcessor {
         if !config.features.enabled(Feature::Plugins) {
             return Err(invalid_request("plugin sharing is not enabled"));
         }
-        let auth = self.auth_manager.auth().await;
+        let auth = self.auth_manager.session_auth().await;
         Ok((config, auth))
     }
 
@@ -1484,7 +1484,7 @@ impl PluginRequestProcessor {
         };
         let config_cwd = marketplace_path.as_path().parent().map(Path::to_path_buf);
         let config = self.load_latest_config(config_cwd.clone()).await?;
-        let auth = self.auth_manager.auth().await;
+        let auth = self.auth_manager.session_auth().await;
 
         if !self
             .workspace_codex_plugins_enabled(&config, auth.as_ref())
@@ -1571,7 +1571,7 @@ impl PluginRequestProcessor {
         }
         validate_remote_plugin_id(&remote_plugin_id)?;
 
-        let auth = self.auth_manager.auth().await;
+        let auth = self.auth_manager.session_auth().await;
         let remote_plugin_service_config = remote_plugin_service_config(&config);
         let remote_detail =
             codex_core_plugins::remote::fetch_remote_plugin_detail_with_download_urls(
@@ -2087,7 +2087,7 @@ impl PluginRequestProcessor {
         }
         validate_remote_plugin_id(&plugin_id)?;
 
-        let auth = self.auth_manager.auth().await;
+        let auth = self.auth_manager.session_auth().await;
         let remote_plugin_service_config = remote_plugin_service_config(&config);
         let uninstall_target = codex_core_plugins::remote::resolve_remote_plugin_uninstall_target(
             &remote_plugin_service_config,

@@ -1,0 +1,33 @@
+{
+  "block": 5,
+  "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-operator-96/target/audit-copy",
+  "command": [
+    "bash",
+    "--noprofile",
+    "--norc",
+    "-x",
+    "-c",
+    "set -eu\nq=qa/portfolio/agent-cost-accounting/pf-60-s03\nexport CARGO_TARGET_DIR=\"$PWD/$q/acct-operator-96/target/cargo\"\nexport NEXTEST_TEST_THREADS=4 CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0\nexport CARGO_PROFILE_DEV_DEBUG_ASSERTIONS=true CARGO_PROFILE_TEST_DEBUG_ASSERTIONS=true\ncd codex-rs\njust test -p codex-core accounting --features codex-core/developer-accounting\n"
+  ],
+  "note_sha256": "632c78b084d7145d5dc406e0d8a96e0d12eea30a4d85a46129526928abd76140",
+  "script_sha256": "d6ad57c30770d150ad98a513f1c9f5f3937f3f3372c57b8c1781777396aa308d",
+  "exit": 0,
+  "elapsed_seconds": 174.81651210784912,
+  "log_sha256": "a006b4ea762b7a3049ba2a7e404dad16e3209472e0304070e0292424fb2aae1b",
+  "environment_keys": [
+    "CARGO_HOME",
+    "CARGO_TERM_COLOR",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_TERMINAL_PROMPT",
+    "HOME",
+    "LC_ALL",
+    "PATH",
+    "PYTHONDONTWRITEBYTECODE",
+    "RUSTUP_HOME",
+    "TERM",
+    "TMPDIR"
+  ],
+  "fresh_shell": true,
+  "shell_variables_from_previous_block": false
+}

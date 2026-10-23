@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"01a120d4-4858-7f52-8b53-a4f6c20e5bdf"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Developer accounting is off for this session: this home's cost ledger was written by a newer Corbanu build. Requests are sent as usual; /cost does not include them."}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"after"}}
+{"type":"turn.completed","usage":{"input_tokens":12629,"cached_input_tokens":12608,"cache_write_input_tokens":0,"output_tokens":2,"reasoning_output_tokens":1}}

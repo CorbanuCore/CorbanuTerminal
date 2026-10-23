@@ -9,7 +9,7 @@ use codex_api::Provider;
 use codex_api::SharedAuthProvider;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
-use codex_login::validate_provider_auth_command;
+use codex_login::validate_provider_auth_command_for_account;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
 use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
@@ -34,6 +34,7 @@ use crate::amazon_bedrock::AmazonBedrockModelProvider;
 use crate::auth::ProviderAuthScope;
 use crate::auth::ResolvedProviderAuth;
 use crate::auth::auth_manager_for_provider;
+use crate::auth::named_sign_in_refusal;
 use crate::auth::resolve_provider_auth;
 use crate::auth::resolve_provider_auth_for_scope;
 use crate::models_endpoint::OpenAiModelsEndpoint;
@@ -256,11 +257,19 @@ pub type ModelProviderFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a
 pub type SharedModelProvider = Arc<dyn ModelProvider>;
 
 fn provider_uses_first_party_auth_path(provider: &ModelProviderInfo) -> bool {
-    provider.requires_openai_auth
-        && provider.env_key.is_none()
-        && provider.experimental_bearer_token.is_none()
-        && provider.auth.is_none()
-        && provider.aws.is_none()
+    provider.uses_first_party_openai_auth()
+}
+
+/// Drops the ambient `OPENAI_API_KEY` fallback for providers that don't use
+/// OpenAI sign-in (local OSS servers, custom endpoints), so a key exported in
+/// the shell is never sent to them. Saved logins keep their existing behavior.
+pub(crate) fn auth_for_provider(
+    auth: Option<CodexAuth>,
+    provider: &ModelProviderInfo,
+) -> Option<CodexAuth> {
+    auth.filter(|auth| {
+        !auth.is_openai_api_key_env_fallback() || provider_uses_first_party_auth_path(provider)
+    })
 }
 
 fn configured_provider_helper_model(info: &ModelProviderInfo) -> Option<&'static str> {
@@ -326,18 +335,74 @@ pub fn create_model_provider(
 struct ConfiguredModelProvider {
     info: ModelProviderInfo,
     auth_manager: Option<Arc<AuthManager>>,
+    /// PF-84: the Corbanu home holding the named-account registry (the
+    /// command-auth manager has no home of its own).
+    account_home: Option<PathBuf>,
+    /// PF-84: why the selected command account cannot be used.
+    account_error: Option<String>,
+}
+
+/// PF-84: a named account of an `auth.command` provider (including Claude
+/// Plan) must be enrolled, checked from vault metadata, so an unenrolled
+/// account fails at once instead of spawning its command on every retry.
+fn command_account_error(
+    provider_info: &ModelProviderInfo,
+    account_home: Option<&std::path::Path>,
+) -> Option<String> {
+    provider_info.auth.as_ref()?;
+    let account = provider_info.account.as_ref()?;
+    let Some(home) = account_home else {
+        return Some(format!(
+            "account `{}` of provider `{}` cannot be verified: no Corbanu home is available",
+            account.name, account.provider_id
+        ));
+    };
+    crate::auth::external_bearer_account(provider_info, Some(home))?
+        .ensure_enrolled()
+        .err()
+        .map(|error| error.to_string())
 }
 
 impl ConfiguredModelProvider {
     fn new(provider_info: ModelProviderInfo, auth_manager: Option<Arc<AuthManager>>) -> Self {
+        let account_home = auth_manager
+            .as_ref()
+            .map(|auth_manager| auth_manager.codex_home().to_path_buf());
+        let account_error = command_account_error(&provider_info, account_home.as_deref());
+        // PF-84: the account-bound manager itself refuses an unenrolled
+        // account before running the command; `account_error` only gives
+        // requests the precise message early.
         let auth_manager = auth_manager_for_provider(auth_manager, &provider_info);
         Self {
             info: provider_info,
             auth_manager,
+            account_home,
+            account_error,
         }
     }
 
     fn provider_env_auth(&self, provider_key_id: &str) -> Option<CodexAuth> {
+        // PF-27-S05: the broker reads this key; Core holds only a placeholder.
+        if crate::model_key_broker::model_key_broker_required() {
+            return Some(CodexAuth::from_api_key(
+                crate::model_key_broker::BROKERED_KEY_PLACEHOLDER,
+            ));
+        }
+        // PF-84: a named account reads only its own stored key.
+        if let Some(account) = self.info.account.as_ref() {
+            return self
+                .auth_manager
+                .as_ref()
+                .and_then(|auth_manager| {
+                    auth_manager
+                        .provider_account_api_key(&account.provider_id, &account.name)
+                        .unwrap_or_else(|error| {
+                            tracing::warn!(%error, "named account key unavailable");
+                            None
+                        })
+                })
+                .map(|api_key| CodexAuth::from_api_key(&api_key));
+        }
         if let Ok(api_key) = std::env::var(provider_key_id)
             && !api_key.trim().is_empty()
         {
@@ -349,6 +414,35 @@ impl ConfiguredModelProvider {
             .and_then(|auth_manager| auth_manager.provider_api_key(provider_key_id).ok())
             .flatten()
             .map(|api_key| CodexAuth::from_api_key(&api_key))
+    }
+}
+
+impl ConfiguredModelProvider {
+    /// Why a request that found no sign-in is refused instead of being sent
+    /// without credentials; `None` when it may go out unauthenticated.
+    fn missing_sign_in_refusal(&self) -> Option<CodexErr> {
+        // PF-84-S06 (#571): a named OpenAI sign-in account without a usable
+        // sign-in (D171, #1286: also one removed or signed out while the
+        // session ran) is refused with the reason, never sent
+        // unauthenticated while the session claims the account.
+        if let Some(refusal) = named_sign_in_refusal(&self.info, self.auth_manager.as_deref()) {
+            return Some(refusal);
+        }
+        // PF-84-S06 (#570): the default login this process hides (the
+        // restrictions rule it out) is refused with the reason, not replaced
+        // by an unauthenticated request.
+        if self.info.requires_openai_auth
+            && self.info.env_key.is_none()
+            && self.info.auth.is_none()
+            && self.info.account.is_none()
+            && let Some(reason) = self
+                .auth_manager
+                .as_ref()
+                .and_then(|auth_manager| auth_manager.hidden_default_login_reason())
+        {
+            return Some(CodexErr::Fatal(reason));
+        }
+        None
     }
 }
 
@@ -384,6 +478,14 @@ impl ModelProvider for ConfiguredModelProvider {
                 namespace_tools: false,
                 image_generation: false,
                 web_search: true,
+            }
+        } else if self.info.wire_api == WireApi::Chat {
+            // Chat Completions has no namespace container either. Core offers
+            // namespaced tools under flat names (#515, #547).
+            ProviderCapabilities {
+                namespace_tools: false,
+                image_generation: false,
+                ..ProviderCapabilities::default()
             }
         } else {
             ProviderCapabilities::default()
@@ -424,7 +526,7 @@ impl ModelProvider for ConfiguredModelProvider {
                 return self.provider_env_auth(provider_key_id);
             }
 
-            auth_manager.auth().await
+            auth_for_provider(auth_manager.auth().await, &self.info)
         })
     }
 
@@ -432,6 +534,9 @@ impl ModelProvider for ConfiguredModelProvider {
         &self,
     ) -> ModelProviderFuture<'_, codex_protocol::error::Result<SharedAuthProvider>> {
         Box::pin(async move {
+            if let Some(message) = &self.account_error {
+                return Err(CodexErr::Fatal(message.clone()));
+            }
             let mut auth = self.auth().await;
             if auth.is_none()
                 && let Some(command_auth) = self.info.auth.as_ref()
@@ -441,7 +546,19 @@ impl ModelProvider for ConfiguredModelProvider {
                 // command through its validating path so the actionable helper error reaches
                 // the user. A transient first failure may recover here, in which case resolve
                 // once more and use the recovered credential.
-                validate_provider_auth_command(command_auth).await?;
+                validate_provider_auth_command_for_account(
+                    command_auth,
+                    self.info
+                        .account
+                        .as_ref()
+                        .map(|account| account.name.as_str()),
+                )
+                .await
+                .map_err(|error| match error.kind() {
+                    // PF-84: an outdated helper refused the account; retrying cannot help.
+                    std::io::ErrorKind::Unsupported => CodexErr::Fatal(error.to_string()),
+                    _ => error.into(),
+                })?;
                 auth = self.auth().await;
                 if auth.is_none() {
                     return Err(std::io::Error::other(format!(
@@ -451,12 +568,62 @@ impl ModelProvider for ConfiguredModelProvider {
                     .into());
                 }
             }
+            if auth.is_none()
+                && let Some(error) = self.missing_sign_in_refusal()
+            {
+                return Err(error);
+            }
             resolve_provider_auth(auth.as_ref(), self.info())
         })
     }
 
+    fn api_auth_for_scope(
+        &self,
+        scope: ProviderAuthScope,
+    ) -> ModelProviderFuture<'_, codex_protocol::error::Result<ResolvedProviderAuth>> {
+        Box::pin(async move {
+            if !provider_uses_first_party_auth_path(self.info()) {
+                return self.api_auth().await.map(ResolvedProviderAuth::new);
+            }
+            let auth = self.auth().await;
+            // D171 (#1286): the first-party path refuses a missing sign-in
+            // as `api_auth` does, instead of sending the request without it.
+            if auth.is_none()
+                && let Some(error) = self.missing_sign_in_refusal()
+            {
+                return Err(error);
+            }
+            resolve_provider_auth_for_scope(self.auth_manager(), auth.as_ref(), self.info(), scope)
+                .await
+        })
+    }
+
     fn account_state(&self) -> ProviderAccountResult {
-        let account = if let Some(provider_key_id) = self.info.env_key.as_deref() {
+        let account = if self.info.env_key.is_some()
+            && crate::model_key_broker::model_key_broker_required()
+        {
+            // PF-27-S05: Core does not read the key to check for it; a missing
+            // key is reported when a request is made.
+            Some(ProviderAccount::ApiKey)
+        } else if let (Some(account), Some(_)) = (self.info.account.as_ref(), &self.info.env_key) {
+            // PF-84: only the named account's own key counts.
+            self.account_home
+                .as_deref()
+                .and_then(|home| {
+                    codex_login::provider_account_holds(
+                        home,
+                        &account.provider_id,
+                        &account.name,
+                        codex_login::ProviderAccountKind::ApiKey,
+                    )
+                    .inspect_err(
+                        |error| tracing::warn!(%error, "named account registry unavailable"),
+                    )
+                    .ok()
+                })
+                .filter(|holds| *holds)
+                .map(|_| ProviderAccount::ApiKey)
+        } else if let Some(provider_key_id) = self.info.env_key.as_deref() {
             let stored_key = self
                 .auth_manager
                 .as_ref()
@@ -652,6 +819,7 @@ mod tests {
 
     fn provider_for(base_url: String) -> ModelProviderInfo {
         ModelProviderInfo {
+            account: None,
             name: "mock".into(),
             base_url: Some(base_url),
             env_key: None,
@@ -675,6 +843,7 @@ mod tests {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+            billing: None,
         }
     }
 
@@ -728,6 +897,48 @@ mod tests {
             .expect("auth should resolve");
 
         assert!(auth.auth.to_auth_headers().is_empty());
+    }
+
+    #[tokio::test]
+    async fn openai_api_key_env_fallback_reaches_only_first_party_openai_auth() {
+        let env_fallback = || {
+            Some(AuthManager::from_auth_for_testing(
+                CodexAuth::from_api_key_env("sk-env", codex_login::OPENAI_API_KEY_ENV_VAR),
+            ))
+        };
+        let oss = create_model_provider(
+            create_oss_provider_with_base_url("http://localhost:11434/v1", WireApi::Responses),
+            env_fallback(),
+        );
+        let openai = create_model_provider(
+            ModelProviderInfo::create_openai_provider(/*base_url*/ None),
+            env_fallback(),
+        );
+
+        assert!(oss.auth().await.is_none());
+        assert!(
+            oss.api_auth()
+                .await
+                .expect("oss auth")
+                .to_auth_headers()
+                .is_empty()
+        );
+        assert_eq!(
+            openai
+                .auth()
+                .await
+                .and_then(|auth| auth.api_key().map(str::to_string)),
+            Some("sk-env".to_string())
+        );
+
+        // A saved key keeps its existing behavior on other providers.
+        let stored = create_model_provider(
+            create_oss_provider_with_base_url("http://localhost:11434/v1", WireApi::Responses),
+            Some(AuthManager::from_auth_for_testing(CodexAuth::from_api_key(
+                "sk-stored",
+            ))),
+        );
+        assert!(stored.auth().await.is_some());
     }
 
     #[test]
@@ -787,6 +998,22 @@ mod tests {
         assert_eq!(
             provider.memory_consolidation_preferred_model(),
             CLAUDE_PLAN_MODEL
+        );
+    }
+
+    #[test]
+    fn chat_wire_providers_disable_namespace_tools() {
+        let mut provider_info = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+        provider_info.wire_api = WireApi::Chat;
+        let provider = create_model_provider(provider_info, /*auth_manager*/ None);
+
+        assert_eq!(
+            provider.capabilities(),
+            ProviderCapabilities {
+                namespace_tools: false,
+                image_generation: false,
+                web_search: true,
+            }
         );
     }
 
@@ -1295,6 +1522,52 @@ mod tests {
                 .and_then(|value| value.to_str().ok()),
             Some("Bearer env-provider-key")
         );
+    }
+
+    #[tokio::test]
+    async fn pf_27_s05_brokered_provider_hands_out_a_placeholder_not_the_key() {
+        let env_key = format!("PFT_PROVIDER_BROKERED_{}", std::process::id());
+        let codex_home = test_codex_home().join(&env_key);
+        std::fs::create_dir_all(&codex_home).expect("temp codex home should be created");
+        let _guard = EnvVarGuard::set(env_key.clone(), "env-provider-key");
+        login_with_provider_api_key(
+            &codex_home,
+            &env_key,
+            "stored-provider-key",
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::default(),
+        )
+        .expect("stored provider key should be written");
+        let provider = create_model_provider(
+            ModelProviderInfo {
+                env_key: Some(env_key.clone()),
+                ..provider_for("https://example.test/v1".to_string())
+            },
+            Some(AuthManager::from_auth_for_testing_with_home(
+                CodexAuth::create_dummy_chatgpt_auth_for_testing(),
+                codex_home,
+            )),
+        );
+        let broker =
+            std::sync::Arc::new(crate::model_key_broker::test_support::RecordingBroker::default());
+        crate::model_key_broker::set_test_model_key_broker(Some(broker.clone()));
+
+        let auth = provider.auth().await.expect("placeholder auth");
+        let api_auth = provider.api_auth().await.expect("brokered auth");
+        let account = provider.account_state().expect("account state");
+        crate::model_key_broker::set_test_model_key_broker(/*broker*/ None);
+
+        assert_eq!(auth.api_key(), Some(crate::BROKERED_KEY_PLACEHOLDER));
+        assert!(api_auth.to_auth_headers().is_empty());
+        assert_eq!(account.account, Some(ProviderAccount::ApiKey));
+        let uses = broker.uses.lock().expect("uses");
+        assert_eq!(uses.len(), 1);
+        assert!(matches!(
+            &uses[0].source,
+            crate::BrokeredKeySource::ProviderKey { provider_key_id, .. } if *provider_key_id == env_key
+        ));
+        let debug = format!("{uses:?}");
+        assert!(!debug.contains("env-provider-key") && !debug.contains("stored-provider-key"));
     }
 
     #[tokio::test]

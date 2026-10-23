@@ -1,0 +1,57 @@
+{"t": 1791781315.742, "ev": "device-usercode"}
+{"t": 1791781315.744, "ev": "sign-in", "user": "tuiwork"}
+{"t": 1791781329.272, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791781368.791, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791781369.238, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791781369.397, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791781370.142, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791781370.634, "ev": "responses-401", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "fakekey"}, "model": "gpt-5.4"}
+{"t": 1791781370.885, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "tuiwork", "gen": 1, "expired": false}}
+{"t": 1791781370.886, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791781370.951, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791781370.959, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791781370.964, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "tuiwork", "gen": 1, "expired": false}}
+{"t": 1791781370.964, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791781370.98, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "tuiwork", "gen": 1, "expired": false}}
+{"t": 1791781371.032, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "tuiwork", "gen": 1, "expired": false}, "model": null}
+{"t": 1791781566.876, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791781590.721, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791781631.602, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791781693.286, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "none"}, "model": "gpt-6-luna"}
+{"t": 1791781749.238, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791781749.239, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "tuiwork", "gen": 1, "expired": false}}
+{"t": 1791781749.842, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791781749.845, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791781763.514, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791781763.516, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791781763.521, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "tuiwork", "gen": 1, "expired": false}}
+{"t": 1791781763.544, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "tuiwork", "gen": 1, "expired": false}}
+{"t": 1791781763.624, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "tuiwork", "gen": 1, "expired": false}, "model": null}
+{"t": 1791781784.836, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791781784.836, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "tuiwork", "gen": 1, "expired": false}}
+{"t": 1791781785.473, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791781785.477, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791781851.341, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791781924.151, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791781950.734, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "envkey"}, "model": "gpt-6-luna"}
+{"t": 1791781979.208, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791782006.042, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "none"}, "model": "gpt-6-luna"}
+{"t": 1791782026.722, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791782065.2, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "none"}, "model": "gpt-6-luna"}
+{"t": 1791782094.379, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791782121.25, "ev": "responses-401", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "fakekey"}, "model": "gpt-6-luna"}
+{"t": 1791782149.678, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791782280.065, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791782310.661, "ev": "device-usercode"}
+{"t": 1791782310.666, "ev": "sign-in", "user": "devcode"}
+{"t": 1791782326.297, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791782326.301, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791782331.964, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791782331.967, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791782331.976, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "devcode", "gen": 1, "expired": false}}
+{"t": 1791782331.996, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "devcode", "gen": 1, "expired": false}}
+{"t": 1791782332.065, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "devcode", "gen": 1, "expired": false}, "model": null}
+{"t": 1791782378.859, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791782393.452, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDOTHERPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791782416.723, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791782622.878, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}

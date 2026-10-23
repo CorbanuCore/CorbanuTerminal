@@ -1,0 +1,57 @@
+
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                   │
+│                                                 │
+│ model:     loading   /model to change           │
+│ directory: /Volumes/…/tui-snapshot-rot-20260916 │
+╰─────────────────────────────────────────────────╯
+
+
+› Write tests for @filename
+
+  fixture-model via pf55-a default · /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916 · Corbanu Terminal · TPS: -- tok/s
+
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                   │
+│                                                 │
+│ model:     fixture-model   /model to change     │
+│ directory: /Volumes/…/tui-snapshot-rot-20260916 │
+╰─────────────────────────────────────────────────╯
+
+
+› use the active runtime, not saved defaults
+
+
+⚠ Model metadata for `fixture-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+
+• PF55 response
+
+/mcp
+
+🔌  MCP Tools
+
+  • No MCP servers configured.
+    See the MCP docs to configure them.
+
+
+› Write tests for @filename
+
+  fixture-model via pf55-a default · /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916 · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

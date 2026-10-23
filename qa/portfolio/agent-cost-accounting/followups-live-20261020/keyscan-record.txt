@@ -1,0 +1,5 @@
+provider/zai_api_key: 0 files with the key value in qa/portfolio/agent-cost-accounting/followups-live-20261020
+openai-api-key: 0 files with the key value in qa/portfolio/agent-cost-accounting/followups-live-20261020
+kimi_api3: 0 files with the key value in qa/portfolio/agent-cost-accounting/followups-live-20261020
+files scanned in qa/portfolio/agent-cost-accounting/followups-live-20261020: 350
+of these, git-ignored (not committed): 8 (each run's fixture .env and product-logs/codex-tui.log); scanned before keyscan-record.txt itself was written

@@ -1,0 +1,48 @@
+# tui-h1-session-work: bin=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s05-indep-acc-20261011/debug/corbanu home=$S/homes/h1 args: --account work
+--- after prompt ---
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s05acc/ws │
+╰──────────────────────────────────────────────────────╯
+⚠ Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set
+  `suppress_unstable_features_warning = true` in $S/homes/h1/config.toml.
+› Reply with exactly the word pong and nothing else.
+• pong
+› Use /skills to list available skills
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: 0.3 tok/s
+--- /status ---
+/status
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Z.AI GLM 5.3 Flash                                                │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account work                │
+│  Directory:            $S/ws               │
+│  Permissions:          Next turn: Custom (workspace, never)                              │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Z.AI API key configured                                           │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12b3d-73c5-79a2-b27f-1b64d8af4f66                              │
+│                                                                                          │
+│  Token usage:          7.04K total  (7.04K input + 3 output)                             │
+│  Context window:       100% left (7.61K used / 950K)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+› Use /skills to list available skills
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: 0.3 tok/s
+--- /cost ---
+  Cost — this conversation
+  Requested UTC day: 2026-10-11
+› Today (UTC) in this conversation:
+  • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 1 request, 7,614 tokens. Estimated cost: $0.001074 (rounded).
+  Other conversations on this day, not included above: 15 requests in 7 conversations.
+  • Kimi Code · account alt · kimi-k3 — Covered by your subscription (not billed per request). 2 requests, 11,357 tokens. Same work at API prices: not available.
+  • Kimi Code · account default · kimi-k3 — Covered by your subscription (not billed per request). 2 requests, 11,421 tokens. Same work at API prices: not available.
+  • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 6 requests, 46,913 tokens. Estimated cost: $0.004231 (rounded).
+  • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 2 requests, tokens not reported. Estimated cost: not available — usage incomplete.
+  • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 3 requests, 19,458 tokens. Estimated cost: $0.002607 (rounded).
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+--- exit ---
+Token usage: total=7,038 input=7,035 (+ 576 cached) output=3
+To continue this session, run corbanu resume 01a12b3d-73c5-79a2-b27f-1b64d8af4f66
+EXITED-0

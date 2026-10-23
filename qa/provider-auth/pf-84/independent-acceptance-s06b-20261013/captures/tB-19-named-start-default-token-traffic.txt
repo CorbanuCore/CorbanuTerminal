@@ -1,0 +1,15 @@
+## t2 (default ChatGPT login tuidefault + named ChatGPT work = tuiwork2): TUI started directly on --account work (openai). Mock requests during the run, by path and identity:
+   1 get /backend-api/codex/connectors/directory/list tuidefault
+   1 get /backend-api/codex/plugins/featured tuidefault
+   34 get /backend-api/codex/ps/plugins/installed tuidefault
+   5 get /backend-api/codex/ps/plugins/list tuidefault
+   5 get /backend-api/codex/ps/plugins/suggested tuidefault
+   2 get /backend-api/codex/ps/plugins/suggested tuiwork2
+   2 get /backend-api/codex/wham/rate-limit-reset-credits tuidefault
+   1 get /backend-api/codex/wham/settings/user tuidefault
+   2 get /backend-api/codex/wham/usage tuidefault
+   1 get /v1/models tuiwork2
+   2 post-unhandled /backend-api/codex/codex/analytics-events/events tuidefault
+   5 post-unhandled /backend-api/codex/ps/mcp none
+   1 refresh None None
+   1 responses /v1/responses tuiwork2

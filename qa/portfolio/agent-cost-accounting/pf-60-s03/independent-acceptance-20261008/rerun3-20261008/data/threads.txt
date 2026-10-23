@@ -1,0 +1,11 @@
+# macOS (real clock)
+mh-def  def-zai    01a11db0-9edd-7aa2-8479-3f5600540c87  default build, built-in zai, 2 req
+mh-dev  dev-zai    01a11db0-9d01-7671-93b8-541a6e51c0e8  developer build, zai, 2 req (viewer)
+mh-dev  nu-nousage 01a11db0-9d1b-7c81-b8fa-4be48c2278a2  zainousage (proxy strips usage), 2 provider responses
+mh-dev  d1         01a11db0-9d96-7ec1-a06c-b8aaa7d185c7  (child 01a11db0-b608-79f2-b3ec-3e91c16aa94c), 6 req root+subagent — deleted at real clock
+# Linux / RTX (h-del)
+a1     01a11daa-d8fc-7c30-bfd7-1769227e63f8  real clock, 2 req — deleted with the clock about 57 s behind the checkpoint (tag del58s)
+a2     01a11daa-d8a3-7901-8252-240fb51e5b1d  real clock, 2 req — deleted with the clock 6 days behind
+vk     01a11dac-4e45-7f93-a5e2-c51b49d76364  real clock, 2 req (viewer)
+sk58s  01a11dab-9f17-7430-946d-55b7e2d84f7e  clock 58 s behind real (49 s behind the checkpoint), 7 req
+cp1    01a11dad-1cb8-73f1-9805-6ade88801a36  real clock, 2 req (fresh checkpoint just before the ~57 s delete)

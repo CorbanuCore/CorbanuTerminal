@@ -1,0 +1,54 @@
+  Attempt, components and original price
+  Requested UTC day: 2026-10-09
+  Provider: OpenAI
+  Model: GPT-5.6-Terra
+  Billing: Pay per use
+  Estimated cost: at least $0.000082 (rounded) (1 attempt had no price)
+  Next step for requests priced only in part: check the bill from OpenAI. Some of their tokens have no published price, so the estimate is only a lower
+  bound.
+  Tokens: 17,344 tokens
+  —— Details ——
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Billed cost: OpenAI doesn't report its charges, so any cost here is an estimate — check OpenAI's bill.
+  Request: f4732f67-ccac-4674-9f97-e94937865363
+  Attempt: 07784b5e-f3cb-4aa2-befe-57d2a1940a60
+  Thread: 01a12208-7b68-77e0-86db-33636119783e
+  Turn: 01a12208-7d56-7041-b5d2-d0528626580f
+  Provider: openai
+  Model: gpt-5.6-terra
+  Opaque scope: 1d10c2ba-6d11-4c01-94f4-d17fe41f3283
+  Arithmetic dialect: Inclusive
+  Admission time: 2026-10-09T18:59:05.176Z
+  Retry predecessor: none
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Known estimated token cost: $0.000082 (rounded) + unknown costs
+  Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
+  Billing basis: pay per use
+  Input: 17339
+  Noncached input (derived for inclusive input): 3 (derived)
+  Cache read: 0 (reported)
+  Cache write: 17336
+  Output: 5
+  Reasoning (subset, not separately billed): 0 (reported)
+  Total (not separately billed): 17344
+  Noncached input cost: $0.000008 (rounded); exact USD 0.0000075
+  Cache read cost: $0.000000; exact USD 0
+  Cache write cost: unknown — rate unavailable
+  Output cost: $0.000075; exact USD 0.000075
+  Known subtotal exact USD: 0.0000825
+  Price ID: 41ac58fb-216f-4948-a49f-f7049e16ca00
+  Price source: NativeCatalog; reference 778867fd-eaff-547a-b0c3-282e096d694f
+  Price currency/unit: Usd / PerMillionTokens
+  Price observed/approved: 2026-10-09T18:59:05.176Z / 2026-10-09T18:59:05.176Z
+  Price effective interval: [2026-10-09T18:59:05.176Z, unbounded)
+  Noncached input rate: 2.5 USD per million tokens
+  Cache read rate: 0.25 USD per million tokens
+  Rate unavailable for Cache write
+  Output rate: 15 USD per million tokens
+  Evidence revision 9; source f9c82667-b53b-40d6-818d-bc7088b70569; sequence 9; presence patch
+  {"input":17339,"read":0,"write":17336,"output":5,"reasoning":0,"total":17344}
+  Snapshot is not current; newer activity is unverified
+  Back
+  Refresh
+  Close

@@ -1,0 +1,15 @@
+== O1 openai default (API-key login), flag on (exit 0)
+   args: 
+   | pong
+   | tokens used
+== O2 openai named work (descoped to S04: must fail closed) (exit 1)
+   args: -c provider_accounts.openai="work"
+   | Error: provider_accounts.openai: provider `openai` does not support named accounts yet
+== O3 amazon-bedrock named work (descoped: must fail closed) (exit 1)
+   args: -c provider_accounts.amazon-bedrock="work"
+   | Error: provider_accounts.amazon-bedrock: provider `amazon-bedrock` does not support named accounts yet
+== O4 flag OFF + openai selector work: ignored, default works (exit 0)
+   args: --disable named_accounts -c provider_accounts.openai="work"
+   | pong
+   | tokens used
+   | warning: `[provider_accounts]` is ignored because the `named_accounts` feature is off; every provider uses its default account.

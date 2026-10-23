@@ -1,0 +1,942 @@
+//! The seam extensions use to record their own model requests.
+use super::*;
+use codex_features::Feature;
+use codex_state::SqliteConfig;
+use codex_state::StateRuntime;
+use codex_state::ThreadMetadataBuilder;
+use codex_utils_absolute_path::AbsolutePathBuf;
+use pretty_assertions::assert_eq;
+
+/// Waits until the ledger writer has written what it was handed. A slow write
+/// is put off and written later (#865), so read the ledger after this.
+async fn settle(db: &StateRuntime) {
+    assert!(
+        db.flush_accounting(std::time::Duration::from_secs(30))
+            .await,
+        "records still queued"
+    );
+}
+
+struct FixtureAuth;
+impl codex_api::AuthProvider for FixtureAuth {
+    fn add_auth_headers(&self, _: &mut http::HeaderMap) {}
+}
+
+/// Image generation is billed model inference that ships on by default, and it
+/// reached no ledger: the extension builds its own client, so there is no turn
+/// to attach to. This is that request, recorded.
+#[tokio::test]
+async fn accounting_extension_client_records_its_own_request() -> anyhow::Result<()> {
+    let server = wiremock::MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/v1/images/generations"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "created": 0,
+                "data": [{"b64_json": "aW1hZ2U="}],
+                "usage": {"input_tokens": 100, "input_tokens_details": {"cached_tokens": 20},
+                    "output_tokens": 40, "total_tokens": 140}
+            })),
+        )
+        .mount(&server)
+        .await;
+
+    let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
+    config.model_provider = codex_model_provider_info::ModelProviderInfo {
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        supports_websockets: false,
+        ..codex_model_provider_info::ModelProviderInfo::create_openai_provider(Some(
+            endpoint.clone(),
+        ))
+    };
+    config.model_provider_id = "openai".into();
+    config.accounting = crate::config::AccountingMode::Provider {
+        scope: Uuid::new_v4(),
+        provider_id: "openai".into(),
+        wire_api: codex_model_provider_info::WireApi::Responses,
+        approved_endpoint: endpoint.clone(),
+        approved_query: None,
+        pricing: crate::config::PriceAuthority::Unavailable,
+        basis_source: Default::default(),
+        account: None,
+    };
+    config.features.enable(Feature::Sqlite)?;
+    let provider = config.model_provider.clone();
+
+    let (mut session, _context) =
+        crate::session::tests::make_session_and_context_for_config(config.clone()).await;
+    let db = StateRuntime::init(
+        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        "openai".into(),
+    )
+    .await?;
+    session.services.state_db = Some(db.clone());
+    crate::session::tests::open_thread_persistence(&mut session).await;
+    let owner = Arc::new(session);
+    db.upsert_thread(
+        &ThreadMetadataBuilder::new(
+            owner.thread_id,
+            home.path().join("image-fixture.jsonl"),
+            chrono::Utc::now(),
+            codex_protocol::protocol::SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
+
+    let accounting = ExtensionAccounting::new(Arc::downgrade(&owner));
+    let transport = accounting
+        .transport(
+            codex_api::ReqwestTransport::from_http_client(
+                codex_login::default_client::create_client(),
+            ),
+            &provider,
+            &endpoint,
+            "gpt-image-1",
+            "images/generations",
+            "image",
+        )
+        .await;
+    let api = provider.to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))?;
+    codex_api::ImagesClient::new(transport, api, Arc::new(FixtureAuth))
+        .generate(
+            &codex_api::ImageGenerationRequest {
+                prompt: "fixture".into(),
+                background: None,
+                model: "gpt-image-1".into(),
+                n: None,
+                quality: None,
+                size: None,
+            },
+            http::HeaderMap::new(),
+        )
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+
+    settle(&db).await;
+    let pool = db
+        .sqlite()
+        .open_read_only_pool(&db.sqlite().state_db_path())
+        .await?;
+    let attempts: Vec<String> =
+        sqlx::query_scalar("SELECT payload FROM draft_accounting_attempts ORDER BY rowid")
+            .fetch_all(&pool)
+            .await?;
+    let turns: Vec<String> = attempts
+        .iter()
+        .map(|row| {
+            serde_json::from_str::<serde_json::Value>(row).expect("attempt payload")["turn"]
+                .as_str()
+                .expect("turn identity")
+                .to_string()
+        })
+        .collect();
+    assert_eq!(
+        turns
+            .iter()
+            .filter(|turn| turn.starts_with("image:"))
+            .count(),
+        1,
+        "turns recorded: {turns:?}"
+    );
+    let models: Vec<String> = attempts
+        .iter()
+        .map(|row| {
+            serde_json::from_str::<serde_json::Value>(row).expect("attempt payload")["model"]
+                .as_str()
+                .expect("model")
+                .to_string()
+        })
+        .collect();
+    assert_eq!(models, vec!["gpt-image-1".to_string()]);
+    // The images response carries its own usage, so the tokens are recorded
+    // rather than left unknown.
+    let observations: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM draft_accounting_observations")
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(observations, 1);
+    Ok(())
+}
+
+/// A handle whose session has gone away records nothing, and does not fail the
+/// extension's request: the owner is held weakly on purpose.
+#[tokio::test]
+async fn accounting_extension_client_without_its_session_records_nothing() -> anyhow::Result<()> {
+    let server = wiremock::MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/v1/images/generations"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "created": 0,
+                "data": [{"b64_json": "aW1hZ2U="}],
+                "usage": {"input_tokens": 100, "output_tokens": 40, "total_tokens": 140}
+            })),
+        )
+        .mount(&server)
+        .await;
+
+    let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
+    config.model_provider = codex_model_provider_info::ModelProviderInfo {
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        supports_websockets: false,
+        ..codex_model_provider_info::ModelProviderInfo::create_openai_provider(Some(
+            endpoint.clone(),
+        ))
+    };
+    config.model_provider_id = "openai".into();
+    config.accounting = crate::config::AccountingMode::Provider {
+        scope: Uuid::new_v4(),
+        provider_id: "openai".into(),
+        wire_api: codex_model_provider_info::WireApi::Responses,
+        approved_endpoint: endpoint.clone(),
+        approved_query: None,
+        pricing: crate::config::PriceAuthority::Unavailable,
+        basis_source: Default::default(),
+        account: None,
+    };
+    config.features.enable(Feature::Sqlite)?;
+    let provider = config.model_provider.clone();
+
+    let (mut session, _context) =
+        crate::session::tests::make_session_and_context_for_config(config.clone()).await;
+    let db = StateRuntime::init(
+        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        "openai".into(),
+    )
+    .await?;
+    session.services.state_db = Some(db.clone());
+    crate::session::tests::open_thread_persistence(&mut session).await;
+    let owner = Arc::new(session);
+    let accounting = ExtensionAccounting::new(Arc::downgrade(&owner));
+    drop(owner);
+
+    let transport = accounting
+        .transport(
+            codex_api::ReqwestTransport::from_http_client(
+                codex_login::default_client::create_client(),
+            ),
+            &provider,
+            &endpoint,
+            "gpt-image-1",
+            "images/generations",
+            "image",
+        )
+        .await;
+    let api = provider.to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))?;
+    // The request still succeeds; only the recording is withheld.
+    codex_api::ImagesClient::new(transport, api, Arc::new(FixtureAuth))
+        .generate(
+            &codex_api::ImageGenerationRequest {
+                prompt: "fixture".into(),
+                background: None,
+                model: "gpt-image-1".into(),
+                n: None,
+                quality: None,
+                size: None,
+            },
+            http::HeaderMap::new(),
+        )
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let pool = db
+        .sqlite()
+        .open_read_only_pool(&db.sqlite().state_db_path())
+        .await?;
+    let installed: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM sqlite_master WHERE name = 'draft_accounting_attempts'",
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(installed, 0, "a session-less handle installed accounting");
+    Ok(())
+}
+
+/// The binding is read live, and the route is the caller's own.
+///
+/// This is the property review caught twice and no test pinned: with the
+/// session configured for one provider route and the extension's client sending
+/// to another, a snapshot taken when the handle was built would pin the stale
+/// route and the request would fail admission instead of recording.
+#[tokio::test]
+async fn accounting_extension_client_binds_the_route_it_actually_sends_to() -> anyhow::Result<()> {
+    let server = wiremock::MockServer::start().await;
+    let live_endpoint = format!("{}/v1", server.uri());
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/v1/images/generations"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "created": 0,
+                "data": [{"b64_json": "aW1hZ2U="}],
+                "usage": {"input_tokens": 100, "output_tokens": 40, "total_tokens": 140}
+            })),
+        )
+        .mount(&server)
+        .await;
+
+    let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
+    // The session was configured for a route the extension no longer uses.
+    let stale = "http://127.0.0.1:1/v1";
+    config.model_provider = codex_model_provider_info::ModelProviderInfo {
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        supports_websockets: false,
+        ..codex_model_provider_info::ModelProviderInfo::create_openai_provider(Some(stale.into()))
+    };
+    config.model_provider_id = "openai".into();
+    config.accounting = crate::config::AccountingMode::Provider {
+        scope: Uuid::new_v4(),
+        provider_id: "openai".into(),
+        wire_api: codex_model_provider_info::WireApi::Responses,
+        approved_endpoint: stale.into(),
+        approved_query: None,
+        pricing: crate::config::PriceAuthority::Unavailable,
+        basis_source: Default::default(),
+        account: None,
+    };
+    config.features.enable(Feature::Sqlite)?;
+
+    let (mut session, _context) =
+        crate::session::tests::make_session_and_context_for_config(config.clone()).await;
+    let db = StateRuntime::init(
+        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        "openai".into(),
+    )
+    .await?;
+    session.services.state_db = Some(db.clone());
+    crate::session::tests::open_thread_persistence(&mut session).await;
+    let owner = Arc::new(session);
+    db.upsert_thread(
+        &ThreadMetadataBuilder::new(
+            owner.thread_id,
+            home.path().join("image-fixture.jsonl"),
+            chrono::Utc::now(),
+            codex_protocol::protocol::SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
+
+    // The client the extension actually sends with.
+    let live = codex_model_provider_info::ModelProviderInfo {
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        supports_websockets: false,
+        ..codex_model_provider_info::ModelProviderInfo::create_openai_provider(Some(
+            live_endpoint.clone(),
+        ))
+    };
+    let accounting = ExtensionAccounting::new(Arc::downgrade(&owner));
+    let transport = accounting
+        .transport(
+            codex_api::ReqwestTransport::from_http_client(
+                codex_login::default_client::create_client(),
+            ),
+            &live,
+            &live_endpoint,
+            "gpt-image-1",
+            "images/generations",
+            "image",
+        )
+        .await;
+    let api = live.to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))?;
+    // A stale pin would make this fail at admission rather than record.
+    codex_api::ImagesClient::new(transport, api, Arc::new(FixtureAuth))
+        .generate(
+            &codex_api::ImageGenerationRequest {
+                prompt: "fixture".into(),
+                background: None,
+                model: "gpt-image-1".into(),
+                n: None,
+                quality: None,
+                size: None,
+            },
+            http::HeaderMap::new(),
+        )
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+
+    settle(&db).await;
+    let pool = db
+        .sqlite()
+        .open_read_only_pool(&db.sqlite().state_db_path())
+        .await?;
+    let attempts: i64 = sqlx::query_scalar("SELECT count(*) FROM draft_accounting_attempts")
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(attempts, 1, "the live route was not recorded");
+    Ok(())
+}
+
+/// The Claude panes bridge sends model requests from inside the TUI, which
+/// cannot reach this crate's transport, so the host reports the send instead.
+/// This is one of those, recorded: a different provider on a different route
+/// from the session's own, with the tokens the provider reported and no money
+/// claimed on a credential this session does not hold.
+#[tokio::test]
+async fn accounting_records_a_request_another_client_already_sent() -> anyhow::Result<()> {
+    let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
+    config.model_provider_id = "openai".into();
+    config.accounting = crate::config::AccountingMode::Provider {
+        scope: Uuid::new_v4(),
+        provider_id: "openai".into(),
+        wire_api: codex_model_provider_info::WireApi::Responses,
+        approved_endpoint: "https://api.openai.com/v1".into(),
+        approved_query: None,
+        pricing: crate::config::PriceAuthority::Unavailable,
+        basis_source: Default::default(),
+        account: None,
+    };
+    config.features.enable(Feature::Sqlite)?;
+
+    let (mut session, _context) =
+        crate::session::tests::make_session_and_context_for_config(config).await;
+    let db = StateRuntime::init(
+        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        "openai".into(),
+    )
+    .await?;
+    session.services.state_db = Some(db.clone());
+    crate::session::tests::open_thread_persistence(&mut session).await;
+    let owner = Arc::new(session);
+    db.upsert_thread(
+        &ThreadMetadataBuilder::new(
+            owner.thread_id,
+            home.path().join("pane-fixture.jsonl"),
+            chrono::Utc::now(),
+            codex_protocol::protocol::SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
+
+    let sent = || SentModelRequest {
+        provider_id: "ambient".into(),
+        endpoint: "https://api.ambient.xyz/v1".into(),
+        path: "chat/completions".into(),
+        wire_api: codex_model_provider_info::WireApi::Chat,
+        model: "claude-sonnet-4-5".into(),
+        label: "pane".into(),
+        usage: Some(serde_json::json!({
+            "prompt_tokens": 120,
+            "prompt_tokens_details": {"cached_tokens": 20},
+            "completion_tokens": 30,
+            "total_tokens": 150
+        })),
+    };
+    assert!(
+        ExtensionAccounting::new(Arc::downgrade(&owner))
+            .record_sent_request(sent())
+            .await
+    );
+
+    settle(&db).await;
+    let pool = db
+        .sqlite()
+        .open_read_only_pool(&db.sqlite().state_db_path())
+        .await?;
+    let attempts: Vec<String> =
+        sqlx::query_scalar("SELECT payload FROM draft_accounting_attempts ORDER BY rowid")
+            .fetch_all(&pool)
+            .await?;
+    let attempt: serde_json::Value = serde_json::from_str(&attempts[0])?;
+    assert_eq!(attempts.len(), 1);
+    assert_eq!(attempt["provider"], "ambient");
+    assert_eq!(attempt["model"], "claude-sonnet-4-5");
+    assert!(
+        attempt["turn"]
+            .as_str()
+            .expect("turn identity")
+            .starts_with("pane:"),
+        "turn recorded: {attempt:?}"
+    );
+    let observations: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM draft_accounting_observations")
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(observations, 1);
+
+    // Claude subscription work reported through the bridge is subscription
+    // work: its declared basis is bound to the attempt even with no rates
+    // this session can attribute (PF-60-S05 AC4).
+    assert!(
+        ExtensionAccounting::new(Arc::downgrade(&owner))
+            .record_sent_request(SentModelRequest {
+                provider_id: codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID.into(),
+                endpoint: codex_model_provider_info::ANTHROPIC_BASE_URL.into(),
+                path: "messages".into(),
+                wire_api: codex_model_provider_info::WireApi::Anthropic,
+                model: codex_model_provider_info::CLAUDE_PLAN_MODEL.into(),
+                label: "pane".into(),
+                usage: Some(serde_json::json!({"input_tokens": 10, "output_tokens": 5})),
+            })
+            .await
+    );
+    settle(&db).await;
+    let bases: Vec<(String, String)> = sqlx::query_as(
+        "SELECT json_extract(payload, '$.provider'), json_extract(payload, '$.basis')
+            FROM draft_accounting_price_snapshots ORDER BY 1",
+    )
+    .fetch_all(&pool)
+    .await?;
+    assert_eq!(
+        bases,
+        vec![
+            // The earlier pay-per-use report, with no price this session can
+            // attribute, is bound to its basis too.
+            ("ambient".to_string(), "Billed".to_string()),
+            ("claude-plan".to_string(), "PlanEquivalent".to_string()),
+        ]
+    );
+
+    // The user's `billing` for that provider applies to bridge reports too.
+    let overridden = {
+        let mut config =
+            crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
+        config.accounting = owner.accounting_binding().await.0;
+        config.features.enable(Feature::Sqlite)?;
+        if let Some(provider) = config
+            .model_providers
+            .get_mut(codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID)
+        {
+            provider.billing = Some(codex_model_provider_info::BillingBasis::Local);
+        }
+        let (mut session, _context) =
+            crate::session::tests::make_session_and_context_for_config(config).await;
+        session.services.state_db = Some(db.clone());
+        crate::session::tests::open_thread_persistence(&mut session).await;
+        Arc::new(session)
+    };
+    db.upsert_thread(
+        &ThreadMetadataBuilder::new(
+            overridden.thread_id,
+            home.path().join("pane-override.jsonl"),
+            chrono::Utc::now(),
+            codex_protocol::protocol::SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
+    assert!(
+        ExtensionAccounting::new(Arc::downgrade(&overridden))
+            .record_sent_request(SentModelRequest {
+                provider_id: codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID.into(),
+                endpoint: codex_model_provider_info::ANTHROPIC_BASE_URL.into(),
+                path: "messages".into(),
+                wire_api: codex_model_provider_info::WireApi::Anthropic,
+                model: codex_model_provider_info::CLAUDE_PLAN_MODEL.into(),
+                label: "pane".into(),
+                usage: Some(serde_json::json!({"input_tokens": 1, "output_tokens": 1})),
+            })
+            .await
+    );
+    settle(&db).await;
+    let overridden_basis: Vec<(String, String)> = sqlx::query_as(
+        "SELECT json_extract(payload, '$.basis'), json_extract(payload, '$.basis_source')
+            FROM draft_accounting_price_snapshots WHERE json_extract(payload, '$.basis') = 'Local'",
+    )
+    .fetch_all(&pool)
+    .await?;
+    assert_eq!(
+        overridden_basis,
+        vec![("Local".to_string(), "UserConfig".to_string())]
+    );
+
+    // A usage report the ledger rejects is not reported as recorded (when
+    // the ledger refuses it while the caller waits; one it puts off is
+    // refused later and reported by the next turn).
+    let writer = db
+        .sqlite()
+        .open_read_write_pool(&db.sqlite().state_db_path())
+        .await?;
+    sqlx::query("CREATE TRIGGER reject_pane_observation BEFORE INSERT ON draft_accounting_observations BEGIN SELECT RAISE(ABORT, 'fixture-observation'); END")
+        .execute(&writer)
+        .await?;
+    assert!(
+        !ExtensionAccounting::new(Arc::downgrade(&owner))
+            .record_sent_request(sent())
+            .await
+    );
+    sqlx::query("DROP TRIGGER reject_pane_observation")
+        .execute(&writer)
+        .await?;
+    writer.close().await;
+    settle(&db).await;
+    let observations: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM draft_accounting_observations")
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(observations, 3);
+
+    // A session that is not collecting records nothing, and says so rather
+    // than failing the caller.
+    let owner_without_collection = {
+        let mut config =
+            crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
+        config.accounting = crate::config::AccountingMode::Disabled;
+        config.features.enable(Feature::Sqlite)?;
+        let (mut session, _context) =
+            crate::session::tests::make_session_and_context_for_config(config).await;
+        session.services.state_db = Some(db.clone());
+        crate::session::tests::open_thread_persistence(&mut session).await;
+        Arc::new(session)
+    };
+    assert!(
+        !ExtensionAccounting::new(Arc::downgrade(&owner_without_collection))
+            .record_sent_request(sent())
+            .await
+    );
+    settle(&db).await;
+    let attempts_after: i64 = sqlx::query_scalar("SELECT count(*) FROM draft_accounting_attempts")
+        .fetch_one(&pool)
+        .await?;
+    // The rejected report's attempt was admitted before its usage failed.
+    assert_eq!(attempts_after, 4);
+    Ok(())
+}
+
+/// PF-60-S05 AC7: web search and image generation are best effort. With the
+/// ledger refusing the admission, or refusing the usage after the paid
+/// response arrived, each client still gets the provider's answer, and the
+/// ledger holds exactly what it accepted.
+#[tokio::test]
+async fn accounting_store_failure_never_fails_search_or_image() -> anyhow::Result<()> {
+    for (refused_table, admitted) in [
+        ("draft_accounting_attempts", 0_i64),
+        ("draft_accounting_observations", 1),
+    ] {
+        for label in ["image", "search"] {
+            let server = wiremock::MockServer::start().await;
+            let endpoint = format!("{}/v1", server.uri());
+            let usage =
+                serde_json::json!({"input_tokens": 10, "output_tokens": 4, "total_tokens": 14});
+            wiremock::Mock::given(wiremock::matchers::method("POST"))
+                .and(wiremock::matchers::path("/v1/images/generations"))
+                .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(
+                    serde_json::json!({"created": 0, "data": [{"b64_json": "aW1hZ2U="}], "usage": usage}),
+                ))
+                .mount(&server)
+                .await;
+            wiremock::Mock::given(wiremock::matchers::method("POST"))
+                .and(wiremock::matchers::path("/v1/alpha/search"))
+                .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(
+                    serde_json::json!({"output": "fixture-results", "usage": usage}),
+                ))
+                .mount(&server)
+                .await;
+
+            let home = tempfile::tempdir()?;
+            let test_cwd = tempfile::tempdir()?;
+            let mut config =
+                crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
+            config.model_provider = codex_model_provider_info::ModelProviderInfo {
+                request_max_retries: Some(0),
+                stream_max_retries: Some(0),
+                supports_websockets: false,
+                ..codex_model_provider_info::ModelProviderInfo::create_openai_provider(Some(
+                    endpoint.clone(),
+                ))
+            };
+            config.model_provider_id = "openai".into();
+            config.accounting = crate::config::AccountingMode::Provider {
+                scope: Uuid::new_v4(),
+                provider_id: "openai".into(),
+                wire_api: codex_model_provider_info::WireApi::Responses,
+                approved_endpoint: endpoint.clone(),
+                approved_query: None,
+                pricing: crate::config::PriceAuthority::Unavailable,
+                basis_source: Default::default(),
+                account: None,
+            };
+            config.features.enable(Feature::Sqlite)?;
+            let provider = config.model_provider.clone();
+            let (mut session, _context) =
+                crate::session::tests::make_session_and_context_for_config(config).await;
+            let db = StateRuntime::init(
+                SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(
+                    home.path().to_path_buf(),
+                )?),
+                "openai".into(),
+            )
+            .await?;
+            session.services.state_db = Some(db.clone());
+            crate::session::tests::open_thread_persistence(&mut session).await;
+            let owner = Arc::new(session);
+            db.upsert_thread(
+                &ThreadMetadataBuilder::new(
+                    owner.thread_id,
+                    home.path().join("fixture.jsonl"),
+                    chrono::Utc::now(),
+                    codex_protocol::protocol::SessionSource::Cli,
+                )
+                .build("openai"),
+            )
+            .await?;
+            // Opening the sampling creates the ledger; the refusal is installed
+            // on it before the send.
+            let (model, path) = match label {
+                "image" => ("gpt-image-1", "images/generations"),
+                _ => ("gpt-5.4", "alpha/search"),
+            };
+            let transport = ExtensionAccounting::new(Arc::downgrade(&owner))
+                .transport(
+                    codex_api::ReqwestTransport::from_http_client(
+                        codex_login::default_client::create_client(),
+                    ),
+                    &provider,
+                    &endpoint,
+                    model,
+                    path,
+                    label,
+                )
+                .await;
+            let writer = db
+                .sqlite()
+                .open_read_write_pool(&db.sqlite().state_db_path())
+                .await?;
+            sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+                "CREATE TRIGGER refuse BEFORE INSERT ON {refused_table} BEGIN SELECT RAISE(ABORT, 'fixture-store-refusal'); END"
+            )))
+            .execute(&writer)
+            .await?;
+            let api = provider.to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))?;
+            let answer = match label {
+                "image" => codex_api::ImagesClient::new(transport, api, Arc::new(FixtureAuth))
+                    .generate(
+                        &codex_api::ImageGenerationRequest {
+                            prompt: "fixture".into(),
+                            background: None,
+                            model: model.into(),
+                            n: None,
+                            quality: None,
+                            size: None,
+                        },
+                        http::HeaderMap::new(),
+                    )
+                    .await
+                    .map(|response| response.data.len().to_string()),
+                _ => codex_api::SearchClient::new(transport, api, Arc::new(FixtureAuth))
+                    .search(
+                        &codex_api::SearchRequest {
+                            id: "fixture".into(),
+                            model: model.into(),
+                            reasoning: None,
+                            input: None,
+                            commands: None,
+                            settings: None,
+                            max_output_tokens: None,
+                        },
+                        http::HeaderMap::new(),
+                    )
+                    .await
+                    .map(|response| response.output),
+            };
+            let expected = if label == "image" {
+                "1"
+            } else {
+                "fixture-results"
+            };
+            assert_eq!(
+                answer.map_err(|error| error.to_string()),
+                Ok(expected.to_string()),
+                "{label} with {refused_table} refused"
+            );
+            settle(&db).await;
+            let attempts: i64 =
+                sqlx::query_scalar("SELECT count(*) FROM draft_accounting_attempts")
+                    .fetch_one(&writer)
+                    .await?;
+            let observations: i64 =
+                sqlx::query_scalar("SELECT count(*) FROM draft_accounting_observations")
+                    .fetch_one(&writer)
+                    .await?;
+            assert_eq!(
+                (attempts, observations),
+                (admitted, 0),
+                "{label} with {refused_table} refused"
+            );
+            writer.close().await;
+        }
+    }
+    Ok(())
+}
+
+/// An image generated on an OpenAI API key is priced at OpenAI's published
+/// image rates, to the micro-dollar: the Images API states its input as text
+/// and image parts with no cache fields, which is a complete report, not a
+/// partial one. The edits endpoint mixes text and image input under one input
+/// count, so it records its tokens with no price rather than a wrong one.
+#[tokio::test]
+async fn accounting_extension_prices_an_api_key_image_generation() -> anyhow::Result<()> {
+    let server = wiremock::MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    let usage = serde_json::json!({
+        "input_tokens": 12,
+        "input_tokens_details": {"text_tokens": 12, "image_tokens": 0},
+        "output_tokens": 272,
+        "output_tokens_details": {"text_tokens": 0, "image_tokens": 272},
+        "total_tokens": 284
+    });
+    for route in ["/v1/images/generations", "/v1/images/edits"] {
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .and(wiremock::matchers::path(route))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "created": 0,
+                    "data": [{"b64_json": "aW1hZ2U="}],
+                    "usage": usage.clone(),
+                })),
+            )
+            .mount(&server)
+            .await;
+    }
+
+    let home = tempfile::tempdir()?;
+    let test_cwd = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path(), test_cwd.path()).await;
+    config.model_provider = codex_model_provider_info::ModelProviderInfo {
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        supports_websockets: false,
+        ..codex_model_provider_info::ModelProviderInfo::create_openai_provider(Some(
+            endpoint.clone(),
+        ))
+    };
+    config.model_provider_id = "openai".into();
+    // OpenAI's API-key rates apply only at OpenAI's own route, which a local
+    // fixture cannot be; the direct API-key mode prices this route as that one.
+    config.accounting = crate::config::AccountingMode::DirectOpenAiResponsesHttp {
+        scope: Uuid::new_v4(),
+        approved_endpoint: endpoint.clone(),
+    };
+    config.features.enable(Feature::Sqlite)?;
+    let provider = config.model_provider.clone();
+
+    let (mut session, _context) =
+        crate::session::tests::make_session_and_context_for_config(config.clone()).await;
+    let db = StateRuntime::init(
+        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        "openai".into(),
+    )
+    .await?;
+    session.services.state_db = Some(db.clone());
+    crate::session::tests::open_thread_persistence(&mut session).await;
+    let owner = Arc::new(session);
+    db.upsert_thread(
+        &ThreadMetadataBuilder::new(
+            owner.thread_id,
+            home.path().join("image-fixture.jsonl"),
+            chrono::Utc::now(),
+            codex_protocol::protocol::SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
+
+    let accounting = ExtensionAccounting::new(Arc::downgrade(&owner));
+    let api = provider.to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))?;
+    let client = |path: &'static str, label: &'static str| {
+        let accounting = accounting.clone();
+        let provider = provider.clone();
+        let endpoint = endpoint.clone();
+        let api = api.clone();
+        async move {
+            let transport = accounting
+                .transport(
+                    codex_api::ReqwestTransport::from_http_client(
+                        codex_login::default_client::create_client(),
+                    ),
+                    &provider,
+                    &endpoint,
+                    "gpt-image-2",
+                    path,
+                    label,
+                )
+                .await;
+            codex_api::ImagesClient::new(transport, api, Arc::new(FixtureAuth))
+        }
+    };
+    client("images/generations", "image")
+        .await
+        .generate(
+            &codex_api::ImageGenerationRequest {
+                prompt: "fixture".into(),
+                background: None,
+                model: "gpt-image-2".into(),
+                n: None,
+                quality: None,
+                size: None,
+            },
+            http::HeaderMap::new(),
+        )
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    client("images/edits", "image-edit")
+        .await
+        .edit(
+            &codex_api::ImageEditRequest {
+                images: vec![codex_api::ImageUrl {
+                    image_url: "data:image/png;base64,aW1hZ2U=".into(),
+                }],
+                prompt: "fixture".into(),
+                background: None,
+                model: "gpt-image-2".into(),
+                n: None,
+                quality: None,
+                size: None,
+            },
+            http::HeaderMap::new(),
+        )
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+
+    settle(&db).await;
+    let day = chrono::Utc::now().timestamp_millis() / 86_400_000;
+    let codex_state::accounting::InspectionDay::Ready(view) =
+        codex_state::accounting::AccountingStore::inspect_day(
+            &db,
+            owner.thread_id,
+            day,
+            chrono::Utc::now().timestamp_millis(),
+        )
+        .await?
+    else {
+        panic!("expected the day");
+    };
+    let quote = |label: &str| {
+        view.requests
+            .values()
+            .flatten()
+            .find(|quote| quote.attempt.turn.starts_with(&format!("{label}:")))
+            .cloned()
+            .unwrap_or_else(|| panic!("no {label} attempt recorded"))
+    };
+    // 12 text input tokens at $5.00/M plus 272 image output tokens at $30.00/M.
+    let generation = quote("image");
+    assert_eq!(
+        generation.all_buckets_priced,
+        Some(codex_state::accounting::Decimal::try_from(
+            "0.00822".to_string()
+        )?)
+    );
+    assert_eq!(
+        generation.snapshot.map(|snapshot| snapshot.basis),
+        Some(codex_state::accounting::Basis::Billed)
+    );
+    let edit = quote("image-edit");
+    assert_eq!(edit.all_buckets_priced, None);
+    assert_eq!(edit.usage.output, Some(272));
+    Ok(())
+}

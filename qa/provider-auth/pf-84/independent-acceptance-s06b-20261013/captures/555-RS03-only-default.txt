@@ -1,0 +1,3 @@
+ERROR: This conversation ran on zai account `work` and resumes on it: account `work` of provider `zai` is not configured; add it with `corbanu account add zai work` or pi
+ck another with `--account` (see `corbanu account list`)
+EXITED-1

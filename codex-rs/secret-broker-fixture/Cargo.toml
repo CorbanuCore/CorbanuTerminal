@@ -1,0 +1,46 @@
+[package]
+name = "codex-secret-broker-fixture"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+doctest = false
+
+# Synthetic test fixtures only. Never installed as a service.
+[[bin]]
+name = "codex-secret-broker-service-fixture"
+path = "src/fixture/main.rs"
+
+[[bin]]
+name = "codex-protected-root-probe"
+path = "src/probe/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+codex-keyring-store = { workspace = true }
+codex-secret-broker = { workspace = true }
+codex-secret-broker-service = { workspace = true }
+codex-security-audit = { workspace = true }
+codex-security-policy = { workspace = true }
+codex-utils-absolute-path = { workspace = true }
+codex-vault = { workspace = true }
+tempfile = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+codex-protected-state = { workspace = true, features = ["synthetic-fixture"] }
+nix = { version = "0.30.1", features = ["socket", "user", "poll", "process"] }
+rustix = { version = "1.1.4", features = ["process", "thread", "fs"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+signal-hook = { version = "0.3.18" }
+
+[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
+codex-linux-pidfd-spawn = { workspace = true, features = ["synthetic-fixture"] }
+
+[dev-dependencies]
+codex-utils-cargo-bin = { workspace = true }
+pretty_assertions = { workspace = true }

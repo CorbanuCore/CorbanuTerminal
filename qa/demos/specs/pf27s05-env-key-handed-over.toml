@@ -1,0 +1,54 @@
+# PF-27-S05: Core hands its provider key to the broker and removes it from its own environment.
+id = "pf27s05-env-key-handed-over"
+feature = "Model-client auth in the broker: Core hands ZAI_API_KEY to the broker at startup and overwrites it in its own launch environment"
+expected = "The session answers through the broker. ps -E on the Corbanu process shows ZAI_API_KEY overwritten, and Core's log says the key was handed to the broker and removed from the environment."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+suppress_unstable_features_warning = true
+
+[features]
+broker_model_auth = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Reply with exactly one line: answered with the key held by the broker"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "(?m)^. answered with the key held by the broker"
+timeout = 240
+compress = 3
+
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+
+[[steps]]
+type = '''!echo "parent: $(ps -o comm= -p $PPID | xargs basename)"; ps -wwEp $PPID -o command= | tr ' ' '\n' | awk -F= '$1=="ZAI_API_KEY"{print "launch env: ZAI_API_KEY", ($2 ~ /^0+$/ ? "OVERWRITTEN" : "STILL SET")}'; grep -hoE "removed from the environment: [A-Z_, ]+" {logs}/*.log | head -1'''
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "removed from the environment: ZAI_API_KEY"
+timeout = 30
+
+[[steps]]
+pause = 4.0

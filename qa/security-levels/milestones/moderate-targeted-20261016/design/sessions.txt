@@ -1,0 +1,3 @@
+designer: start 2026-10-16T10:06:56Z exit=0  end 2026-10-16T10:14:44Z
+reviewer: start 2026-10-16T10:16:43Z exit=0  end 2026-10-16T10:21:24Z
+both: ~/.local/bin/corbanu exec --json -s read-only --skip-git-repo-check -m claude-opus-5-5-plan (claude-plan, reasoning high), working directory = the packet folder only

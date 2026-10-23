@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a15924-3e81-7881-8f4d-670b843ab76d"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"AGMS-SMOKE-OK"}}
+{"type":"turn.completed","usage":{"input_tokens":6125,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":17,"reasoning_output_tokens":8}}

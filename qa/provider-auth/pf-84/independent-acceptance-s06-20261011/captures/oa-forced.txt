@@ -1,0 +1,59 @@
+
+### 1 CAND, default=API key, forced chatgpt, --account chat (named ChatGPT: allowed)
+   default login before: auth.json 387fd2904b22
+$ run $CAND $S/homes/f1 exec --skip-git-repo-check -C $S/ws -c forced_login_method="chatgpt" --account chat Reply with exactly: pong
+mock: chatgpt named gen1
+mock: chatgpt named gen1
+[exit 0]
+   default login after: auth.json ABSENT
+   mock: {"t": 1791780993.019, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "named", "gen": 1, "expired": false}, "model": null}
+
+### 2 CAND, default=API key, forced chatgpt, --account key (named API key: refused)
+   default login before: auth.json 387fd2904b22
+$ run $CAND $S/homes/f2 exec --skip-git-repo-check -C $S/ws -c forced_login_method="chatgpt" --account key Reply with exactly: pong
+Error: thread/start: thread/start failed: account `key` holds an OpenAI API key, but this configuration requires a ChatGPT sign-in; sign in with `corbanu login --account key` (code -32600)
+[exit 1]
+   default login after: auth.json ABSENT
+
+### 3 CAND, default=API key, forced chatgpt, default session
+   default login before: auth.json 387fd2904b22
+$ run $CAND $S/homes/f3 exec --skip-git-repo-check -C $S/ws -c forced_login_method="chatgpt" Reply with exactly: pong
+mock: none 
+mock: none 
+[exit 0]
+   default login after: auth.json ABSENT
+   mock: {"t": 1791780996.625, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "none"}, "model": "gpt-5.4"}
+
+### 4 BASE (pre-S06), default=API key, forced chatgpt, default session
+   default login before: auth.json 387fd2904b22
+$ run $BASE $S/homes/f4 exec --skip-git-repo-check -C $S/ws -c forced_login_method="chatgpt" Reply with exactly: pong
+mock: none 
+mock: none 
+[exit 0]
+   default login after: auth.json ABSENT
+   mock: {"t": 1791780998.369, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "none"}, "model": "gpt-5.4"}
+
+### 5 CAND, default=ChatGPT, forced api, --account key (named API key: allowed)
+   default login before: auth.json 22f9f2fd79f9
+$ run $CAND $S/homes/f5 exec --skip-git-repo-check -C $S/ws -c forced_login_method="api" --account key Reply with exactly: pong
+mock: bearer keyacct
+mock: bearer keyacct
+[exit 0]
+   default login after: auth.json ABSENT
+   mock: {"t": 1791781000.553, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "keyacct"}, "model": "gpt-5.4"}
+
+### 6 BASE (pre-S06), default=ChatGPT, forced api, default session
+   default login before: auth.json 06ba9b8f3871
+$ run $BASE $S/homes/f6 exec --skip-git-repo-check -C $S/ws -c forced_login_method="api" Reply with exactly: pong
+mock: none 
+mock: none 
+[exit 0]
+   default login after: auth.json ABSENT
+   mock: {"t": 1791781002.287, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "none"}, "model": "gpt-5.4"}
+
+### 7 CAND, default=ChatGPT (ws-main), forced workspace ws-other, --account key
+   default login before: auth.json 1de6db1bb727
+$ run $CAND $S/homes/f7 exec --skip-git-repo-check -C $S/ws -c forced_chatgpt_workspace_id="ws-other" --account key Reply with exactly: pong
+Login is restricted to workspace(s) ws-other, but current credentials belong to ws-main. Logging out.
+[exit 1]
+   default login after: auth.json ABSENT

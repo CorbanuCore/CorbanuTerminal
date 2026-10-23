@@ -1,0 +1,8 @@
+mac-c1 01a11b1f-96f1-7fc2-b0d3-759b9a38afe1
+mac-c2 01a11b1f-9654-7973-b4fe-5463b1ea8959
+mac-c3 01a11b1f-95b2-7de3-90d9-6bdd26f584f8
+mac-custom 01a11b23-b048-7532-a2e0-9c5b65ccd403
+mac-nousage 01a11b23-b0db-7700-b41e-da229a92027d
+mac1-probe 01a11b1c-c767-7322-bf56-0aea70e02a36
+mac-tui-convA 01a11b1d-ecc9-7581-afa4-c59a9295612c (TUI root; children 01a11b1e-297d-78a2-898e-a627dc53a60e, 01a11b1e-29ce-7ac3-bcd4-b6cabdd7a180)
+mac-c5 (exec, 11:28Z, written only to make hour 10 a whole bucket; see captures/exec-json/mac-c5.jsonl)

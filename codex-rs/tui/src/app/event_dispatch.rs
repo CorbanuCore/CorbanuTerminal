@@ -5,6 +5,7 @@
 
 use super::resize_reflow::trailing_run_start;
 use super::session_lifecycle::ThreadAttachPresentation;
+use super::thread_settings::SettingsUpdateOutcome;
 use super::*;
 use crate::app_event::WalletUnlockContinuation;
 use crate::app_server_session::ForkGoalContinuation;
@@ -22,6 +23,107 @@ use codex_protocol::protocol::AgentMessageKind;
 use std::collections::HashSet;
 
 const SHUTDOWN_FIRST_EXIT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
+
+impl App {
+    // This local-only route has no app-server client or account request capability.
+    pub(super) fn handle_accounting_inspector_event(&mut self, event: AppEvent) {
+        match event {
+            AppEvent::OpenAccountingInspector { day } => {
+                self.chat_widget.open_accounting_inspector(day)
+            }
+            AppEvent::LoadAccountingInspector {
+                generation,
+                thread,
+                day,
+                range,
+            } => {
+                let db = self.state_db.clone();
+                let embedded = matches!(self.app_server_target, crate::AppServerTarget::Embedded);
+                let current = self.current_displayed_thread_id();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = if !embedded {
+                        Err(format!(
+                            "Unavailable — recorded request inspection is local-only; remote server selected. Next step: run {} in a session started without a remote server.",
+                            crate::chatwidget::cost_command()
+                        ))
+                    } else if thread.is_none() {
+                        Err(format!(
+                            "Unavailable — no current native thread. Next step: send a turn or open a conversation with /resume, then run {cost}.",
+                            cost = crate::chatwidget::cost_command()
+                        ))
+                    } else if thread != current {
+                        Err(format!(
+                            "Unavailable — the conversation changed while this view was loading. Next step: run {} again.",
+                            crate::chatwidget::cost_command()
+                        ))
+                    } else if let (Some(db), Some(owner)) = (db, thread) {
+                        accounting_inspector_read_result(async {
+                            let now = chrono::Utc::now().timestamp_millis();
+                            match range {
+                                Some(range) => {
+                                    codex_state::accounting::AccountingStore::inspect_range(
+                                        &db, owner, range, now,
+                                    )
+                                    .await
+                                }
+                                None => {
+                                    codex_state::accounting::AccountingStore::inspect_day(
+                                        &db, owner, day, now,
+                                    )
+                                    .await
+                                }
+                            }
+                        })
+                        .await
+                    } else {
+                        Err("Unavailable — native state database is not open. Next step: restart Corbanu Terminal; if it stays unavailable, check that its home directory is writable.".into())
+                    };
+                    tx.send(AppEvent::AccountingInspectorLoaded {
+                        generation,
+                        thread,
+                        day,
+                        result,
+                    });
+                });
+            }
+            AppEvent::AccountingInspectorLoaded {
+                generation,
+                thread,
+                day,
+                result,
+            } => {
+                if thread == self.current_displayed_thread_id() {
+                    self.chat_widget
+                        .finish_accounting_inspector(generation, thread, day, result);
+                }
+            }
+            AppEvent::NavigateAccountingInspector { generation, page } => self
+                .chat_widget
+                .navigate_accounting_inspector(generation, page),
+            AppEvent::CloseAccountingInspector { generation } => {
+                self.chat_widget.close_accounting_inspector(generation)
+            }
+            AppEvent::RefreshAccountingInspector { generation } => {
+                self.chat_widget.refresh_accounting_inspector(generation)
+            }
+            _ => unreachable!("non-inspector event"),
+        }
+    }
+}
+
+pub(super) async fn accounting_inspector_read_result(
+    read: impl std::future::Future<Output = anyhow::Result<codex_state::accounting::InspectionDay>>,
+) -> Result<codex_state::accounting::InspectionDay, String> {
+    match tokio::time::timeout(Duration::from_secs(15), read).await {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(error)) => {
+            tracing::warn!(error = %format!("{error:#}"), "accounting inspection failed");
+            Err("Unavailable — accounting evidence is corrupt, incompatible or could not be read. Refresh to retry; no repair performed. Next step: if Refresh fails again, check your provider's bill; the log names the cause.".into())
+        }
+        Err(_) => Err("Unavailable — inspection timed out. Next step: select Refresh; another Corbanu process may be holding the ledger.".into()),
+    }
+}
 
 fn resolve_shared_provider_selection_model(
     configured_model: Option<String>,
@@ -82,6 +184,61 @@ const RESERVED_PANE_DISPLAY_NAMES: &[&str] = &[
 ];
 
 impl App {
+    pub(super) async fn handle_resume_picker_event(
+        &mut self,
+        tui: &mut tui::Tui,
+        app_server: &mut AppServerSession,
+        tui_events: &mut (dyn Stream<Item = TuiEvent> + Send + Unpin),
+    ) -> Result<AppRunControl> {
+        let picker_app_server = match crate::start_app_server_for_picker(
+            &self.config,
+            &self.app_server_target,
+            self.state_db.clone(),
+            self.environment_manager.clone(),
+        )
+        .await
+        {
+            Ok(app_server) => app_server,
+            Err(err) => {
+                self.chat_widget
+                    .add_error_message(format!("Failed to start TUI session picker: {err}"));
+                self.chat_widget.maybe_send_next_queued_input();
+                return Ok(AppRunControl::Continue);
+            }
+        };
+        let selection =
+            crate::resume_picker::run_resume_picker_from_existing_session_with_app_server(
+                tui,
+                &self.config,
+                /*show_all*/ false,
+                /*include_non_interactive*/ false,
+                picker_app_server,
+                tui_events,
+            )
+            .await?;
+        match selection {
+            SessionSelection::Resume(target_session) => {
+                match self
+                    .resume_target_session_with_events(tui, app_server, target_session, tui_events)
+                    .await?
+                {
+                    AppRunControl::Continue => {}
+                    AppRunControl::Exit(reason) => return Ok(AppRunControl::Exit(reason)),
+                }
+            }
+            SessionSelection::Exit
+            | SessionSelection::StartFresh
+            | SessionSelection::ResumePanesOnly { .. } => {
+                self.refresh_in_memory_config_from_disk_best_effort("closing the session picker")
+                    .await;
+            }
+            SessionSelection::Fork(_) => {}
+        }
+        self.chat_widget.maybe_send_next_queued_input();
+        tui.frame_requester().schedule_frame();
+        Ok(AppRunControl::Continue)
+    }
+
     pub(super) async fn handle_external_agent_config_migration_event(
         &mut self,
         tui: &mut tui::Tui,
@@ -112,6 +269,33 @@ impl App {
             }
         }
         tui.frame_requester().schedule_frame();
+    }
+
+    /// PF-84: the model list again, after the session moved to another
+    /// account's sign-in (the app server lists with that account now).
+    /// Returns whether the list was replaced.
+    pub(super) async fn refresh_model_list(&mut self, app_server: &mut AppServerSession) -> bool {
+        match app_server.list_models().await {
+            Ok(models) if !models.is_empty() => {
+                self.model_catalog.replace_listed_models(models);
+                let model = self.chat_widget.current_model().to_string();
+                let provider_id = self.chat_widget.config_ref().model_provider_id.clone();
+                self.model_catalog.sync_runtime_models(
+                    [provider_id.as_str()],
+                    Some(&model),
+                    &provider_id,
+                );
+                true
+            }
+            Ok(_) => {
+                tracing::warn!("model/list returned no models after an account switch");
+                false
+            }
+            Err(error) => {
+                tracing::warn!("model/list failed after an account switch: {error}");
+                false
+            }
+        }
     }
 
     pub(super) async fn refresh_gpu_runtime_overlay(&mut self) {
@@ -862,57 +1046,10 @@ impl App {
                 .await;
             }
             AppEvent::OpenResumePicker => {
-                let picker_app_server = match crate::start_app_server_for_picker(
-                    &self.config,
-                    &self.app_server_target,
-                    self.state_db.clone(),
-                    self.environment_manager.clone(),
-                )
-                .await
-                {
-                    Ok(app_server) => app_server,
-                    Err(err) => {
-                        self.chat_widget.add_error_message(format!(
-                            "Failed to start TUI session picker: {err}"
-                        ));
-                        self.chat_widget.maybe_send_next_queued_input();
-                        return Ok(AppRunControl::Continue);
-                    }
-                };
-                match crate::resume_picker::run_resume_picker_from_existing_session_with_app_server(
-                    tui,
-                    &self.config,
-                    /*show_all*/ false,
-                    /*include_non_interactive*/ false,
-                    picker_app_server,
-                )
-                .await?
-                {
-                    SessionSelection::Resume(target_session) => {
-                        match self
-                            .resume_target_session(tui, app_server, target_session)
-                            .await?
-                        {
-                            AppRunControl::Continue => {}
-                            AppRunControl::Exit(reason) => {
-                                return Ok(AppRunControl::Exit(reason));
-                            }
-                        }
-                    }
-                    SessionSelection::Exit
-                    | SessionSelection::StartFresh
-                    | SessionSelection::ResumePanesOnly { .. } => {
-                        self.refresh_in_memory_config_from_disk_best_effort(
-                            "closing the session picker",
-                        )
-                        .await;
-                    }
-                    SessionSelection::Fork(_) => {}
-                }
-
-                self.chat_widget.maybe_send_next_queued_input();
-                // Leaving alt-screen may blank the inline viewport; force a redraw either way.
-                tui.frame_requester().schedule_frame();
+                // The main loop must lend its drained input queue to modal screens.
+                self.chat_widget.add_error_message(
+                    "Resume could not acquire terminal input. Retry /resume.".to_string(),
+                );
             }
             AppEvent::OpenExternalAgentConfigMigration => {
                 self.chat_widget.add_error_message(
@@ -1075,13 +1212,8 @@ impl App {
                                 )
                                 .await
                         }
-                        Ok(None) => {
-                            app_server
-                                .start_thread_with_session_start_source(
-                                    &config, /*session_start_source*/ None,
-                                )
-                                .await
-                        }
+                        // #1038: the first message: a new thread, still a reopen.
+                        Ok(None) => app_server.start_thread_for_first_prompt_edit(&config).await,
                         Err(err) => Err(err),
                     },
                     Err(err) => Err(err),
@@ -1217,6 +1349,30 @@ impl App {
                         .add_error_message(format!("Logout failed: {err}"));
                 }
             },
+            AppEvent::RestartForSecurityLevel => {
+                // #436: never restart into a session without its provider key.
+                if let Some(blocked) = crate::security::restart::restart_blocker() {
+                    self.chat_widget.add_error_message(blocked);
+                    return Ok(AppRunControl::Continue);
+                }
+                self.show_shutdown_feedback(tui)?;
+                let _ = self
+                    .handle_exit_mode(app_server, ExitMode::ShutdownFirst)
+                    .await;
+                return Ok(AppRunControl::Exit(ExitReason::Restart));
+            }
+            AppEvent::KillSwitchTurnedOn => {
+                self.on_kill_switch_changed(/*on*/ true, /*elsewhere*/ false);
+            }
+            AppEvent::KillSwitchTurnedOff => {
+                self.on_kill_switch_changed(/*on*/ false, /*elsewhere*/ false);
+            }
+            AppEvent::KillSwitchChangedElsewhere { on } => {
+                self.on_kill_switch_changed(on, /*elsewhere*/ true);
+            }
+            AppEvent::SecurityLevelRaisedElsewhere { level } => {
+                self.on_level_raised_elsewhere(level);
+            }
             AppEvent::FatalExitRequest(message) => {
                 return Ok(AppRunControl::Exit(ExitReason::Fatal(message)));
             }
@@ -1672,6 +1828,12 @@ impl App {
             AppEvent::RefreshRateLimits { origin } => {
                 self.refresh_rate_limits(app_server, origin);
             }
+            event @ (AppEvent::OpenAccountingInspector { .. }
+            | AppEvent::LoadAccountingInspector { .. }
+            | AppEvent::AccountingInspectorLoaded { .. }
+            | AppEvent::NavigateAccountingInspector { .. }
+            | AppEvent::CloseAccountingInspector { .. }
+            | AppEvent::RefreshAccountingInspector { .. }) => self.handle_accounting_inspector_event(event),
             AppEvent::RefreshTokenActivity { request_id } => {
                 self.refresh_token_activity(app_server, request_id);
             }
@@ -1946,6 +2108,9 @@ impl App {
                         return Ok(AppRunControl::Continue);
                     }
                 }
+                // PF-84: a switch to another sign-in account waits until the
+                // session has moved to it, then fetches that account's list.
+                let mut account_switch = None;
                 if let Some(model_provider) = provider.as_ref() {
                     let Some(provider_info) =
                         self.config.model_providers.get(model_provider).cloned()
@@ -1955,6 +2120,8 @@ impl App {
                         ));
                         return Ok(AppRunControl::Continue);
                     };
+                    account_switch =
+                        sign_in_account_switch(&self.config.model_provider, &provider_info);
                     self.config.model_provider_id = model_provider.clone();
                     self.config.model_provider = provider_info.clone();
                     self.chat_widget
@@ -1964,8 +2131,36 @@ impl App {
                 }
                 self.chat_widget.set_model(&model);
                 self.refresh_session_header(tui)?;
-                self.sync_active_thread_model_selection(app_server, model, provider)
+                let outcome = self
+                    .sync_active_thread_model_selection(
+                        app_server,
+                        model,
+                        provider,
+                        account_switch.is_some(),
+                    )
                     .await;
+                // Only once core has moved: otherwise the list (and the
+                // message) could still be the old account's.
+                if let Some(account) = account_switch {
+                    let message = match outcome {
+                        SettingsUpdateOutcome::Confirmed => {
+                            if self.refresh_model_list(app_server).await {
+                                Some(account_switch_message(
+                                    account.as_ref(),
+                                    &self.config,
+                                ))
+                            } else {
+                                Some(SWITCH_LIST_NOT_REFRESHED.to_string())
+                            }
+                        }
+                        SettingsUpdateOutcome::Accepted => Some(SWITCH_NOT_CONFIRMED.to_string()),
+                        // A failure already says so; nothing was sent otherwise.
+                        SettingsUpdateOutcome::Failed | SettingsUpdateOutcome::NotSent => None,
+                    };
+                    if let Some(message) = message {
+                        self.chat_widget.add_info_message(message, /*hint*/ None);
+                    }
+                }
                 self.sync_active_thread_service_tier_to_cached_session()
                     .await;
             }
@@ -1988,8 +2183,9 @@ impl App {
                 self.chat_widget
                     .open_reasoning_popup_for_purpose(model, purpose);
             }
-            AppEvent::OpenAdvancedReasoningPopup { model } => {
-                self.chat_widget.open_advanced_reasoning_popup(model);
+            AppEvent::OpenAdvancedReasoningPopup { model, purpose } => {
+                self.chat_widget
+                    .open_advanced_reasoning_popup_for_purpose(model, purpose);
             }
             AppEvent::ApplyAdvancedReasoning { model, effort } => {
                 let default_effort =
@@ -2641,12 +2837,22 @@ impl App {
                 generation,
                 status_host,
                 statuses,
+                accounts,
             } => self.provider_manager_statuses_resolved(
                 generation,
                 status_host,
                 statuses,
+                accounts,
                 app_server,
             ),
+            AppEvent::ProviderAccount(event) => {
+                self.handle_provider_account_event(tui, app_server, event)
+                    .await;
+            }
+            AppEvent::NamedBedrockAccountChecked {
+                generation,
+                offered,
+            } => self.named_bedrock_account_checked(generation, offered),
             AppEvent::ProviderManagerMetadataResolved {
                 generation,
                 metadata,
@@ -3259,7 +3465,14 @@ impl App {
                     }
                 }
             }
-            AppEvent::CorbanuApiLoaded { result, deferred } => {
+            AppEvent::CorbanuApiLoaded {
+                result,
+                deferred,
+                capability_lapsed,
+            } => {
+                if capability_lapsed {
+                    self.chat_widget.forget_lapsed_wallet_capability();
+                }
                 if corbanu_api_continuation_is_current(
                     self.active_deferred_provider_setup.as_ref(),
                     deferred.as_ref(),
@@ -3594,6 +3807,11 @@ impl App {
             }
             AppEvent::VaultCredentialDeleted { label, result } => {
                 self.chat_widget.on_vault_credential_deleted(label, result);
+                // #1193: the deleted entry may have been a named account.
+                crate::provider_named_accounts::check_named_account_providers(
+                    &self.model_catalog,
+                    &self.config,
+                );
             }
             AppEvent::VaultMenuCredentialsReady { result } => {
                 self.chat_widget.on_vault_menu_credentials_ready(result);
@@ -4128,7 +4346,7 @@ impl App {
                                 &[],
                             );
                             tracing::warn!(
-                                error = %err,
+                                error = %format!("{err:#}"),
                                 "failed to preflight non-admin Windows sandbox setup"
                             );
                         }
@@ -4307,7 +4525,7 @@ impl App {
                                         /*personality*/ None,
                                     ),
                                 ));
-                                if self.apply_permission_profile_selection(selection).await {
+                                if self.apply_permission_profile_selection(app_server, selection).await {
                                     self.chat_widget.submit_initial_user_message_if_pending();
                                 }
                                 self.chat_widget.add_plain_history_lines(vec![
@@ -4322,10 +4540,10 @@ impl App {
                                 self.app_event_tx.send(AppEvent::CodexOp(
                                     AppCommand::override_turn_context(
                                         /*cwd*/ None,
-                                        Some(AskForApproval::from(preset.approval)),
-                                        Some(self.config.approvals_reviewer),
-                                        Some(preset.permission_profile.clone()),
-                                        Some(preset.active_permission_profile.clone()),
+                                        /*approval_policy*/ None,
+                                        /*approvals_reviewer*/ None,
+                                        /*permission_profile*/ None,
+                                        /*active_permission_profile*/ None,
                                         #[cfg(target_os = "windows")]
                                         Some(windows_sandbox_level),
                                         /*model*/ None,
@@ -4336,13 +4554,12 @@ impl App {
                                         /*personality*/ None,
                                     ),
                                 ));
-                                self.app_event_tx.send(AppEvent::UpdateAskForApprovalPolicy(
-                                    AskForApproval::from(preset.approval),
-                                ));
-                                self.app_event_tx
-                                    .send(AppEvent::UpdateActivePermissionProfile(
-                                        preset.active_permission_profile.clone(),
-                                    ));
+                                self.app_event_tx.send(AppEvent::SelectPermissionProfile(PermissionProfileSelection {
+                                    profile_id: preset.active_permission_profile.id.clone(),
+                                    approval_policy: Some(AskForApproval::from(preset.approval)),
+                                    approvals_reviewer: Some(self.config.approvals_reviewer),
+                                    display_label: preset.active_permission_profile.id.clone(),
+                                }));
                                 self.chat_widget.add_plain_history_lines(vec![
                                     Line::from(vec!["• ".dim(), "Sandbox ready".into()]),
                                     Line::from(vec![
@@ -4351,6 +4568,13 @@ impl App {
                                             .dark_gray(),
                                     ]),
                                 ]);
+                            }
+                            if let Some(message) = codex_sandboxing::legacy_windows_sandbox_warning(
+                                windows_sandbox_level,
+                                &preset.permission_profile,
+                            ) {
+                                self.chat_widget
+                                    .add_to_history(history_cell::new_warning_event(message));
                             }
                         }
                         Err(err) => {
@@ -4446,7 +4670,13 @@ impl App {
                                     .unwrap_or_else(|| provider_id.to_string())
                             }
                         });
-                        let mut message = if let Some(provider_label) = provider_label {
+                        // #653: a model served over several connections names the one chosen.
+                        let route = provider.as_deref().and_then(|provider_id| {
+                            codex_model_provider_info::model_route(&model, provider_id)
+                        });
+                        let mut message = if let Some(route) = route {
+                            format!("Model changed to {}", route.model_label(&model_label))
+                        } else if let Some(provider_label) = provider_label {
                             format!("Model changed to {model_label} via {provider_label}")
                         } else {
                             format!("Model changed to {model_label}")
@@ -4643,7 +4873,36 @@ impl App {
                 }
             }
             AppEvent::SelectPermissionProfile(selection) => {
-                if self.apply_permission_profile_selection(selection).await {
+                if self.apply_permission_profile_selection(app_server, selection).await {
+                    self.chat_widget.submit_initial_user_message_if_pending();
+                }
+            }
+            AppEvent::PermissionConfirmationCompleted { selection_id, result } => {
+                // Completion also carries confirmed settings into fresh sessions and
+                // submits or restores held initial input after checking correlation.
+                if let Some(reviewer) = self.finish_permission_confirmation(selection_id, result)
+                    && let Err(error) = crate::config_update::write_config_batch(
+                        app_server.request_handle(),
+                        vec![crate::config_update::replace_config_value("approvals_reviewer", serde_json::json!(reviewer.to_string()))],
+                    ).await
+                {
+                    self.chat_widget.add_error_message(format!("Permissions applied, but the default reviewer could not be saved: {error}"));
+                }
+            }
+            AppEvent::SelectPermissionPreset(selection) => {
+                let reviewer = selection.approvals_reviewer;
+                if let Some(thread_id) = self.active_thread_id {
+                    self.request_permission_confirmation(app_server, codex_app_server_protocol::ThreadSettingsUpdateParams {
+                        thread_id: thread_id.to_string(),
+                        permissions: Some(selection.profile_id),
+                        approval_policy: selection.approval_policy,
+                        approvals_reviewer: reviewer.map(Into::into),
+                        ..Default::default()
+                    }, selection.display_label, reviewer);
+                } else if self.apply_permission_profile_selection(app_server, selection).await {
+                    if let Some(reviewer) = reviewer {
+                        self.app_event_tx.send(AppEvent::UpdateApprovalsReviewer(reviewer));
+                    }
                     self.chat_widget.submit_initial_user_message_if_pending();
                 }
             }
@@ -4887,6 +5146,7 @@ impl App {
                         return Ok(AppRunControl::Continue);
                     }
                 };
+                let mut started_crew_root = false;
                 let (agent_class, prepared_root_crew_id) = if role
                     == crate::spawn_orchestration::SpawnRole::Nazgul
                 {
@@ -4916,8 +5176,11 @@ impl App {
                         }
                     }
                 } else {
-                    match self.custom_spawn_member_agent_class(role) {
-                        Ok(agent_class) => (agent_class, None),
+                    match self.custom_spawn_member_agent_class_under(role, &logical_parent_node_id) {
+                        Ok((agent_class, started)) => {
+                            started_crew_root = started;
+                            (agent_class, None)
+                        }
                         Err(err) => {
                             self.chat_widget.add_error_message(err.to_string());
                             return Ok(AppRunControl::Continue);
@@ -5017,6 +5280,9 @@ impl App {
                         if let Some(crew_id) = prepared_root_crew_id.as_deref() {
                             self.abort_prepared_custom_spawn_root(crew_id);
                         }
+                        if started_crew_root {
+                            self.abort_started_custom_spawn_root();
+                        }
                         tracing::error!(
                             error = ?err,
                             error_chain = %format!("{err:#}"),
@@ -5082,20 +5348,35 @@ impl App {
             AppEvent::OpenSpawnClaudePaneTaskPrompt { pane_id } => {
                 self.open_spawn_claude_pane_task_prompt(pane_id);
             }
-            AppEvent::SubmitSpawnAgentTask { thread_id, task } => {
-                if self.spawn_legacy_read_only
-                    || self.spawn_crew.as_ref().is_some_and(|crew| {
-                        !matches!(crew.status, crate::crew_state::CrewCreationStatus::Ready)
-                    })
+            AppEvent::SubmitSpawnAgentTask {
+                thread_id,
+                task,
+                sent_while_kill_switch_on,
+            } => {
+                // D106 (#1176): a pane the person opened takes agents' tasks
+                // from its mailbox too; the /spawn crew's state does not stop
+                // them, as it did not when they arrived as its input.
+                let is_operator_pane = self
+                    .agent_navigation
+                    .get(&thread_id)
+                    .is_some_and(|entry| self.is_operator_owned_codex_user_pane(thread_id, entry));
+                if !is_operator_pane
+                    && (self.spawn_legacy_read_only
+                        || self.spawn_crew.as_ref().is_some_and(|crew| {
+                            !matches!(crew.status, crate::crew_state::CrewCreationStatus::Ready)
+                        }))
                 {
                     let target_node_id = self.logical_native_node_for_thread(thread_id);
                     let acks = self.take_spawn_dispatch_acks_for_task(&target_node_id, task.trim());
                     self.release_spawn_dispatch_origins(&acks);
-                    self.record_spawn_dispatch_acks(
+                    // #660: a task sent while the switch was on starts no turn
+                    // in its sender, also when it fails after switch-off.
+                    self.record_spawn_dispatch_acks_with_turns(
                         &acks,
                         "failed",
                         "crew identity or creation state is not reconciled",
                         /*notify*/ true,
+                        /*start_turns*/ !sent_while_kill_switch_on,
                     );
                     self.chat_widget.add_error_message(
                         "This /spawn hierarchy is read-only until its crew identity and creation \
@@ -5106,6 +5387,14 @@ impl App {
                 }
                 let task = task.trim().to_string();
                 if task.is_empty() {
+                    // The sender is told, as before for a pane the person opened.
+                    let target_node_id = self.logical_native_node_for_thread(thread_id);
+                    self.record_spawn_dispatch_failed_for_task_with_turns(
+                        &target_node_id,
+                        &task,
+                        "spawn task cannot be empty",
+                        /*start_turns*/ !sent_while_kill_switch_on,
+                    );
                     self.chat_widget
                         .add_error_message("Spawn task cannot be empty.".to_string());
                     return Ok(AppRunControl::Continue);
@@ -5139,6 +5428,15 @@ impl App {
                     &source_node_id,
                     &target_node_id,
                 );
+                // #507: with the kill switch on the task waits in the mailbox
+                // for that pane's next turn; nothing runs, before or after the
+                // switch is turned off. #660: also when another agent sent it
+                // while the switch was on and it is handled only after
+                // switch-off; it asks for no turn.
+                // `trigger_turn` is part of a mailbox message's identity. The ID
+                // comes from the dispatch origin, admitted once, so the same ID
+                // is not sent again on the other side of a switch change.
+                let hold = sent_while_kill_switch_on || self.kill_switch_on_now();
                 let params = ThreadAgentMessageParams {
                     source_thread_id: source_thread_id.to_string(),
                     target_thread_id: thread_id.to_string(),
@@ -5146,7 +5444,7 @@ impl App {
                     assignment_id: Some(message_id.clone()),
                     kind: AgentMessageKind::Assignment,
                     content: task.clone(),
-                    trigger_turn: true,
+                    trigger_turn: !hold,
                 };
                 match app_server.send_agent_message(params).await {
                     Ok(_) => {
@@ -5166,29 +5464,46 @@ impl App {
                             "durably admitted to the native mailbox",
                             /*notify*/ false,
                         );
-                        self.spawn_status_by_thread.insert(
-                            thread_id,
-                            codex_app_server_protocol::CollabAgentState {
-                                status: codex_app_server_protocol::CollabAgentStatus::Running,
-                                message: None,
-                            },
-                        );
-                        self.agent_navigation
-                            .set_running(thread_id, /*is_running*/ true);
+                        if hold {
+                            self.note_kill_switch_held_native_task(thread_id);
+                            self.chat_widget.add_info_message(
+                                self.kill_switch_held_native_task_message(&label),
+                                /*hint*/ None,
+                            );
+                        } else {
+                            self.spawn_status_by_thread.insert(
+                                thread_id,
+                                codex_app_server_protocol::CollabAgentState {
+                                    status: codex_app_server_protocol::CollabAgentStatus::Running,
+                                    message: None,
+                                },
+                            );
+                            self.agent_navigation
+                                .set_running(thread_id, /*is_running*/ true);
+                        }
                         self.agent_navigation.set_last_task_message(
                             thread_id,
                             Some(task.chars().take(240).collect()),
                         );
                         self.persist_pane_state();
                     }
+                    // D106: a pane the person opened is never re-created as a
+                    // saved agent; if Core has not loaded it, the task fails
+                    // (below) as it did when it had no live session.
                     Err(error)
-                        if AppServerSession::agent_message_target_not_found(&error, thread_id) =>
+                        if !is_operator_pane
+                            && AppServerSession::agent_message_target_not_found(
+                                &error, thread_id,
+                            ) =>
                     {
                         match self
                             .materialize_saved_native_spawn_thread_for_task(app_server, thread_id)
                             .await
                         {
                             Ok(materialized_thread_id) => {
+                                // The switch may have gone on (in another
+                                // process) while the agent was materialized.
+                                let hold = hold || self.kill_switch_on_now();
                                 let materialized_source_thread_id = self
                                     .spawn_node_backing_thread_id(&source_node_id)
                                     .or(self.primary_thread_id)
@@ -5200,7 +5515,7 @@ impl App {
                                     assignment_id: Some(message_id),
                                     kind: AgentMessageKind::Assignment,
                                     content: task.clone(),
-                                    trigger_turn: true,
+                                    trigger_turn: !hold,
                                 };
                                 match app_server.send_agent_message(retry_params).await {
                                     Ok(_) => {
@@ -5220,17 +5535,27 @@ impl App {
                                             "cold-restored agent was materialized and the assignment was durably admitted to its native mailbox",
                                             /*notify*/ false,
                                         );
-                                        self.spawn_status_by_thread.insert(
-                                            materialized_thread_id,
-                                            codex_app_server_protocol::CollabAgentState {
-                                                status: codex_app_server_protocol::CollabAgentStatus::Running,
-                                                message: None,
-                                            },
-                                        );
-                                        self.agent_navigation.set_running(
-                                            materialized_thread_id,
-                                            /*is_running*/ true,
-                                        );
+                                        if hold {
+                                            self.note_kill_switch_held_native_task(
+                                                materialized_thread_id,
+                                            );
+                                            self.chat_widget.add_info_message(
+                                                self.kill_switch_held_native_task_message(&label),
+                                                /*hint*/ None,
+                                            );
+                                        } else {
+                                            self.spawn_status_by_thread.insert(
+                                                materialized_thread_id,
+                                                codex_app_server_protocol::CollabAgentState {
+                                                    status: codex_app_server_protocol::CollabAgentStatus::Running,
+                                                    message: None,
+                                                },
+                                            );
+                                            self.agent_navigation.set_running(
+                                                materialized_thread_id,
+                                                /*is_running*/ true,
+                                            );
+                                        }
                                         self.agent_navigation.set_last_task_message(
                                             materialized_thread_id,
                                             Some(task.chars().take(240).collect()),
@@ -5239,13 +5564,14 @@ impl App {
                                     }
                                     Err(retry_error) => {
                                         self.release_spawn_dispatch_origins(&acks);
-                                        self.record_spawn_dispatch_acks(
+                                        self.record_spawn_dispatch_acks_with_turns(
                                             &acks,
                                             "failed",
-                                            format!(
+                                            &format!(
                                                 "native mailbox admission still failed after Core materialized the saved agent: {retry_error:#}"
                                             ),
                                             /*notify*/ true,
+                                            /*start_turns*/ !hold,
                                         );
                                         self.chat_widget.add_error_message(format!(
                                             "Could not admit task for {label}: {retry_error:#}"
@@ -5255,13 +5581,14 @@ impl App {
                             }
                             Err(materialization_error) => {
                                 self.release_spawn_dispatch_origins(&acks);
-                                self.record_spawn_dispatch_acks(
+                                self.record_spawn_dispatch_acks_with_turns(
                                     &acks,
                                     "failed",
-                                    format!(
+                                    &format!(
                                         "native mailbox target was unavailable and Core could not materialize the saved agent: {materialization_error:#}"
                                     ),
                                     /*notify*/ true,
+                                    /*start_turns*/ !hold,
                                 );
                                 self.chat_widget.add_error_message(format!(
                                     "Could not admit task for {label}: {materialization_error:#}"
@@ -5271,11 +5598,12 @@ impl App {
                     }
                     Err(error) => {
                         self.release_spawn_dispatch_origins(&acks);
-                        self.record_spawn_dispatch_acks(
+                        self.record_spawn_dispatch_acks_with_turns(
                             &acks,
                             "failed",
-                            format!("native mailbox admission failed: {error:#}"),
+                            &format!("native mailbox admission failed: {error:#}"),
                             /*notify*/ true,
+                            /*start_turns*/ !hold,
                         );
                         self.chat_widget.add_error_message(format!(
                             "Could not admit task for {label}; no automatic replay was attempted: {error:#}"
@@ -5283,107 +5611,132 @@ impl App {
                     }
                 }
             }
-            AppEvent::SubmitCodexUserPaneTask { thread_id, task } => {
-                let task = task.trim().to_string();
-                let target_node_id = self.logical_native_node_for_thread(thread_id);
-                let is_operator_pane = self
-                    .agent_navigation
-                    .get(&thread_id)
-                    .is_some_and(|entry| self.is_operator_owned_codex_user_pane(thread_id, entry));
-                if !is_operator_pane {
-                    let detail =
-                        format!("native thread {thread_id} is not an operator-owned user pane");
-                    self.record_spawn_dispatch_failed_for_task(&target_node_id, &task, &detail);
-                    self.chat_widget.add_error_message(detail);
+            AppEvent::SubmitSpawnAgentTaskFromPerson { thread_id, task } => {
+                // D95 (#1146): the person's own task from Spawn status reaches
+                // the pane as user input, as if typed there. No agent's
+                // dispatch acknowledgement is consumed or attributed to it.
+                if self.spawn_legacy_read_only
+                    || self.spawn_crew.as_ref().is_some_and(|crew| {
+                        !matches!(crew.status, crate::crew_state::CrewCreationStatus::Ready)
+                    })
+                {
+                    self.chat_widget.add_error_message(
+                        "This /spawn hierarchy is read-only until its crew identity and creation \
+                         state are reconciled."
+                            .to_string(),
+                    );
                     return Ok(AppRunControl::Continue);
                 }
+                let task = task.trim().to_string();
                 if task.is_empty() {
-                    self.record_spawn_dispatch_failed_for_task(
-                        &target_node_id,
-                        &task,
-                        "operator pane task cannot be empty",
-                    );
                     self.chat_widget
-                        .add_error_message("Operator pane task cannot be empty.".to_string());
+                        .add_error_message("Spawn task cannot be empty.".to_string());
                     return Ok(AppRunControl::Continue);
                 }
                 if task.len() > crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES {
-                    let detail = format!(
+                    self.chat_widget.add_error_message(format!(
                         "task is {} bytes; maximum is {} bytes",
                         task.len(),
                         crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES
-                    );
-                    self.record_spawn_dispatch_failed_for_task(&target_node_id, &task, &detail);
-                    self.chat_widget.add_error_message(detail);
+                    ));
                     return Ok(AppRunControl::Continue);
                 }
-                let session = match self.thread_event_channels.get(&thread_id) {
-                    Some(channel) => match channel.store.try_lock() {
-                        Ok(store) => store.session.clone(),
-                        Err(_) => {
-                            // Never wait on a thread store from the main dispatcher. A thread-event
-                            // handler may hold this lock while doing asynchronous work, which would
-                            // otherwise freeze all terminal input. Wait off-loop, then replay the
-                            // submission so it observes the latest pane ownership and session.
-                            let store = Arc::clone(&channel.store);
-                            let app_event_tx = self.app_event_tx.clone();
-                            tokio::spawn(async move {
-                                let store_guard = store.lock().await;
-                                drop(store_guard);
-                                app_event_tx
-                                    .send(AppEvent::SubmitCodexUserPaneTask { thread_id, task });
-                            });
-                            return Ok(AppRunControl::Continue);
+                let label = self.thread_label(thread_id);
+                // A pane its parent controls takes no typed input; the task
+                // goes to it as before, as a message, and the person is told.
+                if self.agent_navigation.is_parent_owned(thread_id) {
+                    self.chat_widget.add_info_message(
+                        person_task_to_parent_owned_pane_message(&label),
+                        /*hint*/ None,
+                    );
+                    self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+                        thread_id,
+                        task,
+                        sent_while_kill_switch_on: false,
+                    });
+                    return Ok(AppRunControl::Continue);
+                }
+                // #507: a typed message is not kept while the kill switch is
+                // on; neither is this one (checked again before it is sent).
+                if self.kill_switch_on_now() {
+                    self.chat_widget
+                        .add_error_message(person_task_kill_switch_message(&label));
+                    return Ok(AppRunControl::Continue);
+                }
+                let thread_id = match self
+                    .materialize_saved_native_spawn_thread_for_task(app_server, thread_id)
+                    .await
+                {
+                    Ok(thread_id) => thread_id,
+                    Err(error) => {
+                        self.chat_widget
+                            .add_error_message(format!("Not sent to {label}: {error:#}"));
+                        return Ok(AppRunControl::Continue);
+                    }
+                };
+                if self.agent_navigation.is_parent_owned(thread_id) {
+                    self.chat_widget.add_info_message(
+                        person_task_to_parent_owned_pane_message(&label),
+                        /*hint*/ None,
+                    );
+                    self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
+                        thread_id,
+                        task,
+                        sent_while_kill_switch_on: false,
+                    });
+                    return Ok(AppRunControl::Continue);
+                }
+                if self.kill_switch_on_now() {
+                    self.chat_widget
+                        .add_error_message(person_task_kill_switch_message(&label));
+                    return Ok(AppRunControl::Continue);
+                }
+                // User input, as typing sends it: added to a running turn, or
+                // a new turn. It sends no settings, so the pane keeps the
+                // approval, sandbox, model and mode Core holds for it.
+                let items = vec![codex_app_server_protocol::UserInput::Text {
+                    text: task.clone(),
+                    text_elements: Vec::new(),
+                }];
+                let sent = match self.active_turn_id_for_submission(thread_id).await {
+                    Some(turn_id) => app_server
+                        .turn_steer(thread_id, turn_id, items, /*client_user_message_id*/ None)
+                        .await
+                        .map(|_| ())
+                        .map_err(|error| {
+                            format!(
+                                "Not sent to {label}: its running turn did not take it ({error}). \
+                                 Send it again when that turn ends."
+                            )
+                        }),
+                    None => match app_server
+                        .turn_start_keeping_thread_settings(
+                            thread_id,
+                            items,
+                            self.spawn_additional_context_for_thread(thread_id),
+                        )
+                        .await
+                    {
+                        Ok(crate::app_server_session::TurnStartOutcome::Started { .. }) => Ok(()),
+                        Ok(crate::app_server_session::TurnStartOutcome::CapacityUnavailable {
+                            max_threads,
+                        }) => Err(format!(
+                            "Not sent to {label}: all {max_threads} execution slots are in use."
+                        )),
+                        Err(error) => {
+                            Err(format!("Not sent to {label}: the turn could not start: {error:#}"))
                         }
                     },
-                    None => None,
                 };
-                let Some(session) = session else {
-                    let detail = format!(
-                        "operator-owned pane {thread_id} has no live session available for turn submission"
-                    );
-                    self.record_spawn_dispatch_failed_for_task(&target_node_id, &task, &detail);
-                    self.chat_widget.add_error_message(detail);
-                    return Ok(AppRunControl::Continue);
-                };
-                let mut op = AppCommand::user_turn(
-                    vec![codex_app_server_protocol::UserInput::Text {
-                        text: task.clone(),
-                        text_elements: Vec::new(),
-                    }],
-                    session.cwd.to_path_buf(),
-                    AskForApproval::from(self.config.permissions.approval_policy.value()),
-                    self.config.permissions.active_permission_profile(),
-                    session.model,
-                    session.reasoning_effort,
-                    /*summary*/ None,
-                    /*service_tier*/ None,
-                    /*final_output_json_schema*/ None,
-                    session.collaboration_mode.map(|mode| *mode),
-                    session.personality,
-                );
-                if let AppCommand::UserTurn {
-                    approvals_reviewer, ..
-                } = &mut op
-                {
-                    *approvals_reviewer = Some(self.config.approvals_reviewer);
-                }
-                match self.submit_thread_op(app_server, thread_id, op).await {
+                match sent {
                     Ok(()) => {
-                        self.record_spawn_dispatch_delivered_for_task(&target_node_id, &task);
-                        self.agent_navigation
-                            .set_running(thread_id, /*is_running*/ true);
                         self.agent_navigation.set_last_task_message(
                             thread_id,
                             Some(task.chars().take(240).collect()),
                         );
                         self.persist_pane_state();
                     }
-                    Err(error) => {
-                        let detail = format!("operator pane turn submission failed: {error:#}");
-                        self.record_spawn_dispatch_failed_for_task(&target_node_id, &task, &detail);
-                        self.chat_widget.add_error_message(detail);
-                    }
+                    Err(detail) => self.chat_widget.add_error_message(detail),
                 }
             }
             AppEvent::SendSpawnAgentMailboxMessage { params } => {
@@ -5398,7 +5751,11 @@ impl App {
                     ));
                 }
             }
-            AppEvent::SubmitSpawnClaudePaneTask { pane_id, task } => {
+            AppEvent::SubmitSpawnClaudePaneTask {
+                pane_id,
+                task,
+                sent_while_kill_switch_on,
+            } => {
                 if self.spawn_legacy_read_only {
                     self.chat_widget.add_error_message(
                         "This restored legacy /spawn hierarchy is read-only. Existing Claude panes \
@@ -5416,11 +5773,21 @@ impl App {
                         task.len(),
                         crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES
                     );
-                    self.record_spawn_dispatch_acks(&acks, "failed", &detail, /*notify*/ true);
+                    // #660: no sender turn for a task sent while on.
+                    self.record_spawn_dispatch_acks_with_turns(
+                        &acks,
+                        "failed",
+                        &detail,
+                        /*notify*/ true,
+                        /*start_turns*/ !sent_while_kill_switch_on,
+                    );
                     self.chat_widget.add_error_message(detail);
                     return Ok(AppRunControl::Continue);
                 }
-                if self.claude_panes.claude_pane_is_running(&pane_id) {
+                // #507: with the kill switch on the task waits, also for a
+                // pane still stopping (#613: or when it was sent while on).
+                let hold = sent_while_kill_switch_on || self.kill_switch_on_now();
+                if self.claude_panes.claude_pane_is_running(&pane_id) && !hold {
                     let acks = self.take_spawn_dispatch_acks_for_task(&target, &task);
                     self.release_spawn_dispatch_origins(&acks);
                     self.record_spawn_dispatch_acks(
@@ -5435,7 +5802,7 @@ impl App {
                     ));
                     return Ok(AppRunControl::Continue);
                 }
-                self.submit_claude_pane_task(pane_id, task);
+                self.submit_claude_pane_task_queued(pane_id, task, sent_while_kill_switch_on);
             }
             AppEvent::OpenSpawnStatus => {
                 self.open_spawn_status();
@@ -5775,6 +6142,31 @@ impl App {
             }
             AppEvent::ClaudePaneTurnProgress { progress } => {
                 self.on_claude_pane_turn_progress(progress);
+            }
+            AppEvent::ClaudePaneApprovalRequested(request) => {
+                self.chat_widget.show_claude_approval(*request);
+            }
+            AppEvent::ClaudePaneLaunchProblem { pane_id, problem } => {
+                self.on_claude_pane_launch_problem(&pane_id, problem);
+            }
+            AppEvent::ClaudePaneApprovalsSettled => {
+                self.chat_widget.remove_settled_claude_approvals();
+            }
+            AppEvent::PaneBridgeModelRequestSent {
+                provider_id,
+                base_url,
+                path,
+                model,
+                usage,
+            } => {
+                self.record_pane_bridge_model_request(
+                    app_server,
+                    provider_id,
+                    base_url,
+                    path,
+                    model,
+                    usage,
+                );
             }
             AppEvent::StartSide {
                 parent_thread_id,
@@ -6326,6 +6718,7 @@ impl App {
             {
                 Ok(removed) => {
                     self.claude_pane_transcript_cells.remove(&pane_id);
+                    self.drop_held_claude_task_of_removed_pane(&pane_id);
                     self.persist_pane_state();
                     tracing::info!(
                         pane_id,
@@ -6373,6 +6766,80 @@ impl App {
             }
         }
     }
+}
+
+const SWITCH_LIST_NOT_REFRESHED: &str = "The account switch applied, but the model list could not be refreshed; switch accounts again or restart to refresh it.";
+const SWITCH_NOT_CONFIRMED: &str = "The account switch was not confirmed, so the model list was not refreshed; switch accounts again or restart to refresh it.";
+/// #1205: appended to the switch message for the default login when this
+/// process left it in place and a login restriction is configured.
+pub(super) const DEFAULT_LOGIN_RESTRICTION_CAVEAT: &str = "If your login restrictions (`forced_login_method`, `forced_chatgpt_workspace_id`) rule out the default login, this session cannot use it and its next request is refused with the reason; sign in with `corbanu login`, or pick a named account in /providers.";
+
+/// PF-84: `Some(account)` when moving from `current` to `next` changes the
+/// sign-in account the session uses (`Some(None)`: to the default login).
+pub(super) fn sign_in_account_switch(
+    current: &codex_model_provider_info::ModelProviderInfo,
+    next: &codex_model_provider_info::ModelProviderInfo,
+) -> Option<Option<codex_login::NamedChatgptAccount>> {
+    let account = codex_model_provider::named_sign_in_account(next);
+    (codex_model_provider::named_sign_in_account(current) != account).then_some(account)
+}
+
+pub(super) fn account_switch_message(
+    account: Option<&codex_login::NamedChatgptAccount>,
+    config: &Config,
+) -> String {
+    account_switch_message_for(
+        account,
+        codex_login::default_login_left_unenforced(),
+        login_restrictions_configured(config),
+    )
+}
+
+/// #1205: whether `forced_login_method` or `forced_chatgpt_workspace_id` is
+/// configured; only these can rule out the default login (the login method
+/// implied by an API-key provider such as Z.AI does not count).
+pub(super) fn login_restrictions_configured(config: &Config) -> bool {
+    config.configured_forced_login_method.is_some() || config.forced_chatgpt_workspace_id.is_some()
+}
+
+/// `default_login_left_in_place`: this process skipped the startup
+/// enforcement of the login restrictions on the default login (#570), so a
+/// default login they rule out is hidden rather than used (#609). The caveat
+/// is shown only when `login_restrictions_configured` too (#1205).
+pub(super) fn account_switch_message_for(
+    account: Option<&codex_login::NamedChatgptAccount>,
+    default_login_left_in_place: bool,
+    login_restrictions_configured: bool,
+) -> String {
+    let label = match account {
+        Some(account) => format!("{} account `{}`", account.provider_id, account.name),
+        None => "the default OpenAI login".to_string(),
+    };
+    let message =
+        format!("Connectors, usage and the model list now use {label}; model list refreshed.");
+    if account.is_none() && default_login_left_in_place && login_restrictions_configured {
+        format!("{message} {DEFAULT_LOGIN_RESTRICTION_CAVEAT}")
+    } else {
+        message
+    }
+}
+
+/// D95: why a task the person sent from Spawn status to a pane its parent
+/// controls arrives as a message, not as their own input.
+fn person_task_to_parent_owned_pane_message(label: &str) -> String {
+    format!(
+        "{label} is controlled by its parent and takes no direct input, so the task was sent to \
+         it as a message (it arrives as a message from another agent, not as your own input)."
+    )
+}
+
+/// D95: a task the person sends from Spawn status while the kill switch is on.
+fn person_task_kill_switch_message(label: &str) -> String {
+    format!(
+        "Not sent to {label}: the security kill switch is on. A task you send from Spawn status \
+         is your own input, as if you typed it in that pane, and typed input is not kept while \
+         the switch is on. Send it again after turning the switch off."
+    )
 }
 
 #[cfg(test)]
@@ -6433,11 +6900,15 @@ mod gpu_notification_tests {
     #[test]
     fn shared_provider_selection_uses_active_model_when_config_has_no_model() {
         assert_eq!(
-            resolve_shared_provider_selection_model(None, "active-custom-model", "custom"),
+            resolve_shared_provider_selection_model(
+                /*configured_model*/ None,
+                "active-custom-model",
+                "custom"
+            ),
             Some("active-custom-model".to_string())
         );
         assert_eq!(
-            resolve_shared_provider_selection_model(None, "", "custom"),
+            resolve_shared_provider_selection_model(/*configured_model*/ None, "", "custom"),
             None
         );
     }
@@ -6463,20 +6934,28 @@ mod gpu_notification_tests {
             Some(&deferred),
             &continuation
         ));
-        assert!(!wallet_unlock_continuation_is_current(None, &continuation));
+        assert!(!wallet_unlock_continuation_is_current(
+            /*active*/ None,
+            &continuation
+        ));
         assert!(corbanu_api_continuation_is_current(
             Some(&deferred),
             Some(&deferred)
         ));
-        assert!(!corbanu_api_continuation_is_current(Some(&deferred), None));
-        assert!(corbanu_api_continuation_is_current(None, None));
+        assert!(!corbanu_api_continuation_is_current(
+            Some(&deferred),
+            /*deferred*/ None
+        ));
+        assert!(corbanu_api_continuation_is_current(
+            /*active*/ None, /*deferred*/ None
+        ));
         let ordinary_continuation = WalletUnlockContinuation::OpenCorbanuApi { deferred: None };
         assert!(!wallet_unlock_continuation_is_current(
             Some(&deferred),
             &ordinary_continuation
         ));
         assert!(wallet_unlock_continuation_is_current(
-            None,
+            /*active*/ None,
             &ordinary_continuation
         ));
     }

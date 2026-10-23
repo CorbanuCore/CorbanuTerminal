@@ -151,4 +151,8 @@ impl ToolExecutor<ToolInvocation> for WaitForEnvironmentHandler {
     }
 }
 
-impl CoreToolRuntime for WaitForEnvironmentHandler {}
+impl CoreToolRuntime for WaitForEnvironmentHandler {
+    fn repeated_identical_calls_are_polling(&self) -> bool {
+        true
+    }
+}

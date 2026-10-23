@@ -101,10 +101,10 @@ fn authoritative(
     kill_switch_active: bool,
 ) -> AuthoritativeSecurityState {
     AuthoritativeSecurityState::new(
-        1,
+        /*revision*/ 1,
         state_owner(),
         level,
-        0,
+        /*grant_generation*/ 0,
         revocation_generation,
         u64::from(kill_switch_active),
         kill_switch_active,
@@ -113,7 +113,8 @@ fn authoritative(
 }
 
 fn state_owner() -> AuthoritativeStateOwner {
-    AuthoritativeStateOwner::new("a".repeat(64), "runtime-owner", 1).expect("state owner")
+    AuthoritativeStateOwner::new("a".repeat(64), "runtime-owner", /*owner_generation*/ 1)
+        .expect("state owner")
 }
 
 fn readiness(status: ProtectionReadinessStatus) -> MeasuredProtectionReadiness {
@@ -184,6 +185,7 @@ fn routes() -> ProtectedRouteRegistry {
 }
 
 #[test]
+#[serial_test::serial(aggressive_grants)]
 fn protected_runtime_binds_configured_creator_and_effective_levels() {
     let revocations = Arc::new(RwLock::new(RevocationState::new()));
     let (view, _controller, root) = policy(SecurityLevel::Moderate, RevocationState::new());
@@ -191,7 +193,11 @@ fn protected_runtime_binds_configured_creator_and_effective_levels() {
     let child_snapshot = view
         .inherit_child(root, child, "task:child", SecurityLevel::Aggressive)
         .expect("stricter child");
-    let state = authoritative(SecurityLevel::Moderate, 0, false);
+    let state = authoritative(
+        SecurityLevel::Moderate,
+        /*revocation_generation*/ 0,
+        /*kill_switch_active*/ false,
+    );
     let measured = readiness(ProtectionReadinessStatus::Ready);
     let recovery = ready_recovery();
 
@@ -252,11 +258,16 @@ fn protected_runtime_binds_configured_creator_and_effective_levels() {
 }
 
 #[test]
+#[serial_test::serial(aggressive_grants)]
 fn protected_runtime_rejects_unavailable_stale_and_expired_readiness() {
     let revocations = Arc::new(RwLock::new(RevocationState::new()));
     let (view, _controller, root) = policy(SecurityLevel::Moderate, RevocationState::new());
     let effective = view.snapshot_for_agent(root).expect("snapshot");
-    let state = authoritative(SecurityLevel::Moderate, 0, false);
+    let state = authoritative(
+        SecurityLevel::Moderate,
+        /*revocation_generation*/ 0,
+        /*kill_switch_active*/ false,
+    );
     let recovery = ready_recovery();
     for status in [
         ProtectionReadinessStatus::Unavailable,
@@ -273,7 +284,11 @@ fn protected_runtime_rejects_unavailable_stale_and_expired_readiness() {
         ));
     }
 
-    let forged_state = authoritative(SecurityLevel::Aggressive, 0, false);
+    let forged_state = authoritative(
+        SecurityLevel::Aggressive,
+        /*revocation_generation*/ 0,
+        /*kill_switch_active*/ false,
+    );
     let ready = readiness(ProtectionReadinessStatus::Ready);
     assert!(matches!(
         ProtectedRuntime::compose(
@@ -349,14 +364,18 @@ fn protected_runtime_rejects_unavailable_stale_and_expired_readiness() {
     .expect("clock-bound runtime");
     clock_runtime
         .authorize_route(
-            current_at(&effective, &state, &ready, &recovery, 12),
+            current_at(
+                &effective, &state, &ready, &recovery, /*now_unix_seconds*/ 12,
+            ),
             ProtectedRouteKind::Ingress,
             "screened-retrieval",
         )
         .expect("advance runtime clock");
     assert!(matches!(
         clock_runtime.authorize_route(
-            current_at(&effective, &state, &ready, &recovery, 20),
+            current_at(
+                &effective, &state, &ready, &recovery, /*now_unix_seconds*/ 20
+            ),
             ProtectedRouteKind::Ingress,
             "screened-retrieval",
         ),
@@ -364,14 +383,18 @@ fn protected_runtime_rejects_unavailable_stale_and_expired_readiness() {
     ));
     clock_runtime
         .authorize_route(
-            current_at(&effective, &state, &ready, &recovery, 13),
+            current_at(
+                &effective, &state, &ready, &recovery, /*now_unix_seconds*/ 13,
+            ),
             ProtectedRouteKind::Ingress,
             "screened-retrieval",
         )
         .expect("invalid future timestamp must not poison the clock");
     assert!(matches!(
         clock_runtime.authorize_route(
-            current_at(&effective, &state, &ready, &recovery, 12),
+            current_at(
+                &effective, &state, &ready, &recovery, /*now_unix_seconds*/ 12
+            ),
             ProtectedRouteKind::Ingress,
             "screened-retrieval",
         ),
@@ -398,7 +421,13 @@ fn protected_runtime_rejects_unavailable_stale_and_expired_readiness() {
     .expect("substituted window");
     assert!(matches!(
         clock_runtime.authorize_route(
-            current_at(&effective, &state, &substituted_window, &recovery, 12),
+            current_at(
+                &effective,
+                &state,
+                &substituted_window,
+                &recovery,
+                /*now_unix_seconds*/ 12
+            ),
             ProtectedRouteKind::Ingress,
             "screened-retrieval",
         ),
@@ -407,11 +436,16 @@ fn protected_runtime_rejects_unavailable_stale_and_expired_readiness() {
 }
 
 #[test]
+#[serial_test::serial(aggressive_grants)]
 fn unregistered_ingress_and_egress_fail_closed() {
     let revocations = Arc::new(RwLock::new(RevocationState::new()));
     let (view, _controller, root) = policy(SecurityLevel::Moderate, RevocationState::new());
     let effective = view.snapshot_for_agent(root).expect("snapshot");
-    let state = authoritative(SecurityLevel::Moderate, 0, false);
+    let state = authoritative(
+        SecurityLevel::Moderate,
+        /*revocation_generation*/ 0,
+        /*kill_switch_active*/ false,
+    );
     let measured = readiness(ProtectionReadinessStatus::Ready);
     let recovery = ready_recovery();
     let runtime = ProtectedRuntime::compose(
@@ -440,11 +474,16 @@ fn unregistered_ingress_and_egress_fail_closed() {
 }
 
 #[test]
+#[serial_test::serial(aggressive_grants)]
 fn restart_recovery_and_live_generation_changes_block_reuse() {
     let revocations = Arc::new(RwLock::new(RevocationState::new()));
     let (view, _controller, root) = policy(SecurityLevel::Moderate, RevocationState::new());
     let effective = view.snapshot_for_agent(root).expect("snapshot");
-    let state = authoritative(SecurityLevel::Moderate, 0, false);
+    let state = authoritative(
+        SecurityLevel::Moderate,
+        /*revocation_generation*/ 0,
+        /*kill_switch_active*/ false,
+    );
     let measured = readiness(ProtectionReadinessStatus::Ready);
     let recovery = ready_recovery();
     let runtime = ProtectedRuntime::compose(
@@ -521,7 +560,7 @@ fn restart_recovery_and_live_generation_changes_block_reuse() {
         principal(PrincipalKind::Human, "human-runtime-owner"),
         RevocationTarget::AllActiveAuthority,
         RevocationReason::HumanRequest,
-        11,
+        /*created_at_unix_seconds*/ 11,
     )
     .expect("revocation");
     revocations
@@ -598,8 +637,8 @@ fn request_and_grant(snapshot: &EffectivePolicySnapshot) -> (AuthorizationReques
         principal(PrincipalKind::Human, "human-runtime-owner"),
         snapshot.actor_chain.clone(),
         scope,
-        5,
-        30,
+        /*issued_at_unix_seconds*/ 5,
+        /*expires_at_unix_seconds*/ 30,
         text("grant-nonce"),
     )
     .expect("grant");
@@ -607,11 +646,16 @@ fn request_and_grant(snapshot: &EffectivePolicySnapshot) -> (AuthorizationReques
 }
 
 #[test]
+#[serial_test::serial(aggressive_grants)]
 fn durable_intent_and_live_fence_precede_the_effect() {
     let revocations = Arc::new(RwLock::new(RevocationState::new()));
     let (view, _controller, root) = policy(SecurityLevel::Moderate, RevocationState::new());
     let effective = view.snapshot_for_agent(root).expect("snapshot");
-    let state = authoritative(SecurityLevel::Moderate, 0, false);
+    let state = authoritative(
+        SecurityLevel::Moderate,
+        /*revocation_generation*/ 0,
+        /*kill_switch_active*/ false,
+    );
     let measured = readiness(ProtectionReadinessStatus::Ready);
     let temp = tempfile::tempdir().expect("journal tempdir");
     let journal_root = AbsolutePathBuf::from_absolute_path_checked(temp.path().join("journal"))
@@ -619,12 +663,16 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     let roots = Arc::new(MemoryRoot::default());
     let owner = JournalOwner::new(
         principal(PrincipalKind::Service, "security-audit-producer"),
-        1,
+        /*owner_generation*/ 1,
         text("integrity-key-v1"),
     )
     .expect("journal owner");
     let mut journal = ReferenceJournal::new(journal_root, owner, roots, JournalConfig::default());
-    let recovery = journal.recover(1, RUN_GENERATION, &RevocationState::new());
+    let recovery = journal.recover(
+        /*expected_policy_generation*/ 1,
+        RUN_GENERATION,
+        &RevocationState::new(),
+    );
     let runtime = ProtectedRuntime::compose(
         current(&effective, &state, &measured, &recovery),
         routes(),
@@ -656,14 +704,16 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         grant.issuer.clone(),
         grant.actor_chain.clone(),
         grant.scope.clone(),
-        5,
-        11,
+        /*issued_at_unix_seconds*/ 5,
+        /*expires_at_unix_seconds*/ 11,
         text("short-lived-grant-nonce"),
     )
     .expect("short-lived grant");
     assert!(matches!(
         runtime.reserve_dispatch(
-            current_at(&effective, &state, &measured, &recovery, 12),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 12
+            ),
             "brokered-https",
             &mut journal,
             &request,
@@ -679,7 +729,9 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     substituted_request.context.destination = Some(text("https://other.example.test"));
     assert!(matches!(
         runtime.reserve_dispatch(
-            current_at(&effective, &state, &measured, &recovery, 12),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 12
+            ),
             "brokered-https",
             &mut journal,
             &substituted_request,
@@ -690,17 +742,23 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         Err(ProtectedRuntimeError::AuthorityRequestMismatch)
     ));
 
-    let preview = ProtectedActionPreview::new(request.clone(), 30, text("preview-nonce"))
-        .expect("action preview");
+    let preview = ProtectedActionPreview::new(
+        request.clone(),
+        /*expires_at_unix_seconds*/ 30,
+        text("preview-nonce"),
+    )
+    .expect("action preview");
     let mandate = ProtectedActionMandate::approve(
         &preview,
         principal(PrincipalKind::Human, "human-runtime-owner"),
-        11,
+        /*approved_at_unix_seconds*/ 11,
     )
     .expect("action mandate");
     assert!(matches!(
         runtime.reserve_dispatch(
-            current_at(&effective, &state, &measured, &recovery, 12),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 12
+            ),
             "brokered-https",
             &mut journal,
             &substituted_request,
@@ -716,7 +774,9 @@ fn durable_intent_and_live_fence_precede_the_effect() {
 
     let mut dispatch = runtime
         .reserve_dispatch(
-            current_at(&effective, &state, &measured, &recovery, 12),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 12,
+            ),
             "brokered-https",
             &mut journal,
             &request,
@@ -729,7 +789,9 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     let fence_is_held = dispatch
         .authorize(
             &other_runtime,
-            current_at(&effective, &state, &measured, &recovery, 12),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 12,
+            ),
             ProtectedAuthority::Grant(&grant),
             ProtectedDispatchStep::Admit,
             || (),
@@ -742,7 +804,9 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     let fence_is_held = dispatch
         .authorize(
             &runtime,
-            current_at(&effective, &state, &measured, &recovery, 12),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 12,
+            ),
             ProtectedAuthority::Grant(&grant),
             ProtectedDispatchStep::Admit,
             || revocations.try_write().is_err(),
@@ -757,7 +821,12 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         mandate_receipt: None,
     };
     assert!(matches!(
-        dispatch.resolve(&runtime, &mut journal, executed_resolution.clone(), 9,),
+        dispatch.resolve(
+            &runtime,
+            &mut journal,
+            executed_resolution.clone(),
+            /*occurred_at_unix_seconds*/ 9,
+        ),
         Err(ProtectedRuntimeError::Journal(
             codex_security_audit::JournalError::EventChain(
                 codex_security_audit::EventChainError::TimestampRegression
@@ -767,7 +836,9 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     assert!(matches!(
         dispatch.authorize(
             &runtime,
-            current_at(&effective, &state, &measured, &recovery, 12),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 12
+            ),
             ProtectedAuthority::Grant(&grant),
             ProtectedDispatchStep::Admit,
             || panic!("retry-pending dispatch must not repeat the effect"),
@@ -781,18 +852,25 @@ fn durable_intent_and_live_fence_precede_the_effect() {
             DispatchResolution::Unknown {
                 reason: UnknownOutcomeReason::PersistenceUncertain,
             },
-            12,
+            /*occurred_at_unix_seconds*/ 12,
         ),
         Err(ProtectedRuntimeError::DispatchResolutionRetryMismatch)
     ));
     let completion = dispatch
-        .resolve(&runtime, &mut journal, executed_resolution.clone(), 12)
+        .resolve(
+            &runtime,
+            &mut journal,
+            executed_resolution.clone(),
+            /*occurred_at_unix_seconds*/ 12,
+        )
         .expect("retry the exact executed resolution after pre-commit validation failure");
     assert_eq!(completion.sequence, 2);
     assert!(matches!(
         dispatch.authorize(
             &runtime,
-            current_at(&effective, &state, &measured, &recovery, 12),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 12
+            ),
             ProtectedAuthority::Grant(&grant),
             ProtectedDispatchStep::Admit,
             || panic!("resolved dispatch must not repeat the effect"),
@@ -800,13 +878,20 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         Err(ProtectedRuntimeError::DispatchEffectUnavailable)
     ));
     assert!(matches!(
-        dispatch.resolve(&runtime, &mut journal, executed_resolution, 12),
+        dispatch.resolve(
+            &runtime,
+            &mut journal,
+            executed_resolution,
+            /*occurred_at_unix_seconds*/ 12
+        ),
         Err(ProtectedRuntimeError::DispatchResolutionUnavailable)
     ));
 
     let mut unknown_dispatch = runtime
         .reserve_dispatch(
-            current_at(&effective, &state, &measured, &recovery, 12),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 12,
+            ),
             "brokered-https",
             &mut journal,
             &request,
@@ -818,7 +903,9 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     unknown_dispatch
         .authorize(
             &runtime,
-            current_at(&effective, &state, &measured, &recovery, 12),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 12,
+            ),
             ProtectedAuthority::Grant(&grant),
             ProtectedDispatchStep::Admit,
             || (),
@@ -831,14 +918,16 @@ fn durable_intent_and_live_fence_precede_the_effect() {
             DispatchResolution::Unknown {
                 reason: UnknownOutcomeReason::TransportLost,
             },
-            12,
+            /*occurred_at_unix_seconds*/ 12,
         )
         .expect("durable unknown receipt");
     assert_eq!(unknown_completion.sequence, 4);
     assert!(matches!(
         unknown_dispatch.authorize(
             &runtime,
-            current_at(&effective, &state, &measured, &recovery, 12),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 12
+            ),
             ProtectedAuthority::Grant(&grant),
             ProtectedDispatchStep::Admit,
             || panic!("unknown terminal dispatch must not repeat the effect"),
@@ -848,7 +937,9 @@ fn durable_intent_and_live_fence_precede_the_effect() {
 
     let mut mandate_dispatch = runtime
         .reserve_dispatch(
-            current_at(&effective, &state, &measured, &recovery, 12),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 12,
+            ),
             "brokered-https",
             &mut journal,
             &request,
@@ -863,7 +954,9 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     mandate_dispatch
         .authorize(
             &runtime,
-            current_at(&effective, &state, &measured, &recovery, 12),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 12,
+            ),
             ProtectedAuthority::Mandate {
                 mandate: &mandate,
                 preview: &preview,
@@ -872,8 +965,13 @@ fn durable_intent_and_live_fence_precede_the_effect() {
             || (),
         )
         .expect("admit mandate dispatch");
-    let receipt = ActionReceipt::complete(&mandate, &preview, MandateOutcome::Executed, 12)
-        .expect("mandate receipt");
+    let receipt = ActionReceipt::complete(
+        &mandate,
+        &preview,
+        MandateOutcome::Executed,
+        /*completed_at_unix_seconds*/ 12,
+    )
+    .expect("mandate receipt");
     let mandate_completion = mandate_dispatch
         .resolve(
             &runtime,
@@ -882,14 +980,16 @@ fn durable_intent_and_live_fence_precede_the_effect() {
                 outcome: MandateOutcome::Executed,
                 mandate_receipt: Some(receipt),
             },
-            12,
+            /*occurred_at_unix_seconds*/ 12,
         )
         .expect("durable mandate receipt");
     assert_eq!(mandate_completion.sequence, 6);
     assert!(matches!(
         mandate_dispatch.authorize(
             &runtime,
-            current_at(&effective, &state, &measured, &recovery, 12),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 12
+            ),
             ProtectedAuthority::Mandate {
                 mandate: &mandate,
                 preview: &preview,
@@ -902,7 +1002,9 @@ fn durable_intent_and_live_fence_precede_the_effect() {
 
     assert!(matches!(
         runtime.reserve_dispatch(
-            current_at(&effective, &state, &measured, &recovery, 13),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 13
+            ),
             "brokered-https",
             &mut journal,
             &request,
@@ -921,13 +1023,15 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     let reapproved_mandate = ProtectedActionMandate::approve(
         &preview,
         principal(PrincipalKind::Human, "human-runtime-owner"),
-        12,
+        /*approved_at_unix_seconds*/ 12,
     )
     .expect("reapproved mandate");
     assert_ne!(reapproved_mandate.mandate_id, mandate.mandate_id);
     assert!(matches!(
         runtime.reserve_dispatch(
-            current_at(&effective, &state, &measured, &recovery, 13),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 13
+            ),
             "brokered-https",
             &mut journal,
             &request,
@@ -947,14 +1051,16 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         grant.issuer.clone(),
         grant.actor_chain.clone(),
         grant.scope.clone(),
-        5,
-        14,
+        /*issued_at_unix_seconds*/ 5,
+        /*expires_at_unix_seconds*/ 14,
         text("expires-before-admission"),
     )
     .expect("expiring grant");
     let mut never_admitted = runtime
         .reserve_dispatch(
-            current_at(&effective, &state, &measured, &recovery, 13),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 13,
+            ),
             "brokered-https",
             &mut journal,
             &request,
@@ -966,7 +1072,9 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     assert!(matches!(
         never_admitted.authorize(
             &runtime,
-            current_at(&effective, &state, &measured, &recovery, 15),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 15
+            ),
             ProtectedAuthority::Grant(&expires_before_admission),
             ProtectedDispatchStep::Admit,
             || (),
@@ -983,14 +1091,16 @@ fn durable_intent_and_live_fence_precede_the_effect() {
                 outcome: MandateOutcome::Cancelled,
                 mandate_receipt: None,
             },
-            15,
+            /*occurred_at_unix_seconds*/ 15,
         )
         .expect("durable cancellation before admission");
     assert_eq!(cancelled.sequence, 8);
     assert!(matches!(
         never_admitted.authorize(
             &runtime,
-            current_at(&effective, &state, &measured, &recovery, 15),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 15
+            ),
             ProtectedAuthority::Grant(&expires_before_admission),
             ProtectedDispatchStep::Admit,
             || panic!("cancelled never-admitted grant must not perform an effect"),
@@ -998,18 +1108,23 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         Err(ProtectedRuntimeError::DispatchEffectUnavailable)
     ));
 
-    let expiring_preview =
-        ProtectedActionPreview::new(request.clone(), 17, text("expiring-mandate-preview"))
-            .expect("expiring preview");
+    let expiring_preview = ProtectedActionPreview::new(
+        request.clone(),
+        /*expires_at_unix_seconds*/ 17,
+        text("expiring-mandate-preview"),
+    )
+    .expect("expiring preview");
     let expiring_mandate = ProtectedActionMandate::approve(
         &expiring_preview,
         principal(PrincipalKind::Human, "human-runtime-owner"),
-        15,
+        /*approved_at_unix_seconds*/ 15,
     )
     .expect("expiring mandate");
     let mut never_admitted_mandate = runtime
         .reserve_dispatch(
-            current_at(&effective, &state, &measured, &recovery, 15),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 15,
+            ),
             "brokered-https",
             &mut journal,
             &request,
@@ -1024,7 +1139,9 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     assert!(matches!(
         never_admitted_mandate.authorize(
             &runtime,
-            current_at(&effective, &state, &measured, &recovery, 18),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 18
+            ),
             ProtectedAuthority::Mandate {
                 mandate: &expiring_mandate,
                 preview: &expiring_preview,
@@ -1043,14 +1160,16 @@ fn durable_intent_and_live_fence_precede_the_effect() {
             DispatchResolution::Unknown {
                 reason: UnknownOutcomeReason::PersistenceUncertain,
             },
-            18,
+            /*occurred_at_unix_seconds*/ 18,
         )
         .expect("expired mandate closes conservatively as unknown");
     assert_eq!(conservative_unknown.sequence, 10);
     assert!(matches!(
         never_admitted_mandate.authorize(
             &runtime,
-            current_at(&effective, &state, &measured, &recovery, 18),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 18
+            ),
             ProtectedAuthority::Mandate {
                 mandate: &expiring_mandate,
                 preview: &expiring_preview,
@@ -1061,13 +1180,16 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         Err(ProtectedRuntimeError::DispatchEffectUnavailable)
     ));
 
-    let collision_preview =
-        ProtectedActionPreview::new(request.clone(), 19, text("dedup-domain-preview"))
-            .expect("domain-separation preview");
+    let collision_preview = ProtectedActionPreview::new(
+        request.clone(),
+        /*expires_at_unix_seconds*/ 19,
+        text("dedup-domain-preview"),
+    )
+    .expect("domain-separation preview");
     let collision_mandate = ProtectedActionMandate::approve(
         &collision_preview,
         principal(PrincipalKind::Human, "human-runtime-owner"),
-        18,
+        /*approved_at_unix_seconds*/ 18,
     )
     .expect("domain-separation mandate");
     let colliding_caller_key = BoundedText::new(format!(
@@ -1077,7 +1199,9 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     .expect("caller-selected collision key");
     let mut collision_grant = runtime
         .reserve_dispatch(
-            current_at(&effective, &state, &measured, &recovery, 18),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 18,
+            ),
             "brokered-https",
             &mut journal,
             &request,
@@ -1089,7 +1213,9 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     collision_grant
         .authorize(
             &runtime,
-            current_at(&effective, &state, &measured, &recovery, 18),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 18,
+            ),
             ProtectedAuthority::Grant(&grant),
             ProtectedDispatchStep::Admit,
             || (),
@@ -1103,13 +1229,15 @@ fn durable_intent_and_live_fence_precede_the_effect() {
                 outcome: MandateOutcome::Cancelled,
                 mandate_receipt: None,
             },
-            18,
+            /*occurred_at_unix_seconds*/ 18,
         )
         .expect("cancel collision grant");
     assert!(matches!(
         collision_grant.authorize(
             &runtime,
-            current_at(&effective, &state, &measured, &recovery, 18),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 18
+            ),
             ProtectedAuthority::Grant(&grant),
             ProtectedDispatchStep::Admit,
             || panic!("cancelled grant must not repeat the effect"),
@@ -1118,7 +1246,9 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     ));
     let mut collision_mandate_dispatch = runtime
         .reserve_dispatch(
-            current_at(&effective, &state, &measured, &recovery, 18),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 18,
+            ),
             "brokered-https",
             &mut journal,
             &request,
@@ -1137,14 +1267,16 @@ fn durable_intent_and_live_fence_precede_the_effect() {
             DispatchResolution::Unknown {
                 reason: UnknownOutcomeReason::PersistenceUncertain,
             },
-            18,
+            /*occurred_at_unix_seconds*/ 18,
         )
         .expect("close domain-separation mandate intent");
     assert_eq!(collision_receipt.sequence, 14);
     assert!(matches!(
         collision_mandate_dispatch.authorize(
             &runtime,
-            current_at(&effective, &state, &measured, &recovery, 18),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 18
+            ),
             ProtectedAuthority::Mandate {
                 mandate: &collision_mandate,
                 preview: &collision_preview,
@@ -1157,7 +1289,9 @@ fn durable_intent_and_live_fence_precede_the_effect() {
 
     let mut wrong_runtime_resolution = runtime
         .reserve_dispatch(
-            current_at(&effective, &state, &measured, &recovery, 18),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 18,
+            ),
             "brokered-https",
             &mut journal,
             &request,
@@ -1169,7 +1303,9 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     wrong_runtime_resolution
         .authorize(
             &runtime,
-            current_at(&effective, &state, &measured, &recovery, 18),
+            current_at(
+                &effective, &state, &measured, &recovery, /*now_unix_seconds*/ 18,
+            ),
             ProtectedAuthority::Grant(&grant),
             ProtectedDispatchStep::Admit,
             || (),
@@ -1183,7 +1319,7 @@ fn durable_intent_and_live_fence_precede_the_effect() {
                 outcome: MandateOutcome::Cancelled,
                 mandate_receipt: None,
             },
-            18,
+            /*occurred_at_unix_seconds*/ 18,
         ),
         Err(ProtectedRuntimeError::RuntimeInstanceMismatch)
     ));

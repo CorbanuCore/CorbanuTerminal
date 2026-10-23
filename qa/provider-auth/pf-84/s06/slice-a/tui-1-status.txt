@@ -1,0 +1,40 @@
+╭──────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                │
+│                                              │
+│ model:     openai.gpt-5.4   /model to change │
+│ directory: /tmp/tmp.SnRbCLioJY/ws            │
+╰──────────────────────────────────────────────╯
+
+⚠ Under-development features enabled: named_accounts. Under-development features are incomplete and may behave
+  unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /tmp/tmp.SnRbCLioJY/
+  corbanu/config.toml.
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                GPT-5.4 (reasoning medium, summaries auto)                        │
+│  Model provider:       Amazon Bedrock - http://127.0.0.1:34300/openai/v1 · account work  │
+│  Directory:            /tmp/tmp.SnRbCLioJY/ws                                            │
+│  Permissions:          Next turn: Workspace (Ask for approval)                           │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Amazon Bedrock AWS credentials                                    │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12dc7-4520-7bd1-9306-a9f314c7e938                              │
+│                                                                                          │
+│  Token usage:          0 total  (0 input + 0 output)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Summarize recent commits
+
+  GPT-5.4 via amazon-bedrock default · /tmp/tmp.SnRbCLioJY/ws · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+

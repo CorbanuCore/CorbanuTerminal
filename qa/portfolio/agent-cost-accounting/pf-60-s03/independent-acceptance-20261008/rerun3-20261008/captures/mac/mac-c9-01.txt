@@ -1,0 +1,11 @@
+--- rollouts before:
+<scratch>/homes/mh-dev/sessions/2026/10/08/rollout-2026-10-08T15-44-36-01a11db0-9d01-7671-93b8-541a6e51c0e8.jsonl
+<scratch>/homes/mh-dev/sessions/2026/10/08/rollout-2026-10-08T15-44-36-01a11db0-9d1b-7c81-b8fa-4be48c2278a2.jsonl
+<scratch>/homes/mh-dev/sessions/2026/10/08/rollout-2026-10-08T15-44-36-01a11db0-9d96-7ec1-a06c-b8aaa7d185c7.jsonl
+<scratch>/homes/mh-dev/sessions/2026/10/08/rollout-2026-10-08T15-44-42-01a11db0-b608-79f2-b3ec-3e91c16aa94c.jsonl
+$ corbanu delete --force 01a11db0-9d96-7ec1-a06c-b8aaa7d185c7
+Deleted session 01a11db0-9d96-7ec1-a06c-b8aaa7d185c7.
+exit=0
+--- rollouts after:
+<scratch>/homes/mh-dev/sessions/2026/10/08/rollout-2026-10-08T15-44-36-01a11db0-9d01-7671-93b8-541a6e51c0e8.jsonl
+<scratch>/homes/mh-dev/sessions/2026/10/08/rollout-2026-10-08T15-44-36-01a11db0-9d1b-7c81-b8fa-4be48c2278a2.jsonl

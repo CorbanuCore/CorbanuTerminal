@@ -1,8 +1,13 @@
+use crate::deny_read_targets::DenyReadRule;
+use crate::deny_read_targets::DenyReadTargets;
 use codex_protocol::permissions::FileSystemAccessMode;
 use codex_protocol::permissions::FileSystemPath;
 use codex_protocol::permissions::FileSystemSandboxEntry;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::permissions::ReadDenyMatcher;
+use codex_protocol::permissions::credential_glob_exempts_templates;
+use codex_protocol::permissions::credential_rule_roots;
+use codex_protocol::permissions::is_credential_template_name;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use std::collections::HashSet;
 use std::path::Path;
@@ -24,49 +29,61 @@ pub fn resolve_windows_deny_read_paths(
     file_system_sandbox_policy: &FileSystemSandboxPolicy,
     cwd: &AbsolutePathBuf,
 ) -> Result<Vec<AbsolutePathBuf>, String> {
-    let mut paths = Vec::new();
-    let mut seen = HashSet::new();
+    Ok(resolve_windows_deny_read_targets(file_system_sandbox_policy, cwd)?.paths())
+}
 
+/// [`resolve_windows_deny_read_paths`], keeping which rule produced each
+/// path. Every configured rule is listed, including a glob that matches
+/// nothing now, so the persistent sync keeps its earlier entries (#304/S1).
+pub fn resolve_windows_deny_read_targets(
+    file_system_sandbox_policy: &FileSystemSandboxPolicy,
+    cwd: &AbsolutePathBuf,
+) -> Result<DenyReadTargets, String> {
+    let mut targets = DenyReadTargets::default();
     for path in file_system_sandbox_policy.get_unreadable_roots_with_cwd(cwd.as_path()) {
-        push_absolute_path(&mut paths, &mut seen, path.into_path_buf())?;
+        let path = absolute_path(path.as_path())?;
+        targets.add(DenyReadRule::Path(path.to_path_buf()), vec![path]);
     }
 
-    let unreadable_globs = file_system_sandbox_policy.get_unreadable_globs_with_cwd(cwd.as_path());
-    if unreadable_globs.is_empty() {
-        return Ok(paths);
+    let globs = file_system_sandbox_policy.get_unreadable_globs_with_cwd(cwd.as_path());
+    // #442 (Travis, 2026-10-12): under the whole credential rule the
+    // templates (`.env.example`, `.env.sample`, `.env.template`) get no deny.
+    let rule_roots = credential_rule_roots(&globs);
+    for pattern in globs {
+        let exempts_templates = credential_glob_exempts_templates(&pattern, &rule_roots);
+        let glob_policy = FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
+            path: FileSystemPath::GlobPattern {
+                pattern: pattern.clone(),
+            },
+            access: FileSystemAccessMode::Deny,
+            missing_path_behavior: None,
+        }]);
+        let mut paths = Vec::new();
+        if let Some(matcher) = ReadDenyMatcher::try_new(&glob_policy, cwd.as_path())? {
+            let scan_plan =
+                glob_scan_plan(&pattern, file_system_sandbox_policy.glob_scan_max_depth);
+            collect_existing_glob_matches(
+                &scan_plan.root,
+                &matcher,
+                &mut paths,
+                &mut HashSet::new(),
+                &mut HashSet::new(),
+                scan_plan.max_depth,
+                /*depth*/ 0,
+            )?;
+        }
+        if exempts_templates {
+            paths.retain(|path| {
+                !path
+                    .as_path()
+                    .file_name()
+                    .is_some_and(is_credential_template_name)
+            });
+        }
+        targets.add(DenyReadRule::Glob(pattern), paths);
     }
 
-    let glob_policy = FileSystemSandboxPolicy::restricted(
-        unreadable_globs
-            .iter()
-            .map(|pattern| FileSystemSandboxEntry {
-                path: FileSystemPath::GlobPattern {
-                    pattern: pattern.clone(),
-                },
-                access: FileSystemAccessMode::Deny,
-                missing_path_behavior: None,
-            })
-            .collect(),
-    );
-    let Some(matcher) = ReadDenyMatcher::try_new(&glob_policy, cwd.as_path())? else {
-        return Ok(paths);
-    };
-
-    for pattern in unreadable_globs {
-        let mut seen_scan_dirs = HashSet::new();
-        let scan_plan = glob_scan_plan(&pattern, file_system_sandbox_policy.glob_scan_max_depth);
-        collect_existing_glob_matches(
-            &scan_plan.root,
-            &matcher,
-            &mut paths,
-            &mut seen,
-            &mut seen_scan_dirs,
-            scan_plan.max_depth,
-            /*depth*/ 0,
-        )?;
-    }
-
-    Ok(paths)
+    Ok(targets)
 }
 
 fn collect_existing_glob_matches(
@@ -128,12 +145,15 @@ fn push_absolute_path(
     seen: &mut HashSet<PathBuf>,
     path: PathBuf,
 ) -> Result<(), String> {
-    let absolute_path = AbsolutePathBuf::from_absolute_path(dunce::simplified(&path))
-        .map_err(|err| err.to_string())?;
+    let absolute_path = absolute_path(&path)?;
     if seen.insert(absolute_path.to_path_buf()) {
         paths.push(absolute_path);
     }
     Ok(())
+}
+
+fn absolute_path(path: &Path) -> Result<AbsolutePathBuf, String> {
+    AbsolutePathBuf::from_absolute_path(dunce::simplified(path)).map_err(|err| err.to_string())
 }
 
 fn glob_scan_plan(pattern: &str, configured_max_depth: Option<usize>) -> GlobScanPlan {
@@ -286,6 +306,69 @@ mod tests {
                 )
                 .expect("absolute missing")
             ]
+        );
+    }
+
+    /// #442 (Travis, 2026-10-12): under the whole credential rule the
+    /// templates get no deny ACE while `.env` and `.env.local` do; a person's
+    /// own `**/.env.*` alone still covers them.
+    #[test]
+    fn credential_rule_leaves_templates_out() {
+        let tmp = TempDir::new().expect("tempdir");
+        let root = dunce::canonicalize(tmp.path()).expect("canonical");
+        let cwd = AbsolutePathBuf::from_absolute_path(&root).expect("absolute cwd");
+        for name in [
+            ".env",
+            ".env.local",
+            ".env.example",
+            "app/.ENV.SAMPLE",
+            ".env.template",
+        ] {
+            let path = root.join(name);
+            std::fs::create_dir_all(path.parent().expect("parent")).expect("parent");
+            std::fs::write(path, "x").expect("write");
+        }
+        let resolve = |globs: Vec<String>| -> HashSet<PathBuf> {
+            let policy = FileSystemSandboxPolicy::restricted(
+                globs.into_iter().map(unreadable_glob_entry).collect(),
+            );
+            resolve_windows_deny_read_paths(&policy, &cwd)
+                .expect("resolve")
+                .into_iter()
+                .map(|path| {
+                    PathBuf::from(
+                        path.as_path()
+                            .strip_prefix(&root)
+                            .expect("below root")
+                            .to_string_lossy()
+                            .replace('\\', "/"),
+                    )
+                })
+                .collect()
+        };
+        let rule = codex_protocol::permissions::credential_file_globs(&root.to_string_lossy());
+        assert_eq!(
+            resolve(rule),
+            [".env", ".env.local"]
+                .into_iter()
+                .map(PathBuf::from)
+                .collect()
+        );
+        assert_eq!(
+            resolve(vec![format!(
+                "{}{sep}**{sep}.env.*",
+                root.to_string_lossy(),
+                sep = std::path::MAIN_SEPARATOR
+            )]),
+            [
+                ".env.local",
+                ".env.example",
+                "app/.ENV.SAMPLE",
+                ".env.template"
+            ]
+            .into_iter()
+            .map(PathBuf::from)
+            .collect()
         );
     }
 

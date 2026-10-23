@@ -2,7 +2,7 @@
 sprint_id: "PF-13-S05"
 title: "Credential boundary adversarial qualification"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 13
 owner: "Jim Ricketts"
@@ -26,8 +26,8 @@ updated: 2026-08-30
 
 ## Plan linkage
 
-- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
+- Upstream: [plan touch record](../../../plans/completed/main-2026-10-08-p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md)
 - Feature: `PF-13`
 - Acceptance advanced: authorized use succeeds while every unauthorized or observable surface remains secret-free.
 

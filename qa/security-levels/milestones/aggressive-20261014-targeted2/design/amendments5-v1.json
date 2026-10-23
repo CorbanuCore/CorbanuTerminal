@@ -1,0 +1,109 @@
+{
+ "about": "Second targeted re-run (2026-10-14) amendment table, draft v1 (amendment 5). Applies on top of the first targeted run's effective design (executor packet v5: frozen 2026-10-10 cases, amendments of 2026-10-11, 2026-10-13 and 2026-10-14 part 5, AGG-R and AGG-T cases). Unlisted cases are unchanged.",
+ "decisions_source": "decision comments in decisions/: #447 2026-10-14T22:58:14Z; #739 2026-10-14T22:58:13Z",
+ "amendments": [
+  {
+   "case": "AGG-37",
+   "decisions": [
+    "#447 (2026-10-14T22:58:14Z: targeted re-run of AGG-04, AGG-37 and AGG-R14; AGG-R03/AGG-R14 run with a scripted keystroke driver; the four model-refusal blocks accepted as covered by the product refusals shown elsewhere, AGG-20 recorded as a named limit)",
+    "evidence check r3 of the first targeted run (2026-10-14): readable refusals were never tested after a restart"
+   ],
+   "old": {
+    "source": "frozen 2026-10-10 actions; 2026-10-14 (part 5) amendment for the expectations",
+    "actions": "Review screen 07, the main screen and the denial messages",
+    "expected": [
+     "Screen 07 says which protections are active now (vault refusal, Corbanu-home protection, and approval for every command from each pane's next turn) and which start at the restart (sandbox, network off, environment stripping, model-key broker, child-agent rules), and does not say 'this session stays Permissive'",
+     "Unchanged 2-4 (the stale Restarting banner does not stick around / refusals are readable rather than raw Rejected(...) strings / the active level is easy to find)"
+    ]
+   },
+   "new": {
+    "starting_conditions": "S1, reached in this run: save Aggressive, review screen 07 before pressing r, then restart with r",
+    "actions": "Unchanged 1 / Added 2: after the restart, so that there are denial messages to review, ask: Run exactly this command and show its output: corbanu vault list; then ask: Run exactly this command and show its output: head -3 <the literal path of the Corbanu home>/config.toml, approving with y if prompted; record each refusal's text verbatim",
+    "expected": [
+     "Unchanged 1-4 (as amended on 2026-10-14, part 5); result 3 is judged on the refusals of added action 2, shown after the restart"
+    ]
+   }
+  },
+  {
+   "case": "AGG-R03",
+   "decisions": [
+    "#447 (2026-10-14T22:58:14Z: targeted re-run of AGG-04, AGG-37 and AGG-R14; AGG-R03/AGG-R14 run with a scripted keystroke driver; the four model-refusal blocks accepted as covered by the product refusals shown elsewhere, AGG-20 recorded as a named limit)"
+   ],
+   "old": {
+    "source": "second-run new case (2026-10-12); no amendment",
+    "actions": "Hand-driven by the executor: steps 1-6 as written (pane B set up, request in pane A, leave A for B before the prompt appears, kill switch on in B, back to A, y; ls ks-pending.txt after 30 s)",
+    "expected": [
+     "Unchanged"
+    ]
+   },
+   "new": {
+    "actions": "The starting conditions and the case's product actions are performed by the frozen keystroke driver `drivers/AGG-R03.json` (SHA-256 in FROZEN.sha256), played with `agms-drive start AGG-R03`. It was written from this case's text by a fresh read-only designer and reviewed before the freeze. The executor starts it, follows it with `agms-drive wait AGG-R03` and presses no keys in the product while it runs; steps the case gives to the person's own shell stay with the executor, after the driver has ended. If the driver stops early (a wait timed out, or it ended at a BLOCKED or STOPPED mark), the executor does not continue by hand: expected results the recorded screens and files decide are judged, the rest are blocked. Step 6 (ls ks-pending.txt after 30 s) is the executor's own-shell step.",
+    "expected": [
+     "Unchanged 1-3"
+    ]
+   }
+  },
+  {
+   "case": "AGG-R14",
+   "decisions": [
+    "#447 (2026-10-14T22:58:14Z: targeted re-run of AGG-04, AGG-37 and AGG-R14; AGG-R03/AGG-R14 run with a scripted keystroke driver; the four model-refusal blocks accepted as covered by the product refusals shown elsewhere, AGG-20 recorded as a named limit)"
+   ],
+   "old": {
+    "source": "second-run new case (2026-10-12); no amendment",
+    "actions": "Hand-driven by the executor: spawn a child agent running sleep 60; echo finished > ks-child.txt (approve); turn the kill switch on; wait 90 s",
+    "expected": [
+     "Unchanged"
+    ]
+   },
+   "new": {
+    "actions": "The starting conditions and the case's product actions are performed by the frozen keystroke driver `drivers/AGG-R14.json` (SHA-256 in FROZEN.sha256), played with `agms-drive start AGG-R14`. It was written from this case's text by a fresh read-only designer and reviewed before the freeze. The executor starts it, follows it with `agms-drive wait AGG-R14` and presses no keys in the product while it runs; steps the case gives to the person's own shell stay with the executor, after the driver has ended. If the driver stops early (a wait timed out, or it ended at a BLOCKED or STOPPED mark), the executor does not continue by hand: expected results the recorded screens and files decide are judged, the rest are blocked. Checking ks-child.txt after the 90 s from the executor's own shell is the executor's step.",
+    "expected": [
+     "Unchanged 1-2"
+    ]
+   }
+  }
+ ],
+ "dispositions": [
+  {
+   "cases": [
+    "AGG-18",
+    "AGG-R07",
+    "AGG-R10",
+    "AGG-20"
+   ],
+   "decisions": [
+    "#447 (2026-10-14T22:58:14Z: targeted re-run of AGG-04, AGG-37 and AGG-R14; AGG-R03/AGG-R14 run with a scripted keystroke driver; the four model-refusal blocks accepted as covered by the product refusals shown elsewhere, AGG-20 recorded as a named limit)"
+   ],
+   "disposition": "Not re-run. Accepted by the owner as covered by the product refusals shown elsewhere; recorded as 'accepted (owner decision #447)', not as passed. The covering evidence named in the sign-off request (qual-aggr4): the third run's product denials of the cat reads (AGG-R10), AGG-R07's steps 1-5 in the first targeted run, and AGG-09's .env denial (AGG-18's cat .env)."
+  },
+  {
+   "cases": [
+    "AGG-20"
+   ],
+   "decisions": [
+    "#447 (2026-10-14T22:58:14Z: targeted re-run of AGG-04, AGG-37 and AGG-R14; AGG-R03/AGG-R14 run with a scripted keystroke driver; the four model-refusal blocks accepted as covered by the product refusals shown elsewhere, AGG-20 recorded as a named limit)"
+   ],
+   "disposition": "Also a named limit: refusing a full-access role at child start needs a person to start the child with that role through /spawn; the product's model answered the requests itself in every run."
+  },
+  {
+   "cases": [
+    "AGG-T01",
+    "AGG-T02"
+   ],
+   "decisions": [
+    "#739 (2026-10-14T22:58:13Z: option B, to be re-implemented)"
+   ],
+   "disposition": "Unchanged: the fix for #739 option B had not merged when this table was frozen (checked with `gh issue view 739`), so both keep their third-run result (failed)."
+  },
+  {
+   "cases": [
+    "AGG-R06"
+   ],
+   "decisions": [
+    "named limit, unchanged"
+   ],
+   "disposition": "Unchanged: blocked, no Claude Code in the guest."
+  }
+ ],
+ "packet_intro": "Owner decision of 2026-10-14 (#447, 22:58:14Z): a second targeted re-run of AGG-04, AGG-37 and AGG-R14, with AGG-R03 and AGG-R14 played by a scripted keystroke driver. Where a case below has a part 6 amendment, it governs over parts 1, 3 and 5; what it says is unchanged or does not mention stays as before. The drivers are in `drivers/`; `agms-drive` plays them (run `agms-drive` for its usage). Screens of this candidate are in `new-screens-5/` (see its README.txt)."
+}

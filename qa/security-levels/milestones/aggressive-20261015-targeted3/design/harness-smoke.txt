@@ -1,0 +1,53 @@
+Host smoke of the harness's second-terminal steps (2026-10-15T21:21Z): agms-tui/agms-drive copies with only tool paths replaced (system tmux, a fake product that echoes its input; no Corbanu Terminal involved).
+
+== driver
+{"case":"SMOKE","steps":[
+ {"do":"start","args":[]},
+ {"do":"wait","regex":"/model to change","seconds":10,"on_timeout":"stop"},
+ {"do":"start","term":2,"args":["-c","x=1"]},
+ {"do":"wait","term":2,"regex":"args=-c x=1","seconds":10,"on_timeout":"stop"},
+ {"do":"text","term":2,"text":"to-two"},{"do":"key","term":2,"keys":["Enter"]},
+ {"do":"text","text":"to-one"},{"do":"key","keys":["Enter"]},
+ {"do":"wait","term":2,"regex":"got: to-two","seconds":5,"on_timeout":"stop"},
+ {"do":"if","term":2,"regex":"got: to-one","then":[{"do":"mark","text":"WRONG: term2 got term1 text"}],"else":[{"do":"mark","text":"term2 ok"}]},
+ {"do":"if","regex":"got: to-one","then":[{"do":"mark","text":"term1 ok"}],"else":[{"do":"mark","text":"WRONG term1"}]},
+ {"do":"stop","term":2},
+ {"do":"if","regex":"FAKE","then":[{"do":"mark","text":"term1 alive after term2 stop"}],"else":[]},
+ {"do":"if","term":2,"regex":"x","then":[],"else":[{"do":"wait","regex":"(?!)","seconds":1,"on_timeout":"stop"}]},
+ {"do":"mark","text":"SHOULD NOT REACH"}
+]}
+
+== driver log
+2026-10-15T21:21:01.474Z DRIVER-BEGIN /Volumes/CorbanuDrive/Corbanu/.codex-work/aggressive-targeted3-20261015/harness-smoke/drivers/SMOKE.json sha256=6ec20118a527ada4d020a14aea3107f413415afaa52a10d8e5019adaa9fc40cb
+2026-10-15T21:21:03.560Z #1 start [] -> rc=0
+2026-10-15T21:21:03.605Z #2 wait "/model to change" 10s -> matched
+2026-10-15T21:21:05.678Z #3 start term=2 ["-c", "x=1"] -> rc=0
+2026-10-15T21:21:05.723Z #4 wait term=2 "args=-c x=1" 10s -> matched
+2026-10-15T21:21:05.765Z #5 text term=2 "to-two" -> rc=0
+2026-10-15T21:21:05.961Z #6 key term=2 Enter -> rc=0
+2026-10-15T21:21:06.007Z #7 text "to-one" -> rc=0
+2026-10-15T21:21:06.197Z #8 key Enter -> rc=0
+2026-10-15T21:21:06.236Z #9 wait term=2 "got: to-two" 5s -> matched
+2026-10-15T21:21:06.276Z #10 if term=2 "got: to-one" -> else
+2026-10-15T21:21:06.276Z #11 mark MARK term2 ok
+2026-10-15T21:21:06.322Z #12 if "got: to-one" -> then
+2026-10-15T21:21:06.322Z #13 mark MARK term1 ok
+2026-10-15T21:21:06.363Z #14 stop term=2 -> rc=0
+2026-10-15T21:21:06.402Z #15 if "FAKE" -> then
+2026-10-15T21:21:06.402Z #16 mark MARK term1 alive after term2 stop
+2026-10-15T21:21:06.441Z #17 if term=2 "x" -> then
+2026-10-15T21:21:06.441Z #18 mark MARK SHOULD NOT REACH
+2026-10-15T21:21:06.441Z DRIVER-END completed all steps
+
+== evidence files
+actions.jsonl
+driver-SMOKE.log
+pty-2.raw
+pty.raw
+screens.jsonl
+actions with term 2: 14
+pty-2.raw:
+to-two
+got: to-two
+
+Note: step 17's 'if' matched because agms-drive matches an 'if' regex against the screen text plus any [stderr] line (here 'tmux error: can't find session' after term 2 was stopped); the smoke's regex "x" was too loose. Real drivers' regexes do not match that text.

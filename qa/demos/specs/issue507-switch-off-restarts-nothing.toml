@@ -1,0 +1,316 @@
+# Issue #507 (owner decision 2026-10-12): turning the kill switch off restarts nothing.
+id = "issue507-switch-off-restarts-nothing"
+feature = "Turning the kill switch off restarts nothing; a waiting task goes with the pane's next turn"
+expected = "Tasks sent to a Codex Troll and a Claude Orc while the switch is on wait. Turning it off starts nothing in either pane; when a person types in each pane, its waiting task goes with that turn."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+[agents]
+provider_allowlist = ["zai", "external-claude:claudeplan"]
+"""
+cols = 150
+rows = 44
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+CLAUDE_CODE_OAUTH_TOKEN = "claude-plan-test-token"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+# Aggressive (the kill switch is in its grants view).
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Aggressive\\?"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+key = "Escape"
+
+# Crew: Nazgul and Troll Burzum (GLM 5.3 Flash), Orc Snaga (Claude Code, Opus 5.5 Claude Plan).
+[[steps]]
+type = "/spawn"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Quick start"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Create Nazgul pane"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Model and Effort"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Reasoning"
+[[steps]]
+key = "Up"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "bound it as the Nazgul root"
+[[steps]]
+type = "/spawn"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Quick start"
+[[steps]]
+key = "Down"
+repeat = 3
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Choose the harness"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Model and Effort"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Reasoning"
+[[steps]]
+key = "Up"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Spawned Corbanu Terminal Troll pane"
+[[steps]]
+type = "/spawn"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Quick start"
+[[steps]]
+key = "Down"
+repeat = 4
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Assign Orc Supervisor"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Choose the harness"
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Spawn Claude Orc"
+[[steps]]
+key = "Down"
+repeat = 6
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "as a background worker"
+
+# Kill switch on.
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Security level"
+[[steps]]
+key = "g"
+[[steps]]
+wait = "Grants and kill switch"
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Turn the kill switch on\\?"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Kill switch on"
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "esc back to the levels"
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "Security level"
+[[steps]]
+key = "Escape"
+
+# Tasks for both panes while the switch is on.
+[[steps]]
+type = "/spawn status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Spawn Status"
+[[steps]]
+type = "send task to burzum"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Send Task to"
+[[steps]]
+type = "Create a file named codex-task.txt in the workspace containing the single line pf507-codex-task."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "A task for Burzum \\[troll\\] waits"
+[[steps]]
+type = "/spawn status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Spawn Status"
+[[steps]]
+type = "send task to claude"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Send Task to"
+[[steps]]
+type = "Reply with exactly the word pf507-claude-task and nothing else."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Snaga \\[orc\\] - Opus 5.5 Claude Plan` waits"
+[[steps]]
+pause = 2.5
+
+# Kill switch off: nothing restarts.
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Security level"
+[[steps]]
+key = "g"
+[[steps]]
+wait = "Grants and kill switch"
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Turn the kill switch off\\?"
+[[steps]]
+pause = 2.5
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Kill switch off"
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "esc back to the levels"
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "Security level"
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "Nothing restarted"
+[[steps]]
+pause = 2.0
+[[steps]]
+run = "sleep 30; ls {workspace}; ls {home}/panes/claude-*/ | grep -c 'turn-.*jsonl' || true"
+timeout = 60
+[[steps]]
+type = "/spawn status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Burzum \\[troll\\]\\s+idle"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Escape"
+
+# A person types in the Troll pane: its task goes with that turn.
+[[steps]]
+type = "/panes"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch user panes"
+[[steps]]
+type = "burzum"
+[[steps]]
+key = "Enter"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Go ahead."
+[[steps]]
+key = "Enter"
+[[steps]]
+run = "for i in $(seq 1 110); do test -f {workspace}/codex-task.txt && sleep 10 && exit 0; sleep 1; done; exit 1"
+timeout = 130
+[[steps]]
+wait = "codex-task.txt"
+[[steps]]
+pause = 2.5
+
+# A person types in the Claude pane: its task goes with that turn.
+[[steps]]
+type = "/spawn status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Spawn Status"
+[[steps]]
+type = "claude-"
+[[steps]]
+key = "Enter"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Hello."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Claude pane turn complete"
+timeout = 120
+compress = 3
+[[steps]]
+pause = 3.5

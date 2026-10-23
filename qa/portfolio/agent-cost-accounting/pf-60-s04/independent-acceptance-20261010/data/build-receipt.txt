@@ -1,0 +1,10 @@
+PF-60-S04 independent acceptance binary
+commit: b1e20a8ec6192ea16a4b3c7e730d28cb712d3707 (origin/main, "Merge pull request #393 from CorbanuCore/docs/pf60-s04-evidence"),
+        exported with `git archive` to the RTX scratch (src/COMMIT records the hash)
+host:   RTX box, Linux x86_64, Ubuntu 26.04.1 LTS, kernel 7.0.0-38-generic (no macOS keychain reachable)
+build:  cargo build --locked -j24 -p codex-cli --bin corbanu --features codex-core/developer-accounting,codex-tui/developer-accounting
+        cargo build --locked -j24 -p codex-state --example accounting_demo_seed
+        (debug profile, toolchain 1.95.0, own CARGO_TARGET_DIR, CORBANU_TEST_NO_NATIVE_KEYRING=1)
+version: corbanu 0.1.48
+sha256: 953802b120556cede2f4a3f2c9e86e6c9c7ea15ae61f86a077c9a8f2d6a89cf1  corbanu
+sha256: ec1f5dae0742223e307d4d75abfe0c00a1b3c3dabc1bf387551b4a2738cffe3e  accounting_demo_seed

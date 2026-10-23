@@ -1,0 +1,21 @@
+#!/bin/bash
+# Launch the exact pinned package with the run's private profile. Usage:
+#   pf83-product ROUTE [resume ARGS...]
+set -u
+route="$1"; shift
+case "$route" in zai|zai-anthropic) ;; *) echo "unknown route $route" >&2; exit 64;; esac
+RUN="${PF83_RUN:?}"
+cfg=(--no-alt-screen -m glm-5.2 -c "model_provider=\"$route\""
+     -c 'cli_auth_credentials_store="file"'
+     -c "log_dir=\"$RUN/product-logs\"" -C "$RUN/fixture/workspace")
+cd "$RUN/fixture/workspace" || exit 66
+env_args=(-i PATH=/opt/pf83/bin:/usr/bin:/bin:/usr/sbin:/sbin HOME="$HOME" USER="$USER"
+  LOGNAME="$USER" SHELL=/bin/bash TERM="${TERM:-screen-256color}" LANG=en_US.UTF-8
+  TMPDIR="$RUN/tmp/" CORBANU_HOME="$RUN/product-home" CODEX_HOME="$RUN/product-home"
+  HTTPS_PROXY="$PF83_PROXY" CODEX_CA_CERTIFICATE=/opt/pf83/etc/mediation-ca.pem
+  ZAI_API_KEY=pf83-synthetic-placeholder-not-a-credential PF83_RUN="$RUN")
+if [ "${1:-}" = "resume" ]; then
+  shift
+  exec env "${env_args[@]}" /opt/pf83/pkg/corbanu resume "$@" "${cfg[@]}"
+fi
+exec env "${env_args[@]}" /opt/pf83/pkg/corbanu "${cfg[@]}" "$@"

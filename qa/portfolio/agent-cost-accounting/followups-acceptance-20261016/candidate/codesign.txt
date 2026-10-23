@@ -1,0 +1,11 @@
+Executable=/Volumes/CorbanuDrive/Corbanu/.codex-work/pf60-s10-20261016/stage/package/bin/corbanu
+Identifier=com.corbanu.corbanu
+Format=Mach-O thin (arm64)
+CodeDirectory v=20500 size=1253695 flags=0x10000(runtime) hashes=39172+2 location=embedded
+Signature size=9043
+Timestamp=15 Oct 2026 at 8:08:32 pm
+Info.plist=not bound
+TeamIdentifier=K5N2T25C23
+Runtime Version=26.0.0
+Sealed Resources=none
+Internal requirements count=1 size=180

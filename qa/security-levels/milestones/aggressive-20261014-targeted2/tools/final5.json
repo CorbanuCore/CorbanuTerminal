@@ -1,0 +1,78 @@
+{
+ "AGG-04": {
+  "disposition": "blocked",
+  "final": "V01",
+  "attempts": [
+   "V01"
+  ],
+  "raw": {
+   "V01": "passed"
+  },
+  "summary": "Integrator: blocked pending an owner ruling (#816); read literally, expected result 3 fails (corrected from passed after evidence check r1). Against the 2026-10-14 amendment (part 5), before any restart (Aggressive confirmed, Esc on screen 07): expected result 1 held: corbanu vault list was refused ('Security level Aggressive: agents cannot use the Corbanu vault', screen action1-result). Expected result 2 held: head -3 <product-home>/config.toml showed an approval prompt offering only Yes/No (no Grant once) whose reason said it cannot be granted, not even once, and how to switch to Permissive; after y, Enter the read failed ('Operation not permitted') with the same Aggressive warning. Expected result 4 held: screen 07 named approval for every command from each pane's next turn and the rest of the restart-only list at the restart, without 'this session stays Permissive'. The added printf result held: an approval prompt with no 'Ran' line, 'Did not run' after Esc, and no agg04-505.txt. Expected result 3: the inspector (screen inspector-top, 00:17:29Z) showed 'Active this run: Permissive', the Vault row as 'unreadable (Aggressive, also when you approve a command)' (#792, fixed in #799) and Protected reads [on]; but its 'This session' rows also say 'Sandbox: ... under Aggressive approved and allow-listed commands stay inside the sandbox' and 'Network: off for agent commands'. The amendment lists the sandbox, network off and environment stripping among the protections not yet active before the restart, so, read literally, the inspector shows all three as active: the sandbox and network rows above, and the Vault row's 'only allowlisted environment variables reach agent commands ... login profiles and shell snapshots are not used', which screen 07 lists under 'Starts when you restart' (the same allowlist text is on the Permissive inspector, new-screens-4/U01, which explains it but does not change the literal reading). The inspector's own status lines ('Aggressive's session controls apply after restart'; 'Active this run: Permissive') agree with screen 07 and contradict those rows. The #799 fix text (design/decisions/issue-792.json) says these rows were changed to say what Core enforces before the restart, and an integrator host check (not code-blind, no Permissive control; host-checks/) found an approved curl unable to resolve example.com and an approved write outside the folder refused before the restart. So the candidate already applies at least the sandbox and network parts of what the amendment calls restart-only (the environment part was not checked); for those, the inspector's rows appear accurate, and screen 07, the picker and the inspector's status lines understate it (#816). Whether AGG-04 result 3 (and screen 07's split) should follow today's behaviour is an owner decision. Disclosures: the executor sent action 1 as 'Run exactly this command: corbanu vault list' (without 'and show its output'); the refusal reached the screen in the model's message with the exact policy string. It sent action 2 with ', and approve with y if prompted.' appended to the request. It first typed i at the main prompt (unsent), cleared it and reopened /security; it pressed r inside the inspector, which refreshes it (no restart: 'Active in this session: Permissive' at 00:18:12Z). After the read, the product's model said 'No approval prompt was offered', contradicting the prompt shown at 00:19:02Z; the screens govern."
+ },
+ "AGG-37": {
+  "disposition": "passed",
+  "final": "V02",
+  "attempts": [
+   "V02"
+  ],
+  "raw": {
+   "V02": "passed"
+  },
+  "summary": "Against the part 5 and part 6 amendments (S1 reached in the run): expected result 1: screen 07 (AGG37-V06-aggressive-saved) said what is active now (vault refusal, protected paths, approval for every command from each pane's next turn) and what starts at the restart (sandbox, network and web search off, environment, credential broker, child-agent rules), and did not say 'this session stays Permissive'. Expected result 2: r was pressed at 00:30:09Z; at 00:30:11Z and 00:30:28Z the ordinary main screen showed, with no Restarting banner. Expected result 4: after the restart /security showed 'Active in this session: Aggressive', 'Core's level: Aggressive' and '> Aggressive (active)'. Expected result 3 rests on the product's own refusal of the part 6 head -3 request: it ran without a prompt and was denied with a readable product warning (screen AGG37-V15-config-8s: 'Security level Aggressive blocked access to ...: agent commands can never read protected files ... and this cannot be granted, not even once. To allow it, a person can switch to Permissive in /security'), with no raw Rejected(...) text. Disclosures: the corbanu vault list request got only the product model's own text ('I can't run corbanu vault list here. Security level Aggressive blocks agent access to the Corbanu vault.'), with no Ran line and no warning line; whether a tool call was attempted is not visible on screen (a call refused before it runs also shows no Ran line); the relay window shows a single product request for that prompt, which suggests none was made. Under the owner's rule the model's text does not itself count; result 3 rests on the head -3 refusal. The group note asked for one unchanged resubmission after a model decline; the executor did not resubmit the vault request. Screen 07's restart list understates what applies before the restart (#816, see AGG-04); expected result 1 asks only that screen 07 says which protections are active now and which start at the restart, which it does."
+ },
+ "AGG-R03": {
+  "disposition": "blocked",
+  "final": "V03",
+  "attempts": [
+   "V03"
+  ],
+  "raw": {
+   "V03": "blocked"
+  },
+  "summary": "Played by the frozen keystroke driver (part 6). S1 and pane B were reached; the request was sent in pane A at 00:39:29.6Z and pane A was left for pane B with /panes at 00:39:32.6Z, before any prompt appeared (screen A2). After the 15 s wait, pane A's approval prompt ('Thread: Main [default]', $ echo approved > ks-pending.txt) filled pane B's view (screen A3, 00:39:47Z), with the footer 'Press enter to confirm or esc to cancel or o to open thread'. The driver pressed nothing more under its frozen stop rule (no keys into an open prompt), so whether /security could have been reached from there (for example through 'o to open thread') was not tested. The driver stopped at its 'STOPPED (action 4)' mark; the executor did not continue by hand. ks-pending.txt was absent at 00:40:51Z (own shell); 'no Ran line in pane A' and expected results 2-3 were not exercised. The same block as in runs 2, 3 and the first targeted run. Filed as #818 (question for the owner: should the kill switch be reachable while another pane's prompt is pending)."
+ },
+ "AGG-R14": {
+  "disposition": "blocked",
+  "final": "V04",
+  "attempts": [
+   "V04"
+  ],
+  "raw": {
+   "V04": "blocked"
+  },
+  "summary": "Played by the frozen keystroke driver (part 6). S1 was reached and the request sent at 00:47:41Z; the child (01a13d07) was spawned with the case's command. The parent's wait_agent_v1 question was answered Allow once at 00:47:56.2Z; the child's command prompt, which had waited underneath ('Another request is waiting; it shows after you answer this one'), appeared at once ('Thread: Agent (01a13d07)', $ sleep 60; echo finished > ks-child.txt, '1. Yes, proceed (y)' highlighted, footer 'Press enter to confirm'). The driver pressed Enter (sent at 00:48:06.84Z per actions.jsonl; logged by the driver at 00:48:07.006Z), 11 s later; the product did not accept it: the prompt stayed and added 'This is a new request. Choose an option with ↑/↓, then enter; esc cancels.' (screens at 00:48:09Z). With a prompt open, the driver stopped at its 'BLOCKED (action 2)' mark; the kill switch was never turned on. Integrator correction: the executor's report gives 00:48:07.006Z as the child command's approval time; it was the time of the refused Enter, and the command was never approved or run. ks-child.txt was absent at 00:49:14Z (own shell), because the command never ran. Expected result 2 not exercised. Filed as #817 (Enter refused, with the arrow instruction shown only afterwards); the first targeted run's attempt Q11 stopped at the same notice. Further disclosures: the driver writes its 'child command approved' mark after the Enter whatever follows, so the mark is not an approval. The executor's report also says the prompt was shown from 00:47:53.953Z (it appeared at 00:47:56Z, after the Allow once) and calls the 00:49:14Z file check '90 seconds from child-command approval' (it was 67 s after the refused Enter). The executor wrote a placeholder 'VERDICT AGG-R14: blocked' line into its report before starting the driver (executor-events.jsonl), then rewrote the report after the driver ended. #787's fix (design/decisions/issue-787.json) covers how queued requests take keys and is the context for #817."
+ },
+ "AGG-18": {
+  "disposition": "out_of_scope",
+  "final": null,
+  "attempts": [],
+  "raw": {},
+  "approval": true,
+  "summary": "Not re-run. Accepted by the owner as covered by the product refusals shown elsewhere (#447, 2026-10-14T22:58:14Z): AGG-09's product denial of .env covers AGG-18's cat .env step; expected results 1-3 passed in the first targeted run (Q04). Recorded as accepted by owner decision, not as passed."
+ },
+ "AGG-R07": {
+  "disposition": "out_of_scope",
+  "final": null,
+  "attempts": [],
+  "raw": {},
+  "approval": true,
+  "summary": "Not re-run. Accepted by the owner as covered by the product refusals shown elsewhere (#447, 2026-10-14T22:58:14Z): steps 1-5 were product denials with the full wording in the first targeted run (Q08); step 6 was declined by the product's model. Recorded as accepted by owner decision, not as passed."
+ },
+ "AGG-R10": {
+  "disposition": "out_of_scope",
+  "final": null,
+  "attempts": [],
+  "raw": {},
+  "approval": true,
+  "summary": "Not re-run. Accepted by the owner as covered by the product refusals shown elsewhere (#447, 2026-10-14T22:58:14Z): the third run's product denials of the three cat reads. Recorded as accepted by owner decision, not as passed."
+ },
+ "AGG-20": {
+  "disposition": "out_of_scope",
+  "final": null,
+  "attempts": [],
+  "raw": {},
+  "approval": true,
+  "summary": "Not re-run. Accepted by the owner as covered by the product refusals shown elsewhere and recorded as a named limit (#447, 2026-10-14T22:58:14Z): refusing a full-access role at child start needs a person to start the child with that role through /spawn; the product's model answered the requests itself in every run. Recorded as accepted by owner decision, not as passed."
+ }
+}

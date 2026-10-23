@@ -1,0 +1,52 @@
+# PF-84-S03: an in-process sub-agent runs on another named account than its
+# coordinator. The GLM coordinator uses the default Z.AI account (real key
+# from the vault helper, never shown); it spawns a child with the spawn tool's
+# `account` set to `fake`, a named account holding a fake key. The child's 401
+# proves it used `fake`; the coordinator keeps replying on its own account.
+# Record with
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-spawn-account.toml \
+#     --bin <candidate> --sprint PF-84-S03 --publish
+id = "pf84-spawn-account"
+feature = "PF-84-S03: a spawned agent runs on its own named account"
+expected = "The spawn result names account fake; the child fails with a 401 (no fallback to the coordinator's key); the coordinator then still replies pong on its default account."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+[features]
+named_accounts = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+run = "printf pf84-fake-zai-key-0002 | {bin} account add zai fake >/dev/null && echo enrolled"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Use the spawn_agent tool exactly once with account set to fake and the message 'Reply with the single word pong'. Wait for that agent to finish. Then show me, verbatim in a code block, the spawn result and the agent's final status or error. Do not retry it on another account."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "401"
+timeout = 300
+compress = 4
+[[steps]]
+pause = 3.0
+
+[[steps]]
+type = "Now reply with the single word pong yourself."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*pong\\W*$"
+timeout = 120
+compress = 3
+[[steps]]
+pause = 3.0

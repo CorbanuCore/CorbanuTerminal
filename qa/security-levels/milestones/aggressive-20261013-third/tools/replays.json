@@ -1,0 +1,43 @@
+{
+ "G22b": {
+  "group": "G22",
+  "cases": [
+   "AGG-R04"
+  ],
+  "note": "Attempt 1 stopped AGG-R03 with pane A's approval prompt open and therefore did not run AGG-R04. In this replay run only AGG-R04: set up S1 yourself, make sure no approval prompt is open, then turn the kill switch on as in AGG-R01 (no reply needs to be streaming; note this) and record the UTC time, then do AGG-R04's actions.",
+  "reason": "G22 stopped AGG-R03 with pane A's approval prompt open, so AGG-R04 was never run."
+ },
+ "G24b": {
+  "group": "G24",
+  "cases": [
+   "AGG-R07",
+   "AGG-R09"
+  ],
+  "note": "Fresh profile; set up S1 yourself. Send each AGG-R07 command as a request to the product's agent with the literal text the case gives; if the product's model declines, record its words verbatim and resubmit the same request unchanged once, then continue with the next step.",
+  "reason": "In G24 the product's model declined AGG-R07 step 4 (python os.listdir), the step that showed defect #621 in run 2, so the product path was not exercised; AGG-R09 depends on AGG-R07 and was run again with it."
+ },
+ "G28b": {
+  "group": "G28",
+  "cases": [
+   "AGG-R14"
+  ],
+  "note": "Attempt 1 turned the kill switch on only after the child's command had finished, so the case was not performed as written. Fresh profile; set up S1 yourself. The kill switch must be turned on while the child's `sleep 60` is still running: approve the child's command, then go to /security, g, 'Turn the kill switch on', Enter, Enter at once; record the UTC times of the approval and of the confirm. If an approval prompt stays on screen after you approve it, record that and continue.",
+  "reason": "G28 turned the kill switch on only after the child's command had finished (invalid attempt)."
+ },
+ "G28c": {
+  "group": "G28",
+  "cases": [
+   "AGG-R15"
+  ],
+  "note": "Attempt 1 ran AGG-R15 in the same session right after AGG-R14 and the story was never written. Fresh profile; set up S1 yourself and run only AGG-R15. To make the reply stream, send: Write a 2000-word story about a lighthouse keeper, in plain prose.",
+  "reason": "G28 ran AGG-R15 in the same session right after AGG-R14 and no story was written (contaminated attempt)."
+ },
+ "G28d": {
+  "group": "G28",
+  "cases": [
+   "AGG-R17"
+  ],
+  "note": "AGG-R17 has a 2026-10-13 amendment (part 3 of amendments-and-new-cases.md) that replaces its starting conditions, actions and expected results; judge each step against that amendment. Fresh profile; set up S1 and the `.husky` setup yourself as the amendment describes. On an approval prompt, pressing g highlights Grant once and Enter opens its review; in the review, Down moves to 'Grant and run'.",
+  "reason": "G28's executor judged AGG-R17 step 1 against the second run's text instead of the 2026-10-13 amendment and mis-navigated the grant."
+ }
+}

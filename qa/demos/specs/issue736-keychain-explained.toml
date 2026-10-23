@@ -1,0 +1,83 @@
+# Issue #736 (AGG-10): under Aggressive a macOS keychain command runs but cannot reach the keychain, and says so.
+id = "issue736-keychain-explained"
+feature = "#736: the keychain stays out of reach, and the prompt and result say so"
+expected = "Under Aggressive, the approval for `security find-generic-password -s probe` offers no Grant once and says the keychain is out of reach of agent commands; approved, it cannot read the keychain and the result says the error comes from Aggressive."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 140
+rows = 50
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Z.AI GLM 5.3 Flash via zai"
+timeout = 60
+compress = 2
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this shell command once, unchanged: security find-generic-password -s probe"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Press enter to confirm"
+timeout = 180
+compress = 2
+[[steps]]
+wait = "keeps the macOS keychain out"
+[[steps]]
+pause = 4.0
+[[steps]]
+run = "tmux -L \"$(ls -t \"${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)\" | grep '^demo-issue736-keychain-explained-' | head -1)\" capture-pane -p -t demo > {run}/prompt-736.txt"
+[[steps]]
+key = "y"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)kept the macOS keychain out of reach.*─{10}.*\\n• "
+timeout = 120
+compress = 2
+[[steps]]
+pause = 3.5

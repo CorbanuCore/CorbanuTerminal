@@ -1,0 +1,11 @@
+Source: https://platform.moonshot.ai/docs/pricing/chat (redirects to https://platform.kimi.ai/docs/pricing/chat; Markdown at .../chat.md), fetched 2026-10-14 ~07:05Z with curl. USD per 1M tokens, taxes excluded. API base_url per https://platform.kimi.ai/docs/guide/kimi-k3-quickstart: https://api.moonshot.ai/v1.
+
+model | cache write TTL 5min | cache write TTL 1h | cached input | input | output | context
+kimi-k3 | 3.00 | 6.00 | 0.30 | 3.00 | 15.00 | 1,048,576
+
+model | cached input (hit) | input (miss) | output | context
+kimi-k2.7-code | 0.19 | 0.95 | 4.00 | 262,144
+kimi-k2.7-code-highspeed | 0.38 | 1.90 | 8.00 | 262,144
+kimi-k2.6 | 0.16 | 0.95 | 4.00 | 262,144
+
+Page notes: K3 cache writes are billed by TTL (5min default when no TTL is given; 1h via prompt_cache_options.ttl); a cache hit refreshes the entry with no write charge. K3 has no context-length tiering.

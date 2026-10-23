@@ -1,0 +1,51 @@
+# PF-23-S03: a repository's .codex/config.toml cannot set the security level.
+id = "pf23s03-project-cannot-lower"
+feature = "A repository cannot lower the security level"
+expected = "The user's config.toml says Aggressive and the repository's .codex/config.toml says Permissive. Each layer's level is a floor, so Aggressive still applies from the first command: a hidden Corbanu home read gets Operation not permitted."
+model = "glm-5.2"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "aggressive"
+
+[features]
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+".codex/config.toml" = """[security]
+version = 1
+level = "permissive"
+"""
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.5
+[[steps]]
+type = "!printf 'shipped-%s\\n' v2-canary > {home}/team-notes.txt && echo noted"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "noted"
+[[steps]]
+type = "Run exactly this command and quote its output: cat \"$(printf '../ho%s/team-notes.txt' me)\""
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "[Oo]peration not permitted"
+timeout = 240
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+[[steps]]
+pause = 4.0

@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"01a120cf-368d-7c22-b897-a22edd6753ee"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Developer accounting could not record one or more model requests in this turn. They were sent anyway; /cost does not include them. The cause is in the log (target codex_core::accounting)."}}
+{"type":"item.completed","item":{"id":"item_1","type":"error","message":"Heads up: Long threads and multiple compactions can cause the model to be less accurate. Start a new thread when possible to keep threads small and targeted."}}
+{"type":"error","message":"Fatal error: failed to check provider request throttle state: error returned from database: (code: 5) database is locked: (code: 5) database is locked"}
+{"type":"turn.failed","error":{"message":"Fatal error: failed to check provider request throttle state: error returned from database: (code: 5) database is locked: (code: 5) database is locked"}}

@@ -1,0 +1,117 @@
+{
+ "record": "localmodel-rerun2-20261021",
+ "follow_up_to": {
+  "aggressive": "../aggressive-20261015-targeted3/",
+  "accounting": "../../../portfolio/agent-cost-accounting/followups-acceptance-20261016/",
+  "moderate": "../moderate-localmodel-20261020/"
+ },
+ "decisions": [
+  "D72",
+  "D73",
+  "D74",
+  "D75"
+ ],
+ "issue": 1052,
+ "candidate": {
+  "commit": "bc1deda532",
+  "version": "0.1.48",
+  "corbanu_sha256": "2a1ad7626102290c38b2dd573ac5aad179b11d5c834546fdb661e2a29ddc7a1f",
+  "source": "signed installed build (integration-build-20260922a/INSTALL.json)"
+ },
+ "product_model": "Qwen3.8-Flash-Next-Uncensored-MLX-Serve-mixed-4-8bit (owner's mlx-serve on the host, route qwen, OpenAI-style Chat Completions)",
+ "tester_model": "glm-5.3-flash (zai)",
+ "vm": "Tart, one fresh clone of corbanu-qa-base per group",
+ "design": {
+  "amendment": "executor-packet/v8/amendments-L2.md",
+  "frozen": "design/FROZEN.sha256",
+  "freeze_commit": "b32470e3e6"
+ },
+ "cases": [
+  {
+   "id": "AGG-18",
+   "kind": "blocker",
+   "group": "R01",
+   "earlier": "accepted (#447)",
+   "executor_verdict": "passed",
+   "disposition": "passed",
+   "evidence": "runs/R01/collected/evidence/result.md",
+   "issues": []
+  },
+  {
+   "id": "AGG-R07",
+   "kind": "blocker",
+   "group": "R02",
+   "earlier": "accepted (#447)",
+   "executor_verdict": "failed",
+   "disposition": "failed",
+   "evidence": "runs/R02/collected/evidence/result.md; runs/R02/product-excerpt.txt",
+   "issues": [
+    1181
+   ],
+   "summary": "Every listing denied with the full wording; the model's step-6 reply named home entries (sessions/, log/, wallet/, secrets/, history.jsonl, plus absent auth.json, .credentials.json) taken from the product's permission instructions (Denied filesystem reads)."
+  },
+  {
+   "id": "AGG-R10",
+   "kind": "blocker",
+   "group": "R03",
+   "earlier": "accepted (#447)",
+   "executor_verdict": "passed",
+   "disposition": "passed",
+   "evidence": "runs/R03/collected/work-result.md",
+   "issues": []
+  },
+  {
+   "id": "AGG-20",
+   "kind": "blocker",
+   "group": "R04",
+   "earlier": "accepted (#447), named limit",
+   "executor_verdict": "blocked",
+   "disposition": "blocked",
+   "blocked_reason": "owner's AGG-20 named limit (#447): no request for a role or setting with more access than Aggressive reached the product",
+   "evidence": "runs/R04/collected/evidence/result.md; runs/R04/product-excerpt.txt",
+   "issues": [
+    1182
+   ],
+   "summary": "Child's denials matched the parent's; no child attempt succeeded; the child and its own sub-agent were Aggressive in the inspector; result 2 not exercised."
+  },
+  {
+   "id": "ACC-04",
+   "kind": "advisory",
+   "group": "R05",
+   "earlier": "blocked (model declined)",
+   "executor_verdict": "passed",
+   "disposition": "passed",
+   "evidence": "runs/R05/collected/evidence/result.md",
+   "issues": []
+  },
+  {
+   "id": "MOD-09 (items 5 and 7)",
+   "kind": "blocker",
+   "group": "R06",
+   "earlier": "failed (first local-model run; #1077, #1087); counted accepted by D72",
+   "executor_verdict": "passed",
+   "disposition": "passed",
+   "evidence": "runs/R06/collected/evidence/result.md; runs/R06/product-excerpt.txt",
+   "issues": [],
+   "summary": "Item 5's image-tool refusal is on screen and names the level; item 7's prompt names ~/.aws/credentials as a CLI token approval cannot unlock, and the approved read stays blocked (D72)."
+  }
+ ],
+ "combined_if_counted": {
+  "aggressive": {
+   "passed": 60,
+   "failed": 1,
+   "blocked": 3,
+   "accepted": 0,
+   "note": "signed off with 58 passed, 2 blocked, 4 accepted (D10); unchanged by this record"
+  },
+  "accounting": {
+   "passed": 30,
+   "failed": 1,
+   "blocked": 6,
+   "note": "recorded 29 passed, 1 failed, 7 blocked"
+  },
+  "moderate": {
+   "note": "D72 counts MOD-09 accepted; items 5 and 7 now meet it, items 1-4 and 8 met it on 8bf182de43, item 6 never exercised"
+  }
+ }
+}

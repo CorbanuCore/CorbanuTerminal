@@ -1,0 +1,7 @@
+---
+source: tui/src/bottom_pane/security_level_picker_tests.rs
+expression: "render(&picker, 80)"
+---
+Saved: Aggressive (nested agents: pass)
+Aggressive is active in this session.
+enter or esc close

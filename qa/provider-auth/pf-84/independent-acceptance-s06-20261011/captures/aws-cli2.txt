@@ -1,0 +1,172 @@
+## home a2: config has NO model_providers.amazon-bedrock.aws.region
+$ run $CAND $S/homes/a2 account add amazon-bedrock work --kind aws-profile --value work
+Saved amazon-bedrock account `work` (aws_profile).
+[exit 0]
+$ run $CAND $S/homes/a2 account add amazon-bedrock alt --kind aws-profile --value other
+Saved amazon-bedrock account `alt` (aws_profile).
+[exit 0]
+$ run $CAND $S/homes/a2 account add amazon-bedrock noreg --kind aws-profile --value noregion
+Saved amazon-bedrock account `noreg` (aws_profile).
+[exit 0]
+$ run $CAND $S/homes/a2 account add amazon-bedrock dash --kind aws-profile --value=-leadingdash
+Error: invalid AWS profile name: use 1-64 letters, digits or '-', '_', '.', '+', '@', starting with a letter or digit
+[exit 1]
+
+## region from the profile (decoy AWS_REGION=ap-south-1 set)
+$ run $CAND $S/homes/a2 exec --skip-git-repo-check -C $S/ws --account alt Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-d5fd-7792-878b-b0f533f0adca
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a2/config.toml.
+corbanu
+mock: sigv4 AKIDOTHERPROFILE eu-central-1
+tokens used
+129
+mock: sigv4 AKIDOTHERPROFILE eu-central-1
+[exit 0]
+-- requests during this run: 1
+$ run $CAND $S/homes/a2 exec --skip-git-repo-check -C $S/ws --account work Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-d886-7053-bce3-113a2d9c62b8
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a2/config.toml.
+corbanu
+mock: sigv4 AKIDWORKPROFILE us-west-2
+tokens used
+129
+mock: sigv4 AKIDWORKPROFILE us-west-2
+[exit 0]
+-- requests during this run: 1
+
+## profile without a region and no config region: refused before any request
+$ run $CAND $S/homes/a2 exec --skip-git-repo-check -C $S/ws --account noreg Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-db04-78a3-86aa-64f6f32f1039
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a2/config.toml.
+ERROR: Fatal error: account `noreg` of provider `amazon-bedrock` uses AWS profile `noregion`, which cannot be used: AWS profile `noregion` sets no region, or is not defined in the AWS config files; set `region` in that profile or `aws.region` for the provider. Corbanu never falls back to another profile or to environment credentials.
+ERROR: Fatal error: account `noreg` of provider `amazon-bedrock` uses AWS profile `noregion`, which cannot be used: AWS profile `noregion` sets no region, or is not defined in the AWS config files; set `region` in that profile or `aws.region` for the provider. Corbanu never falls back to another profile or to environment credentials.
+[exit 1]
+-- requests during this run: 0
+
+## AWS_CONFIG_FILE / AWS_SHARED_CREDENTIALS_FILE name other files
+$ run $CAND $S/homes/a2 exec --skip-git-repo-check -C $S/ws --account work Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-dda5-72a0-bc5c-d3cf2d7e183d
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a2/config.toml.
+corbanu
+mock: sigv4 AKIDALTFILEWORK sa-east-1
+tokens used
+129
+mock: sigv4 AKIDALTFILEWORK sa-east-1
+[exit 0]
+-- requests during this run: 1
+
+## [provider_accounts] selection: amazon-bedrock = "alt" (no --account)
+$ run $CAND $S/homes/a2 exec --skip-git-repo-check -C $S/ws -c provider_accounts.amazon-bedrock="alt" Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-e023-79c1-958a-fb6e5665eb27
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a2/config.toml.
+corbanu
+mock: sigv4 AKIDOTHERPROFILE eu-central-1
+tokens used
+129
+mock: sigv4 AKIDOTHERPROFILE eu-central-1
+[exit 0]
+-- requests during this run: 1
+
+## [provider_accounts] amazon-bedrock = "ghost": fail closed
+$ run $CAND $S/homes/a2 exec --skip-git-repo-check -C $S/ws -c provider_accounts.amazon-bedrock="ghost" Reply with exactly: pong
+Reading additional input from stdin...
+Error: thread/start: thread/start failed: account `ghost` of provider `amazon-bedrock` is not configured; add it with `corbanu account add amazon-bedrock ghost --kind aws-profile --value <profile>` or pick another with `--account` (see `corbanu account list`) (code -32600)
+[exit 1]
+-- requests during this run: 0
+
+## --account amazon-bedrock:work form
+$ run $CAND $S/homes/a2 exec --skip-git-repo-check -C $S/ws --account amazon-bedrock:work Reply with exactly: pong
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: $S/ws
+model: openai.gpt-5.4
+provider: amazon-bedrock
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+reasoning effort: none
+reasoning summaries: none
+session id: 01a12e6e-e3f0-7582-996d-da455dc27159
+--------
+user
+Reply with exactly: pong
+warning: Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in $S/homes/a2/config.toml.
+corbanu
+mock: sigv4 AKIDWORKPROFILE us-west-2
+tokens used
+129
+mock: sigv4 AKIDWORKPROFILE us-west-2
+[exit 0]
+-- requests during this run: 1
+
+## mock log
+{"t": 1791780378.43, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDOTHERPROFILE", "region": "eu-central-1", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780379.109, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780380.413, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDALTFILEWORK", "region": "sa-east-1", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780381.064, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDOTHERPROFILE", "region": "eu-central-1", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}
+{"t": 1791780382.022, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}

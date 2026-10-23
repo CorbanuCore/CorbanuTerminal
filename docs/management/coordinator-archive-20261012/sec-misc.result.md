@@ -1,0 +1,69 @@
+All three issues are fixed and merged with every check green, and #562, #563 and #565 are closed with evidence. Each PR was approved by Opus 5.5 High. None changes what Permissive allows; #579 also fixes a Linux sandbox race and a run failure that hit every level.
+
+| Issue | PR | Merge commit | Review rounds |
+|---|---|---|---|
+| #563 | #575 | `d312cb39c5` | 4, all APPROVE |
+| #565 | #580 | `0f979f808b` | 2, both APPROVE |
+| #562 | #579 | `a643c15699` | 3: changes requested twice, then APPROVE |
+
+**#563: a missing bubblewrap was a product crash, not only a test-harness one**
+- **What happened:** with no system or bundled bwrap, the Linux sandbox helper panicked.
+  - Product: exit 101.
+  - Test binaries: an abort (134) with no message, because the helper runs from a constructor there. That's what CI showed.
+  - Either way the command never ran, inside or outside the sandbox.
+- **Fix:** the helper now prints "bubblewrap is unavailable: … the command did not run. Install or update bubblewrap with your OS package manager (for example sudo apt install bubblewrap …)" and exits 1, exactly where it used to panic.
+- **Permissive is unchanged:** retry decisions are the same as before. Reviews r1 and r2 caught that refusing earlier would change them in corner cases; refusing at the old panic point keeps them identical.
+- **Startup warning:** it no longer promises a bundled copy that isn't there.
+- **Bundled copy:** release packages ship one, and the helper uses it. On Ubuntu 24.04's default AppArmor setting it can't start (#581).
+
+**#565: under Aggressive, a `.codex` or `.agents` write is refused before anyone is asked**
+- The refusal uses the #520 explanation, with permission requests on or off.
+- Git hooks still wait for a grant.
+- Moderate and Permissive are unchanged.
+- The Aggressive refusal for hooks no longer lists `.codex`/`.agents` as liftable by "Grant once".
+
+**#562: a protected command can no longer create a missing Corbanu-home runtime entry**
+- **Linux runtime entries:** missing ones (`AGENTS.md`, `skills/`, `plugins/` and the rest) are now protected; missing folders are first created empty, only where the run could write the home.
+- **`AGENTS.override.md`:** Corbanu reads it ahead of `AGENTS.md`, and it could be created on every platform, macOS included. It is now denied before it exists.
+- **macOS Seatbelt:** already covered the runtime entries. On main the new test let macOS create only `AGENTS.override.md`.
+- **Found in review, fixed in the Linux sandbox:**
+  - Overlapping runs no longer pull a shared placeholder out from under each other. Before, the first run's cleanup removed it and the second run could create the entry. This also affected the existing credential-store placeholders.
+  - A file sitting where a protected folder would be no longer fails every run. glitch has a stale `~/Library` file left by an earlier run, which broke every Moderate full-access command there; it now stays in place and protected.
+
+**Gate evidence**
+- **Regression tests:** every one fails on main and passes with the fix.
+  - Linux (glitch, bubblewrap hidden from PATH): the bwrap-missing and overlap tests.
+  - macOS (Seatbelt): the #565 rows.
+  - Both: the #562 integration test.
+- **Core security CI selection** (`security::` plus `pf_23_s01`/`pf_25_s01`), with the default temp folder and `TMPDIR=/tmp`: passed on macOS for all three, and on glitch for #562 and #563.
+- **Linux sandbox suite on glitch:** passed.
+- **Clippy `-D warnings`:** clean on macOS and glitch for every PR. #579 was also checked merged with main after #575 landed.
+- **tmux check for #565:** GLM 5.3 Flash, fresh debug binary, disposable home. The write was refused at once with no prompt; the recorder's leak scan passed. [Video](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/issue-565-issue565-aggressive-agents-write-refused-before-asking-c144258a8758-2026-10-11.mp4)
+- **Not run:** Windows, beyond CI.
+- **macOS test noise:** with this worker's `TMPDIR` on CorbanuDrive, two Seatbelt snapshot tests fail. They pass with `/tmp` and with the system default; the PRs don't touch that code.
+
+**Decision for you: retries outside the sandbox under Permissive.** Under Permissive with on-request approvals, a command already approved whose sandbox fails to start (for example, bwrap is missing) is retried outside the sandbox without a second prompt. This is existing behaviour and I left it alone. Moderate and Aggressive keep the sandbox.
+- **Recommendation:** keep it as upstream does.
+- **Alternative:** ask the person again before that retry. Commands that hit a broken sandbox would then need a second approval.
+
+**Follow-ups filed**
+- **#587 (needs a fix soon):** with a profile that can write the home's parent (full access, or a workspace covering `$HOME`), a protected command on Linux can move the whole Corbanu home aside and plant a new one. Confirmed on glitch. It bypasses every per-entry protection in the home. macOS not checked.
+- **#583:** other Corbanu-home entries read later (e.g. the exec-policy `rules/`) can still be created where missing.
+- **#582:** remaining placeholder issues:
+  - placeholders left behind when the helper is killed;
+  - a host rename over a placeholder detaches it;
+  - symlinked runtime entries on Linux.
+- **#581:** the bundled bwrap can't start where AppArmor restricts user namespaces (Ubuntu 24.04).
+- **#584:** under Aggressive, `request_permissions` and plain commands still ask about a `.codex`/`.agents` write that no grant can lift.
+- **glitch's stale `~/Library` file:** left in place, because it is outside the worker folder.
+
+**Cleanup**
+- **Removed:**
+  - all three worktrees and Mac build folders (about 69 GB);
+  - glitch's checkout, its 65 GB build folder and scratch folders.
+- **Kept:**
+  - glitch logs in `~/corbanu-rtx/s56x-logs-archive/`;
+  - review rounds and PR texts in `.codex-work/workers-20261012-s56x/`;
+  - the local branches, since deleting them would need a force-delete.
+
+The full report is in `.codex-work/workers-20261002/sec-562-565.result.md`.

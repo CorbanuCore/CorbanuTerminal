@@ -1,0 +1,1015 @@
+# Current workstream handoffs — September 12
+
+## September 20 19:15 UTC — build for human testing installed
+
+- The launcher's stable links now point at a build of integration commit
+  `3882e39d5`, built from a clean detached checkout of that exact commit. Two
+  packages were produced: the distribution-clean one from the canonical builder,
+  and a developer-accounting one with collection compiled in. Both are signed
+  with the same Developer ID and identifiers, so Keychain and TCC identity are
+  unchanged, and either can be selected with a one-line script.
+- **The shortcut opens the developer-accounting package**, at Travis's explicit
+  request to be able to test the feature. The package builder still refuses any
+  marked input, so this cannot become a shipped binary.
+- Two gates would otherwise read as defects and are now stated on the dashboard:
+  collection activates only for provider ids `openai` and `anthropic` - the
+  lane's own test asserts `claude-plan` is excluded - and the ledger installs
+  itself on first use, so an empty inspector right after switching is expected.
+- The human test queue was rewritten against this build; the older entries had
+  described work from 14-17 September. See
+  [the testing note](human-testing-20260920.md).
+
+## September 15 19:40 UTC — isolation executed, two units received
+
+- **Security** ([PF-83-S01](../../../docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md)):
+  the network blocker is **closed**. Travis supplied an administrator credential
+  through the vault and the manager executed the isolation directly: Tailscale
+  logged out and disconnected, default-deny `pf` leaving only inbound SSH from
+  the host and its reply path, DHCP and host ICMP, restored at boot by a
+  LaunchDaemon. Verified after a reboot with 839 packets proven dropped by the
+  block rule, because `pflog0` does not exist on this build and a counter proves
+  more than a timeout. The mediated pinhole is **deliberately absent**: it was
+  opened on 8111 and Docker already held that port on the host, so the rule
+  pointed the guest at an unrelated published port. Sealed is correct until a
+  real mediator exists. [Receipt](../management-bootstrap/pf83-isolation-executed-20260915.md).
+  Decision `pf83-network-isolation-20260915` is **resolved**; the dashboard is
+  down to one open question. No case has run and all 380 verdicts stay
+  `not_reached` until the preflight re-run and a separate execution decision.
+- **Accounting** ([PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md)):
+  direct Chat received at `82f9dde0e`, cleanup at `533a16077`, ledgers
+  reconciled, and an authoritative receiving disposition now names every
+  attempt and whose fault each stop was — four of the six stops were the
+  manager's. The [closure assessment](../../../docs/research/agent-cost-accounting/s02-closure-assessment-20260915.md)
+  recommends closing bounded S02 rather than adding another collector; closure
+  itself is a separate decision that has not been taken.
+- **Task Node** ([PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md)):
+  owner-daemon increment D received at `aba3707b0` after five review rounds.
+  Its [functional case design](../management-bootstrap/owner-daemon-functional-design-20260915.md)
+  is frozen with 18 offline cases; the harness has 6 built and 12 correctly
+  refused for lack of working negative controls, which is being finished now.
+- **Known gap:** the evidenced Slack alert path is still refused because the
+  transport verification window expired, and re-qualification needs owner UI
+  evidence plus a gap review for three uncovered ingress marks. See
+  [the request](../management-bootstrap/slack-requalification-20260915.md).
+  Reaching Travis is not blocked; only the receipted path is.
+
+## September 15 14:40 UTC — unattended manager session
+
+Fable ran the review to receive to dispatch loop unattended on Opus 5.0 High.
+
+- **Task Node** ([PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md)):
+  threaded decision answers are **received at `4c501b710`** and pushed. Two
+  designs were rejected before this one; both are retained. The accepted design
+  gives every alert its own root thread and posts one fixed-text pointer into
+  the parent thread, so ingress attribution never consults follower state. The
+  independent review found a P2 (a pre-admission gate refusal was written as a
+  terminal `uncertain` although no POST was attempted, leaving a slot that
+  `send` would not retry and `reconcile` could not resolve) and a P3 (an
+  undocumented `message_mention` field); both were corrected in `e430763bb`
+  with five regressions proven to fail against the previous commit. Disclosed
+  and open: a refused slot returns to `pending` but surfaces no signal, so only
+  an operator re-running `send` moves it.
+- **Accounting** ([PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md)):
+  the direct Chat Completions unit is frozen, published and dispatched. Three
+  workers **correctly STOPPED** before finishing and each was right: two named
+  unreconciled dispatch prerequisites (fixed in `d7cd95e16`, `155b0c1a9` and
+  `3e04c4e52`, including the exclusive lease `acct-chat-20260915`), and the
+  third stopped on a real contract conflict — the frozen design expects
+  continuation after a length finish while Core terminates without further
+  model work. **Manager disposition: production behaviour wins**; the
+  expectation is corrected and the counterexample preserved. `acct-chat-impl-04`
+  is running on that disposition plus a compile failure, four failures, two
+  LEAK markers and three owed mutation demonstrations.
+- **Security** ([PF-83-S01](../../../docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md)):
+  still **blocked on network isolation**, which is a Travis decision. The
+  preflight receipt is accepted as an honest result, not a passing gate: 2
+  proven, 173 of 175 controls UNPROVEN, all 380 verdicts `not_reached`. No case
+  will run while the guest reaches the internet.
+- **Slack**: the receiver crashed at 12:22 UTC; three inbound callbacks were
+  fenced but never recorded. It was restarted and the gap is disclosed rather
+  than papered over. A password posted in the channel is treated as exposed: it
+  was never used, never stored, and rotation was requested. Key-based access to
+  the guest already exists and is sufficient.
+
+## September 15 19:00 UTC — second unattended session
+
+- **Accounting** ([PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md)):
+  the direct Chat Completions unit is **received at `82f9dde0e`** and its
+  disclosed-debt cleanup at `533a16077`. Five workers were dispatched to get
+  there and three of them **correctly STOPPED**: twice because the manager had
+  not reconciled the dispatch prerequisites, once on a real contract conflict
+  where the frozen design expected continuation after a length finish while
+  Core terminates. Production behaviour won and the counterexample is kept.
+  The cleanup closed six leaky fixtures, the per-frame provider-check lag and
+  a dishonest builder signature. Two further worker stops were caused by
+  manager scope errors, recorded as such rather than blamed on the workers.
+- **Task Node** ([PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md)):
+  threaded decision answers received at `4c501b710`, then owner-daemon
+  **increment D received at `aba3707b0`** after five review rounds. Increment D
+  exists because of a real incident this session: the Slack listener died at
+  12:22 UTC, the supervisor saw the exit and only stopped, nothing restarted or
+  recorded it, and it stayed dead about two hours while the fence ran three
+  marks ahead of recorded ingress with nothing surfacing the gap. Review found
+  and closed two P2s and six P3s along the way, including a watchdog that could
+  die from lock contention, a supervisor that contended with the callback lock
+  and could cause the very gap it discloses, and a fix that fsync-rewrote its
+  status file ten times a second. Final review: zero findings, confidence 0.82.
+  Recurrence stays **OFF**.
+- **Security** ([PF-83-S01](../../../docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md)):
+  still gated on Travis, but the question is now much sharper. Inspecting the
+  guest to write the execution brief found **Tailscale connected on it**, a
+  second default route through `utun6`. A packet filter on `en0` alone would
+  have looked enforced without being enforced, which is the worst available
+  outcome and is a plausible reason the preflight reached the internet. The
+  [execution brief](../management-bootstrap/pf83-isolation-execution-20260915.md)
+  removes that path first, then installs default-deny with two exceptions, with
+  a dead-man revert, boot persistence and a post-reboot verification matrix.
+
+## September 14 correction — overnight Keychain prompts
+
+The first PF-83 verification run inherited the live Corbanu home and generated
+100 native-Keychain prompt requests from separate test app-server processes.
+The earlier “unlock the Mac” explanation below is incomplete and must not be
+used as a recovery instruction. Preserve the contaminated run, stop unsafe
+retries, and use [the guarded test procedure](../../../docs/development/test-isolation.md).
+[Repair scope and qualification](../../reliability/test-keychain-isolation-20260914.md)
+do not close PF-83's separate functional gate or resume paused product work.
+
+## Management takeover — September 14 01:40 UTC (Fable 5.1 High)
+
+Fable took over management/integration under the authorized PF-80-S01 bootstrap
+per the takeover brief (root `fableMarkdown.md`) at `c0d5b38fd`, which matched
+`origin/integrate/management-workstreams-20260911`. Recorded as coordinator event
+`takeover:fable-manager-20260914T0140Z` (revision 373). Actual state inspected,
+not replayed: coordinator `enabled: false`, no manager run, 19 meaningful events
+pending; both monitors PAUSED; decision feed revision 32 with all five decisions
+resolved; supervised Slack listener still alive against the operator store
+(journal `held`, last verified 2026-09-13T22:55:59Z, one agent ACK); dashboard
+on `127.0.0.1:8769` is the RPC SSH forward serving stale `build-mppqf3at`
+(source `239f7f82`, feed revision 30). This host exposes no native subagents;
+workers run as TMUX Corbanu sessions.
+
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): active. Next owned actions: one Luna Extra High republication of this commit; close [DEC-001 provenance limits](../management-bootstrap/supervised-qualification-20260913.md); allocate a new Slack receiver and the next frozen DEC/SLK cases; qualify handoff/stall/restart paths before any recurring activation.
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): intentional pause (product resumption gate). Remaining ledger: non-Anthropic dispatch coverage; S03 dependent; collection OFF.
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): intentional pause (product resumption gate). Remaining: native/all-platform and independently isolated functional acceptance; PF-35-S01 dataset generation via DeepSeek API through Corbanu Terminal.
+
+Product resumption, recurring activation, Task Node posting and public beta
+remain separately gated. Older sections below are historical.
+
+### Update — September 14 04:45 UTC: accounting gate opened; cycle 2 dispatched
+
+Travis directly authorized opening the **accounting** product-resumption gate;
+**security resumes only after the isolated executor is qualified.** Recorded as
+decision `accounting-product-resumption` (raised/resolved, feed revision 33) and
+coordinator stream mode `accounting: enabled` (revision 388). Dashboard was
+republished at `005cc644f` as `build-emg07z3v` (feed 32, 0 open; receipt
+`publication-one-shot-20260914T041440Z`). Fresh Fable decision runs
+`d36611fa…` and `dc371dd6…` accepted three actions, each dispatched to an Astra
+High TMUX session that returned the exact allocation-digest ACK:
+
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md) `dec001-provenance-closeout-01` (implement, private harness repo, 90 min): close the five DEC-001 provenance receipts and review02 follow-ups; no live replay.
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md) `slack-receiver-02` (evidence_review, ACK-only, tools disabled): live receiver for future human replies, replacing closed `01a09c75`.
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) `responses-dispatch-design-01` (design, read-only goldens checkout, 60 min): allocation proposal for Responses HTTP dispatch coverage; manager accepts/adjusts before any source dispatch.
+
+One fresh-manager attempt (`eee2a820…`) was held at `briefing_size_hold`
+(70,371 B at one event vs 65,536) and failed explicitly; eight consumed
+historical allocations were compacted via `put_allocation(replace)` with frozen
+originals retained in the audit table. No inference ran for that attempt.
+[PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md) stays intentionally paused by that decision.
+
+### Update — September 14 09:45 UTC: overnight cycles 3–8
+
+Travis approved unattended recurrence (activation still gated on qualification),
+`--yolo` for non-test workers, and security relaunch once workstream 3 is done.
+
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Responses HTTP dispatch allocation frozen (`25920ec8d`), governance reconciled after a correct worker preflight STOP (`c7ee093bc`); implementation `e47e41870` (20 files, 2871/1054 lines, 385/385 focused; two frozen role cases reframed because a role cannot override the reserved built-in `openai` provider) reviewed clean (0 findings) and **received at `d81bad635`**: combined 634/634, Core accounting 63/63. Collection OFF; WS/Chat/auxiliary routes remain open.
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): DEC-001 harness hardened (`7ce49a7` → P2 fixed `ebe0bd7`, corrective review clean), fresh attested fixture from a detached candidate worktree (`4713c31`), replay `attempt-waid23v9` raw pass with **independent evidence review "supported with limits"** (all five prior provenance gaps evidenced; residual: image consumption not attested, provider HTTP uncapturable). Briefing-size defect fixed and received (`da456599d`, 494 tests) plus preview follow-up (`82dda1ad2`, 496 tests). Multi-case harness `00ef50f` reviewed correct; DEC-021 marked unmapped (vacuous secret variant, P2) with DEC-003/026; two executor-found defects fixed by the manager (write-once receipt collisions → checkpoints `2761743`; venv interpreter). DEC-002 passed on `3ffeac0`; the remaining 21 mapped cases are executing sequentially with retained failures.
+- **Competing writer**: `fix/live-permission-transition-20260913` (new sprint PF-83-S01 under the security plan, created by another agent) was merged into integration as `a51602037` outside the integration gate and carried to origin by a manager push before detection. Its only known review is "patch is incorrect" (pre-commit tree). Not reverted; treated as unverified; question `pf83-external-integration` sent to Slack (thread `1789375985.333669`) after a recorded outage-gap review re-qualified the transport. Default if unanswered: keep + Rust verification, revert on failure.
+- Slack receiver `slack-receiver-02` alive (session `01a09e29…`); listener journal re-qualified 08:52Z.
+
+### Update — September 14 12:50 UTC: overnight cycles 9–15 (Travis signed off ~08:40Z)
+
+Authority recorded: unattended recurrence approved pending qualification;
+`--yolo` for non-test workers; security relaunch once workstream 3 completes.
+
+- **DEC functional cases**: 18 independently supported (001, 002, 004–019 less
+  003), DEC-025 retained as a genuine product/UX finding, DEC-020/022/023/024
+  blocked by the pinned guest's ~20-action budget, DEC-003/021/026 unmapped.
+  Record: [supervised-execution-20260914](../management-bootstrap/supervised-execution-20260914.md).
+  Harness lineage through `714cb08`; every executor-found defect fixed and reviewed.
+- **Restart/stall/crash rehearsal** with real TMUX workers: crashed worker and
+  uncertain dispatch both flagged by `watchdog` and reconciled `failed` without
+  relaunch; receiver kept on inspection. Recorded in the same document.
+- **Owner daemon**: design accepted (`owner-daemon-design-01`); increment A
+  kernel `48f340767` reviewed correct (P3 temp-dir) and **received at
+  `bcec9862f`** (514 tests). Default OFF; live TMUX transport is increment B
+  (allocated). Recurrence is **not** activated; no Slack activation notice sent.
+- **SLK harness**: design accepted (14 offline cases, 4 live-no-human, SLK-009
+  needs Travis, SLK-006 deferred); increment 1 `c030e7f` in the private repo
+  (packaging, synthetic fixtures, dry diagnostics for five cases) accepted as a
+  bounded partial; increment 2 allocated with an integrator-recorded +800 lines.
+- **PF-83 external merge**: first Rust verification was invalid — my session's
+  `CODEX_HOME` leaked into spawned app-servers (real home read; 543 v2 failures);
+  retained as contaminated, rerun with home variables unset in progress. The
+  Slack question `pf83-external-integration` remains open.
+- **Blockers needing Travis**: (1) `git push` blocked — login keychain locked, so
+  origin stays at `f26ce7daa` while local integration is ahead; (2) Claude
+  provider (`claude-plan`) unresponsive from ~12:10Z: fresh Fable decisions and
+  independent reviews are paused; a bounded retry loop is running; OpenAI
+  workers unaffected. Nothing was pushed to main; no credentials were entered.
+
+### Update — September 14 21:30 UTC: relaunched host, afternoon cycles
+
+Corrections: the overnight "locked keychain" framing was wrong — test app-servers
+inherited the live profile (repair `3ab6aa051`); both overnight PF-83 runs stay
+contaminated. Since the relaunch (rebuilt host 0.1.42; worker pin unchanged):
+
+- **PF-83 external merge**: guarded `just test` on the tip plus a pre-merge
+  baseline (`da456599d` + isolation harness, isolated build dir): app-server
+  0 tip-only failures (11 vs 13), TUI 4 tip-only all flaky on rerun, PF-83 area
+  tests 15/15. No attributable regression. Travis answered in Slack
+  (`Ev0C1N1SCT53`): keep and incorporate, fix the two P2s. Feed rev 36
+  resolved; PF-83 functional gate remains open for its owner.
+- **Slack**: the supervised listener child had been a zombie since ~10:16Z
+  (PID-only liveness checks missed it); replaced by a manager-owned supervised
+  listener (operator2, FIFO ops), re-qualified with gap reviews twice (one
+  self-inflicted supervisor bug, patched). **SLK-009 re-run completed**: fresh
+  ACK-only question, Travis ACK admitted live, interpreted, handoff delivered to
+  `slack-receiver-02` with exact `expected_ack`, feed rev 38 resolved,
+  acknowledged notice posted. Limit: the native `Bridge` evidence contract was
+  bypassed for the TMUX receiver (owner-daemon increment C input).
+- **DEC-025 fix** (Travis: fix now): `d71a8ef14` → `7a8ff466a` → `2aac8f840`,
+  all reviewed/received (`fcbc2ad31`, `d8d8e3516`, `a9801395b`); harness
+  re-pinned per candidate (v2–v4). On v4: DEC-002 ✓, DEC-005 ✓, DEC-025 ✓;
+  DEC-001 fails on the synthetic summary's wording (passed twice on v1 with the
+  same text) — under independent adjudication, not treated as a regression.
+- **Owner daemon**: increment B received (`e8d99d4cb`) after a corrective
+  review (two transport races fixed, 539 tests). Recurrence still not activated.
+- **SLK harness**: increments 2–3 corrected P1/P2 findings; increment 4 (SLK-013
+  expectation, traceback retention, ceiling citation 1987) dispatched.
+- Dashboard `build-uflvf0tt` @ `a826527bb`; integration tip `a9801395b` == origin.
+
+### Update — September 15 00:15 UTC: Task Node records landed; model switch to Opus 5.0 High
+
+Travis (chat): accepted all three Task Node coordination tasks and asked for the
+work they describe; then, citing quota, directed that after this round every use
+of Fable 5.1 High (independent reviews, evidence reviews, the fresh-manager loop)
+move to **Opus 5.0 High** (`claude-opus-5-plan`, provider `claude-plan`, effort
+`high`) and that this round be merged onto integration and pushed.
+
+- **Task Node** ([PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md)):
+  acceptance receipt [tasknode-acceptance-20260914](../management-bootstrap/tasknode-acceptance-20260914.md)
+  (three off-chain `accepted` lifecycle events, CLI statuses, JSON digests).
+  Guarded single-event transport `c37d68969` reviewed (correct, two P3 follow-ups:
+  `flush` must skip intent-bearing events before any batch enablement; add a
+  `send`→`post` idempotency wiring test) and received at `5c2cfc04b`. Posting OFF;
+  no activation file exists.
+- **Workstream records** (each reviewed by Opus 5.0 High as a truthfulness audit,
+  all hashes/links verified, "Human review and approval" left blank for Travis):
+  PF-13 security `ccac81090` → `08a5b105b`; PF-60 accounting `2de349bcd` →
+  `56410b5aa` (P3: row-29 "stale" wording is an author disposition, flagged for
+  Travis); PF-80 status packet `5d4089851` + owner receipt fix `ad000956c` →
+  `677e970cd`. Next: Travis reads each document and fills the approval block;
+  only then a guarded dry-run, then one `--live` evidence submission per task.
+- **Security** ([PF-83-S01](../../../docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md)):
+  both P2s were already fixed in the merged tip; `4fd27d0b6` adds real-dispatch
+  regression coverage (guarded focused TUI 9/9; three pre-existing broader
+  failures documented, incl. version snapshot 0.1.38 vs 0.1.42), reviewed
+  (correct, 1 P3) and received at `02abee2ec`. Independent functional gate still
+  open. PF-27-S04 successor design accepted (revoke idle broker channels on
+  generation cancellation; reconcile `c51d2d6aa` receiving receipt); dispatch
+  waits for PF-83-S01 closure and PF-27-S04 re-reservation.
+- **Accounting** ([PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md)):
+  next-unit design accepted — Responses **WebSocket sampling** (18 files, 36
+  tests, 3000/1050 target, 3300/1200 stop; reuses the accepted decoder and
+  price snapshots; startup prewarm explicitly outside scope; Chat deferred with
+  cited reasons). Next: freeze the allocation document, reconcile plan/sprint,
+  dispatch implementation.
+- **SLK harness** increment 4 (`f97406f`) reviewed correct (1 P3: readiness read
+  lacks OSError retry); offline runs are scripted-actor only — code-blind actor
+  wiring is next.
+- **Model switch** landed at `76efe32eb` ([record](../management-bootstrap/model-switch-opus5-20260914.md)):
+  `fable_launcher.MODEL = claude-opus-5-plan`; Python suite green under the
+  receiving tree. The first live decision cycle on the new model qualifies it.
+  Review wrappers now pass `--model claude-opus-5-plan`.
+- **Briefing size**: two `briefing_size_hold` runs failed explicitly; resolved by
+  compacting consumed allocations and moving long record briefs into frozen
+  digest-checked private files. Structural growth (36 consumed allocations,
+  ~2 KB per retained terminal action) remains a delivery follow-up.
+- Dispatch defect fixed: worker START must be re-sent until the pane shows
+  `Working (`; the dispatch helper now verifies that.
+
+### Update — September 15 12:50 UTC: PF-83 preflight ran; Bridge bypass closed; two designs rejected on review
+
+- **Security** ([PF-83-S01](../../../docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md)):
+  the gate is now real machinery running against a real guest. Travis provisioned
+  a macOS 26.2 arm64 VM and then a clean `agent` account (uid 503, not in
+  `admin`, no sudo, empty home) after the first account was **refused** for
+  carrying live agent credentials. `BoundaryWire` now runs over key-authenticated
+  SSH with its framing and checks unchanged, the package is pinned by the proven
+  cargo lane (`corbanu 0.1.42`, binary SHA-256 `3e99a6cb…`, mismatched manifest
+  refused), and `tmux 3.7c` passed the PTY probe. **The authoritative preflight
+  ran: 2 proven, 173 of 175 controls UNPROVEN.** Both the bridge and its child
+  reached github.com and the host on port 22, so network denial is unenforced and
+  no case may run. All 380 verdicts remain `not_reached`. Open decision
+  `pf83-network-isolation-20260915`. Two manager-owned blockers were cleared
+  along the way: the build lane was wrong (`just build-for-release` is a
+  six-platform Bazel filegroup) and two `~/.cache` Bazel symlinks on this host
+  were broken, failing every Bazel invocation at startup.
+- **Task Node** ([PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md)):
+  the **Slack Bridge evidence bypass is closed and received at `2ca10a43e`**. A
+  TMUX receiver is now a first-class evidenced transport requiring its original
+  in-memory witness, unchanged rollout and capture bytes, matching identity, an
+  unconsumed nonce and bounded freshness — the manual pane-reading I had been
+  relying on for real handoffs is no longer how this works. Three review rounds
+  were needed: the transport itself, then real-world brickability (an ordinary
+  mid-append rollout read or a slow model turn permanently bricked a handoff),
+  then a budget-reserve gap that could start a durable attempt with no room left
+  to collect the ACK.
+- **Slack status** was wedged at `held` all session by an unreconcilable post
+  record — the residue of a malformed attempt id I created. The guard now
+  validates attempts before any durable write, the live orphan was reconciled as
+  never-sent against read-only inspection evidence, and a **second copy of the
+  same predicate** in the published projection (which is what the dashboard
+  actually reads) had to be fixed too. The status is finally clear.
+
+**Two designs were rejected on review rather than patched:**
+
+- Shared-thread Slack posting failed twice — first silently misattributing a
+  human reply to the wrong decision, then making a terminally failed follower
+  deadlock the entire thread so even the parent question became unanswerable.
+  After the second failure the approach was abandoned rather than iterated:
+  every decision keeps its own thread, and a follow-up posts a fixed-text
+  pointer notice into the thread it answers.
+- The briefing ceiling was being met by hand-trimming context, which made
+  briefings worse to make them smaller. Travis granted 10 KiB; the real cost was
+  found instead (65 spent allocation stubs repeating placeholder objects,
+  14.5 KB), collapsed into a digest index for a 10.7 KB saving, and **the grant
+  was handed back the same day**.
+
+### Update — September 15 10:10 UTC: accounting vectors closed, daemon qualified unassisted, security waiting on Travis
+
+- **Accounting** ([PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md)):
+  both previously partially-proven native vectors are **closed and received at
+  `16c43b5fe`**. A stage-one binding injected into an *already-running* combined
+  WS dispatch now stops it, and the native fixture emits the full safety /
+  model-verification / moderation matrix across 72 combinations. Every claim is
+  mutation-proven — guard bypass (`b530eb42`) and slot replacement (`5578019c`)
+  each failed with their exact named assertions before the mutations were removed.
+  Getting there took two recorded manager decisions, both triggered by the worker
+  correctly refusing to act alone: a deliberate widening to 20 paths, and a
+  bounded size-ceiling extension to 3700/1350 after it stopped 6 lines under the
+  frozen 3300 limit. Two non-blocking P3s are recorded as disclosed follow-ups
+  rather than dropped. Collection stays **OFF**.
+- **Task Node** ([PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md)):
+  the owner daemon now runs a live tick **unassisted**. The launch path writes a
+  private `config.toml` and passes startup overrides, so a worker reaches a
+  working state with no human clearing update/trust prompts — with sandbox,
+  approval policy and prompt refusals unchanged. That also let the expired-lease
+  case be re-proven properly: PID 20423 was actively running `/bin/sleep 300`
+  when its real 180-second lease expired, giving `lease_expired` with a surviving
+  PID, HOLD and exactly one launch. Reviewed clean (0 findings) and received.
+  **Recurrence is still OFF**: independent confined functional acceptance and
+  Slack/recurring-supervision qualification remain, so activation is not yet
+  proposable.
+- **Security** ([PF-83-S01](../../../docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md)):
+  **waiting on Travis.** The code-blind gate needs a genuinely isolated macOS
+  environment (disposable VM, or a dedicated synthetic account with enforced
+  filesystem / process / IPC / network / Keychain isolation). The manager cannot
+  provision either — no passwordless `sudo` — and will not run the executor
+  without the boundary, because the isolated-execution contract already rejects
+  that evidence. Open decision `pf83-isolation-provisioning-20260915`. Meanwhile
+  everything not needing the environment advanced: package verification (an
+  altered manifest hash is refused), a bounded PTY protocol client, journaling and
+  sealing, preflight validation and fault/MCP helpers. The preflight honestly
+  reports all 175 controls **UNPROVEN**. A second blocker — the Bazel Rust target
+  failing under Bazel 9.0.0, so no package can be pinned — is manager-owned and
+  open. All 380 cases remain `not_reached`.
+
+Two more manager-side process defects were found and fixed:
+
+- A receive was recorded `verification_failed` even though the merge and all four
+  gates passed, because the manager committed a doc-only change to the receiving
+  branch while the gate was still running and the HEAD-unchanged check failed.
+  One integration writer means no manager commits during an in-flight receive.
+  Reconciled explicitly with the original receipt retained.
+- Worker dispatch now refuses to launch when the worktree HEAD does not equal the
+  assigned base, after a worker correctly stopped on exactly that divergence.
+
+### Update — September 15 08:05 UTC: WS accounting, owner daemon C and the PF-83 harness all received
+
+Three units landed in one goal-mode session, each reviewed by Opus 5.0 High and
+corrected before receiving.
+
+- **Accounting** ([PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md)):
+  the Responses **WebSocket sampling unit is received at `c86634e21`** — 18 files,
+  2831 total / 841 non-test lines (target 3000/1050), all 36 named cases. Review
+  found one real gap: the redirect-latch case passed identically with the latch
+  arm deleted, so it proved nothing. Closed in `50382ef13` by a mutation
+  experiment — arm removed, case fails with the exact expected message (run
+  `d4d6c364`, exit 100); arm restored, passes across all ten vectors (run
+  `cccb60ec`). Receiving gates on the merged tree: codex-api 224/224, WS native
+  20/20, Core accounting 35/35, state + TaskNode-session 390/390, responses proxy
+  28/28. Two native vectors remain honestly disclosed as partially proven.
+  Collection stays **OFF**. Two earlier attempts stopped correctly before
+  touching code (missing build lease; base divergence) and both receipts are kept.
+- **Task Node** ([PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md)):
+  **owner daemon increment C received at `95b4d339a`** — a tick now carries
+  prepared work through the real worker lifecycle (claim → TMUX launch → exact
+  ACK digest compare → START with mandatory working verification → RETURN → record).
+  Review caught a P2 that would have wedged the daemon permanently: any
+  non-worker action kind (a prepared `wait`, `integrate`, `complete_sprint` …)
+  hit `unsupported_worker_kind` and left an unresolvable hold, so every later
+  tick returned HOLD forever. Corrected with named regressions, plus two P3s
+  (pause before any effect now defers instead of fencing; a worker that dies
+  right after emitting RETURN still has its durable evidence recorded). Suite
+  591 green. The daemon stays **OFF** with no activation record.
+- **Security** ([PF-83-S01](../../../docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md)):
+  functional-gate **harness increment 1 received at `4b85ffd98`** (harness lives
+  outside the repo at `.codex-work/functional-pf83.20260915`). The design manifest
+  is normalized to the expanded ID set so the schema-2 handoff checker can pass,
+  with the original F01–F11 bytes preserved. Review found the loopback denial
+  probes were invalid controls (a refused connection to a port with no listener)
+  yet were feeding an `os-enforced` claim; they are removed and loopback is now
+  recorded as explicitly **UNPROVEN**. The reserved 8-call tail is wired and
+  proven end to end. Every functional verdict is still `not_reached`.
+
+Two manager-side defects were found and fixed rather than worked around:
+
+- Manager cycles were failing `briefing_size_hold` on every attempt. Compacted
+  terminal actions still inlined their frozen 18-path manifests; those are now
+  omitted with their digest retained (`8f3381ca3`). A second change that filtered
+  "already visible" digests out of `evidence_omissions` was **reverted**
+  (`d0d93c75a`) — `manager_cycle_test.BriefingSizeTests` encodes that the list
+  reports what the manager *cannot read*, and the ~2.5 KB saving was not worth
+  weakening that meaning.
+- Receiving verification ran under the default macOS `TMPDIR`, exceeding the
+  104-byte Unix socket limit and failing 27 daemon cases with
+  `socket_path_too_long` on code the worker had seen green. Receiving commands
+  now pin `TMPDIR=/private/tmp`; the failed gate was explicitly reconciled rather
+  than retried silently, and its original receipt is retained.
+
+### Update — September 15 06:00 UTC: three parallel workers; goal-mode operation
+
+Travis placed the manager in goal mode (poll subagents on an interval, advance
+all three workstreams, Slack only if human help is genuinely required). Until
+now the manager only ran when prompted: workers are independent TMUX processes
+and kept running, but the review→receive→dispatch loop stalled between prompts.
+Owner-daemon increment C (below) is the structural fix.
+
+- **Accounting** ([PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md)):
+  WS sampling allocation frozen (`f07a6e7ef`), reviewed by Opus 5.0 High (correct,
+  0.83; two P3s fixed in `5c80b88ce`) and **received at `73fc51b1a`**; sprint
+  repointed at `556da8be7`. First implementation attempt `acct-ws-impl-01`
+  **correctly STOPPED** before touching code: the frozen allocation requires a
+  manager-assigned exclusive build-target lease and none existed. Its receipt-only
+  commit `4364dd53e` (0 lines in all 17 allocated Rust files, no Rust tests) was
+  received at `94ea8948e`. Lease `acct-ws-20260915` has since been granted after
+  comparing current reservations and actual diffs — a dedicated `CARGO_TARGET_DIR`,
+  exclusive while no other Rust build is active — and `acct-ws-impl-02` is running.
+- **Security** ([PF-83-S01](../../../docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md)):
+  the last open Remaining item is the independent code-blind functional gate. Its
+  allocation (`8f5ed4270`, 472 lines: cases G01–G19 each with a negative control,
+  enforced executor boundary, tiered 64/96/128-call budgets) was reviewed correct;
+  three P3s fixed in `3dc6e6c5b` — most importantly the expanded case IDs must be
+  normalized into the design manifest before dispatch or
+  `qa/code-blind-functional/check.py` hard-fails the handoff even on a clean run.
+  Received at `47acb6458`; harness increment 1 is running.
+- **Task Node** ([PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md)):
+  all three coordination tasks are **Rewarded** — evidence submitted and the
+  verification requests answered after Travis approved the records ("approve all",
+  Slack `Ev0C1N8EPLQ3`, feed rev 40). Both transport P3s closed in `e3b3b2da9`
+  (received `7e6728f1d`): `flush` now skips intent-bearing events, including the
+  crash case, and a test pins the real `send`→`post` idempotency wiring. Owner
+  daemon increment C ("adds effects": real ACK/START/RETURN lifecycle, verified
+  START, lease-based liveness, per-operation error isolation) is running.
+- **Dashboard access**: the read-only service rejected the tailnet hostname with
+  403 — a hardcoded Host allowlist (DNS-rebinding protection). `serve` now takes
+  a repeatable `--allow-host` accepting exact DNS names only (no wildcard, suffix
+  match, port or address literal), driven from `control.json.web_allowed_hosts`
+  so it survives republication (`efbbf1403`). Verified on the server: loopback 200,
+  tailnet host 200, `evil.invalid` 403. Remaining and **not** ours to fix: Serve
+  only answers on the tailnet IPv6 address because another service holds
+  `0.0.0.0:443`, and the node shared with Travis was `postfiat1`, not
+  `productionrpc`.
+- **Suite repair**: the YuE2 facilities merge updated one facility-count assertion
+  but missed the second, leaving the Python suite red on integration. Fixed in
+  `f65639e89`.
+- **Briefing ceiling**: manager cycles were failing `briefing_size_hold` every run.
+  45 consumed allocation stubs were shrunk to the minimum the coordinator requires
+  (frozen originals retained in the audit table), 21.8 KB → 15.2 KB.
+
+### Update — September 14 13:15 UTC: overnight close-out
+
+- **Root cause of the blockers**: the Mac's login keychain locked overnight
+  (~12:00Z). Raw HTTPS egress is fine, but the Corbanu binary's auth/keyring path
+  blocks on the unlock prompt, so *every* new model session stalls (three held
+  Fable runs, a review probe, a Luna publisher) and `git push` prompts for
+  credentials. Unlocking the Mac restores all of it; no config was changed.
+- **PF-83 verification (clean env)**: app-server 1356/1374 (13 failed + 5 timed
+  out, none in PF-83 areas; the 15 PF-83-area tests passed); TUI 3955/4098 (106
+  failed + 37 timed out, mostly snapshot/provider/onboarding suites; 10 touch
+  permission/settings rendering). **Attribution unknown** without a baseline run
+  on `da456599d`; the merge stays unverified and unreverted; Slack question open.
+  Test artifacts (`.snap.new`, tmux artifacts) retained privately, tree clean.
+- **Not dispatched** (Fable decisions blocked): `owner-daemon-impl-02` and
+  `slk-harness-impl-02` allocations are prepared; dispatch resumes after unlock.
+- Local integration tip is ahead of origin by three commits; the dashboard still
+  shows `build-lasnxjjf` (`d4f61a978`). First morning actions: unlock → push →
+  republish → baseline run for PF-83 → answer/dispatch pending increments.
+
+## STOP — user-requested management pause, September 13
+
+All three workstreams have reached a checkpoint and stopped. The implementation
+subagents are closed, security owner paused and both management monitors paused.
+[Integrated checkpoints, evidence and remaining gates](../../../docs/plans/management-pause-2026-09-13.md).
+This deliberate pause is not an unanswered question. No successor work or live
+enablement; older progress notes below are historical and do not authorize work.
+
+## Current handoff — September13 02:27 manager cycle
+
+02:32 update supersedes the pending preflight below: PF13 source/evidence is
+received throughc51d2d6aa, original30 exits/reviews inspected; exact combined
+RTX/TMUX qualification dispatched to its sole owner. James formatting passed,
+actual1370/614; no dependency build yet. Slack OFF launcher preflight passed,
+no state/credential access; durable live/phone/ACK remains unqualified. Feed22
+records zero open human decisions, with previous questions/resolutions preserved.
+
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): [compact import accepted](../../portfolio/agent-cost-accounting/pf-60-s02/compact-late-import-receiving.md); manager review/receiving hold cleared. Mendel runs [original-contract native goldens](../../../docs/research/agent-cost-accounting/original-contract-native-golden-allocation.md) at34f0786e6: three new/20import/598shared reported pass, Core compiling at observation. S03 remains dependent; collection OFF.
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): James returned927/424 uncompiled source; same-ten-path formatting/size extension accepted in [allocation](../../../docs/research/tasknode-integration/owned-ingress-allocation-20260913.md). Parent serializes dependency/build lease. [Slack credential handoff resolved](slack-access-decision.md); durable alert/reply/phone/nativeACK and independent execution remain manager work, not an unanswered user question.
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): latest task view idle; exact owner preflight handoff and shared dependency reservation requested. Pending19f662493/f68dd66fe/10dcbb649 are not yet manager-received; no duplicate security source assignment or approval hold inferred.
+
+## Current handoff — September13 01:19 manager cycle
+
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): [private preflight](../../security-levels/sprints/PF-27-S04/system-preflight-allocation-20260913.md) actual clean launchb65bf1e932 acknowledged; existing owner implementing, seven paths/reviews39–40. Combined session proof accepted; no native activation.
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): 1970-line compact import returned with reported19+5/594/100 test passes. Manager review01 found a test that requires nondeterministic SQLite race diversity; Mendel is correcting it within the [same allocation](../../../docs/research/agent-cost-accounting/compact-late-import-allocation.md), retaining Mac target. No product approval or S03 activation.
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): [bounded fixture-only ingress](../../../docs/research/tasknode-integration/owned-ingress-allocation-20260913.md) coding dispatched to James at verifiede2400ed95, ten crate-local paths. Parent supplies dependency/build lease after accounting correction; source authoring continues. [Private credential handoff](slack-access-decision.md) still needed only for live Slack; installation approvals remain resolved.
+
+## Current handoff — September13 combined session accepted
+
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): exact combinedc1d866fd4 proof accepted, all29 exits+suite0, actual RTX/TMUX/invariance. Same owner dispatched [private system preflight](../../security-levels/sprints/PF-27-S04/system-preflight-allocation-20260913.md), allocationab985f5f8, seven paths550/700/reviews39–40. No user hold, process launch, native activation or sprint-completion claim.
+
+## Current handoff — September13 root-session received
+
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): [29-command owner proof and reviews37/38](../../security-levels/sprints/PF-27-S04/descriptor-root-session-20260912/README.md) inspected; source received locally through51d1a64f5, newer accounting lock preserved. Existing owner gets the exact combined receiving test next; no new human approval or native-service claim. Same-sprint successor is design-only pending combined proof and exact allocation.
+
+## Current handoff — September13 combined proof accepted
+
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): [combined100/575/Clippy/check all pass](combined-native-20260913.md). Mendel dispatched at clean37d6ffcc9 on the [complete eight-path compact-only import operation](../../../docs/research/agent-cost-accounting/compact-late-import-allocation.md), target2000/650 STOP2200/750, new accounting-late-import checkout and exclusive Mac target. S03 stays dependent and collection OFF.
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): exact combined28-command RTX proof accepted; all exits/suite0, source/locks/artifacts unchanged. Existing owner dispatched on [private root-session pump](../../security-levels/sprints/PF-27-S04/descriptor-root-session-allocation-20260912.md), seven paths700/800, reviews37/38. No new native/public bootstrap or protected activation.
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): [private credential-path handoff already requested](slack-access-decision.md); installation/scopes stay complete. Pinned tiny_http cannot bound ingress/cleanup through its public APIs, so the old proxy proposal is not implemented. James prepares an exact opt-in same-binary owned-ingress scope using maintained existing parser/runtime machinery. Manager infrastructure, not another user decision or a qualified executor.
+
+These are same-sprint continuations after accepted evidence, not new initiatives,
+main/release or whole-sprint completion. Historical failures remain preserved.
+
+## Current handoff — September13 00:14UTC
+
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): reviewed933/279 candidate received2cb69e429, combined with security at eb5855959. Parent100 focused tests passed18.334s; shared575/Clippy/check are running. Mendel prepares only the next compact late-import allocation. S03 remains dependent, collection OFF.
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): reviewed740-line source and literal evidence received at eb5855959. Existing sole owner confirmed no pause and launched the same28-command RTX/TMUX proof against this combined source. No duplicate review or new native activation; successor stays a proposal until combined proof.
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): [installation complete; private credential handoff already requested](slack-access-decision.md). Feed18 shows this distinct setup question, not another access approval. James inspects actual pinned proxy timeout/body/schema APIs before a minimal infrastructure allocation. Corrected646-line/12-test engineering is accepted, not full isolation or live Slack qualification.
+
+No implementation source is being edited during combined verification. Current
+assignments are manager Mac tests, sole security owner RTX tests and two bounded
+preparation tasks. Main, release, sprint acceptance and protected activation are
+unchanged. The previous installation publication is verified separately; this
+new receiving observation awaits one Luna sync.
+
+## Current handoff — Slack installation completed
+
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): Travis approved access and separately approved the installation agreement. Reinstall is complete, the bot is in the private channel, and Socket Mode/private reply events are enabled. [Exact setup evidence and remaining credential handoff](slack-access-decision.md). Both required token environment inputs are absent in this runner; no token was extracted. Manager owns actual connection, bounded no-op alert/reply/native-ACK and independent qualification once privately provisioned. Alerts remain non-operational. The resolved access question must not reappear as a hold.
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): corrected ten-file candidate933/279 has100 focused/575 shared tests, normal check, Clippy and clean material review. Manager has read the exact evidence and source; receiving and combined verification are next. S03 stays dependent, collection OFF.
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): final740-line candidate has actual28 command exits+suite0 and clean reviews35/36. Manager has read the evidence and source; scoped receiving and exact combined proof are next. No native activation or sprint-completion claim.
+
+Isolated engineering646/650 passed12 actual RTX tests and correction review02;
+accepted as engineering only, not a complete independent executor. Standing
+manager instructions now require proactively initiating authorized blocking
+tests or dispatching eligible execution; manager-owned must not mean unstarted.
+
+## Current handoff — 23:16 UTC
+
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): actual browser preflight found missing bot posting/private-history permissions and reply events, despite Socket Mode being ON. [Access question and context](slack-access-decision.md) was asked directly; live setup waits for Travis's confirmation, not a repeat of prior product approvals. Supervisor code remains integrated with261 passing tests. Five-file isolated engineering returned588 lines/11 actual RTX tests; first independent boundary review is running, not accepted execution. Manager owns remaining confined executor/transport qualification.
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): first ten-file correction returned835/249 with100focused/575shared and normal check passing. Original eight Core errors cleared;24 emitted errors at16 existing native-test sites remain. Manager inspected/allocated only those assertions and dispatched Mendel at524674860; same ten files/ceiling, runtime frozen. [Exact continuation](../../../docs/research/agent-cost-accounting/core-policy-repair-allocation.md). First material review follows correction; S03 stays dependent, collection OFF.
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): sole owner confirmed same final-c7 RTX run completed23:03:38, all28 command exits+suite0. Sourcec7d48e482/Rustbd56b597, original source-guard failure preserved; no test ran on the mismatched source. Owner is preparing literal receipt and already-allocated reviews35/36; manager has not yet accepted that new increment. No duplicate test run, main or protected activation.
+
+The only human hold is the already-asked Slack access expansion. Accounting
+correction, PF13 review closeout and independent infrastructure review continue.
+No sprint is complete. Last verified dashboard publication22:49:26/source527238dfd;
+this updated observation awaits one Luna synchronization.
+
+## Current handoff — 22:45 UTC
+
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): exact combined37f23b991 compatibility proof accepted:25 command exits+suite0, real RTX/TMUX, unchanged source/locks. Existing sole owner dispatched on [private root dispatch](../../security-levels/sprints/PF-27-S04/descriptor-root-dispatch-allocation-20260912.md), fifteen paths/740target800hard, reviews35/36. Synthetic fresh-root/client bridge explicitly allocated; production factories unchanged. Owner acknowledged clean launch00b07dad10 and began implementation; no new user approval.
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): eight-file correction reviewed clean and received37f23b991; parent575/575 zero skipped plus normal six-library check pass. Eight Core policy errors remain. Mendel dispatched at clean93dc55215 in a fresh sequential checkout on [ten-file Core correction](../../../docs/research/agent-cost-accounting/core-policy-repair-allocation.md), including cancellation/poison and native regression proof. Historical failures retained, S03 dependent and collection OFF.
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): supervisor remains clean-reviewed and integrated with261 receiving tests passing. Actual RTX feasibility is complete; James is implementing [five-file isolation engineering](isolated-boundary-engineering-20260912.md), with effective seccomp/cgroup/cleanup and positive PTY controls. A confined fresh reasoning executor, independent functional execution, real Slack connection/phone/native ACK are still manager-owned prerequisites. Alerts are not operational.
+
+Owner acknowledgment22:47: PF13 imported the allocation at clean00b07dad10b215e756696f8c5477055f1e1722d5, source unchanged from12e0bc2d8; owner checkers3/115/125 pass. Root-dispatch implementation begins; earlier acknowledgment-pending wording above is superseded.
+
+No decision is awaiting Travis. Local receiving integration is not a main merge,
+sprint completion, native qualification or release. One Luna publication verifies
+this observation separately. Earlier observations are retained history.
+
+## Current handoff — 22:03 UTC
+
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): exact combined Stage B RTX proof accepted, all17 command exits+suite0. Sole owner acknowledged clean next launch8eeabe2cc and is implementing [descriptor identity compatibility](../../security-levels/sprints/PF-27-S04/descriptor-root-compat-allocation-20260912.md). Manager allocated PF20 compatibility and one realistic test relay, eleven paths/hard800; no new human approval or native activation.
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): first correction passed575full/105focused tests and normal check; Clippy exposed eight errors in one external test file. Mendel resumed at8cccd477a with [exact eight-file correction](../../../docs/research/agent-cost-accounting/policy-lint-repair-allocation.md), same450/225 ceiling. Changes are underway; first review remains next, prior failures retained. S03 remains dependent and collection OFF.
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): supervisor review08 clean and integrated92d6eb261; all261 receiving tests pass187.549s. [Evidence and limitations](slack-supervisor-integration-20260912.md). James now checks actual machine/tool feasibility for the existing isolated-execution proposal. Manager owns subsequent isolation and live Slack/phone/native-ACK qualification; alerts are not yet operational.
+
+All three lanes have assigned next actions. No decision is awaiting Travis.
+These are local integration/implementation observations, not full-sprint, human,
+main or release acceptance. Publication is verified separately by one Luna sync.
+Earlier dated observations below are history, not competing current statuses.
+
+## Current handoff — 21:03 UTC
+
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): recovery review07 clean and locally integrated at a89a48548; all251 receiving tests pass144.128s. James dispatched to implement the real supervised listener in the fresh slack-supervisor-20260912 checkout, source-start179172541. [Exact assignment](../../../docs/research/tasknode-integration/slack-supervised-quiescence-allocation.md). Live Slack/phone/restart/CAS/native-ACK and isolated functional acceptance remain unproven; no user answer needed for this implementation.
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): accepted native implementation passes71focused/840shared receiving tests and normal check. Mendel dispatched to repair concrete policy-lint failures in the fresh accounting-policy-repair-20260912 checkout, source-start179172541. [Exact seven-file assignment](../../../docs/research/agent-cost-accounting/policy-lint-repair-allocation.md). Historical full-Core failures are not waived; compact late import follows, S03 remains draft, collection OFF.
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): combined Stage A proof accepted. Existing sole owner resumed Stage B from30923e30f; initial3 real connector/admission and2 normal tests passed. At measured791 lines the owner stopped appropriately; manager granted same-seven-path hard900 for remaining tests/runner only, runtime frozen. [Disposition and next proof](../../security-levels/sprints/PF-27-S04/descriptor-admission-allocation-20260912.md). Reviews30/31 remain required; no native activation or sprint completion claim.
+
+All three lanes have implementation assignments. Halley separately owns a
+read-only audit of existing isolated-execution runner sources, with a concrete
+infrastructure handoff; no fourth product initiative or qualified sandbox claim.
+Root policy1.7 is already on local main8cfcff990; product work is on the declared
+receiving branch, not claimed merged to main or released. No new human decision.
+Publication of this observation is pending the single Luna synchronization.
+
+## Historical observations
+
+Latest security follow-up: [combined receiving RTX proof](combined-native-20260912-1911.md)
+passed all eight required scoped checks on unchangedc5e606fa2/Rust18cf961a.
+The broader dependency-lint failure remains disclosed. Existing owner is
+freezing the already-approved pair-stage allocation, then implementing within
+hard800 lines; no user decision or whole-PF27 acceptance. Accounting receiving
+verification and Slack recovery remain their separate ongoing assignments.
+
+## Current observation — 19:18 UTC
+
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): review03 clean; exact24-file accounting candidate locally integrated. Mendel dispatched on combined receiving verification, not another source correction. Prior full Core/shared failures remain visible; serial targeted passes do not erase them.
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): reviewed adapter/single-child62956038e merged locally with accounting atc5e606fa2. Existing owner active on two-child proposal and then exact receiving RTX proof. Approval resolved; broader native/product gates remain.
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): James dispatched on the five-file local fence-loss recovery in fresh worktree tasknode-slack-recovery-20260912 at cleanefb0f95f8. Gated predecessor is integrated; real supervisor/connection/phone/ACK still unqualified, live OFF.
+
+[Combined integration evidence and exact limitations](combined-native-20260912-1911.md).
+One source implementation worker, one receiving-verification worker and the
+existing security owner task are assigned. No open human decisions. Mainf505bd211
+is an older Facilities/service-control import, not the declared receiving source.
+Last verified publication18:48:22/build-p4f8ktvl; new source awaits one Luna sync.
+
+## Current observation — 18:39 UTC
+
+18:47 final observation: [Slack integration evidence](slack-integration-20260912.md)
+records clean review06,244 staging passes, receiving243pass/one enforced
+source-drift guard, then exact1/1 rerun with stable source. No runtime repair or
+waived error; gated code is locally integrated, not live. Accounting now has
+24 disjoint source/test/receipt files and3900/1450 ceiling for the scoped
+redirect-policy correction. Security confirmed active/no pause: source60068b967,
+final RTX/TMUX proof complete, Astra25 running and Fable26 next. No user blocker.
+
+18:41 update: combined Slack review06 is clean;244 staging tests passed133.965s,
+Facilities/governance pass. Manager accepted staging3561ebcc2 for local receiving
+integration and imported13 identical code/receipt/guidance files, preserving
+newer plan/sprint records. Receiving full tests are running. This supersedes the
+running review below, not the still-open missing-fence/live qualification gates.
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): recovered test profile now executes28 accounting and42 role tests, all pass. Full Core3405pass/133fail/19skip/2leaky is non-clean; all133 failure names also occur on the launch baseline. Review02 found redirects bypassing approved-endpoint accounting attribution. Mendel is dispatched to disable accounted redirects while preserving existing OFF/proxy/CA/guard behavior, with real two-endpoint zero-follow proof. Existing20-file scope; shared API changes require manager disposition, not a human blocker.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): worker237 tests pass; imported into manager staging with owner-lease-aware status and19 passing feed tests. One combined review06 and full combined suite are running on16paths3131total/1314non-test. James prepares a private minimal missing-fence recovery proposal only; no live credentials or code changes during review. Full Slack/phone/ACK gates remain.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): next single-child owner focused8/real3/service52 pass, four artifact skips explicit. Existing task was idle; manager requested already-allocated artifact/TMUX/parity/review closeout subject to any newer explicit user pause. Owner checkpoint78185b756 and adapterfb7523f4b are not yet native receiving integration. Isolated-adapter approval stays resolved.
+
+No new decision is required. Accounting correction is dispatched, Slack source
+is frozen for manager combined proof/review, and security closeout is requested
+from its sole owner. Last verified publication18:15:20UTC/build-akhq3xe5 matches
+971db3c8d and feed10 with zero open decisions. This semantic update awaits one
+Luna sync; source collection and rendering are not implementation completion.
+
+Facilities observation18:19:52UTC: six interface targets returned200; the
+[Drone ACE-Step fallback](http://100.81.145.102:7866/) refused connection.
+The primary RTX ACE-Step remains reachable. This is an interface availability
+issue, not a dashboard server failure or a blocker on the three workstreams.
+No service repair or restart is authorized by this observation.
+
+## Current observation — 18:09 UTC: continuation, not human holds
+
+18:14 follow-up: Slack review05 returned one confirmed initial-qualification
+retry deadlock following auth failure. James is now dispatched on its narrow
+recovery correction and regression tests; review06 follows the changed candidate.
+The manager recorded exact scope/size and retained all234 tests/review history.
+Thus the current work is one active security task, one accounting verification
+worker and one Slack correction worker, not the running review05 described at
+18:09 below. No user answer or new product contract is required; live stays OFF.
+
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): adapter handoff fb7523f4b is qualified on the owner's branch; literal Astra23/Fable24 both findings[]. RTX focused3/OS7/service44 (one explicit exclusion)/profile2/TMUX7 pass. Alex's GNU2.39 host proves unsupported rejection only. Manager allocated the next private synthetic single-child asynchronous owner, bounded cancellation/cleanup/quarantine and real late-spawn proof. Sole existing security task is active; no duplicate worker or new user decision. Native source30b471a47 and evidence fb7523f4b remain pending receiving integration; approval allocation c5b05d9d8 is reconciled here.
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): first role-override correction returned3436total/983non-test. API208 and state287 pass,3leaky; Core tests stopped before execution with59 compiler diagnostics following shared-target baseline reuse. Manager authorized exactly32 enumerated recoverable fingerprint moves and locked/offline rebuild; Mendel is dispatched on verification, not a new product contract. All132 original candidate failures also occurred on the matched baseline; zero candidate-only failures in that original comparison does not prove the corrected candidate. Review/integration follow actual tests. Collection OFF.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): lifetime-lock/session-lease correction returned234 passing tests,2558total/990non-test across seven files. Independent Astra High review05 is running on the frozen source; implementation worker returned. Manager owns importing the exact frozen helper into shared status-registration staging, combined tests/review and the separate missing-fence recovery requirement before live connection. Live Slack/posting OFF.
+
+Zero open manager decisions. One security task is active, one accounting
+verification worker dispatched, and one Slack independent review is running.
+No sprint is complete or human-test-ready from these internal results. Last
+verified publication17:26:18UTC, source ef4b8e531/build-d1po25v1; this semantic
+refresh awaits the current heartbeat's single Luna publication. Earlier
+observations below are historical and do not override resolved decisions.
+
+## Current observation — 17:24 UTC: isolated adapter approved
+
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): Travis explicitly approved the [isolated adapter](pf27-launch-adapter-decision.md). Feed revision9 records resolution against question revision1 at17:23:24UTC. The existing owner was instructed to record/check its allocation and resume adapter implementation, independent review and non-root tests across available configured Linux hosts. Owner acknowledgment is pending; no invented running-worker, privileged-installation or live-credential claim.
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): first review's dropped role retry/timeout settings P2 is accepted; its bounded correction is queued after the active matched baseline diagnostic. No new human decision, collection OFF.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): manager narrowed the recovery proposal and dispatched the lifetime-lock/session-lease correction to James at17:22. Broader recovery-send/quarantine/migration is excluded; missing-fence recovery remains a pre-live manager requirement. Shared18-test status-registration staging is unaccepted; live Slack/posting OFF.
+
+There are no open decisions in the current manager feed. Engineering, review and
+acceptance gates remain; this does not mark any sprint complete. The prior
+17:15:52 publication succeeded; this user-answer update is not yet published.
+Older stopped-worker counts and approval holds below are dated history.
+
+## Current observation — 17:12 UTC
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): native caller returned frozen at87a9a81ad,3017total/904non-test. Focused native tests pass, API208 and state287 pass; full Core3401passed/132failed/19skipped/1leaky is not clean. First independent review is running. Mendel is assigned a matched clean-launch baseline diagnostic to distinguish regressions from existing failures, without editing the candidate. No new human answer required; OFF, not S02/S03 acceptance.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): third Slack correction passed225 tests,2116total/840non-test. Review04 found a real lost-outage issue after abrupt listener termination. Source edits pause for a concrete session/fence recovery contract, including the already-known missing-fence recovery route; James prepares the bounded proposal and manager owns its decision. Shared CLI/cache/per-question status code is underway in separate staging, with a passing actual local-ingress/two-question revision test. Live Slack and posting remain OFF.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): owner021f82e6 remains clean; [isolated-adapter question](pf27-launch-adapter-decision.md) is still the last-known open decision. Main406aa3c5 remains reconciled. No inferred approval or duplicate security worker.
+
+Both source candidates have returned: zero source-implementation workers at this
+observation, one baseline-diagnostic worker, one recovery-design worker and one
+independent review. These are manager-owned next steps, not new human blockers.
+Last verified publication16:17:16UTC,4b9904d30/build-52koqg3r; user-turn private
+index/Facilities HTTP checks also passed16:55. This update awaits this heartbeat's
+one Luna sync. Earlier observations below remain historical.
+
+## Current observation — 16:13 UTC
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Mendel is dispatched on actual native Anthropic sampling from87a9a81ad: per-send durable admission, retry identity, raw usage presence, trusted original prices and native recovery tests.20 disjoint source/test/receipt files, default OFF. Manager completed the existing SQLx test dependency under the security owner's narrow lease and released it. This is implementation, not a finished sprint or live collector.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): first Slack correction passed208 tests. Independent review found three more real integration defects; James is assigned their second coherent correction. Manager owns shared registration and actual private Slack/phone/ACK proof. No new user decision required; live OFF.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): owner021f82e6 freshly checked clean; the [existing isolated-adapter approval](pf27-launch-adapter-decision.md) remains open. Dependency-file coordination did not grant that approval or resume security implementation.
+
+Last verified publication15:49:41UTC fromc8358dd9b/build-qxq_400c, both private
+endpoints and seven Facilities links passed. Current semantic update awaits
+this cycle's one Luna sync; historical observations follow.
+
+## Current observation — 15:45 UTC
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): normal-library store reviewed clean and integrated at9518184ac;367 combined state/TaskNode tests pass, one leaky. Mendel prepares the exact actual provider/runtime caller assignment. Collection remains OFF; S02 is not complete and S03 remains dependent. No new human blocker.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): first real-SDK candidate passed198 Python tests, but independent review found four ingress/recovery bugs. James is assigned their coherent correction plus the agreed narrow scopes and ongoing listener behavior. Manager owns shared registration, actual Slack/phone/agent-ACK qualification; live Slack is not operational.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): the [isolated-adapter question](pf27-launch-adapter-decision.md) remains the existing user decision, not dashboard publication approval. No approval is inferred from “press on.”
+
+Last verified publication15:23:11UTC, generationbuild-mla2tqxg, source21c8da489;
+remote and local private index/Facilities returned200. This update is queued for
+the normal Luna sync; no user click is needed. The dated observations below are history.
+
+## Current observation — 15:19 UTC
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): two earlier issues corrected with286 passing state tests; the next review found a production deletion-time race under concurrent accounting updates. Mendel is correcting it, with a specifically approved proof-size allowance. No new human answer required; collection OFF.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): James implements real Slack transport/bridge. An independent20-case human-style test design is frozen, not executed. Manager freshly verified the approved private Slack channel and Travis membership; its Agents & apps tab has no bot row, so the historical webhook installation is not a working two-way connection. Registration, bot/setup, private phone access and real reply/ACK proof remain manager-owned.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): [existing isolated-adapter question](pf27-launch-adapter-decision.md) remains open; owner021f82e6 unchanged. Other implementation continues independently.
+
+Last verified publication14:59:46UTC frome0ba52947, generationbuild-vbt9k49f;
+index and Facilities succeeded through remote and local private endpoints.
+Main406aa3c5 is still reconciled. This later semantic update awaits the current
+heartbeat's one Luna sync, not another publication click.
+
+## Current observation — 14:55 UTC
+
+Two source workers are running; dashboard publication needs no user click.
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): normal-library store candidate returned with284 tests. Independent review found two real issues: concurrent deletion on default profiles and an aggregate-overflow write that could block later reads/deletion. Mendel corrects both in the existing17-file scope. This is active engineering, not waiting on Travis; collection stays OFF.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): offline Slack recovery is reviewed/integrated at9877c058d;169 receiving Python tests and Facilities pass. James now implements [real Slack SDK transport and native-agent reply bridge](../../../docs/research/tasknode-integration/slack-live-allocation.md) from cleanba3a2457c. Manager owns shared registration and actual connection/phone qualification. Slack is not yet operational.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): [isolated adapter approval](pf27-launch-adapter-decision.md) remains unanswered; owner021f82e6 is unchanged. This existing human hold does not stop the other two initiatives.
+
+[Receiving/review evidence](integration-20260912-1356.md) preserves corrected
+failures and exact acceptance limits. Last verified publication14:22:46UTC from
+b26d1b935; this later observation awaits this heartbeat's one native Luna sync.
+
+## Current observation — 14:18 UTC
+
+Two source implementation workers are running. [Review/integration ledger](integration-20260912-1356.md)
+retains earlier results and the current bounded correction disposition.
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Mendel now implements the [normal-library opt-in store](../../../docs/research/agent-cost-accounting/production-store-allocation.md), clean launchef13b347c. Allocation reviewed clean and integrated;17 files, default no-install/collection OFF. Native354-test acceptance remains valid; full S02/S03 is not complete.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): James corrects a concurrent decision-revision race at final handoff.167 Python tests passed on the prior candidate; review03 identified this remaining issue. Manager performed scope/convergence review and authorized one narrow same-owner correction plus review, not another contract or user blocker. Real Slack remains unconnected.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): the [isolated adapter question](pf27-launch-adapter-decision.md) remains open at owner021f82e6; no new answer or repeated alert. Independent work continues.
+
+Last verified publication:14:01:06UTC from8aeebf72d. These later observations await
+this heartbeat's one native Luna Extra High sync; no publication approval is pending.
+
+## Current observation — 13:56 UTC
+
+Publication is healthy; no click is required. [Receiving evidence](integration-20260912-1356.md)
+supersedes older implementation/review observations below.
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): native ownership/deletion bridge is independently reviewed and integrated at8725e1ff7;354 combined native tests pass. Mendel prepares the exact normal-build opt-in store allocation; production source dispatch follows manager acceptance, not another human approval. S03 remains dependent.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): James corrects the second-review edited-reply recovery finding after161 Python tests. Earlier two duplicate-delivery findings were corrected; this candidate has not passed final review or integration. Real Slack transport/registration follows, with live delivery OFF.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): [isolated Linux adapter approval](pf27-launch-adapter-decision.md) remains open at unchanged owner021f82e6. Accounting and Slack continue independently; no repeated question or inferred approval.
+
+One source implementation worker runs (Slack correction), one allocation worker
+runs (accounting), and the manager owns integration. This source awaits this
+heartbeat's one verified publication; no live result is inferred.
+
+## New decision — 13:14 UTC
+
+[PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md)
+now has an [explicit approval question](pf27-launch-adapter-decision.md), ID
+`pf27-linux-launch-adapter`: authorize a narrow separately audited unsafe/FFI
+adapter while retaining the main broker's unsafe-code prohibition and all live
+authority gates. A concrete libc backend was located; this new trust-boundary
+decision supersedes the earlier manager-only capability search. Recommendation:
+approve bounded implementation and non-root tests, not installation or live use.
+Two independent implementation workers continue: accounting and Slack recovery.
+The decision is recorded for dashboard projection and asked in the manager task;
+Slack is not connected, so no Slack alert is claimed.
+
+## Current observation — 13:05 UTC, September 12
+
+Two implementation workers are dispatched, not merely a running dashboard timer.
+No new answer is required from Travis for these assignments.
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Mendel implements the [native ownership/deletion bridge](../../../docs/research/agent-cost-accounting/native-ownership-allocation.md), clean launch165da0ef3. Three allocation documents reviewed clean and integrated; exact six-path scope, real native/thread/accounting transaction proof, production OFF. Full S02 and S03 readiness are not claimed.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): James implements [offline Slack sender/reply recovery](../../../docs/research/tasknode-integration/slack-recovery-allocation.md), clean launch8dd9274b4. Allocation reviewed clean; five new files, durable attempts/uncertainty, revision-bound resolution and restart-safe handoff. Actual Slack transport, scopes/credentials and first real delivery remain next, not connected yet.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): launch implementation remains held at owner1b4ac697 for a real safe process backend. Manager now asks the sole owner to qualify one concrete GNU pidfd_spawn lead, not repeat broad dependency searches. No build/invocation/main window or new user question.
+
+F01 age and legal-ID history closure are independently supported by actual browser
+evidence. [Evidence disposition](age-evidence-20260912.md) retains DEC021's
+mixed-feed useful-content failure and baseline-provenance limit; this does not
+block the independent offline Slack assignment or create unqualified human readiness.
+Last verified publication: d19e34b16 at12:37:35Z. This source awaits this run's
+normal native Luna sync; earlier observations below remain historical.
+
+## PF-27-S04 follow-up — 12:42 UTC
+
+[Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md)
+has a concrete technical hold on its next launch implementation. The manager
+read owner checkpoint1b4ac697: inspected safe APIs either replace the caller or
+return a PID without the proposed stable process-ownership guarantee. No real
+supported backend yet meets the complete selected contract. The manager owns
+backend qualification and assessment of which API constraints are actually
+required; no safety guarantee is waived, no mock-only implementation is accepted,
+and no new question is waiting on Travis. Accounting allocation and dashboard
+browser verification continue independently. This is not a failure of the
+already-landed parser. Dashboard publication fromd19e34b16 succeeded12:37:35Z;
+this later observation awaits the next scheduled sync.
+
+## Current observation — 12:32 UTC, September 12
+
+Publication approval remains resolved; no user click or new answer is needed.
+Last verified publication was12:04:01Z from3ba7b121. The following newer receiving
+results await this heartbeat's single native Luna sync; no live result inferred.
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): complete C2 atomic retention/deletion passed independent review and was integrated atd5608c58d;346 combined state/TaskNode tests passed. Mendel now prepares the exact native ownership/deletion bridge allocation, not another retention prerequisite. No implementation of that successor is claimed yet; S03 still depends on full S02.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): F01 age fix1a6d9c8df is reviewed/integrated,122Python tests and Facilities Node regression pass. Review caught a legal decision-ID collision; corrected before integration and rerun clean. Laplace executes actual desktop/phone/history/redaction proof now. Slack sender/reply proposal is prepared; manager allocation and live configuration still pending, not user approval.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): parser406aa3c5 is reconciled. Sole owner returned concrete read-only descriptor preflight atb496da56 after the empty task readbacks. Report identifies process-launch fallback/cleanup ownership choices for manager disposition; no code/build/invocation or new execution authorization is inferred. Manager reviews the proposal next, not waiting on your answer.
+
+[Review and receiving evidence](integration-20260912-1232.md) distinguishes these
+accepted increments from full sprint, live integration or human-test readiness.
+The following older observations are retained history, not current assignments.
+
+## Current observation — 11:56 UTC heartbeat, September 12
+
+Native Luna publication succeeded at11:40:05Z fromafe535c06, including Music
+Studio and all six existing interfaces. Duplicate desktop publisher archived;
+saved native-worker instructions now prohibit redelegation. No user click needed.
+This newer source awaits the next normal verified sync; no publication inferred.
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Mendel returned without edits because C1's interim deletion-rejection assertion contradicted C2. Manager inspected and authorized only that sixth-path test adaptation, preserving full replacement success/rollback proof. Clean launchadb36c528; same native Astra High worker resumed. No user decision or review pass spent on that correction.
+- [TaskNode PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): [F01 age correction and Slack successor preparation](../../../docs/research/tasknode-integration/decision-age-followup.md) allocated. Original browser evidence independently checked; DEC021partial and DEC025advisory retained. Exact worker dispatch is reported separately; no live Slack/posting claim.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): reviewed parser406aa3c5 landed on main and reconciled into receiving43e1e7864. Fable22P3 test gap corrected with actual rerun, not relabeled clean. Main window released. Descriptor-launch proposal is manager review/preflight only; no artifact invocation approved.
+
+No newly required human answer. These observations supersede earlier assignments.
+
+## Current observation — Music Studio link integration, September 12
+
+The publication approval issue is resolved: nothing to click. Previous native
+Luna publication succeeded at10:40:01Z; this new source awaits its own verified
+publication. [Facilities link evidence](music-studio-link.md) records the
+seven-entry update, unchanged six service controls and limited keyboard proof.
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): C1 reviewed clean and integrated; combined native tests335passed,2leaky,0skipped. C2 allocation/dispatch is manager work still pending, not a running agent or user blocker. S03 remains dependent.
+- [TaskNode PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): independent browser evidence check returned; relative-age defect and partial redaction/advisory evidence gaps need targeted follow-up. Slack sender/replies and live mapping remain unqualified; posting OFF. No repeat authority question.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): static feasibility checkpoint97d4cb6e landed and is reconciled. Existing owner is authorized for bounded sealed-byte ELF inspection after recording exact allocation; no protected execution or installation claim.
+
+These observations supersede older worker assignments below. No new human decision.
+
+## Current observation — 10:37 UTC, September12
+
+Publication approval is resolved; there is nothing to click. A separate source
+pointer drift was reconciled while preserving Facilities. Final correction review
+is clean;118 Python tests and the Node UI regression pass. Native Luna publication
+postflight is next, not yet claimed. See [reconciliation details](facilities-reconciliation.md).
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): C1 returned255passing state tests. Manager explicitly authorized review of1121total/396non-test lines to preserve its detailed proof; Aristotle is reviewing. C2 remains next after acceptance, S03 dependent. No user size decision.
+- [TaskNode PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): all26 original browser cases executed at72854ec77. Helmholtz independently checks evidence; an additional static relative-age display defect is retained. Slack sender/replies and live mapping qualification remain pending; posting OFF.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): reviewed sealed-image checkpoint140e094ad landed on main and is reconciled; main window released. Sole owner is authorized for build-only static-probe feasibility under the accepted next proposal. No artifact invocation, protected execution, loader trust or installation claim.
+
+These observations supersede earlier assignments below. No new user question.
+
+## Publication recovery — 10:19 UTC, September12
+
+The obsolete publication task was archived through Codex's supported task tool.
+Codex now confirms its pending run is interrupted and the task is not loaded;
+the cancellation message confirms no further publication action. History is
+retained. There is no outstanding approval for Travis to find or click.
+The stale-task overlap hold is cleared. One fresh native Luna Extra High sync
+will publish the declared receiving source; success must be verified separately.
+Earlier approval-waiting observations below are history, not current blockers.
+
+## Current observation — 10:10 UTC, September12
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Boole is implementing C1 fixture activation/admission/retained reads at clean launch4642785db. Explicit setup state preserves all A/B assertions; C2 atomic cleanup/deletion is the fixed next increment, S03 still dependent.
+- [TaskNode PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): corrected immutable feed72854ec77 is reviewed clean and integrated at9a31f3aac;111combinedPython tests pass25.362s. McClintock is executing actual desktop/phone/keyboard cases on synthetic local pages. Independent evidence and Slack sender/reply implementation remain pending, not live.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): manifest2c7c4e6c0 landed and is reconciled. Sole owner has accepted sealed-image preparation next, with two new scoped reviews. No protected exec, loader-trust or installation claim.
+
+No new product question. Routine mapped TaskNode progress is authorized after
+technical qualification, still OFF. The old declined publisher is unchanged
+at app approval-waiting as of this observation; no overlapping sync or live claim.
+Earlier observations below are retained history.
+
+## Current observation — 10:02 UTC, September12
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): reduction B is independently reviewed and integrated at7514be8ec. All330 combined state/TaskNode tests pass. Manager prepares the coupled retention/read/delete/admission allocation, resolving fixture setup explicitly; no new user decision or S03 activation.
+- [TaskNode PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): feed wiring returned553changed lines with109 passing tests; scoped code review is running. One real-server regression and desktop/phone/keyboard plus independent evidence remain outstanding. Slack is not connected; live progress remains OFF pending qualification.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): manifest checkpoint2c7c4e6c0 passed Astra16/Fable17 and RTX3/35/356 tests (two existing affected-suite skips). Fresh exact-checkpoint owner main window granted; actual landing/release confirmation pending. Inspection only, not protected execution or installation.
+
+The declined publisher still lacks confirmed app termination; no duplicate
+publisher or live-dashboard freshness claim. Local integration continues.
+Earlier observations below are history, not current agent assignments.
+
+## Current observation — 09:46 UTC, September12
+
+Canonical source a0e2c3270 includes accepted launcher, retention-input A and
+corrected offline decisions. Two native implementation workers are now assigned:
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Rawls implements pure retention reduction B after A passed review and325combined state/TaskNode tests. Runtime/read/delete/admission and S03 remain later.
+- [TaskNode PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): Anscombe implements feed export/activation/render/health wiring in fixtures after corrected offline records passed review and100combinedPython tests. Slack delivery/reply routing follows; not connected yet.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): launcher cc931adf6 landed on main and reconciled locally. Sole owner has an accepted next manifest-inspection allocation and two new scoped reviews; no privileged installation/execution.
+
+No new user decision. Integrator recorded extra review allowances without
+resetting history. Earlier decision-record defects were reproduced and corrected
+before integration: stale answers could resolve changed context; canonical
+encoding could exceed storage limits. All original functional cases retained.
+Human browser/keyboard/phone evidence and live delivery remain unqualified.
+Routine mapped TaskNode progress is authorized once qualified, still OFF.
+Old publisher remains app approval-waiting despite decline; no overlapping sync
+or claim these new source records are live. Prior observations below are history.
+
+## Current observation — 08:48 UTC, September 12
+
+This supersedes historical candidate notes below. Canonical receiving is
+reconciled at b8da69d744aa65ea68e5b71c199d401922f84602. Two implementation workers
+were dispatched, not merely an active scheduler:
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Ohm is implementing read-only retention planning. Latest quote is reviewed/integrated; S03 awaits full S02 qualification.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): Curie is implementing offline decision records and contextual notices. Native validity is reviewed/integrated. Slack sender/replies remain unconnected.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): sole owner completed Astra12/Fable13 under an integrator extension. P3 fixture portability is a follow-up, not a runtime defect; RTX qualification and owner-controlled main landing remain distinct.
+
+Travis delegated additional review authorization to the integrator. No new
+review-spend question is needed; substantive functional/security/human/dependency
+gates remain. Routine redacted progress to existing mapped Task Node targets is
+authorized once delivery is qualified; posting remains OFF until then. Slack
+completion is prioritized within the active sprint. No task acceptance, rewards,
+financial action, public beta posting or new recipient is authorized.
+
+The old publisher was declined; app termination is being verified before fresh
+native Luna sync. This local record does not prove the new source is live.
+No repeat product approval or wallet seed is requested.
+
+These are manager observations, not automatic acceptance. Supersedes the
+September 11 recovery-source cards. Canonical sprints remain authoritative.
+
+## Workstream 1 — PF13 / security
+
+PF13 owner reports Travis completed the human test and authorized integration.
+Owner verified main d870c92dab2bf3fbb602dc3b8447fe9f3534aecb after RTX531 selected
+Rust passes, package28/gate11, build/package/wallet startup and actual-key provider,
+tool/trusted-app journeys. Manager receiving source reconciles this accepted main
+without discarding newer accounting/TaskNode work. PF35 external classifier
+qualification is separate and not proven by PF13 human acceptance. Manager must
+retain the owner's new PF27S04 allocation as a separate continuation; do not
+silently mark the whole security program complete. PF35's engineering reservation
+is draft/external in accepted main; no detector qualification claim.
+Human next action: none requested by this dashboard repair.
+
+## Workstream 2 — Accounting
+
+Defaults and conservative UTC-day aggregate expiry approved; PF60S01 archived,
+PF60S02 in progress. Latest-quote increment returned for independent manager
+review and combined-tree validation. Worker reports 242 full-crate tests passed;
+this is not yet an integrated candidate or human-test readiness.
+Next manager action: review the returned increment, integrate and allocate atomic
+retention/read/delete/admission. Custom ranges/intervals remain in dependent S03.
+Human next action: no repeat policy approval. Test runtime views only after a
+candidate-bound guide is supplied; no live billing or collection enabled.
+
+## Workstream 3 — Task Node
+
+Existing Mac publisher and native server-backed nullable-expiry validity direction
+approved. PF80S01 in progress; native-validity increment returned for independent
+manager review and combined-tree validation. Worker reports 80 full-crate tests
+passed; no public caller or live validity qualification claimed.
+Next manager action: review/integrate, then scoped dashboard decision/Slack alert
+wiring and recovery work. The private Slack channel/app exist, but automatic
+alerts are not yet operational. Live posting stays OFF independently of code
+progress. No new wallet secret needed for this implementation assignment.
+First live event still requires exact scoped authority, supported task lifecycle,
+current validity/enrollment and reviewed payload. Historical PF76 events stay
+held; no silent mapping to PF80, replay, task acceptance or public beta launch.
+
+## Dashboard checks for a human
+
+Open workstreams; click blocked labels to read the named sprint's reasons.
+Hover/focus an in-progress label, then click/tap to read its full latest note.
+Confirm the source banner names the manager receiving checkout, not recovery.
+Answering a question does not complete a sprint; disabled posting does not mean
+implementation is waiting on that answered question. A stale/failure banner
+means last-known information, even when the page itself is reachable.

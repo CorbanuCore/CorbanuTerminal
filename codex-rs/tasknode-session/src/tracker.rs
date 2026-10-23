@@ -181,9 +181,12 @@ impl TrackerStore {
             .map_err(|e| e.to_string())?;
         file.persist(self.lock_path.with_file_name("outbox.bin"))
             .map_err(|e| e.to_string())?;
+        // Windows cannot open a directory with `File::open` (os error 5).
+        #[cfg(unix)]
         std::fs::File::open(directory)
             .and_then(|f| f.sync_all())
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string())?;
+        Ok(())
     }
     pub fn state(&self) -> Result<TrackerState, String> {
         self.locked(|| {

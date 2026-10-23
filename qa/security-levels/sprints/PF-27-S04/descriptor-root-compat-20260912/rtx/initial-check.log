@@ -1,0 +1,179 @@
+    Checking subtle v2.6.1
+    Checking futures-io v0.3.32
+    Checking tinystr v0.8.3
+    Checking zeroize v1.8.2
+    Checking digest v0.10.7
+    Checking futures-util v0.3.32
+    Checking rustls-pki-types v1.14.0
+    Checking icu_locale_core v2.2.0
+    Checking sha1 v0.10.6
+    Checking getrandom v0.2.17
+    Checking aws-lc-rs v1.16.2
+    Checking ring v0.17.14
+    Checking icu_provider v2.2.0
+    Checking unicode-normalization v0.1.25
+   Compiling rustix v1.1.4
+    Checking icu_normalizer v2.2.0
+    Checking gix-utils v0.3.1
+    Checking icu_properties v2.2.0
+    Checking linux-raw-sys v0.12.1
+    Checking rustls-webpki v0.103.13
+    Checking sha2 v0.10.9
+    Checking gix-features v0.46.2
+    Checking futures-executor v0.3.32
+    Checking idna_adapter v1.2.1
+    Checking futures v0.3.31
+    Checking idna v1.1.0
+    Checking rustls v0.23.36
+    Checking rama-core v0.3.0-alpha.4
+    Checking url v2.5.8
+    Checking rustls-native-certs v0.8.3
+    Checking hyper-util v0.1.20
+    Checking tempfile v3.27.0
+    Checking sha1-checked v0.10.0
+    Checking tower v0.5.3
+    Checking gix-hash v0.23.0
+    Checking webpki-roots v1.0.5
+    Checking codex-utils-absolute-path v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/absolute-path)
+    Checking rama-http-types v0.3.0-alpha.4
+    Checking gix-hashtable v0.13.0
+    Checking publicsuffix v2.3.0
+    Checking tower-http v0.6.8
+    Checking cookie_store v0.22.1
+    Checking hickory-proto v0.25.2
+    Checking gix-object v0.58.0
+    Checking tokio-rustls v0.26.4
+    Checking hyper-rustls v0.27.7
+    Checking hyper-tls v0.6.0
+    Checking blake3 v1.8.2
+    Checking reqwest v0.12.28
+    Checking pagable v0.4.1
+    Checking rama-net v0.3.0-alpha.4
+    Checking codex-utils-rustls-provider v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/rustls-provider)
+    Checking starlark_map v0.14.2
+    Checking x509-parser v0.18.1
+    Checking hickory-resolver v0.25.2
+    Checking fd-lock v4.0.4
+    Checking gix-fs v0.19.2
+    Checking rustyline v14.0.0
+    Checking rcgen v0.14.7
+    Checking starlark_syntax v0.14.2
+    Checking codex-http-client v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/http-client)
+    Checking codex-security-policy v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/security-policy)
+    Checking starlark v0.14.2
+    Checking enumflags2 v0.7.12
+    Checking codex-utils-cache v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/cache)
+    Checking icu_locale v2.2.0
+    Checking gix-tempfile v21.0.2
+    Checking codex-utils-home-dir v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/home-dir)
+    Checking codex-utils-string v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/string)
+    Checking codex-utils-path-uri v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/path-uri)
+    Checking headers v0.4.1
+    Checking rama-http-headers v0.3.0-alpha.4
+    Checking rama-dns v0.3.0-alpha.4
+    Checking rama-udp v0.3.0-alpha.4
+    Checking rama-unix v0.3.0-alpha.4
+    Checking rama-tls-rustls v0.3.0-alpha.4
+    Checking icu_decimal v2.2.0
+    Checking gix-lock v21.0.2
+    Checking codex-utils-image v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/image)
+    Checking rama-http v0.3.0-alpha.4
+    Checking landlock v0.4.4
+    Checking codex-extension-items v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/ext/items)
+    Checking concurrent-queue v2.5.0
+    Checking codex-async-utils v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/async-utils)
+    Checking tungstenite v0.27.0 (https://github.com/openai-oss-forks/tungstenite-rs?rev=4fffad30fe373adbdcffab9545e9e9bf4f2fc19f#4fffad30)
+    Checking event-listener v5.4.1
+    Checking rama-tcp v0.3.0-alpha.4
+    Checking gix-commitgraph v0.35.0
+    Checking hyper-timeout v0.5.2
+    Checking gix-quote v0.7.0
+   Compiling nix v0.30.1
+    Checking tonic v0.14.3
+    Checking rama-socks5 v0.3.0-alpha.4
+    Checking gix-revwalk v0.29.0
+    Checking event-listener-strategy v0.5.4
+    Checking tokio-tungstenite v0.28.0 (https://github.com/openai-oss-forks/tokio-tungstenite?rev=0e5b2d73aa18dd9f0a50ee9ff199d5aef7594186#0e5b2d73)
+    Checking gix-ref v0.61.0
+    Checking gix-command v0.8.0
+    Checking codex-client v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/codex-client)
+    Checking codex-websocket-client v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/websocket-client)
+    Checking async-channel v2.5.0
+    Checking tonic-prost v0.14.3
+    Checking opentelemetry_sdk v0.31.0
+    Checking gix-glob v0.24.0
+    Checking gix-pack v0.68.0
+    Checking gix-transport v0.55.1
+    Checking gix-revision v0.43.0
+    Checking gix-shallow v0.10.0
+    Checking opentelemetry-http v0.31.0
+    Checking gix-config v0.54.0
+    Checking rama-http-core v0.3.0-alpha.4
+    Checking opentelemetry-proto v0.31.0
+    Checking gix-protocol v0.59.0
+    Checking gix-refspec v0.39.0
+    Checking gix-odb v0.78.0
+    Checking os_info v3.14.0
+    Checking codex-execpolicy v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/execpolicy)
+    Checking gix-discover v0.49.0
+    Checking gix-traverse v0.55.0
+    Checking gix-diff v0.61.0
+    Checking opentelemetry-otlp v0.31.0
+    Checking gethostname v1.1.0
+    Checking codex-product-brand v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/product-brand)
+    Checking codex-utils-path v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/path-utils)
+    Checking gix v0.81.0
+    Checking codex-security-audit v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/security-audit)
+    Checking codex-linux-pidfd-spawn v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/linux-pidfd-spawn)
+    Checking hmac v0.12.1
+error[E0369]: binary operation `==` cannot be applied to type `Option<rustix::process::WaitIdStatus>`
+   --> linux-pidfd-spawn/src/spawn_tests.rs:199:5
+    |
+199 |     assert_eq!(child.try_wait().unwrap(), None);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     Option<rustix::process::WaitIdStatus>
+    |     Option<rustix::process::WaitIdStatus>
+    |
+note: `rustix::process::WaitIdStatus` does not implement `PartialEq`
+   --> /home/travis/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/src/process/wait.rs:189:1
+    |
+189 | pub struct WaitIdStatus(pub(crate) backend::c::siginfo_t);
+    | ^^^^^^^^^^^^^^^^^^^^^^^ `rustix::process::WaitIdStatus` is defined in another crate
+    = note: this error originates in the macro `$crate::assert_eq` which comes from the expansion of the macro `assert_eq` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0369]: binary operation `==` cannot be applied to type `Option<rustix::process::WaitIdStatus>`
+   --> linux-pidfd-spawn/src/spawn_tests.rs:208:5
+    |
+208 |     assert_eq!(other.try_wait().unwrap(), None);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     Option<rustix::process::WaitIdStatus>
+    |     Option<rustix::process::WaitIdStatus>
+    |
+note: `rustix::process::WaitIdStatus` does not implement `PartialEq`
+   --> /home/travis/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/src/process/wait.rs:189:1
+    |
+189 | pub struct WaitIdStatus(pub(crate) backend::c::siginfo_t);
+    | ^^^^^^^^^^^^^^^^^^^^^^^ `rustix::process::WaitIdStatus` is defined in another crate
+    = note: this error originates in the macro `$crate::assert_eq` which comes from the expansion of the macro `assert_eq` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0369]: binary operation `==` cannot be applied to type `Option<rustix::process::WaitIdStatus>`
+   --> linux-pidfd-spawn/src/spawn_tests.rs:233:5
+    |
+233 |     assert_eq!(child.try_wait().unwrap(), None);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     |
+    |     Option<rustix::process::WaitIdStatus>
+    |     Option<rustix::process::WaitIdStatus>
+    |
+note: `rustix::process::WaitIdStatus` does not implement `PartialEq`
+   --> /home/travis/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/src/process/wait.rs:189:1
+    |
+189 | pub struct WaitIdStatus(pub(crate) backend::c::siginfo_t);
+    | ^^^^^^^^^^^^^^^^^^^^^^^ `rustix::process::WaitIdStatus` is defined in another crate
+    = note: this error originates in the macro `$crate::assert_eq` which comes from the expansion of the macro `assert_eq` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+For more information about this error, try `rustc --explain E0369`.
+error: could not compile `codex-linux-pidfd-spawn` (lib test) due to 3 previous errors
+warning: build failed, waiting for other jobs to finish...

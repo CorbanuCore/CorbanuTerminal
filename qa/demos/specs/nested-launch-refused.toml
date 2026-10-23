@@ -1,0 +1,71 @@
+# Under Aggressive (nested agents: refuse, the default) an agent command that
+# starts `corbanu exec` is refused, also with the marker variable dropped.
+# Record with
+#   PF24_CANDIDATE=<corbanu> --bin qa/security-levels/pf24-followups/nested-launch/restart-once.sh
+id = "nested-launch-refused"
+feature = "Aggressive refuses agents started by agent commands"
+expected = "With Aggressive active, the agent's `corbanu exec` is refused, and so is the same launch with CORBANU_SECURITY_ORIGIN removed."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Nested agents: refuse"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive \\(nested agents: refuse\\)"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Enter"
+[[steps]]
+type = "/exit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "restarting Corbanu Terminal.*model: +glm-5\\.2"
+timeout = 60
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run exactly this shell command once, without changing it: corbanu exec 'say hi' 2>&1 | tail -2; env -u CORBANU_SECURITY_ORIGIN corbanu exec 'say hi' 2>&1 | tail -2 . Then tell me in one sentence what happened."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Would you like to run"
+timeout = 120
+compress = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)• Ran corbanu.*\\n• \\S"
+timeout = 120
+compress = 3
+[[steps]]
+pause = 4.0

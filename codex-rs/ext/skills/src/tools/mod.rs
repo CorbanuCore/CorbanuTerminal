@@ -23,7 +23,6 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
-use tokio::sync::OnceCell;
 
 use crate::catalog::SkillAuthority;
 use crate::catalog::SkillCatalog;
@@ -56,7 +55,6 @@ pub(crate) fn skill_tools(
         orchestrator_available,
         executor_query,
         sandbox_contexts,
-        executor_catalog: Arc::new(OnceCell::new()),
         shadow_selection,
     };
     vec![
@@ -75,7 +73,6 @@ struct SkillToolContext {
     orchestrator_available: bool,
     executor_query: Option<SkillListQuery>,
     sandbox_contexts: Option<Arc<HashMap<String, FileSystemSandboxContext>>>,
-    executor_catalog: Arc<OnceCell<SkillCatalog>>,
     shadow_selection: Arc<ShadowSelectionExperiment>,
 }
 
@@ -108,10 +105,11 @@ impl SkillToolContext {
                     return SkillCatalog::default();
                 };
                 query.turn_id = turn_id.to_string();
-                self.executor_catalog
-                    .get_or_init(|| self.providers.list_executor_for_turn(query))
+                // Selected roots are stable for the thread, so reuse the catalog that World State
+                // already discovered instead of rescanning the executor filesystem on every call.
+                self.thread_state
+                    .executor_catalog_snapshot(&self.providers, query)
                     .await
-                    .clone()
             }
         }
     }

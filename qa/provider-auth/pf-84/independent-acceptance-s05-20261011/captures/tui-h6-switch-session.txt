@@ -1,0 +1,29 @@
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.3-flash   /model to change          │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s05acc/ws │
+╰──────────────────────────────────────────────────────╯
+⚠ Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set
+  `suppress_unstable_features_warning = true` in $S/homes/h6/config.toml.
+› Reply with exactly the word pong and nothing else.
+• pong
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.3-flash   /model to change          │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s05acc/ws │
+╰──────────────────────────────────────────────────────╯
+Token usage: total=7,614 input=7,611 output=3
+To continue this session, run corbanu resume 01a12b50-4aad-7fa1-98ee-0390a2735e2f
+• New session: requests to zai use account `work`.
+⚠ Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set
+  `suppress_unstable_features_warning = true` in $S/homes/h6/config.toml.
+› Reply with exactly the word pong and nothing else.
+• pong
+› Write tests for @filename
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: 11.8 tok/s
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account work                │
+│  Session:              01a12b50-fbab-7401-b9c3-7605a81f6e18                              │
+To continue this session, run corbanu resume 01a12b50-fbab-7401-b9c3-7605a81f6e18
+EXITED-0

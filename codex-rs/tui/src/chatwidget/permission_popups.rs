@@ -142,7 +142,7 @@ impl ChatWidget {
 
         let footer_note = show_elevate_sandbox_hint.then(|| {
             vec![
-                "The non-admin sandbox protects your files and prevents network access under most circumstances. However, it carries greater risk if prompt injected. To upgrade to the default sandbox, run ".dim(),
+                "The non-admin sandbox protects your files and prevents network access under most circumstances, but sandboxed commands can delete or move files you own outside your workspace, and it carries greater risk if prompt injected. To upgrade to the default sandbox, run ".dim(),
                 "/setup-default-sandbox".cyan(),
                 ".".dim(),
             ]
@@ -240,37 +240,20 @@ impl ChatWidget {
 
     pub(super) fn approval_preset_actions(
         approval: AskForApproval,
-        permission_profile: PermissionProfile,
+        _permission_profile: PermissionProfile,
         active_permission_profile: ActivePermissionProfile,
         label: String,
         approvals_reviewer: ApprovalsReviewer,
     ) -> Vec<SelectionAction> {
         vec![Box::new(move |tx| {
-            tx.send(AppEvent::CodexOp(AppCommand::override_turn_context(
-                /*cwd*/ None,
-                Some(approval),
-                Some(approvals_reviewer),
-                Some(permission_profile.clone()),
-                Some(active_permission_profile.clone()),
-                /*windows_sandbox_level*/ None,
-                /*model*/ None,
-                /*effort*/ None,
-                /*summary*/ None,
-                /*service_tier*/ None,
-                /*collaboration_mode*/ None,
-                /*personality*/ None,
-            )));
-            tx.send(AppEvent::UpdateAskForApprovalPolicy(approval));
-            tx.send(AppEvent::UpdateActivePermissionProfile(
-                active_permission_profile.clone(),
+            tx.send(AppEvent::SelectPermissionPreset(
+                PermissionProfileSelection {
+                    profile_id: active_permission_profile.id.clone(),
+                    approval_policy: Some(approval),
+                    approvals_reviewer: Some(approvals_reviewer),
+                    display_label: label.clone(),
+                },
             ));
-            tx.send(AppEvent::UpdateApprovalsReviewer(approvals_reviewer));
-            tx.send(AppEvent::InsertHistoryCell(Box::new(
-                history_cell::new_info_event(
-                    format!("Permissions updated to {label}"),
-                    /*hint*/ None,
-                ),
-            )));
         })]
     }
 
@@ -410,7 +393,7 @@ impl ChatWidget {
         let mut header_children: Vec<Box<dyn Renderable>> = Vec::new();
         let title_line = Line::from("Enable full access?").bold();
         let info_line = Line::from(vec![
-            "When Codex runs with full access, it can edit any file on your computer and run commands with network, without your approval. "
+            "When Corbanu runs with full access, it can edit any file on your computer and run commands with network, without your approval. "
                 .into(),
             "Exercise caution when enabling full access. This significantly increases the risk of data loss, leaks, or unexpected behavior."
                 .fg(Color::Red),
@@ -434,7 +417,21 @@ impl ChatWidget {
             Self::permission_profile_selection_actions,
         );
 
+        // Cancel is the safe default, so Enter alone keeps the current
+        // permissions. Say so; otherwise Enter looks like it did nothing.
+        let report_not_enabled = |tx: &AppEventSender| {
+            tx.send(AppEvent::InsertHistoryCell(Box::new(
+                history_cell::new_info_event(
+                    "Full access was not enabled; permissions are unchanged.".to_string(),
+                    Some(
+                        "To enable it, choose Full Access, then \"Yes, continue anyway\"."
+                            .to_string(),
+                    ),
+                ),
+            )));
+        };
         let deny_actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
+            report_not_enabled(tx);
             if return_to_permissions {
                 tx.send(AppEvent::OpenPermissionsPopup);
             } else {
@@ -465,6 +462,7 @@ impl ChatWidget {
             header: Box::new(header),
             initial_selected_idx: Some(1),
             allow_number_shortcuts: false,
+            on_cancel: Some(Box::new(report_not_enabled)),
             ..Default::default()
         });
     }

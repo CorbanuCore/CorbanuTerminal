@@ -1,0 +1,374 @@
+## candidate 53c02c9301 (origin/main); HOME=$S/fh-b1; CORBANU_HOME=$S/homes/b1; mock 127.0.0.1:34721
+
+## default login: ChatGPT user deflt (device code), access tokens 30 s
+$ run $S/bin/corbanu-cand $S/homes/b1 login --device-auth --experimental_issuer http://127.0.0.1:34721
+Successfully logged in
+[exit 0]
+   default auth.json: a3b53f17dd0f4458
+
+## B3/B6 named sign-ins (device code), same-user cases
+$ run $S/bin/corbanu-cand $S/homes/b1 login --account work --device-auth --experimental_issuer http://127.0.0.1:34721
+Signed in OpenAI account `work` (ChatGPT sign-in · w…@example.com · Plus).
+[exit 0]
+$ run $S/bin/corbanu-cand $S/homes/b1 login --account play --device-auth --experimental_issuer http://127.0.0.1:34721
+Signed in OpenAI account `play` (ChatGPT sign-in · p…@example.com · Plus).
+[exit 0]
+$ run $S/bin/corbanu-cand $S/homes/b1 login --account twin --device-auth --experimental_issuer http://127.0.0.1:34721
+Signed in OpenAI account `twin` (ChatGPT sign-in · w…@example.com · Plus).
+Warning: this is the same ChatGPT user as account(s) `work`. They share that user's usage limits, and signing out of one can end the other's session.
+[exit 0]
+$ run $S/bin/corbanu-cand $S/homes/b1 login --account dup --device-auth --experimental_issuer http://127.0.0.1:34721
+Signed in OpenAI account `dup` (ChatGPT sign-in · d…@example.com · Plus).
+Warning: this is the same ChatGPT user as account(s) `default`. They share that user's usage limits, and signing out of one can end the other's session.
+[exit 0]
+$ run $S/bin/corbanu-cand $S/homes/b1 login --account bad --device-auth --experimental_issuer http://127.0.0.1:34721
+Signed in OpenAI account `bad` (ChatGPT sign-in · b…@example.com · Plus).
+[exit 0]
+$ run $S/bin/corbanu-cand $S/homes/b1 login --account key --with-api-key
+Reading API key from stdin...
+Signed in OpenAI account `key` (OpenAI API key).
+[exit 0]
+$ run $S/bin/corbanu-cand $S/homes/b1 login --account fake --with-api-key
+Reading API key from stdin...
+Signed in OpenAI account `fake` (OpenAI API key).
+[exit 0]
+   default auth.json: a3b53f17dd0f4458
+
+## B5 display
+$ run $S/bin/corbanu-cand $S/homes/b1 account list openai
+openai	bad	chatgpt_auth	ChatGPT sign-in · b…@example.com · Plus
+openai	dup	chatgpt_auth	ChatGPT sign-in · d…@example.com · Plus
+openai	fake	chatgpt_auth	OpenAI API key
+openai	key	chatgpt_auth	OpenAI API key
+openai	play	chatgpt_auth	ChatGPT sign-in · p…@example.com · Plus
+openai	twin	chatgpt_auth	ChatGPT sign-in · w…@example.com · Plus
+openai	work	chatgpt_auth	ChatGPT sign-in · w…@example.com · Plus
+[exit 0]
+$ run $S/bin/corbanu-cand $S/homes/b1 login --account work status
+OpenAI account `work`: ChatGPT sign-in · w…@example.com · Plus
+[exit 0]
+$ run $S/bin/corbanu-cand $S/homes/b1 login --account twin status
+OpenAI account `twin`: ChatGPT sign-in · w…@example.com · Plus
+[exit 0]
+$ run $S/bin/corbanu-cand $S/homes/b1 login --account key status
+OpenAI account `key`: OpenAI API key
+[exit 0]
+$ run $S/bin/corbanu-cand $S/homes/b1 login --account bad status
+OpenAI account `bad`: ChatGPT sign-in · b…@example.com · Plus
+[exit 0]
+$ run $S/bin/corbanu-cand $S/homes/b1 login --account ghost status
+OpenAI account `ghost` is not signed in
+[exit 1]
+$ run $S/bin/corbanu-cand $S/homes/b1 login status
+Logged in using ChatGPT
+[exit 0]
+
+## B1 storage: vault labels and files
+$S/homes/b1/auth.json
+$S/homes/b1/secrets/.vault.lock
+$S/homes/b1/secrets/keyring-fallback/29d949ea1ae975c50be3e472e65f1ebca4422ac3fa40bd08a67a7bb680866c59.key
+$S/homes/b1/secrets/local.age
+$S/homes/b1/tmp/arg0/codex-arg0pA1YuE/.lock
+home files holding a named refresh token / key in clear:
+
+## B2 refresh write-back: wait for the 30 s tokens to expire; refreshed tokens live 8 s; decoys set
+(parallel exec on work and play)
+-- work:
+   1 [exit 0]
+   2 mock: chatgpt work gen30
+-- play:
+   1 [exit 0]
+   2 mock: chatgpt play gen30
+-- mock during the parallel runs: refreshes / rejections per user, and the user+gen each /responses carried
+   30 x refresh play 
+   29 x refresh work 
+   1 x responses play gen30
+   1 x responses work gen30
+   default auth.json: a3b53f17dd0f4458
+(new process on work after its refreshed token expired: gen continues from the vault)
+mock: chatgpt work gen58
+mock: chatgpt work gen58
+[exit 0]
+   mock: {"ev": "refresh", "user": "work", "frm": 30, "to": 31}
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "work", "gen": 58, "expired": false}, "model": null}
+(twin = same ChatGPT user as work, own store)
+mock: chatgpt work~2 gen30
+mock: chatgpt work~2 gen30
+[exit 0]
+   mock: {"ev": "refresh", "user": "work~2", "frm": 1, "to": 2}
+   mock: {"ev": "refresh", "user": "work~2", "frm": 2, "to": 3}
+   mock: {"ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "work~2", "gen": 3, "expired": false}}
+
+## B9 API-key accounts with env decoys
+$ run $S/bin/corbanu-cand $S/homes/b1 exec --skip-git-repo-check -C $S/ws --account key Reply with exactly: pong
+mock: bearer keyacct
+mock: bearer keyacct
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "keyacct"}, "model": "gpt-5.4"}
+$ run $S/bin/corbanu-cand $S/homes/b1 exec --skip-git-repo-check -C $S/ws --account fake Reply with exactly: pong
+ERROR: unexpected status 401 Unauthorized: Incorrect API key, url: http://127.0.0.1:34721/v1/responses
+ERROR: unexpected status 401 Unauthorized: Incorrect API key, url: http://127.0.0.1:34721/v1/responses
+ERROR: OpenAI (openai) account `fake` was rejected. Sign it in again with `corbanu login --account fake` (add `--with-api-key` for an API key), or choose another account. The default OpenAI credential is unchanged.
+[exit 1]
+   mock: {"ev": "responses-401", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "fakekey"}, "model": "gpt-5.4"}
+
+## B8 rejected refresh
+$ run $S/bin/corbanu-cand $S/homes/b1 exec --skip-git-repo-check -C $S/ws --account bad Reply with exactly: pong
+2026-10-13T07:46:11.823592Z ERROR codex_login::auth::manager: Failed to refresh token: 401 Unauthorized: {"error": {"code": "refresh_token_expired", "message": "expired"}}
+2026-10-13T07:46:11.840652Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:11.843706Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:11.867040Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:11.875932Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:11.991402Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:11.996141Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:11.999614Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:12.000518Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:12.698011Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:12.708390Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:12.726573Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:12.770260Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:12.771392Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:12.772576Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:12.778500Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:12.782205Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:12.783349Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:12.859984Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:12.862154Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-13T07:46:12.863369Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+ERROR: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+ERROR: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+ERROR: OpenAI (openai) account `bad` was rejected. Sign it in again with `corbanu login --account bad` (add `--with-api-key` for an API key), or choose another account. The default OpenAI credential is unchanged.
+[exit 1]
+   mock: {"ev": "refresh-rejected", "user": "bad", "why": "expired"}
+   mock: {"ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "bad", "gen": 1, "expired": true}}
+   mock: {"ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "bad", "gen": 1, "expired": true}}
+   mock: {"ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "bad", "gen": 1, "expired": true}}
+   mock: {"ev": "responses-401", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "bad", "gen": 1, "expired": true}, "model": null}
+   mock: {"ev": "responses-401", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "bad", "gen": 1, "expired": true}, "model": null}
+
+## C3 missing account
+$ run $S/bin/corbanu-cand $S/homes/b1 exec --skip-git-repo-check -C $S/ws --account ghost Reply with exactly: pong
+Error: thread/start: thread/start failed: account `ghost` of provider `openai` is not signed in; sign in with `corbanu login --account ghost` or pick another with `--account` (see `corbanu account list`) (code -32600)
+[exit 1]
+$ run $S/bin/corbanu-cand $S/homes/b1 exec --skip-git-repo-check -C $S/ws --account openai:ghost Reply with exactly: pong
+Error: thread/start: thread/start failed: account `ghost` of provider `openai` is not signed in; sign in with `corbanu login --account ghost` or pick another with `--account` (see `corbanu account list`) (code -32600)
+[exit 1]
+   default auth.json: a3b53f17dd0f4458
+   (D0=a3b53f17dd0f4458)
+
+## B4 default login unreadable (chmod 000): named session still works
+$ run $S/bin/corbanu-cand $S/homes/b1 exec --skip-git-repo-check -C $S/ws --account key Reply with exactly: pong
+mock: bearer keyacct
+mock: bearer keyacct
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "keyacct"}, "model": "gpt-5.4"}
+   default auth.json: a3b53f17dd0f4458
+
+## B3 re-login: another user (old tokens revoked), same user (nothing revoked)
+$ run $S/bin/corbanu-cand $S/homes/b1 login --account play --device-auth --experimental_issuer http://127.0.0.1:34721
+Signed in OpenAI account `play` (ChatGPT sign-in · p…@example.com · Plus).
+[exit 0]
+   mock: {"ev": "sign-in", "user": "play2"}
+   mock: {"ev": "revoke", "user": "play", "kind": "refresh_token"}
+$ run $S/bin/corbanu-cand $S/homes/b1 login --account play --device-auth --experimental_issuer http://127.0.0.1:34721
+Signed in OpenAI account `play` (ChatGPT sign-in · p…@example.com · Plus).
+[exit 0]
+   mock: {"ev": "sign-in", "user": "play2~2"}
+
+## B3 logout --account play (revokes only play)
+$ run $S/bin/corbanu-cand $S/homes/b1 logout --account play
+Signed out OpenAI account `play`
+[exit 0]
+   mock: {"ev": "revoke", "user": "play2~2", "kind": "refresh_token"}
+$ run $S/bin/corbanu-cand $S/homes/b1 logout --account play
+OpenAI account `play` is not signed in
+[exit 0]
+$ run $S/bin/corbanu-cand $S/homes/b1 logout --account ghost
+OpenAI account `ghost` is not signed in
+[exit 0]
+$ run $S/bin/corbanu-cand $S/homes/b1 exec --skip-git-repo-check -C $S/ws --account play Reply with exactly: pong
+Error: thread/start: thread/start failed: account `play` of provider `openai` is not signed in; sign in with `corbanu login --account play` or pick another with `--account` (see `corbanu account list`) (code -32600)
+[exit 1]
+$ run $S/bin/corbanu-cand $S/homes/b1 account list openai
+openai	bad	chatgpt_auth	ChatGPT sign-in · b…@example.com · Plus
+openai	dup	chatgpt_auth	ChatGPT sign-in · d…@example.com · Plus
+openai	fake	chatgpt_auth	OpenAI API key
+openai	key	chatgpt_auth	OpenAI API key
+openai	twin	chatgpt_auth	ChatGPT sign-in · w…@example.com · Plus
+openai	work	chatgpt_auth	ChatGPT sign-in · w…@example.com · Plus
+[exit 0]
+   default auth.json: a3b53f17dd0f4458
+
+## B3 rename/remove; rename hint when [provider_accounts] names the old name
+$ run $S/bin/corbanu-cand $S/homes/b1 account rename openai twin twin2
+Renamed openai account `twin` to `twin2`.
+Note: `[provider_accounts]` still selects `twin` for openai; new sessions refuse it until you change it to `twin2`. A running session on `twin` loses it at its next request.
+[exit 0]
+[provider_accounts]
+openai = "twin"
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "work~2", "gen": 32, "expired": false}, "model": null}
+$ run $S/bin/corbanu-cand $S/homes/b1 account remove openai twin2
+Signed out and removed openai account `twin2`.
+[exit 0]
+   mock: {"ev": "revoke", "user": "work~2", "kind": "refresh_token"}
+$ run $S/bin/corbanu-cand $S/homes/b1 account list openai
+openai	bad	chatgpt_auth	ChatGPT sign-in · b…@example.com · Plus
+openai	dup	chatgpt_auth	ChatGPT sign-in · d…@example.com · Plus
+openai	fake	chatgpt_auth	OpenAI API key
+openai	key	chatgpt_auth	OpenAI API key
+openai	work	chatgpt_auth	ChatGPT sign-in · w…@example.com · Plus
+[exit 0]
+
+## default session (decoys set) after all named runs: default login still used and unchanged
+$ run $S/bin/corbanu-cand $S/homes/b1 exec --skip-git-repo-check -C $S/ws Reply with exactly: pong
+mock: bearer codexenv
+mock: bearer codexenv
+[exit 0]
+   mock: {"ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "codexenv"}, "model": "gpt-5.4"}
+   default auth.json: a3b53f17dd0f4458
+   (D0=a3b53f17dd0f4458)
+
+## full mock log (credential-bearing events)
+   {"t": 1791877478.201, "ev": "sign-in", "user": "deflt"}
+   {"t": 1791877478.299, "ev": "sign-in", "user": "work"}
+   {"t": 1791877479.094, "ev": "sign-in", "user": "play"}
+   {"t": 1791877480.081, "ev": "sign-in", "user": "work~2"}
+   {"t": 1791877481.091, "ev": "sign-in", "user": "deflt~2"}
+   {"t": 1791877482.187, "ev": "sign-in", "user": "bad"}
+   {"t": 1791877517.098, "ev": "refresh", "user": "work", "frm": 1, "to": 2}
+   {"t": 1791877517.511, "ev": "refresh", "user": "play", "frm": 1, "to": 2}
+   {"t": 1791877517.512, "ev": "refresh", "user": "work", "frm": 2, "to": 3}
+   {"t": 1791877518.387, "ev": "refresh", "user": "work", "frm": 3, "to": 4}
+   {"t": 1791877518.388, "ev": "refresh", "user": "play", "frm": 2, "to": 3}
+   {"t": 1791877519.177, "ev": "refresh", "user": "work", "frm": 4, "to": 5}
+   {"t": 1791877519.177, "ev": "refresh", "user": "play", "frm": 3, "to": 4}
+   {"t": 1791877519.959, "ev": "refresh", "user": "work", "frm": 5, "to": 6}
+   {"t": 1791877519.959, "ev": "refresh", "user": "play", "frm": 4, "to": 5}
+   {"t": 1791877520.803, "ev": "refresh", "user": "work", "frm": 6, "to": 7}
+   {"t": 1791877521.181, "ev": "refresh", "user": "play", "frm": 5, "to": 6}
+   {"t": 1791877521.558, "ev": "refresh", "user": "work", "frm": 7, "to": 8}
+   {"t": 1791877521.943, "ev": "refresh", "user": "play", "frm": 6, "to": 7}
+   {"t": 1791877521.944, "ev": "refresh", "user": "work", "frm": 8, "to": 9}
+   {"t": 1791877522.693, "ev": "refresh", "user": "play", "frm": 7, "to": 8}
+   {"t": 1791877522.694, "ev": "refresh", "user": "work", "frm": 9, "to": 10}
+   {"t": 1791877523.444, "ev": "refresh", "user": "play", "frm": 8, "to": 9}
+   {"t": 1791877523.446, "ev": "refresh", "user": "work", "frm": 10, "to": 11}
+   {"t": 1791877524.184, "ev": "refresh", "user": "play", "frm": 9, "to": 10}
+   {"t": 1791877524.184, "ev": "refresh", "user": "work", "frm": 11, "to": 12}
+   {"t": 1791877524.923, "ev": "refresh", "user": "play", "frm": 10, "to": 11}
+   {"t": 1791877525.292, "ev": "refresh", "user": "work", "frm": 12, "to": 13}
+   {"t": 1791877525.292, "ev": "refresh", "user": "play", "frm": 11, "to": 12}
+   {"t": 1791877526.058, "ev": "refresh", "user": "work", "frm": 13, "to": 14}
+   {"t": 1791877526.059, "ev": "refresh", "user": "play", "frm": 12, "to": 13}
+   {"t": 1791877526.835, "ev": "refresh", "user": "work", "frm": 14, "to": 15}
+   {"t": 1791877526.836, "ev": "refresh", "user": "play", "frm": 13, "to": 14}
+   {"t": 1791877527.591, "ev": "refresh", "user": "work", "frm": 15, "to": 16}
+   {"t": 1791877527.592, "ev": "refresh", "user": "play", "frm": 14, "to": 15}
+   {"t": 1791877528.341, "ev": "refresh", "user": "work", "frm": 16, "to": 17}
+   {"t": 1791877528.343, "ev": "refresh", "user": "play", "frm": 15, "to": 16}
+   {"t": 1791877529.076, "ev": "refresh", "user": "work", "frm": 17, "to": 18}
+   {"t": 1791877529.078, "ev": "refresh", "user": "play", "frm": 16, "to": 17}
+   {"t": 1791877529.846, "ev": "refresh", "user": "work", "frm": 18, "to": 19}
+   {"t": 1791877529.847, "ev": "refresh", "user": "play", "frm": 17, "to": 18}
+   {"t": 1791877530.638, "ev": "refresh", "user": "work", "frm": 19, "to": 20}
+   {"t": 1791877530.638, "ev": "refresh", "user": "play", "frm": 18, "to": 19}
+   {"t": 1791877531.418, "ev": "refresh", "user": "work", "frm": 20, "to": 21}
+   {"t": 1791877531.42, "ev": "refresh", "user": "play", "frm": 19, "to": 20}
+   {"t": 1791877532.2, "ev": "refresh", "user": "work", "frm": 21, "to": 22}
+   {"t": 1791877532.201, "ev": "refresh", "user": "play", "frm": 20, "to": 21}
+   {"t": 1791877532.989, "ev": "refresh", "user": "work", "frm": 22, "to": 23}
+   {"t": 1791877532.991, "ev": "refresh", "user": "play", "frm": 21, "to": 22}
+   {"t": 1791877533.765, "ev": "refresh", "user": "work", "frm": 23, "to": 24}
+   {"t": 1791877533.765, "ev": "refresh", "user": "play", "frm": 22, "to": 23}
+   {"t": 1791877534.547, "ev": "refresh", "user": "work", "frm": 24, "to": 25}
+   {"t": 1791877534.549, "ev": "refresh", "user": "play", "frm": 23, "to": 24}
+   {"t": 1791877535.337, "ev": "refresh", "user": "work", "frm": 25, "to": 26}
+   {"t": 1791877535.339, "ev": "refresh", "user": "play", "frm": 24, "to": 25}
+   {"t": 1791877536.137, "ev": "refresh", "user": "work", "frm": 26, "to": 27}
+   {"t": 1791877536.14, "ev": "refresh", "user": "play", "frm": 25, "to": 26}
+   {"t": 1791877536.915, "ev": "refresh", "user": "work", "frm": 27, "to": 28}
+   {"t": 1791877536.916, "ev": "refresh", "user": "play", "frm": 26, "to": 27}
+   {"t": 1791877537.711, "ev": "refresh", "user": "work", "frm": 28, "to": 29}
+   {"t": 1791877537.712, "ev": "refresh", "user": "play", "frm": 27, "to": 28}
+   {"t": 1791877538.477, "ev": "refresh", "user": "work", "frm": 29, "to": 30}
+   {"t": 1791877538.477, "ev": "refresh", "user": "play", "frm": 28, "to": 29}
+   {"t": 1791877539.719, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "work", "gen": 30, "expired": false}, "model": null}
+   {"t": 1791877540.369, "ev": "refresh", "user": "play", "frm": 29, "to": 30}
+   {"t": 1791877540.938, "ev": "refresh", "user": "play", "frm": 30, "to": 31}
+   {"t": 1791877540.975, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "play", "gen": 30, "expired": false}, "model": null}
+   {"t": 1791877550.833, "ev": "refresh", "user": "work", "frm": 30, "to": 31}
+   {"t": 1791877551.156, "ev": "refresh", "user": "work", "frm": 31, "to": 32}
+   {"t": 1791877551.435, "ev": "refresh", "user": "work", "frm": 32, "to": 33}
+   {"t": 1791877551.712, "ev": "refresh", "user": "work", "frm": 33, "to": 34}
+   {"t": 1791877552.058, "ev": "refresh", "user": "work", "frm": 34, "to": 35}
+   {"t": 1791877552.326, "ev": "refresh", "user": "work", "frm": 35, "to": 36}
+   {"t": 1791877552.603, "ev": "refresh", "user": "work", "frm": 36, "to": 37}
+   {"t": 1791877552.881, "ev": "refresh", "user": "work", "frm": 37, "to": 38}
+   {"t": 1791877553.138, "ev": "refresh", "user": "work", "frm": 38, "to": 39}
+   {"t": 1791877553.393, "ev": "refresh", "user": "work", "frm": 39, "to": 40}
+   {"t": 1791877553.644, "ev": "refresh", "user": "work", "frm": 40, "to": 41}
+   {"t": 1791877553.895, "ev": "refresh", "user": "work", "frm": 41, "to": 42}
+   {"t": 1791877554.16, "ev": "refresh", "user": "work", "frm": 42, "to": 43}
+   {"t": 1791877554.423, "ev": "refresh", "user": "work", "frm": 43, "to": 44}
+   {"t": 1791877554.678, "ev": "refresh", "user": "work", "frm": 44, "to": 45}
+   {"t": 1791877554.944, "ev": "refresh", "user": "work", "frm": 45, "to": 46}
+   {"t": 1791877555.221, "ev": "refresh", "user": "work", "frm": 46, "to": 47}
+   {"t": 1791877555.471, "ev": "refresh", "user": "work", "frm": 47, "to": 48}
+   {"t": 1791877555.724, "ev": "refresh", "user": "work", "frm": 48, "to": 49}
+   {"t": 1791877555.972, "ev": "refresh", "user": "work", "frm": 49, "to": 50}
+   {"t": 1791877556.235, "ev": "refresh", "user": "work", "frm": 50, "to": 51}
+   {"t": 1791877556.497, "ev": "refresh", "user": "work", "frm": 51, "to": 52}
+   {"t": 1791877556.776, "ev": "refresh", "user": "work", "frm": 52, "to": 53}
+   {"t": 1791877557.064, "ev": "refresh", "user": "work", "frm": 53, "to": 54}
+   {"t": 1791877557.352, "ev": "refresh", "user": "work", "frm": 54, "to": 55}
+   {"t": 1791877557.644, "ev": "refresh", "user": "work", "frm": 55, "to": 56}
+   {"t": 1791877557.926, "ev": "refresh", "user": "work", "frm": 56, "to": 57}
+   {"t": 1791877558.208, "ev": "refresh", "user": "work", "frm": 57, "to": 58}
+   {"t": 1791877558.524, "ev": "refresh", "user": "work", "frm": 58, "to": 59}
+   {"t": 1791877558.549, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "work", "gen": 58, "expired": false}, "model": null}
+   {"t": 1791877559.354, "ev": "refresh", "user": "work~2", "frm": 1, "to": 2}
+   {"t": 1791877559.723, "ev": "refresh", "user": "work~2", "frm": 2, "to": 3}
+   {"t": 1791877560.193, "ev": "refresh", "user": "work~2", "frm": 3, "to": 4}
+   {"t": 1791877560.466, "ev": "refresh", "user": "work~2", "frm": 4, "to": 5}
+   {"t": 1791877560.851, "ev": "refresh", "user": "work~2", "frm": 5, "to": 6}
+   {"t": 1791877561.132, "ev": "refresh", "user": "work~2", "frm": 6, "to": 7}
+   {"t": 1791877561.425, "ev": "refresh", "user": "work~2", "frm": 7, "to": 8}
+   {"t": 1791877561.75, "ev": "refresh", "user": "work~2", "frm": 8, "to": 9}
+   {"t": 1791877562.02, "ev": "refresh", "user": "work~2", "frm": 9, "to": 10}
+   {"t": 1791877562.292, "ev": "refresh", "user": "work~2", "frm": 10, "to": 11}
+   {"t": 1791877562.66, "ev": "refresh", "user": "work~2", "frm": 11, "to": 12}
+   {"t": 1791877562.933, "ev": "refresh", "user": "work~2", "frm": 12, "to": 13}
+   {"t": 1791877563.289, "ev": "refresh", "user": "work~2", "frm": 13, "to": 14}
+   {"t": 1791877563.604, "ev": "refresh", "user": "work~2", "frm": 14, "to": 15}
+   {"t": 1791877563.914, "ev": "refresh", "user": "work~2", "frm": 15, "to": 16}
+   {"t": 1791877564.194, "ev": "refresh", "user": "work~2", "frm": 16, "to": 17}
+   {"t": 1791877564.479, "ev": "refresh", "user": "work~2", "frm": 17, "to": 18}
+   {"t": 1791877564.746, "ev": "refresh", "user": "work~2", "frm": 18, "to": 19}
+   {"t": 1791877565.038, "ev": "refresh", "user": "work~2", "frm": 19, "to": 20}
+   {"t": 1791877565.307, "ev": "refresh", "user": "work~2", "frm": 20, "to": 21}
+   {"t": 1791877565.588, "ev": "refresh", "user": "work~2", "frm": 21, "to": 22}
+   {"t": 1791877565.851, "ev": "refresh", "user": "work~2", "frm": 22, "to": 23}
+   {"t": 1791877566.131, "ev": "refresh", "user": "work~2", "frm": 23, "to": 24}
+   {"t": 1791877566.393, "ev": "refresh", "user": "work~2", "frm": 24, "to": 25}
+   {"t": 1791877566.677, "ev": "refresh", "user": "work~2", "frm": 25, "to": 26}
+   {"t": 1791877566.945, "ev": "refresh", "user": "work~2", "frm": 26, "to": 27}
+   {"t": 1791877567.21, "ev": "refresh", "user": "work~2", "frm": 27, "to": 28}
+   {"t": 1791877567.472, "ev": "refresh", "user": "work~2", "frm": 28, "to": 29}
+   {"t": 1791877567.761, "ev": "refresh", "user": "work~2", "frm": 29, "to": 30}
+   {"t": 1791877568.019, "ev": "refresh", "user": "work~2", "frm": 30, "to": 31}
+   {"t": 1791877568.034, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "work~2", "gen": 30, "expired": false}, "model": null}
+   {"t": 1791877569.392, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "keyacct"}, "model": "gpt-5.4"}
+   {"t": 1791877570.89, "ev": "responses-401", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "fakekey"}, "model": "gpt-5.4"}
+   {"t": 1791877571.823, "ev": "refresh-rejected", "user": "bad", "why": "expired"}
+   {"t": 1791877572.83, "ev": "responses-401", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "bad", "gen": 1, "expired": true}, "model": null}
+   {"t": 1791877572.898, "ev": "responses-401", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "bad", "gen": 1, "expired": true}, "model": null}
+   {"t": 1791877575.76, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "keyacct"}, "model": "gpt-5.4"}
+   {"t": 1791877576.638, "ev": "sign-in", "user": "play2"}
+   {"t": 1791877577.238, "ev": "revoke", "user": "play", "kind": "refresh_token"}
+   {"t": 1791877578.258, "ev": "sign-in", "user": "play2~2"}
+   {"t": 1791877579.831, "ev": "revoke", "user": "play2~2", "kind": "refresh_token"}
+   {"t": 1791877583.713, "ev": "refresh", "user": "work~2", "frm": 31, "to": 32}
+   {"t": 1791877584.931, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "work~2", "gen": 32, "expired": false}, "model": null}
+   {"t": 1791877585.776, "ev": "revoke", "user": "work~2", "kind": "refresh_token"}
+   {"t": 1791877587.95, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "codexenv"}, "model": "gpt-5.4"}

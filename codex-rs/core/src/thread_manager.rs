@@ -313,6 +313,16 @@ pub fn build_models_manager(
     config: &Config,
     auth_manager: Arc<AuthManager>,
 ) -> SharedModelsManager {
+    // PF-84: an OpenAI sign-in provider's list follows the account the
+    // active session uses.
+    if let Some(manager) = crate::account_models_manager::AccountModelsManager::for_provider(
+        &config.model_provider,
+        Arc::clone(&auth_manager),
+        config.codex_home.to_path_buf(),
+        config.model_catalog.clone(),
+    ) {
+        return Arc::new(manager);
+    }
     let provider = create_model_provider(config.model_provider.clone(), Some(auth_manager));
     provider.models_manager(
         config.codex_home.to_path_buf(),
@@ -1849,6 +1859,20 @@ impl ThreadManagerState {
         supports_openai_form_elicitation: bool,
         user_shell_override: Option<crate::shell::Shell>,
     ) -> CodexResult<NewThread> {
+        if let Some(message) = thread_start_account_error(&config, &session_source) {
+            return Err(CodexErr::InvalidRequest(message));
+        }
+        // A sign-in made since (e.g. `corbanu login` elsewhere) may have
+        // replaced the hidden login; look again before refusing.
+        let default_manager = auth_manager.default_account_manager();
+        if default_manager.hidden_default_login_reason().is_some() {
+            default_manager.reload().await;
+        }
+        if let Some(message) =
+            crate::config::default_login_restriction_error(&config, &auth_manager)
+        {
+            return Err(CodexErr::InvalidRequest(message));
+        }
         let source_changed_during_startup = Arc::new(AtomicBool::new(false));
         {
             let mut starting = self
@@ -2295,6 +2319,18 @@ fn resolve_spawn_multi_agent_version(
     }
 
     resolve_multi_agent_version(initial_history, inherited_multi_agent_version)
+}
+
+/// PF-84: a session, resumed thread or spawned agent never starts on a named
+/// account that is missing; it is refused, never run on another. A session
+/// also checks an explicit account of another provider (#425); a spawned
+/// agent checks only the account it runs on.
+fn thread_start_account_error(config: &Config, session_source: &SessionSource) -> Option<String> {
+    if matches!(session_source, SessionSource::SubAgent(_)) {
+        crate::config::subagent_account_error(config)
+    } else {
+        crate::config::session_account_error(config)
+    }
 }
 
 #[cfg(test)]

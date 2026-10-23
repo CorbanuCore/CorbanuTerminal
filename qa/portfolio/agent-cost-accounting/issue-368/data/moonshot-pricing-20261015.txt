@@ -1,0 +1,10 @@
+Source: https://platform.kimi.ai/docs/pricing/chat.md, fetched 2026-10-15 ~21:31Z with curl. Same table as
+moonshot-pricing-20261014.txt (USD per 1M tokens, taxes excluded):
+
+model | cache write TTL 5min | cache write TTL 1h | cached input | input | output | context
+kimi-k3 | 3.00 | 6.00 | 0.30 | 3.00 | 15.00 | 1,048,576
+
+model | cached input (hit) | input (miss) | output | context
+kimi-k2.7-code | 0.19 | 0.95 | 4.00 | 262,144
+kimi-k2.7-code-highspeed | 0.38 | 1.90 | 8.00 | 262,144
+kimi-k2.6 | 0.16 | 0.95 | 4.00 | 262,144

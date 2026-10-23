@@ -1,0 +1,1 @@
+D3/D54 GRANTED (Travis, 2026-10-20 ~01:57Z, option a): one first turn and one second (cache-read) turn per Kimi model, kimi-k3 and kimi-k2.7-code. The relay allows at most 4 Moonshot requests in the whole run, then answers 'test harness: Moonshot request limit reached'. Never retry a Moonshot turn.

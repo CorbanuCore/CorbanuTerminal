@@ -537,7 +537,17 @@ pub fn should_require_platform_sandbox(
     }
 
     match file_system_policy.kind {
-        FileSystemSandboxKind::Restricted => !file_system_policy.has_full_disk_write_access(),
+        // #506: a directory that may not be listed needs the sandbox too, and
+        // so does a path that may not be moved (#598), and keeping the
+        // keychain services away on macOS (#758), and denying user
+        // namespaces on Linux (#826).
+        FileSystemSandboxKind::Restricted => {
+            !file_system_policy.has_full_disk_write_access()
+                || !file_system_policy.get_unlistable_directories().is_empty()
+                || !file_system_policy.get_unmovable_paths().is_empty()
+                || (cfg!(target_os = "macos") && file_system_policy.denies_keychain_services())
+                || (cfg!(target_os = "linux") && file_system_policy.denies_user_namespaces())
+        }
         FileSystemSandboxKind::Unrestricted | FileSystemSandboxKind::ExternalSandbox => false,
     }
 }

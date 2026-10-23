@@ -194,7 +194,8 @@ impl ChatWidget {
                     secret: crate::app_event::VaultSecret::new(secret),
                 });
             }),
-        );
+        )
+        .rejecting_shown_errors(self.shown_error_texts());
         self.bottom_pane.show_view(Box::new(view));
     }
 
@@ -690,6 +691,7 @@ mod tests {
                 created_at: 1,
                 updated_at: 1,
                 storage_backend: StorageBackend::EncryptedSecrets,
+                sign_in: None,
             }])),
         );
         let names = items
@@ -716,6 +718,7 @@ mod tests {
             created_at: 1,
             updated_at: 1,
             storage_backend: StorageBackend::EncryptedSecrets,
+            sign_in: None,
         }])));
 
         assert_eq!(items.len(), 1);

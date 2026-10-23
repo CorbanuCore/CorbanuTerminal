@@ -1,0 +1,1 @@
+{"arm_meta": "exact match", "comparisons": 3, "coordinator_tables": ["audit", "events", "sqlite_sequence", "state"], "disarm": "only meta mode/generation changed", "first_tick_coordinator": "all changed tables match; only wall times normalized", "live_access": false, "result": "PASS"}

@@ -1,0 +1,36 @@
+
+
+› reply with the single word side
+
+
+• side
+
+/status
+
+╭───────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                            │
+│                                                                                           │
+│  Model:                Z.AI GLM 5.3 Flash                                                 │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account work                 │
+│  Directory:            $S/ws               │
+│  Permissions:          Next turn: Full Access                                             │
+│  Security:             Requested Permissive; effective protection unverified (/security)  │
+│  Agents.md:            <none>                                                             │
+│  Account:              Z.AI API key configured                                            │
+│  Collaboration mode:   Default                                                            │
+│  Session:              01a13443-7100-7b51-b66f-9d16950b6323                               │
+│                                                                                           │
+│  Token usage:          13.3K total  (13.3K input + 24 output)                             │
+│  Context window:       100% left (7.1K used / 950K)                                       │
+│  Account usage:        work · 7,143 input · 7,360 cached input · 21 output (14 reasoning) │
+│  Limits:               data not available yet                                             │
+╰───────────────────────────────────────────────────────────────────────────────────────────╯
+
+■ Editing previous prompts is unavailable in side conversations.
+
+■ Editing previous prompts is unavailable in side conversations.
+
+
+› How many files have been modified?
+
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Te… Side from main thread · ctrl + / to switch · ctrl + c to close

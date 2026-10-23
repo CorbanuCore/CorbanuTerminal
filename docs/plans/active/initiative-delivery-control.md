@@ -5,29 +5,218 @@ change_class: product-initiative
 priority: P1
 owner: "Codex Task Node integration lane; Travis Good accountable"
 parallel_sprint_limit: 1
-integration_owner: "Codex management"
+integration_owner: "Codex bootstrap coordinator; fresh Fable manager after qualification"
 activation_authority: "Travis Good"
 activation_basis: "September 10 delivery control request; September 11 three-workstream selection, task creation, beta planning and Astra High kickoff"
 target_release: "Internal operations; no Terminal or Desktop release authorized"
 deadline: "TBD"
 created: 2026-09-10
-updated: 2026-09-11
+updated: 2026-09-14
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "Internal delivery control — TO BUILD"
   requirement_excerpt: "Use sequential sprints per initiative"
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-owner-daemon-20260914"
+    branch: "bootstrap/owner-daemon-20260914"
+    base_commit: "bebe14686b16295903a79606e4e0163c87dc403b"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/decision-inspection-20260913"
+    branch: "bootstrap/decision-inspection-20260913"
+    base_commit: "239f7f82d5d410adb936963ef6be891a9184bbdd"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-transitions-20260913"
+    branch: "bootstrap/owner-transitions-20260913"
+    base_commit: "b004bb06c1b7aad432c0633ffdf319b2d247d8df"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/native-owner-20260913"
+    branch: "bootstrap/native-owner-20260913"
+    base_commit: "a3368e443e09a9acfd1dd8c74432d9924ed8cd69"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/isolated-browser-guest-20260913"
+    branch: "bootstrap/isolated-browser-guest-20260913"
+    base_commit: "72429ddaec4ab0f2dd19f4e59da8d095c6bc39a8"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/isolated-image-transport-20260913"
+    branch: "bootstrap/isolated-image-transport-20260913"
+    base_commit: "8665ff1c962ff2a6aa6a3157eb2251942d438c3f"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/isolated-model-transport-20260913"
+    branch: "bootstrap/isolated-model-transport-20260913"
+    base_commit: "0c5dfca05aca00567671f1335e476c89b4f7f72c"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/coordinator-wait-20260913"
+    branch: "bootstrap/coordinator-wait-20260913"
+    base_commit: "9bafae46ba615768d9fff3e72c6beddf54771f95"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/manager-cycle-20260913"
+    branch: "bootstrap/manager-cycle-20260913"
+    base_commit: "bca6485a2e60803393bbca0ee56d98953022ed12"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/slack-reply-poll-20260913"
+    branch: "bootstrap/slack-reply-poll-20260913"
+    base_commit: "327eade129e186a5c66a3bacbf60c2342771de86"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/coordinator-bridge-20260913"
+    branch: "bootstrap/coordinator-bridge-20260913"
+    base_commit: "84f16cceec87292296ff94a9d431a86d23a9fe52"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/fable-launcher-20260913"
+    branch: "bootstrap/fable-launcher-20260913"
+    base_commit: "eb01bf006eacbeef5be07174a3f37ad124abc74c"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-owned-ingress-20260913"
+    branch: "workstream/tasknode-owned-ingress-20260913"
+    base_commit: "6dde60fface29b0678b792926cbcff7bc8cc542e"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "295aed26e53b17f919f7199ae1c9748b1b1250ba"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
-    branch: "workstream/tasknode-pf80-s01-20260911"
-    base_commit: "295aed26e53b17f919f7199ae1c9748b1b1250ba"
+    base_commit: "eb01bf006eacbeef5be07174a3f37ad124abc74c"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-slack-recovery-20260912"
+    branch: "workstream/tasknode-slack-recovery-20260912"
+    base_commit: "b9e671e60416b952cc20d7b7260d3678080aebd0"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/slack-supervisor-20260912"
+    branch: "workstream/slack-supervisor-20260912"
+    base_commit: "a89a48548f644a64cbb8cd9da090b5b75578c922"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
+    branch: "feat/provider-reauth-health"
+    base_commit: "eb7af932bc8cc859122b5b2dbef223fbd45ea25c"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/slack-registration-20260912"
+    branch: "integrate/slack-registration-20260912"
+    base_commit: "4b9904d306dd8a3c35b9f6d43291ebaed905cccf"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917"
+    branch: "bootstrap/owner-recurrence-20260917"
+    base_commit: "08db99fff46fd22c582fbea0240fa379a42242e7"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/slack-listener-20260916"
+    branch: "bootstrap/slack-listener-20260916"
+    base_commit: "061cb260348258af5886e1ed21c40d51953cf297"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916"
+    branch: "bootstrap/tui-snapshot-rot-20260916"
+    base_commit: "788a87f24c872b60a6ee2dd2221f82be0a1ca012"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-cli-fences-20260916"
+    branch: "bootstrap/tasknode-cli-fences-20260916"
+    base_commit: "582b622647f406f8bfb424baff11dda0c2a5ef7d"
 ---
 
 # 3. Task Node integration and delivery control
 
+## Current authority — September 13 management bootstrap
+
+Travis explicitly authorized all five bootstrap deliverables in
+[coordinatorInstructions.md](../../../coordinatorInstructions.md). Execute the
+[bounded bootstrap allocation](../../research/tasknode-integration/coordinator-bootstrap-20260913.md)
+within PF-80-S01. Security/accounting product implementation and old recurring
+automations remain paused. Parent coordinates bootstrap until the fresh Fable
+launcher and decision path are qualified; this is an explicit startup exception,
+not a claim the new management runtime already exists. The stale progress and
+allocations below are historical; no other owner should resume from them.
+
+September13 scope amendment: Travis removed the private off-Mac dashboard-access
+requirement. Tailscale administrator setup is no longer active work or a bootstrap
+launch gate; existing SSH publication and private loopback serving remain. Other
+Slack, independent functional and unattended-recovery gates are unchanged.
+
+September13 02:27UTC: Slack credential/identity/Socket connection preflight is
+complete; no human credential hold remains. Durable alert/reply/phone/native ACK
+and independent isolated qualification remain manager-owned. James returned
+927/424 uncompiled owned-ingress source; scoped formatting is now authorized
+under the same ten paths, target1800/1000 STOP1950/1100. Dependency/build handoff
+is serialized behind accounting's active Mac gate; no user decision or new route.
+
+Historical September13: Slack installation/access are complete; then-pending
+private credential-file handoff and actual live qualification remained. Earlier
+permission holds below are superseded. Corrected646-line isolation engineering
+and12tests accepted; not a confined reasoning executor. James now owns the
+[ten-file bounded synthetic ingress implementation](../../research/tasknode-integration/owned-ingress-allocation-20260913.md)
+in tasknode-owned-ingress-20260913. Source authoring starts now; parent serializes
+dependency/lock/build integration after accounting's current Mac correction.
+No worker waits on a human allocation decision; live alerts/posting stay OFF.
+
+23:16UTC: [actual Slack access question](../../../qa/initiative-control/status-display/slack-access-decision.md)
+is awaiting Travis's action-time confirmation; SocketMode ON but webhook-only
+bot scopes/events OFF. Only live setup held, not ongoing offline work. Isolated
+engineering returned588lines/11actualRTXpasses and first independent boundary
+review is running. Real confined executor/phone/nativeACK still unqualified;
+the earlier testing-only status understated the actual app-configuration gap.
+
+22:44UTC: [rootless isolation engineering](../../../qa/initiative-control/status-display/isolated-boundary-engineering-20260912.md)
+is allocated to James: exactly five private runner files,525target/650hard,
+actual RTX seccomp/cgroup/cleanup/PTY probes, one boundary review plus necessary
+correction. Feasibility inspection is complete; engineering is now dispatched.
+No VM-equivalence, actual confined reasoning executor, live Slack or phone/ACK
+acceptance is claimed. Those next gates are manager-owned, not user questions.
+
+22:03UTC: supervisor review08 clean; exact5-file c7a1b9690 received92d6eb261.
+All261 combined tests pass187.549s; Facilities/governance pass, original failures
+retained. [Integration and next owner](../../../qa/initiative-control/status-display/slack-supervisor-integration-20260912.md).
+James now verifies existing isolated-execution proposal against actual available
+machine/tools, private evidence only; manager owns final infrastructure allocation
+and actual Slack/phone/nativeACK qualification. Live remains OFF, no user decision.
+
+20:57UTC manager handoff: recovery review07 clean, receiving251 tests pass
+144.128s at a89a48548. [Real owned-listener supervision](../../research/tasknode-integration/slack-supervised-quiescence-allocation.md)
+is the current exact five-file sequential James assignment in the new supervisor
+checkout above. Older allocations below are history, not concurrent mandates.
+Manager accepts the bounded guard-born/legacy-unknown contract and850/400 hard
+ceiling; new reviews08/09 preserve01–07. Actual live Slack/phone/native ACK and
+independent isolated execution remain required before operator-ready acceptance.
+
+September12 next: gated transport/shared registration accepted atb9e671e60.
+The [local fence-loss recovery allocation](../../research/tasknode-integration/slack-fence-recovery-allocation.md)
+owns five paths in the fresh second worktree above, one sequential James worker.
+Old worker checkout is frozen, not concurrently active. Manager approved
+loss-record retention and historical alert-revision refusal, not new authority.
+Supervisor/quiescence wiring is now integrated above; live/phone/ACK remain unqualified.
+
+18:41: combined review06 clean,244 staging tests and Facilities/governance pass
+on3561ebcc2. Manager imported13 exact code/receipt/guidance files into receiving,
+preserving current allocation records. Receiving final suite is in progress;
+missing-fence recovery and actual Slack/phone/ACK qualification still prevent
+live enablement. No seventh opinion on unchanged clean code; proceed to actual
+remaining evidence and supported recovery. Earlier statuses remain history.
+
+18:14 review05 found a same-owner initial-qualification retry deadlock after
+transient auth failure. Manager authorizes its narrow correction and recovery
+regressions under the [allocation](../../research/tasknode-integration/slack-live-allocation.md):
+same seven paths, worker2700/1140, parent650/500, combined3350/1640, one necessary
+changed-candidate review06. No erased journals, expanded recovery architecture
+or live authority; preserve234 passing tests and all earlier review history.
+
+17:22 manager classification: the [allocation](../../research/tasknode-integration/slack-live-allocation.md)
+now authorizes the narrow lifetime-lock/session-lease correction only, same
+seven worker paths. Worker2600/1100, combined3250/1600 and one changed-candidate
+review preserve prior usage. Broader quarantine/recovery-send/migration proposals
+are excluded; missing-fence bookkeeping recovery remains a separate pre-live
+manager action. Canonical publication17:15:52 is verified; this later amendment
+awaits the next scheduled sync, not a second publication in this heartbeat.
+
+Latest17:12UTC: third Slack recovery candidate2116/840 has225 passing tests.
+Review04 found an abrupt-listener-exit gap; source freezes for exact session/fence
+recovery contract classification by manager, with James preparing the proposal.
+The missing-fence recovery limitation is included, not silently reset. Prior
+review03 and its two-cycle convergence classification remain in the allocation.
+Manager shared registration is actual uncommitted code in the separately declared
+staging checkout, with passing local ingress/two-question/revision proof; not
+accepted, published or live. No new human approval requested for manager work.
+
+Latest16:13UTC: real SDK first correction returned1688total/768non-test with208
+passing Python tests. Review02 found three remaining integration defects: stale
+permit after an ACK notice, silent SDK disconnect, and pending events before
+resolution. Manager inspected the code and pinned SDK, then dispatched one
+coherent second correction to James. Prior reviews and198-test failures remain.
+Manager owns shared CLI/status registration and actual Slack/phone/native-ACK
+qualification; these are executable manager tasks, not missing human approval.
+Live Slack and Task Node posting remain OFF; S01/beta readiness not claimed.
+
+Latest14:50UTC: offline recovery730577f1d integrated9877c058d after clean
+corrective review04 and169 receiving Python tests plus Facilities/governance.
+Manager accepts1506total/638non-test; original targets and all three failed
+reviews remain in the receipt. [Real Slack allocation](../../research/tasknode-integration/slack-live-allocation.md)
+owns the sequential seven-file worker plus ten manager-owned paths,1800/1000
+target and1900/1050 reallocation boundary. Native-subagent bridge, real SDK,
+registration and qualified connection/HTTPS/phone/ACK evidence are next.
+No new recipient decision, live activation or full sprint acceptance is inferred.
+
+Current September12: F01 age1a6d9c8df reviewed/integrated;122Python/Facilities Node pass. Laplace returned exact-package browser proof: age and legal-ID history regression pass;152 no-exposure trials, DEC021mixed-feed useful-content expectation still partial. Darwin independently checks the packet; no new human-readiness claim. Earlier code/design/evidence usage and corrected P2 remain recorded. [Slack recovery allocation](../../research/tasknode-integration/slack-recovery-allocation.md) now owns five new files, target1200total/650non-test with explicit coherent-unit exception, one new-code review plus necessary correction. Manager reviews/integrates allocation before Astra High dispatch; real Slack/Task Node stay OFF. UI evidence does not block this independent offline successor.
+
 ## Activation record
+
+September12 overnight authority: Travis authorizes routine redacted progress to
+existing mapped Task Node tasks once technology is ready, and prioritizes Slack.
+No per-progress approval is needed after actual validity/enrollment/target,
+redaction, idempotency and recovery qualification. Keep posting OFF until then;
+the integrator owns bounded enablement and first-delivery verification. No task
+acceptance, rewards, financial/signing action, public beta or new recipient is
+authorized. Supported credential setup/channel verification remain necessary;
+never scrape session tokens or distribute wallet seeds. This supersedes older
+requests for another approval for ordinary mapped progress only.
 
 Slot 3/3. Reuse native `/tasknode` and Campaign Tracker, not another auth system
 or scheduler. The [main handoff](../main-workstreams-2026-09-11.md) owns source
@@ -49,8 +238,38 @@ blockers, machine/run reports and human test plans. Workers cannot self-accept.
 ## Scope
 
 PF-80 owns the internal projection/progress adapter; PF-79 owns the subsequent
-public Desktop beta program. No fourth initiative, automatic merge, release,
+public Desktop beta program. PF-81 owns the queued standalone visual QA harness,
+as requested by Travis through the PF13/provider-reauth owner on September 11.
+No fourth initiative, automatic main merge/push, release,
 reward, financial action or private-recording export is authorized.
+
+Local receiving-branch integration and reallocation within PF-80 are now
+manager-owned under the [continuation rule](../../sprints/index.md#manager-owned-continuation).
+The [current handoff](../workstream-manager-handoff-2026-09-11.md) records
+combined-tree evidence and the next offline native slice; live authority is separate.
+
+Native preparation candidate `2b281975a` is now independently reviewed and
+integrated locally at `c33d47f6c`: 42 native tests, 54 Python tests and two
+cross-language goldens pass on the receiving tree. The manager is preparing
+the next profile-bound one-event increment; no sender or production entry exists
+in the accepted preparation slice. Whole PF-80-S01 remains in progress.
+The bound engine 7e25982b5 is now reviewed/integrated at 486d2fb94, with all55
+Task Node tests passing. Native adapter d7bf73a52 is now reviewed/integrated
+at56295f668; all63 crate tests pass there. It builds actual Client requests
+in memory and consumes pinned response fixtures; no sending or live authority.
+Exact-goal reconciliation177ec93fc is also reviewed/integrated at3898eaa65;
+all73 native tests pass there. Travis approved both setup/validity directions;
+PF-80-S01 is in manager-owned allocation preparation, not waiting on those answers.
+The [native-validity allocation](../../research/tasknode-integration/native-validity-allocation.md)
+owns the now-reviewed production-compiled private path bda5b35b4. Combined staging
+04ba6b8b7 passes242state/80TaskNode tests; no public caller enabled. See
+[staging evidence](../../../qa/initiative-control/native-staging-2026-09-12.md).
+The [dashboard decision/Slack amendment](../decision-escalation.md) is queued within
+PF-80-S01. Channel setup and publication qualification are separate from this code.
+The [prepared projection allocation](../../research/tasknode-integration/decision-projection-next.md)
+is historical. [Slack recovery allocation](../../research/tasknode-integration/slack-recovery-allocation.md) records current five-file ownership and tests; the manager receipt records actual dispatch, not plan prose.
+The [runtime recovery handoff](../../research/tasknode-integration/recovery-decision-handoff.md)
+records manager design work, recommendations and the gated human test plan.
 
 PF-80 replaces only the recovery operations source's conflicting PF-76 identity.
 Main's provider-persistence PF-76 and security PF-77/PF-78 remain untouched.
@@ -65,7 +284,10 @@ and [setup checks](../../../qa/initiative-control/2026-09-11/tasknode-setup.md)
 do not establish accepted tasks, current worker profile isolation or live posting.
 The private dashboard, tested adapter and default-OFF checker exist on the
 recovery source, not this main baseline. PF-80-S01 must port the bounded tooling,
-qualify it here and prepare a reviewed first-event path. Do not copy the whole
+qualify it here and prepare a reviewed first-event path. The port and corrections
+are now integrated locally at the receiving base recorded above; remote main and
+the current publisher remain distinct. September12 cutover already selected
+the manager receiving checkout; obsolete publishers were archived and normal native Luna publication recovered, most recently d19e34b16 at12:37:35Z. No user click remains. Do not copy the whole
 recovery branch or any auth/session/state directory.
 
 ## Invariants
@@ -75,7 +297,10 @@ owns only its assigned implementation/research/QA paths and per-run report.
 ## Ownership and implementation worktrees
 
 The first checkout above is the manager, the second the Astra High Task Node
-worker. Fast-forward the worker to the merged planning commit before dispatch;
+worker. The third is a verified **draft-only** PF-81 destination, not a running
+allocation or provider-auth reactivation. Reconcile its then-current HEAD and
+pending work before promotion; [handoff](../visual-test-harness-allocation-2026-09-11.md).
+Fast-forward the Task Node worker to the merged planning commit before dispatch;
 record actual HEAD in the kickoff receipt. No raw HTML, remote images, credentials or private logs in
 the projection. Unknown/stale evidence stays visible. OFF hides discovery and
 denies new work while preserving data and supported recovery.
@@ -86,17 +311,22 @@ Reuse `codex-rs/cli/src/tasknode_cmd.rs`, native tasknode-session/profile and
 Campaign Tracker contracts read-only initially. Port `scripts/initiative_control/`
 from the inspected recovery source under an audited manifest; tests must run on
 the receiving main tree. Keep `docs/plans/check.py` and `docs/sprints/check.py`
-manager-owned. No Rust/upstream protocol modification is allocated by kickoff.
-If one becomes necessary, return an exact scoped follow-up instead of widening
-authority. [Feature delivery contract](../feature-delivery.md).
+manager-owned. The original kickoff was Python-only. The current PF-80-S01
+test-only reconciliation child is accepted and frozen. New validity allocation
+allows private async Client byte extraction and an unexposed identity observer;
+no production entry, live call, auth store, queue or dependency changes.
+See the [accepted allocation](../../research/tasknode-integration/native-reconciliation-allocation.md)
+and runtime recovery handoff above before a new allocation.
+[Feature delivery contract](../feature-delivery.md).
 
 ## Sprint execution map
 
 | Feature | Sprint | State and acceptance |
 | --- | --- | --- |
-| PF-80 | [S01 native delivery-control integration](../../sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md) | Allocated for post-merge kickoff; port/requalify tooling, offline first-event preparation, then separately authorized live acceptance |
+| PF-80 | [S01 native delivery-control integration](../../sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md) | Native validity reviewed/tested in staging; next contextual decision allocation in preparation; Slack and live acceptance still pending |
 | PF-79 | [S01 Desktop beta channel/test contract](../../sprints/current/initiative-delivery-control/pf-79-s01-beta-channel-and-test-contract.md) | Draft; depends on PF-80-S01; Desktop source/permissions unresolved |
 | PF-79 | [S02 public beta pilot](../../sprints/current/initiative-delivery-control/pf-79-s02-public-beta-pilot.md) | Draft; depends on S01; no public launch |
+| PF-81 | [S01 bounded screenshot/inference QA harness](../../sprints/current/initiative-delivery-control/pf-81-s01-visual-test-harness.md) | Draft; depends on PF-80-S01; existing PF13 task owns later implementation, no new worker |
 
 ## Acceptance flows
 
@@ -113,11 +343,30 @@ enrolled bulk flush is not a safe one-event qualification. Keep posting OFF
 until the operator authorizes the account/destination/scope and exact payload.
 Beta follows the [detailed contract](../tasknode-beta-program.md): isolated exact
 Desktop candidate, public safe cards, independent testing and a bounded pilot.
+PF-81 is another sequential follow-up, not parallel with PF-80 or beta. Its order
+number does not override dependencies or reserve priority over existing beta
+drafts. The manager chooses one eligible sprint at promotion. Only fixture-driven
+QA and endpoint setup instructions are allocated; live control, deployment and
+inference qualification stay gated by explicit target and data permission.
+
+## Independent functional execution — September 12
+
+The next applicable user-facing handoff follows the mandatory
+[isolated execution gate](../../../qa/code-blind-functional/isolated-execution.md).
+The named integrator owns packet/isolation provisioning and separate executor
+and reviewer assignments; implementation owners do not execute acceptance cases.
+Record increment-specific internal-only N/A with later functional gate, not a
+plan-wide exemption. Missing isolation is manager work, not unanswered approval.
+Existing evidence stays historical; dependencies, feature flags and live authority
+are unchanged. See the linked rollout table for this lane's next acceptance.
 
 ## Automated evidence
 
 Focused Python/governance suites, negative HTTP fixtures, retained last-good
 publication and source-provenance checks must pass on the receiving tree.
+PF-81 additionally requires deterministic malformed-action, stale-frame,
+out-of-bounds, budget/cancel and replay tests. Model conclusions remain evidence
+for human review, not self-acceptance; preserve blocked/native-not-run outcomes.
 
 ## True-TUI evidence
 

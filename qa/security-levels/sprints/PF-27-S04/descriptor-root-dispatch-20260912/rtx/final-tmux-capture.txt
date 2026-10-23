@@ -1,0 +1,55 @@
+bash /home/travis/security-round5/evidence/pf27-root-dispatch-20260912/final.sh
+travis@ambient-System-Product-Name:~$ bash /home/travis/security-round5/evidence/pf27-root-dispatch-20260912/final.sh
+travis@ambient-System-Product-Name:~$ bash /home/travis/security-round5/evidence/pf27-root-dispatch-20260912/final-c7.sh
+        PASS [   0.075s] (3/4) codex-protected-state native::tests::pf27_root_compat_both_entries_reject_malformed_and_replay
+        PASS [   0.101s] (4/4) codex-protected-state native::tests::pf27_root_compat_rejected_identity_never_receives_key
+────────────
+     Summary [   0.101s] 4 tests run: 4 passed, 20 skipped
+    Checking codex-utils-rustls-provider v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/utils/rustls-provider)
+    Checking codex-security-policy v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/security-policy)
+    Checking codex-utils-cache v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/utils/cache)
+    Checking codex-utils-path-uri v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/utils/path-uri)
+    Checking codex-http-client v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/http-client)
+    Checking codex-utils-image v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/utils/image)
+    Checking codex-execpolicy v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/execpolicy)
+    Checking codex-utils-path v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/utils/path-utils)
+    Checking codex-linux-pidfd-spawn v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/linux-pidfd-spawn)
+    Checking codex-websocket-client v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/websocket-client)
+    Checking codex-client v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/codex-client)
+    Checking codex-network-proxy v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/network-proxy)
+    Checking codex-security-audit v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/security-audit)
+    Checking codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/protocol)
+    Checking codex-api v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/codex-api)
+    Checking codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/file-system)
+    Checking codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/git-utils)
+    Checking codex-otel v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/otel)
+    Checking codex-model-provider-info v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/model-provider-info)
+    Checking codex-features v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/features)
+    Checking codex-config v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/config)
+    Checking codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/protected-state)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 14.21s
+PF27_ROOT_COMPAT_TMUX_COMPLETE
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.29s
+────────────
+ Nextest run ID 3e907eba-1b9a-4df0-8a35-9deb24d2ee15 with nextest profile: local
+    Starting 1 test across 7 binaries (75 tests skipped)
+        PASS [   0.002s] (1/1) codex-secret-broker-service launch::manifest::elf::tests::pf_27_s01_elf_profile_frozen_artifacts_as_data
+────────────
+     Summary [   0.003s] 1 test run: 1 passed, 75 skipped
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+────────────
+ Nextest run ID 6252a4a2-b4d9-4aed-a005-f4f2049d8fad with nextest profile: local
+    Starting 6 tests across 7 binaries (70 tests skipped)
+        PASS [   0.040s] (1/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_lost_reply
+        PASS [   0.061s] (2/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_wrong_and_stale_receipts
+        PASS [   0.065s] (3/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_actual_namespaces_and_duplicate
+        PASS [   0.094s] (4/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_construction_failures
+        PASS [   0.135s] (5/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_protocol_rejections
+        PASS [   0.808s] (6/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_lifecycle
+────────────
+     Summary [   0.808s] 6 tests run: 6 passed, 70 skipped
+PF27_ROOT_DISPATCH_TMUX_COMPLETE
+PF27_ROOT_DISPATCH_C7D48E482_COMPLETE
+travis@ambient-System-Product-Name:~$

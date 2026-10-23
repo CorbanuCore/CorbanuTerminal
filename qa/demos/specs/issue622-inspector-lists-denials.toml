@@ -1,0 +1,99 @@
+# Issue #622 (AGG-R09): the inspector's Recent denials list the Corbanu-home listing denials.
+id = "issue622-inspector-lists-denials"
+feature = "#622: the inspector lists sandbox denials of protected paths"
+expected = "Under Aggressive, after the agent's listing of the Corbanu home is denied, /security i shows it under Recent denials: listing the Corbanu home, denied by the sandbox; never granted under Aggressive."
+model = "glm-5.3-flash"
+provider = "zai"
+rows = 40
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Z.AI GLM 5.3 Flash via zai"
+timeout = 60
+compress = 2
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this shell command once, unchanged: python3 -c \"import os; print(os.listdir('{home}'))\""
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Press enter to confirm"
+timeout = 180
+compress = 2
+[[steps]]
+key = "y"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Security level Aggressive blocked listing"
+timeout = 60
+compress = 2
+[[steps]]
+wait = "(?m)^› "
+timeout = 120
+compress = 2
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Aggressive"
+[[steps]]
+key = "i"
+[[steps]]
+wait = "Security inspector"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Down"
+repeat = 80
+[[steps]]
+wait = "listing the Corbanu home: denied by the sandbox"
+[[steps]]
+pause = 3.5

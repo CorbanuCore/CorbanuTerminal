@@ -1,0 +1,67 @@
+{
+  "buckets": [
+    {
+      "page": "spring-America-New_York-0",
+      "group": "hour",
+      "start": "2026-03-08T06:00:00Z",
+      "end": "2026-03-08T07:00:00Z",
+      "exact_usd": "0.00196",
+      "members": [
+        {
+          "attempt": "a0404b5a-b6b7-4106-95ca-aaad9bda149d",
+          "model": "gpt-5.6-sol",
+          "admitted_ms": 1772953199000,
+          "input": 100,
+          "exact_usd": "0.00071",
+          "emission": 0
+        },
+        {
+          "attempt": "e0969ac5-ece4-4c16-ace3-247735bb282f",
+          "model": "gpt-5.6-sol",
+          "admitted_ms": 1772953199000,
+          "input": 101,
+          "exact_usd": "0.000715",
+          "emission": 1
+        },
+        {
+          "attempt": "80e2e307-38e9-4db0-8a01-79cd2d9299f2",
+          "model": "gpt-5.6-sol",
+          "admitted_ms": 1772953199000,
+          "input": 80,
+          "exact_usd": "0.000535",
+          "emission": 2
+        }
+      ],
+      "excluded_emissions": [
+        3,
+        4
+      ]
+    },
+    {
+      "page": "spring-America-New_York-1",
+      "group": "hour",
+      "start": "2026-03-08T07:00:00Z",
+      "end": "2026-03-08T08:00:00Z",
+      "exact_usd": "0.00072",
+      "members": [
+        {
+          "attempt": "9ea02100-0b4b-4c6f-a9d5-617dd6904d62",
+          "model": "gpt-5.6-sol",
+          "admitted_ms": 1772953200000,
+          "input": 102,
+          "exact_usd": "0.00072",
+          "emission": 3
+        }
+      ],
+      "excluded_emissions": [
+        0,
+        1,
+        2,
+        4
+      ]
+    }
+  ],
+  "groups": [],
+  "unknown_causes": [],
+  "partial": []
+}

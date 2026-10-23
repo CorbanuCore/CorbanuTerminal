@@ -3,6 +3,7 @@ use std::sync::atomic::Ordering;
 
 use axum::http::HeaderValue;
 use codex_analytics::AppServerRpcTransport;
+use codex_app_server_protocol::RuledOutDefaultLoginPolicy;
 use codex_login::default_client::SetOriginatorError;
 use codex_login::default_client::USER_AGENT_SUFFIX;
 use codex_login::default_client::get_codex_user_agent;
@@ -140,6 +141,15 @@ impl InitializeRequestProcessor {
             codex_home,
             platform_family: std::env::consts::FAMILY.to_string(),
             platform_os: std::env::consts::OS.to_string(),
+            // PF-84-S06 (#595): a client reusing this server (the TUI with a
+            // local daemon) leaves a ruled-out default login in place only
+            // when this server does too, under the same restrictions.
+            ruled_out_default_login: codex_login::default_login_left_unenforced().then(|| {
+                RuledOutDefaultLoginPolicy {
+                    forced_login_method: self.config.configured_forced_login_method,
+                    forced_chatgpt_workspace_id: self.config.forced_chatgpt_workspace_id.clone(),
+                }
+            }),
         };
 
         self.outgoing

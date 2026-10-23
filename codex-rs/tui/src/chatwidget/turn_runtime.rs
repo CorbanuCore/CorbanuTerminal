@@ -545,8 +545,30 @@ impl ChatWidget {
         }
     }
 
+    /// A config warning is shown once the session header is in place; the
+    /// session's own repeat of it is then not shown again (#419).
+    pub(super) fn on_config_warning(&mut self, summary: String, message: String) {
+        if !self.is_session_configured() {
+            self.warning_display_state
+                .defer_config_warning(summary, message);
+            return;
+        }
+        self.on_warning(message);
+        self.warning_display_state.config_warning_shown(summary);
+    }
+
+    pub(crate) fn show_deferred_config_warnings(&mut self) {
+        for (summary, message) in self.warning_display_state.take_pending_config_warnings() {
+            self.on_warning(message);
+            self.warning_display_state.config_warning_shown(summary);
+        }
+    }
+
     pub(super) fn on_warning(&mut self, message: impl Into<String>) {
         let message = message.into();
+        if message == crate::legacy_core::security_revocation::KILL_SWITCH_STOPPED {
+            self.turn_lifecycle.kill_switch_stopped = true;
+        }
         if !self.warning_display_state.should_display(&message) {
             return;
         }

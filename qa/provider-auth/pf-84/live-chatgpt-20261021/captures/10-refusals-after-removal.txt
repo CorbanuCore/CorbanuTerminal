@@ -1,0 +1,12 @@
+# After `corbanu logout --account t1` ("Signed out OpenAI account `t1`"; `account list`: "No named accounts.")
+# Copied from the run's terminal output (stderr; stdout empty).
+
+$ corbanu exec --skip-git-repo-check -s read-only resume 01a15d9f-346e-7373-933b-2e71fdd9d1d0 Reply-with-exactly-PF84-AFTER-REMOVE
+Error: thread/resume: thread/resume failed: account `t1` of provider `openai` is not signed in; sign in with `corbanu login --account t1` or pick another with `--account` (see `corbanu account list`) (code -32600)
+EXIT:1
+
+$ corbanu exec --skip-git-repo-check -s read-only --ephemeral --account t1 -m gpt-5.6-luna Reply-with-exactly-PF84-AFTER-REMOVE
+Error: thread/start: thread/start failed: account `t1` of provider `openai` is not signed in; sign in with `corbanu login --account t1` or pick another with `--account` (see `corbanu account list`) (code -32600)
+EXIT:1
+
+# TUI `corbanu resume` / `corbanu fork` of the same thread: see tui-resume-after-remove.txt and tui-fork-after-remove.txt.

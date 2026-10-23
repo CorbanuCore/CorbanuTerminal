@@ -1,0 +1,18 @@
+test_identity_positive_and_other_mismatches (test_guards.Guards.test_identity_positive_and_other_mismatches) ... ok
+test_matching_identity_reaches_only_mock_upload (test_guards.Guards.test_matching_identity_reaches_only_mock_upload) ... ok
+test_payload_allowlist_excludes_source_and_provenance (test_guards.Guards.test_payload_allowlist_excludes_source_and_provenance) ... ok
+test_pin_parser_does_not_execute (test_guards.Guards.test_pin_parser_does_not_execute) ... ok
+test_ssh_host_rejection_aborts (test_guards.Guards.test_ssh_host_rejection_aborts) ... ok
+test_stale_candidate_refuses_dispatch_and_matching_pin_passes (test_guards.Guards.test_stale_candidate_refuses_dispatch_and_matching_pin_passes) ... ok
+test_wrong_host_key_transfers_nothing (test_guards.Guards.test_wrong_host_key_transfers_nothing) ... ok
+test_wrong_uuid_transfers_nothing (test_guards.Guards.test_wrong_uuid_transfers_nothing) ... ok
+test_all_checks_with_synthetic_owner_and_ssh (__main__.Accuracy.test_all_checks_with_synthetic_owner_and_ssh) ... ok
+test_missing_inputs_reports_every_precondition_without_contact (__main__.Accuracy.test_missing_inputs_reports_every_precondition_without_contact) ... ok
+test_unmet_owner_checker_blocks_contact (__main__.Accuracy.test_unmet_owner_checker_blocks_contact) ... ok
+test_wrapper_preserves_real_process_exit_codes (__main__.Accuracy.test_wrapper_preserves_real_process_exit_codes) ... ok
+test_wrong_uuid_fails_preflight (__main__.Accuracy.test_wrong_uuid_fails_preflight) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 4.551s
+
+OK

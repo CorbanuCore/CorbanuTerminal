@@ -33,19 +33,19 @@ const CONNECTOR_METADATA_TIMEOUT: Duration = Duration::from_secs(60);
 const DEFAULT_APPS_PRODUCT_SKU: &str = "codex";
 
 async fn apps_enabled(config: &Config) -> bool {
-    let auth_manager =
-        AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false).await;
-    let auth = auth_manager.auth().await;
+    let auth = AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false)
+        .await
+        .session_auth()
+        .await;
     config
         .features
         .apps_enabled_for_auth(auth.as_ref().is_some_and(CodexAuth::uses_codex_backend))
 }
 
 async fn connector_auth(config: &Config) -> anyhow::Result<CodexAuth> {
-    let auth_manager =
-        AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false).await;
-    let auth = auth_manager
-        .auth()
+    let auth = AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ false)
+        .await
+        .session_auth()
         .await
         .ok_or_else(|| anyhow::anyhow!("ChatGPT auth not available"))?;
     anyhow::ensure!(

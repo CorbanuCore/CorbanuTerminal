@@ -107,6 +107,8 @@ pub(crate) struct ExecCommandRequest {
     pub additional_permissions_preapproved: bool,
     pub justification: Option<String>,
     pub prefix_rule: Option<Vec<String>>,
+    /// #1057: the policy the handler read this request's grants under.
+    pub handler_basis: Option<crate::tools::orchestrator::HandlerBasis>,
 }
 
 #[derive(Debug)]

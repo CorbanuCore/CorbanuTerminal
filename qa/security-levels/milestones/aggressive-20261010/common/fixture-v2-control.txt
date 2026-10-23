@@ -1,0 +1,9 @@
+# Coordinator control, 2026-10-11T05:46:42Z: does an agms-tui --env value reach the product process? (lane agmx0, Permissive, no model turn)
+$ agms-tui start --env PLAIN_VAR=visible --env FOO_API_KEY=synthetic-env-2
+# ps eww of the product process (names only):
+ZAI_API_KEY=<present>
+PLAIN_VAR=<present>
+FOO_API_KEY=<present>
+# installed agms-product digest:
+8c2803ffd610fa900e677277cf94ce6e3295b36fec21296152c50ce4ae291a74  /opt/agms/bin/agms-product
+9acbd38f7b26a718e800e778a41c5518a22a0191e1fc668490522875447fd17a  /opt/agms/bin/agms-tui

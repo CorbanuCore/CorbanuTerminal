@@ -4,6 +4,13 @@ use codex_protocol::protocol::SessionSource;
 use std::sync::atomic::AtomicI64;
 use std::sync::atomic::Ordering;
 
+#[derive(Clone, Copy)]
+enum DeletionTime {
+    AtWriterLock,
+    #[cfg(test)]
+    Explicit(i64),
+}
+
 impl StateRuntime {
     pub async fn get_thread(&self, id: ThreadId) -> anyhow::Result<Option<crate::ThreadMetadata>> {
         let row = sqlx::query(
@@ -1051,6 +1058,25 @@ ON CONFLICT(id) DO UPDATE SET
     /// Spawn edges and thread rows are deleted last so a failed delete can be retried with enough
     /// state left to rediscover the same spawned subtree.
     pub async fn delete_threads_strict(&self, thread_ids: &[ThreadId]) -> anyhow::Result<u64> {
+        self.delete_threads_with_time(thread_ids, DeletionTime::AtWriterLock)
+            .await
+    }
+
+    #[cfg(test)]
+    pub(super) async fn delete_threads_at(
+        &self,
+        thread_ids: &[ThreadId],
+        as_of_ms: i64,
+    ) -> anyhow::Result<u64> {
+        self.delete_threads_with_time(thread_ids, DeletionTime::Explicit(as_of_ms))
+            .await
+    }
+
+    async fn delete_threads_with_time(
+        &self,
+        thread_ids: &[ThreadId],
+        time: DeletionTime,
+    ) -> anyhow::Result<u64> {
         if thread_ids.is_empty() {
             return Ok(0);
         }
@@ -1068,11 +1094,100 @@ ON CONFLICT(id) DO UPDATE SET
             self.thread_goals.delete_thread_goal(*thread_id).await?;
         }
 
-        let mut tx = self.pool.begin().await?;
+        let validated_at_ms = Self::prepare_delete(self, time).await?;
+        let mut tx = super::accounting::native::begin_delete(&self.pool).await?;
+        let result = async {
+            let as_of_ms = Self::deletion_time_on_connection(&mut tx, time).await?;
+            Self::delete_threads_on_connection(&mut tx, thread_ids, as_of_ms, validated_at_ms).await
+        }
+        .await;
+        match result {
+            Ok(rows) => {
+                tx.commit().await?;
+                Ok(rows)
+            }
+            Err(error) => {
+                tx.rollback().await?;
+                Err(error)
+            }
+        }
+    }
+
+    /// Check that deleting `thread_ids` can update this database, changing none
+    /// of their records. (Like any ledger write, it may first retire ledger
+    /// records already due to expire.)
+    ///
+    /// Callers that remove other records first (a conversation's rollout files)
+    /// run this before them, so a ledger that cannot be updated leaves the
+    /// conversation whole instead of half-deleted.
+    pub async fn preflight_delete_threads(&self, thread_ids: &[ThreadId]) -> anyhow::Result<()> {
+        if thread_ids.is_empty() {
+            return Ok(());
+        }
+        // Retiring what retention has due, in short batches as any ledger write
+        // does, keeps the preflight's maintenance under the lock bounded.
+        let validated_at_ms = Self::prepare_delete(self, DeletionTime::AtWriterLock).await?;
+        let mut tx = super::accounting::native::begin_delete(&self.pool).await?;
+        let result = async {
+            let as_of_ms =
+                Self::deletion_time_on_connection(&mut tx, DeletionTime::AtWriterLock).await?;
+            Self::delete_threads_on_connection(&mut tx, thread_ids, as_of_ms, validated_at_ms).await
+        }
+        .await;
+        let rolled_back = tx.rollback().await;
+        result?;
+        Ok(rolled_back?)
+    }
+
+    /// Cleanup and lock acquisition can be overtaken by a later accounting writer,
+    /// so production time is read only once the write lock is held. Like ledger
+    /// writes, it holds at the ledger checkpoint while the clock is behind it.
+    /// Explicit clocks stay strict.
+    async fn deletion_time_on_connection(
+        conn: &mut sqlx::SqliteConnection,
+        time: DeletionTime,
+    ) -> anyhow::Result<i64> {
+        match time {
+            DeletionTime::AtWriterLock => super::accounting::store::AsOf::Now.sample_on(conn).await,
+            #[cfg(test)]
+            DeletionTime::Explicit(as_of_ms) => Ok(as_of_ms),
+        }
+    }
+
+    /// The ledger's hour validation and due expiries, before a deletion takes
+    /// the write lock, so that its maintenance under the lock stays bounded
+    /// (see `AccountingStore::prepare_delete`).
+    async fn prepare_delete(&self, time: DeletionTime) -> anyhow::Result<Option<i64>> {
+        let as_of = match time {
+            DeletionTime::AtWriterLock => super::accounting::store::AsOf::Now,
+            #[cfg(test)]
+            DeletionTime::Explicit(as_of_ms) => super::accounting::store::AsOf::At(as_of_ms),
+        };
+        super::accounting::store::AccountingStore::prepare_delete(self, as_of).await
+    }
+
+    /// Main-state cleanup only; earlier logs, memories and goals have separate commits.
+    pub(super) async fn delete_threads_on_connection(
+        conn: &mut sqlx::SqliteConnection,
+        thread_ids: &[ThreadId],
+        as_of_ms: i64,
+        validated_at_ms: Option<i64>,
+    ) -> anyhow::Result<u64> {
+        super::accounting::native::delete_on_connection(
+            conn,
+            thread_ids,
+            as_of_ms,
+            validated_at_ms,
+        )
+        .await?;
+        let thread_id_strings = thread_ids
+            .iter()
+            .map(ThreadId::to_string)
+            .collect::<Vec<_>>();
         for thread_id_string in &thread_id_strings {
             sqlx::query("DELETE FROM thread_dynamic_tools WHERE thread_id = ?")
                 .bind(thread_id_string)
-                .execute(&mut *tx)
+                .execute(&mut *conn)
                 .await?;
         }
         for thread_id_string in &thread_id_strings {
@@ -1081,19 +1196,17 @@ ON CONFLICT(id) DO UPDATE SET
             )
             .bind(thread_id_string)
             .bind(thread_id_string)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?;
         }
         let mut rows_affected = 0;
         for thread_id_string in &thread_id_strings {
             rows_affected += sqlx::query("DELETE FROM threads WHERE id = ?")
                 .bind(thread_id_string)
-                .execute(&mut *tx)
+                .execute(&mut *conn)
                 .await?
                 .rows_affected();
         }
-        tx.commit().await?;
-
         Ok(rows_affected)
     }
 }
@@ -1250,6 +1363,7 @@ pub(super) fn extract_memory_mode(items: &[RolloutItem]) -> Option<String> {
         | RolloutItem::Compacted(_)
         | RolloutItem::TurnContext(_)
         | RolloutItem::WorldState(_)
+        | RolloutItem::SourceOrigin(_)
         | RolloutItem::EventMsg(_) => None,
     })
 }
@@ -3222,6 +3336,7 @@ mod tests {
                     model_context_window: None,
                 }),
                 rate_limits: None,
+                account_usage: None,
             },
         ))];
         let override_updated_at =

@@ -47,6 +47,7 @@ use super::execution::ClaudeSecretRedactor;
 use super::execution::failed_turn_output;
 use super::execution::partial_failed_turn_output;
 use super::execution::run_claude_command_plan;
+#[cfg(unix)]
 use super::execution::stop_claude_child;
 use super::execution::write_turn_audit;
 use super::output_parse::parse_claude_output;
@@ -75,13 +76,16 @@ use super::smoke_workflows::smoke_provider_profile;
 use super::turn_types::ClaudeBridgeKind;
 #[cfg(unix)]
 use super::turn_types::ClaudeBridgePlan;
+#[cfg(unix)]
 use super::turn_types::ClaudeCommandPlan;
 use super::turn_types::ClaudePaneReasoningEvent;
 use super::turn_types::ClaudePaneToolEvent;
 use super::turn_types::ClaudePaneTurnOutput;
 use super::turn_types::ClaudePaneTurnProgress;
+use super::turn_types::PaneDirectAccounting;
 
 use std::path::PathBuf;
+#[cfg(unix)]
 use tokio::process::Command;
 
 // Re-export items the test helpers use with their original unqualified names.
@@ -1545,6 +1549,9 @@ async fn anthropic_passthrough_bridge_replaces_client_auth_and_forwards_oauth_be
                 Arc::new(format!("http://{upstream_addr}")),
                 reqwest::Client::new(),
                 /*proxy_count_tokens*/ true,
+                /*send_api_key_header*/ false,
+                /*accounting_tx*/ None,
+                /*accounting_provider_id*/ Arc::new(None),
             )
             .await
             .expect("proxy request");
@@ -1611,6 +1618,9 @@ async fn anthropic_compatibility_bridge_keeps_authorized_synthetic_token_counts(
                 Arc::new("http://127.0.0.1:1".to_string()),
                 reqwest::Client::new(),
                 /*proxy_count_tokens*/ false,
+                /*send_api_key_header*/ false,
+                /*accounting_tx*/ None,
+                /*accounting_provider_id*/ Arc::new(None),
             )
             .await
             .expect("serve compatibility request");
@@ -2474,6 +2484,9 @@ fn bridge_redaction_plan(
         provider_model: "test-model".to_string(),
         turn_index: 1,
         command_mode: ClaudeCommandMode::NewSession,
+        direct_accounting: None,
+        containment: None,
+        stdin_prompt: None,
         command_session_id: "11111111-1111-4111-8111-111111111111".to_string(),
         max_turns: None,
         artifact_path: dir.path().join("turn-0001.jsonl"),
@@ -2489,6 +2502,7 @@ fn bridge_redaction_plan(
             upstream_api_key: Some(secret.to_string()),
             deferred_vault_secret: None,
             upstream_model: "test-model".to_string(),
+            accounting_provider_id: None,
         }),
     }
 }
@@ -2507,7 +2521,8 @@ fn claude_secret_redactor_redacts_bridge_credentials() {
 
 #[test]
 fn relative_claude_config_dir_is_bound_to_the_launch_cwd() {
-    let launch_cwd = PathBuf::from("/launch/cwd");
+    // `/launch/cwd` has no drive on Windows; anchor it like the product does.
+    let launch_cwd = std::path::absolute("/launch/cwd").expect("absolute launch cwd");
     let resolved = absolute_claude_config_dir_override_against(
         Some(PathBuf::from("profiles/work")),
         &launch_cwd,
@@ -2798,8 +2813,140 @@ fn claude_provider_picker_labels_are_compact() {
     );
     assert_eq!(
         ClaudeProviderProfileKind::ClaudePlan.status_model_label(),
-        "Opus 5 Claude Plan"
+        "Opus 5.5 Claude Plan"
     );
+}
+
+#[test]
+fn claude_plan_pane_label_names_the_pinned_model_it_serves() {
+    let (dir, pane) = pane(ClaudeProviderProfileKind::ClaudePlan);
+    let plan =
+        build_claude_command_plan(&pane, "hello".to_string(), dir.path()).expect("command plan");
+    let model_arg = plan
+        .args
+        .iter()
+        .position(|arg| arg == "--model")
+        .and_then(|index| plan.args.get(index + 1))
+        .expect("--model argument");
+
+    // The pane asks Claude Code for an exact model, not the moving `opus`
+    // alias, and its label names that model.
+    assert_eq!(model_arg, "claude-opus-5-5");
+    assert_eq!(plan.provider_model, "claude-opus-5-5");
+    assert_eq!(
+        ClaudeProviderProfileKind::ClaudePlan.status_model_label(),
+        "Opus 5.5 Claude Plan"
+    );
+}
+
+#[test]
+fn saved_claude_plan_pane_titles_move_to_the_current_label() {
+    use super::persistence::current_profile_title;
+    use super::persistence::spawn_identity_from_title;
+    let profile = ClaudeProviderProfileKind::ClaudePlan;
+
+    assert_eq!(
+        current_profile_title(
+            "Claude Code Burzum [troll] - Opus 5 Claude Plan".to_string(),
+            profile
+        ),
+        "Claude Code Burzum [troll] - Opus 5.5 Claude Plan"
+    );
+    assert_eq!(
+        current_profile_title("Review - Claude Plan".to_string(), profile),
+        "Review - Claude Plan"
+    );
+    assert_eq!(
+        current_profile_title("My review pane".to_string(), profile),
+        "My review pane"
+    );
+    assert_eq!(
+        spawn_identity_from_title("Claude Code Burzum [troll] - Opus 5 Claude Plan", profile),
+        (Some(SpawnRole::Troll), Some("Burzum".to_string()))
+    );
+}
+
+#[test]
+fn saved_pane_with_the_old_opus_5_label_restores_relabelled() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let pane_id = "claude-opus5-label-pane";
+    let artifact_dir = codex_home.path().join("panes").join(pane_id);
+    std::fs::create_dir_all(&artifact_dir).expect("artifact dir");
+    let artifact_path = artifact_dir.join("turn-0001.jsonl");
+    let audit_path = artifact_dir.join("turn-0001.audit.json");
+    std::fs::write(
+        &artifact_path,
+        serde_json::json!({
+            "type": "result",
+            "subtype": "success",
+            "result": "legacy Claude Plan result",
+            "session_id": "22222222-3333-4444-8555-666666666666"
+        })
+        .to_string(),
+    )
+    .expect("artifact");
+    std::fs::write(
+        &audit_path,
+        serde_json::json!({
+            "pane_id": pane_id,
+            "pane_title": "Claude Code Burzum [troll] - Opus 5 Claude Plan",
+            "provider": "Claude Code - Opus 5 Claude Plan",
+            "model": "opus",
+            "session_id": "22222222-3333-4444-8555-666666666666",
+            "turn_index": 1,
+            "command_mode": "new-session",
+            "max_turns": null,
+            "artifact_path": artifact_path,
+            "audit_path": audit_path,
+            "timeout_ms": null,
+            "started_at_unix_ms": current_unix_ms_i64(),
+            "ended_at_unix_ms": current_unix_ms_i64(),
+            "last_progress_elapsed_ms": null,
+            "duration_ms": 123,
+            "usage": null,
+            "usage_status": "untrusted",
+            "terminal_reason": null,
+            "status": "success",
+            "error_summary": null,
+            "reasoning_event_count": 0,
+            "reasoning_events": [],
+            "tool_use_count": 0,
+            "tool_names": [],
+            "tool_events": []
+        })
+        .to_string(),
+    )
+    .expect("audit");
+
+    let layout = PaneLayoutState {
+        version: PANE_LAYOUT_VERSION,
+        codex_thread_id: Some("019f0657-1d67-7103-9d65-89e71587347d".to_string()),
+        active_user_pane_id: None,
+        spawn_nazgul_pane_id: None,
+        claude_pane_ids: vec![pane_id.to_string()],
+        spawn_parent_by_node: BTreeMap::new(),
+        ..Default::default()
+    };
+    let restored = ClaudePaneRegistry::restore_from_disk(codex_home.path(), Some(&layout));
+    assert_eq!(restored.panes().len(), 1);
+    let pane = &restored.panes()[0];
+    assert_eq!(pane.id, pane_id);
+    assert_eq!(pane.profile, ClaudeProviderProfileKind::ClaudePlan);
+    assert_eq!(pane.spawn_role, Some(SpawnRole::Troll));
+    assert_eq!(pane.spawn_nickname.as_deref(), Some("Burzum"));
+    assert_eq!(
+        pane.title,
+        "Claude Code Burzum [troll] - Opus 5.5 Claude Plan"
+    );
+    assert_eq!(
+        pane.claude_session_id.as_deref(),
+        Some("22222222-3333-4444-8555-666666666666")
+    );
+    assert_eq!(
+        pane.latest_result_message.as_deref(),
+        Some("legacy Claude Plan result")
+    );
+    assert_eq!(pane.next_turn_index, 2);
 }
 
 #[test]
@@ -3011,6 +3158,7 @@ fn interrupt_turn_cancels_prepared_claude_token_and_finishes_cleanly() {
         status: ClaudePaneTurnStatus::Interrupted,
         session_id: None,
         usage_summary: None,
+        turn_usage_summary: None,
         usage_status: ClaudePaneUsageStatus::Missing,
         artifact_path: dir.path().join("turn-0001.jsonl"),
         audit_path: dir.path().join("turn-0001.audit.json"),
@@ -3021,6 +3169,7 @@ fn interrupt_turn_cancels_prepared_claude_token_and_finishes_cleanly() {
         tool_events: Vec::new(),
         reasoning_events: Vec::new(),
         command_mode: ClaudeCommandMode::NewSession,
+        direct_accounting: None,
     });
     registry.finish_turn(&pane_id, &result);
 
@@ -3120,6 +3269,9 @@ async fn cancelling_running_command_returns_interrupted_output() {
             provider_model: "test-model".to_string(),
             turn_index: 1,
             command_mode: ClaudeCommandMode::NewSession,
+            direct_accounting: None,
+            containment: None,
+        stdin_prompt: None,
             command_session_id: "55555555-5555-4555-8555-555555555555".to_string(),
             max_turns: None,
             artifact_path: artifact_path.clone(),
@@ -3263,7 +3415,7 @@ fn claude_spawn_pane_title_includes_role() {
             /*spawn_role*/ None,
             /*spawn_nickname*/ None
         ),
-        "Claude Code - Opus 5 Claude Plan"
+        "Claude Code - Opus 5.5 Claude Plan"
     );
 }
 
@@ -3290,7 +3442,7 @@ fn create_pane_with_role_sets_spawn_role_and_title() {
     assert_eq!(pane.spawn_nickname.as_deref(), Some("Burzum"));
     assert_eq!(
         pane.title,
-        "Claude Code Burzum [troll] - Opus 5 Claude Plan"
+        "Claude Code Burzum [troll] - Opus 5.5 Claude Plan"
     );
 }
 
@@ -3391,6 +3543,7 @@ fn registry_locks_turns_and_resumes_stored_session() {
         status: ClaudePaneTurnStatus::Success,
         session_id: Some("11111111-2222-4333-8444-555555555555".to_string()),
         usage_summary: None,
+        turn_usage_summary: None,
         usage_status: ClaudePaneUsageStatus::Missing,
         artifact_path: dir.path().join("turn-0001.jsonl"),
         audit_path: dir.path().join("turn-0001.audit.json"),
@@ -3401,6 +3554,7 @@ fn registry_locks_turns_and_resumes_stored_session() {
         tool_events: Vec::new(),
         reasoning_events: Vec::new(),
         command_mode: ClaudeCommandMode::NewSession,
+        direct_accounting: None,
     });
     registry.finish_turn(&pane_id, &result);
 
@@ -3482,6 +3636,7 @@ fn provider_error_clears_resume_session_for_next_turn() {
         status: ClaudePaneTurnStatus::ProviderError,
         session_id: Some("11111111-2222-4333-8444-555555555555".to_string()),
         usage_summary: None,
+        turn_usage_summary: None,
         usage_status: ClaudePaneUsageStatus::Untrusted,
         artifact_path: dir.path().join("turn-0001.jsonl"),
         audit_path: dir.path().join("turn-0001.audit.json"),
@@ -3492,6 +3647,7 @@ fn provider_error_clears_resume_session_for_next_turn() {
         tool_events: Vec::new(),
         reasoning_events: Vec::new(),
         command_mode: ClaudeCommandMode::Resume,
+        direct_accounting: None,
     });
     registry.finish_turn(&pane_id, &result);
 
@@ -3528,6 +3684,7 @@ fn max_turn_output_keeps_resume_guidance_and_audit_hint() {
         status: ClaudePaneTurnStatus::MaxTurnsPause,
         session_id: Some("44444444-4444-4444-8444-444444444444".to_string()),
         usage_summary: Some(r#"{"input_tokens":10}"#.to_string()),
+        turn_usage_summary: None,
         usage_status: ClaudePaneUsageStatus::Reported,
         artifact_path: dir.path().join("turn-0001.jsonl"),
         audit_path: dir.path().join("turn-0001.audit.json"),
@@ -3541,6 +3698,7 @@ fn max_turn_output_keeps_resume_guidance_and_audit_hint() {
         }],
         reasoning_events: Vec::new(),
         command_mode: ClaudeCommandMode::NewSession,
+        direct_accounting: None,
     };
 
     assert!(output.failure_message().contains("Type `continue`"));
@@ -3591,6 +3749,7 @@ fn turn_audit_counts_tool_events_not_unique_tool_names() {
         status: ClaudePaneTurnStatus::Success,
         session_id: Some("11111111-2222-4333-8444-555555555555".to_string()),
         usage_summary: None,
+        turn_usage_summary: None,
         usage_status: ClaudePaneUsageStatus::Missing,
         artifact_path: plan.artifact_path.clone(),
         audit_path: plan.audit_path.clone(),
@@ -3614,6 +3773,7 @@ fn turn_audit_counts_tool_events_not_unique_tool_names() {
         ],
         reasoning_events: Vec::new(),
         command_mode: ClaudeCommandMode::NewSession,
+        direct_accounting: None,
     };
 
     write_turn_audit(
@@ -3638,6 +3798,7 @@ fn turn_audit_serializes_reasoning_events() {
         status: ClaudePaneTurnStatus::Success,
         session_id: Some("11111111-2222-4333-8444-555555555555".to_string()),
         usage_summary: None,
+        turn_usage_summary: None,
         usage_status: ClaudePaneUsageStatus::Missing,
         artifact_path: plan.artifact_path.clone(),
         audit_path: plan.audit_path.clone(),
@@ -3650,6 +3811,7 @@ fn turn_audit_serializes_reasoning_events() {
             preview: "Inspect Orc output before reporting to the Nazgul.".to_string(),
         }],
         command_mode: ClaudeCommandMode::NewSession,
+        direct_accounting: None,
     };
 
     write_turn_audit(
@@ -4094,4 +4256,1047 @@ async fn live_ambient_bridge_runs_disposable_edit_task() {
         std::fs::read_to_string(&target).expect("read edited fixture"),
         "PFT_EDIT_OK\n"
     );
+}
+
+/// The pane's turns are the operator's spend, and the bridge is the only place
+/// that sees them. What gets reported - and what does not - is the whole
+/// feature, so drive it rather than reason about it.
+///
+/// The client this bridge serves sends `/v1/messages?beta=true`. Comparing the
+/// target for exact equality dropped every real turn while still admitting
+/// nothing extra, which is a failure that shows up as silence.
+#[tokio::test]
+async fn passthrough_bridge_reports_inference_and_not_token_counting() {
+    use crate::app_event::AppEvent;
+    use crate::app_event_sender::AppEventSender;
+
+    let upstream_listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind fake upstream");
+    let upstream_addr = upstream_listener.local_addr().expect("upstream address");
+    tokio::spawn(async move {
+        loop {
+            let (mut stream, _) = upstream_listener.accept().await.expect("accept upstream");
+            let _ = read_http_request(&mut stream).await;
+            let body = r#"{"usage":{"input_tokens":11,"output_tokens":7},"type":"message"}"#;
+            stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .expect("write upstream response");
+        }
+    });
+
+    let (event_tx, mut events) = tokio::sync::mpsc::unbounded_channel();
+    let accounting_tx = AppEventSender::new(event_tx);
+    let bridge_listener = TcpListener::bind("127.0.0.1:0").await.expect("bind bridge");
+    let bridge_addr = bridge_listener.local_addr().expect("bridge address");
+    let upstream_base = format!("http://{upstream_addr}");
+    let bridge_upstream_base = upstream_base.clone();
+    tokio::spawn(async move {
+        for _ in 0..2 {
+            let (stream, _) = bridge_listener.accept().await.expect("accept bridge");
+            handle_anthropic_passthrough_bridge_connection(
+                stream,
+                Arc::new("capability".to_string()),
+                Arc::new("upstream-secret-not-real".to_string()),
+                Arc::new(bridge_upstream_base.clone()),
+                reqwest::Client::new(),
+                /*proxy_count_tokens*/ true,
+                /*send_api_key_header*/ false,
+                /*accounting_tx*/ Some(accounting_tx.clone()),
+                /*accounting_provider_id*/ Arc::new(Some("vercel-anthropic".to_string())),
+            )
+            .await
+            .expect("serve bridge request");
+        }
+    });
+
+    let send = |target: &'static str, body: &'static str| async move {
+        let mut client = TcpStream::connect(bridge_addr).await.expect("connect");
+        client
+            .write_all(
+                format!(
+                    "POST {target} HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer capability\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .as_bytes(),
+            )
+            .await
+            .expect("write request");
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).await.expect("read");
+    };
+
+    // Inference, with the beta query this client always sends.
+    send("/v1/messages?beta=true", r#"{"model":"zai/glm-5.2"}"#).await;
+    // Bounded: a defect that stops reporting should fail here and say so,
+    // rather than hang until the runner gives up.
+    let event = tokio::time::timeout(Duration::from_secs(10), events.recv())
+        .await
+        .expect("a send is reported")
+        .expect("a send is reported");
+    match event {
+        AppEvent::PaneBridgeModelRequestSent {
+            provider_id,
+            base_url,
+            path,
+            model,
+            usage,
+        } => {
+            assert_eq!(provider_id, "vercel-anthropic");
+            assert_eq!(base_url, format!("{upstream_base}/v1"));
+            assert_eq!(path, "messages");
+            assert_eq!(model, "zai/glm-5.2");
+            assert_eq!(
+                usage.and_then(|usage| usage["input_tokens"].as_i64()),
+                Some(11)
+            );
+        }
+        other => panic!("unexpected event: {other:?}"),
+    }
+
+    // Token counting is free and is not inference. It must not enter the
+    // ledger, even though this lane proxies it upstream.
+    send(
+        "/v1/messages/count_tokens?beta=true",
+        r#"{"model":"zai/glm-5.2"}"#,
+    )
+    .await;
+    assert!(
+        events.try_recv().is_err(),
+        "token counting must not be reported as a model request"
+    );
+}
+
+/// Every pane profile must report a route the server will accept, and the two
+/// sides of that agreement live in different crates. When they drift the
+/// failure is silence - the server warns and records nothing - so pin it here
+/// rather than discover it by finding the ledger empty.
+#[test]
+fn every_pane_profile_reports_its_provider_s_own_route() {
+    use super::bridge::AMBIENT_CHAT_BASE_URL;
+    use super::provider::ClaudeProviderTransport;
+
+    let catalogue =
+        codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None);
+    for kind in ClaudeProviderProfileKind::restoration_options() {
+        let profile = kind.profile();
+        // What the bridge will report, built the way the bridge builds it.
+        let reported = match profile.transport {
+            ClaudeProviderTransport::AmbientChatBridge => AMBIENT_CHAT_BASE_URL.to_string(),
+            ClaudeProviderTransport::AnthropicPassthroughBridge => format!(
+                "{}/v1",
+                profile
+                    .base_url
+                    .expect("a passthrough profile names its upstream")
+                    .trim_end_matches('/')
+            ),
+            // The Claude Plan profile has no base URL of its own; its bridge
+            // posts to Anthropic.
+            ClaudeProviderTransport::DirectAnthropic
+                if kind == ClaudeProviderProfileKind::ClaudePlan =>
+            {
+                format!("{}/v1", "https://api.anthropic.com".trim_end_matches('/'))
+            }
+            // A direct profile has no bridge at all: the pane talks to the
+            // provider itself, and the turn is recorded from what it reports
+            // against that same route.
+            ClaudeProviderTransport::DirectAnthropic => format!(
+                "{}/v1",
+                profile
+                    .base_url
+                    .expect("a direct profile names its provider")
+                    .trim_end_matches('/')
+            ),
+        };
+        let provider_id = profile
+            .accounting_provider_id
+            .unwrap_or_else(|| panic!("{kind:?} spends on a provider and must name its account"));
+        let provider = catalogue.get(provider_id).unwrap_or_else(|| {
+            panic!("{kind:?} names `{provider_id}`, which this build does not ship")
+        });
+        let api = provider
+            .to_api_provider(/*auth_mode*/ None)
+            .unwrap_or_else(|_| panic!("{provider_id} resolves to an API provider"));
+        assert_eq!(
+            api.base_url.trim_end_matches('/'),
+            reported,
+            "{kind:?} would report a route `{provider_id}` does not serve"
+        );
+    }
+}
+
+/// Claude Code streams. If a streamed turn records with its tokens unknown,
+/// then in practice the ledger has no numbers for the pane lane that is
+/// actually used, which is most of the feature missing.
+#[tokio::test]
+async fn passthrough_bridge_reports_the_numbers_a_streamed_turn_stated() {
+    use crate::app_event::AppEvent;
+    use crate::app_event_sender::AppEventSender;
+
+    let upstream_listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind fake upstream");
+    let upstream_addr = upstream_listener.local_addr().expect("upstream address");
+    tokio::spawn(async move {
+        let (mut stream, _) = upstream_listener.accept().await.expect("accept upstream");
+        let _ = read_http_request(&mut stream).await;
+        let body = concat!(
+            "event: message_start\n",
+            "data: {\"type\":\"message_start\",\"message\":{\"content\":[],\"usage\":{\"input_tokens\":120,\"cache_read_input_tokens\":20,\"output_tokens\":1}}}\n\n",
+            "event: content_block_delta\n",
+            "data: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"hello\"}}\n\n",
+            "event: message_delta\n",
+            "data: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":44}}\n\n",
+        );
+        stream
+            .write_all(
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .as_bytes(),
+            )
+            .await
+            .expect("write streamed upstream response");
+    });
+
+    let (event_tx, mut events) = tokio::sync::mpsc::unbounded_channel();
+    let accounting_tx = AppEventSender::new(event_tx);
+    let bridge_listener = TcpListener::bind("127.0.0.1:0").await.expect("bind bridge");
+    let bridge_addr = bridge_listener.local_addr().expect("bridge address");
+    let upstream_base = format!("http://{upstream_addr}");
+    tokio::spawn(async move {
+        let (stream, _) = bridge_listener.accept().await.expect("accept bridge");
+        handle_anthropic_passthrough_bridge_connection(
+            stream,
+            Arc::new("capability".to_string()),
+            Arc::new("upstream-secret-not-real".to_string()),
+            Arc::new(upstream_base),
+            reqwest::Client::new(),
+            /*proxy_count_tokens*/ true,
+            /*send_api_key_header*/ false,
+            /*accounting_tx*/ Some(accounting_tx),
+            /*accounting_provider_id*/ Arc::new(Some("claude-plan".to_string())),
+        )
+        .await
+        .expect("serve bridge request");
+    });
+
+    let body = r#"{"model":"claude-opus-4-5","stream":true}"#;
+    let mut client = TcpStream::connect(bridge_addr).await.expect("connect");
+    client
+        .write_all(
+            format!(
+                "POST /v1/messages?beta=true HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer capability\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .as_bytes(),
+        )
+        .await
+        .expect("write request");
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).await.expect("read");
+
+    let event = tokio::time::timeout(Duration::from_secs(10), events.recv())
+        .await
+        .expect("a streamed send is reported")
+        .expect("a streamed send is reported");
+    let AppEvent::PaneBridgeModelRequestSent { model, usage, .. } = event else {
+        panic!("unexpected event");
+    };
+    assert_eq!(model, "claude-opus-4-5");
+    let usage = usage.expect("a streamed turn states its usage in its events");
+    assert_eq!(usage["input_tokens"], 120);
+    assert_eq!(usage["cache_read_input_tokens"], 20);
+    assert_eq!(usage["output_tokens"], 44);
+}
+
+/// A turn is recorded from what the pane reports only when this process had no
+/// chance to see the sends itself. Recording both ways would count the same
+/// spend twice.
+#[test]
+fn only_a_pane_without_a_bridge_is_recorded_from_its_own_report() {
+    let home = tempfile::tempdir().expect("temp home");
+    let mut registry = ClaudePaneRegistry::new();
+
+    let direct = registry
+        .create_pane_without_vault_for_test(
+            ClaudeProviderProfileKind::ZaiGlm52,
+            home.path().to_path_buf(),
+            home.path(),
+        )
+        .expect("create direct pane");
+    let plan = build_claude_command_plan(
+        registry
+            .panes
+            .iter()
+            .find(|pane| pane.id == direct)
+            .expect("direct pane"),
+        "prompt".to_string(),
+        home.path(),
+    )
+    .expect("plan for a direct profile");
+    assert!(plan.bridge.is_none(), "this profile talks to z.ai itself");
+    let accounting = plan
+        .direct_accounting
+        .expect("a direct turn is recorded from its own report");
+    assert_eq!(accounting.provider_id, "zai-anthropic");
+    assert_eq!(accounting.base_url, "https://api.z.ai/api/anthropic/v1");
+    assert_eq!(accounting.model, "glm-5.2[1m]");
+
+    let bridged = registry
+        .create_pane_without_vault_for_test(
+            ClaudeProviderProfileKind::VercelGlm52,
+            home.path().to_path_buf(),
+            home.path(),
+        )
+        .expect("create bridged pane");
+    let plan = build_claude_command_plan(
+        registry
+            .panes
+            .iter()
+            .find(|pane| pane.id == bridged)
+            .expect("bridged pane"),
+        "prompt".to_string(),
+        home.path(),
+    )
+    .expect("plan for a bridged profile");
+    assert!(plan.bridge.is_some(), "this profile posts through a bridge");
+    assert!(
+        plan.direct_accounting.is_none(),
+        "a bridged turn is recorded send by send, and must not be recorded twice"
+    );
+}
+
+/// The display summary is the first usage a transcript carries, which is one
+/// model request. A turn that ran a tool loop made several, and only the pane
+/// knows their total. Recording the first request's numbers in a turn-shaped
+/// row undercounts every aggregate a reader of the ledger computes.
+#[test]
+fn a_turn_s_usage_is_the_total_the_pane_stated_not_its_first_request() {
+    let parsed = parse_claude_output(
+        r#"{"type":"assistant","message":{"content":[{"type":"text","text":"one"}],"usage":{"input_tokens":10,"output_tokens":2}}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"two"}],"usage":{"input_tokens":400,"output_tokens":9}}}
+{"type":"result","result":"done","session_id":"22222222-2222-4222-8222-222222222222","usage":{"input_tokens":410,"cache_read_input_tokens":64,"output_tokens":11}}"#,
+    )
+    .expect("parse");
+
+    // Unchanged: the display still shows the shape the turn started with.
+    assert_eq!(
+        parsed.usage_summary.as_deref(),
+        Some(r#"{"input_tokens":10,"output_tokens":2}"#)
+    );
+    // Accounting takes the turn's own total.
+    let total: serde_json::Value = serde_json::from_str(
+        parsed
+            .turn_usage_summary
+            .as_deref()
+            .expect("a stated total"),
+    )
+    .expect("the total is a usage object");
+    assert_eq!(total["input_tokens"], 410);
+    assert_eq!(total["cache_read_input_tokens"], 64);
+    assert_eq!(total["output_tokens"], 11);
+}
+
+/// A turn that stopped before stating a total states no total. Summing the
+/// requests would be this client inventing one, so nothing is recorded.
+#[test]
+fn a_turn_that_stated_no_total_records_none() {
+    let parsed = parse_claude_output(
+        r#"{"type":"assistant","message":{"content":[{"type":"text","text":"one"}],"usage":{"input_tokens":10}}}
+{"type":"result","result":"done","session_id":"22222222-2222-4222-8222-222222222222"}"#,
+    )
+    .expect("parse");
+
+    assert!(parsed.usage_summary.is_some());
+    assert_eq!(parsed.turn_usage_summary, None);
+}
+
+/// What a direct turn records, pinned where it is decided. The row is the
+/// turn's, so the numbers must be the turn's: recording the first request's
+/// usage here undercounts every aggregate computed from these rows.
+#[test]
+fn a_direct_turn_records_the_turn_s_total_and_only_when_there_is_one() {
+    let base = |turn_usage_summary: Option<&str>,
+                direct: Option<PaneDirectAccounting>|
+     -> ClaudePaneTurnOutput {
+        ClaudePaneTurnOutput {
+            text: "done".to_string(),
+            status: ClaudePaneTurnStatus::Success,
+            session_id: None,
+            // The first request's usage, which the display shows and the
+            // ledger must not take.
+            usage_summary: Some(r#"{"input_tokens":10,"output_tokens":2}"#.to_string()),
+            turn_usage_summary: turn_usage_summary.map(ToString::to_string),
+            usage_status: ClaudePaneUsageStatus::Reported,
+            direct_accounting: direct,
+            artifact_path: PathBuf::from("artifact.jsonl"),
+            audit_path: PathBuf::from("audit.json"),
+            duration_ms: 1,
+            terminal_reason: None,
+            error_summary: None,
+            tool_names: Vec::new(),
+            tool_events: Vec::new(),
+            reasoning_events: Vec::new(),
+            command_mode: ClaudeCommandMode::NewSession,
+        }
+    };
+    let direct = PaneDirectAccounting {
+        provider_id: "zai-anthropic".to_string(),
+        base_url: "https://api.z.ai/api/anthropic/v1".to_string(),
+        model: "glm-5.2".to_string(),
+    };
+
+    let (accounting, usage) = base(
+        Some(r#"{"input_tokens":410,"cache_read_input_tokens":64,"output_tokens":11}"#),
+        Some(direct.clone()),
+    )
+    .direct_turn_record()
+    .expect("a direct turn with a stated total is recorded");
+    assert_eq!(accounting, direct);
+    assert_eq!(usage["input_tokens"], 410);
+    assert_eq!(usage["output_tokens"], 11);
+
+    // A turn that stated no total states nothing this client can stand behind.
+    assert!(base(None, Some(direct)).direct_turn_record().is_none());
+    // A bridged turn is recorded send by send and must not be recorded again.
+    assert!(
+        base(Some(r#"{"input_tokens":410}"#), None)
+            .direct_turn_record()
+            .is_none()
+    );
+}
+
+/// An interrupted turn spent what it spent. If the pane stated the total
+/// before it stopped - even in a transcript that no longer parses as a whole -
+/// that turn is recorded.
+#[test]
+fn an_interrupted_direct_turn_is_recorded_when_it_stated_a_total() {
+    let (_home, pane) = pane(ClaudeProviderProfileKind::ZaiGlm52);
+    let home = tempfile::tempdir().expect("codex home");
+    let plan = build_claude_command_plan(&pane, "prompt".to_string(), home.path())
+        .expect("plan for a direct profile");
+
+    let stated = r#"{"type":"assistant","message":{"content":[{"type":"text","text":"one"}],"usage":{"input_tokens":10}}}
+{"type":"result","result":"done","usage":{"input_tokens":410,"output_tokens":11}}
+this line is not json and makes the transcript unparsable"#;
+    let output = partial_failed_turn_output(
+        &plan,
+        /*duration_ms*/ 5,
+        ClaudePaneTurnStatus::Interrupted,
+        Some("interrupted".to_string()),
+        "interrupted".to_string(),
+        stated,
+    );
+    let (_, usage) = output
+        .direct_turn_record()
+        .expect("an interrupted turn that stated a total is recorded");
+    assert_eq!(usage["input_tokens"], 410);
+
+    // A turn that stopped before stating one is not - and this transcript is
+    // unparsable too, so the salvage path really runs and really finds no
+    // total. A reader that took the last usage-bearing line instead of the
+    // `result` line would record this request's tokens as the turn's.
+    let silent = r#"{"type":"assistant","message":{"content":[{"type":"text","text":"one"}],"usage":{"input_tokens":10}}}
+this line is not json and makes the transcript unparsable"#;
+    let output = partial_failed_turn_output(
+        &plan,
+        /*duration_ms*/ 5,
+        ClaudePaneTurnStatus::Interrupted,
+        Some("interrupted".to_string()),
+        "interrupted".to_string(),
+        silent,
+    );
+    assert!(output.direct_turn_record().is_none());
+}
+
+#[test]
+fn aggressive_refuses_new_claude_panes_before_any_artifact() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let mut registry = ClaudePaneRegistry::new();
+    // Saved, not yet active: a pane could rewrite the level before restart.
+    let _levels = crate::security::level::test_levels::set(
+        crate::security::level::ChosenLevel::Permissive,
+        crate::security::level::ChosenLevel::Aggressive,
+    );
+    for role in [None, Some(SpawnRole::Orc)] {
+        let error = registry
+            .create_pane_with_role(
+                ClaudeProviderProfileKind::ClaudePlan,
+                std::env::current_dir().expect("cwd"),
+                codex_home.path(),
+                role,
+                /*spawn_nickname*/ None,
+            )
+            .expect_err("Aggressive refuses Claude panes");
+        assert!(
+            error.to_string().starts_with("Claude panes are off"),
+            "{error}"
+        );
+    }
+    assert!(registry.panes().is_empty());
+    assert!(!codex_home.path().join("panes").exists());
+}
+
+#[test]
+fn aggressive_refuses_turns_in_existing_panes_without_side_effects() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let mut registry = ClaudePaneRegistry::new();
+    let pane_id = registry
+        .create_pane(
+            ClaudeProviderProfileKind::ClaudePlan,
+            std::env::current_dir().expect("cwd"),
+            codex_home.path(),
+        )
+        .expect("create pane");
+    let _levels = crate::security::level::test_levels::set(
+        crate::security::level::ChosenLevel::Aggressive,
+        crate::security::level::ChosenLevel::Aggressive,
+    );
+    let Err(error) = registry.prepare_turn(&pane_id, "hi".to_string(), codex_home.path()) else {
+        panic!("Aggressive refuses Claude turns");
+    };
+    assert!(
+        error.to_string().starts_with("Claude panes are off"),
+        "{error}"
+    );
+    let pane = registry
+        .panes()
+        .iter()
+        .find(|pane| pane.id == pane_id)
+        .expect("pane");
+    assert_eq!(
+        (pane.status.clone(), pane.next_turn_index),
+        (ClaudePaneStatus::Idle, 1)
+    );
+}
+
+/// #507: with the kill switch on, a Claude pane turn is refused the same
+/// way as a Codex turn, before anything starts; turning it off lets turns
+/// through again.
+#[test]
+fn kill_switch_refuses_claude_pane_turns() {
+    use crate::legacy_core::security_level_change::LevelBasis;
+    use crate::legacy_core::security_level_change::SecurityLevel;
+    use crate::legacy_core::security_revocation::HumanRevocation;
+    use crate::legacy_core::security_revocation::KILL_SWITCH_REFUSAL;
+    use crate::legacy_core::security_revocation::commit_human_revocation;
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let mut registry = ClaudePaneRegistry::new();
+    let pane_id = registry
+        .create_pane(
+            ClaudeProviderProfileKind::ClaudePlan,
+            std::env::current_dir().expect("cwd"),
+            codex_home.path(),
+        )
+        .expect("create pane");
+    let switch = |choice| {
+        let basis = LevelBasis::read(
+            codex_home.path(),
+            SecurityLevel::Permissive,
+            /*thread*/ None,
+        );
+        commit_human_revocation(
+            codex_home.path(),
+            SecurityLevel::Permissive,
+            /*thread*/ None,
+            &basis,
+            choice,
+            /*now_unix_seconds*/ 1_000,
+        )
+        .expect("commit");
+    };
+    switch(HumanRevocation::KillSwitchOn);
+    let Err(error) = registry.prepare_turn(&pane_id, "hi".to_string(), codex_home.path()) else {
+        panic!("the kill switch refuses Claude turns");
+    };
+    assert_eq!(error.to_string(), KILL_SWITCH_REFUSAL);
+    let pane = registry
+        .panes()
+        .iter()
+        .find(|pane| pane.id == pane_id)
+        .expect("pane");
+    assert_eq!(
+        (pane.status.clone(), pane.next_turn_index),
+        (ClaudePaneStatus::Idle, 1)
+    );
+
+    switch(HumanRevocation::KillSwitchOff);
+    if let Err(error) = registry.prepare_turn(&pane_id, "hi".to_string(), codex_home.path()) {
+        assert_ne!(error.to_string(), KILL_SWITCH_REFUSAL);
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn aggressive_refuses_to_start_a_claude_process() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let marker = dir.path().join("started");
+    let plan = bridge_redaction_plan(
+        &dir,
+        format!("touch {}", marker.display()),
+        "bridge-secret-for-gate-test",
+    );
+    let _levels = crate::security::level::test_levels::set(
+        crate::security::level::ChosenLevel::Aggressive,
+        crate::security::level::ChosenLevel::Aggressive,
+    );
+    let error = run_claude_command_plan(plan, CancellationToken::new(), /*progress_tx*/ None)
+        .await
+        .expect_err("Aggressive refuses Claude processes");
+    assert!(
+        error.to_string().starts_with("Claude panes are off"),
+        "{error}"
+    );
+    assert!(!marker.exists());
+    assert!(!dir.path().join("turn-0001.audit.json").exists());
+}
+
+/// #218: a contained pane reaches every provider through the bridge, as its
+/// HTTP proxy, with its own Claude state folder and no key helper.
+#[test]
+fn contained_plan_bridges_every_provider_without_a_key_helper() {
+    let state_root = tempfile::tempdir().expect("state root");
+    let _settings =
+        super::containment::test_settings::set(super::containment::ContainmentSettings {
+            enabled: true,
+            linux_sandbox_exe: None,
+            state_root: Some(state_root.path().to_path_buf()),
+        });
+    for kind in ClaudeProviderProfileKind::restoration_options() {
+        let (dir, pane) = pane(kind);
+        let plan = build_claude_command_plan(&pane, "hello".to_string(), dir.path())
+            .unwrap_or_else(|err| panic!("{kind:?}: {err:#}"));
+        let bridge = plan
+            .bridge
+            .as_ref()
+            .expect("every contained pane is bridged");
+        let base_url = format!("http://{}", bridge.bind_addr);
+        assert_eq!(plan.env.get("HTTP_PROXY"), Some(&base_url), "{kind:?}");
+        assert_eq!(
+            plan.env.get("ANTHROPIC_BASE_URL"),
+            Some(&base_url),
+            "{kind:?}"
+        );
+        assert_eq!(
+            plan.env.get("ANTHROPIC_AUTH_TOKEN"),
+            Some(&bridge.client_auth_token),
+            "{kind:?}"
+        );
+        let containment = plan.containment.as_ref().expect("contained");
+        assert!(!containment.state_dir.starts_with(dir.path()), "{kind:?}");
+        assert_eq!(
+            plan.env.get("CLAUDE_CONFIG_DIR").map(String::as_str),
+            containment.config_dir().to_str(),
+            "{kind:?}"
+        );
+        assert!(plan.direct_accounting.is_none(), "{kind:?}");
+        let settings = std::fs::read_to_string(containment.settings_path())
+            .expect("settings should be written to the state folder");
+        assert!(!settings.contains("apiKeyHelper"), "{kind:?}: {settings}");
+        let settings_arg = plan
+            .args
+            .iter()
+            .position(|arg| arg == "--settings")
+            .and_then(|index| plan.args.get(index + 1))
+            .map(PathBuf::from);
+        assert_eq!(settings_arg, Some(containment.settings_path()), "{kind:?}");
+        assert!(!settings.contains("vault auth-helper"), "{kind:?}");
+        let profile = kind.profile();
+        if kind != ClaudeProviderProfileKind::ClaudePlan
+            && profile.transport == super::provider::ClaudeProviderTransport::DirectAnthropic
+        {
+            assert_eq!(
+                bridge.kind,
+                ClaudeBridgeKind::AnthropicApiKeyPassthrough,
+                "{kind:?}"
+            );
+            assert_eq!(
+                Some(bridge.upstream_base_url.as_str()),
+                profile.base_url.map(|url| url.trim_end_matches('/')),
+                "{kind:?}"
+            );
+            assert_eq!(
+                bridge
+                    .deferred_vault_secret
+                    .as_ref()
+                    .map(|secret| secret.label.as_str()),
+                profile.vault_label,
+                "{kind:?}"
+            );
+        }
+    }
+}
+
+/// #218: requests from a contained pane arrive in absolute form through the
+/// proxy setting; the bridge forwards only the path, with the key in both
+/// headers for bridged direct providers.
+#[tokio::test]
+async fn bridge_accepts_absolute_form_targets_and_sends_the_api_key_header() {
+    let upstream_listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind fake upstream");
+    let upstream_addr = upstream_listener.local_addr().expect("upstream address");
+    let upstream = tokio::spawn(async move {
+        let (mut stream, _) = upstream_listener.accept().await.expect("accept upstream");
+        let request = read_http_request(&mut stream).await;
+        stream
+            .write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+            )
+            .await
+            .expect("write fake upstream response");
+        request
+    });
+    let bridge_listener = TcpListener::bind("127.0.0.1:0").await.expect("bind bridge");
+    let bridge_addr = bridge_listener.local_addr().expect("bridge address");
+    let bridge = tokio::spawn(async move {
+        let (stream, _) = bridge_listener.accept().await.expect("accept bridge");
+        handle_anthropic_passthrough_bridge_connection(
+            stream,
+            Arc::new("local-bridge-capability".to_string()),
+            Arc::new("bridge-upstream-secret-not-real".to_string()),
+            Arc::new(format!("http://{upstream_addr}/api/anthropic")),
+            reqwest::Client::new(),
+            /*proxy_count_tokens*/ false,
+            /*send_api_key_header*/ true,
+            /*accounting_tx*/ None,
+            /*accounting_provider_id*/ Arc::new(None),
+        )
+        .await
+        .expect("proxy request");
+    });
+
+    let mut client = TcpStream::connect(bridge_addr).await.expect("connect");
+    client
+        .write_all(
+            format!(
+                "POST http://{bridge_addr}/v1/messages?beta=true HTTP/1.1\r\nHost: {bridge_addr}\r\nAuthorization: Bearer local-bridge-capability\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}"
+            )
+            .as_bytes(),
+        )
+        .await
+        .expect("write bridge request");
+    let mut response = Vec::new();
+    client
+        .read_to_end(&mut response)
+        .await
+        .expect("read response");
+
+    bridge.await.expect("bridge task");
+    let upstream_request = String::from_utf8(upstream.await.expect("upstream task"))
+        .expect("UTF-8 upstream request")
+        .to_ascii_lowercase();
+    assert!(
+        upstream_request.starts_with("post /api/anthropic/v1/messages?beta=true http/1.1"),
+        "{upstream_request}"
+    );
+    assert!(upstream_request.contains("authorization: bearer bridge-upstream-secret-not-real"));
+    assert!(upstream_request.contains("x-api-key: bridge-upstream-secret-not-real"));
+    assert!(!upstream_request.contains("local-bridge-capability"));
+    assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 200 OK"));
+}
+
+/// #218 review: the bridge attaches the provider key upstream, so a crafted
+/// target must never choose the host, port or path it goes to.
+#[test]
+fn passthrough_bridge_forwards_only_messages_routes_to_its_own_host() {
+    use super::bridge::passthrough_upstream;
+    let base = "https://inference.baseten.co";
+    for line in [
+        "POST @attacker.example/v1/messages HTTP/1.1",
+        "POST .attacker.example/v1/messages HTTP/1.1",
+        "POST :8443/v1/messages HTTP/1.1",
+        "POST //attacker.example/v1/messages HTTP/1.1",
+        "POST /v1/messages/../../v1/keys HTTP/1.1",
+        "POST /v1/messages/count_tokens/../x HTTP/1.1",
+        "POST /v1/messages?x=@attacker.example HTTP/1.1",
+        "POST /v1/messages#frag HTTP/1.1",
+        "POST /v1/models HTTP/1.1",
+        "POST http://user:pass@127.0.0.1:1/v1/models HTTP/1.1",
+        "POST",
+    ] {
+        assert_eq!(passthrough_upstream(line, base), None, "{line}");
+    }
+    for (line, path, url) in [
+        (
+            "POST /v1/messages?beta=true HTTP/1.1",
+            "/v1/messages?beta=true",
+            "https://inference.baseten.co/v1/messages?beta=true",
+        ),
+        (
+            "POST http://user:pass@127.0.0.1:1/v1/messages/count_tokens HTTP/1.1",
+            "/v1/messages/count_tokens",
+            "https://inference.baseten.co/v1/messages/count_tokens",
+        ),
+    ] {
+        let (forwarded, upstream) = passthrough_upstream(line, base).expect(line);
+        assert_eq!((forwarded, upstream.as_str()), (path, url), "{line}");
+    }
+    let (_, upstream) = passthrough_upstream(
+        "POST /v1/messages HTTP/1.1",
+        "https://api.z.ai/api/anthropic/",
+    )
+    .expect("base path");
+    assert_eq!(
+        upstream.as_str(),
+        "https://api.z.ai/api/anthropic/v1/messages"
+    );
+}
+
+/// #218: a contained pane asks before each tool through Claude Code's stdio
+/// permission prompt instead of bypassing permissions, and sends the prompt
+/// on stdin rather than in argv.
+#[test]
+fn contained_plan_routes_tool_approvals_to_corbanu() {
+    let state_root = tempfile::tempdir().expect("state root");
+    let _settings =
+        super::containment::test_settings::set(super::containment::ContainmentSettings {
+            enabled: true,
+            linux_sandbox_exe: None,
+            state_root: Some(state_root.path().to_path_buf()),
+        });
+    let (dir, contained_pane) = pane(ClaudeProviderProfileKind::ZaiGlm52);
+    let plan = build_claude_command_plan(&contained_pane, "do the thing".to_string(), dir.path())
+        .expect("plan");
+    assert!(!plan.args.iter().any(|arg| arg == "bypassPermissions"));
+    assert!(!plan.args.iter().any(|arg| arg == "do the thing"));
+    assert_eq!(plan.stdin_prompt.as_deref(), Some("do the thing"));
+    let flag = |name: &str| {
+        plan.args
+            .iter()
+            .position(|arg| arg == name)
+            .and_then(|index| plan.args.get(index + 1))
+            .map(String::as_str)
+    };
+    assert_eq!(flag("--permission-mode"), Some("default"));
+    assert_eq!(flag("--permission-prompt-tool"), Some("stdio"));
+    assert_eq!(flag("--input-format"), Some("stream-json"));
+    // Project settings (hooks, allow rules), MCP servers, CLAUDE.md, skills,
+    // plugins, custom commands and agents are not loaded.
+    assert_eq!(flag("--setting-sources"), Some(""));
+    assert!(plan.args.iter().any(|arg| arg == "--strict-mcp-config"));
+    assert!(plan.args.iter().any(|arg| arg == "--safe-mode"));
+    // Only these tools; no subagents, skills or slash commands.
+    assert_eq!(
+        flag("--tools"),
+        Some("Bash,Read,Edit,Write,MultiEdit,NotebookEdit,Glob,Grep,WebFetch,WebSearch,TodoWrite")
+    );
+    assert_eq!(
+        flag("--disallowedTools"),
+        Some(
+            "Agent,Task,Skill,SlashCommand,Workflow,CronCreate,ScheduleWakeup,SendMessage,EnterWorktree"
+        )
+    );
+    // Corbanu's settings: no hooks, ask before every command, edit and web
+    // request, no bypass.
+    let settings: Value = serde_json::from_str(
+        &std::fs::read_to_string(flag("--settings").expect("settings")).expect("settings file"),
+    )
+    .expect("settings json");
+    assert_eq!(settings["disableAllHooks"], json!(true));
+    assert_eq!(
+        settings["permissions"],
+        json!({
+            "ask": ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"],
+            "deny": [
+                "Agent", "Task", "Skill", "SlashCommand", "Workflow", "CronCreate",
+                "ScheduleWakeup", "SendMessage", "EnterWorktree"
+            ],
+            "disableBypassPermissionsMode": "disable",
+        })
+    );
+
+    // A prompt starting with `/` reaches the model as text, not a command.
+    let plan =
+        build_claude_command_plan(&contained_pane, "/loop 1m rm -rf .".to_string(), dir.path())
+            .expect("plan");
+    assert_eq!(plan.stdin_prompt.as_deref(), Some(" /loop 1m rm -rf ."));
+
+    // Without the feature nothing changes.
+    drop(_settings);
+    let (dir, pane) = pane(ClaudeProviderProfileKind::ZaiGlm52);
+    let plan =
+        build_claude_command_plan(&pane, "do the thing".to_string(), dir.path()).expect("plan");
+    assert!(plan.args.iter().any(|arg| arg == "bypassPermissions"));
+    assert!(
+        !plan
+            .args
+            .iter()
+            .any(|arg| arg == "--safe-mode" || arg == "--disallowedTools")
+    );
+    assert_eq!(plan.args.last().map(String::as_str), Some("do the thing"));
+    assert_eq!(plan.stdin_prompt, None);
+}
+
+#[cfg(unix)]
+#[path = "approval_turn_tests.rs"]
+mod approval_turn;
+
+/// PF-84 (#414): a Claude Plan pane on a named account passes the account in
+/// argv, so a helper that predates named accounts refuses instead of printing
+/// the default account's token; without one, no account variable leaks in.
+#[cfg(unix)]
+#[tokio::test]
+async fn claude_plan_pane_passes_its_named_account_to_the_helper() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let write_helper = |name: &str, body: &str| {
+        let path = dir.path().join(name);
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).expect("helper");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        path
+    };
+    let current = write_helper(
+        "corbanu",
+        "if [ \"$*\" = \"internal-claude-oauth-token --account work --enable named_accounts\" ] && [ \"$CORBANU_PROVIDER_ACCOUNT\" = work ]; then printf token-work; \
+         elif [ \"$*\" = internal-claude-oauth-token ] && [ -z \"${CORBANU_PROVIDER_ACCOUNT+x}\" ]; then printf token-default; else exit 3; fi",
+    );
+    let outdated = write_helper(
+        "old-corbanu",
+        "if [ $# -gt 1 ]; then echo \"error: unexpected argument '$2' found\" >&2; exit 2; fi; printf token-default",
+    );
+    let deferred = |helper: &std::path::Path, account: Option<&str>| {
+        super::turn_types::DeferredClaudePlanAuth {
+            codex_home: dir.path().to_path_buf(),
+            helper_executable: helper.to_path_buf(),
+            cwd: dir.path().to_path_buf(),
+            claude_config_dir_override: None,
+            account: account.map(str::to_string),
+        }
+    };
+    let token = |plan| async move {
+        super::execution::resolve_deferred_claude_plan_token(plan)
+            .await
+            .map(|token| token.to_string())
+    };
+
+    assert_eq!(
+        token(deferred(&current, Some("work")))
+            .await
+            .expect("named"),
+        "token-work"
+    );
+    assert_eq!(
+        token(deferred(&current, None)).await.expect("default"),
+        "token-default"
+    );
+    assert!(token(deferred(&outdated, Some("work"))).await.is_err());
+}
+
+/// #891: where a contained pane's launch denied user namespaces, a tool
+/// result reporting the refusal (bubblewrap's message from Claude Code's own
+/// Bash sandbox, or `unshare`) ends the turn's text with a note naming the
+/// rule. Nothing is added without the rule, or for other failures.
+#[cfg(unix)]
+#[test]
+fn issue_891_pane_names_the_user_namespace_rule_when_a_command_hits_it() {
+    use super::execution::add_user_namespaces_note;
+    use super::output_parse::tool_results_report_user_namespace_denial;
+
+    let call = |id: &str, name: &str| {
+        json!({
+            "type": "assistant",
+            "message": { "role": "assistant", "content": [{
+                "type": "tool_use", "id": id, "name": name, "input": {},
+            }]},
+        })
+        .to_string()
+    };
+    let result = |id: &str, content: Value| {
+        json!({
+            "type": "user",
+            "message": { "role": "user", "content": [{
+                "type": "tool_result", "tool_use_id": id, "content": content,
+            }]},
+        })
+    };
+    // Claude Code's own Bash sandbox, as bubblewrap reports it in a pane.
+    let bwrap = format!(
+        "{}\n{}",
+        call("toolu_1", "Bash"),
+        result(
+            "toolu_1",
+            json!(
+                "bwrap: No permissions to create new namespace, likely because the kernel does not allow non-privileged user namespaces."
+            ),
+        )
+    );
+    let mut unshare_result = result(
+        "toolu_2",
+        json!([{ "type": "text", "text": "unshare: unshare failed: Operation not permitted" }]),
+    );
+    unshare_result["tool_use_result"] =
+        json!({ "stdout": "", "stderr": "unshare: unshare failed: Operation not permitted" });
+    let unshare = format!("{}\n{unshare_result}", call("toolu_2", "Bash"));
+    let other = format!(
+        "{}\n{}",
+        call("toolu_3", "Bash"),
+        result("toolu_3", json!("cat: /etc/shadow: Permission denied"))
+    );
+    // A file Claude Code read, or the assistant quoting the words: no
+    // command ran.
+    let read = format!(
+        "{}\n{}",
+        call("toolu_4", "Read"),
+        result(
+            "toolu_4",
+            json!("unshare: unshare failed: Operation not permitted")
+        )
+    );
+    let quoted = json!({
+        "type": "assistant",
+        "message": { "role": "assistant", "content": [{
+            "type": "text",
+            "text": "unshare: unshare failed: Operation not permitted",
+        }]},
+    })
+    .to_string();
+    for (stdout, reported) in [
+        (bwrap.as_str(), true),
+        (unshare.as_str(), true),
+        (other.as_str(), false),
+        (read.as_str(), false),
+        (quoted.as_str(), false),
+        ("not json", false),
+    ] {
+        assert_eq!(
+            tool_results_report_user_namespace_denial(stdout),
+            reported,
+            "{stdout}"
+        );
+    }
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let plan = bridge_redaction_plan(&dir, String::new(), "secret-891");
+    let turn = |text: &str, level: Option<&str>, stdout: &str| {
+        let mut output = failed_turn_output(
+            &plan,
+            /*duration_ms*/ 0,
+            ClaudePaneTurnStatus::Success,
+            /*terminal_reason*/ None,
+            String::new(),
+        );
+        output.text = text.to_string();
+        add_user_namespaces_note(&mut output, level, stdout);
+        output.text
+    };
+    let noted = turn("It failed.", Some("Moderate"), &bwrap);
+    assert!(
+        noted.starts_with("It failed.\n\nCorbanu Terminal: a command in this turn reported a refused user namespace. Security level Moderate blocks"),
+        "{noted}"
+    );
+    assert!(
+        turn("", Some("Aggressive"), &unshare).starts_with("Corbanu Terminal:"),
+        "empty text gets the note alone"
+    );
+    assert_eq!(turn("It failed.", None, &bwrap), "It failed.");
+    assert_eq!(turn("It failed.", Some("Moderate"), &other), "It failed.");
 }

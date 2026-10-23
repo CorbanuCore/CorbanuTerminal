@@ -1,0 +1,5 @@
+---
+source: tui/src/chatwidget/tests/vault_add_failure.rs
+expression: shown
+---
+■ Failed to add vault credential "moonshot_api_key": failed to open vault lock /Users/example/.corbanu/secrets/.vault.lock: Operation not permitted (os error 1)

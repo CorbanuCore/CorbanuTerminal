@@ -1,0 +1,21 @@
+I found no remaining blocking issues in 047d9e1039. All four blocking findings are fixed, and I found no new bugs. I read the code only; I could not build or run tests because the sandbox is read-only.
+
+**Blocking findings**
+1. **Fixed: role-based children keep the parent's account** (`core/src/agent/role.rs:202-214`). After a role is applied, a child on the same provider gets the parent's live account back, both in `model_providers` and in `model_provider`. The spawn `account` check runs after the role is applied (`multi_agents/spawn.rs:120`, `multi_agents_v2/spawn.rs:179`), so a role can no longer swap the account without the D3 check. One side effect: a role file's own `[provider_accounts]` is now ignored when the child stays on the same provider. That fits "inherit unless the spawn names one", but it should be documented.
+2. **Fixed: D3 uses the level in force** (`multi_agents_account.rs:64-73`). The check now takes the stricter of the configured level and the level from `snapshot_for_agent`. `SecurityLevel` derives `Ord` in the order Permissive < Moderate < Aggressive, so `max` picks the stricter one. If the policy can't be read, it counts as Aggressive. Every session sets up its policy at startup (`session.rs:646`), so that fallback won't hit normal sessions.
+3. **Fixed: `--account` is stored with its provider** (`config/mod.rs:4193-4211`). The TUI and exec now forward `<provider>:<name>`, using the same provider that the TUI check ran against. A thread on another provider can't reinterpret it.
+4. **Fixed: TUI workers inherit the parent's account** (`thread_processor.rs:700-707`, `session.rs:244-252`). `thread/spawnAgent` uses the parent's live account unless the request names one. The parent's account is always set, including `<provider>:default`, and uses the provider the parent is currently on. With the `named_accounts` feature off, `<provider>:default` still passes. One small gap: the TUI fills the worker's `provider_account` from `config.provider_account_override`, so with `--account` the worker gets the CLI selection, not the parent's live account. Today those are the same unless the parent changed provider mid-session, and then the selection is ignored because it names the old provider.
+
+**Non-blocking findings the fix touched**
+- **5 (resume): fixed.** Resume now reads only the newest turn context, and only when the thread resumes on the recorded provider. It is also applied before the config is built. If a resume passes an explicit model but no provider, the recorded account is still applied. If that recorded provider has since been removed from the config, the resume fails with "unknown provider". This is an edge case; ignoring the account in that case would be more forgiving.
+- **6 (running-thread resume): fixed, with one rough edge** (`thread_processor.rs:85-92`). The check compares the raw request value with the stored `<provider>:<name>` value. A client that sends `work` or `default` without a provider gets a false mismatch: an idle cached thread is cold-reloaded, otherwise only a warning is logged. The TUI is unaffected because it now always sends `<provider>:<name>`. Normalizing the request with `split_account_selection(…, &snapshot.model_provider_id)` would fix it.
+- **9 (error prefix): fixed.** Errors now read `--account <provider>:<name>: …` and `spawn_agent account: …`. Both remove the prefix by matching the literal string `provider_accounts.{id}: `, so an error helper without the prefix would hold up better if that text changes.
+- **10 (tests): improved, still gaps.** New tests cover inheritance with and without a role, switching accounts below Aggressive with no prompt, and the resume provider check. Still missing:
+  - a D3 case where the configured level is Permissive but a stricter level was committed during the session (the actual bypass that was fixed);
+  - `thread/spawnAgent` inheritance;
+  - the running-thread account mismatch check;
+  - stored `<provider>:<name>` form for a prefix-less `--account`.
+
+VERDICT: approve
+
+Remaining blocking findings: none.

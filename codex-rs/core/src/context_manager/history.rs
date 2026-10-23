@@ -58,6 +58,9 @@ pub(crate) struct ContextManager {
     reference_context_item: Option<TurnContextItem>,
     /// World state most recently appended to model-visible history.
     world_state_baseline: Option<WorldStateSnapshot>,
+    /// #578: whether this session already logged that another provider's
+    /// compaction summary is left out (shared by every snapshot).
+    foreign_compaction_warned: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl ContextManager {
@@ -70,6 +73,7 @@ impl ContextManager {
             ),
             reference_context_item: None,
             world_state_baseline: None,
+            foreign_compaction_warned: Arc::default(),
         }
     }
 
@@ -144,6 +148,28 @@ impl ContextManager {
     pub(crate) fn for_prompt(mut self, input_modalities: &[InputModality]) -> Vec<ResponseItem> {
         self.normalize_history(input_modalities);
         Arc::unwrap_or_clone(self.items)
+    }
+
+    /// [`Self::for_prompt`] for a request of `turn_context`'s provider: items
+    /// another provider produced are adapted first (#578, see
+    /// [`super::provider_items`]).
+    pub(crate) fn for_turn_prompt(mut self, turn_context: &TurnContext) -> Vec<ResponseItem> {
+        let dropped_summary = super::provider_items::adapt_for_provider(
+            Arc::make_mut(&mut self.items),
+            &super::provider_items::ProviderTarget::for_turn(turn_context),
+        );
+        // Once per session: prompts are built several times per turn.
+        if dropped_summary
+            && !self
+                .foreign_compaction_warned
+                .swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
+            tracing::warn!(
+                "another provider's compaction summary is left out of requests to this \
+                 provider; it cannot read it"
+            );
+        }
+        self.for_prompt(&turn_context.model_info.input_modalities)
     }
 
     /// Returns raw items in the history.
@@ -546,6 +572,13 @@ fn estimate_response_item_model_visible_bytes(item: &ResponseItem) -> i64 {
                 audio_data_url_estimate_adjustment(item);
             let (encrypted_payload_bytes, encrypted_replacement_bytes) =
                 encrypted_function_output_estimate_adjustment(item);
+            // #578: the local producer never reaches the model
+            // (`,"producer":"…"` in the passthrough metadata; history items
+            // always carry a turn ID first, so that is all it adds).
+            let local_provenance_bytes = item.producer().map_or(0, |producer| {
+                i64::try_from(producer.len() + r#","producer":"""#.len()).unwrap_or(0)
+            });
+            let raw = raw.saturating_sub(local_provenance_bytes);
             // Replace raw base64 payload bytes with per-modality estimates.
             // We intentionally preserve the data URL prefix and JSON
             // wrapper bytes already included in `raw`.

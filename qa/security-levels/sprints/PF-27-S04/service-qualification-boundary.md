@@ -11,9 +11,10 @@ native peer, binding, MAC and expiring grants; the runtime also requires the
 existing `ProtectedModeAuthorization`. None is a worker-deserialized setup API.
 
 The normal `codex-secret-broker-service` binary still exits 78. The separately
-named `codex-secret-broker-service-fixture` requires the `synthetic-fixture`
-build feature and an explicit fixture argument. It uses only a newly created
-synthetic Vault, mock keyring, volatile test integrity root and fixed receipt
+named `codex-secret-broker-service-fixture` is built only from the test-only
+`codex-secret-broker-fixture` package and requires an explicit fixture
+argument. It uses only a newly created synthetic Vault, mock keyring, volatile
+test integrity root and fixed receipt
 transport. Its inherited socket-pair peer is the parent that created the pair,
 not the child's post-exec PID. Native peer checks do not prove process isolation.
 

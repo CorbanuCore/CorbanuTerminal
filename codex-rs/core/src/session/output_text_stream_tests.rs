@@ -6,7 +6,7 @@ use pretty_assertions::assert_eq;
 fn pending_output_text_binds_unidentified_text_to_the_first_item() {
     let mut pending = PendingOutputText::default();
     pending
-        .push(None, "early ".to_string())
+        .push(/*item_id*/ None, "early ".to_string())
         .expect("first delta should buffer");
     pending
         .push(Some("msg-1".to_string()), "text".to_string())

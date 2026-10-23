@@ -1,0 +1,8 @@
+home hP accounts:
+  kimi-code	kimionly	api_key
+  zpx	aggr	api_key
+  zpx	fake	api_key
+  zpx	main	api_key
+  zpx	work	api_key
+default account = env ZPX_API_KEY (canary 'default'); proxy forwards: default,main,work; 401 for fake,kimionly,aggr
+proxy session started

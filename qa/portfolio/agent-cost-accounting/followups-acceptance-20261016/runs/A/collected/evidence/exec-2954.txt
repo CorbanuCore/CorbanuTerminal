@@ -1,0 +1,24 @@
+argv: ['/opt/agms/bin/agms-product', '--exec', 'zai', 'glm-5.3-flash', 'Reply with the single word CONTROL.']
+exit: 0
+--- stdout
+CONTROL
+
+--- stderr
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: /Users/agmx2/runs/acc-A-agmx2-20261016T035204Z/fixture/workspace
+model: glm-5.3-flash
+provider: zai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+session id: 01a142f6-e433-7991-b3ab-6d8e3ca8ab0d
+--------
+user
+Reply with the single word CONTROL.
+{"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":32997,"ms_to_response_headers":2224,"ms_to_first_sse_byte":2224,"ms_to_first_parsed_data_event":2225,"ms_to_first_actionable_event":2225,"total_stream_ms":2248,"comment_frame_count":0,"parsed_event_count":18,"x_request_id":"1fd882ab-1b66-4f1c-a06f-e6a95f124577","generation_id":"20261016122722d2a7da3001834d66","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+corbanu
+CONTROL
+tokens used
+6,980
+

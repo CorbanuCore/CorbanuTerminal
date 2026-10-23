@@ -1,0 +1,16 @@
+Request
+Requested UTC day: 2026-10-15
+Provider: kimi
+Model: kimi-k2.7-code
+Billing: Pay per use
+Estimated cost: $0.011027 (rounded)
+Tokens: 11,572 tokens
+—— Details ——
+Billed cost: kimi doesn't report its charges, so any cost here is an estimate — check kimi's bill.
+Request: 7942db8e-2ad4-4197-873b-95c69d4a9ff0
+Snapshot is not current; newer activity is unverified
+—— Open ——
+→ Technical details (attempt 1)
+Back
+Refresh
+Close

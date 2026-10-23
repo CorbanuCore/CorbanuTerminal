@@ -25,7 +25,7 @@ impl ChatWidget {
                         "Search preserved prompts and summaries within your current access."
                             .to_string(),
                         initial,
-                        None,
+                        /*context_label*/ None,
                         Box::new(move |input| {
                             if let Ok(mut url) =
                                 url::Url::parse(&format!("https://tracker.invalid{source}"))
@@ -67,7 +67,7 @@ impl ChatWidget {
                     String::new()
                 };
                 let tx = self.app_event_tx.clone();
-                self.show_custom_prompt_view(CustomPromptView::new("Correct task mapping".to_string(), "First line: owned task IDs separated by spaces (empty clears mapping). Following lines: rationale.".to_string(), initial, None, Box::new(move |input| {
+                self.show_custom_prompt_view(CustomPromptView::new("Correct task mapping".to_string(), "First line: owned task IDs separated by spaces (empty clears mapping). Following lines: rationale.".to_string(), initial, /*context_label*/ None, Box::new(move |input| {
                     let mut lines=input.lines();
                     let tasks: Vec<&str> = lines.next().unwrap_or("").split_whitespace().collect();
                     let note=lines.collect::<Vec<_>>().join("\n");

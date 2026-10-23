@@ -1,0 +1,32 @@
+$ /cost 2026-10-02
+╭───────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)         │
+│                                       │
+│ model:     glm-5.2   /model to change │
+│ directory: ~/pf60-s05-indep/work/repo │
+╰───────────────────────────────────────╯
+
+  Cost — this conversation
+  Requested UTC day: 2026-10-02
+  This conversation on 2026-10-02 (UTC): no recorded requests.
+  Other conversations on this day, not included above: 493 requests in 27 conversations.
+  • Claude Plan · Claude Opus 5.5 Plan — Covered by your subscription (not billed per request). 485 requests, 158,568,263+ tokens. Same work at API prices:
+  at least $51.802843 (rounded).
+  • Z.AI · Z.AI GLM 5.2 — Pay per use. 8 requests, 141,514 tokens. Estimated cost: $0.160219 (rounded).
+  Other conversations' estimated cost: $0.160219 (rounded); subscription part — same work at API prices: at least $51.802843 (rounded).
+  3 conversations could not be read in full; their cost is unknown and not included.
+  To see those requests, open that conversation with /resume and run /cost there.
+  ↑↓ scroll · Enter open · Esc back/close
+  Costs are estimates from published prices; your provider's bill is the final amount.
+  —— Details ——
+  No recorded attempts in this conversation or its subagents; collection coverage unknown.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-02T00:00:00.000Z, 2026-10-03T00:00:00.000Z)
+  Read at: 2026-10-09T14:11:06.119Z; ledger current to: 2026-10-03T22:31:33.704Z (488372415 ms behind)
+  Retention: request detail kept since 2026-07-11T14:11:06.119Z; daily totals kept since 2025-10-04; oldest recorded day in this conversation none
+  Known subtotal exact USD: none — no recorded attempts in this conversation
+  Input: 0
+  Noncached input (derived for inclusive input): 0

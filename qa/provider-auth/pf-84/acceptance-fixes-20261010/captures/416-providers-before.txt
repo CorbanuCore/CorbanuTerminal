@@ -1,0 +1,32 @@
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     glm-5.3-flash   /model to change             │
+│ directory: /Volumes/CorbanuDrive/…/pf84fix-scratch/work │
+╰─────────────────────────────────────────────────────────╯
+
+⚠ Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true`
+  in <scratch>/hz/config.toml.
+
+› Reply with exactly the word pong and nothing else.
+
+⚠ Z.AI (zai) credential was rejected. Open /providers, select Z.AI, and press r to recover. Other providers are unchanged.
+
+■ unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: b237ccb1-0e93-4053-b6c2-f025e868e22b
+
+  Providers
+  Configure providers and control whether they are eligible for use.
+  Configured means credentials are present, not verified by the provider.
+
+› 1. OpenAI          Not configured · unavailable
+  2. Claude Account  Not configured · unavailable
+  3. Corbanu API     Not configured · unavailable
+  4. Anthropic       Not configured · unavailable
+  5. Ambient         Not configured · unavailable
+  6. Kimi Code       Not configured · unavailable
+  7. Z.AI            Credential needs attention · r recover · current · unavailable
+  8. DeepSeek        Not configured · unavailable
+
+  r recover credentials · Enter manage · Esc back
+  Press enter to confirm or esc to go back
+

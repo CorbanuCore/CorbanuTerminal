@@ -1,0 +1,70 @@
+{
+ "note": "Model-visible tool inventory as observed by the inference mediator on every forwarded request in the campaign (names only). Executor (corbanu exec) and product (TUI) requests share one mediator and one tool set, so per-request attribution is not claimed. Shell access for executors is confined by the OS account, file modes and per-uid pf rules in effective-policy.txt.",
+ "observed_tool_sets": [
+  {
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "view_image",
+    "spawn_agent_v1",
+    "send_input_v1",
+    "wait_agent_v1",
+    "close_agent_v1"
+   ],
+   "requests": 1
+  },
+  {
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "structured_edit",
+    "structured_write",
+    "view_image",
+    "spawn_agent_v1",
+    "send_input_v1",
+    "wait_agent_v1",
+    "close_agent_v1",
+    "get_goal",
+    "create_goal",
+    "update_goal"
+   ],
+   "requests": 1135
+  }
+ ],
+ "executor_shell_tools": {
+  "PATH": "launcher sets /opt/pf83/bin:/usr/bin:/bin:/usr/sbin:/sbin, but the executor shell tool runs bash -lc and path_helper prepends /usr/local/bin, /opt/homebrew/bin and system paths (see runs/F10/executor-events.jsonl); any world-executable tool there was invocable under the executor account",
+  "/opt/pf83/bin": [
+   "pf83-tui",
+   "pf83-probe",
+   "pf83-product",
+   "pf83-launch",
+   "tmux"
+  ],
+  "privilege": "no sudo (probe: 'sudo: a password is required'), no admin/staff/ssh group"
+ },
+ "mcp_servers": "none configured (fresh CORBANU_HOME per run)",
+ "network": "only 127.0.0.1:18443 mediator; all other tcp/udp from executor uids dropped by pf",
+ "mediator_denials_snapshot": {
+  "CONNECT github.com:443 HTTP/1.1": 161,
+  "CONNECT raw.githubusercontent.com:443 HTTP/1.1": 112,
+  "CONNECT codeload.github.com:443 HTTP/1.1": 112,
+  "CONNECT chatgpt.com:443 HTTP/1.1": 98,
+  "CONNECT api.github.com:443 HTTP/1.1": 159,
+  "CONNECT ab.chatgpt.com:443 HTTP/1.1": 192,
+  "CONNECT example.com:443 HTTP/1.1": 1
+ },
+ "mediator_forwarded_status": {
+  "200": 1136
+ },
+ "mediator_denied_paths": {
+  "/": 112
+ },
+ "mediator_errors": {},
+ "snapshot_rows": 2084,
+ "process_visibility": "other accounts' process command lines visible via ps (macOS default); lanes ran concurrently",
+ "mediator_log": "common/mediator-campaign.jsonl (full campaign; per-attempt windows in runs/*/mediator-window.jsonl include concurrent lanes)"
+}

@@ -88,6 +88,19 @@ or restarting.
   is not evidence.
 - Use the repository's release policy for true-TUI and human acceptance gates.
 
+## Which providers a crew may use
+
+`[agents] provider_allowlist` sets which providers crew members may spend on.
+
+- **With an allowlist:** `claude-plan` also allows Claude Code panes on Claude Plan.
+  Other Claude Code panes need their own entry, such as `external-claude:zaiglm52`.
+- **Without one:** a crew accepts the providers usable for spawning when it was created,
+  and every Claude Code pane.
+
+A crew keeps the list it was created with. A crew created before Claude Code panes
+were accepted, or one that says "Crew recovery is read-only until repaired" because
+a Claude Code member couldn't join, needs to be removed and created again.
+
 ## Main implementation
 
 - `codex-rs/tui/src/spawn_orchestration.rs`

@@ -1,0 +1,141 @@
+{
+ "note": "Model-visible tool sets observed by the mediator over the whole run (G01-G25, G18b, G21b), by the request role the relay recorded (executor = corbanu exec of the executor; product = the TUI under test). Names only; no bodies or headers. Full log: common/mediator-final.jsonl.gz; per-run windows: runs/*/mediator-window.jsonl.",
+ "observed_tool_sets": [
+  {
+   "role": "executor",
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "structured_edit",
+    "structured_write",
+    "view_image",
+    "spawn_agent_v1",
+    "send_input_v1",
+    "wait_agent_v1",
+    "close_agent_v1",
+    "resume_agent_v1",
+    "get_goal",
+    "create_goal",
+    "update_goal"
+   ],
+   "requests": 1162
+  },
+  {
+   "role": "product",
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "structured_edit",
+    "structured_write",
+    "view_image",
+    "spawn_agent_v1",
+    "send_input_v1",
+    "wait_agent_v1",
+    "close_agent_v1",
+    "resume_agent_v1",
+    "get_goal",
+    "create_goal",
+    "update_goal"
+   ],
+   "requests": 160
+  },
+  {
+   "role": "product",
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "list_mcp_resources",
+    "list_mcp_resource_templates",
+    "read_mcp_resource",
+    "update_plan",
+    "request_user_input",
+    "structured_edit",
+    "structured_write",
+    "view_image",
+    "spawn_agent_v1",
+    "send_input_v1",
+    "wait_agent_v1",
+    "close_agent_v1",
+    "resume_agent_v1",
+    "get_goal",
+    "create_goal",
+    "update_goal",
+    "mcp__notes__post_note",
+    "mcp__notes__read_shared_note"
+   ],
+   "requests": 27
+  },
+  {
+   "role": "product",
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "structured_edit",
+    "structured_write",
+    "view_image",
+    "get_goal",
+    "create_goal",
+    "update_goal"
+   ],
+   "requests": 3
+  },
+  {
+   "role": "product",
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "view_image",
+    "spawn_agent_v1",
+    "send_input_v1",
+    "wait_agent_v1",
+    "close_agent_v1",
+    "resume_agent_v1"
+   ],
+   "requests": 1
+  },
+  {
+   "role": "product",
+   "tools": [
+    "web_search",
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "structured_edit",
+    "structured_write",
+    "view_image",
+    "spawn_agent_v1",
+    "send_input_v1",
+    "wait_agent_v1",
+    "close_agent_v1",
+    "resume_agent_v1",
+    "get_goal",
+    "create_goal",
+    "update_goal"
+   ],
+   "requests": 1
+  }
+ ],
+ "events": {
+  "started": 1,
+  "denied_proxy_request": 1558,
+  "denied_path": 138,
+  "forwarded": 1354
+ },
+ "denied_connect_targets": {
+  "github.com:443": 232,
+  "raw.githubusercontent.com:443": 138,
+  "codeload.github.com:443": 138,
+  "chatgpt.com:443": 188,
+  "api.github.com:443": 354,
+  "ab.chatgpt.com:443": 508
+ }
+}

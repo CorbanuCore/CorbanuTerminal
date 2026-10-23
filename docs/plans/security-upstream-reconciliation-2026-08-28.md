@@ -3,7 +3,7 @@
 This routine planning/process merge preserves accepted upstream work while adding
 the architecture review's stronger requirements to explicit follow-up sprints.
 It does not implement or qualify a runtime feature, activate another sprint,
-or authorize a release. The [active plan](active/p0-security-levels.md) owns scope.
+or authorize a release. The [active plan](completed/main-2026-10-08-p0-security-levels.md) owns scope.
 
 ## Exact merge inputs
 

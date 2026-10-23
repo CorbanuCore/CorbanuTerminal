@@ -38,6 +38,95 @@ use super::manager::ProviderApiKeyStorageSource;
 /// credentials.
 pub(crate) const PROVIDER_LABEL_PREFIX: &str = "provider/";
 
+/// PF-84: the API key of one named account, from the encrypted vault only.
+/// There is no legacy-file or environment fallback, and a missing account is
+/// `Ok(None)`, never another account's key.
+pub fn provider_account_api_key(
+    codex_home: &Path,
+    provider_id: &str,
+    account_name: &str,
+) -> std::io::Result<Option<String>> {
+    read_provider_account_kind(
+        &Vault::new(codex_home.to_path_buf()),
+        provider_id,
+        account_name,
+        codex_vault::ProviderAccountKind::ApiKey,
+    )
+}
+
+/// PF-84-S06: the AWS profile name (not secret) a named account uses, from
+/// the vault only. A missing account or kind is `Ok(None)`; there is no
+/// fallback to `AWS_PROFILE` or the `default` profile.
+pub fn provider_account_aws_profile(
+    codex_home: &Path,
+    provider_id: &str,
+    account_name: &str,
+) -> std::io::Result<Option<String>> {
+    read_provider_account_kind(
+        &Vault::new(codex_home.to_path_buf()),
+        provider_id,
+        account_name,
+        codex_vault::ProviderAccountKind::AwsProfile,
+    )
+}
+
+/// PF-84: whether a named account holds `kind`, from vault metadata only (no
+/// secret is decrypted). A missing account is `Ok(false)`.
+pub fn provider_account_holds(
+    codex_home: &Path,
+    provider_id: &str,
+    account_name: &str,
+    kind: codex_vault::ProviderAccountKind,
+) -> std::io::Result<bool> {
+    let name = codex_vault::ProviderAccountName::parse(account_name)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
+    let vault = Vault::new(codex_home.to_path_buf());
+    if vault.key_storage() == VaultKeyStorage::NotInitialized {
+        return Ok(false);
+    }
+    vault
+        .provider_account_kinds(provider_id, &name)
+        .map(|kinds| kinds.contains(&kind))
+        .map_err(std::io::Error::other)
+}
+
+/// PF-84 (#609): what a named sign-in account holds (a ChatGPT sign-in or
+/// an OpenAI API key), as its vault metadata records it. Reads the vault
+/// index only, never the sign-in; `Ok(None)` when it holds none or it was
+/// not recorded yet (saved by an earlier build and not used since).
+pub fn provider_account_sign_in(
+    codex_home: &Path,
+    provider_id: &str,
+    account_name: &str,
+) -> std::io::Result<Option<codex_vault::ProviderAccountSignIn>> {
+    let name = codex_vault::ProviderAccountName::parse(account_name)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
+    let vault = Vault::new(codex_home.to_path_buf());
+    if vault.key_storage() == VaultKeyStorage::NotInitialized {
+        return Ok(None);
+    }
+    vault
+        .provider_account_sign_in(provider_id, &name)
+        .map_err(std::io::Error::other)
+}
+
+fn read_provider_account_kind(
+    vault: &Vault,
+    provider_id: &str,
+    account_name: &str,
+    kind: codex_vault::ProviderAccountKind,
+) -> std::io::Result<Option<String>> {
+    let name = codex_vault::ProviderAccountName::parse(account_name)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
+    if vault.key_storage() == VaultKeyStorage::NotInitialized {
+        return Ok(None);
+    }
+    vault
+        .read_provider_account(provider_id, &name, kind)
+        .map(|value| value.map(|value| value.to_string()))
+        .map_err(std::io::Error::other)
+}
+
 /// Resolve a provider API key, preferring the encrypted vault over the legacy plaintext store.
 ///
 /// Returns `Ok(None)` when the key is absent from both stores.
@@ -86,7 +175,10 @@ pub(crate) fn provider_key_metadata(
 /// An unavailable vault degrades to an empty set so callers can preserve the existing legacy
 /// fallback behavior. Secret values are neither decrypted nor returned.
 pub(crate) fn stored_provider_key_ids(codex_home: &Path) -> HashSet<String> {
-    let vault = Vault::new(codex_home.to_path_buf());
+    stored_provider_key_ids_with_vault(&Vault::new(codex_home.to_path_buf()))
+}
+
+fn stored_provider_key_ids_with_vault(vault: &Vault) -> HashSet<String> {
     if vault.key_storage() == VaultKeyStorage::NotInitialized {
         return HashSet::new();
     }
@@ -192,6 +284,14 @@ fn write_provider_key_with_vault(
     api_key: &str,
     vault: Vault,
 ) -> std::io::Result<()> {
+    // #855: checked here as well as by the vault, so that the plaintext
+    // fallback below can never store it either.
+    if codex_vault::is_vault_error_text(api_key) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            codex_vault::VaultError::ErrorTextAsSecret,
+        ));
+    }
     let label = provider_label(provider_key_id);
     let entry = AddCredential {
         label: label.clone(),
@@ -213,6 +313,9 @@ fn write_provider_key_with_vault(
         Ok(_) => true,
         Err(codex_vault::VaultError::NotFound { .. }) => match vault.add(entry) {
             Ok(()) => true,
+            Err(err @ codex_vault::VaultError::StorageUnavailable { .. }) => {
+                return Err(std::io::Error::other(err));
+            }
             Err(err) => {
                 tracing::warn!(
                     ?err,
@@ -225,6 +328,12 @@ fn write_provider_key_with_vault(
                 );
             }
         },
+        // #855: a vault whose storage cannot be reached right now (for
+        // example an unreadable home) is not a keyring-less environment: the
+        // save fails, and the key is not written in plaintext instead.
+        Err(err @ codex_vault::VaultError::StorageUnavailable { .. }) => {
+            return Err(std::io::Error::other(err));
+        }
         Err(err) => {
             tracing::warn!(
                 ?err,
@@ -517,6 +626,173 @@ mod tests {
         assert_eq!(
             vault.reveal("personal-token").expect("user reveal"),
             "keep-me"
+        );
+    }
+
+    /// PF-84: each named account resolves only its own key; a missing account
+    /// never yields the default key, and the default key never yields an account's.
+    #[test]
+    fn named_account_keys_are_isolated_from_each_other_and_from_default() {
+        let codex_home = tempfile::tempdir().expect("tempdir");
+        let keyring = Arc::new(MockKeyringStore::default());
+        write_provider_key_with_store(
+            codex_home.path(),
+            "ZAI_API_KEY",
+            "canary-default",
+            keyring.clone(),
+        )
+        .expect("default key");
+        let vault = Vault::new_with_keyring_store(codex_home.path().to_path_buf(), keyring.clone());
+        for (name, value) in [("a", "canary-a"), ("b", "canary-b")] {
+            vault
+                .write_provider_account(
+                    "zai",
+                    &codex_vault::ProviderAccountName::parse(name).expect("name"),
+                    codex_vault::ProviderAccountKind::ApiKey,
+                    value,
+                )
+                .expect("account key");
+        }
+        let account = |name: &str| {
+            read_provider_account_kind(
+                &vault,
+                "zai",
+                name,
+                codex_vault::ProviderAccountKind::ApiKey,
+            )
+            .expect("read account")
+        };
+        assert_eq!(account("a").as_deref(), Some("canary-a"));
+        assert_eq!(account("b").as_deref(), Some("canary-b"));
+        assert_eq!(account("missing"), None);
+        assert!(
+            read_provider_account_kind(
+                &vault,
+                "zai",
+                "default",
+                codex_vault::ProviderAccountKind::ApiKey,
+            )
+            .is_err(),
+            "`default` is not a named account"
+        );
+        assert_eq!(
+            read_provider_key_with_store(codex_home.path(), "ZAI_API_KEY", keyring)
+                .expect("default read")
+                .as_deref(),
+            Some("canary-default")
+        );
+        // Named labels never surface as default provider-key identities.
+        assert_eq!(
+            stored_provider_key_ids_with_vault(&vault),
+            HashSet::from(["ZAI_API_KEY".to_string()])
+        );
+    }
+
+    /// PF-84 migration: a single-account home resolves identically and its
+    /// vault bytes stay unchanged until the first named-account write.
+    #[test]
+    fn single_account_home_is_unchanged_until_a_named_account_is_added() {
+        let codex_home = tempfile::tempdir().expect("tempdir");
+        let keyring = Arc::new(MockKeyringStore::default());
+        write_provider_key_with_store(codex_home.path(), "ZAI_API_KEY", "canary", keyring.clone())
+            .expect("default key");
+        let vault_file = codex_home.path().join("secrets").join("local.age");
+        let before = std::fs::read(&vault_file).expect("vault bytes");
+        let vault = Vault::new_with_keyring_store(codex_home.path().to_path_buf(), keyring.clone());
+        assert_eq!(vault.list_provider_accounts().expect("list"), Vec::new());
+        assert_eq!(
+            read_provider_account_kind(
+                &vault,
+                "zai",
+                "work",
+                codex_vault::ProviderAccountKind::ApiKey,
+            )
+            .expect("read"),
+            None
+        );
+        assert_eq!(
+            read_provider_key_with_store(codex_home.path(), "ZAI_API_KEY", keyring.clone())
+                .expect("default read")
+                .as_deref(),
+            Some("canary")
+        );
+        assert_eq!(std::fs::read(&vault_file).expect("vault bytes"), before);
+
+        vault
+            .write_provider_account(
+                "zai",
+                &codex_vault::ProviderAccountName::parse("work").expect("name"),
+                codex_vault::ProviderAccountKind::ApiKey,
+                "canary-work",
+            )
+            .expect("named write");
+        assert_ne!(std::fs::read(&vault_file).expect("vault bytes"), before);
+        assert_eq!(
+            read_provider_key_with_store(codex_home.path(), "ZAI_API_KEY", keyring)
+                .expect("default read")
+                .as_deref(),
+            Some("canary")
+        );
+    }
+
+    /// #855: a vault that cannot be reached right now (here: its lock file
+    /// cannot be opened) fails the save; the key is not written to the
+    /// plaintext fallback.
+    #[test]
+    fn an_unreachable_vault_fails_the_save_without_a_plaintext_copy() {
+        let codex_home = tempfile::tempdir().expect("tempdir");
+        let keyring = Arc::new(MockKeyringStore::default());
+        let lock = codex_home.path().join("secrets").join(".vault.lock");
+        std::fs::create_dir_all(&lock).expect("a directory where the lock file belongs");
+
+        let error = write_provider_key_with_store(
+            codex_home.path(),
+            "MOONSHOT_API_KEY",
+            "lock-test-value-0001",
+            keyring,
+        )
+        .expect_err("the save must fail");
+
+        assert!(
+            error.to_string().starts_with("failed to open vault lock"),
+            "{error}"
+        );
+        assert!(!codex_home.path().join("provider_auth.json").exists());
+        assert!(!codex_home.path().join("secrets").join("local.age").exists());
+    }
+
+    /// #855: the text of a vault error message is not saved as a provider
+    /// key, in the vault or in the plaintext fallback.
+    #[test]
+    fn the_text_of_a_vault_error_is_not_saved_as_a_provider_key() {
+        let codex_home = tempfile::tempdir().expect("tempdir");
+        let keyring = Arc::new(MockKeyringStore::default());
+        let shown = "Failed to add vault credential \"moonshot_api_key\": failed to open vault lock /tmp/home/secrets/.vault.lock";
+
+        for _ in 0..2 {
+            let error = write_provider_key_with_store(
+                codex_home.path(),
+                "MOONSHOT_API_KEY",
+                shown,
+                keyring.clone(),
+            )
+            .expect_err("error text must be refused");
+            assert!(error.to_string().contains("nothing was stored"), "{error}");
+            write_provider_key_with_store(
+                codex_home.path(),
+                "MOONSHOT_API_KEY",
+                "lock-test-value-0001",
+                keyring.clone(),
+            )
+            .expect("a real key is saved");
+        }
+
+        assert!(!codex_home.path().join("provider_auth.json").exists());
+        assert_eq!(
+            read_provider_key_with_store(codex_home.path(), "MOONSHOT_API_KEY", keyring)
+                .expect("read")
+                .as_deref(),
+            Some("lock-test-value-0001")
         );
     }
 }

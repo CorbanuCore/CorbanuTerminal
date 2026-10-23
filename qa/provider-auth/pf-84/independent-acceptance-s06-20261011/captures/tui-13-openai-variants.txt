@@ -1,0 +1,87 @@
+
+######## V1
+TUI started directly on OpenAI: -c model_provider=openai -m gpt-5.4 --account work
+-- mock lines for this turn (credential-bearing only):
+{"t": 1791781763.624, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "tuiwork", "gen": 1, "expired": false}, "model": null}
+› Reply with exactly: pong
+⚠ MCP client for `codex_apps` failed to start: MCP startup failed: handshaking with MCP server failed: Send message error Transport
+⚠ MCP startup incomplete (failed: codex_apps)
+• mock: chatgpt tuiwork gen1
+│  Model provider:       OpenAI - http://127.0.0.1:34631/v1 · account work                 │
+│  Account:              ChatGPT sign-in · t…@example.com · Plus (account work)            │
+
+######## V2
+TUI started on Z.AI (real key) with --account openai:work, then /model -> OpenAI GPT-6 Luna
+pick: /GPT-6 Luna/ not found
+send_line: composer never showed the text; aborting (no Enter sent)
+-- mock lines for this turn (credential-bearing only):
+send_line: composer never showed the text; aborting (no Enter sent)
+send_line: composer never showed the text; aborting (no Enter sent)
+
+######## V5
+TUI started on Z.AI (real key), no account selection, then /model -> OpenAI GPT-6 Luna (default account; OPENAI_API_KEY decoy in env)
+pick: /GPT-6 Luna/ not found
+send_line: composer never showed the text; aborting (no Enter sent)
+-- mock lines for this turn (credential-bearing only):
+send_line: composer never showed the text; aborting (no Enter sent)
+send_line: composer never showed the text; aborting (no Enter sent)
+(V2 and V5 above aborted: the earlier /model choice had been persisted to config.toml, so those TUIs started on OpenAI; the script now restores Z.AI after each variant)
+
+######## V2
+TUI started on Z.AI (real key) with --account openai:work, then /model -> OpenAI GPT-6 Luna
+-- mock lines for this turn (credential-bearing only):
+{"t": 1791782006.042, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "none"}, "model": "gpt-6-luna"}
+› Reply with exactly: pong
+⚠ Code Mode is unavailable because failed to spawn code-mode host /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s06-indep-acc-20261011/debug/codex-code-mode-
+• mock: none
+│  Model provider:       OpenAI - http://127.0.0.1:34631/v1 · account work                 │
+│  Account:              ChatGPT sign-in · t…@example.com · Plus (account work)            │
+
+######## V3
+TUI started on Z.AI (real key); /providers -> OpenAI · work -> Use for this session; then /model -> OpenAI GPT-6 Luna
+• New session: requests to openai use account `work`.
+-- mock lines for this turn (credential-bearing only):
+{"t": 1791782065.2, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "none"}, "model": "gpt-6-luna"}
+› Reply with exactly: pong
+⚠ Code Mode is unavailable because failed to spawn code-mode host /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s06-indep-acc-20261011/debug/codex-code-mode-
+• mock: none
+│  Model provider:       OpenAI - http://127.0.0.1:34631/v1 · account work                 │
+│  Account:              ChatGPT sign-in · t…@example.com · Plus (account work)            │
+
+######## V4
+TUI started on Z.AI (real key) with --account openai:fake (named API-key account), then /model -> OpenAI GPT-6 Luna
+-- mock lines for this turn (credential-bearing only):
+{"t": 1791782121.25, "ev": "responses-401", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "fakekey"}, "model": "gpt-6-luna"}
+› Reply with exactly: pong
+⚠ Code Mode is unavailable because failed to spawn code-mode host /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s06-indep-acc-20261011/debug/codex-code-mode-
+⚠ OpenAI (openai) account `fake` was rejected. Sign it in again with `corbanu login --account fake` (add `--with-api-key` for an API key), or choose another account. The
+■ unexpected status 401 Unauthorized: Incorrect API key, url: http://127.0.0.1:34631/v1/responses
+│  Model provider:       OpenAI - http://127.0.0.1:34631/v1 · account fake                 │
+│  Account:              OpenAI API key (account fake)                                     │
+
+######## V5 
+TUI started on Z.AI (real key), no account selection, then /model -> OpenAI GPT-6 Luna (default account; OPENAI_API_KEY decoy in env)
+-- mock lines for this turn (credential-bearing only):
+{"t": 1791783165.967, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "envkey"}, "model": "gpt-6-luna"}
+› Reply with exactly: pong
+⚠ Code Mode is unavailable because failed to spawn code-mode host /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s06-indep-acc-20261011/debug/codex-code-mode-
+⚠ Using OPENAI_API_KEY from your environment — billed per use to that API key. Sign in or unset it to change.
+• mock: bearer envkey
+│  Model provider:       OpenAI - http://127.0.0.1:34631/v1 · account default              │
+│  Account:              OpenAI API key configured (run corbanu login to use ChatGPT)      │
+
+######## V6 
+Default login = ChatGPT (mock user tuidefault, auth.json), NO OPENAI_API_KEY in env; TUI on Z.AI (real key), no account selection, /model -> OpenAI GPT-6 Luna (CAND)
+-- mock lines for this turn (credential-bearing only):
+{"t": 1791783219.059, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "tuidefault", "gen": 1, "expired": false}, "model": null}
+› Reply with exactly: pong
+⚠ Code Mode is unavailable because failed to spawn code-mode host /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s06-indep-acc-20261011/debug/codex-code-mode-
+• mock: chatgpt tuidefault gen1
+│  Model provider:       OpenAI - http://127.0.0.1:34631/v1 · account default              │
+│  Account:              OpenAI API key configured (run corbanu login to use ChatGPT)      │
+
+######## V6 (BASE)
+Default login = ChatGPT (mock user tuidefault, auth.json), NO OPENAI_API_KEY in env; TUI on Z.AI (real key), no account selection, /model -> OpenAI GPT-6 Luna (/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s06-indep-base-20261011/debug/corbanu)
+pick: /GPT-6 Luna/ not found
+-- mock lines for this turn (credential-bearing only):
+Reply with exactly: pong

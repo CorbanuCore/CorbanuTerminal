@@ -1,0 +1,23 @@
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       glm-5.3-flash   /model to change           │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+• To sign in openai account `devz`, open http://127.0.0.1:34731/codex/device and enter code MOCK-0001. Waiting for the sign-in…
+• Signed in openai account `devz` (ChatGPT sign-in · d…@example.com · Plus). Use it from /providers, `--account devz` or a spawn `account`.
+■ openai already has an account `devz`. Choose another name, or remove it first.
+  Providers
+  Configure providers and control whether they are eligible for use.
+  Configured means credentials are present, not verified by the provider.
+› 1. OpenAI · default  Enabled · configured · this session · default for new sessions
+  2. OpenAI · devz     Named account · ChatGPT sign-in · d…@example.com · Plus · fp 66c459b23aba
+  3. OpenAI · fake     Named account · OpenAI API key · fp 53e52a8ab4d0
+  4. OpenAI · fpx      Named account · ChatGPT sign-in · f…@example.com · Plus · fp a51941579b31
+  5. OpenAI · fpy      Named account · ChatGPT sign-in · f…@example.com · Plus · fp 4934a2521a5b
+  6. OpenAI · work     Named account · ChatGPT sign-in · t…@example.com · Plus · fp 3c3b6f0807d1
+  7. Claude Account    Not configured · unavailable
+  8. Corbanu API       Not configured · unavailable
+  r recover credentials · Enter manage · Esc back
+  Press enter to confirm or esc to go back

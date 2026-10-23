@@ -44,6 +44,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use supports_color::Stream;
 
+mod account_cmd;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod app_cmd;
 mod claude_oauth;
@@ -53,6 +54,7 @@ mod doctor;
 mod exec_server_telemetry;
 mod marketplace_cmd;
 mod mcp_cmd;
+mod nested_security;
 mod pfterminal_home;
 mod plugin_cmd;
 mod remote_control_cmd;
@@ -143,9 +145,18 @@ enum Subcommand {
     /// Internal vault helpers for Corbanu Terminal integrations.
     Vault(VaultCommand),
 
+    /// Manage named accounts per provider (`named_accounts` feature).
+    Account(account_cmd::AccountCommand),
+
     /// Internal: print the active Claude Code OAuth token for the Corbanu Terminal-native Claude Plan provider.
-    #[clap(hide = true, name = "internal-claude-oauth-token")]
-    InternalClaudeOauthToken,
+    #[clap(hide = true, name = codex_login::auth::CLAUDE_PLAN_TOKEN_HELPER_SUBCOMMAND)]
+    InternalClaudeOauthToken {
+        /// PF-84: a named Claude account instead of the home's selection.
+        /// Defaults to `CORBANU_PROVIDER_ACCOUNT`, which Corbanu sets for its
+        /// provider auth commands.
+        #[arg(long)]
+        account: Option<String>,
+    },
 
     /// Internal: verify the platform-owned Claude Code login without printing credential data.
     #[clap(hide = true, name = "internal-claude-login-health")]
@@ -156,7 +167,7 @@ enum Subcommand {
     },
 
     /// Internal: print one rental endpoint token for command-backed provider authentication.
-    #[clap(hide = true, name = "internal-gpu-endpoint-token")]
+    #[clap(hide = true, name = codex_login::auth::GPU_ENDPOINT_TOKEN_HELPER_SUBCOMMAND)]
     InternalGpuEndpointToken { rental_id: String },
 
     /// Internal: reconcile durable GPU rentals independently of any TUI process.
@@ -528,6 +539,11 @@ struct LoginCommand {
     #[arg(long = "device-auth")]
     use_device_code: bool,
 
+    /// Sign in a named OpenAI account (needs the `named_accounts` feature);
+    /// the default login is left untouched.
+    #[arg(long = "account", value_name = "NAME")]
+    account: Option<String>,
+
     /// EXPERIMENTAL: Use custom OAuth issuer base URL (advanced)
     /// Override the OAuth issuer base URL (advanced)
     #[arg(long = "experimental_issuer", value_name = "URL", hide = true)]
@@ -550,8 +566,12 @@ enum LoginSubcommand {
 #[derive(Debug, Parser)]
 struct LogoutCommand {
     /// Also remove provider API keys from the vault and legacy provider auth storage.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "account")]
     all: bool,
+
+    /// Sign out only this named OpenAI account (revoking its tokens).
+    #[arg(long = "account", value_name = "NAME")]
+    account: Option<String>,
 
     #[clap(skip)]
     config_overrides: CliConfigOverrides,
@@ -864,6 +884,14 @@ fn handle_app_exit(exit_info: AppExitInfo) -> anyhow::Result<()> {
             eprintln!("ERROR: {message}");
             true
         }
+        ExitReason::Restart => {
+            // No newline: the restarted process erases this line (#444).
+            print!("{}", codex_tui::RESTART_BANNER);
+            std::io::stdout().flush()?;
+            let err = codex_tui::restart_process();
+            println!();
+            anyhow::bail!("could not restart Corbanu Terminal ({err}); start it again yourself");
+        }
         ExitReason::UserRequested => false,
     };
 
@@ -1087,12 +1115,25 @@ fn stage_str(stage: Stage) -> &'static str {
 }
 
 fn main() -> anyhow::Result<()> {
+    codex_tui::take_restart_marker();
+    // #855: a vault folder or lock this process may not open is recorded in
+    // the #616 home-access log, like an unreadable home.
+    codex_vault::set_storage_failure_reporter(record_vault_storage_failure);
     pfterminal_home::configure_for_current_process()?;
+    // #766: before any thread, as it may change the Corbanu home variables.
+    // Held until the run ends, when its folder is removed.
+    let _nested_moderate_home = nested_moderate_home();
+    pfterminal_home::exit_if_home_unreadable();
     let remote_control_disabled = codex_app_server::take_remote_control_disabled_env();
     arg0_dispatch_or_else(move |arg0_paths: Arg0DispatchPaths| async move {
         cli_main(arg0_paths, remote_control_disabled).await?;
         Ok(())
     })
+}
+
+fn record_vault_storage_failure(operation: &str, path: &std::path::Path, error: &std::io::Error) {
+    let _ =
+        codex_core::home_access::record_home_access_failure(operation, path, &error.to_string());
 }
 
 async fn cli_main(
@@ -1117,6 +1158,40 @@ async fn cli_main(
     if let Some(subcommand) = subcommand.as_ref() {
         profile_v2_for_subcommand(&interactive, subcommand)?;
     }
+    let nested = match nested_security::nested_launch_kind(subcommand.as_ref())
+        .map(|(name, kind)| codex_tui::nested_launch(name, kind))
+    {
+        // #766: `main` gave this run a Corbanu home of its own because it is
+        // held to Moderate; detection from that home may not find the
+        // origin again.
+        None | Some(codex_tui::NestedLaunch::NotNested) => {
+            nested_security::relocated_origin().map(codex_tui::NestedLaunch::EnforceModerate)
+        }
+        Some(codex_tui::NestedLaunch::Refuse(message)) => {
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("{message}");
+            }
+            std::process::exit(1);
+        }
+        Some(launch) => Some(launch),
+    };
+    let exec_enforcement: Option<Box<dyn codex_exec::EnforcedSecurity>> =
+        match (nested, subcommand.as_ref()) {
+            (
+                Some(codex_tui::NestedLaunch::EnforceAggressive(origin)),
+                Some(Subcommand::Exec(_) | Subcommand::Review(_)),
+            ) => Some(Box::new(nested_security::NestedAggressive::new(origin)?)),
+            (
+                Some(codex_tui::NestedLaunch::EnforceModerate(origin)),
+                Some(Subcommand::Exec(_) | Subcommand::Review(_)),
+            ) => Some(Box::new(nested_security::NestedModerate::new(origin)?)),
+            (Some(_), _) => {
+                anyhow::bail!("this nested launch cannot be held to its security level")
+            }
+            (None, _) => None,
+        };
+    let exec_enforcement = exec_enforcement.as_deref();
 
     match subcommand {
         None => {
@@ -1147,7 +1222,7 @@ async fn cli_main(
                 &mut exec_cli.config_overrides,
                 root_config_overrides.clone(),
             );
-            codex_exec::run_main(exec_cli, arg0_paths.clone()).await?;
+            codex_exec::run_main_enforced(exec_cli, arg0_paths.clone(), exec_enforcement).await?;
         }
         Some(Subcommand::Review(ReviewCommand {
             strict_config,
@@ -1168,7 +1243,7 @@ async fn cli_main(
                 &mut exec_cli.config_overrides,
                 root_config_overrides.clone(),
             );
-            codex_exec::run_main(exec_cli, arg0_paths.clone()).await?;
+            codex_exec::run_main_enforced(exec_cli, arg0_paths.clone(), exec_enforcement).await?;
         }
         Some(Subcommand::McpServer(McpServerCommand { strict_config })) => {
             reject_remote_mode_for_subcommand(
@@ -1510,6 +1585,33 @@ async fn cli_main(
                 &mut login_cli.config_overrides,
                 root_config_overrides.clone(),
             );
+            if let Some(account) = login_cli.account.as_deref() {
+                let method = match login_cli.action {
+                    Some(LoginSubcommand::Status) => {
+                        codex_cli::run_named_account_login_status(
+                            login_cli.config_overrides,
+                            account,
+                        )
+                        .await
+                    }
+                    None if login_cli.with_access_token || login_cli.api_key.is_some() => {
+                        eprintln!("A named account signs in with ChatGPT or --with-api-key.");
+                        std::process::exit(1);
+                    }
+                    None if login_cli.with_api_key => {
+                        codex_cli::NamedLoginMethod::ApiKey(read_api_key_from_stdin())
+                    }
+                    None if login_cli.use_device_code => codex_cli::NamedLoginMethod::DeviceCode,
+                    None => codex_cli::NamedLoginMethod::Browser,
+                };
+                codex_cli::run_named_account_login(
+                    login_cli.config_overrides,
+                    account,
+                    method,
+                    login_cli.issuer_base_url.clone(),
+                )
+                .await;
+            }
             match login_cli.action {
                 Some(LoginSubcommand::Status) => {
                     run_login_status(login_cli.config_overrides).await;
@@ -1554,6 +1656,9 @@ async fn cli_main(
                 &mut logout_cli.config_overrides,
                 root_config_overrides.clone(),
             );
+            if let Some(account) = logout_cli.account.as_deref() {
+                codex_cli::run_named_account_logout(logout_cli.config_overrides, account).await;
+            }
             run_logout(logout_cli.config_overrides, logout_cli.all).await;
         }
         Some(Subcommand::Vault(mut vault_cli)) => {
@@ -1568,8 +1673,20 @@ async fn cli_main(
             );
             run_vault_command(vault_cli).await?;
         }
-        Some(Subcommand::InternalClaudeOauthToken) => {
-            run_internal_claude_oauth_token().await?;
+        Some(Subcommand::Account(mut account_cli)) => {
+            reject_remote_mode_for_subcommand(
+                root_remote.as_deref(),
+                root_remote_auth_token_env.as_deref(),
+                "account",
+            )?;
+            prepend_config_flags(
+                &mut account_cli.config_overrides,
+                root_config_overrides.clone(),
+            );
+            account_cmd::run_account_command(account_cli).await?;
+        }
+        Some(Subcommand::InternalClaudeOauthToken { account }) => {
+            run_internal_claude_oauth_token(account, root_config_overrides.clone()).await?;
         }
         Some(Subcommand::InternalClaudeLoginHealth { source_id }) => {
             let source_id =
@@ -1882,6 +1999,45 @@ async fn cli_main(
     Ok(())
 }
 
+/// #766: a Corbanu home of its own for `corbanu exec` or `review` started by
+/// an agent command under Moderate that cannot write the home it was given
+/// (see [`nested_security::prepare_moderate_home`]). Anything else, or a
+/// command line that does not parse, is left alone.
+fn nested_moderate_home() -> Option<tempfile::TempDir> {
+    // Cheap first: most launches (and every sandbox helper) start no agent.
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|argv1| codex_arg0::is_private_helper_argv1(&argv1))
+        || !std::env::args_os()
+            .skip(1)
+            .any(|arg| matches!(arg.to_str(), Some("exec" | "e" | "review")))
+    {
+        return None;
+    }
+    let matches = MultitoolCli::command()
+        .try_get_matches_from(std::env::args_os())
+        .ok()?;
+    let cli = MultitoolCli::from_arg_matches(&matches).ok()?;
+    let (name, kind) = nested_security::nested_launch_kind(cli.subcommand.as_ref())?;
+    if kind != codex_tui::NestedKind::Agent {
+        return None;
+    }
+    let codex_tui::NestedLaunch::EnforceModerate(origin) = codex_tui::nested_launch(name, kind)
+    else {
+        return None;
+    };
+    match nested_security::prepare_moderate_home(&origin) {
+        Ok(home) => home,
+        Err(message) => {
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("{message}");
+            }
+            std::process::exit(1);
+        }
+    }
+}
+
 fn parse_multitool_cli() -> MultitoolCli {
     let mut command = MultitoolCli::command();
     if pfterminal_home::current_entrypoint_is_corbanu() {
@@ -1894,7 +2050,61 @@ fn parse_multitool_cli() -> MultitoolCli {
                 "corbanu [OPTIONS] [PROMPT]\n       corbanu [OPTIONS] <COMMAND> [ARGS]",
             );
     }
-    MultitoolCli::from_arg_matches(&command.get_matches()).unwrap_or_else(|err| err.exit())
+    let matches = command.try_get_matches().unwrap_or_else(|err| {
+        let args = std::env::args_os().skip(1).collect::<Vec<_>>();
+        if let Some(message) = secret_argument_error(&err, &args) {
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("{message}");
+            }
+            std::process::exit(2);
+        }
+        err.exit()
+    });
+    MultitoolCli::from_arg_matches(&matches).unwrap_or_else(|err| err.exit())
+}
+
+/// D175: `corbanu login` and `corbanu account` read keys and tokens from
+/// stdin only. A value they do not expect may be one passed on the command
+/// line by mistake, so their usage error does not repeat it.
+fn secret_argument_error(err: &clap::Error, args: &[std::ffi::OsString]) -> Option<String> {
+    use clap::error::ContextKind;
+    use clap::error::ContextValue;
+    use clap::error::ErrorKind;
+    // A value attached to an on/off flag (`--with-api-key=<key>`) is a
+    // `TooManyValues` error; a rejected value names it as well.
+    if !matches!(
+        err.kind(),
+        ErrorKind::UnknownArgument
+            | ErrorKind::InvalidSubcommand
+            | ErrorKind::TooManyValues
+            | ErrorKind::InvalidValue
+            | ErrorKind::ValueValidation
+    ) {
+        return None;
+    }
+    if !args
+        .iter()
+        .any(|arg| matches!(arg.to_str(), Some("login" | "account")))
+    {
+        return None;
+    }
+    // An unknown flag without a value is safe to name.
+    if matches!(err.kind(), ErrorKind::UnknownArgument)
+        && let Some(ContextValue::String(flag)) = err.get(ContextKind::InvalidArg)
+        && flag.starts_with('-')
+        && !flag.contains('=')
+    {
+        return None;
+    }
+    Some(
+        "error: unexpected or invalid argument (not shown, in case it is a key or token)\n\n\
+         Keys and tokens are read from stdin, never from the command line, for example \
+         `printenv OPENAI_API_KEY | corbanu login --with-api-key` or \
+         `printenv ZAI_API_KEY | corbanu account add zai <name>`. If you typed a key, it may \
+         be in your shell history.\n\nFor more information, try '--help'."
+            .to_string(),
+    )
 }
 
 fn profile_v2_for_subcommand<'a>(
@@ -2366,10 +2576,54 @@ async fn run_vault_command(command: VaultCommand) -> anyhow::Result<()> {
     }
 }
 
-async fn run_internal_claude_oauth_token() -> anyhow::Result<()> {
+async fn run_internal_claude_oauth_token(
+    account: Option<String>,
+    config_overrides: CliConfigOverrides,
+) -> anyhow::Result<()> {
     let codex_home = find_codex_home()?;
-    let access_token = claude_oauth::resolve_claude_oauth_access_token(&codex_home).await?;
+    let account = account.or_else(|| {
+        std::env::var(codex_login::PROVIDER_ACCOUNT_ENV_VAR)
+            .ok()
+            .filter(|value| !value.is_empty())
+    });
+    let named = account
+        .as_deref()
+        .map(codex_vault::parse_provider_account_selection)
+        .transpose()?
+        .flatten();
+    let access_token = match named {
+        Some(name) => {
+            // PF-84 (#415): with the feature off, a named account is refused,
+            // never served and never replaced by the default account.
+            ensure_named_accounts_enabled(config_overrides, &name).await?;
+            claude_oauth::resolve_claude_account_access_token(&codex_home, &name).await?
+        }
+        None => claude_oauth::resolve_claude_oauth_access_token(&codex_home).await?,
+    };
     std::io::stdout().write_all(access_token.as_bytes())?;
+    Ok(())
+}
+
+async fn ensure_named_accounts_enabled(
+    config_overrides: CliConfigOverrides,
+    name: &codex_vault::ProviderAccountName,
+) -> anyhow::Result<()> {
+    let cli_kv_overrides = config_overrides
+        .parse_overrides()
+        .map_err(anyhow::Error::msg)?;
+    let config = ConfigBuilder::default()
+        .cli_overrides(cli_kv_overrides)
+        .build()
+        .await?;
+    if !config
+        .features
+        .enabled(codex_features::Feature::NamedAccounts)
+    {
+        anyhow::bail!(
+            "Claude account `{name}` was requested, but named accounts are off; enable them \
+             with `[features] named_accounts = true` or `--enable named_accounts`"
+        );
+    }
     Ok(())
 }
 
@@ -2661,7 +2915,7 @@ fn unsupported_subcommand_name_for_strict_config(
         | Some(Subcommand::Fork(_))
         | Some(Subcommand::Telegram(_))
         | Some(Subcommand::Doctor(_))
-        | Some(Subcommand::InternalClaudeOauthToken)
+        | Some(Subcommand::InternalClaudeOauthToken { .. })
         | Some(Subcommand::InternalClaudeLoginHealth { .. })
         | Some(Subcommand::InternalGpuEndpointToken { .. })
         | Some(Subcommand::InternalGpuController(_)) => None,
@@ -2677,6 +2931,7 @@ fn unsupported_subcommand_name_for_strict_config(
         Some(Subcommand::Login(_)) => Some("login"),
         Some(Subcommand::Logout(_)) => Some("logout"),
         Some(Subcommand::Vault(_)) => Some("vault"),
+        Some(Subcommand::Account(_)) => Some("account"),
         Some(Subcommand::Tasknode(_)) => Some("tasknode"),
         Some(Subcommand::ClaudePaneSmoke(_)) => Some("claude-pane-smoke"),
         Some(Subcommand::ClaudePaneWorkflowSuite(_)) => Some("claude-pane-workflow-suite"),
@@ -3027,6 +3282,7 @@ fn merge_interactive_cli_flags(interactive: &mut TuiCli, subcommand_cli: TuiCli)
         approval_policy,
         web_search,
         prompt,
+        account,
         config_overrides,
         ..
     } = subcommand_cli;
@@ -3038,6 +3294,9 @@ fn merge_interactive_cli_flags(interactive: &mut TuiCli, subcommand_cli: TuiCli)
     }
     if web_search {
         interactive.web_search = true;
+    }
+    if account.is_some() {
+        interactive.account = account;
     }
     if strict_config {
         interactive.strict_config = true;

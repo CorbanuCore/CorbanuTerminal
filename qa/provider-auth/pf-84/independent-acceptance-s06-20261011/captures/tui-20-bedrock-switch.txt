@@ -1,0 +1,7 @@
+• New session: requests to amazon-bedrock use account `work`.
+  OpenAI  [Z.AI]  Other
+› 1. Z.AI GLM 5.3 Flash (current)  Model: glm-5.3-flash. Native multimodal GLM 5.3 Flash through the Z.AI API, billed per token; mandatory thinking, with low/high/max
+  OpenAI  Z.AI  [Other]
+› 1. Z.AI GLM 5.2 via zai-anthropic  Model: glm-5.2. GLM 5.2 through the Z.AI API, billed per token.
+  [OpenAI]  Z.AI  Other
+› 1. GPT-6 Sol (default)  Model: gpt-6-sol. Cost-efficient high-end GPT-6 reasoning and coding, below Astra and above Luna. Requires eligible OpenAI account access;

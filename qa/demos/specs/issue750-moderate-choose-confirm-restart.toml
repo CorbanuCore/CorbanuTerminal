@@ -1,0 +1,76 @@
+# Issue #750: Moderate is chosen in /security: review, confirm (Core's rules at once), restart, active after the restart.
+id = "issue750-moderate-choose-confirm-restart"
+feature = "Choosing Moderate in /security: review, confirm, restart"
+expected = "Moderate is offered in /security. Its review lists what it adds and what is not available; Enter saves it, Core's Moderate rules apply at once and the broker waits for the restart; r restarts and /security then shows Moderate active."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+# The session has started (its policy runs in this process) once the model shows.
+[[steps]]
+wait = "model:\\s+glm-5\\.3-flash"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Moderate\\?"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Down"
+repeat = 40
+[[steps]]
+wait = "enter confirm and save"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active now in this session"
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "r"
+[[steps]]
+wait = "^(?![\\s\\S]*Saved: Moderate)[\\s\\S]*Corbanu Terminal \\(v[\\s\\S]*› "
+timeout = 60
+[[steps]]
+wait = "model:\\s+glm-5\\.3-flash"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Moderate"
+[[steps]]
+pause = 3.0

@@ -1,0 +1,16 @@
+--- /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-targeted-20261019/design/amendments-v4-designer.md	2026-10-19 20:35:31
++++ /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-targeted-20261019/design/amendments-v4-draft.md	2026-10-19 20:35:37
+@@ -1,11 +1,11 @@
+ # Amendments to the Moderate design (amendments-v4, second targeted re-run)
+ 
+-Applied on top of `design-cases.md` + `amendments-v2.md` + `amendments-v3.md`, for the 2 re-run cases only: MOD-15
++Applied on top of `design-cases.md` + `amendments.md` (amendments-v2) + `amendments-v3.md`, for the 2 re-run cases only: MOD-15
+ (group Q01) and MOD-28 (group Q02). Each case runs in a fresh profile and a fresh copy of the test project, with a
+ fresh AI tester. Precedence: this amendment over amendments-v3, over amendments-v2, over the frozen cases. For an
+ amended case, this amendment governs where it differs. Everything it does not mention stays as in force. "screens-v4
+ NN" is a screen of this candidate (folder `screens-v4/`). "screens-v3 NN" keeps its v3 meaning. Decision labels are
+-the owner's decisions of 2026-10-19 (D38, D40) and the integrator's choices (F) in `decisions.md`.
++the owner's decisions of 2026-10-19 (D38, D40) and the integrator's choices (F), listed in the integrator's record (not part of the tester's packet).
+ 
+ ## Rules for this re-run
+ 

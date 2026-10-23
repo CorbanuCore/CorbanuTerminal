@@ -775,3 +775,80 @@ fn defaults(
         default_tools_approval_mode: None,
     }
 }
+
+/// #1001 D52: the mode a tool would have without any `approve` setting skips
+/// each `approve` in the usual order (managed, tool, app default, global
+/// default) and falls back to Auto.
+#[test]
+fn approval_without_approve_skips_each_approve_setting() {
+    let tool = |approval_mode| AppToolConfig {
+        enabled: None,
+        approval_mode: Some(approval_mode),
+    };
+    let apps_config = AppsConfigToml {
+        default: Some(AppsDefaultConfig {
+            default_tools_approval_mode: Some(AppToolApproval::Writes),
+            ..defaults(
+                /*enabled*/ true, /*destructive_enabled*/ true,
+                /*open_world_enabled*/ true,
+            )
+        }),
+        apps: HashMap::from([(
+            "calendar".to_string(),
+            AppConfig {
+                enabled: true,
+                default_tools_approval_mode: Some(AppToolApproval::Approve),
+                tools: Some(AppToolsConfig {
+                    tools: HashMap::from([
+                        ("events/create".to_string(), tool(AppToolApproval::Prompt)),
+                        ("events/list".to_string(), tool(AppToolApproval::Approve)),
+                    ]),
+                }),
+                ..Default::default()
+            },
+        )]),
+    };
+    let requirements = AppsRequirementsToml {
+        apps: BTreeMap::from([(
+            "calendar".to_string(),
+            AppRequirementToml {
+                enabled: None,
+                tools: Some(AppToolsRequirementsToml {
+                    tools: BTreeMap::from([(
+                        "events/create".to_string(),
+                        AppToolRequirementToml {
+                            approval_mode: Some(AppToolApproval::Approve),
+                        },
+                    )]),
+                }),
+            },
+        )]),
+    };
+    let evaluator = AppToolPolicyEvaluator::from_parts(Some(apps_config), Some(&requirements));
+    let without = |tool_name| {
+        evaluator.approval_without_approve(input(tool_name, /*tool_title*/ None))
+    };
+    // Managed approve over the user's prompt: prompt.
+    assert_eq!(without("events/create"), AppToolApproval::Prompt);
+    // Tool approve, app default approve: the global default.
+    assert_eq!(without("events/list"), AppToolApproval::Writes);
+    // Nothing but approve: Auto.
+    let only_approve = AppToolPolicyEvaluator::from_parts(
+        Some(AppsConfigToml {
+            default: None,
+            apps: HashMap::from([(
+                "calendar".to_string(),
+                AppConfig {
+                    enabled: true,
+                    default_tools_approval_mode: Some(AppToolApproval::Approve),
+                    ..Default::default()
+                },
+            )]),
+        }),
+        /*requirements_apps_config*/ None,
+    );
+    assert_eq!(
+        only_approve.approval_without_approve(input("events/list", /*tool_title*/ None)),
+        AppToolApproval::Auto
+    );
+}

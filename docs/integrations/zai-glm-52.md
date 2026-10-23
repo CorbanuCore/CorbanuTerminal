@@ -1,6 +1,11 @@
 # Z.AI GLM 5.2 Integration
 
-Corbanu Terminal also supports direct GLM 5.2 access through the Z.AI coding plan API.
+Corbanu Terminal also supports direct GLM access through Z.AI's pay-as-you-go API, billed per token.
+
+The built-in `zai` provider uses the general API endpoint, not the GLM Coding Plan
+endpoint (`/api/coding/paas/v4`). A Coding Plan subscriber can point a custom provider at
+that endpoint; `/cost` then records tokens without a price, because the bundled rates are
+the per-token API rates.
 
 ## Current Provider
 
@@ -10,7 +15,7 @@ The built-in Z.AI provider is defined in `codex-rs/model-provider-info/src/lib.r
 | --- | --- |
 | Provider id | `zai` |
 | Display name | `Z.AI` |
-| Base URL | `https://api.z.ai/api/coding/paas/v4` |
+| Base URL | `https://api.z.ai/api/paas/v4` |
 | API key env var | `ZAI_API_KEY` |
 | Wire API | `chat` |
 | OpenAI auth required | `false` |
@@ -19,7 +24,7 @@ The built-in Z.AI provider is defined in `codex-rs/model-provider-info/src/lib.r
 Auth guidance shown to users:
 
 ```text
-Set ZAI_API_KEY to your Z.AI Plan API key.
+Set ZAI_API_KEY to your Z.AI API key.
 ```
 
 ## Current Model
@@ -30,7 +35,7 @@ The visible Z.AI model is bundled in `codex-rs/models-manager/models.json`:
 | --- | --- |
 | Slug | `glm-5.2` |
 | Display name | `Z.AI GLM 5.2` |
-| Description | `GLM 5.2 through the Z.AI coding plan API.` |
+| Description | `GLM 5.2 through the Z.AI API, billed per token.` |
 | Context window | `1000000` tokens |
 | Default reasoning level | `medium` |
 | Listed in picker | yes |
@@ -40,7 +45,12 @@ The visible Z.AI model is bundled in `codex-rs/models-manager/models.json`:
 
 Corbanu Terminal maps model selections to providers in `codex-rs/tui/src/chatwidget/model_popups.rs`:
 
-- `glm-*` and `glm-5.2` resolve to provider `zai`.
+- `glm-*` and `glm-5.2` resolve to provider `zai` (OpenAI-style) by default.
+- The same GLM models are also served by `zai-anthropic`, Z.AI's Anthropic-compatible
+  connection (the GLM Coding Plan route) with the same `ZAI_API_KEY`. `/model` lists both
+  connections in the Z.AI tab, e.g. **GLM 5.3 Flash · Z.AI (OpenAI-style)** and
+  **GLM 5.3 Flash · Z.AI (Claude-style)**; see
+  [Choosing the connection](../features/model-providers.md#choosing-the-connection).
 - `zai-org/*` resolves to provider `ambient`.
 - The all-models popup only shows Corbanu Terminal-relevant Ambient and Z.AI models by default.
 
@@ -73,7 +83,10 @@ provider/zai_api_key
 ```
 
 The environment variable `ZAI_API_KEY` is still supported for temporary shells
-and automation.
+and automation. Corbanu reads it to call Z.AI but removes it from the commands
+the model runs, so a command (or a prompt injection) can't read your key. To
+give it to commands on purpose, see
+[Shell Environment](../config.md#shell-environment).
 
 ## Source
 

@@ -109,6 +109,7 @@ impl Handler {
                     prompt: None,
                     model: None,
                     reasoning_effort: None,
+                    provider_account: None,
                     agents_states: Default::default(),
                 }),
             )
@@ -144,6 +145,7 @@ impl Handler {
                                 prompt: None,
                                 model: None,
                                 reasoning_effort: None,
+                                provider_account: None,
                                 agents_states: statuses,
                             }),
                         )
@@ -213,6 +215,7 @@ impl Handler {
                     prompt: None,
                     model: None,
                     reasoning_effort: None,
+                    provider_account: None,
                     agents_states: statuses_by_id,
                 }),
             )
@@ -265,6 +268,9 @@ fn wait_receiver_agents(
 }
 
 impl CoreToolRuntime for Handler {
+    fn repeated_identical_calls_are_polling(&self) -> bool {
+        true
+    }
     fn matches_kind(&self, payload: &ToolPayload) -> bool {
         matches!(payload, ToolPayload::Function { .. })
     }

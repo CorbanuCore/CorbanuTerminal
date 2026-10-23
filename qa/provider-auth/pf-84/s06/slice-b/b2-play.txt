@@ -1,0 +1,7 @@
+2026-10-12T03:21:25.873830Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 404 Not Found: Unknown error, url: http://127.0.0.1:31285/v1/models?client_version=REDACTED
+2026-10-12T03:21:26.535717Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 404 Not Found: Unknown error, url: http://127.0.0.1:31285/v1/models?client_version=REDACTED
+2026-10-12T03:21:26.602833Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:26.605372Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:26.743246Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:26.744745Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+openai-mock: authorized as play (token gen 3)

@@ -41,9 +41,25 @@ use tokio_util::sync::CancellationToken;
 pub(crate) struct ApprovalStore {
     // Store serialized keys for generic caching across requests.
     map: HashMap<String, ReviewDecision>,
+    /// Policy epoch and revocation generation the entries were made under.
+    policy: Option<(u64, u64)>,
 }
 
 impl ApprovalStore {
+    /// PF-23-S03: a committed security transition drops every cached
+    /// decision.
+    pub(crate) fn fence(&mut self, policy: Option<(u64, u64)>) {
+        if self.policy != policy {
+            self.map.clear();
+            self.policy = policy;
+        }
+    }
+
+    /// The policy the entries were made under.
+    pub(crate) fn policy(&self) -> Option<(u64, u64)> {
+        self.policy
+    }
+
     pub fn get<K>(&self, key: &K) -> Option<ReviewDecision>
     where
         K: Serialize,
@@ -62,17 +78,50 @@ impl ApprovalStore {
     }
 }
 
+tokio::task_local! {
+    /// Issue #513: set once a person is asked about the approval being
+    /// resolved (see [`asking_person`]).
+    static PERSON_ASKED: std::cell::Cell<bool>;
+}
+
+/// Issue #513: runs `approval` (a runtime's `start_approval_async`) and says
+/// whether a person was asked during it, as opposed to an answer remembered
+/// from earlier (the approval cache) or a stored grant. Unmarked counts as
+/// not asked (fail closed).
+pub(crate) async fn asking_person<Fut>(approval: impl FnOnce() -> Fut) -> (ReviewDecision, bool)
+where
+    Fut: Future<Output = ReviewDecision>,
+{
+    // The whole call, its synchronous part included, runs in the scope.
+    PERSON_ASKED
+        .scope(std::cell::Cell::new(false), async {
+            let decision = approval().await;
+            (decision, PERSON_ASKED.with(std::cell::Cell::get))
+        })
+        .await
+}
+
+/// Issue #513: a person is being asked about this approval now.
+pub(crate) fn note_person_asked() {
+    let _ = PERSON_ASKED.try_with(|asked| asked.set(true));
+}
+
 /// Takes a vector of approval keys and returns a ReviewDecision.
 /// There will be one key in most cases, but apply_patch can modify multiple files at once.
 ///
 /// - If all keys are already approved for session, we skip prompting.
 /// - If the user approves for session, we store the decision for each key individually
 ///   so future requests touching any subset can also skip prompting.
+///
+/// With `fresh_human_authority` (PF-30-S03 post-taint actions) the cache is
+/// neither read nor written: the human decides this exact action, and a
+/// "for session" answer counts for this one call only.
 pub(crate) async fn with_cached_approval<K, F, Fut>(
     services: &SessionServices,
     // Name of the tool, used for metrics collection.
     tool_name: &str,
     keys: Vec<K>,
+    fresh_human_authority: bool,
     fetch: F,
 ) -> ReviewDecision
 where
@@ -80,21 +129,33 @@ where
     F: FnOnce() -> Fut,
     Fut: Future<Output = ReviewDecision>,
 {
+    if fresh_human_authority {
+        note_person_asked();
+        return match fetch().await {
+            ReviewDecision::ApprovedForSession => ReviewDecision::Approved,
+            decision => decision,
+        };
+    }
     // To be defensive here, don't bother with checking the cache if keys are empty.
     if keys.is_empty() {
+        note_person_asked();
         return fetch().await;
     }
 
-    let already_approved = {
-        let store = services.tool_approvals.lock().await;
-        keys.iter()
-            .all(|key| matches!(store.get(key), Some(ReviewDecision::ApprovedForSession)))
+    let (already_approved, decided_under) = {
+        let store = services.approval_cache().await;
+        (
+            keys.iter()
+                .all(|key| matches!(store.get(key), Some(ReviewDecision::ApprovedForSession))),
+            store.policy(),
+        )
     };
 
     if already_approved {
         return ReviewDecision::ApprovedForSession;
     }
 
+    note_person_asked();
     let decision = fetch().await;
 
     services.session_telemetry.counter(
@@ -107,10 +168,7 @@ where
     );
 
     if matches!(decision, ReviewDecision::ApprovedForSession) {
-        let mut store = services.tool_approvals.lock().await;
-        for key in keys {
-            store.put(key, ReviewDecision::ApprovedForSession);
-        }
+        services.remember_approvals(keys, decided_under).await;
     }
 
     decision
@@ -123,6 +181,8 @@ pub(crate) struct ApprovalCtx<'a> {
     pub call_id: &'a str,
     pub retry_reason: Option<String>,
     pub network_approval_context: Option<NetworkApprovalContext>,
+    /// PF-30-S03: ask the human about this exact action; no cache, no preapproval.
+    pub fresh_human_authority: bool,
 }
 
 pub(crate) use super::approvals::ApprovalAction;
@@ -298,6 +358,24 @@ pub(crate) fn sandbox_permissions_preserving_denied_reads(
     }
 }
 
+/// [`sandbox_permissions_preserving_denied_reads`] for a run in `session`:
+/// under security level Moderate (#747, decision D3), and under Permissive
+/// with protected launch armed (#739), a request to run outside the sandbox
+/// runs inside it too.
+pub(crate) fn sandbox_permissions_for_session(
+    sandbox_permissions: SandboxPermissions,
+    file_system_sandbox_policy: &FileSystemSandboxPolicy,
+    session: &crate::session::session::Session,
+) -> SandboxPermissions {
+    if sandbox_permissions.requires_escalated_permissions()
+        && crate::security::protected_additional::keeps_sandbox_always(session)
+    {
+        SandboxPermissions::UseDefault
+    } else {
+        sandbox_permissions_preserving_denied_reads(sandbox_permissions, file_system_sandbox_policy)
+    }
+}
+
 pub(crate) fn managed_network_for_sandbox_permissions(
     network: Option<&NetworkProxy>,
     sandbox_permissions: SandboxPermissions,
@@ -327,6 +405,14 @@ pub(crate) trait Approvable<Req> {
         SandboxPermissions::UseDefault
     }
 
+    /// The permissions this request adds to the sandbox for its run (issue
+    /// #245: checked against the protected paths before it runs). Required,
+    /// so a new runtime cannot skip the check by accident.
+    fn additional_permissions<'a>(
+        &self,
+        req: &'a Req,
+    ) -> Option<&'a codex_protocol::models::AdditionalPermissionProfile>;
+
     fn should_bypass_approval(&self, policy: AskForApproval, already_approved: bool) -> bool {
         if already_approved {
             // We do not ask one more time
@@ -340,6 +426,11 @@ pub(crate) trait Approvable<Req> {
     fn exec_approval_requirement(&self, _req: &Req) -> Option<ExecApprovalRequirement> {
         None
     }
+
+    /// Called with each decision the person or the automatic reviewer gave
+    /// on this request (not permission hooks, which show nothing). Clients
+    /// show the command as running while it is reviewed (#466).
+    fn note_review_decision(&mut self, _decision: &ReviewDecision, _ctx: &ApprovalCtx<'_>) {}
 
     /// Return hook input for approval-time policy hooks when this runtime wants
     /// hook evaluation to run before guardian or user approval.
@@ -382,7 +473,11 @@ pub(crate) struct ToolCtx {
 
 #[derive(Debug)]
 pub(crate) enum ToolError {
+    /// Refused by policy or setup, before execution or (a network-policy
+    /// denial, #873) while the command ran; no approval decision is implied.
     Rejected(String),
+    /// An approval request resolved without permission to proceed.
+    Declined(String),
     Codex(CodexErr),
 }
 
@@ -394,6 +489,19 @@ pub(crate) trait ToolRuntime<Req, Out>: Approvable<Req> + Sandboxable {
     }
 
     fn sandbox_cwd<'a>(&self, _req: &'a Req) -> Option<&'a PathUri> {
+        None
+    }
+
+    /// #943 item 11: the folder the command itself runs in (the model's
+    /// `workdir`), for the post-command `.git` check only.
+    fn command_cwd(&self, _req: &Req) -> Option<codex_utils_absolute_path::AbsolutePathBuf> {
+        None
+    }
+
+    /// D48 (c): the `PATH` the command runs with, where it runs on this host
+    /// (a program named without a folder is looked up there); `None` where
+    /// unknown or remote.
+    fn local_search_path<'a>(&self, _req: &'a Req) -> Option<&'a str> {
         None
     }
 
@@ -432,6 +540,47 @@ impl<'a> SandboxAttempt<'a> {
         fallback.map(|fallback| self.network_proxy.unwrap_or(fallback))
     }
 
+    /// PF-27-S02: when the secretless launch contract is armed, refuses
+    /// launches it cannot contain, scrubs the command's environment and
+    /// returns `permissions` with the protected paths denied.
+    /// `proxy_enforced`: the launch goes through the managed network proxy,
+    /// which on Windows selects the elevated sandbox backend.
+    fn protect_launch(
+        &self,
+        contract: Option<&crate::security::launch_contract::LaunchContract>,
+        command: &mut SandboxCommand,
+        exec_server: bool,
+        proxy_enforced: bool,
+    ) -> Result<Option<codex_protocol::models::PermissionProfile>, CodexErr> {
+        let Some(contract) = contract else {
+            return Ok(None);
+        };
+        let cwd = self.sandbox_cwd.to_abs_path()?;
+        let windows_elevated = codex_sandboxing::windows_sandbox_uses_elevated_backend(
+            self.windows_sandbox_level,
+            proxy_enforced,
+        );
+        let protected = contract
+            .protect_launch(
+                self.sandbox,
+                self.sandbox_requested,
+                exec_server,
+                windows_elevated,
+                command,
+                self.permissions,
+                cwd.as_path(),
+            )
+            .map_err(|denied| CodexErr::UnsupportedOperation(denied.to_string()))?;
+        #[cfg(windows)]
+        if windows_elevated {
+            contract
+                .protect_new_codex_home_files()
+                .inspect_err(crate::security::inspection::record_launch_denial)
+                .map_err(|denied| CodexErr::UnsupportedOperation(denied.to_string()))?;
+        }
+        Ok(Some(protected))
+    }
+
     pub fn env_for(
         &self,
         command: SandboxCommand,
@@ -439,12 +588,36 @@ impl<'a> SandboxAttempt<'a> {
         network: Option<&NetworkProxy>,
         environment_id: Option<&str>,
     ) -> Result<crate::sandboxing::ExecRequest, CodexErr> {
+        self.env_for_with_contract(
+            crate::security::launch_contract::active(),
+            command,
+            options,
+            network,
+            environment_id,
+        )
+    }
+
+    /// [`Self::env_for`] with an explicit PF-27-S02 launch contract.
+    pub(crate) fn env_for_with_contract(
+        &self,
+        contract: Option<&crate::security::launch_contract::LaunchContract>,
+        mut command: SandboxCommand,
+        options: ExecOptions,
+        network: Option<&NetworkProxy>,
+        environment_id: Option<&str>,
+    ) -> Result<crate::sandboxing::ExecRequest, CodexErr> {
         let network = self.network_proxy(network);
+        let protected = self.protect_launch(
+            contract,
+            &mut command,
+            /*exec_server*/ false,
+            /*proxy_enforced*/ network.is_some(),
+        )?;
         let request = self
             .manager
             .transform(SandboxTransformRequest {
                 command,
-                permissions: self.permissions,
+                permissions: protected.as_ref().unwrap_or(self.permissions),
                 sandbox: self.sandbox,
                 enforce_managed_network: self.enforce_managed_network,
                 environment_id,
@@ -463,11 +636,37 @@ impl<'a> SandboxAttempt<'a> {
             .iter()
             .map(PathUri::to_abs_path)
             .collect::<std::io::Result<Vec<_>>>()?;
-        Ok(crate::sandboxing::ExecRequest::from_sandbox_exec_request(
+        let mut exec_request = crate::sandboxing::ExecRequest::from_sandbox_exec_request(
             request,
             options,
             workspace_roots,
-        ))
+        );
+        if exec_request.sandbox == SandboxType::WindowsRestrictedToken {
+            let sandbox_cwd = self.sandbox_cwd.to_abs_path()?;
+            if codex_sandboxing::windows_sandbox_uses_elevated_backend(
+                exec_request.windows_sandbox_level,
+                exec_request.network.is_some(),
+            ) {
+                // #294: without this the elevated Windows sandbox applies none
+                // of the profile's deny entries, including the contract's.
+                crate::exec::attach_windows_sandbox_filesystem_overrides(
+                    &mut exec_request,
+                    &sandbox_cwd,
+                    contract,
+                )?;
+            } else {
+                // #300: the unelevated backend cannot block reads, so a
+                // profile that denies some is refused, as in
+                // `process_exec_tool_call`, rather than run with its
+                // protected files readable.
+                codex_sandboxing::refuse_unenforceable_windows_read_restrictions(
+                    exec_request.sandbox,
+                    &exec_request.permission_profile,
+                )
+                .map_err(CodexErr::UnsupportedOperation)?;
+            }
+        }
+        Ok(exec_request)
     }
 
     pub fn env_for_exec_server(
@@ -475,7 +674,29 @@ impl<'a> SandboxAttempt<'a> {
         command: SandboxCommand,
         options: ExecOptions,
     ) -> Result<crate::sandboxing::ExecRequest, CodexErr> {
+        self.env_for_exec_server_with_contract(
+            crate::security::launch_contract::active(),
+            command,
+            options,
+        )
+    }
+
+    /// [`Self::env_for_exec_server`] with an explicit launch contract. A
+    /// remote environment rebuilds the child environment on its own host, so
+    /// an armed contract refuses it (PF-27-S02).
+    pub(crate) fn env_for_exec_server_with_contract(
+        &self,
+        contract: Option<&crate::security::launch_contract::LaunchContract>,
+        mut command: SandboxCommand,
+        options: ExecOptions,
+    ) -> Result<crate::sandboxing::ExecRequest, CodexErr> {
         let managed_network = command.managed_network.clone();
+        self.protect_launch(
+            contract,
+            &mut command,
+            /*exec_server*/ true,
+            /*proxy_enforced*/ false,
+        )?;
         let exec_server_permissions = effective_permission_profile(
             self.exec_server_permissions,
             command.additional_permissions.as_ref(),
@@ -519,3 +740,7 @@ impl<'a> SandboxAttempt<'a> {
 #[cfg(test)]
 #[path = "sandboxing_tests.rs"]
 mod tests;
+
+#[cfg(all(test, windows))]
+#[path = "sandboxing_windows_tests.rs"]
+mod windows_tests;

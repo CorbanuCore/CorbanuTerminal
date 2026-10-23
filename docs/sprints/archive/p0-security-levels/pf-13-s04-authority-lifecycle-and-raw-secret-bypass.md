@@ -2,7 +2,7 @@
 sprint_id: "PF-13-S04"
 title: "Credential authority lifecycle and raw-secret bypass closure"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 12
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-08-26
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md)
 - Feature: `PF-13`
 - Acceptance advanced: credential use produces a secret-free decision/receipt and revoked authority cannot be replayed.
 

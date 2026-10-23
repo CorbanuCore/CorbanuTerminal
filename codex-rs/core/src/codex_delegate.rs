@@ -9,6 +9,7 @@ use codex_core_plugins::PluginCommandAttribution;
 use codex_extension_api::LoadedUserInstructions;
 use codex_plugin::PluginId;
 use codex_protocol::items::is_safe_plugin_relative_path;
+use codex_protocol::protocol::AccountTokenUsage;
 use codex_protocol::protocol::ApplyPatchApprovalRequestEvent;
 use codex_protocol::protocol::Event;
 use codex_protocol::protocol::EventMsg;
@@ -21,6 +22,7 @@ use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::Submission;
 use codex_protocol::protocol::ThreadSource;
+use codex_protocol::protocol::TokenCountEvent;
 use codex_protocol::request_permissions::PermissionGrantScope;
 use codex_protocol::request_permissions::RequestPermissionsArgs;
 use codex_protocol::request_permissions::RequestPermissionsEvent;
@@ -304,6 +306,9 @@ async fn forward_events(
 ) {
     let cancelled = cancel_token.cancelled();
     tokio::pin!(cancelled);
+    // PF-84: the delegate's usage per account so far; each increase counts
+    // toward the parent conversation, as the accounting ledger records it.
+    let mut delegated_usage: Vec<AccountTokenUsage> = Vec::new();
 
     loop {
         tokio::select! {
@@ -317,6 +322,18 @@ async fn forward_events(
                     Err(_) => break,
                 };
                 match event {
+                    Event {
+                        id: _,
+                        msg:
+                            EventMsg::TokenCount(TokenCountEvent {
+                                account_usage: Some(usage),
+                                ..
+                            }),
+                    } => {
+                        let increase = AccountTokenUsage::increase_since(&delegated_usage, &usage);
+                        delegated_usage = usage;
+                        parent_session.record_delegated_account_usage(&increase).await;
+                    }
                     Event {
                         id: _,
                         msg:
@@ -529,6 +546,10 @@ async fn handle_exec_approval(
                 normalized_relative_path: script_path,
             })
         });
+    // Issue #513: the delegate counts this answer as a person's (it asked
+    // its client), also when the automatic reviewer gives it here. Today's
+    // delegates run with approvals off; one that can prompt under Moderate
+    // must not let the reviewer's answer open a persistence file.
     let decision = if routes_approval_to_guardian(parent_ctx) {
         let review_cancel = cancel_token.child_token();
         let review_rx = spawn_approval_request_review(

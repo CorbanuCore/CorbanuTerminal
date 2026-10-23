@@ -190,6 +190,7 @@ fn sanitize_directory(lines: Vec<String>) -> Vec<String> {
     lines
         .into_iter()
         .map(|line| {
+            let line = super::snapshot_helpers::normalize_snapshot_version(&line);
             if let (Some(frame_width), Some(dir_pos), Some(pipe_idx)) =
                 (frame_width, line.find("Directory: "), line.rfind('│'))
             {
@@ -264,7 +265,7 @@ fn permissions_text_for(config: &Config) -> Option<String> {
         /*collaboration_mode*/ None,
         /*reasoning_effort_override*/ None,
     );
-    render_lines(&composite.display_lines(/*width*/ 80))
+    render_lines(&composite.display_lines(/*width*/ 240))
         .iter()
         .find(|line| line.contains("Permissions:"))
         .and_then(|line| {
@@ -273,8 +274,77 @@ fn permissions_text_for(config: &Config) -> Option<String> {
                 .map(str::trim)
                 .map(|text| text.trim_end_matches('│'))
                 .map(str::trim)
+                .and_then(|text| text.strip_prefix("Next turn: "))
                 .map(ToString::to_string)
         })
+}
+
+#[tokio::test]
+async fn status_permissions_compact_next_turn_label_at_narrow_widths() {
+    let temp_home = TempDir::new().expect("temp home");
+    let mut config = test_config(&temp_home).await;
+    let mut sections = Vec::new();
+    for (profile, active, policy) in [
+        (
+            PermissionProfile::Disabled,
+            ActivePermissionProfile::new(":danger-full-access"),
+            AskForApproval::Never,
+        ),
+        (
+            PermissionProfile::read_only(),
+            ActivePermissionProfile::read_only(),
+            AskForApproval::OnRequest,
+        ),
+    ] {
+        config
+            .permissions
+            .approval_policy
+            .set(policy.to_core())
+            .unwrap();
+        config
+            .permissions
+            .set_permission_profile_from_session_snapshot(PermissionProfileSnapshot::active(
+                profile, active,
+            ))
+            .unwrap();
+        let cell = new_status_output(
+            &config,
+            /*account_display*/ None,
+            /*token_info*/ None,
+            &TokenUsage::default(),
+            &None,
+            /*thread_name*/ None,
+            /*forked_from*/ None,
+            /*rate_limits*/ None,
+            /*_plan_type*/ None,
+            Local::now(),
+            "gpt-5.2",
+            /*collaboration_mode*/ None,
+            /*reasoning_effort_override*/ None,
+        );
+        // The renderer has no running-turn snapshot: retain the scope qualifier
+        // without an unconditional paragraph or a guessed authority comparison.
+        for width in [42, 46, 70, 100] {
+            let lines = render_lines(&cell.display_lines(width));
+            assert!(lines.iter().all(|line| line.width() <= usize::from(width)));
+            let section = lines
+                .iter()
+                .skip_while(|line| !line.contains("Permissions:"))
+                .take_while(|line| !line.contains("Security:"))
+                .map(|line| line.trim_matches(['│', ' ']))
+                .collect::<Vec<_>>();
+            assert!(section.len() <= 4, "width {width}: {section:?}");
+            sections.push(format!(
+                "width {width}: {} lines\n{}",
+                section.len(),
+                section.join("\n")
+            ));
+        }
+    }
+    insta::assert_snapshot!(
+        "status_permissions_distinguish_next_turn_from_unreported_running_authority",
+        sections.join("\n\n")
+    );
 }
 
 #[tokio::test]
@@ -771,6 +841,7 @@ async fn status_model_provider_uses_bedrock_runtime_base_url_and_gates_usage_lin
         /*reasoning_effort_override*/ None,
         "<none>".to_string(),
         /*refreshing_rate_limits*/ false,
+        /*account_usage*/ None,
     );
     let rendered = render_lines(&composite.display_lines(/*width*/ 120)).join("\n");
 
@@ -812,6 +883,7 @@ async fn status_model_provider_uses_bedrock_runtime_base_url_and_gates_usage_lin
         /*reasoning_effort_override*/ None,
         "<none>".to_string(),
         /*refreshing_rate_limits*/ false,
+        /*account_usage*/ None,
     );
     let rendered = render_lines(&composite.display_lines(/*width*/ 120)).join("\n");
 
@@ -1573,7 +1645,7 @@ async fn status_snapshot_uses_command_backed_provider_account_identity() {
     config.model_provider = ModelProviderInfo::create_claude_plan_provider();
     set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
 
-    let account = StatusAccountDisplay::ApiKey;
+    let account = StatusAccountDisplay::ApiKey { env_var: None };
     let usage = TokenUsage::default();
     let now = chrono::Local
         .with_ymd_and_hms(2024, 1, 2, 3, 4, 5)
@@ -1649,6 +1721,121 @@ async fn status_snapshot_shows_missing_limits_message() {
 }
 
 #[tokio::test]
+async fn status_snapshot_names_openai_api_key_from_environment() {
+    let temp_home = TempDir::new().expect("temp home");
+    let mut config = test_config(&temp_home).await;
+    config.model = Some("gpt-5.4".to_string());
+    set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
+
+    let account = StatusAccountDisplay::ApiKey {
+        env_var: Some("OPENAI_API_KEY".to_string()),
+    };
+    let usage = TokenUsage::default();
+    let now = chrono::Local
+        .with_ymd_and_hms(2024, 2, 3, 4, 5, 6)
+        .single()
+        .expect("timestamp");
+    let composite = new_status_output(
+        &config,
+        Some(&account),
+        /*token_info*/ None,
+        &usage,
+        &None,
+        /*thread_name*/ None,
+        /*forked_from*/ None,
+        /*rate_limits*/ None,
+        /*plan_type*/ None,
+        now,
+        "gpt-5.4",
+        /*collaboration_mode*/ None,
+        /*reasoning_effort_override*/ None,
+    );
+    let mut rendered_lines = render_lines(&composite.display_lines(/*width*/ 100));
+    if cfg!(windows) {
+        for line in &mut rendered_lines {
+            *line = line.replace('\\', "/");
+        }
+    }
+    let sanitized = sanitize_directory(rendered_lines).join("\n");
+    assert_snapshot!(sanitized);
+}
+
+#[tokio::test]
+async fn status_does_not_name_openai_api_key_for_other_providers() {
+    let temp_home = TempDir::new().expect("temp home");
+    let mut config = test_config(&temp_home).await;
+    // A local provider that never receives the OPENAI_API_KEY fallback.
+    config.model_provider.requires_openai_auth = false;
+    config.model_provider.name = "Local Test".to_string();
+    set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
+
+    let account = StatusAccountDisplay::ApiKey {
+        env_var: Some("OPENAI_API_KEY".to_string()),
+    };
+    let composite = new_status_output(
+        &config,
+        Some(&account),
+        /*token_info*/ None,
+        &TokenUsage::default(),
+        &None,
+        /*thread_name*/ None,
+        /*forked_from*/ None,
+        /*rate_limits*/ None,
+        /*plan_type*/ None,
+        chrono::Local::now(),
+        "local-model",
+        /*collaboration_mode*/ None,
+        /*reasoning_effort_override*/ None,
+    );
+    let rendered = render_lines(&composite.display_lines(/*width*/ 120)).join("\n");
+
+    assert!(!rendered.contains("from your environment"), "{rendered}");
+    // #462: a non-OpenAI provider's stored key is not an OpenAI key.
+    assert!(!rendered.contains("OpenAI API key"), "{rendered}");
+    assert!(
+        rendered.contains("Local Test API key configured"),
+        "{rendered}"
+    );
+}
+
+/// #462: a Z.AI-only home (key in the vault, no OpenAI credential) must not
+/// claim an OpenAI API key.
+#[tokio::test]
+async fn status_names_the_vault_key_provider_not_openai() {
+    let temp_home = TempDir::new().expect("temp home");
+    let mut config = test_config(&temp_home).await;
+    config.model_provider_id = "zai".to_string();
+    config.model_provider = ModelProviderInfo {
+        name: "Z.AI".to_string(),
+        // Unset in the test environment: the key lives in the vault.
+        env_key: Some("PF84_ISSUE_462_UNSET_API_KEY".to_string()),
+        ..Default::default()
+    };
+    set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
+
+    let account = StatusAccountDisplay::ApiKey { env_var: None };
+    let composite = new_status_output(
+        &config,
+        Some(&account),
+        /*token_info*/ None,
+        &TokenUsage::default(),
+        &None,
+        /*thread_name*/ None,
+        /*forked_from*/ None,
+        /*rate_limits*/ None,
+        /*plan_type*/ None,
+        chrono::Local::now(),
+        "glm-5.3-flash",
+        /*collaboration_mode*/ None,
+        /*reasoning_effort_override*/ None,
+    );
+    let rendered = render_lines(&composite.display_lines(/*width*/ 120)).join("\n");
+
+    assert!(!rendered.contains("OpenAI"), "{rendered}");
+    assert!(rendered.contains("Z.AI API key configured"), "{rendered}");
+}
+
+#[tokio::test]
 async fn status_snapshot_uses_default_reasoning_when_config_empty() {
     let temp_home = TempDir::new().expect("temp home");
     let mut config = test_config(&temp_home).await;
@@ -1693,6 +1880,7 @@ async fn status_snapshot_uses_default_reasoning_when_config_empty() {
         /*reasoning_effort_override*/ Some(Some(ReasoningEffort::Medium)),
         "<none>".to_string(),
         /*refreshing_rate_limits*/ false,
+        /*account_usage*/ None,
     );
     let mut rendered_lines = render_lines(&composite.display_lines(/*width*/ 80));
     if cfg!(windows) {
@@ -1802,6 +1990,7 @@ async fn transcript_overlay_remeasures_status_after_rate_limit_refresh() {
         /*reasoning_effort_override*/ None,
         "<none>".to_string(),
         /*refreshing_rate_limits*/ true,
+        /*account_usage*/ None,
     );
     let mut overlay =
         TranscriptOverlay::new(vec![Arc::new(status)], RuntimeKeymap::defaults().pager);
@@ -2249,5 +2438,499 @@ async fn status_context_window_uses_last_usage() {
     assert!(
         !context_line.contains("102K"),
         "context line should not use total aggregated tokens, got: {context_line}"
+    );
+}
+
+/// PF-84: a Z.AI session on `account` with named accounts on or off.
+async fn named_account_status(
+    named_accounts: bool,
+    account: Option<&str>,
+    account_usage: Option<super::StatusAccountUsage>,
+    width: u16,
+) -> String {
+    let temp_home = TempDir::new().expect("temp home");
+    named_account_status_in(&temp_home, named_accounts, account, account_usage, width).await
+}
+
+/// D86: adds named API-key accounts (provider id, name) to `home`'s vault.
+fn enroll_named_accounts(home: &TempDir, accounts: &[(&str, &str)]) {
+    let vault = codex_vault::Vault::new(home.path().to_path_buf());
+    for (provider_id, name) in accounts {
+        let name = codex_vault::ProviderAccountName::parse(name).expect("account name");
+        vault
+            .create_provider_account(
+                provider_id,
+                &name,
+                codex_vault::ProviderAccountKind::ApiKey,
+                "test-key-not-a-secret",
+            )
+            .expect("add named account");
+    }
+}
+
+/// [`named_account_status`] in `temp_home`, whose vault the test prepared.
+async fn named_account_status_in(
+    temp_home: &TempDir,
+    named_accounts: bool,
+    account: Option<&str>,
+    account_usage: Option<super::StatusAccountUsage>,
+    width: u16,
+) -> String {
+    let mut config = test_config(temp_home).await;
+    config.model_provider_id = "zai".to_string();
+    config.model_provider = ModelProviderInfo {
+        name: "Z.AI".to_string(),
+        // Unset in the test environment: the key lives in the vault.
+        env_key: Some("PF84_STATUS_ACCOUNT_USAGE_UNSET_KEY".to_string()),
+        account: account.map(|name| codex_model_provider_info::NamedProviderAccount {
+            provider_id: "zai".to_string(),
+            name: name.to_string(),
+        }),
+        ..Default::default()
+    };
+    if named_accounts {
+        config
+            .features
+            .enable(codex_features::Feature::NamedAccounts)
+            .expect("enable named accounts");
+    }
+    set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
+    // #1193: what the background check found in this home's vault, unless
+    // the test set it (a vault it cannot read leaves it unknown).
+    let account_usage = account_usage.map(|mut summary| {
+        if summary.named_account_in_home.is_none() {
+            summary.named_account_in_home =
+                crate::provider_named_accounts::named_account_providers(temp_home.path())
+                    .map(|providers| providers.contains("zai"));
+        }
+        summary
+    });
+    // The session's own token usage: what the account rows add up to.
+    let usage = account_usage
+        .as_ref()
+        .map(|summary| {
+            summary
+                .rows
+                .iter()
+                .fold(TokenUsage::default(), |mut total, (_, usage)| {
+                    total.input_tokens += usage.input_tokens;
+                    total.cached_input_tokens += usage.cached_input_tokens;
+                    total.output_tokens += usage.output_tokens;
+                    total.reasoning_output_tokens += usage.reasoning_output_tokens;
+                    total.total_tokens += usage.total_tokens;
+                    total
+                })
+        })
+        .unwrap_or_else(|| {
+            account_tokens(
+                /*input*/ 47_100, /*cached*/ 12_000, /*output*/ 6_247,
+                /*reasoning*/ 300,
+            )
+        });
+    let now = chrono::Local
+        .with_ymd_and_hms(2026, 10, 11, 4, 5, 6)
+        .single()
+        .expect("timestamp");
+    let account_display = StatusAccountDisplay::ApiKey { env_var: None };
+    let (composite, _) = new_status_output_with_rate_limits_handle(
+        &config,
+        /*runtime_model_provider_base_url*/ None,
+        /*remote_connection*/ None,
+        Some(&account_display),
+        /*token_info*/ None,
+        &usage,
+        &None,
+        /*thread_name*/ None,
+        /*forked_from*/ None,
+        &[],
+        /*plan_type*/ None,
+        now,
+        "glm-5.3-flash",
+        /*collaboration_mode*/ None,
+        /*reasoning_effort_override*/ None,
+        "<none>".to_string(),
+        /*refreshing_rate_limits*/ false,
+        account_usage,
+    );
+    let mut rendered_lines = render_lines(&composite.display_lines(width));
+    if cfg!(windows) {
+        for line in &mut rendered_lines {
+            *line = line.replace('\\', "/");
+        }
+    }
+    sanitize_directory(rendered_lines).join("\n")
+}
+
+fn account_tokens(input: i64, cached: i64, output: i64, reasoning: i64) -> TokenUsage {
+    TokenUsage {
+        input_tokens: input,
+        cached_input_tokens: cached,
+        output_tokens: output,
+        reasoning_output_tokens: reasoning,
+        total_tokens: input + output,
+    }
+}
+
+/// PF-84: with named accounts off, `/status` has no account usage.
+#[tokio::test]
+async fn status_snapshot_account_usage_flag_off() {
+    let rendered = named_account_status(
+        /*named_accounts*/ false, /*account*/ None, /*account_usage*/ None,
+        /*width*/ 100,
+    )
+    .await;
+    assert!(!rendered.contains("Account usage"), "{rendered}");
+    assert_snapshot!(rendered);
+}
+
+#[tokio::test]
+async fn status_snapshot_account_usage_no_usage_yet() {
+    let rendered = named_account_status(
+        /*named_accounts*/ true,
+        Some("work"),
+        Some(super::StatusAccountUsage {
+            named_account_in_home: None,
+            rows: vec![("work".to_string(), TokenUsage::default())],
+        }),
+        /*width*/ 100,
+    )
+    .await;
+    assert_snapshot!(rendered);
+}
+
+#[tokio::test]
+async fn status_snapshot_account_usage_one_account() {
+    let rendered = named_account_status(
+        /*named_accounts*/ true,
+        Some("work"),
+        Some(super::StatusAccountUsage {
+            named_account_in_home: None,
+            rows: vec![(
+                "work".to_string(),
+                account_tokens(
+                    /*input*/ 47_100, /*cached*/ 12_000, /*output*/ 6_247,
+                    /*reasoning*/ 300,
+                ),
+            )],
+        }),
+        // Narrow enough that the one account's line wraps.
+        /*width*/ 80,
+    )
+    .await;
+    assert_snapshot!(rendered);
+}
+
+#[tokio::test]
+async fn status_snapshot_account_usage_several_accounts() {
+    let rendered = named_account_status(
+        /*named_accounts*/ true,
+        /*account*/ None,
+        Some(super::StatusAccountUsage {
+            named_account_in_home: None,
+            rows: vec![
+                (
+                    "default".to_string(),
+                    account_tokens(
+                        /*input*/ 40_100, /*cached*/ 12_000, /*output*/ 6_015,
+                        /*reasoning*/ 300,
+                    ),
+                ),
+                (
+                    "work".to_string(),
+                    account_tokens(
+                        /*input*/ 7_000, /*cached*/ 0, /*output*/ 232,
+                        /*reasoning*/ 0,
+                    ),
+                ),
+            ],
+        }),
+        /*width*/ 100,
+    )
+    .await;
+    assert_snapshot!(rendered);
+}
+
+fn model_provider_line(rendered: &str) -> &str {
+    rendered
+        .lines()
+        .find(|line| line.contains("Model provider:"))
+        .expect("model provider line")
+}
+
+fn default_account_usage() -> Option<super::StatusAccountUsage> {
+    Some(super::StatusAccountUsage {
+        named_account_in_home: None,
+        rows: vec![(
+            codex_vault::DEFAULT_PROVIDER_ACCOUNT.to_string(),
+            account_tokens(
+                /*input*/ 47_100, /*cached*/ 12_000, /*output*/ 6_247,
+                /*reasoning*/ 300,
+            ),
+        )],
+    })
+}
+
+/// D86: with named accounts on, a provider with no named account in the
+/// home shows no account, as with them off.
+#[tokio::test]
+async fn status_snapshot_account_line_hidden_without_named_accounts() {
+    let rendered = named_account_status(
+        /*named_accounts*/ true,
+        /*account*/ None,
+        default_account_usage(),
+        /*width*/ 100,
+    )
+    .await;
+    let line = model_provider_line(&rendered);
+    assert!(
+        line.contains("Z.AI") && !line.contains("account"),
+        "{rendered}"
+    );
+    // D125: nor the "Account usage" line: the card is exactly as with named
+    // accounts off.
+    assert!(!rendered.contains("Account usage"), "{rendered}");
+    let flag_off = named_account_status(
+        /*named_accounts*/ false, /*account*/ None, /*account_usage*/ None,
+        /*width*/ 100,
+    )
+    .await;
+    assert_eq!(rendered, flag_off);
+    assert_snapshot!(rendered);
+}
+
+/// D86: once the provider has a named account, the line names the account
+/// the session uses, `default` included.
+#[tokio::test]
+async fn status_snapshot_account_line_names_default_when_provider_has_named_account() {
+    let home = TempDir::new().expect("temp home");
+    enroll_named_accounts(&home, &[("zai", "work")]);
+    let rendered = named_account_status_in(
+        &home,
+        /*named_accounts*/ true,
+        /*account*/ None,
+        default_account_usage(),
+        /*width*/ 100,
+    )
+    .await;
+    assert!(
+        model_provider_line(&rendered).contains("Z.AI · account default"),
+        "{rendered}"
+    );
+    assert_snapshot!(rendered);
+}
+
+/// D86: another provider's named account does not count; a vault that
+/// cannot be read does (the account is named rather than hidden).
+#[tokio::test]
+async fn account_line_counts_only_this_providers_named_accounts() {
+    let home = TempDir::new().expect("temp home");
+    enroll_named_accounts(&home, &[("kimi", "work")]);
+    let rendered = named_account_status_in(
+        &home,
+        /*named_accounts*/ true,
+        /*account*/ None,
+        default_account_usage(),
+        /*width*/ 100,
+    )
+    .await;
+    assert!(
+        !model_provider_line(&rendered).contains("account"),
+        "{rendered}"
+    );
+    assert!(!rendered.contains("Account usage"), "{rendered}");
+
+    std::fs::write(
+        home.path().join("secrets").join("local.age"),
+        b"not an age file",
+    )
+    .expect("corrupt the vault");
+    let rendered = named_account_status_in(
+        &home,
+        /*named_accounts*/ true,
+        /*account*/ None,
+        default_account_usage(),
+        /*width*/ 100,
+    )
+    .await;
+    assert!(
+        model_provider_line(&rendered).contains("Z.AI · account default"),
+        "{rendered}"
+    );
+    assert!(rendered.contains("Account usage:"), "{rendered}");
+}
+
+/// D86: with named accounts off, an enrolled named account changes nothing.
+#[tokio::test]
+async fn account_line_stays_off_with_named_accounts_off() {
+    let home = TempDir::new().expect("temp home");
+    enroll_named_accounts(&home, &[("zai", "work")]);
+    let rendered = named_account_status_in(
+        &home, /*named_accounts*/ false, /*account*/ None, /*account_usage*/ None,
+        /*width*/ 100,
+    )
+    .await;
+    let line = model_provider_line(&rendered);
+    assert!(
+        line.contains("Z.AI") && !line.contains("account"),
+        "{rendered}"
+    );
+}
+
+/// D86: the default OpenAI provider in a home without named accounts has no
+/// "Model provider" line: it renders exactly as with named accounts off.
+#[tokio::test]
+async fn default_openai_status_is_unchanged_without_named_accounts() {
+    async fn render(named_accounts: bool) -> String {
+        let temp_home = TempDir::new().expect("temp home");
+        let mut config = test_config(&temp_home).await;
+        if named_accounts {
+            config
+                .features
+                .enable(codex_features::Feature::NamedAccounts)
+                .expect("enable named accounts");
+        } else {
+            config
+                .features
+                .disable(codex_features::Feature::NamedAccounts)
+                .expect("disable named accounts");
+        }
+        set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
+        let usage = account_tokens(
+            /*input*/ 1_000, /*cached*/ 0, /*output*/ 200, /*reasoning*/ 0,
+        );
+        let now = chrono::Local
+            .with_ymd_and_hms(2026, 10, 11, 4, 5, 6)
+            .single()
+            .expect("timestamp");
+        let account_display = StatusAccountDisplay::ChatGpt {
+            email: Some("user@example.com".to_string()),
+            plan: Some("Plus".to_string()),
+        };
+        let (composite, _) = new_status_output_with_rate_limits_handle(
+            &config,
+            /*runtime_model_provider_base_url*/ None,
+            /*remote_connection*/ None,
+            Some(&account_display),
+            /*token_info*/ None,
+            &usage,
+            &None,
+            /*thread_name*/ None,
+            /*forked_from*/ None,
+            &[],
+            /*plan_type*/ None,
+            now,
+            "gpt-5.1-codex-max",
+            /*collaboration_mode*/ None,
+            /*reasoning_effort_override*/ None,
+            "<none>".to_string(),
+            /*refreshing_rate_limits*/ false,
+            // What `status_account_usage` passes: rows only with the flag on.
+            named_accounts.then(|| super::StatusAccountUsage {
+                // The background check found no named account.
+                named_account_in_home: Some(false),
+                rows: vec![(
+                    codex_vault::DEFAULT_PROVIDER_ACCOUNT.to_string(),
+                    usage.clone(),
+                )],
+            }),
+        );
+        sanitize_directory(render_lines(&composite.display_lines(/*width*/ 100))).join("\n")
+    }
+    let on = render(/*named_accounts*/ true).await;
+    assert!(!on.contains("Model provider"), "{on}");
+    assert_eq!(on, render(/*named_accounts*/ false).await);
+}
+
+/// D171 (#1286): `/status` of an OpenAI session on the named ChatGPT account
+/// `work`, signed in when `signed_in`.
+async fn named_sign_in_status(signed_in: bool, remote: bool) -> String {
+    let temp_home = TempDir::new().expect("temp home");
+    if signed_in {
+        app_test_support::write_named_chatgpt_auth(
+            temp_home.path(),
+            "openai",
+            "work",
+            ChatGptAuthFixture::new("work-access-not-a-secret")
+                .account_id("acct-work")
+                .plan_type("plus"),
+        )
+        .expect("named sign-in");
+    }
+    let mut config = test_config(&temp_home).await;
+    config.model_provider_id = "openai".to_string();
+    config.model_provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+    config.model_provider.account = Some(codex_model_provider_info::NamedProviderAccount {
+        provider_id: "openai".to_string(),
+        name: "work".to_string(),
+    });
+    config
+        .features
+        .enable(codex_features::Feature::NamedAccounts)
+        .expect("enable named accounts");
+    set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
+    let usage = account_tokens(
+        /*input*/ 1_000, /*cached*/ 0, /*output*/ 20, /*reasoning*/ 0,
+    );
+    let account_usage = super::StatusAccountUsage {
+        named_account_in_home: Some(true),
+        rows: vec![("work".to_string(), usage.clone())],
+    };
+    let now = chrono::Local
+        .with_ymd_and_hms(2026, 10, 22, 4, 5, 6)
+        .single()
+        .expect("timestamp");
+    let remote_connection = remote.then(|| RemoteConnectionStatus {
+        address: "wss://remote.example".to_string(),
+        version: "0.0.0".to_string(),
+    });
+    let (composite, _) = new_status_output_with_rate_limits_handle(
+        &config,
+        /*runtime_model_provider_base_url*/ None,
+        remote_connection.as_ref(),
+        /*account_display*/ None,
+        /*token_info*/ None,
+        &usage,
+        &None,
+        /*thread_name*/ None,
+        /*forked_from*/ None,
+        &[],
+        /*plan_type*/ None,
+        now,
+        "gpt-5.5",
+        /*collaboration_mode*/ None,
+        /*reasoning_effort_override*/ None,
+        "<none>".to_string(),
+        /*refreshing_rate_limits*/ false,
+        Some(account_usage),
+    );
+    render_lines(&composite.display_lines(/*width*/ 100)).join("\n")
+}
+
+/// D171 (#1286): once the session's ChatGPT account is removed or signed
+/// out, `/status` no longer presents the session as running on it: the
+/// provider line says the account is unavailable and the Account line names
+/// it with its recovery.
+#[tokio::test]
+async fn status_does_not_present_a_removed_sign_in_account_as_the_sessions() {
+    let signed_in = named_sign_in_status(/*signed_in*/ true, /*remote*/ false).await;
+    assert!(signed_in.contains("OpenAI · account work"), "{signed_in}");
+    assert!(!signed_in.contains("unavailable"), "{signed_in}");
+
+    // A remote app server's account lives on its host: this vault cannot tell.
+    let remote = named_sign_in_status(/*signed_in*/ false, /*remote*/ true).await;
+    assert!(remote.contains("OpenAI · account work"), "{remote}");
+    assert!(!remote.contains("unavailable"), "{remote}");
+
+    let removed = named_sign_in_status(/*signed_in*/ false, /*remote*/ false).await;
+    assert!(!removed.contains("· account work"), "{removed}");
+    assert!(
+        removed.contains("OpenAI · account unavailable"),
+        "{removed}"
+    );
+    assert!(
+        removed.contains(
+            "account work has no sign-in: `corbanu login --account work` or `/providers`"
+        ),
+        "{removed}"
     );
 }

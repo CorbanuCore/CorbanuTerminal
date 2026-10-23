@@ -71,6 +71,22 @@ pub struct InitializeResponse {
     /// Operating system for the running app-server target, for example
     /// `"macos"`, `"linux"`, or `"windows"`.
     pub platform_os: String,
+    /// Set when this server leaves a default OpenAI login that its login
+    /// restrictions rule out in place, never logging it out, and refuses to
+    /// use it (the `named_accounts` feature is on). Carries those
+    /// restrictions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub ruled_out_default_login: Option<RuledOutDefaultLoginPolicy>,
+}
+
+/// The login restrictions under which a server leaves a ruled-out default
+/// OpenAI login in place and refuses to use it.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct RuledOutDefaultLoginPolicy {
+    pub forced_login_method: Option<ForcedLoginMethod>,
+    pub forced_chatgpt_workspace_id: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

@@ -1,0 +1,5 @@
+  signatures on unsigning, and support key rotation and fallback signers.
+  src/itsdangerous/_json.py — Provides a _CompactJSON wrapper around Python's standard json module that deserializes payloads normally but serializes objects
+  with ASCII disabled and whitespace stripped, so JSON output is compact for use in signed tokens.
+› /cost
+  Z.AI GLM 5.2 via zai standard · ~/corbanu-rtx/pf60-indep-20261008/repos/itsdangerous · Corbanu Terminal · TPS: -- tok/s

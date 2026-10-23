@@ -1,0 +1,18 @@
+2026-10-14T12:19:55Z sync + clean shutdown from inside (guest-shutdown.sh)
+synced
+Connection to 192.168.64.3 closed by remote host.
+2026-10-14T12:20:07Z status: stopped
+2026-10-14T12:20:07Z verification boot: utmctl start
+campaign paths present: 0 (of ~/agms ~/agms-canary /opt/agms /etc/sudoers.d/agms-codeblind /private/tmp/agms-canary-ipc)
+agmx accounts: 0
+agmsexec group: absent
+AGMS lines in pf anchor corbanu.pf83: 0
+/etc/codex/config.toml: -rw-r--r--  1 root  wheel  82 Sep 17 22:00 /etc/codex/config.toml
+virtiofs mounts: 1
+admin helper scripts left in ~agent/ag-admin: agadmin-1791980374-45176.sh agadmin-1791980378-45552.sh agadmin-1791980381-45733.sh agadmin-1791980395-46330.sh su.exp 
+2026-10-14T12:20:21Z final clean shutdown
+Connection to 192.168.64.3 closed by remote host.
+2026-10-14T12:20:33Z final utmctl list:
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3

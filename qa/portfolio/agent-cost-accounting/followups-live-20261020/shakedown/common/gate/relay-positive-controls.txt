@@ -1,0 +1,7 @@
+https://api.openai.com/v1/models 200
+https://api.moonshot.ai/v1/models 503
+direct 127.0.0.1:443 GET /v1/models 403
+{"conn": "1792461235026987000-49212", "event": "forwarded", "host": "api.z.ai", "method": "POST", "model": "glm-5.3-flash", "path": "/api/paas/v4/chat/completions", "real": true, "request_bytes": 26874, "response_bytes": 4479, "seconds": 5.347, "service_tier": null, "status": "200", "stream": true, 
+{"conn": "1792461240507002000-49217", "event": "forwarded", "host": "api.openai.com", "method": "GET", "path": "/v1/models", "real": true, "request_bytes": 0, "response_bytes": 22203, "seconds": 0.934, "status": "200", "time_ns": 1792461241448838000, "ts": "2026-10-20T01:54:01+0000", "usage": null, 
+{"conn": "1792461241460839000-49219", "event": "denied_no_key", "host": "api.moonshot.ai", "path": "/v1/models", "time_ns": 1792461241464253000, "ts": "2026-10-20T01:54:01+0000"}
+{"conn": "rt-1792461241477227000-49220", "event": "denied_path", "host": "api.openai.com (direct)", "method": "GET", "path": "/v1/models", "time_ns": 1792461241480259000, "ts": "2026-10-20T01:54:01+0000", "websocket": false}

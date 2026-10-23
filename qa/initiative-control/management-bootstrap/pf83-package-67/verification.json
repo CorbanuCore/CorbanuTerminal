@@ -1,0 +1,22 @@
+{
+  "production_files": 34,
+  "production_matches": 34,
+  "packet_paths": 288,
+  "packet_counts": {
+    "F05": 8,
+    "F06": 8,
+    "F07": 16,
+    "F08": 40,
+    "F09": 216
+  },
+  "package_manifest_sha256": "32529d0a894503c021ff756ebc27a75555ab05ed2ec63dc47dc0d9d7bb878024",
+  "build_attestation_sha256": "349ecadeae3d1d57125acc012103aa6bb92acf1eec42678669a817aaec162d53",
+  "executable_inventory": [
+    "codex-code-mode-host",
+    "corbanu",
+    "corbanu-acp",
+    "corbanu-walletd"
+  ],
+  "no_packaged_execution": true,
+  "live_harness_pin_updated": false
+}

@@ -1,0 +1,64 @@
+{
+  "source_commit": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
+  "classification": "routine evidence maintenance",
+  "disagreement_verdict": "documentation drift; no changed monetary/functional evidence claim",
+  "prior_exit": 3,
+  "refreshed_exit": 2,
+  "baseline_counts_unchanged": [
+    20,
+    0,
+    3,
+    2
+  ],
+  "membership_unchanged": true,
+  "changed_inventory_entries": [
+    {
+      "before": {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md",
+        "bytes": 17913,
+        "sha256": "473662b97512936c832d33c64233ca4ab50c4e5d73dd07f6fd88590d42afd6c5",
+        "lines": 236,
+        "kind": "new"
+      },
+      "after": {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md",
+        "bytes": 18490,
+        "sha256": "6f50dd49303a3d128674b93348285ea58c8f69debdc865bf3eedd802fad86bc9",
+        "lines": 244,
+        "kind": "new"
+      }
+    }
+  ],
+  "previous_totals": {
+    "total_new_bytes": 59977,
+    "total_new_text_lines": 782,
+    "total_new_files": 15,
+    "total_modified_files": 3,
+    "total_modified_bytes": 16713,
+    "total_modified_text_lines": 230,
+    "total_current_bytes": 76690,
+    "total_current_text_lines": 1012
+  },
+  "refreshed_totals": {
+    "total_new_bytes": 60554,
+    "total_new_text_lines": 790,
+    "total_new_files": 15,
+    "total_modified_files": 3,
+    "total_modified_bytes": 16713,
+    "total_modified_text_lines": 230,
+    "total_current_bytes": 77267,
+    "total_current_text_lines": 1020
+  },
+  "previous_reference_sha256": "97316af06e636192bd1086eafae4bc7acb6c03b5faa95239adfd48096209db60",
+  "reference_sha256": "c0c52beb096b3aeb4a54676e57356b3ac3b804f28ccdb42f49f07dfdc081eecc",
+  "changed_reference_lines": {
+    "removed": [
+      "AGREE acct-acceptance-75 inventory: entries=18; new_files=15; new_bytes=59977; new_text_lines=782; modified_files=3; modified_bytes=16713; modified_text_lines=230; current_bytes=76690; current_text_lines=1012; full-file sizes, not diff lines",
+      "AGREE acceptance numerical coverage: no unmatched digit-form quantities outside matched claim spans, fenced code and link targets; known round/sprint/severity identifiers excluded; worded quantities and excluded regions not audited"
+    ],
+    "added": [
+      "AGREE acct-acceptance-75 inventory: entries=18; new_files=15; new_bytes=60554; new_text_lines=790; modified_files=3; modified_bytes=16713; modified_text_lines=230; current_bytes=77267; current_text_lines=1020; full-file sizes, not diff lines",
+      "AGREE acceptance numerical coverage: no unmatched digit-form quantities outside matched claim spans, fenced code and link targets; known round/sprint/severity/model identifiers excluded; worded quantities and excluded regions not audited"
+    ]
+  }
+}

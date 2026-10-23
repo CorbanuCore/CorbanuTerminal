@@ -1,0 +1,81 @@
+# Issue #623 (G27, AGG-R13; Travis's decision 2026-10-13): under Aggressive a
+# link into the project's .agents (or .codex) is refused before the command
+# runs, so nothing is created.
+id = "issue623-agents-link-refused"
+feature = "#623: no link into .agents or .codex under Aggressive"
+expected = "With Aggressive active, `ln -s .agents ag && echo x >> ag/notes.md` is refused before it runs and the refusal says why (.codex and .agents are always read-only, a link to them is not created, not even once); no `ag` link exists afterwards."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 40
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"notes.txt" = "buy coffee\nreview budget\n"
+".agents/notes.md" = "orig\n"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "enter confirm and save"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+timeout = 60
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Z.AI GLM 5.3 Flash via zai"
+timeout = 60
+compress = 2
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this shell command once, unchanged: ln -s .agents ag && echo x >> ag/notes.md"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "refused this command before it ran"
+timeout = 180
+compress = 2
+[[steps]]
+pause = 4.0
+[[steps]]
+run = "test ! -e {workspace}/ag && test ! -L {workspace}/ag && grep -qx orig {workspace}/.agents/notes.md"
+[[steps]]
+wait = "(?s)refused this command before it ran.*\\n• "
+timeout = 120
+compress = 2
+[[steps]]
+pause = 3.0

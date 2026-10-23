@@ -1,0 +1,52 @@
+# #565: under Aggressive (permission requests on), an additional write
+# permission for the project's .agents folder is refused and explained before
+# anyone is asked: no grant lifts it under Aggressive (#520). On main the
+# person was asked first, possibly offered "Grant once", and the write was
+# refused after the answer anyway.
+id = "issue565-aggressive-agents-write-refused-before-asking"
+feature = "#565: under Aggressive a .agents write is refused before anyone is asked"
+expected = "With Aggressive and permission requests on, the agent asks to write .agents/issue565.md with an additional write permission for .agents. No approval prompt appears: it is refused at once with the #520 explanation (neither an additional permission nor \"Grant once\" can change it; switch to Permissive in /security), and .agents/issue565.md does not exist."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "aggressive"
+
+[features]
+exec_permission_approvals = true
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Call your shell tool exactly once to run: mkdir -p {workspace}/.agents && printf x > {workspace}/.agents/issue565.md -- with sandbox_permissions set to with_additional_permissions and additional_permissions set to {\"file_system\":{\"write\":[\"{workspace}/.agents\"]}}. Do not retry. Then report the result."
+[[steps]]
+key = "Enter"
+# Fails (times out) if an approval prompt appears first: nothing answers it.
+[[steps]]
+wait = "(?s)Security level Aggressive\\s+blocked\\s+writing\\s+to.*neither\\s+an\\s+additional\\s+permission(?:(?!Working).)*\n› "
+timeout = 240
+compress = 3
+[[steps]]
+pause = 3.0
+[[steps]]
+type = "!ls {workspace}/.agents/issue565.md"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "No such file\\s+or\\s+directory"
+[[steps]]
+pause = 3.0

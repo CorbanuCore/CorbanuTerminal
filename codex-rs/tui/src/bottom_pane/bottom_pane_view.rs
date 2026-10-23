@@ -26,6 +26,30 @@ pub(crate) trait BottomPaneView: Renderable {
         false
     }
 
+    /// Drop requests that something other than this view's input settled
+    /// (contained Claude pane requests whose turn stopped waiting). Return
+    /// `true` when nothing is left, so the view is removed wherever it is in
+    /// the stack.
+    fn remove_settled_requests(&mut self) -> bool {
+        false
+    }
+
+    /// The view is the active one again after the view above it closed.
+    fn on_uncovered(&mut self) {}
+
+    /// Like [`Self::on_uncovered`], but only when the view was already in the
+    /// stack under the view that closed, never when it was just pushed.
+    fn on_revealed(&mut self) {}
+
+    /// Try to queue a contained Claude pane's tool request; return it if not
+    /// consumed.
+    fn try_consume_claude_approval(
+        &mut self,
+        request: crate::claude_panes::approval::ClaudeApprovalRequest,
+    ) -> Option<crate::claude_panes::approval::ClaudeApprovalRequest> {
+        Some(request)
+    }
+
     /// Return the completion reason once the view has finished.
     fn completion(&self) -> Option<ViewCompletion> {
         None
@@ -38,6 +62,26 @@ pub(crate) trait BottomPaneView: Renderable {
 
     /// Clear any pending child-flow cleanup marker after a child view is cancelled.
     fn clear_dismiss_after_child_accept(&mut self) {}
+
+    /// #624: whether this view answers a request from an agent or a server
+    /// (an approval, a question, an MCP form). Such a view never opens over a
+    /// view the person opened, so keys meant for that view can't answer it.
+    fn answers_request(&self) -> bool {
+        false
+    }
+
+    /// #787: changes whenever this request view starts showing another
+    /// request (its queue advanced), so the pane knows a new request just
+    /// appeared and drops the keys of the moment that follows.
+    /// Every view that answers a request returns a value from
+    /// [`next_shown_request_generation`], taken anew for each request.
+    fn shown_request_generation(&self) -> u64 {
+        0
+    }
+
+    /// #787: the pane dropped input that reached this request in the moment
+    /// after it appeared. Require navigation before Enter and say why.
+    fn on_early_input(&mut self) {}
 
     /// Stable identifier for views that need external refreshes while open.
     fn view_id(&self) -> Option<&'static str> {
@@ -154,4 +198,11 @@ pub(crate) trait BottomPaneView: Renderable {
     fn next_frame_delay(&self) -> Option<std::time::Duration> {
         None
     }
+}
+
+/// #787: a value no other shown request had (see
+/// [`BottomPaneView::shown_request_generation`]).
+pub(crate) fn next_shown_request_generation() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }

@@ -1,0 +1,24 @@
+$ /usage requests 2026-09-01 2026-10-01 month
+  Recorded request range
+  Requested: [2026-09-01T00:00:00.000Z, 2026-10-01T00:00:00.000Z); timezone: UTC; grouping: Month
+  Retention: request detail kept since 2026-07-10T11:22:29.308Z; oldest daily total kept none
+  Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost:
+  unavailable — no settlement evidence.
+  Snapshot is not current; newer activity is unverified
+  Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+  Other conversations are not included in this view; /cost covers only the open conversation.
+  Estimated token cost for recorded attempts: $0.014966 (rounded)
+  ↑↓ scroll · Enter open · Esc back/close
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-09-01T00:00:00.000Z, 2026-10-01T00:00:00.000Z): [2026-09-01T00:00:00.000Z, 2026-
+  10-01T00:00:00.000Z)
+  —— Open ——
+  → Month [2026-09-01T00:00:00.000Z, 2026-10-01T00:00:00.000Z)
+  Refresh
+  Close
+--- last screen:
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-09-01T00:00:00.000Z, 2026-10-01T00:00:00.000Z): [2026-09-01T00:00:00.000Z, 2026-
+  10-01T00:00:00.000Z)
+  —— Open ——
+  → Month [2026-09-01T00:00:00.000Z, 2026-10-01T00:00:00.000Z)
+› Refresh
+  ↑↓ scroll · Enter open · Esc back/close

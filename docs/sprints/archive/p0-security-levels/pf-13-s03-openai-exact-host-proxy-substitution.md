@@ -2,7 +2,7 @@
 sprint_id: "PF-13-S03"
 title: "OpenAI exact-host proxy substitution"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 11
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-08-25
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md)
 - Feature: `PF-13`
 - Acceptance advanced: approved `POST https://api.openai.com/v1/*` receives `Authorization: Bearer <secret>` only at transport.
 

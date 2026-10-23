@@ -42,7 +42,9 @@ rust_binary(
 
 wine_rust_test(
     name = "wine-test-support-unit-tests",
-    timeout = "short",
+    # Cold Linux CI runs these Wine starts beside V8 and Rust compiles on a
+    # 4-core runner without remote execution; 60 s is not enough there.
+    timeout = "moderate",
     crate = ":wine_test_support",
     windows_binaries = {
         "wine-smoke": ":windows-smoke",

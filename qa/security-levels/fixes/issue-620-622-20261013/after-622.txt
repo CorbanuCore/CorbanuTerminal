@@ -1,0 +1,2 @@
+# candidate 30cb180947, from issue622-inspector-lists-denials-20261013T060827Z/raw.cast (whitespace collapsed, local paths redacted)
+Recent denials 51s ago: listing the Corbanu home: denied by the sandbox; never granted under Aggressive (main session) [observed: this process] ↑/↓ scroll · r refresh · esc back to /security

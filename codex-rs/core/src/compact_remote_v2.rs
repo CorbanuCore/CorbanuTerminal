@@ -18,6 +18,9 @@ use crate::hook_runtime::PostCompactHookOutcome;
 use crate::hook_runtime::PreCompactHookOutcome;
 use crate::hook_runtime::run_post_compact_hooks;
 use crate::hook_runtime::run_pre_compact_hooks;
+use crate::provider_throttle::AdmittedProviderRequest;
+use crate::provider_throttle::AuxiliaryRequest;
+use crate::provider_throttle::record_auxiliary_outcome;
 use crate::responses_metadata::CodexResponsesMetadata;
 use crate::responses_metadata::CompactionTurnMetadata;
 use crate::responses_retry::ResponsesStreamRequest;
@@ -276,10 +279,12 @@ async fn run_remote_compact_task_inner_impl(
     let RemoteCompactV2Attempt {
         trace_input_history,
         prompt_input,
-        compaction_output,
+        mut compaction_output,
         token_usage,
         owned_client_session: _owned_client_session,
     } = attempt;
+    // #578: its encrypted summary is sealed for this provider (and account).
+    compaction_output.set_producer(&compaction_turn_context.output_producer());
     if let Some(token_usage) = token_usage {
         sess.record_rollout_budget_usage(&token_usage)?;
         analytics_details.active_context_tokens_before = Some(token_usage.input_tokens);
@@ -344,8 +349,18 @@ async fn run_remote_compaction_request_v2(
         .stream_max_retries()
         .min(MAX_REMOTE_COMPACTION_V2_STREAM_RETRIES);
     let mut retries = 0;
+    let mut unresolvable_item_retries = 0;
+    let mut home_wait = crate::home_access::HomeWait::default();
     loop {
         ensure_gpu_runtime_provider_active(sess, turn_context).await?;
+        // #509: each attempt is a model request on the turn's key.
+        let admitted = AdmittedProviderRequest::admit_for_turn(
+            AuxiliaryRequest::Compaction,
+            sess,
+            turn_context,
+            prompt,
+        )
+        .await?;
         let attempt_started_at = std::time::Instant::now();
         let result = match client_session
             .stream_with_same_turn_attempt(
@@ -364,12 +379,31 @@ async fn run_remote_compaction_request_v2(
             Ok(stream) => collect_compaction_output(stream).await,
             Err(err) => Err(err),
         };
+        record_auxiliary_outcome(admitted.as_ref(), &result).await;
         let attempt_elapsed = attempt_started_at.elapsed();
 
         match result {
             Ok(compaction_output) => return Ok(compaction_output),
+            // #578: the provider could not find an item this request referenced.
+            Err(err)
+                if crate::session::turn::retry_without_unresolvable_item(
+                    client_session,
+                    &err,
+                    &mut unresolvable_item_retries,
+                ) => {}
             Err(err) if !err.is_retryable() => return Err(err),
             Err(err) => {
+                // #616: wait out an unreadable home without using retries.
+                let Err(err) = crate::home_access::wait_if_home_unreadable(
+                    &mut home_wait,
+                    sess,
+                    turn_context,
+                    err,
+                )
+                .await
+                else {
+                    continue;
+                };
                 handle_retryable_response_stream_error(
                     &mut retries,
                     max_retries,
@@ -623,6 +657,38 @@ mod tests {
             rx_event,
             consumer_dropped: CancellationToken::new(),
         }
+    }
+
+    /// #509: each remote compaction v2 attempt respects the key's cooldown and
+    /// records its own 429.
+    #[tokio::test]
+    async fn remote_compaction_v2_respects_and_records_the_provider_request_throttle() {
+        use crate::provider_throttle::tests::RateLimitedSession;
+        use crate::provider_throttle::tests::assert_rate_limited_then_blocked;
+
+        let fixture = RateLimitedSession::start().await;
+        let mut client_session = fixture.session.services.model_client().new_session();
+        let metadata = fixture.metadata();
+        let prompt = Prompt {
+            input: vec![message("user", "compact this", /*phase*/ None)],
+            ..Default::default()
+        };
+        let mut attempt = async || match run_remote_compaction_request_v2(
+            &fixture.session,
+            &fixture.turn_context,
+            &mut client_session,
+            &prompt,
+            &metadata,
+        )
+        .await
+        {
+            Ok(_) => panic!("the provider refuses every request"),
+            Err(error) => error,
+        };
+        let first = attempt().await;
+        let second = attempt().await;
+        assert_rate_limited_then_blocked(&first, &second);
+        assert_eq!(fixture.requests().await, 1);
     }
 
     #[test]

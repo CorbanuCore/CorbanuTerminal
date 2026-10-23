@@ -1,0 +1,78 @@
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     loading   /model to change                  │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+
+› Write tests for @filename
+
+  Z.AI GLM 5.3 Flash via zpx default · $S/work · Corbanu Terminal · TPS: -- tok/s
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+/status
+
+╭────────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                             │
+│                                                                                            │
+│  Model:                Z.AI GLM 5.3 Flash                                                  │
+│  Model provider:       Z.AI via canary proxy - http://127.0.0.1:18686/proxy · account work │
+│  Directory:            $S/work                   │
+│  Permissions:          Next turn: Workspace (Ask for approval)                             │
+│  Security:             Requested Permissive; effective protection unverified (/security)   │
+│  Agents.md:            <none>                                                              │
+│  Account:              Z.AI via canary proxy API key configured                            │
+│  Collaboration mode:   Default                                                             │
+│  Session:              01a12a88-0347-78b0-9cec-2e246bab6965                                │
+│                                                                                            │
+│  Token usage:          0 total  (0 input + 0 output)                                       │
+│  Limits:               data not available yet                                              │
+╰────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+
+• Saved zpx account `temp`. Use it from /providers, `--account temp` or a spawn `account`.
+
+■ Failed to start a fresh session through the app server: thread/start failed during TUI bootstrap: thread/start failed: account `temp` of provider `zpx` is not
+configured; add it with `corbanu account add zpx temp` or pick another with `--account` (see `corbanu account list`) (code -32600)
+
+■ The new session did not start, so no session runs on zpx account `temp`; the account selection was not changed.
+
+/status
+
+╭────────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                             │
+│                                                                                            │
+│  Model:                Z.AI GLM 5.3 Flash                                                  │
+│  Model provider:       Z.AI via canary proxy - http://127.0.0.1:18686/proxy · account work │
+│  Directory:            $S/work                   │
+│  Permissions:          Next turn: Workspace (Ask for approval)                             │
+│  Security:             Requested Permissive; effective protection unverified (/security)   │
+│  Agents.md:            <none>                                                              │
+│  Account:              Z.AI via canary proxy API key configured                            │
+│  Collaboration mode:   Default                                                             │
+│  Session:              01a12a88-0347-78b0-9cec-2e246bab6965                                │
+│                                                                                            │
+│  Token usage:          42 total  (29 input + 13 output)                                    │
+│  Context window:       100% left (5.55K used / 950K)                                       │
+│  Limits:               data not available yet                                              │
+╰────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word pong and nothing else.
+
+Token usage: total=42 input=29 (+ 5,504 cached) output=13 (reasoning 10)
+To continue this session, run corbanu resume 01a12a88-0347-78b0-9cec-2e246bab6965
+TUI_EXITED rc=0

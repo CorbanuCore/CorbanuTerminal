@@ -1,0 +1,43 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: ~/runs/…/fixture/workspace       │
+╰─────────────────────────────────────────────╯
+
+
+› Reply with the single word OK.
+
+
+• OK
+
+
+› Start one sub-agent that replies with the single word AGENT, then tell me its answer.
+
+
+• Spawned 01a142ec-c29b-78b3-900d-dded357a22c8 (glm-5.3-flash max)
+  └ Reply with the single word AGENT.
+
+• Waiting for 01a142ec-c29b-78b3-900d-dded357a22c8
+  └ Wakes on a child report/message, follow-up task, human steering, or timeout.
+
+• Wait ended — child status update
+  └ 01a142ec-c29b-78b3-900d-dded357a22c8: Completed - AGENT
+
+• The sub-agent replied: AGENT
+
+
+  Attempt, components and original price
+  Requested UTC day: 2026-10-16
+
+  Provider: Z.AI
+  Model: Z.AI GLM 5.3 Flash
+› Billing: Pay per use
+  Estimated cost: $0.000548 (rounded)
+  Tokens: 4,722 tokens
+  —— Details ——
+  Billed cost: Z.AI doesn't report its charges, so any cost here is an estimate — check Z.AI's bill.
+  Request: 49678dce-9fe9-471d-a903-98a8ccb068d1
+
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

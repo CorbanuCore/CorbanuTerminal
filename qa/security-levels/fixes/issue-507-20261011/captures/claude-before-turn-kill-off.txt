@@ -1,0 +1,126 @@
+
+
+
+› Write a detailed 1500-word essay on the history of tea, in plain text.
+
+
+■ Claude pane `Claude Code - Opus 5.5 Claude Plan` is already running
+
+• The History of Tea
+
+  Tea is now the most widely drunk beverage in the world after water, but it began as a bitter wild leaf in the forested hills where southwestern China meets
+  northern Myanmar and northeastern India. Its spread from there is a long story that takes in monks, emperors, merchants, smugglers and colonial planters. Tea
+  has been used as medicine, money, a spiritual practice, a sign of social status and a cause of war. Following it across roughly two thousand years shows how
+  one plant, Camellia sinensis, helped shape economies, rituals and empires.
+
+  Chinese tradition dates tea to 2737 BCE. In the story, the legendary emperor Shennong, known as the Divine Farmer, was boiling water in the shade of a tree
+  when a few leaves drifted into his pot. He tasted the result and found it refreshing and restorative. The tale is a myth, but it reflects something likely
+  true: tea was first valued as a medicinal herb, chewed or boiled by people in the southwest long before it became a drink of pleasure. Physical evidence for
+  early tea drinking is surprisingly old. In 2016, scientists confirmed that plant material buried in the tomb of the Han emperor Jing, who died in 141 BCE, was
+  tea. In 59 BCE the scholar Wang Bao wrote a humorous contract for a household servant that included the duty of buying tea at market and preparing it for
+  guests. By then, tea was already something you could buy and serve.
+
+  Over the following centuries tea moved from medicine toward everyday refreshment. During the Tang dynasty (618 to 907) it became a national passion. Tea
+  leaves were steamed, pounded and pressed into cakes, which were roasted, ground into powder and boiled with water, often with salt added. Around 760 the
+  writer Lu Yu completed the Cha Jing, or Classic of Tea, the first known book devoted entirely to the subject. Lu Yu had been raised as an orphan in a Buddhist
+  monastery. He described how to grow, pick, process and brew tea, which water to use, and which utensils were proper. He also argued that preparing tea was a
+  disciplined, nearly philosophical act that reflected harmony and order in the universe. Lu Yu was later honored as the sage of tea, and his book raised tea
+  drinking into an art.
+
+  Under the Song dynasty (960 to 1279) the way tea was made changed again. Tea cakes were ground into a fine powder and whisked with hot water in a bowl until
+  frothy. This method was the ancestor of Japanese matcha. Refined people held tea competitions in which contestants were judged on the color and lasting
+  quality of the foam. Emperor Huizong was a devoted connoisseur and wrote a treatise on tea in 1107, praising pale, delicate brews whisked to perfection. Tea
+  also became essential to the state. Government monopolies and taxes on tea raised large revenues, and tea was traded across the frontier for warhorses from
+  Tibet and Central Asia. Caravans carried compressed tea bricks along the routes later called the Tea Horse Road, through mountain passes into the Tibetan
+  plateau, where tea churned with yak butter and salt became a staple food.
+
+  The Ming dynasty brought another shift. In 1391 the founding emperor, Zhu Yuanzhang, reportedly banned the production of labor-intensive compressed tea cakes
+  as tribute, partly because he saw them as an extravagance that burdened peasants. Loose-leaf tea steeped in hot water became standard, and that is still how
+  most of the world drinks tea today. The change encouraged new ways of processing leaves. Over the next centuries Chinese producers developed or refined the
+  major categories we know now: green, white, yellow, oolong and black tea, along with fermented dark teas such as pu'er. Steeping whole leaves also created a
+  need for teapots, and the small unglazed clay pots of Yixing, prized for how they absorb the character of the tea over years of use, became treasured objects.
+
+  Meanwhile tea was spreading beyond China. Buddhist monks carried it to Korea and Japan, where it helped them stay alert during long hours of meditation. In
+  the early ninth century the Japanese monks Saicho and Kukai brought tea seeds home from China, but tea drinking did not take lasting hold until the monk Eisai
+  returned from China in 1191 with seeds and the Song method of whisking powdered tea. Eisai's 1211 book on tea and health promoted it as a medicine for body
+  and spirit. Over the next four centuries, powdered tea grew into the Japanese tea ceremony, known as chanoyu or chado, the Way of Tea. Tea masters such as
+  Murata Juko and Takeno Joo moved the ceremony away from showy displays of expensive Chinese wares and toward rustic simplicity. Their successor Sen no Rikyu
+  (1522 to 1591) perfected the aesthetic of wabi, which finds beauty in humble, imperfect and fleeting things. Rikyu's small thatched tea rooms, rough ceramic
+  bowls and carefully planned gestures turned a cup of tea into a meditation on hospitality, respect and the present moment. The tradition remains a pillar of
+  Japanese culture today.
+
+  Europe came to tea late. Portuguese traders and missionaries met it in the sixteenth century, but the Dutch East India Company first shipped tea to Europe in
+  commercial quantities, around 1610. At first it was an expensive novelty sold by apothecaries as a cure-all. In England, a London coffeehouse advertised tea
+  in 1658. Tea became fashionable after 1662, when the Portuguese princess Catherine of Braganza married King Charles II and brought her love of tea to the
+  English court. The English East India Company soon took over the trade, and over the eighteenth century tea went from aristocratic luxury to a national habit.
+  The government taxed it heavily, at times above 100 percent, so a huge smuggling network grew up, and adulterated tea bulked out with used leaves, sloe leaves
+  or even sheep dung was common. Only after the Commutation Act of 1784 cut the duty sharply did legal tea become affordable for ordinary people. Tea sweetened
+  with sugar from Caribbean slave plantations became the fuel of British workers during the Industrial Revolution. In the 1840s Anna, Duchess of Bedford, is
+  credited with popularizing afternoon tea, a light meal to fill the long gap before a late dinner.
+
+  Russia got its tea overland. In 1638 a Mongol ruler gave a gift of tea to Tsar Michael. Later, the treaties of Nerchinsk in 1689 and Kyakhta in 1727 opened a
+  regular caravan trade that carried tea across Siberia on camel and sledge, a journey that could last more than a year. Russians developed their own tea
+  culture centered on the samovar, a large urn that keeps water hot for strong tea concentrate diluted to taste through long conversations.
+
+  Tea also played a part in revolution and war. In 1773 the British Parliament passed the Tea Act, which helped the struggling East India Company sell tea in
+  the American colonies while keeping a tax colonists considered unjust. On December 16 of that year, protesters in Boston boarded three ships and dumped 342
+  chests of tea into the harbor. The Boston Tea Party helped push the colonies toward independence. Half a century later, Britain's thirst for Chinese tea led
+  to a much darker conflict. China would accept little but silver in payment, and the resulting trade deficit drove British merchants to smuggle opium from
+  India into China to balance the books. When Chinese officials tried to stamp out the drug trade, Britain went to war. The First Opium War (1839 to 1842) and
+  the Second (1856 to 1860) forced China to open its ports, cede Hong Kong and accept humiliating treaties. Tea, in a real sense, helped bring on what China
+  remembers as its century of humiliation.
+
+  Britain's dependence on China worried its merchants and statesmen, and they set out to grow tea in their own empire. In the 1820s the Scottish adventurer
+  Robert Bruce learned from local Singpho people that a native tea plant grew wild in Assam, in northeastern India. The Assam Company was founded in 1839, and
+  huge plantations were cleared from the jungle. In 1848 the botanist Robert Fortune was sent on a now-famous mission of industrial espionage. Disguised in
+  Chinese dress, he traveled into China's tea regions and smuggled out thousands of plants and seeds, along with skilled workers and knowledge of processing
+  methods, to India. Plantations spread to Darjeeling and elsewhere. In Ceylon, now Sri Lanka, a fungal blight wiped out the coffee crop in the 1870s, and
+  planters such as James Taylor switched to tea with great success. Entrepreneurs like Thomas Lipton later sold Ceylon tea cheaply to the masses. This colonial
+  tea industry depended on harsh labor systems. Hundreds of thousands of indentured workers, often recruited by deception, toiled for poor wages in grim
+  conditions, a legacy that still shapes plantation communities today. By the late nineteenth century, India and Ceylon had overtaken China as Britain's main
+  suppliers, and Indian-style black tea, strong and suited to milk and sugar, came to define tea for much of the Western world.
+
+  Speed mattered in this trade too. In the mid-nineteenth century, sleek sailing ships called tea clippers raced from China to London to deliver the first and
+  most valuable tea of the season. The Great Tea Race of 1866 ended with ships arriving within hours of each other after more than three months at sea. The
+  opening of the Suez Canal in 1869 and the rise of steamships soon made the clippers obsolete, although the Cutty Sark survives in Greenwich as a reminder of
+  that era.
+
+  The twentieth century made tea an industrial product. Around 1908 the New York merchant Thomas Sullivan sent out samples in small silk pouches, and customers
+  began brewing the pouches directly. That was the start of the tea bag, which came to dominate the market, first in America and later in Britain. Iced tea,
+  already popular in the American South, got a boost at the 1904 St. Louis World's Fair. In the 1930s a new mechanical method called CTC, for crush, tear, curl,
+  produced the small, uniform granules that brew quickly and strong, ideal for tea bags. Tea cultivation spread across Africa, and Kenya became one of the
+  world's largest exporters. Late in the century Taiwan invented bubble tea, which became a global craze. Meanwhile, interest in matcha, single-origin leaves
+  and traditional brewing revived the artisanal side of tea.
+
+  Today billions of cups are drunk every day, and tea cultures thrive on every continent. Examples include Moroccan mint tea poured from a height, Turkish tea
+  in tulip-shaped glasses, Indian masala chai sold at railway stations, British builder's tea, and Chinese gongfu brewing. China is again the world's largest
+  producer, with India second. Across these varied traditions the core of tea is unchanged since the legend of Shennong: dried leaves, hot water and a moment of
+  pause. Tea has carried religion across seas, funded empires, sparked rebellions and caused great suffering, and it remains one of humanity's most widely
+  shared pleasures.
+
+• Claude pane turn complete. status: success; mode: session-id; tools: none; usage:
+{"input_tokens":2,"cache_creation_input_tokens":7528,"cache_read_input_tokens":0,"cache_creation":
+{"ephemeral_5m_input_tokens":7528,"ephemeral_1h_input_tokens":0},"output_tokens":8,"service_tier":"standard","inference_geo":"global"}; artifact: /Volumes/
+CorbanuDrive/Corbanu/.codex-work/workers-20261002/agg-dec-c/runs/507/claude-before/home/panes/claude-666579c5-8178-4a49-a7fe-f23b554bfe66/turn-0001.jsonl;
+audit: /Volumes/CorbanuDrive/Corbanu/.codex-work/workers-20261002/agg-dec-c/runs/507/claude-before/home/panes/claude-666579c5-8178-4a49-a7fe-f23b554bfe66/turn-
+0001.audit.json
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+
+• Claude pane turn complete. status: success; mode: resume; tools: none; usage:
+{"input_tokens":2,"cache_creation_input_tokens":4994,"cache_read_input_tokens":7528,"cache_creation":
+{"ephemeral_5m_input_tokens":4994,"ephemeral_1h_input_tokens":0},"output_tokens":4,"service_tier":"standard","inference_geo":"global"}; artifact: /Volumes/
+CorbanuDrive/Corbanu/.codex-work/workers-20261002/agg-dec-c/runs/507/claude-before/home/panes/claude-666579c5-8178-4a49-a7fe-f23b554bfe66/turn-0002.jsonl;
+audit: /Volumes/CorbanuDrive/Corbanu/.codex-work/workers-20261002/agg-dec-c/runs/507/claude-before/home/panes/claude-666579c5-8178-4a49-a7fe-f23b554bfe66/turn-
+0002.audit.json
+
+• Messages to be submitted after next tool call (press esc to interrupt and send immediately)
+  ↳ Reply with exactly the word pong and nothing else.
+
+› Improve documentation in @filename
+
+  Opus 5.5 Claude Plan · /Volumes/CorbanuDrive/Corbanu/.codex-work/workers-20261002/agg-dec-c/runs/507/claude-before/ws · Corbanu Terminal · TPS: ~0.6 tok/s · …

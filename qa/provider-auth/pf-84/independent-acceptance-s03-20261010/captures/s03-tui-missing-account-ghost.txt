@@ -1,0 +1,50 @@
+before:
+  default label provider/zai_api_key: <absent> (default canary sha12 98e40c607667); vault files: keyring-fallback local.age 
+-- start screen:
+   | > Use your Z.AI API key
+   | Paste your ZAI_API_KEY API key. Corbanu stores it in the encrypted vault and never adds it to chat. An existing environment variable takes precedence; unset it
+   | outside Corbanu to use the saved key.
+   |   Detected ZAI_API_KEY environment variable.
+   |   Paste a different key if you prefer to use another account.
+   | ╭API key───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+   | │•••••••••••••••••••••••••••••••••••••••                                                                                                                       │
+   | ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+   |   Press enter to save
+   |   Press esc to go back
+TIMEOUT waiting for /model: |rror|TUI_EXITED|›/ in g1-ghost
+-- after Enter on the key screen:
+   |   Connect a Z.AI API key to use Corbanu Terminal
+   | > 1. Provide your Z.AI API key
+   |      Pay for what you use
+   |   Use ↑/↓ to choose · Press enter to continue
+   | API-key setup did not complete.
+after:
+  default label provider/zai_api_key: <absent> (default canary sha12 98e40c607667); vault files: keyring-fallback local.age 
+accounts after:
+  kimi-code	kimionly	api_key
+  zai	fake	api_key
+  zai	main	api_key
+  zai	work	api_key
+
+=== t4d: corbanu resume --account ghost <t1 session> (home hS, built-in zai): final screen
+Paste your ZAI_API_KEY API key. Corbanu stores it in the encrypted vault and never adds it to chat. An existing environment variable takes precedence; unset it
+outside Corbanu to use the saved key.
+  Detected ZAI_API_KEY environment variable.
+  Paste a different key if you prefer to use another account.
+╭API key───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│•••••••••••••••••••••••••••••••••••••••                                                                                                                       │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+  Press enter to save
+  Press esc to go back
+
+=== p3: corbanu --account ghost on the custom provider zpx (home hP, canary proxy): first screen and request count
+  Choose a provider account for Corbanu Terminal
+> 1. Provider: OpenAI Codex Account
+     Sign in with device code
+  2. Provider: OpenAI API Key
+     Use the OpenAI auth store
+  3. Provider: Anthropic Claude Account
+   ...
+TIMEOUT waiting for /TUI_EXITED/ in p3-ghost
+   proxy saw 0 request(s): {} | canary/real values in bodies: none False
+   (typing /exit + Enter in that picker led to the OpenAI device-code screen; the session was then killed)

@@ -1,0 +1,59 @@
+# #391: under Aggressive a broker that cannot start refuses every model
+# request; nothing is sent directly. The candidate runs inside another
+# Seatbelt sandbox (wrapper: SEC391_CANDIDATE under sandbox-exec), where macOS
+# refuses the broker's own sandbox, so the broker cannot start.
+id = "sec391-aggressive-broker-fails-closed"
+feature = "#391: under Aggressive, a broker that cannot start fails closed"
+expected = "The turn fails at once with a message naming broker_model_auth, Permissive in /security and the config line that turns it off; no model request is sent."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "aggressive"
+
+[features]
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Reply with exactly one word: pong"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "model\\s+requests\\s+are\\s+refused[\\s\\S]*broker_model_auth\\s*=\\s*false"
+timeout = 120
+compress = 2
+
+[[steps]]
+wait = "(?m)^› "
+timeout = 60
+compress = 1
+
+[[steps]]
+type = '!grep -hoE "model credential broker did n[o]t start: .*" {logs}/*.log | sort | uniq -c'
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "1 model credential broker did not start"
+timeout = 30
+
+[[steps]]
+pause = 5.0

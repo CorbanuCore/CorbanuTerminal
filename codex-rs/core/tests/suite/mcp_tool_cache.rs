@@ -122,6 +122,8 @@ async fn regular_mcp_definition_cache_preserves_live_session_state() -> anyhow::
                 serde_json::from_value(json!({
                     "command": command,
                     "environment_id": environment_id,
+                    // Remote stdio MCP servers must be given an explicit cwd.
+                    "cwd": config.cwd.clone(),
                     "env": {
                         "MCP_TEST_APP_ONLY_CWD_MARKER_FILE": app_only_cwd_marker_file,
                         "MCP_TEST_INITIALIZE_BARRIER_FILE": barrier_file,

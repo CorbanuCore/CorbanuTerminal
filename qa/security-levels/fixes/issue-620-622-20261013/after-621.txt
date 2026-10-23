@@ -1,0 +1,8 @@
+# candidate 30cb180947, from issue621-python-listing-never-granted-20261013T060730Z/raw.cast (whitespace collapsed, local paths redacted)
+Would you like to run the following command? Environment: local
+Reason: Security level Aggressive blocked listing `<run>/home`: agent commands can never list the Corbanu home or read its protected files (Corbanu's sign-in, vault, config and history), and this cannot be granted, not even once. To allow it, a person can switch to Permissive in /security (it applies after a restart).
+$ python3 -c "import os; print(os.listdir('<run>/home'))"
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for commands that start with `python3 -c "import os; print(os.listdir('<run>/home'))"`
+  3. No, and tell Corbanu Terminal what to do differently (esc)
+A letter in brackets only highlights its option; enter confirms it. Options that last beyond this request: choose with ↑/↓, then enter. Press enter to confirm

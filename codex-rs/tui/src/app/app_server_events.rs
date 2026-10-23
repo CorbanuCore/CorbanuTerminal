@@ -108,6 +108,7 @@ impl App {
                     status_account_display_from_auth_mode(
                         notification.auth_mode,
                         notification.plan_type,
+                        notification.api_key_env_var.clone(),
                     ),
                     notification.plan_type,
                     notification
@@ -156,6 +157,7 @@ impl App {
 
         self.cache_collab_receiver_threads_for_notification(&notification);
         self.update_spawn_status_for_thread_notification(&notification);
+        self.record_thread_account_usage(&notification);
 
         match server_notification_thread_target(&notification) {
             ServerNotificationThreadTarget::Thread(thread_id) => {
@@ -250,6 +252,26 @@ impl App {
             };
         if let Err(err) = result {
             tracing::warn!("failed to enqueue app-server request: {err}");
+        }
+    }
+
+    /// PF-84: every thread of the session reports its usage per account (only
+    /// while named accounts are on); `/status` adds them up, so a spawned
+    /// agent's work counts toward its own account. Only this session's threads
+    /// count (a late report from a thread of an earlier session is ignored),
+    /// including one that already reported and has since left, such as a
+    /// discarded side conversation finishing its interrupted turn.
+    pub(super) fn record_thread_account_usage(&mut self, notification: &ServerNotification) {
+        if let ServerNotification::ThreadTokenUsageUpdated(update) = notification
+            && let Some(usage) = update.account_usage.clone()
+            && let Ok(thread_id) = codex_protocol::ThreadId::from_string(&update.thread_id)
+            && (self.primary_thread_id == Some(thread_id)
+                || self.agent_navigation.get(&thread_id).is_some()
+                || self.side_threads.contains_key(&thread_id)
+                || self.chat_widget.session_account_usage.has_thread(thread_id))
+        {
+            self.chat_widget
+                .record_thread_account_usage(thread_id, usage);
         }
     }
 }

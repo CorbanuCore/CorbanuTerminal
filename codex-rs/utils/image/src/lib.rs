@@ -261,6 +261,34 @@ pub fn load_data_url_for_prompt(
     load_for_prompt_bytes(Path::new("<data-url-image>"), file_bytes, mode)
 }
 
+/// Base64 characters decoded to read an image header. PNG, GIF and WebP keep
+/// their dimensions in the first bytes; JPEG usually within the first few KiB.
+const HEADER_PROBE_BASE64_CHARS: usize = 64 * 1024;
+
+/// Returns an image's pixel dimensions from base64 data, decoding only as much
+/// as its header needs; falls back to the whole payload when the header is
+/// further in (for example a JPEG with large EXIF data).
+pub fn base64_image_dimensions(encoded: &str) -> Option<(u32, u32)> {
+    let probe_len = (encoded.len().min(HEADER_PROBE_BASE64_CHARS) / 4) * 4;
+    let dimensions = |bytes: &[u8]| {
+        ImageReader::new(Cursor::new(bytes))
+            .with_guessed_format()
+            .ok()?
+            .into_dimensions()
+            .ok()
+    };
+    if let Some(prefix) = encoded.get(..probe_len)
+        && let Ok(bytes) = BASE64_STANDARD.decode(prefix)
+        && let Some(found) = dimensions(&bytes)
+    {
+        return Some(found);
+    }
+    if probe_len >= encoded.len() {
+        return None;
+    }
+    dimensions(&BASE64_STANDARD.decode(encoded).ok()?)
+}
+
 fn prompt_image_output_dimensions_for_limits(
     width: u32,
     height: u32,

@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"01a120b9-1af4-7b42-885d-93ec5e4692e4"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Model metadata for `test-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."}}
+{"type":"item.completed","item":{"id":"item_1","type":"error","message":"Skill descriptions were shortened to fit the 2% skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest."}}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_2","type":"error","message":"Developer accounting could not record one or more model requests in this turn. They were sent anyway; /cost does not include them. The cause is in the log (target codex_core::accounting)."}}
+{"type":"error","message":"Fatal error: Amazon Bedrock bearer token auth requires `model_providers.amazon-bedrock.aws.region`, `AWS_REGION`, or `AWS_DEFAULT_REGION`"}
+{"type":"turn.failed","error":{"message":"Fatal error: Amazon Bedrock bearer token auth requires `model_providers.amazon-bedrock.aws.region`, `AWS_REGION`, or `AWS_DEFAULT_REGION`"}}

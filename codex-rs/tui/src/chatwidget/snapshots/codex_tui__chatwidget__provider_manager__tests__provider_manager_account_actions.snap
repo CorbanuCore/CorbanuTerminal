@@ -1,0 +1,13 @@
+---
+source: tui/src/chatwidget/provider_manager.rs
+assertion_line: 926
+expression: rendered
+---
+  Z.AI · fake
+  API key · fp 0f1e2d3c4b5a · this session
+
+› 1. Make default  New sessions use this account; this session is unchanged.
+  2. Rename        Give this account another name; its credential is unchanged.
+  3. Remove        Delete this account's credential from the vault; other accounts are kept.
+
+  Press enter to confirm or esc to go back

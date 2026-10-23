@@ -1,0 +1,37 @@
+     Running unittests src/lib.rs (/home/ambient/corbanu-rtx/target-pf27s02/debug/deps/codex_network_proxy-5d12d6792c7f99a1)
+test credential_broker::isolated::client::pf_27_s02_tests::pf_27_s02_containment_requirement_is_platform_specific ... ok
+test credential_broker::isolated::client::pf_27_s02_tests::pf_27_s02_long_runtime_dirs_fall_back_to_the_user_runtime_dir ... ok
+test credential_broker::isolated::tests::pf_27_s04_pf_27_s01_isolated_broker_child_entry ... ok
+test credential_broker::tests::pf_27_s02_without_secretless_launch_the_child_env_is_the_only_source ... ok
+test credential_broker::tests::pf_27_s02_core_values_the_user_policy_excluded_are_not_brokered ... ok
+test credential_broker::tests::pf_27_s02_stripped_child_env_still_gets_a_brokered_dummy ... ok
+test credential_broker::isolated::tests::pf_27_s04_pf_27_s01_unavailable_broker_never_exposes_or_injects_raw_values ... ok
+test credential_broker::tests::pf_27_s04_isolated_route_never_injects_raw_auth_and_supports_fresh_dispatches ... ok
+test credential_broker::isolated::tests::pf_27_s02_a_spoofed_bootstrap_path_is_never_trusted ... ok
+test credential_broker::isolated::tests::pf_27_s04_pf_27_s01_wrong_os_peer_is_disconnected_before_any_request ... ok
+test credential_broker::isolated::tests::pf_27_s04_pf_27_s01_broker_resources_and_registrations_are_bounded ... ok
+test credential_broker::isolated::tests::pf_27_s04_pf_27_s01_cross_run_unbound_host_and_mismatched_requests_are_denied ... ok
+test credential_broker::isolated::tests::pf_27_s04_pf_27_s01_raw_credential_is_substituted_only_inside_the_broker ... ok
+test credential_broker::isolated::tests::pf_27_s02_broker_sockets_live_in_the_private_runtime_dir ... ok
+test credential_broker::isolated::tests::pf_27_s04_pf_27_s01_forged_tampered_and_replayed_frames_are_denied ... ok
+test credential_broker::isolated::tests::pf_27_s04_pf_27_s01_broker_crash_fails_closed_and_restart_rejects_old_handles ... ok
+test credential_broker::isolated::tests::pf_27_s04_pf_27_s01_controller_exit_stops_the_broker ... ok
+test credential_broker::isolated::tests::pf_27_s04_pf_27_s01_revocation_closes_open_channels_and_old_generations ... ok
+test credential_broker::isolated::tests::pf_27_s04_pf_27_s01_externally_terminated_broker_is_detected_and_cleaned_up ... ok
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 217 filtered out; finished in 0.29s
+     Running tests/destination_contract.rs (/home/ambient/corbanu-rtx/target-pf27s02/debug/deps/destination_contract-246db890c859d0c2)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+     Running tests/windows_stable_ingress.rs (/home/ambient/corbanu-rtx/target-pf27s02/debug/deps/windows_stable_ingress-cb9639ae7219f188)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src/lib.rs (/home/ambient/corbanu-rtx/target-pf27s02/debug/deps/codex_process_hardening-d4cb9ac87d74c919)
+test broker_containment::tests::pf_27_s02_broker_profile_rejects_unquotable_paths ... ok
+test broker_containment::tests::pf_27_s02_containment_child_entry ... ok
+test broker_containment::tests::pf_27_s02_broker_profile_denies_exec_and_confines_writes ... ok
+test broker_containment::tests::pf_27_s02_contained_broker_cannot_exec_or_write_outside_its_dir ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+     Running unittests src/lib.rs (/home/ambient/corbanu-rtx/target-pf27s02/debug/deps/codex_protocol-3275f8d30e5676bd)
+test secretless_launch::tests::pf_27_s02_url_passwords_are_detected ... ok
+test secretless_launch::tests::pf_27_s02_ordinary_tool_variables_survive ... ok
+test secretless_launch::tests::pf_27_s02_secret_and_helper_names_are_never_inherited ... ok
+test secretless_launch::tests::pf_27_s02_retain_keeps_exempt_names_but_drops_url_passwords ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 294 filtered out; finished in 0.00s

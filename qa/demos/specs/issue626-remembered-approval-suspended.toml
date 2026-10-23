@@ -1,0 +1,96 @@
+# Issue #626 (G11b, AGG-33; Travis's decision 2026-10-13): a "don't ask again"
+# approval remembered under Permissive does not approve the command while
+# Aggressive is active; the person is asked and told why.
+id = "issue626-remembered-approval-suspended"
+feature = "#626: approvals remembered under Permissive are suspended under Aggressive"
+expected = "Under Permissive the person approves `touch remembered.txt` with \"don't ask again\"; after switching to Aggressive the same command asks again, and the prompt says the remembered approval was not applied because Aggressive is on (it is kept for Permissive)."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 40
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "untrusted"
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"notes.txt" = "buy coffee\nreview budget\n"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this shell command once, unchanged: touch remembered.txt"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "don't ask again for commands that start with"
+timeout = 180
+compress = 2
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "You approved Corbanu to always run commands that start with"
+timeout = 60
+[[steps]]
+wait = "(?s)always run commands.*\\n• "
+timeout = 120
+compress = 2
+[[steps]]
+pause = 1.5
+[[steps]]
+run = "rm {workspace}/remembered.txt && grep -q 'touch' {home}/rules/default.rules"
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "enter confirm and save"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+timeout = 60
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Z.AI GLM 5.3 Flash via zai"
+timeout = 60
+compress = 2
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this shell command once, unchanged: touch remembered.txt"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)Reason: A remembered approval.*was not\\s+applied"
+timeout = 180
+compress = 2
+[[steps]]
+pause = 5.0

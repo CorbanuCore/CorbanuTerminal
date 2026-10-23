@@ -1,0 +1,47 @@
+=== zai-default: corbanu exec -m glm-5.3-flash -c model_provider="zai" ===
+exit=0
+thread 01a12b1f-66c3-7770-b128-10fcd1df7e17
+reply 'pong'
+usage {"cache_write_input_tokens": 0, "cached_input_tokens": 0, "input_tokens": 7422, "output_tokens": 3, "reasoning_output_tokens": 0}
+stderr(last 4):
+  Reading additional input from stdin...
+  {"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":32807,"ms_to_response_headers":4550,"ms_to_first_sse_byte":4552,"ms_to_first_parsed_data_event":4552,"ms_to_first_actionable_event":4554,"total_stream_ms":4570,"comment_frame_count":0,"parsed_event_count":3,"x_reques
+=== zai-work: corbanu exec -m glm-5.3-flash -c model_provider="zai" --account work ===
+exit=0
+thread 01a12b1f-7c04-70c3-bbac-d32ec450afbb
+reply 'pong'
+usage {"cache_write_input_tokens": 0, "cached_input_tokens": 1280, "input_tokens": 7422, "output_tokens": 3, "reasoning_output_tokens": 0}
+stderr(last 4):
+  Reading additional input from stdin...
+  {"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":32807,"ms_to_response_headers":2935,"ms_to_first_sse_byte":2935,"ms_to_first_parsed_data_event":2936,"ms_to_first_actionable_event":2936,"total_stream_ms":2952,"comment_frame_count":0,"parsed_event_count":3,"x_reques
+=== zai-fake: corbanu exec -m glm-5.3-flash -c model_provider="zai" --account fake ===
+exit=1
+thread 01a12b1f-8d65-7140-9079-436ce38e2059
+error {"type": "error", "message": "unexpected status 401 Unauthorized: Authentication Failed, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 697db793-26de-40d9-a204-f49bc180f4e4"}
+turn.failed {"type": "turn.failed", "error": {"message": "unexpected status 401 Unauthorized: Authentication Failed, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 697db793-26de-40d9-a204-f49bc180f4e4"}}
+stderr(last 4):
+  Reading additional input from stdin...
+  {"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":32807,"ms_to_response_headers":451,"ms_to_first_sse_byte":null,"ms_to_first_parsed_data_event":null,"ms_to_first_actionable_event":null,"total_stream_ms":451,"comment_frame_count":0,"parsed_event_count":0,"x_request_
+=== zai-ghost: corbanu exec -m glm-5.3-flash -c model_provider="zai" --account ghost ===
+exit=1
+stderr(last 4):
+  Reading additional input from stdin...
+  Error: thread/start: thread/start failed: account `ghost` of provider `zai` is not configured; add it with `corbanu account add zai ghost` or pick another with `--account` (see `corbanu account list`) (code -32600)
+=== kimi-default: corbanu exec -m kimi-k3 -c model_provider="kimi-code" ===
+exit=0
+thread 01a12b1f-959a-7da3-b7ad-118fd30de4a4
+reply 'pong'
+usage {"cache_write_input_tokens": 0, "cached_input_tokens": 0, "input_tokens": 11254, "output_tokens": 167, "reasoning_output_tokens": 115}
+stderr(last 4):
+  Reading additional input from stdin...
+  {"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":51748,"ms_to_response_headers":3530,"ms_to_first_sse_byte":3530,"ms_to_first_parsed_data_event":3530,"ms_to_first_actionable_event":3530,"total_stream_ms":3974,"comment_frame_count":0,"parsed_event_count":10,"x_reque
+  {"tag":"corbanu_call_metrics","call_index":2,"attempt_number":1,"request_byte_size":1241,"ms_to_response_headers":1791,"ms_to_first_sse_byte":1791,"ms_to_first_parsed_data_event":1791,"ms_to_first_actionable_event":1791,"total_stream_ms":12552,"comment_frame_count":0,"parsed_event_count":59,"x_reque
+=== kimi-alt: corbanu exec -m kimi-k3 -c model_provider="kimi-code" --account alt ===
+exit=0
+thread 01a12b1f-d8df-7683-8f33-2d46ea15fb97
+reply 'pong'
+usage {"cache_write_input_tokens": 0, "cached_input_tokens": 11254, "input_tokens": 11254, "output_tokens": 103, "reasoning_output_tokens": 49}
+stderr(last 4):
+  Reading additional input from stdin...
+  {"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":51748,"ms_to_response_headers":2255,"ms_to_first_sse_byte":2256,"ms_to_first_parsed_data_event":2256,"ms_to_first_actionable_event":2256,"total_stream_ms":3293,"comment_frame_count":0,"parsed_event_count":18,"x_reque
+  {"tag":"corbanu_call_metrics","call_index":2,"attempt_number":1,"request_byte_size":1241,"ms_to_response_headers":2758,"ms_to_first_sse_byte":2758,"ms_to_first_parsed_data_event":2758,"ms_to_first_actionable_event":2758,"total_stream_ms":6002,"comment_frame_count":0,"parsed_event_count":24,"x_reques

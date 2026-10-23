@@ -1,0 +1,58 @@
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     loading   /model to change                  │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.3 Flash via zpx default · $S/work · Corbanu Terminal · TPS: -- tok/s
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+
+• Saved zpx account `main`. Use it from /providers, `--account main` or a spawn `account`.
+
+• Saved zpx account `work`. Use it from /providers, `--account work` or a spawn `account`.
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+Token usage: total=5,536 input=5,533 output=3
+To continue this session, run corbanu resume 01a12a82-0670-76a2-ae04-4b303508c1ca
+
+• New session: requests to zpx use account `main`.
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+
+• New sessions use zpx account `work`. This session is unchanged.
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+Token usage: total=11,087 input=11,081 output=6
+To continue this session, run corbanu resume 01a12a83-bcec-7041-9051-4520b9ac15d5
+TUI_EXITED rc=0

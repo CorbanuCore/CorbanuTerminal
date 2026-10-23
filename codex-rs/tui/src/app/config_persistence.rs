@@ -31,7 +31,7 @@ async fn build_config_on_runtime_worker(
     }
 }
 
-pub(super) fn resume_model_settings_for_overrides(
+pub(crate) fn resume_model_settings_for_overrides(
     config: &Config,
     harness_overrides: &ConfigOverrides,
 ) -> crate::app_server_session::ResumeModelSettings {
@@ -118,11 +118,19 @@ impl App {
             .harness_overrides(overrides)
             .loader_overrides(self.loader_overrides.clone())
             .cloud_config_bundle(self.cloud_config_bundle.clone());
-        build_config_on_runtime_worker(
+        let mut config = build_config_on_runtime_worker(
             builder,
             format!("Failed to rebuild config for cwd {cwd_display}"),
         )
-        .await
+        .await?;
+        crate::security::launch::verify_reloaded(&config)
+            .await
+            .map_err(color_eyre::eyre::Report::msg)?;
+        crate::resume_launch::apply_inherited_account_to_its_provider(
+            &mut config,
+            self.harness_overrides.inherited_provider_account.as_deref(),
+        );
+        Ok(config)
     }
 
     pub(super) async fn rebuild_config_for_permission_profile(
@@ -172,8 +180,13 @@ impl App {
 
     pub(super) async fn apply_permission_profile_selection(
         &mut self,
+        app_server: &mut AppServerSession,
         selection: PermissionProfileSelection,
     ) -> bool {
+        if let Some(reason) = crate::security::level::permission_change_block_reason() {
+            self.chat_widget.add_error_message(reason);
+            return false;
+        }
         let PermissionProfileSelection {
             profile_id,
             approval_policy,
@@ -235,6 +248,21 @@ impl App {
             config.approvals_reviewer = reviewer;
         }
         config.permissions.network = network.clone();
+        if let Some(thread_id) = self.active_thread_id {
+            self.request_permission_confirmation(
+                app_server,
+                codex_app_server_protocol::ThreadSettingsUpdateParams {
+                    thread_id: thread_id.to_string(),
+                    permissions: Some(profile_id),
+                    approval_policy,
+                    approvals_reviewer: approvals_reviewer.map(Into::into),
+                    ..Default::default()
+                },
+                display_label,
+                /*persist_reviewer*/ None,
+            );
+            return false;
+        }
         self.config = config;
 
         if let Some(policy) = approval_policy {
@@ -263,24 +291,9 @@ impl App {
             Some(RuntimePermissionProfileOverride::from_config(&self.config));
         self.sync_active_thread_permission_settings_to_cached_session()
             .await;
-        self.app_event_tx
-            .send(AppEvent::CodexOp(AppCommand::override_turn_context(
-                /*cwd*/ None,
-                approval_policy,
-                approvals_reviewer,
-                Some(permission_profile.clone()),
-                active_permission_profile,
-                /*windows_sandbox_level*/ None,
-                /*model*/ None,
-                /*effort*/ None,
-                /*summary*/ None,
-                /*service_tier*/ None,
-                /*collaboration_mode*/ None,
-                /*personality*/ None,
-            )));
         self.app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
             history_cell::new_info_event(
-                format!("Permissions updated to {display_label}"),
+                format!("Permissions selected for the new session: {display_label}. Application is not yet confirmed."),
                 /*hint*/ None,
             ),
         )));
@@ -448,6 +461,15 @@ impl App {
         updates: Vec<(Feature, bool)>,
     ) {
         if updates.is_empty() {
+            return;
+        }
+        // Auto-review rewrites approval and sandbox settings.
+        if updates
+            .iter()
+            .any(|(feature, _)| *feature == Feature::GuardianApproval)
+            && let Some(reason) = crate::security::level::permission_change_block_reason()
+        {
+            self.chat_widget.add_error_message(reason);
             return;
         }
 
@@ -1749,6 +1771,7 @@ enabled = false
                 message_history: None,
                 network_proxy: None,
                 rollout_path: Some(PathBuf::new()),
+                provider_account: None,
             });
 
         assert_eq!(app.chat_widget.config_ref().cwd.to_path_buf(), next_cwd);

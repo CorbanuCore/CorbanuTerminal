@@ -20,7 +20,7 @@ fn enrollment_recovery_and_sequence_preserve_identical_prompts_as_distinct_actio
     let (_home, store) = fixture();
     store.capture(event("Investigate the worker")).unwrap();
     assert!(store.state().unwrap().pending.is_empty());
-    store.enroll("repo", true).unwrap();
+    store.enroll("repo", /*enabled*/ true).unwrap();
     store
         .capture(event("Investigate the worker\nThen reproduce it."))
         .unwrap();
@@ -50,14 +50,14 @@ fn enrollment_recovery_and_sequence_preserve_identical_prompts_as_distinct_actio
         reopened.state().unwrap().pending,
         vec![state.pending[1].clone()]
     );
-    reopened.enroll("repo", false).unwrap();
+    reopened.enroll("repo", /*enabled*/ false).unwrap();
     reopened.capture(event("This workspace is paused")).unwrap();
     assert_eq!(reopened.state().unwrap().pending.len(), 1);
 }
 #[test]
 fn tampered_outbox_fails_closed_and_preserves_ciphertext() {
     let (_home, store) = fixture();
-    store.enroll("repo", true).unwrap();
+    store.enroll("repo", /*enabled*/ true).unwrap();
     store.capture(event("Preserve my evidence")).unwrap();
     let path = store.lock_path.with_file_name("outbox.bin");
     let mut bytes = std::fs::read(&path).unwrap();
@@ -81,7 +81,7 @@ fn unicode_chunking_and_secret_redaction_are_lossless_except_known_credentials()
 #[test]
 fn expired_source_is_removed_without_changing_its_digest_or_event_identity() {
     let (_home, store) = fixture();
-    store.enroll("repo", true).unwrap();
+    store.enroll("repo", /*enabled*/ true).unwrap();
     let mut output = event("Temporary output");
     output["kind"] = json!("agent_output");
     store.capture(output).unwrap();

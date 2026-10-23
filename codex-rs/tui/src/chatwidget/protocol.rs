@@ -166,12 +166,13 @@ impl ChatWidget {
             ServerNotification::DeprecationNotice(notification) => {
                 self.on_deprecation_notice(notification.summary, notification.details)
             }
-            ServerNotification::ConfigWarning(notification) => self.on_warning(
-                notification
+            ServerNotification::ConfigWarning(notification) => {
+                let message = notification
                     .details
                     .map(|details| format!("{}: {details}", notification.summary))
-                    .unwrap_or(notification.summary),
-            ),
+                    .unwrap_or_else(|| notification.summary.clone());
+                self.on_config_warning(notification.summary, message);
+            }
             ServerNotification::McpServerStatusUpdated(notification) => {
                 self.on_mcp_server_status_updated(notification)
             }
@@ -357,6 +358,7 @@ impl ChatWidget {
                 prompt,
                 model,
                 reasoning_effort,
+                provider_account,
                 agents_states,
             } => self.on_collab_agent_tool_call(ThreadItem::CollabAgentToolCall {
                 id,
@@ -367,6 +369,7 @@ impl ChatWidget {
                 prompt,
                 model,
                 reasoning_effort,
+                provider_account,
                 agents_states,
             }),
             item @ ThreadItem::SubAgentActivity { .. } => self.on_sub_agent_activity(item),

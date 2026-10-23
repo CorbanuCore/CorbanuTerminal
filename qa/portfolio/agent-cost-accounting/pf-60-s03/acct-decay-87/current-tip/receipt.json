@@ -1,0 +1,46 @@
+{
+  "integration_ref": "refs/heads/integrate/management-workstreams-20260911",
+  "commit": "4dcf6da1f324b2fd8773c26b3a296b51b3f28fdf",
+  "source_tip_after": "4dcf6da1f324b2fd8773c26b3a296b51b3f28fdf",
+  "clone": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-decay-87/target/current-tip-3aewxi1u/checkout",
+  "run_directory": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-decay-87/target/current-tip-3aewxi1u",
+  "status_before": "",
+  "status_after": "",
+  "full_checkout": true,
+  "copied_working_tree_files": false,
+  "package_absent": true,
+  "no_network": true,
+  "no_package_launch": true,
+  "reference_commit": "dfd5c09bfd2b37eeaa3e00443b176e34d0c991a9",
+  "reference": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-selfcheck-84/proposed-controls/clean-checkout.stdout.txt",
+  "reference_sha256": "023c3e6dcc8dc42b0d01d477454328084ae30b7074a3887dbf9c68841395b07c",
+  "stdout_matches_prior_replay": true,
+  "commands": [
+    {
+      "name": "acceptance",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py"
+      ],
+      "exit": 2,
+      "expected_exit": 2,
+      "stderr_empty": true,
+      "stdout_sha256": "023c3e6dcc8dc42b0d01d477454328084ae30b7074a3887dbf9c68841395b07c",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "controls",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/check_verifier.py"
+      ],
+      "exit": 0,
+      "expected_exit": 0,
+      "stderr_empty": true,
+      "stdout_sha256": "29053c0a2eb6d17835ea5f40579923efe3275473f36f7c8a5e7cf04a5160fc28",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

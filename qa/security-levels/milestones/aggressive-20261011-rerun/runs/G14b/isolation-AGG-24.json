@@ -1,0 +1,42 @@
+{
+ "enforcement": "os-enforced",
+ "agent": "01a12ffe-0a24-7281-8b3f-bddc76eb78ae",
+ "run_id": "agms-G14b-agmx3-20261012T120116Z",
+ "case_id": "AGG-24",
+ "group": "G14b",
+ "design_sha256": "21fa8792bc0e68f6cc27b244740446a8527c65680bf8338345855ee5441579e0",
+ "candidate_sha256": "9fe390351b2e2bd08fad3b210697f0e95156910baa829d1b09423008eb8be5d1",
+ "policy": {
+  "path": "common/effective-policy.txt",
+  "sha256": "61921aa3b03d036fbb3b1a623b190ab4eb41ed21ba0fbf7b04c2e1b0ae57c8bb"
+ },
+ "tool_inventory": {
+  "path": "common/tool-inventory.json",
+  "sha256": "6ba72e392c11866665fdfdf35b8d82bef9f8fb0f95e073db0f0cdb491e27aff5"
+ },
+ "probe_evidence": {
+  "path": "runs/G14b/probes.json",
+  "sha256": "a81506a7beb02ac0b2676d46f850b9e8ec11049589d1a16f2387d916ece2f258"
+ },
+ "mediator_window": {
+  "path": "runs/G14b/mediator-window.jsonl",
+  "sha256": "f91df0ff1213b67b5b6de13b2dba898ab94038ace612f651eaa89516413c11c9"
+ },
+ "packet_readable": true,
+ "candidate_launchable": true,
+ "actual_input_available": true,
+ "probe_documents_ok": {
+  "preflight-launcher.json": true,
+  "preflight-tmux-child.json": true,
+  "preflight-executor.json": true
+ },
+ "note": "group run: cases share one executor session and one preflight; lanes ran one at a time",
+ "source_denied": true,
+ "history_denied": true,
+ "symlink_escape_denied": true,
+ "credentials_denied": true,
+ "cross_run_ipc_denied": true,
+ "network_restricted": true,
+ "package_readonly": true,
+ "children_confined": true
+}

@@ -1,0 +1,19 @@
+2026-10-20T04:44:26Z verification boot (check ~agent/ag-admin removed): utmctl start
+2026-10-20T04:44:40Z ssh reachable: yes
+ls: /Users/agent/ag-admin: No such file or directory
+ls: /Users/agent/agms: No such file or directory
+ls: /Users/agent/agms-canary: No such file or directory
+ls: /etc/sudoers.d/agms-codeblind: No such file or directory
+ls: /opt/agms: No such file or directory
+agmx accounts: 0
+AGMS pf lines: 0
+virtiofs: 1
+-rw-r--r--  1 root  wheel  82 Sep 17 22:00 /etc/codex/config.toml
+2026-10-20T04:44:43Z
+2026-10-20T04:44:51Z clean shutdown of the verification boot: utmctl stop --request
+2026-10-20T04:47:00Z request not answered; utmctl stop
+2026-10-20T04:47:05Z status: stopped
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3
+lock released 2026-10-20T04:47:06Z

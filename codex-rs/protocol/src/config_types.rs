@@ -580,10 +580,8 @@ fn default_provider_auth_cwd() -> AbsolutePathBuf {
         return cwd;
     }
 
-    match AbsolutePathBuf::current_dir() {
-        Ok(cwd) => cwd,
-        Err(err) => panic!("provider auth cwd must resolve: {err}"),
-    }
+    // #616: never panic on an unresolvable working directory.
+    AbsolutePathBuf::current_dir_or_last_known()
 }
 
 fn is_default_provider_auth_cwd(path: &AbsolutePathBuf) -> bool {

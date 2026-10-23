@@ -1,0 +1,12 @@
+› Reply with exactly: pong
+■ Fatal error: account `gone` of provider `amazon-bedrock` uses AWS profile `nosuchprofile`, which cannot be used: failed to load AWS credentials: the
+credentials provider was not properly configured: ProfileFile provider could not be built: profile `nosuchprofile` was not defined: could not find source
+profile nosuchprofile referenced from the root profile. Check that the profile is in ~/.aws/config or ~/.aws/credentials (or the files AWS_CONFIG_FILE and
+AWS_SHARED_CREDENTIALS_FILE name) and that its credentials work; for an SSO profile run `aws sso login --profile nosuchprofile`. Corbanu never falls back to
+another profile or to environment credentials.
+› Explain this codebase
+  GPT-5.4 via amazon-bedrock medium · /Volumes/CorbanuDrive/Corbanu/.codex-work/s06acc/ws · Corbanu Terminal · TPS: -- tok/s
+-- mock lines during this turn: 0
+account `ghost` of provider `amazon-bedrock` is not configured; add it with `corbanu account add amazon-bedrock ghost --kind aws-profile --value <profile>` or p
+ick another with `--account` (see `corbanu account list`)
+EXITED-1

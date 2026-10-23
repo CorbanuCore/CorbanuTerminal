@@ -1,0 +1,31 @@
+## t1 after every TUI add (devz, twinz, keyz, fpx, fpy) and all t1 sessions, 2026-10-13T09:35:00Z: top-level files, and any auth.json anywhere in the home
+accounting-pending
+config.toml
+gpu-controller.lock
+history.jsonl
+installation_id
+log
+mcp-oauth-locks
+models-cache
+panes
+pfterminal_db_init.lock
+pfterminal_goals_1.sqlite
+pfterminal_logs_2.sqlite
+pfterminal_logs_2.sqlite-shm
+pfterminal_logs_2.sqlite-wal
+pfterminal_memories_1.sqlite
+pfterminal_state_5.sqlite
+pfterminal_state_5.sqlite-shm
+pfterminal_state_5.sqlite-wal
+rules
+run
+secrets
+security_confirm.lock
+security_level.lock
+sessions
+shell_snapshots
+skills
+telegram
+tmp
+--- find auth.json:
+(none above means no default login was created)

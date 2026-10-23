@@ -1,0 +1,8 @@
+# VM state, captured by the integrator
+# At the end of the run (2026-10-14 ~01:41Z), after restore.sh/restore-fix.sh, the integrator ran:
+#   utmctl stop "macOS 3"   -> exit status 0 (no output)
+#   utmctl list (30 s later) -> both VMs 'stopped' (same as the listing below)
+# That terminal output was not saved to a file at the time; this file re-captures the state at 2026-10-14T02:29:04Z:
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3

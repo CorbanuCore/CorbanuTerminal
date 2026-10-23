@@ -1,0 +1,74 @@
+# #391 (Windows): security level Aggressive turns broker_model_auth on by
+# default; the config sets the level and does not mention broker_model_auth.
+id = "sec391-win-aggressive-broker-default"
+feature = "#391 (Windows): Aggressive holds the model key in the credential broker by default"
+expected = "With [security] level = \"aggressive\" and no broker_model_auth setting, the session answers; ZAI_API_KEY is gone from Core's environment and the log shows the broker (token+dacl+job) holds the Z.AI credential."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+suppress_unstable_features_warning = true
+
+[windows]
+sandbox = "unelevated"
+
+[security]
+version = 1
+level = "aggressive"
+
+[features]
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Do you trust the contents of this directory"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Reply with exactly one line: answered under Aggressive on Windows"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "(?m)^. answered under Aggressive on Windows"
+timeout = 240
+compress = 3
+
+[[steps]]
+wait = "\\A(?![\\s\\S]*esc to interrupt)"
+timeout = 120
+compress = 1
+
+[[steps]]
+type = '''!(sls -Path ../home/config.toml -Pattern 'level|broker_model_auth').Line; "ZAI_API_KEY in Core's environment: " + $(if ($env:ZAI_API_KEY) { 'SET' } else { 'none' }); (sls -Path ../logs/codex-tui.log -Pattern 'containment=\S+|removed from the environment: \w+|held by the credential broker \(host=[^,]+').Matches.Value | Sort-Object -Unique'''
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "removed from the environment: ZAI_API_KEY"
+timeout = 60
+
+[[steps]]
+wait = "environment: none"
+timeout = 10
+
+[[steps]]
+wait = "held by the credential broker \\(host=api\\.z\\.ai"
+timeout = 10
+
+[[steps]]
+pause = 4.0

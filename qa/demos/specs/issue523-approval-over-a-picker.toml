@@ -1,0 +1,87 @@
+# #523: the main approval prompt that opens over another view (here the
+# /permissions picker) takes neither the Enter nor a number key meant for
+# that view; the arrow keys then Enter answer it.
+id = "issue523-approval-over-a-picker"
+feature = "#523: an approval that opens over a picker does not take the picker's Enter"
+expected = "While a command runs, the /permissions picker is open. The next command's approval opens over it. Enter only shows how to answer, and 1 then Enter is typed text; after the arrow keys, Enter approves and the file is created."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Make exactly two shell tool calls, one after the other, without asking me anything first: sleep 15, then touch ../outside/issue523.txt with sandbox_permissions set to require_escalated and justification create the demo file. Then stop."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "sleep 15"
+timeout = 180
+compress = 2
+[[steps]]
+type = "/permissions"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?i)Update Model Permissions"
+[[steps]]
+pause = 2.0
+[[steps]]
+wait = "Would you like to run the following command\\?"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 3.0
+
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "This is a new request\\. Choose an option with ↑/↓, then enter"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "1"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Typed text is not sent while this request is open"
+[[steps]]
+pause = 3.0
+
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Up"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?i)Update Model Permissions"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "(?s)Ran touch.*› "
+timeout = 120
+compress = 3
+[[steps]]
+type = "!ls ../outside"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "└ issue523\\.txt"
+[[steps]]
+pause = 3.0

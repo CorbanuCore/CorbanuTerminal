@@ -72,7 +72,7 @@ fn unauthorized_recovery_enforces_exact_selected_source_without_fallback() {
         ),
     ] {
         let mut controller = ProviderAuthController::default();
-        let started = controller.dispatch(start(unauthorized(source), status(None)));
+        let started = controller.dispatch(start(unauthorized(source), status(/*source*/ None)));
         assert!(matches!(
             started.snapshot,
             ProviderAuthFlowSnapshot::ClaudeAccount(ClaudeAccountSnapshot::ChoosingMethod {
@@ -105,7 +105,7 @@ fn unauthorized_recovery_enforces_exact_selected_source_without_fallback() {
         ),
     ] {
         let mut controller = ProviderAuthController::default();
-        let transition = controller.dispatch(start(unauthorized(source), status(None)));
+        let transition = controller.dispatch(start(unauthorized(source), status(/*source*/ None)));
         assert_eq!(
             match transition.snapshot {
                 ProviderAuthFlowSnapshot::ClaudeAccount(ClaudeAccountSnapshot::Blocked {
@@ -526,7 +526,7 @@ fn correlated_success_requires_exact_method_status_and_rejects_stale_ids() {
 
 fn choosing(intent: ClaudeAccountIntent) -> (ProviderAuthController, ClaudeAccountFlow) {
     let mut controller = ProviderAuthController::default();
-    let transition = controller.dispatch(start(intent, status(None)));
+    let transition = controller.dispatch(start(intent, status(/*source*/ None)));
     let ProviderAuthFlowSnapshot::ClaudeAccount(ClaudeAccountSnapshot::ChoosingMethod {
         flow, ..
     }) = transition.snapshot

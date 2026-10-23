@@ -50,6 +50,9 @@ pub(crate) struct WalletPlanChoice {
     pub(crate) deferred_setup: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
 }
 
+// Unreachable since the legacy plan state was retired (66ff6579d7); remove
+// or wire back in.
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WalletPlanPurchaseMode {
     New,
@@ -111,6 +114,8 @@ fn wallet_balance_endpoint(
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WalletPlanStatus {
+    // Deserialized from the daemon status; no reader since 66ff6579d7.
+    #[allow(dead_code)]
     pub(crate) wallet_address: String,
     pub(crate) period: WalletPlanPeriod,
     pub(crate) weekly: WalletUsageWindow,
@@ -1405,6 +1410,7 @@ impl ChatWidget {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn on_wallet_plan_credential_persistence_finished(
         &mut self,
         attempt_id: WalletPlanPersistenceAttemptId,
@@ -1692,6 +1698,11 @@ fn shared_provider_status_description(
         status.eligibility,
         status.availability,
     ) {
+        (Configuration::Configured, Eligibility::Active, Availability::Ready)
+            if super::provider_manager::is_unchecked_local_runtime(status) =>
+        {
+            "Local (not checked) · active".to_string()
+        }
         (Configuration::Configured, Eligibility::Active, Availability::Ready) => {
             "Configured · active · ready".to_string()
         }
@@ -2062,14 +2073,17 @@ mod tests {
     #[tokio::test]
     async fn shared_provider_setup_can_select_a_noninteractive_runtime() {
         let (mut chat, mut rx, _op_rx) =
-            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(/*model_override*/ None)
+                .await;
         while rx.try_recv().is_ok() {}
         let host = crate::provider_status_host::ProviderStatusHost::from_config(
             &chat.config,
             crate::provider_status_host::ProviderAccountMetadata::default(),
         );
 
-        chat.open_shared_provider_setup(&host, false, false);
+        chat.open_shared_provider_setup(
+            &host, /*queued_corbanu*/ false, /*can_finish*/ false,
+        );
         for character in "ollama".chars() {
             chat.handle_key_event(crossterm::event::KeyEvent::new(
                 crossterm::event::KeyCode::Char(character),
@@ -2091,10 +2105,36 @@ mod tests {
         ));
     }
 
+    /// Ollama and LM Studio are never probed; the shared setup rows say so
+    /// instead of "ready".
+    #[tokio::test]
+    async fn shared_provider_setup_marks_local_runtimes_not_checked() {
+        let (mut chat, _rx, _op_rx) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(/*model_override*/ None)
+                .await;
+        let host = crate::provider_status_host::ProviderStatusHost::from_config(
+            &chat.config,
+            crate::provider_status_host::ProviderAccountMetadata::default(),
+        );
+
+        chat.open_shared_provider_setup(
+            &host, /*queued_corbanu*/ false, /*can_finish*/ false,
+        );
+        for character in "local runtime".chars() {
+            chat.handle_key_event(crossterm::event::KeyEvent::new(
+                crossterm::event::KeyCode::Char(character),
+                crossterm::event::KeyModifiers::NONE,
+            ));
+        }
+        let rendered = render_bottom_pane(&chat, /*width*/ 100);
+        insta::assert_snapshot!("shared_provider_setup_local_runtimes", rendered);
+    }
+
     #[tokio::test]
     async fn shared_account_auth_phases_replace_one_stack_slot() {
         let (mut chat, _rx, _op_rx) =
-            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(/*model_override*/ None)
+                .await;
 
         chat.open_shared_account_pending(
             crate::provider_account_auth_host::ProviderAccountCancelKind::OpenAi,
@@ -2115,7 +2155,7 @@ mod tests {
         chat.open_shared_account_pending(
             crate::provider_account_auth_host::ProviderAccountCancelKind::Claude,
         );
-        chat.open_shared_claude_method_choice(None);
+        chat.open_shared_claude_method_choice(/*recovery*/ None);
         chat.open_shared_claude_managed_token_entry();
         assert_ne!(
             chat.bottom_pane.active_view_id(),
@@ -2131,27 +2171,30 @@ mod tests {
     #[tokio::test]
     async fn shared_claude_method_choice_matches_established_presentation() {
         let (mut chat, _rx, _op_rx) =
-            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(/*model_override*/ None)
+                .await;
 
-        chat.open_shared_claude_method_choice(None);
+        chat.open_shared_claude_method_choice(/*recovery*/ None);
 
-        insta::assert_snapshot!(render_bottom_pane(&chat, 76));
+        insta::assert_snapshot!(render_bottom_pane(&chat, /*width*/ 76));
     }
 
     #[tokio::test]
     async fn shared_claude_managed_token_entry_matches_established_presentation() {
         let (mut chat, _rx, _op_rx) =
-            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(/*model_override*/ None)
+                .await;
 
         chat.open_shared_claude_managed_token_entry();
 
-        insta::assert_snapshot!(render_bottom_pane(&chat, 76));
+        insta::assert_snapshot!(render_bottom_pane(&chat, /*width*/ 76));
     }
 
     #[tokio::test]
     async fn provider_auth_guidance_wraps_and_failures_remain_actionable() {
         let (mut chat, _rx, _op_rx) =
-            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(/*model_override*/ None)
+                .await;
         chat.open_shared_claude_managed_token_entry();
         for width in [40, 76, 120] {
             let rendered = render_bottom_pane(&chat, width);
@@ -2166,7 +2209,7 @@ mod tests {
             kind: crate::provider_account_auth_host::ProviderAccountCancelKind::Claude,
             retry: true,
         });
-        let rendered = render_bottom_pane(&chat, 76);
+        let rendered = render_bottom_pane(&chat, /*width*/ 76);
         assert!(rendered.contains("then retry with its token."));
         insta::assert_snapshot!("provider_auth_failure_recovery", rendered);
     }
@@ -2174,12 +2217,13 @@ mod tests {
     #[tokio::test]
     async fn openai_challenge_wraps_as_one_clickable_url() {
         let (mut chat, _rx, _op_rx) =
-            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(/*model_override*/ None)
+                .await;
         let url = "https://example.com/device/very-long-authentication-link";
         chat.open_shared_openai_challenge(
             codex_provider_auth::OpenAiAccountChallenge::device_code(url, "TEST-CODE"),
         );
-        let rendered = render_bottom_pane(&chat, 40);
+        let rendered = render_bottom_pane(&chat, /*width*/ 40);
         assert!(
             rendered.contains(&format!("\u{1b}]8;;{url}")),
             "the wrapped URL must carry OSC8 metadata"
@@ -2272,7 +2316,8 @@ mod tests {
     #[tokio::test]
     async fn provisional_receipt_replaces_duplicate_purchase_view_stack() {
         let (mut chat, _rx, _op_rx) =
-            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(/*model_override*/ None)
+                .await;
         for view_id in [
             WALLET_MENU_VIEW_ID,
             WALLET_PLANS_VIEW_ID,
@@ -2292,7 +2337,7 @@ mod tests {
                 scheduled_start: None,
                 transaction: Some("settlement-signature".to_string()),
             },
-            None,
+            /*credential_error*/ None,
         ));
 
         assert_eq!(
@@ -2309,7 +2354,8 @@ mod tests {
     #[tokio::test]
     async fn deferred_cancellation_removes_every_corbanu_api_and_wallet_plan_view() {
         let (mut chat, _rx, _op_rx) =
-            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(/*model_override*/ None)
+                .await;
         for view_id in [
             WALLET_MENU_VIEW_ID,
             WALLET_PLANS_VIEW_ID,
@@ -2332,7 +2378,8 @@ mod tests {
     #[tokio::test]
     async fn provisioned_purchase_presents_receipt_before_persistence_completion() {
         let (mut chat, mut rx, _op_rx) =
-            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(/*model_override*/ None)
+                .await;
         let credential_home = tempfile::tempdir().expect("temporary credential home");
         let credential_home_root = credential_home.path().to_path_buf();
         let credential_home_path = credential_home.path().join("not-a-directory");
@@ -2355,7 +2402,7 @@ mod tests {
                     transaction: Some("settlement-signature".to_string()),
                 }),
             }),
-            None,
+            /*deferred_setup*/ None,
         );
 
         let pending_attempt = chat
@@ -2409,7 +2456,8 @@ mod tests {
     #[tokio::test]
     async fn stale_plan_persistence_and_receipt_completions_are_inert() {
         let (mut chat, mut rx, _op_rx) =
-            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(/*model_override*/ None)
+                .await;
         while rx.try_recv().is_ok() {}
         const MARKER_VIEW_ID: &str = "wallet-plan-persistence-test-marker";
         chat.show_selection_view(SelectionViewParams {
@@ -2423,8 +2471,8 @@ mod tests {
             stale_attempt,
             WalletPlanProvisioningOperation::Recovery,
             "existing".to_string(),
-            None,
-            None,
+            /*purchase*/ None,
+            /*deferred_setup*/ None,
             Some(WalletSecret::new("stale-recovery-key".to_string())),
             Ok(()),
         );
@@ -2438,7 +2486,7 @@ mod tests {
                     scheduled_start: None,
                     transaction: Some("stale-transaction".to_string()),
                 },
-                None,
+                /*credential_error*/ None,
             ),
         );
 
@@ -2456,8 +2504,8 @@ mod tests {
             current_attempt,
             WalletPlanProvisioningOperation::Recovery,
             "existing".to_string(),
-            None,
-            None,
+            /*purchase*/ None,
+            /*deferred_setup*/ None,
             Some(WalletSecret::new("current-recovery-key".to_string())),
             Ok(()),
         );
@@ -2482,7 +2530,7 @@ mod tests {
                     scheduled_start: None,
                     transaction: Some("current-transaction".to_string()),
                 },
-                None,
+                /*credential_error*/ None,
             ),
         );
         assert_eq!(
@@ -2569,8 +2617,12 @@ mod tests {
         server.await.unwrap();
         let (mut chat, _, _, _) =
             crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
-        chat.show_selection_view(wallet_params(Some(Err(error)), false));
-        let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 100);
+        chat.show_selection_view(wallet_params(
+            Some(Err(error)),
+            /*client_can_sign*/ false,
+        ));
+        let rendered =
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 100);
         assert!(rendered.contains("daemon_upgrade_required"));
         assert!(rendered.contains("pfterminal-walletd"));
         assert!(rendered.contains("outcome is unknown"));

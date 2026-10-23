@@ -189,6 +189,9 @@ async fn auto_store_remains_pinned_across_session_recovery() -> anyhow::Result<(
         ])
         .env("CODEX_HOME", codex_home.path())
         .env(CHILD_SERVER_URL_ENV, &base_url)
+        // The child installs a process-only mock keyring before anything
+        // else; test keyring isolation would refuse it before the mock runs.
+        .env_remove(codex_protocol::shell_environment::NO_NATIVE_KEYRING_ENV_VAR)
         .status()
         .await?;
 

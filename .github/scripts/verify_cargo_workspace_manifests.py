@@ -28,9 +28,38 @@ UTILITY_NAME_EXCEPTIONS = {
 MANIFEST_FEATURE_EXCEPTIONS = {
     "codex-rs/code-mode-runtime/Cargo.toml": {"sandbox": ("v8/v8_enable_sandbox",)},
     "codex-rs/v8-poc/Cargo.toml": {"sandbox": ("v8/v8_enable_sandbox",)},
+    # Temporary: the local cost ledger ships behind a developer-only build
+    # flag until accounting is released; remove both with that rollout.
+    "codex-rs/core/Cargo.toml": {"developer-accounting": ()},
+    "codex-rs/tui/Cargo.toml": {"developer-accounting": ()},
+    # Temporary: synthetic secret-broker fixture APIs, compiled only for the
+    # codex-secret-broker-fixture test crate (never in product builds).
+    "codex-rs/linux-pidfd-spawn/Cargo.toml": {"synthetic-fixture": ()},
+    "codex-rs/protected-state/Cargo.toml": {
+        "synthetic-fixture": (
+            "dep:tempfile",
+            "dep:codex-linux-pidfd-spawn",
+            "codex-linux-pidfd-spawn/synthetic-fixture",
+        )
+    },
 }
-OPTIONAL_DEPENDENCY_EXCEPTIONS = set()
-INTERNAL_DEPENDENCY_FEATURE_EXCEPTIONS = {}
+_LINUX_GNU_DEPS = 'target.cfg(all(target_os = "linux", target_env = "gnu")).dependencies'
+OPTIONAL_DEPENDENCY_EXCEPTIONS = {
+    ("codex-rs/protected-state/Cargo.toml", _LINUX_GNU_DEPS, "codex-linux-pidfd-spawn"),
+    ("codex-rs/protected-state/Cargo.toml", _LINUX_GNU_DEPS, "tempfile"),
+}
+INTERNAL_DEPENDENCY_FEATURE_EXCEPTIONS = {
+    (
+        "codex-rs/secret-broker-fixture/Cargo.toml",
+        'target.cfg(target_os = "linux").dependencies',
+        "codex-protected-state",
+    ): ("synthetic-fixture",),
+    (
+        "codex-rs/secret-broker-fixture/Cargo.toml",
+        _LINUX_GNU_DEPS,
+        "codex-linux-pidfd-spawn",
+    ): ("synthetic-fixture",),
+}
 
 
 def main() -> int:

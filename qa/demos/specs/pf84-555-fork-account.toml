@@ -1,0 +1,75 @@
+# PF-84 #555 (a): /fork of a conversation on a named account runs on that
+# account, and /status says so. Record with
+#   DEMO_CANDIDATE=<corbanu> python3 scripts/demo_video.py record \
+#     qa/demos/specs/pf84-555-fork-account.toml \
+#     --bin qa/demos/wrappers/pf84-555-fork-account.sh --sprint ISSUE-555 --publish
+id = "pf84-555-fork-account"
+feature = "PF-84 #555: /fork runs on the conversation's named account"
+expected = "A conversation on account work is resumed and forked; [provider_accounts] says personal, but the fork answers on work and /status shows account work with usage only on work."
+model = "glm-5.3-flash"
+provider = "zai"
+rows = 44
+config = """
+suppress_unstable_features_warning = true
+[features]
+named_accounts = true
+[provider_accounts]
+zai = "personal"
+"""
+
+[credentials]
+PF84_ACCOUNT_SEED = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Reply with the single word ping"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*ping\\W*$"
+timeout = 120
+compress = 3
+[[steps]]
+run = "sleep 8"
+[[steps]]
+type = "/exit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Now: corbanu resume --last"
+[[steps]]
+pause = 2.0
+[[steps]]
+wait = "Reply with the single word ping"
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/fork"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Thread forked"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Reply with the single word forked"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*forked\\W*$"
+timeout = 120
+compress = 3
+[[steps]]
+run = "sleep 6"
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Account usage:\\s+work"
+[[steps]]
+pause = 4.0

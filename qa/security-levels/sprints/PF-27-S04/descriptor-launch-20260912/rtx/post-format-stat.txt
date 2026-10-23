@@ -1,0 +1,5 @@
+ codex-rs/Cargo.lock                           |   9 ++
+ codex-rs/linux-pidfd-spawn/src/ffi.rs         |  86 +++++++++++++----
+ codex-rs/linux-pidfd-spawn/src/spawn.rs       |  89 ++++++++++++++----
+ codex-rs/linux-pidfd-spawn/src/spawn_tests.rs | 130 ++++++++++++++++++++++----
+ 4 files changed, 266 insertions(+), 48 deletions(-)

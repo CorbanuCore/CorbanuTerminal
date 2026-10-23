@@ -1,0 +1,5 @@
+a1           2 requests  exact USD 0.01226288
+a2           2 requests  exact USD 0.01156248
+cp1          2 requests  exact USD 0.00488256
+sk58s        7 requests  exact USD 0.01776348
+vk           2 requests  exact USD 0.00411176

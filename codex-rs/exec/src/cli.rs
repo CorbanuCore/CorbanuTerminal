@@ -43,6 +43,25 @@ pub struct Cli {
     #[arg(long = "output-schema", value_name = "FILE", global = true)]
     pub output_schema: Option<PathBuf>,
 
+    /// Named account for this session (`<name>` for the session's provider,
+    /// or `<provider>:<name>`). Another provider's account is used by spawned
+    /// agents on that provider, and is refused when none can run there. Needs
+    /// the `named_accounts` feature; a missing account is an error, never the
+    /// default account.
+    #[arg(long = "account", value_name = "[PROVIDER:]NAME", global = true)]
+    pub account: Option<String>,
+
+    /// How long to wait, retrying with backoff, while the Corbanu home cannot
+    /// be read (for example when a drive is briefly blocked) before failing.
+    /// `0` fails at once.
+    #[arg(
+        long = "home-wait-secs",
+        value_name = "SECONDS",
+        default_value_t = 3600,
+        global = true
+    )]
+    pub home_wait_secs: u64,
+
     #[clap(skip)]
     pub config_overrides: CliConfigOverrides,
 

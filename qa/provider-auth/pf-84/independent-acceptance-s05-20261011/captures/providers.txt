@@ -1,0 +1,67 @@
+Saved claude-plan account `cp` (claude_oauth_token).
+Saved claude-plan account `cpfake` (claude_oauth_token).
+Saved zai account `fake` (api_key).
+Successfully logged in
+account add openai x: Error: provider `openai` does not take `--kind api-key` accounts
+=== claude-cp: exec -m claude-opus-5-5-plan -c model_provider="claude-plan" --account cp -> exit=0 thread 01a12b3b-5357-7ea1-b698-2945054c589f reply 'pong' usage {"cache_write_input_tokens": 8484, "cached_input_tokens": 0, "input_tokens": 8488, "output_tokens": 4, "reasoning_output_tokens": 0}  
+=== claude-cpfake: exec -m claude-opus-5-5-plan -c model_provider="claude-plan" --account cpfake -> exit=1 thread 01a12b3b-65cb-7b52-a10b-332e24ed260c error unexpected status 401 Unauthorized: Invalid bearer token, url: https://api.anthropic.com/v1/messages, cf-ray: a48e56c2ed5e6ee6-DFW turn.failed unexpected status 401 Unauthorized: Invalid bearer token, url: https://api.anthropic.com/v1/messages, cf-ray: a48e56c2ed5e6ee6-DFW  
+=== openai-default: exec -m gpt-5.4 -c model_provider="openai" -> exit=0 thread 01a12b3b-764f-79b3-ab46-03aa80fa7364 reply 'pong' usage {"cache_write_input_tokens": 0, "cached_input_tokens": 0, "input_tokens": 10912, "output_tokens": 22, "reasoning_output_tokens": 15}  
+=== openai-named: exec -m gpt-5.4 -c model_provider="openai" --account work -> exit=1  Error: --account openai:work: provider `openai` does not support named accounts yet
+=== zai-fake: exec -m glm-5.3-flash -c model_provider="zai" --account fake -> exit=1 thread 01a12b3b-7fd2-7a52-919e-bd347a3fff8e error unexpected status 401 Unauthorized: Authentication Failed, url: https://api.z.ai/api/paas/v4/chat/completions, request id: ad1ea62f-f9e3-490a-96b3-5ff8d5dbd151 turn.failed unexpected status 401 Unauthorized: Authentication Failed, url: https://api.z.ai/api/paas/v4/chat/completions, request id: ad1ea62f-f9e3-490a-96b3-5ff8d5dbd151  
+--- ledger vs rollouts ---
+ledger format rows: [2, 3, 4]
+
+LEDGER per thread: attempts input cached output total | (provider, account, fingerprint)
+  01a12b3b-5357-7ea1-b698-2945054c589f   1       4       0      4       0 | [('claude-plan', 'cp', 'bbf4a6e822ee')]
+  01a12b3b-65cb-7b52-a10b-332e24ed260c   2       0       0      0       0 | [('claude-plan', 'cpfake', 'd3c066a6c093')]
+  01a12b3b-764f-79b3-ab46-03aa80fa7364   2   20377       0     22   20399 | [('openai', '(none)', '')]
+  01a12b3b-7fd2-7a52-919e-bd347a3fff8e   1       0       0      0       0 | [('zai', 'fake', '2bf266f67e3e')]
+
+LEDGER per (provider, account): attempts input cached output total no-usage-attempts
+  claude-plan cp         1       4       0      4       0 0
+  claude-plan cpfake     2       0       0      0       0 2
+  openai     (none)     2   20377       0     22   20399 0
+  zai        fake       1       0       0      0       0 1
+  (/cost 'tokens' = input + output, input including cached)
+  /cost-equivalent claude-plan cp: 8 tokens
+  /cost-equivalent claude-plan cpfake: 0 tokens
+  /cost-equivalent openai (none): 20,399 tokens
+  /cost-equivalent zai fake: 0 tokens
+
+ROLLOUT (provider-reported usage as recorded per thread: last cumulative token_count) vs LEDGER
+  01a12b3b-5357-7ea1-b698-2945054c589f rollout in=8488 cached=0 out=4 total=8492 | ledger attempts=1 [('claude-plan', 'cp', 'bbf4a6e822ee')] DIFF [1, 4, 0, 4, 0]
+  01a12b3b-65cb-7b52-a10b-332e24ed260c rollout in=0 cached=0 out=0 total=0 | ledger attempts=2 [('claude-plan', 'cpfake', 'd3c066a6c093')] MATCH
+  01a12b3b-764f-79b3-ab46-03aa80fa7364 rollout in=10912 cached=0 out=22 total=10934 | ledger attempts=2 [('openai', '(none)', '')] DIFF [2, 20377, 0, 22, 20399]
+  01a12b3b-7fd2-7a52-919e-bd347a3fff8e rollout in=0 cached=0 out=0 total=0 | ledger attempts=1 [('zai', 'fake', '2bf266f67e3e')] MATCH
+ROLLOUT vs LEDGER exact per thread: MISMATCH
+--- throttle keys ---
+claude-plan|claude-opus-5-5-plan|account:cp
+claude-plan|claude-opus-5-5-plan|account:cpfake
+openai|gpt-5.4|auth-mode:Some(ApiKey)
+zai|glm-5.3-flash|account:fake
+ledger format rows: [2, 3, 4]
+prewarm attempts (websocket warm-up, not in rollout turns): [('fa7364', 9465)] -- EXCLUDED below
+
+LEDGER per thread: attempts input cached output total | (provider, account, fingerprint)
+  01a12b3b-5357-7ea1-b698-2945054c589f   1    8488       0      4    8492 | [('claude-plan', 'cp', 'bbf4a6e822ee')]
+  01a12b3b-65cb-7b52-a10b-332e24ed260c   2       0       0      0       0 | [('claude-plan', 'cpfake', 'd3c066a6c093')]
+  01a12b3b-764f-79b3-ab46-03aa80fa7364   1   10912       0     22   10934 | [('openai', '(none)', '')]
+  01a12b3b-7fd2-7a52-919e-bd347a3fff8e   1       0       0      0       0 | [('zai', 'fake', '2bf266f67e3e')]
+
+LEDGER per (provider, account): attempts input cached output total no-usage-attempts
+  claude-plan cp         1    8488       0      4    8492 0
+  claude-plan cpfake     2       0       0      0       0 2
+  openai     (none)     1   10912       0     22   10934 0
+  zai        fake       1       0       0      0       0 1
+  (/cost 'tokens' = input + output, input including cached)
+  /cost-equivalent claude-plan cp: 8,492 tokens
+  /cost-equivalent claude-plan cpfake: 0 tokens
+  /cost-equivalent openai (none): 10,934 tokens
+  /cost-equivalent zai fake: 0 tokens
+
+ROLLOUT (provider-reported usage as recorded per thread: last cumulative token_count) vs LEDGER
+  01a12b3b-5357-7ea1-b698-2945054c589f rollout in=8488 cached=0 out=4 total=8492 | ledger attempts=1 [('claude-plan', 'cp', 'bbf4a6e822ee')] MATCH
+  01a12b3b-65cb-7b52-a10b-332e24ed260c rollout in=0 cached=0 out=0 total=0 | ledger attempts=2 [('claude-plan', 'cpfake', 'd3c066a6c093')] MATCH
+  01a12b3b-764f-79b3-ab46-03aa80fa7364 rollout in=10912 cached=0 out=22 total=10934 | ledger attempts=1 [('openai', '(none)', '')] MATCH
+  01a12b3b-7fd2-7a52-919e-bd347a3fff8e rollout in=0 cached=0 out=0 total=0 | ledger attempts=1 [('zai', 'fake', '2bf266f67e3e')] MATCH
+ROLLOUT vs LEDGER exact per thread: ALL MATCH

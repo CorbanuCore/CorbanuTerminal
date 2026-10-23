@@ -1,0 +1,88 @@
+# #437 (AGG-24): a declined approval is a recent denial; rows stay strict after a turn.
+id = "agg-437-inspector-decline"
+feature = "#437: the inspector lists a declined approval"
+expected = "Under Aggressive, Esc on an approval prompt declines it; /security i then shows the session rows strict after the turn and lists the decline under Recent denials."
+model = "glm-5.3-flash"
+provider = "zai"
+rows = 40
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Z.AI GLM 5.3 Flash via zai"
+timeout = 60
+compress = 2
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this shell command: git commit --allow-empty -m probe"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Press enter to confirm"
+timeout = 180
+compress = 2
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "Did not run"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Aggressive"
+[[steps]]
+key = "i"
+[[steps]]
+wait = "passed the launch check"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Down"
+repeat = 60
+[[steps]]
+wait = "command approval: declined by you"
+[[steps]]
+pause = 3.0

@@ -1,0 +1,36 @@
+╭────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                      │
+│                                                    │
+│ model:     glm-5.2   /model to change              │
+│ directory: ~/corbanu-rtx/pf27s02-e2e/work/linux-on │
+╰────────────────────────────────────────────────────╯
+› Run sh check.sh and then sh probe.sh, show me their raw output verbatim, then stop.
+• Ran sh probe.sh
+  └ read auth.json: denied
+    read secrets/: denied
+    … +4 lines (ctrl + t to view transcript)
+    read Core environment: denied
+    probes done
+• Ran sh check.sh
+  └ credential-looking names: GH_ENTERPRISE_TOKEN
+    agent token sha256: f1705e7931e9
+    {"path": "/api/v3/user", "authorized": true, "token_sha256_prefix": "946ae98e9fbe"}
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+• Raw output verbatim:
+  check.sh:
+  credential-looking names: GH_ENTERPRISE_TOKEN
+  agent token sha256: f1705e7931e9
+  {"path": "/api/v3/user", "authorized": true, "token_sha256_prefix": "946ae98e9fbe"}
+  probe.sh:
+  read auth.json: denied
+  read secrets/: denied
+  read .env: denied
+  read config.toml: denied
+  read shell snapshots: denied
+  write config.toml: denied
+  read Core environment: denied
+  probes done
+  Stopping now.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+› Use /skills to list available skills
+  Z.AI GLM 5.2 via zai standard · ~/corbanu-rtx/pf27s02-e2e/work/linux-on · Corbanu Terminal · TPS: 39.7 tok/s

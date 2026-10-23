@@ -1,0 +1,14 @@
+== agms-W01-agmx1-20261015T225441Z
+done agms-W01-agmx1-20261015T225441Z exit=0
+== agms-W02-agmx2-20261015T230645Z
+done agms-W02-agmx2-20261015T230645Z exit=0
+== agms-W03-agmx3-20261015T231641Z
+done agms-W03-agmx3-20261015T231641Z exit=0
+== agms-W04-agmx1-20261015T232433Z
+done agms-W04-agmx1-20261015T232433Z exit=0
+SEQ-DONE W01 W02 W03 W04
+2026-10-15T23:31:24Z RUNS-DONE
+2026-10-15T23:33:38Z W04 attempt 1 blocked: the parent's model asked to run its own polling command (sleep 65 && cat ks-child.txt ...) before the child's command prompt appeared; the frozen driver answered nothing and stopped (BLOCKED action 2). One fresh replay (attempt 2) with the same frozen driver, new executor, new lane; both attempts recorded.
+== agms-W04-a2-agmx2-20261015T233338Z
+done agms-W04-a2-agmx2-20261015T233338Z exit=0
+2026-10-15T23:42:58Z RUNS2-DONE

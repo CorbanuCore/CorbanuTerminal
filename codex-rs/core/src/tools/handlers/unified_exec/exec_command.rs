@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use crate::function_tool::FunctionCallError;
 use crate::maybe_emit_implicit_skill_invocation;
+use crate::security::refusal_notice;
 use crate::tools::context::ExecCommandToolOutput;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
@@ -19,6 +20,7 @@ use crate::tools::handlers::resolve_tool_environment;
 use crate::tools::handlers::rewrite_function_string_argument;
 use crate::tools::handlers::updated_hook_command;
 use crate::tools::hook_names::HookToolName;
+use crate::tools::orchestrator::HandlerBasis;
 use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::PostToolUsePayload;
 use crate::tools::registry::PreToolUsePayload;
@@ -31,6 +33,8 @@ use crate::unified_exec::generate_chunk_id;
 use codex_features::Feature;
 use codex_otel::SessionTelemetry;
 use codex_otel::TOOL_CALL_UNIFIED_EXEC_METRIC;
+use codex_protocol::protocol::EventMsg;
+use codex_protocol::protocol::WarningEvent;
 use codex_sandboxing::SandboxManager;
 use codex_sandboxing::SandboxType;
 use codex_sandboxing::SandboxablePreference;
@@ -258,6 +262,22 @@ impl ExecCommandHandler {
         let requested_additional_permissions = additional_permissions.clone();
         // TODO(anp): Make permission matching operate on PathUri for remote environments.
         let permission_cwd = native_cwd.as_ref().unwrap_or(&turn.config.cwd);
+        // Issue #245: under Aggressive a protected path is never opened.
+        if let Some(refusal) = crate::security::protected_reads::additional_permission_refusal(
+            &session,
+            &turn,
+            additional_permissions.as_ref(),
+            permission_cwd.as_path(),
+        )
+        .await
+        {
+            crate::security::protected_reads::notify(&session, &turn, refusal.clone()).await;
+            crate::security::protected_reads::record_permission_refusal(&session);
+            manager.release_process_id(process_id).await;
+            return Err(FunctionCallError::RespondToModel(refusal));
+        }
+        // #1057: taken before the grants are read.
+        let handler_basis = HandlerBasis::now(context.session.as_ref());
         let effective_additional_permissions = apply_granted_turn_permissions(
             context.session.as_ref(),
             &turn_environment.environment_id,
@@ -344,7 +364,8 @@ impl ExecCommandHandler {
         }
 
         emit_unified_exec_tty_metric(&turn.session_telemetry, tty);
-        match manager
+        let explained_command = command.clone();
+        let result = match manager
             .exec_command(
                 ExecCommandRequest {
                     command,
@@ -365,12 +386,13 @@ impl ExecCommandHandler {
                         .permissions_preapproved,
                     justification,
                     prefix_rule,
+                    handler_basis: Some(handler_basis),
                 },
                 &context,
             )
             .await
         {
-            Ok(response) => Ok(boxed_tool_output(response)),
+            Ok(response) => Ok((response, /*sandbox_denied*/ false)),
             Err(UnifiedExecError::SandboxDenied {
                 output,
                 original_token_count,
@@ -380,27 +402,104 @@ impl ExecCommandHandler {
                 let output_text = output.aggregated_output.text;
                 let original_token_count =
                     original_token_count.unwrap_or_else(|| approx_token_count(&output_text));
-                Ok(boxed_tool_output(ExecCommandToolOutput {
-                    event_call_id: context.call_id.clone(),
-                    chunk_id: generate_chunk_id(),
-                    wall_time: output.duration,
-                    raw_output: output_text.into_bytes(),
-                    truncation_policy: turn.model_info.truncation_policy.into(),
-                    max_output_tokens,
-                    // Sandbox denial is terminal, so there is no live
-                    // process for write_stdin to resume.
-                    process_id: None,
-                    exit_code: Some(output.exit_code),
-                    original_token_count: Some(original_token_count),
-                    output_omitted_bytes,
-                    hook_command: Some(hook_command),
-                }))
+                Ok((
+                    ExecCommandToolOutput {
+                        event_call_id: context.call_id.clone(),
+                        chunk_id: generate_chunk_id(),
+                        wall_time: output.duration,
+                        raw_output: output_text.into_bytes(),
+                        truncation_policy: turn.model_info.truncation_policy.into(),
+                        max_output_tokens,
+                        // Sandbox denial is terminal, so there is no live
+                        // process for write_stdin to resume.
+                        process_id: None,
+                        exit_code: Some(output.exit_code),
+                        original_token_count: Some(original_token_count),
+                        output_omitted_bytes,
+                        hook_command: Some(hook_command),
+                    },
+                    /*sandbox_denied*/ true,
+                ))
             }
+            // #439: a refusal reads as its own message, not as a debug dump.
+            Err(UnifiedExecError::Rejected { message }) => Err(FunctionCallError::RespondToModel(
+                format!("exec_command failed for `{command_for_display}`: {message}"),
+            )),
             Err(err) => Err(FunctionCallError::RespondToModel(format!(
-                "exec_command failed for `{command_for_display}`: {err:?}"
+                "exec_command failed for `{command_for_display}`: {err}"
             ))),
+        };
+        let (mut output, sandbox_denied) = result?;
+        let output_text = String::from_utf8_lossy(&output.raw_output).into_owned();
+        // #442: a protected read the Aggressive rules denied is explained
+        // where it failed, to the person and to the model (it is never
+        // granted). Otherwise #439: say when Aggressive stopped the command.
+        let protected_read = match native_cwd.as_ref().filter(|_| !environment.is_remote()) {
+            Some(cwd) => {
+                crate::security::protected_reads::denial_explanation(
+                    session.as_ref(),
+                    turn.as_ref(),
+                    &explained_command,
+                    cwd.as_path(),
+                    output.exit_code,
+                    &output_text,
+                )
+                .await
+            }
+            None => None,
+        };
+        // #826 follow-up: and a user namespace the Linux rule refused, named
+        // instead of a bare "Operation not permitted".
+        let user_namespace = crate::security::user_namespaces::denial_explanation(
+            session.as_ref(),
+            turn.as_ref(),
+            &context.call_id,
+            output.exit_code,
+            &output_text,
+        );
+        let explanation = match (protected_read, user_namespace) {
+            (Some(read), Some(namespace)) => Some(format!("{read}\n{namespace}")),
+            (read, namespace) => read.or(namespace),
+        };
+        if let Some(explanation) = explanation {
+            crate::security::protected_reads::notify(
+                session.as_ref(),
+                turn.as_ref(),
+                explanation.clone(),
+            )
+            .await;
+            output
+                .raw_output
+                .extend_from_slice(format!("\n{explanation}\n").as_bytes());
+        } else if let Some(blocked) =
+            refusal_notice::blocked(&turn.config, sandbox_denied, output.exit_code, &output_text)
+        {
+            notify_blocked(&context, blocked).await;
+            output
+                .raw_output
+                .extend_from_slice(blocked.model_note().as_bytes());
         }
+        Ok(boxed_tool_output(output))
     }
+}
+
+/// #439: tells the person in the transcript why the command failed.
+async fn notify_blocked(context: &UnifiedExecContext, blocked: refusal_notice::Blocked) {
+    // #622: listed under the inspector's recent denials too.
+    crate::security::inspection::record_refusal(
+        context.session.thread_id(),
+        blocked.inspected(),
+        blocked.inspected_outcome(),
+    );
+    context
+        .session
+        .send_event(
+            context.turn.as_ref(),
+            EventMsg::Warning(WarningEvent {
+                message: blocked.notice().to_string(),
+            }),
+        )
+        .await;
 }
 
 impl CoreToolRuntime for ExecCommandHandler {

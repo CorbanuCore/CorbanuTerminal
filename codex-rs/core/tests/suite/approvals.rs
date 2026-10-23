@@ -3965,3 +3965,88 @@ async fn compound_command_with_one_safe_command_still_requires_approval() -> Res
 
     Ok(())
 }
+
+/// #437 (AGG-24): a command approval the person declines (Esc on the prompt)
+/// is listed under the `/security` inspector's recent denials.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(unix)]
+async fn declined_command_approval_is_a_recent_denial() -> Result<()> {
+    let server = start_mock_server().await;
+    let approval_policy = AskForApproval::UnlessTrusted;
+    let sandbox_policy = SandboxPolicy::new_read_only_policy();
+    let sandbox_policy_for_config = sandbox_policy.clone();
+    let mut builder = test_codex().with_config(move |config| {
+        config.permissions.approval_policy = Constrained::allow_any(approval_policy);
+        config
+            .set_legacy_sandbox_policy(sandbox_policy_for_config)
+            .expect("set sandbox policy");
+    });
+    let test = builder.build(&server).await?;
+    let thread = test.session_configured.thread_id;
+    let (event, expected_command) = ActionKind::RunCommand {
+        command: "touch declined-437.txt",
+    }
+    .prepare(
+        &test,
+        &server,
+        "declined-437",
+        SandboxPermissions::UseDefault,
+    )
+    .await?;
+    let expected_command = expected_command.expect("a shell command");
+    let _ = mount_sse_once(
+        &server,
+        sse(vec![
+            ev_response_created("resp-declined-437-1"),
+            event,
+            ev_completed("resp-declined-437-1"),
+        ]),
+    )
+    .await;
+    let _ = mount_sse_once(
+        &server,
+        sse(vec![
+            ev_assistant_message("msg-declined-437", "done"),
+            ev_completed("resp-declined-437-2"),
+        ]),
+    )
+    .await;
+
+    let denied = |test: &TestCodex| {
+        codex_core::security_inspection::observe(
+            test.home.path(),
+            codex_core::security_inspection::SecurityLevel::Permissive,
+            Some(thread),
+            i64::MAX / 2,
+        )
+        .denials
+        .into_iter()
+        .filter(|denial| denial.thread == Some(thread))
+        .map(|denial| (denial.reason, denial.outcome))
+        .collect::<Vec<_>>()
+    };
+    assert_eq!(denied(&test), Vec::new());
+
+    submit_turn(&test, "declined-437", approval_policy, sandbox_policy).await?;
+    let approval = expect_exec_approval(&test, expected_command.as_str()).await;
+    test.codex
+        .submit(Op::ExecApproval {
+            id: approval.effective_approval_id(),
+            turn_id: None,
+            decision: ReviewDecision::Abort,
+        })
+        .await?;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_) | EventMsg::TurnAborted(_))
+    })
+    .await;
+
+    // Abort (Esc) interrupts the turn, which drops the waiting request.
+    let shown = denied(&test);
+    assert!(
+        shown == vec![("command approval", "declined by you (turn interrupted)")]
+            || shown == vec![("command approval", "declined by you")],
+        "{shown:?}"
+    );
+    Ok(())
+}

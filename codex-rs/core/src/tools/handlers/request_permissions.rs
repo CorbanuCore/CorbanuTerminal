@@ -93,7 +93,7 @@ impl RequestPermissionsHandler {
         }
 
         let response = session
-            .request_permissions_for_environment(
+            .request_permissions_explained(
                 &turn,
                 call_id,
                 args,
@@ -101,6 +101,8 @@ impl RequestPermissionsHandler {
                 cancellation_token,
             )
             .await
+            // #584: refused before anyone was asked; the model is told why.
+            .map_err(FunctionCallError::RespondToModel)?
             .ok_or_else(|| {
                 FunctionCallError::RespondToModel(
                     "request_permissions was cancelled before receiving a response".to_string(),

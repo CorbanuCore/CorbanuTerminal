@@ -1,0 +1,8 @@
+$ /usage requests 2026-10-09
+  Z.AI GLM 5.2 via zai standard · <scratch>/repos/is-plain-obj · Corbanu Terminal · TPS: -- tok/s
+--- last screen:
+• Per-request cost history is not part of this build.
+• Per-request cost history is not part of this build.
+• Per-request cost history is not part of this build.
+› Explain this codebase
+  Z.AI GLM 5.2 via zai standard · <scratch>/repos/is-plain-obj · Corbanu Terminal · TPS: -- tok/s

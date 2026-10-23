@@ -1,0 +1,53 @@
+
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     loading   /model to change           │
+│ directory: <run>/workspace │
+╰─────────────────────────────────────────────────╯
+
+
+› Find and fix a bug in @filename
+
+  Z.AI GLM 5.2 via zai standard · <run>/workspace · Corbanu Terminal · TPS: -- tok/s
+
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     glm-5.2   /model to change           │
+│ directory: <run>/workspace │
+╰─────────────────────────────────────────────────╯
+
+
+› Reply with the word PONG twice, joined by a dash, nothing else.
+
+
+• PONG-PONG
+
+
+› Find and fix a bug in @filename
+
+  Z.AI GLM 5.2 via zai standard · <run>/workspace · Corbanu Terminal · TPS: 2.8 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

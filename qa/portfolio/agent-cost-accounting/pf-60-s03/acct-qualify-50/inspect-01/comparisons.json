@@ -1,0 +1,8 @@
+{
+  "expected_exact_usd": "0.0016875",
+  "range_day_equality": [
+    "hour",
+    "week",
+    "month"
+  ]
+}

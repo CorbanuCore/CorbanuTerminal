@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"01a120be-0441-7dc3-8278-26d90f4546d8"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Model metadata for `test-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."}}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 403 Forbidden: {\"error\":\"please check the api-key you provided\"}, url: https://inference.baseten.co/v1/chat/completions"}
+{"type":"turn.failed","error":{"message":"unexpected status 403 Forbidden: {\"error\":\"please check the api-key you provided\"}, url: https://inference.baseten.co/v1/chat/completions"}}

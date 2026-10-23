@@ -1,0 +1,48 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     gpt-5.4 low   /model to change   │
+│ directory: ~/corbanu-rtx/pf60s04-ia/work/ws │
+╰─────────────────────────────────────────────╯
+
+
+› Use the spawn_agent tool three times: a sub-agent on model glm-5.3-flash (provider zai) with the message 'Reply with the single word ZED.', a sub-agent on
+  model k3 (provider kimi-code) with the message 'Reply with the single word KIMI.', and a sub-agent on model claude-opus-5-5-plan (provider claude-plan) with
+  the message 'Reply with the single word CLAUDE.'. Wait for all three, then reply with the single word DONE.
+
+
+• I’m locating the multi-agent tool and then I’ll launch the three requested sub-agents in parallel, wait for their results, and return exactly the requested
+  final word.
+
+• The sub-agent tool is available. I’m spawning the three exact model/provider combinations now and then I’ll wait for all three to finish before returning the
+  required final response.
+
+• One sub-agent has completed. I’m waiting on the remaining two and will return the final single-word response once both are done.
+
+• DONE
+
+
+› Write the numbers from 1 to 300 in words, one per line, with no other text.
+
+
+■ Conversation interrupted - tell the model what to do differently. Something went wrong? Hit `/feedback` to report the issue.
+
+■ Restored a legacy /spawn hierarchy in read-only mode. Existing panes remain inspectable, but Corbanu Terminal will not dispatch or replay work until you
+create a new CrewSpec-backed crew.
+
+
+› Reply with the single word KILLED.
+
+
+• KILLED
+
+
+› <rtx-home>/corbanu-rtx/pf60s04-ia/homes/h1/launch.sh: line 2: 1620643 Killed                     <rtx-home>/corbanu-rtx/pf60s04-ia/bin/corbanu -C <rtx-home>/corbanu-rtx/pf60s04-ia/work/ws -c log_dir=\"<rtx-home>/corbanu-rtx/pf60s04-ia/homes/h1/logs\" resume 01a12451-0c3e-78d1-af1e-971bc1e26a14 2>> "$CODEX_HOME/logs/stderr.log"anu-rtx/pf60s04-ia/work/ws · Corbanu Terminal · TPS: 6.3 tok/s · Main [default]
+                      EXITED 137
+
+
+
+
+
+
+

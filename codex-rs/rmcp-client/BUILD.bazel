@@ -6,4 +6,8 @@ codex_rust_crate(
     extra_binaries = [
         "//codex-rs/cli:codex",
     ],
+    # Like login, vault and secrets: the OAuth secrets-store tests derive keys
+    # with production-cost scrypt, unoptimized under Bazel fastbuild, and the
+    # target timed out at 300s on a cold nightly runner.
+    unit_test_timeout = "long",
 )

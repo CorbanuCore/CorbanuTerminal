@@ -1,0 +1,44 @@
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     deepseek-v4-flash   /model to change │
+│ directory: ~/corbanu-rtx/pf60s04-qual/work/ws   │
+╰─────────────────────────────────────────────────╯
+
+› Reply with the single word RETRIED.
+• RETRIED
+  Request
+  Requested UTC day: 2026-10-10
+› Provider: deepseek-retry
+  Model: DeepSeek V4 Flash 0731 (Direct)
+  Billing: Pay per use
+  Estimated cost: no price available
+  Next step for requests with no price: check the bill from deepseek-retry. No published price covers them, so no cost is shown for them here.
+  Tokens: 6,015+ tokens
+  —— Details ——
+  Billed cost: deepseek-retry doesn't report its charges, so any cost here is an estimate — check deepseek-retry's bill.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Provider: deepseek-retry
+› Model: DeepSeek V4 Flash 0731 (Direct)
+› Billing: Pay per use
+› Estimated cost: no price available
+› Next step for requests with no price: check the bill from deepseek-retry. No published price covers them, so no cost is shown for them here.
+› Tokens: 6,015+ tokens
+› —— Details ——
+› Billed cost: deepseek-retry doesn't report its charges, so any cost here is an estimate — check deepseek-retry's bill.
+› Request: 2afdeb17-9aef-4b90-a9e5-c2544f622367
+  Request: 2afdeb17-9aef-4b90-a9e5-c2544f622367
+› Snapshot is not current; newer activity is unverified
+  Snapshot is not current; newer activity is unverified
+› —— Open ——
+  —— Open ——
+› → Technical details (attempt 1)
+  → Technical details (attempt 1)
+› → Technical details (attempt 2)
+  → Technical details (attempt 2)
+› Back
+  Back
+› Refresh
+  Refresh
+› Close

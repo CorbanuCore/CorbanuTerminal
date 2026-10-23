@@ -48,8 +48,21 @@ struct TopCli {
 }
 
 fn main() -> anyhow::Result<()> {
+    codex_tui::take_restart_marker();
     arg0_dispatch_or_else(|arg0_paths: Arg0DispatchPaths| async move {
         let top_cli = TopCli::parse();
+        // An agent command under security level Aggressive must not start
+        // this binary to get around `corbanu`'s nested-launch check.
+        if let Some(message) = codex_security_level::nested::standalone_nested_refusal(
+            "codex-tui",
+            codex_security_level::nested::NestedKind::Interactive,
+        ) {
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("{message}");
+            }
+            std::process::exit(1);
+        }
         let mut inner = top_cli.inner;
         inner
             .config_overrides
@@ -66,6 +79,13 @@ fn main() -> anyhow::Result<()> {
             ExitReason::Fatal(message) => {
                 eprintln!("ERROR: {message}");
                 true
+            }
+            ExitReason::Restart => {
+                print!("{}", codex_tui::RESTART_BANNER);
+                std::io::stdout().flush()?;
+                let err = codex_tui::restart_process();
+                eprintln!("\nERROR: could not restart ({err}); start it again yourself");
+                std::process::exit(1);
             }
             ExitReason::UserRequested => false,
         };

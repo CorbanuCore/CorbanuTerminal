@@ -1,0 +1,6 @@
+---
+source: tui/src/chatwidget/tests/app_server.rs
+expression: "lines_to_single_string(&cells[0])"
+---
+⚠ Using OPENAI_API_KEY from your environment — billed per use to that API key.
+  Sign in or unset it to change.

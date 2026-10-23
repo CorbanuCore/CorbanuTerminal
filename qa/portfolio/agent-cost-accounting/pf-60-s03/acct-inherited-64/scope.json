@@ -1,0 +1,11 @@
+{
+  "status": " M qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/RETURN.md\n M qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\n M qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/RETURN.md\n?? qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/\n",
+  "tracked_numstat": "10\t1\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/RETURN.md\n20\t9\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\n8\t0\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/RETURN.md\n",
+  "production_lines_changed": 0,
+  "rust_test_lines_changed": 0,
+  "new_qa_source_lines": {
+    "collect_evidence.py": 78,
+    "page_controls.py": 88
+  },
+  "file_count": 23
+}

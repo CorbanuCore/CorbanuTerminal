@@ -1,0 +1,81 @@
+# PF-60-S04 gap (i): a /side conversation is paid inference for the conversation it was opened from. A real
+# Kimi Code K3 turn, then a real /side question; back in the main conversation, /cost counts the side request
+# under this conversation, and its technical page labels its turn "side:". No seeding.
+id = "pf60s04-side-conversation-cost"
+feature = "/cost after a /side question: the side conversation's request is recorded under the conversation it came from"
+expected = "/cost in the main conversation counts the /side request with the conversation's own. The request's technical page names its turn side:…; before PF-60-S04 it was not recorded at all."
+model = "k3"
+provider = "kimi-code"
+rows = 46
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+KIMI_API_KEY = "provider/kimi_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with the single word READY."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*READY\\W*$"
+timeout = 180
+compress = 3
+# The turn ends after its completion check, a few seconds after the answer.
+[[steps]]
+run = "sleep 45"
+timeout = 60
+[[steps]]
+type = "/side Reply with the single word SIDE."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*SIDE\\W*$"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "C-c"
+[[steps]]
+wait = "(?m)^\\W*READY\\W*$"
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Kimi Code K3 — Covered by your subscription"
+[[steps]]
+pause = 3
+# The side conversation's requests come after the turn's own; seven steps up from the first line is the last
+# request listed, the side one.
+[[steps]]
+key = "Up"
+repeat = 7
+[[steps]]
+wait = "› → Request \\d+ · Kimi Code"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Billing: Covered by your subscription"
+[[steps]]
+key = "Up"
+repeat = 4
+[[steps]]
+wait = "› → Technical details"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Attempt, components and original price"
+[[steps]]
+key = "Down"
+repeat = 11
+[[steps]]
+wait = "› Turn: side:"
+[[steps]]
+pause = 5

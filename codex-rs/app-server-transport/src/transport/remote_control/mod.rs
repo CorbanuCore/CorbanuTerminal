@@ -106,6 +106,10 @@ pub(super) struct QueuedServerEnvelope {
 pub struct RemoteControlHandle {
     policy: RemoteControlPolicy,
     desired_state_tx: Arc<watch::Sender<RemoteControlDesiredState>>,
+    /// Serializes the desired-state RPCs (enable, disable, their ephemeral
+    /// forms, and resolving the persisted preference). Each stores the desired
+    /// state and then publishes the matching status; holding this lock across
+    /// both steps keeps another RPC from landing in between (#908).
     desired_state_rpc_lock: Arc<Semaphore>,
     desired_state_persistence_lock: Arc<Semaphore>,
     status_tx: Arc<watch::Sender<RemoteControlStatusChangedNotification>>,
@@ -115,6 +119,10 @@ pub struct RemoteControlHandle {
     pairing_persistence_key: RemoteControlPairingPersistenceKey,
     pairing_persistence_key_required: bool,
     auth_manager: Arc<AuthManager>,
+    /// Called with the desired state an RPC just stored, before it publishes
+    /// the matching status (tests only: they race another RPC there, #908).
+    #[cfg(test)]
+    desired_state_stored_hook: Option<Arc<dyn Fn(RemoteControlDesiredState) + Send + Sync>>,
 }
 
 // Pairing and websocket connect share one selected server so they cannot enroll or replace
@@ -246,16 +254,15 @@ impl RemoteControlHandle {
             .map_err(|err| io::Error::new(io::ErrorKind::PermissionDenied, err))
     }
 
-    pub fn enable_ephemeral(
+    pub async fn enable_ephemeral(
         &self,
     ) -> Result<RemoteControlStatusChangedNotification, RemoteControlEnableError> {
+        self.ensure_enable_possible()?;
+        let _transition = self.acquire_desired_state_rpc_lock().await;
         self.enable_with_preference(/*persistence_preference*/ None)
     }
 
-    fn enable_with_preference(
-        &self,
-        persistence_preference: Option<bool>,
-    ) -> Result<RemoteControlStatusChangedNotification, RemoteControlEnableError> {
+    fn ensure_enable_possible(&self) -> Result<(), RemoteControlEnableError> {
         self.ensure_remote_control_allowed()
             .map_err(RemoteControlEnableError::DisabledByRequirements)?;
         if self.state_db.is_none() {
@@ -264,6 +271,29 @@ impl RemoteControlHandle {
                 RemoteControlUnavailable,
             ));
         }
+        Ok(())
+    }
+
+    async fn acquire_desired_state_rpc_lock(&self) -> SemaphorePermit<'_> {
+        self.desired_state_rpc_lock
+            .acquire()
+            .await
+            .unwrap_or_else(|_| unreachable!())
+    }
+
+    #[cfg(test)]
+    fn desired_state_stored(&self, desired_state: RemoteControlDesiredState) {
+        if let Some(hook) = &self.desired_state_stored_hook {
+            hook(desired_state);
+        }
+    }
+
+    /// The caller must hold `desired_state_rpc_lock`.
+    fn enable_with_preference(
+        &self,
+        persistence_preference: Option<bool>,
+    ) -> Result<RemoteControlStatusChangedNotification, RemoteControlEnableError> {
+        self.ensure_enable_possible()?;
 
         let mut effective_persistence_preference = persistence_preference;
         let desired_state_changed = self.desired_state_tx.send_if_modified(|state| {
@@ -284,6 +314,12 @@ impl RemoteControlHandle {
             *state = next_state;
             changed
         });
+        #[cfg(test)]
+        {
+            // Copy it out first: the hook may store a desired state itself.
+            let desired_state = *self.desired_state_tx.borrow();
+            self.desired_state_stored(desired_state);
+        }
 
         let status = self.status();
         info!(
@@ -310,11 +346,7 @@ impl RemoteControlHandle {
         app_server_client_name: Option<&str>,
     ) -> io::Result<RemoteControlStatusChangedNotification> {
         self.ensure_remote_control_allowed_io()?;
-        let _transition = self
-            .desired_state_rpc_lock
-            .acquire()
-            .await
-            .unwrap_or_else(|_| unreachable!());
+        let _transition = self.acquire_desired_state_rpc_lock().await;
         let _persistence = acquire_persistence_lock(&self.desired_state_persistence_lock).await;
         self.persist_preference(
             app_server_client_name,
@@ -325,21 +357,20 @@ impl RemoteControlHandle {
     }
 
     pub async fn disable_ephemeral(&self) -> RemoteControlStatusChangedNotification {
-        let _transition = self
-            .desired_state_rpc_lock
-            .acquire()
-            .await
-            .unwrap_or_else(|_| unreachable!());
+        let _transition = self.acquire_desired_state_rpc_lock().await;
         let _persistence = acquire_persistence_lock(&self.desired_state_persistence_lock).await;
         self.transition_disabled()
     }
 
+    /// The caller must hold `desired_state_rpc_lock`.
     fn transition_disabled(&self) -> RemoteControlStatusChangedNotification {
         let desired_state_changed = self.desired_state_tx.send_if_modified(|state| {
             let changed = *state != RemoteControlDesiredState::Disabled;
             *state = RemoteControlDesiredState::Disabled;
             changed
         });
+        #[cfg(test)]
+        self.desired_state_stored(RemoteControlDesiredState::Disabled);
         let status = self.status();
         info!(
             desired_state_changed,
@@ -1079,6 +1110,8 @@ pub async fn start_remote_control(
             pairing_persistence_key,
             pairing_persistence_key_required,
             auth_manager: handle_auth_manager,
+            #[cfg(test)]
+            desired_state_stored_hook: None,
         },
     ))
 }

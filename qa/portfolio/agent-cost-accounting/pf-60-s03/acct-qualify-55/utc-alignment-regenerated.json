@@ -1,0 +1,17 @@
+[
+  {
+    "group": "hour",
+    "expected_bucket": "Hour [2026-08-10T12:00:00.000Z, 2026-08-10T13:00:00.000Z)",
+    "matched": true
+  },
+  {
+    "group": "week",
+    "expected_bucket": "Week [2026-08-10T00:00:00.000Z, 2026-08-17T00:00:00.000Z)",
+    "matched": true
+  },
+  {
+    "group": "month",
+    "expected_bucket": "Month [2026-08-01T00:00:00.000Z, 2026-09-01T00:00:00.000Z)",
+    "matched": true
+  }
+]

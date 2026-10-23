@@ -1,0 +1,208 @@
+{
+  "base": "1aadfc123592530f657794489249e954f5e3885a",
+  "scope": "qa/portfolio/agent-cost-accounting/pf-60-s03/",
+  "files": [
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md",
+      "bytes": 4772,
+      "lines": 71,
+      "sha256": "8e29bfa03f76d2e1b3d1848150abdc4d5b3443ecafb603f2b22a4a58c964d5f5",
+      "kind": "modified"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/scope.json",
+      "bytes": 5107,
+      "lines": 125,
+      "sha256": "f17b4def971f7adc3c3cf6f1ff817b0cdc5b8e9a5184da15dc523ebaa358091b",
+      "kind": "modified"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/scope.json",
+      "bytes": 15332,
+      "lines": 357,
+      "sha256": "613c7ab5a2e0ce9b3ab94e338b6343b650294336328ccd15c7e91186ca584b84",
+      "kind": "modified"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/.gitignore",
+      "bytes": 43,
+      "lines": 3,
+      "sha256": "4d33be2a8b16f0998d6233875f176c9f7c7dc02d69c82ee8a22f2be35fe89f51",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/RETURN.md",
+      "bytes": 5828,
+      "lines": 91,
+      "sha256": "194fc61627a1cc76827109cf161380c555610ade92d69a79cf34cf45ac4de440",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/acct-acceptance-75-scope-before.json",
+      "bytes": 4418,
+      "lines": 115,
+      "sha256": "a51e25cbc46e4509221bce53981033c62024c026c20f2a5fe5e7e950c6dc2651",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/acct-controls-72-scope-before.json",
+      "bytes": 14703,
+      "lines": 349,
+      "sha256": "83b7e0acd32674c01ba5aeb2f2b8f1258f11c92ca8c1463f943e2c691600e153",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/designer-intent.md",
+      "bytes": 986,
+      "lines": 16,
+      "sha256": "20ba9de414be80dab90258898326df3082c3c7e1e6403453c479ce94abc30dac",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/engineering.md",
+      "bytes": 8285,
+      "lines": 81,
+      "sha256": "b491572741b2b1868cc3acc6f9ab0511d1ec322b18a0cbeb751bfe46a1395d9d",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/finalize.py",
+      "bytes": 3502,
+      "lines": 60,
+      "sha256": "f162d398c22b25514e3b27f0df81f825f193008d51a96c2e3ad5c8b97a5edbbe",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/gate.py",
+      "bytes": 3323,
+      "lines": 72,
+      "sha256": "867439fb4de5a404ac071c846d14cc99d4ad72991c6388eb4cc60c8ea3a2692f",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/gates-01/alone-feature.json",
+      "bytes": 1496,
+      "lines": 43,
+      "sha256": "aec182816f97ed765cacf8fdfdc12ba9aaabe1b1280142bd586da18d8c26703c",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/gates-01/alone-feature.log.gz",
+      "bytes": 1963,
+      "lines": null,
+      "sha256": "7a39bc32aaf0324c68567867ec9ba44c74d8f4bac3f4f3f3b619b9c829720622",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/gates-01/core-default.json",
+      "bytes": 1380,
+      "lines": 41,
+      "sha256": "4fa1658fe112b3883a54bf6ade631f1ddb9e19a3d1993c56202a70aa38949a88",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/gates-01/core-default.log.gz",
+      "bytes": 4979,
+      "lines": null,
+      "sha256": "6905c6c14c4c5b258352660aca4b16145e79bbf77f4a6efad32a332d94e5f2cb",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/gates-01/core-feature.json",
+      "bytes": 1436,
+      "lines": 43,
+      "sha256": "a3f96440495ba50c861e0dbed996a0a8bb72b67bfdde38845d62c4ebad181597",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/gates-01/core-feature.log.gz",
+      "bytes": 5044,
+      "lines": null,
+      "sha256": "82726b06fe91414a2c6abe91259a13644e68c412aec476656ad504b807e8bdbf",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/gates-01/prerequisites.json",
+      "bytes": 962,
+      "lines": 33,
+      "sha256": "dc9fa6c467a5368d11b5d6dd7d1d65e83397acd34ce3e44ff3f1cc0095ddeb8a",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/gates-01/prerequisites.log.gz",
+      "bytes": 3132,
+      "lines": null,
+      "sha256": "f64873c5875c8333c1553a14207d3f0a868b0dc724bfe2c5a11e3eb013011e40",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/gates-01/tui.json",
+      "bytes": 1005,
+      "lines": 38,
+      "sha256": "0d451c9b45501fc10c32caa7df737eeed30bb318fb8825906ba29b9cbb360970",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/gates-01/tui.log.gz",
+      "bytes": 6533,
+      "lines": null,
+      "sha256": "e480d4bde3490a510e5c24e02732ed6c6c3d2a81ca5551a5e5d8d8a2d59f2e43",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/inventory-refresh.json",
+      "bytes": 3673,
+      "lines": 83,
+      "sha256": "83c3745407784f128e055b66e984c6c582b8682e9bed032a8d2827d55c640f1a",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/inventory.py",
+      "bytes": 1760,
+      "lines": 29,
+      "sha256": "54a25435efad9c165b2edfadd0da60d9b246dc82653bdd6e6ad31a2257b774b0",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package-build.log.gz",
+      "bytes": 3519,
+      "lines": null,
+      "sha256": "c0cdd869f37c22a17e78ec6b75b09be77f3537c8c2da4caeae85d7acf1eda5bf",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package-manifest.json",
+      "bytes": 1811,
+      "lines": 54,
+      "sha256": "4cebbae567c8d7414dbc0577be840e421b28ae377cd1b4d403687563a2156834",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/prepare_package.py",
+      "bytes": 2382,
+      "lines": 51,
+      "sha256": "2a888418681b34de44dd057d3fc5688128890691614ca2e7ca74306dd147c722",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/refresh_inventory.py",
+      "bytes": 3095,
+      "lines": 52,
+      "sha256": "0c501de59baf098c5cb8ade8dc5086450fe949c1609f89c16cd18ce69b74b796",
+      "kind": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/test-results.json",
+      "bytes": 7498,
+      "lines": 209,
+      "sha256": "89e7d056bbbb581631785c57d483cb9c3905fc6f2d2fff6b4631b60296b5a05d",
+      "kind": "new"
+    }
+  ],
+  "self_excluded": true,
+  "outside_scope_changes": [],
+  "tracked_numstat": "69\t55\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md\n14\t4\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/scope.json\n20\t12\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/scope.json\n",
+  "new_text_lines": 1463,
+  "new_files": 25,
+  "note": "Generated receipts and original-inventory copies count as evidence lines; ignored local build/package bytes are bound separately by package-manifest.json."
+}

@@ -1,0 +1,7 @@
+openai	devz	chatgpt_auth	ChatGPT sign-in · d…@example.com · Plus
+openai	fake	chatgpt_auth	OpenAI API key
+openai	fpx	chatgpt_auth	ChatGPT sign-in · f…@example.com · Plus
+openai	fpy	chatgpt_auth	ChatGPT sign-in · f…@example.com · Plus
+openai	keyz	chatgpt_auth	OpenAI API key
+openai	twinz	chatgpt_auth	ChatGPT sign-in · t…@example.com · Plus
+openai	work	chatgpt_auth	ChatGPT sign-in · t…@example.com · Plus

@@ -1,0 +1,64 @@
+{"t": 1791775280.969, "event": "sign-in", "user": "work"}
+{"t": 1791775281.689, "event": "sign-in", "user": "play"}
+{"t": 1791775282.648, "event": "sign-in", "user": "work-2"}
+{"t": 1791775283.605, "event": "sign-in", "user": "bad-user"}
+{"t": 1791775284.828, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775284.94, "event": "refresh", "user": "work", "from_gen": 1, "to_gen": 2}
+{"t": 1791775284.972, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775285.44, "event": "refresh", "user": "play", "from_gen": 1, "to_gen": 2}
+{"t": 1791775285.478, "event": "refresh", "user": "work", "from_gen": 2, "to_gen": 3}
+{"t": 1791775285.479, "event": "get", "path": "/v1/models", "who": "work (token gen 2)"}
+{"t": 1791775285.873, "event": "get", "path": "/v1/models", "who": "play (token gen 2)"}
+{"t": 1791775286.221, "event": "refresh", "user": "play", "from_gen": 2, "to_gen": 3}
+{"t": 1791775286.249, "event": "get", "path": "/v1/models", "who": "work (token gen 3)"}
+{"t": 1791775286.469, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 3)"}
+{"t": 1791775286.51, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 3)"}
+{"t": 1791775286.535, "event": "get", "path": "/v1/models", "who": "play (token gen 3)"}
+{"t": 1791775286.569, "event": "responses", "who": "work (token gen 3)"}
+{"t": 1791775286.773, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "play (token gen 3)"}
+{"t": 1791775286.812, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "play (token gen 3)"}
+{"t": 1791775286.877, "event": "responses", "who": "play (token gen 3)"}
+{"t": 1791775287.199, "event": "get", "path": "/v1/models", "who": "work (token gen 3)"}
+{"t": 1791775287.199, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775287.225, "event": "get", "path": "/v1/models", "who": "work (token gen 3)"}
+{"t": 1791775287.465, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 3)"}
+{"t": 1791775287.505, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 3)"}
+{"t": 1791775287.566, "event": "responses", "who": "work (token gen 3)"}
+{"t": 1791775287.924, "event": "get", "path": "/v1/models", "who": "play (token gen 3)"}
+{"t": 1791775287.928, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775287.951, "event": "get", "path": "/v1/models", "who": "play (token gen 3)"}
+{"t": 1791775288.192, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "play (token gen 3)"}
+{"t": 1791775288.231, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "play (token gen 3)"}
+{"t": 1791775288.292, "event": "responses", "who": "play (token gen 3)"}
+{"t": 1791775288.487, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775288.772, "event": "responses", "who": "api key default"}
+{"t": 1791775289.115, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775289.115, "event": "refresh-rejected", "user": "bad-user", "reason": "expired"}
+{"t": 1791775289.22, "event": "get", "path": "/v1/models", "who": "bad-user (token gen 1)"}
+{"t": 1791775289.249, "event": "get", "path": "/v1/models", "who": "bad-user (token gen 1)"}
+{"t": 1791775289.596, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "bad-user (token gen 1)"}
+{"t": 1791775289.661, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "bad-user (token gen 1)"}
+{"t": 1791775289.827, "event": "responses-rejected", "who": "bad-user (token gen 1)", "reason": "expired access token"}
+{"t": 1791775289.959, "event": "responses-rejected", "who": "bad-user (token gen 1)", "reason": "expired access token"}
+{"t": 1791775290.087, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775290.364, "event": "responses", "who": "api key default"}
+{"t": 1791775290.688, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775291.067, "event": "revoke", "user": "play"}
+{"t": 1791775291.593, "event": "sign-in", "user": "solo"}
+{"t": 1791775292.54, "event": "refresh", "user": "solo", "from_gen": 1, "to_gen": 2}
+{"t": 1791775292.543, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775292.855, "event": "refresh", "user": "solo", "from_gen": 2, "to_gen": 3}
+{"t": 1791775292.855, "event": "get", "path": "/v1/models", "who": "solo (token gen 2)"}
+{"t": 1791775293.16, "event": "get", "path": "/v1/models", "who": "solo (token gen 3)"}
+{"t": 1791775293.383, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "solo (token gen 3)"}
+{"t": 1791775293.421, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "solo (token gen 3)"}
+{"t": 1791775293.483, "event": "responses", "who": "solo (token gen 3)"}
+{"t": 1791775293.623, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775293.898, "event": "responses", "who": "api key envdecoy"}
+{"t": 1791775294.672, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775294.674, "event": "get", "path": "/v1/models", "who": "work (token gen 3)"}
+{"t": 1791775294.914, "event": "get", "path": "/v1/models", "who": "work (token gen 3)"}
+{"t": 1791775300.161, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 3)"}
+{"t": 1791775300.205, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 3)"}
+{"t": 1791775300.276, "event": "responses", "who": "work (token gen 3)"}
+{"t": 1791775311.632, "event": "sign-in", "user": "tui"}

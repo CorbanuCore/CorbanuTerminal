@@ -47,6 +47,11 @@ impl StartedNetworkProxy {
     pub fn proxy(&self) -> NetworkProxy {
         self.proxy.clone()
     }
+
+    /// PF-23-S03: see [`NetworkProxy::revoke_brokered_credentials`].
+    pub(crate) fn revoke_brokered_credentials(&self) -> bool {
+        self.proxy.revoke_brokered_credentials()
+    }
 }
 
 #[derive(Clone)]
@@ -87,6 +92,22 @@ impl NetworkProxySpec {
         self.config.enable_socks5
     }
 
+    /// True when brokered provider credentials live in the separate broker
+    /// process instead of this process (PF-27-S04).
+    pub fn isolated_credential_broker_enabled(&self) -> bool {
+        self.config.credential_broker && self.config.isolated_credential_broker
+    }
+
+    #[cfg(test)]
+    pub(crate) fn url_destination_policy_enabled(&self) -> bool {
+        self.config.url_destination_policy
+    }
+
+    #[cfg(test)]
+    pub(crate) fn credential_response_gate_enabled(&self) -> bool {
+        self.config.credential_response_gate
+    }
+
     #[cfg(any(target_os = "windows", test))]
     pub(crate) fn configured_proxy_ports(&self) -> std::io::Result<Vec<u16>> {
         managed_proxy_ports(&self.config).map_err(std::io::Error::other)
@@ -94,7 +115,8 @@ impl NetworkProxySpec {
 
     #[cfg(any(target_os = "windows", test))]
     pub(crate) fn allow_local_binding(&self) -> bool {
-        self.config.allow_local_binding
+        // PF-33-S02: the destination guard leaves the sandbox only the proxy ports.
+        self.config.allow_local_binding && !self.config.url_destination_policy
     }
 
     pub fn from_config_and_constraints(

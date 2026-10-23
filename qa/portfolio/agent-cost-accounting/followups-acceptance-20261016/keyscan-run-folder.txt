@@ -1,0 +1,8 @@
+PATTERN-HIT: /Volumes/CorbanuDrive/Corbanu/.codex-work/pf60-s10-20261016/runs/acc-C-agmx3-20261016T042942Z/x/product-home/sessions/2026/10/15/rollout-2026-10-15T21-45-32-01a14307-9204-7623-93f3-e307b0be32ea.jsonl
+provider/zai_api_key: 0 files with the key value in /Volumes/CorbanuDrive/Corbanu/.codex-work/pf60-s10-20261016
+openai-api-key: 0 files with the key value in /Volumes/CorbanuDrive/Corbanu/.codex-work/pf60-s10-20261016
+kimi_api3: 0 files with the key value in /Volumes/CorbanuDrive/Corbanu/.codex-work/pf60-s10-20261016
+files scanned in /Volumes/CorbanuDrive/Corbanu/.codex-work/pf60-s10-20261016: 2759
+Note: the one PATTERN-HIT is inside a 2,079-character base64 blob (an encrypted reasoning item in a product session
+file of group C, not part of this record): the letters "sk-" occur in the base64 text. It is not a key; the exact scans
+for the three real key values found 0 files. The same scan over this record: 0 pattern hits, 0 key hits.

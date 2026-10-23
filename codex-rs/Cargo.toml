@@ -49,6 +49,7 @@ members = [
     "secrets",
     "secret-broker",
     "secret-broker-service",
+    "secret-broker-fixture",
     "exec",
     "file-system",
     "exec-server-protocol",
@@ -73,8 +74,10 @@ members = [
     "file-search",
     "file-watcher",
     "linux-sandbox",
+    "linux-pidfd-spawn",
     "lmstudio",
     "login",
+    "log-guard",
     "codex-mcp",
     "mcp-server",
     "memories/read",
@@ -96,6 +99,7 @@ members = [
     "response-debug-context",
     "sandboxing",
     "security-audit",
+    "security-level",
     "security-policy",
     "stdio-to-uds",
     "otel",
@@ -148,7 +152,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.44"
+version = "0.1.48"
 # Track the edition for all workspace crates in one place. Individual
 # crates can still override this value, but keeping it here means new
 # crates created with `cargo new -w ...` automatically inherit the 2024
@@ -224,6 +228,7 @@ codex-hooks = { path = "hooks" }
 codex-keyring-store = { path = "keyring-store" }
 codex-linux-sandbox = { path = "linux-sandbox" }
 codex-lmstudio = { path = "lmstudio" }
+codex-log-guard = { path = "log-guard" }
 codex-login = { path = "login" }
 codex-message-history = { path = "message-history" }
 codex-memories-extension = { path = "ext/memories" }
@@ -254,9 +259,11 @@ codex-rollout = { path = "rollout" }
 codex-rollout-trace = { path = "rollout-trace" }
 codex-sandboxing = { path = "sandboxing" }
 codex-security-audit = { path = "security-audit" }
+codex-security-level = { path = "security-level" }
 codex-security-policy = { path = "security-policy" }
 codex-secret-broker = { path = "secret-broker" }
 codex-secret-broker-service = { path = "secret-broker-service" }
+codex-linux-pidfd-spawn = { path = "linux-pidfd-spawn" }
 codex-secrets = { path = "secrets" }
 codex-shell-command = { path = "shell-command" }
 codex-shell-escalation = { path = "shell-escalation" }
@@ -346,7 +353,7 @@ crossterm = "0.29.0"
 # ctor 0.6 split its macros into host-only crates that rules_rs could not load
 # while cross-compiling the native-Windows gnullvm graph. The 1.x line uses the
 # linktime macro implementation already exercised elsewhere in this workspace.
-ctor = "1.0.6"
+ctor = "1.0.13"
 deno_core_icudata = "0.77.0"
 derive_more = "2"
 diffy = "0.4.2"
@@ -368,7 +375,10 @@ glob = "0.3"
 globset = "0.4"
 hmac = "0.12.1"
 http = "1.3.1"
+http-body-util = "=0.1.3"
 httpdate = "1.0.3"
+hyper = { version = "=1.8.1", default-features = false }
+hyper-util = { version = "=0.1.20", default-features = false }
 iana-time-zone = "0.1.64"
 icu_decimal = "2.1"
 icu_locale_core = "2.1"
@@ -498,6 +508,8 @@ toml = "0.9.5"
 toml_edit = "0.24.0"
 tracing = "0.1.44"
 tracing-appender = "0.2.3"
+tracing-core = "0.1.36"
+tracing-log = "0.2.0"
 tracing-opentelemetry = "0.32.0"
 tracing-subscriber = "0.3.22"
 tracing-test = "0.2.5"
@@ -531,7 +543,15 @@ which = "8"
 whoami = "1.6.1"
 wildmatch = "2.6.1"
 winapi-util = "0.1.11"
-zip = "2.4.2"
+# Only the methods GitHub zipballs and skill exports use (stored, deflate,
+# deflate64, bzip2). Fewer decoders for untrusted archives, and fewer crates on
+# the Windows Bazel lint command line (#968).
+zip = { version = "9.0.5", default-features = false, features = [
+    "bzip2-rs",
+    "deflate64",
+    "deflate",
+    "time",
+] }
 zstd = "0.13"
 
 wiremock = "0.6"
@@ -591,6 +611,11 @@ ignored = [
 # Keep line tables/backtraces while avoiding expensive full variable debug info
 # across local dev builds.
 debug = "limited"
+# macOS defaults to "unpacked", which keeps one object file per codegen unit for
+# the debugger. Cargo never deletes stale ones, so a long-lived target grew to
+# ~930k files in debug/deps and every rustc invocation slowed to a crawl while
+# listing it. "off" is already the default on Linux.
+split-debuginfo = "off"
 
 # Vault passphrases use the production scrypt work factor in every profile.
 # Optimize the CPU-heavy primitives so debug builds stay responsive without
@@ -601,10 +626,79 @@ opt-level = 3
 [profile.dev.package.salsa20]
 opt-level = 3
 
+# SQLite itself: the state DB is shared by every Corbanu process on a home, and
+# a write transaction holds its one write lock for as long as its statements
+# run. Unoptimized, SQLite's C code ran the ledger's scans 3-4x slower, so a
+# debug build held the lock several times longer and other sessions waited.
+[profile.dev.package.libsqlite3-sys]
+opt-level = 3
+
+[profile.dev.package.codex-state]
+opt-level = 2
+
+[profile.dev.package.sqlx-sqlite]
+opt-level = 2
+
+[profile.dev.package.sqlx-core]
+opt-level = 2
+
+[profile.dev.package.serde_json]
+opt-level = 2
+
 [profile.test.package.scrypt]
 opt-level = 3
 
 [profile.test.package.salsa20]
+opt-level = 3
+
+# Image codecs: unoptimized PNG/JPEG/WebP decode, resize and re-encode made
+# image-preparation tests exceed the 60s nextest limit on hosted CI runners.
+[profile.test.package.crc32fast]
+opt-level = 3
+
+[profile.test.package.fdeflate]
+opt-level = 3
+
+[profile.test.package.flate2]
+opt-level = 3
+
+[profile.test.package.gif]
+opt-level = 3
+
+[profile.test.package.image]
+opt-level = 3
+
+[profile.test.package.image-webp]
+opt-level = 3
+
+[profile.test.package.miniz_oxide]
+opt-level = 3
+
+[profile.test.package.moxcms]
+opt-level = 3
+
+[profile.test.package.png]
+opt-level = 3
+
+[profile.test.package.pxfm]
+opt-level = 3
+
+[profile.test.package.simd-adler32]
+opt-level = 3
+
+[profile.test.package.tiff]
+opt-level = 3
+
+[profile.test.package.weezl]
+opt-level = 3
+
+[profile.test.package.zlib-rs]
+opt-level = 3
+
+[profile.test.package.zune-core]
+opt-level = 3
+
+[profile.test.package.zune-jpeg]
 opt-level = 3
 
 [profile.dev-small]

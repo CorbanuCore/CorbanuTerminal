@@ -79,6 +79,8 @@ struct AgentLabel<'a> {
 pub(crate) struct SpawnRequestSummary {
     pub(crate) model: String,
     pub(crate) reasoning_effort: ReasoningEffortConfig,
+    /// PF-84: the spawned agent's named account, once the spawn completed.
+    pub(crate) provider_account: Option<String>,
 }
 
 pub(crate) fn agent_picker_status_dot_spans(is_closed: bool) -> Vec<Span<'static>> {
@@ -200,10 +202,12 @@ pub(crate) fn spawn_request_summary(item: &ThreadItem) -> Option<SpawnRequestSum
             tool: CollabAgentTool::SpawnAgent,
             model: Some(model),
             reasoning_effort: Some(reasoning_effort),
+            provider_account,
             ..
         } => Some(SpawnRequestSummary {
             model: model.clone(),
             reasoning_effort: reasoning_effort.clone(),
+            provider_account: provider_account.clone(),
         }),
         _ => None,
     }
@@ -237,11 +241,20 @@ pub(crate) fn tool_call_history_cell(
                 return None;
             }
             let fallback_spawn_request = spawn_request_summary(item);
-            let spawn_request = cached_spawn_request.or(fallback_spawn_request.as_ref());
+            let mut spawn_request = cached_spawn_request
+                .cloned()
+                .or_else(|| fallback_spawn_request.clone());
+            // The account is only known once the spawn resolved it.
+            if let (Some(request), Some(completed)) =
+                (spawn_request.as_mut(), fallback_spawn_request.as_ref())
+                && completed.provider_account.is_some()
+            {
+                request.provider_account = completed.provider_account.clone();
+            }
             Some(spawn_end(
                 first_receiver,
                 prompt,
-                spawn_request,
+                spawn_request.as_ref(),
                 &mut agent_metadata,
             ))
         }
@@ -593,14 +606,22 @@ fn spawn_request_spans(spawn_request: Option<&SpawnRequestSummary>) -> Vec<Span<
     };
 
     let model = spawn_request.model.trim();
-    if model.is_empty() && spawn_request.reasoning_effort == ReasoningEffortConfig::default() {
+    let account = spawn_request
+        .provider_account
+        .as_deref()
+        .map(|account| format!(" · account {account}"))
+        .unwrap_or_default();
+    if model.is_empty()
+        && spawn_request.reasoning_effort == ReasoningEffortConfig::default()
+        && account.is_empty()
+    {
         return Vec::new();
     }
 
     let details = if model.is_empty() {
-        format!("({})", spawn_request.reasoning_effort)
+        format!("({}{account})", spawn_request.reasoning_effort)
     } else {
-        format!("({model} {})", spawn_request.reasoning_effort)
+        format!("({model} {}{account})", spawn_request.reasoning_effort)
     };
 
     vec![Span::from(" ").dim(), Span::from(details).magenta()]
@@ -773,6 +794,7 @@ mod tests {
                 prompt: Some("Compute 11! and reply with just the integer result.".to_string()),
                 model: Some("gpt-5".to_string()),
                 reasoning_effort: Some(ReasoningEffortConfig::High),
+                provider_account: None,
                 agents_states: HashMap::from([(
                     robie_id.to_string(),
                     agent_state(CollabAgentStatus::PendingInit, /*message*/ None),
@@ -793,6 +815,7 @@ mod tests {
                 prompt: Some("Please continue and return the answer only.".to_string()),
                 model: None,
                 reasoning_effort: None,
+                provider_account: None,
                 agents_states: HashMap::from([(
                     robie_id.to_string(),
                     agent_state(CollabAgentStatus::Running, /*message*/ None),
@@ -813,6 +836,7 @@ mod tests {
                 prompt: None,
                 model: None,
                 reasoning_effort: None,
+                provider_account: None,
                 agents_states: HashMap::new(),
             },
             /*cached_spawn_request*/ None,
@@ -830,6 +854,7 @@ mod tests {
                 prompt: None,
                 model: None,
                 reasoning_effort: None,
+                provider_account: None,
                 agents_states: HashMap::from([
                     (
                         robie_id.to_string(),
@@ -856,6 +881,7 @@ mod tests {
                 prompt: None,
                 model: None,
                 reasoning_effort: None,
+                provider_account: None,
                 agents_states: HashMap::from([(
                     robie_id.to_string(),
                     agent_state(CollabAgentStatus::Completed, Some("39916800")),
@@ -924,6 +950,44 @@ mod tests {
         ));
     }
 
+    /// PF-84-S04: the spawn line names the account the spawned agent uses,
+    /// which only the completed spawn knows.
+    #[test]
+    fn spawn_line_shows_the_spawned_agent_account() {
+        let sender_thread_id = ThreadId::from_string("00000000-0000-0000-0000-000000000001")
+            .expect("valid sender thread id");
+        let robie_id = ThreadId::from_string("00000000-0000-0000-0000-000000000002")
+            .expect("valid robie thread id");
+        let cached = SpawnRequestSummary {
+            model: "glm-5.3-flash".to_string(),
+            reasoning_effort: ReasoningEffortConfig::High,
+            provider_account: None,
+        };
+        let cell = tool_call_history_cell(
+            &ThreadItem::CollabAgentToolCall {
+                id: "call-spawn".to_string(),
+                tool: CollabAgentTool::SpawnAgent,
+                status: CollabAgentToolCallStatus::Completed,
+                sender_thread_id: sender_thread_id.to_string(),
+                receiver_thread_ids: vec![robie_id.to_string()],
+                prompt: Some(String::new()),
+                model: Some("glm-5.3-flash".to_string()),
+                reasoning_effort: Some(ReasoningEffortConfig::High),
+                provider_account: Some("fake".to_string()),
+                agents_states: HashMap::new(),
+            },
+            Some(&cached),
+            |thread_id| metadata_for(thread_id, robie_id, ThreadId::new()),
+        )
+        .expect("spawn item renders");
+
+        let lines = cell.display_lines(/*width*/ 200);
+        assert_eq!(
+            lines[0].spans[6].content.as_ref(),
+            "(glm-5.3-flash high · account fake)"
+        );
+    }
+
     #[test]
     fn title_styles_nickname_and_role() {
         let sender_thread_id = ThreadId::from_string("00000000-0000-0000-0000-000000000001")
@@ -940,6 +1004,7 @@ mod tests {
                 prompt: Some(String::new()),
                 model: Some("gpt-5".to_string()),
                 reasoning_effort: Some(ReasoningEffortConfig::High),
+                provider_account: None,
                 agents_states: HashMap::from([(
                     robie_id.to_string(),
                     agent_state(CollabAgentStatus::PendingInit, /*message*/ None),
@@ -979,6 +1044,7 @@ mod tests {
                 prompt: None,
                 model: None,
                 reasoning_effort: None,
+                provider_account: None,
                 agents_states: HashMap::from([(
                     robie_id.to_string(),
                     agent_state(CollabAgentStatus::Interrupted, /*message*/ None),

@@ -1,0 +1,45 @@
+# #245: under Moderate (permission requests on), an additional read permission
+# for a file under a protected folder (~/.ssh) is refused and explained before
+# anyone is asked; on main it was approved and the file was read.
+id = "issue245-moderate-additional-read-refused"
+feature = "#245: an additional read permission never reopens ~/.ssh under Moderate"
+expected = "With Moderate and permission requests on, the agent asks to read a dummy file under ~/.ssh as an additional permission. It is refused before any approval prompt, with an explanation naming Moderate and /security; the file is not read."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+exec_permission_approvals = true
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+run = "mkdir -p \"$HOME/.ssh\" && printf 'dummy file, not a key\\n' > \"$HOME/.ssh/dummy_id_245\" && echo \"$HOME\""
+capture = "h"
+
+[[steps]]
+type = "Call your shell tool exactly once to run: cat {h}/.ssh/dummy_id_245 -- with sandbox_permissions set to with_additional_permissions and additional_permissions set to {\"file_system\":{\"read\":[\"{h}/.ssh/dummy_id_245\"]}}. Then report the result."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)Security level Moderate\\s+blocked\\s+access\\s+to(?:(?!Working).)*\n› "
+timeout = 240
+compress = 3
+[[steps]]
+pause = 4.0

@@ -1,0 +1,30 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-admission-20260912/codex-rs/secret-broker-service)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.33s
+────────────
+ Nextest run ID b2b4b9e7-cb05-496e-9ed5-8cf87159ad60 with nextest profile: local
+    Starting 1 test across 7 binaries (69 tests skipped)
+        FAIL [   2.110s] (1/1) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_peer_eof_death_receipt_drop_and_caller_drop
+  stdout ───
+
+    running 1 test
+    test launch::manifest::pair::admission::tests::pf_27_s01_admission_real_peer_eof_death_receipt_drop_and_caller_drop ... FAILED
+
+    failures:
+
+    failures:
+        launch::manifest::pair::admission::tests::pf_27_s01_admission_real_peer_eof_death_receipt_drop_and_caller_drop
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 48 filtered out; finished in 2.11s
+
+  stderr ───
+
+    thread 'launch::manifest::pair::admission::tests::pf_27_s01_admission_real_peer_eof_death_receipt_drop_and_caller_drop' (1054002) panicked at secret-broker-service/src/launch/manifest/pair_admission_tests.rs:453:36:
+    called `Result::unwrap()` on an `Err` value: Os { code: 11, kind: WouldBlock, message: "Resource temporarily unavailable" }
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+────────────
+     Summary [   2.112s] 1 test run: 0 passed, 1 failed, 69 skipped
+        FAIL [   2.110s] (1/1) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_peer_eof_death_receipt_drop_and_caller_drop
+error: test run failed
+error: recipe `test` failed on line 82 with exit code 100

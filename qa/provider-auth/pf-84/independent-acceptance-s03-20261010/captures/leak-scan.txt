@@ -1,0 +1,28 @@
+roots: $S, <this dir>
+scanned 49781 files under 2 root(s); 14 secret values (4 real, 10 synthetic)
+REAL_CLAUDE: 0 file(s)
+REAL_KIMI: 0 file(s)
+REAL_OPENAI: 1 file(s)
+    $S/homes/hO/auth.json x1
+REAL_ZAI: 0 file(s)
+canary:aggr: 1 file(s)
+    $S/proxy/canaries.json x1
+canary:default: 1 file(s)
+    $S/proxy/canaries.json x1
+canary:fake: 1 file(s)
+    $S/proxy/canaries.json x1
+canary:kimionly: 1 file(s)
+    $S/proxy/canaries.json x1
+canary:main: 1 file(s)
+    $S/proxy/canaries.json x1
+canary:work: 1 file(s)
+    $S/proxy/canaries.json x1
+synthetic:cfgdir-token: 1 file(s)
+    $S/claudecfg/.credentials.json x1
+synthetic:claude-fake-token.txt: 1 file(s)
+    $S/claude-fake-token.txt x1
+synthetic:default-canary.txt: 1 file(s)
+    $S/default-canary.txt x1
+synthetic:env-token: 2 file(s)
+    $S/scripts/s02/recheck-claude.sh x7
+    <this dir>/scripts/s02/recheck-claude.sh x7

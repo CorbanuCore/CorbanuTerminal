@@ -1,0 +1,215 @@
+
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     loading   /model to change                │
+│ directory: /Volumes/CorbanuDrive/…/fixture/workspace │
+╰──────────────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.3 Flash via zai default · <run>/fixture/workspace · Corbanu Terminal · TPS: -…
+
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.3-flash   /model to change          │
+│ directory: /Volumes/CorbanuDrive/…/fixture/workspace │
+╰──────────────────────────────────────────────────────╯
+
+
+› Run exactly this command: echo remembered >> ../outside-notes.txt
+
+
+• Ran echo remembered >> ../outside-notes.txt
+  └ /bin/bash: ../outside-notes.txt: Operation not permitted
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• I ran it exactly, but it failed:
+
+  /bin/bash: ../outside-notes.txt: Operation not permitted
+
+  The sandbox allows writes only inside the workspace (and writable temp dirs), not ../outside-notes.txt.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Run exactly this command again: echo remembered >> ../outside-notes.txt
+
+
+• Ran echo remembered >> ../outside-notes.txt
+  └ /bin/bash: ../outside-notes.txt: Operation not permitted
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Ran it again exactly; same sandbox error:
+
+  Operation not permitted
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Please attempt it once with sandbox_permissions set to require_escalated (justification: This command writes outside the workspace. Do
+  you want to allow it?): echo remembered >> ../outside-notes.txt
+
+
+⚠ Not run: this command asked to run outside the OS sandbox, and that isn't possible here. Protected launch (secretless_agent_launch) keeps
+  every agent command inside the sandbox, also at security level Permissive and even with an approval, so no approval was asked for. Inside
+  the sandbox it cannot write outside your writable folders or use network the sandbox blocks.
+
+• Attempted it with require_escalated; it was not run because protected launch keeps every command inside the sandbox, even with escalation.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Security level
+Active in this session: Permissive
+
+  Permissive  (active)
+  Moderate
+> Aggressive
+
+Sensitive access denied by default, built from existing sandbox, approval, network and exec-policy controls.
+
+↑/↓ move · enter choose · esc close · i inspect
+
+Switch to Aggressive?
+These settings replace yours in Corbanu Terminal sessions and their child agents:
+"now" shows this session; web search, environment, shell and roles are as loaded at launch.
+• Sandbox now: commands can write to the current folder, /private/tmp; with protected launch (secretless_agent_launch) no command runs
+    outside the sandbox, so none is offered; permission-request tools are off
+  Aggressive: write only in the current folder (where the Corbanu home and the nested-launch registry stay read-only): no extra writable
+    folders, no /tmp or $TMPDIR; approved commands stay inside it too; escalation and permission-request tools are off; the
+    project's .git, .codex and .agents stay read-only, even with Grant once (it only lets one command write git hooks and config kept
+    outside a .git folder and, when the current folder holds your home folder, start-up files, login agents and .claude settings); reading
+    credential files (.env, .env.* and .envrc files, also ones created later; not .env.example, .env.sample or .env.template; SSH, cloud and
+    CLI tokens) or Corbanu's sign-in, vault, config and history is denied to agent commands and is never granted, not even once (switch to
+    Permissive in /security to allow it); on Linux and Windows a command is stopped when such a file appears while it runs, and a process
+    already waiting for that file can read it in the moment before the stop; a credential file that is a link must be replaced with a
+    regular file or moved out of the folder
+• Approvals now: on-request (reviewer: you)
+  Aggressive: untrusted: you approve every command that is not known read-only (reviewer: you, never auto-review)
+• Network now: off for agent commands; web search cached
+  Aggressive: off for agent commands; web search off
+• Vault now: the vault store and sign-in file are unreadable (secretless_agent_launch, also when you approve a command) to agent commands;
+    only allowlisted environment variables reach agent commands (for example PATH, HOME, locale, terminal, proxy and tool locations;
+    secretless_agent_launch); set others explicitly in shell_environment_policy.set; login profiles and shell snapshots are not used
+  Aggressive: the vault store and sign-in file are unreadable to agent commands, and direct `corbanu vault …` commands are refused; secret-
+    like environment variables (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL) are removed, and with secretless_agent_launch
+    on so is every other variable outside an allowlist (for example PATH, HOME, locale, terminal, proxy and tool locations; set others
+    explicitly in shell_environment_policy.set); login profiles and shell snapshots are not used
+• Model keys now: Corbanu reads provider keys itself (broker_model_auth off)
+  Aggressive: provider API keys from the environment or the vault are held by the isolated credential broker, which sends model requests for
+    Corbanu (sign-in tokens are passed to it; command, AWS and header sign-ins are not brokered; realtime and websockets are off); if it
+    cannot start, model requests are refused, never sent directly (broker_model_auth; `broker_model_auth = false` in your own config keeps
+    it off)
+• Child agents now: spawned agents get this session's values
+  Aggressive: spawned agents get the same values; custom roles that would change them are refused at start; Claude panes are refused because
+    Claude Code runs outside the sandbox, unless contained_external_agents and secretless_agent_launch run them in it, asking you before
+    every command, file edit and web request (reading files stays automatic) (Claude Code sign-in still runs)
+• Nested agents: refuse. An agent command that starts another agent (`corbanu exec`, `review`, `resume`, `fork`, a new session, `app-server`
+    or `mcp-server`) is refused.
+Press n to switch between refuse and pass. Nested launches read this when they start.
+Preflight passed: no known raw-secret route stays open to agents or the model.
+Controls ready: 6 of 6 (OS sandbox, Secretless agent launch, Isolated credential broker, Secret output gate, Untrusted-content labels,
+Vault)
+Corbanu history and state denied to agent commands after restart: sessions, history.jsonl, 4 databases
+Conversations recorded before the restart cannot be resumed under Aggressive.
+Limits: Only fixed locations are checked; secrets in other files, under innocent names, are not found. Values are matched by name, by common
+key shapes and against Corbanu's own secret variables; other encodings are missed. The vault is not opened; whether its key unlocks it is
+checked when a credential is used. Browser profiles and keychains are listed, not read. MCP servers, hooks and notify commands run outside
+the sandbox; only their configured secrets are checked.
+Unchanged: model and provider, MCP servers, apps and hooks (they run outside the sandbox), wallet scopes, and commands you have already
+allowed permanently (they skip the prompt but stay sandboxed). `corbanu exec` that you start yourself and IDE sessions are not covered yet,
+↑/↓ scroll · n refuse/pass · enter confirm and save · esc back, nothing changes · i inspect
+
+Saving Aggressive…
+Writing the level and confirming it with Core. Nothing is active until this finishes.
+
+saving… · i inspect
+
+Saved: Aggressive (nested agents: refuse)
+Active now in this session: agent commands cannot run `corbanu vault …` and cannot open protected paths (the vault store, sign-in and
+credential files, and Corbanu's config, history and state), sensitive surfaces need a grant, external content reaches the model labelled
+untrusted, and memory summaries stop.
+Approval for every command: from each pane's next turn you approve every command that is not known read-only (reviewer: you), now in 1
+thread of this Corbanu Terminal and in those you start before you restart.
+Starts when you restart: the Aggressive sandbox (writes only in the current folder, approved commands stay inside it), network and web
+search off, secret-like environment variables removed and login profiles and shell snapshots unused, model keys held by the credential
+broker, and the child-agent rules. Until then this session keeps your own settings for these, and commands already running keep the
+permissions they started with until they end.
+Core's level is Aggressive now in this session, and from every start.
+Press r to restart now: Corbanu Terminal closes this session and starts again in this folder with the same options. Conversations from
+before cannot be resumed under Aggressive.
+
+r restart now · enter or esc close · i inspect
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

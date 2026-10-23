@@ -55,11 +55,7 @@ impl RemoteControlHandle {
         if self.ensure_remote_control_allowed().is_err() {
             return Ok(false);
         }
-        let _transition = self
-            .desired_state_rpc_lock
-            .acquire()
-            .await
-            .unwrap_or_else(|_| unreachable!());
+        let _transition = self.acquire_desired_state_rpc_lock().await;
         if !matches!(
             *self.desired_state_tx.borrow(),
             RemoteControlDesiredState::Unknown
@@ -99,11 +95,7 @@ impl RemoteControlHandle {
     ) -> io::Result<RemoteControlStatusChangedNotification> {
         self.ensure_remote_control_allowed()
             .map_err(|err| io::Error::new(io::ErrorKind::PermissionDenied, err))?;
-        let _transition = self
-            .desired_state_rpc_lock
-            .acquire()
-            .await
-            .unwrap_or_else(|_| unreachable!());
+        let _transition = self.acquire_desired_state_rpc_lock().await;
         let state_db = self
             .state_db
             .as_deref()

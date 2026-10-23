@@ -15,6 +15,8 @@ use crate::session::session::Session;
 use crate::session::step_context::StepContext;
 use codex_api::OPENAI_FILE_UPLOAD_LIMIT_BYTES;
 use codex_api::upload_openai_file;
+use codex_file_system::FileSystemReadStream;
+use codex_file_system::FileSystemSandboxContext;
 use codex_http_client::RouteAwareClientPool;
 use codex_login::CodexAuth;
 use serde_json::Value as JsonValue;
@@ -36,7 +38,30 @@ pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
     let Some(arguments) = arguments_value.as_object() else {
         return Ok(Some(arguments_value));
     };
-    let auth = sess.services.auth_manager.auth().await;
+    let auth = sess.services.auth_manager().auth().await;
+    // PF-23-S01: after untrusted content these host-side reads honour the
+    // same read denials as agent commands.
+    let read_policy =
+        crate::security::protected_surface::post_taint_read_policy(sess, &step_context.turn);
+    // PF-23-S02: the read itself goes through the same sandbox, so a link
+    // swapped in after the check above still cannot be read.
+    let read_sandbox = read_policy.as_ref().and_then(|_| {
+        step_context.environments.primary().map(|environment| {
+            crate::security::protected_surface::protect_file_tool_context(
+                sess,
+                &step_context.turn,
+                step_context
+                    .turn
+                    .file_system_sandbox_context(/*additional_permissions*/ None, environment),
+            )
+        })
+    });
+    if read_policy.is_some() && read_sandbox.is_none() {
+        return Err(
+            "failed to upload files: no protected file sandbox is available for this session"
+                .to_string(),
+        );
+    }
     let mut rewritten_arguments = arguments.clone();
 
     for (field_name, optional_fields) in openai_file_input_optional_fields {
@@ -45,6 +70,8 @@ pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
         };
         let Some(uploaded_value) = rewrite_argument_value_for_openai_files(
             step_context,
+            read_policy.as_ref(),
+            read_sandbox.as_ref(),
             &sess.services.openai_file_upload_client_pool,
             auth.as_ref(),
             field_name,
@@ -65,8 +92,11 @@ pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
     Ok(Some(JsonValue::Object(rewritten_arguments)))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn rewrite_argument_value_for_openai_files(
     step_context: &StepContext,
+    read_policy: Option<&codex_protocol::permissions::FileSystemSandboxPolicy>,
+    read_sandbox: Option<&FileSystemSandboxContext>,
     client_pool: &RouteAwareClientPool,
     auth: Option<&CodexAuth>,
     field_name: &str,
@@ -75,8 +105,11 @@ async fn rewrite_argument_value_for_openai_files(
 ) -> Result<Option<JsonValue>, String> {
     match value {
         JsonValue::String(file_path) => {
+            check_upload_readable(step_context, read_policy, file_path)?;
             let rewritten = build_uploaded_argument_value(
                 step_context,
+                read_policy,
+                read_sandbox,
                 client_pool,
                 auth,
                 field_name,
@@ -93,8 +126,11 @@ async fn rewrite_argument_value_for_openai_files(
                 let Some(file_path) = item.as_str() else {
                     return Ok(None);
                 };
+                check_upload_readable(step_context, read_policy, file_path)?;
                 let rewritten = build_uploaded_argument_value(
                     step_context,
+                    read_policy,
+                    read_sandbox,
                     client_pool,
                     auth,
                     field_name,
@@ -111,8 +147,49 @@ async fn rewrite_argument_value_for_openai_files(
     }
 }
 
+/// PF-23-S01: after untrusted content, a file the host reads for upload
+/// must be readable under the same read denials as agent commands.
+fn check_upload_readable(
+    step_context: &StepContext,
+    read_policy: Option<&codex_protocol::permissions::FileSystemSandboxPolicy>,
+    file_path: &str,
+) -> Result<(), String> {
+    let Some(policy) = read_policy else {
+        return Ok(());
+    };
+    let Some(turn_environment) = step_context.environments.primary() else {
+        return Err("no primary turn environment is available".to_string());
+    };
+    #[allow(deprecated)]
+    let cwd = step_context.turn.cwd.clone();
+    // A path this host cannot check (a remote environment) is refused.
+    let readable = !turn_environment.environment.is_remote()
+        && turn_environment
+            .cwd()
+            .join(file_path)
+            .ok()
+            .and_then(|uri| uri.to_abs_path().ok())
+            .is_some_and(|path| {
+                crate::security::protected_surface::readable_under(
+                    policy,
+                    path.as_path(),
+                    cwd.as_path(),
+                )
+            });
+    if readable {
+        Ok(())
+    } else {
+        Err(format!(
+            "failed to upload `{file_path}`: reading this file is blocked after untrusted content entered the session"
+        ))
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn build_uploaded_argument_value(
     step_context: &StepContext,
+    read_policy: Option<&codex_protocol::permissions::FileSystemSandboxPolicy>,
+    read_sandbox: Option<&FileSystemSandboxContext>,
     client_pool: &RouteAwareClientPool,
     auth: Option<&CodexAuth>,
     field_name: &str,
@@ -143,28 +220,42 @@ async fn build_uploaded_argument_value(
         .join(file_path)
         .map_err(|error| contextualize_error(error.to_string()))?;
     let fs = turn_environment.environment.get_filesystem();
-    let metadata = fs
-        .get_metadata(&path_uri, /*sandbox*/ None)
+    let (size, contents) = if let Some(policy) = read_policy
+        && !read_sandbox.is_some_and(FileSystemSandboxContext::should_run_in_sandbox)
+    {
+        // #519: the sandbox does not run this read (full write access), so
+        // the file is opened once, checked as opened, and read from there:
+        // a link swapped in after the check above cannot redirect it.
+        if turn_environment.environment.is_remote() {
+            return Err(contextualize_error(
+                "this host cannot check a remote file".to_string(),
+            ));
+        }
+        let path = path_uri
+            .to_abs_path()
+            .map_err(|error| contextualize_error(error.to_string()))?;
+        let policy = policy.clone();
+        #[allow(deprecated)]
+        let cwd = step_context.turn.cwd.clone();
+        let bytes = tokio::task::spawn_blocking(move || {
+            crate::security::protected_surface::read_checked(
+                &policy,
+                path.as_path(),
+                cwd.as_path(),
+                OPENAI_FILE_UPLOAD_LIMIT_BYTES,
+            )
+        })
         .await
+        .map_err(|error| contextualize_error(error.to_string()))?
         .map_err(|error| contextualize_error(error.to_string()))?;
-    if !metadata.is_file {
-        return Err(contextualize_error(format!(
-            "path `{}` is not a file",
-            path_uri.inferred_native_path_string()
-        )));
-    }
-    if metadata.size > OPENAI_FILE_UPLOAD_LIMIT_BYTES {
-        return Err(contextualize_error(format!(
-            "file `{}` is too large: {} bytes exceeds the limit of {} bytes",
-            path_uri.inferred_native_path_string(),
-            metadata.size,
-            OPENAI_FILE_UPLOAD_LIMIT_BYTES,
-        )));
-    }
-    let contents = fs
-        .read_file_stream(&path_uri, /*sandbox*/ None)
-        .await
-        .map_err(|error| contextualize_error(error.to_string()))?;
+        let size = bytes.len() as u64;
+        let chunk = futures::stream::once(std::future::ready(Ok(bytes.into())));
+        (size, FileSystemReadStream::new(chunk))
+    } else {
+        read_upload_contents(fs.as_ref(), &path_uri, read_sandbox)
+            .await
+            .map_err(contextualize_error)?
+    };
     let file_name = path_uri
         .basename()
         .or_else(|| {
@@ -182,7 +273,7 @@ async fn build_uploaded_argument_value(
         upload_auth.as_ref(),
         client_pool,
         file_name,
-        metadata.size,
+        size,
         contents,
     )
     .await
@@ -210,6 +301,58 @@ async fn build_uploaded_argument_value(
         );
     }
     Ok(JsonValue::Object(payload))
+}
+
+/// The upload's size and bytes, read through `read_sandbox` when it runs.
+async fn read_upload_contents(
+    fs: &dyn codex_exec_server::ExecutorFileSystem,
+    path_uri: &codex_utils_path_uri::PathUri,
+    read_sandbox: Option<&FileSystemSandboxContext>,
+) -> Result<(u64, FileSystemReadStream), String> {
+    let metadata = fs
+        .get_metadata(path_uri, read_sandbox)
+        .await
+        .map_err(|error| error.to_string())?;
+    if !metadata.is_file {
+        return Err(format!(
+            "path `{}` is not a file",
+            path_uri.inferred_native_path_string()
+        ));
+    }
+    if metadata.size > OPENAI_FILE_UPLOAD_LIMIT_BYTES {
+        return Err(format!(
+            "file `{}` is too large: {} bytes exceeds the limit of {} bytes",
+            path_uri.inferred_native_path_string(),
+            metadata.size,
+            OPENAI_FILE_UPLOAD_LIMIT_BYTES,
+        ));
+    }
+    Ok(match read_sandbox {
+        // Sandboxed reads do not stream: read the whole file (within the
+        // upload limit) through the sandbox.
+        Some(sandbox) => {
+            let bytes = fs
+                .read_file(path_uri, Some(sandbox))
+                .await
+                .map_err(|error| error.to_string())?;
+            let size = bytes.len() as u64;
+            if size > OPENAI_FILE_UPLOAD_LIMIT_BYTES {
+                return Err(format!(
+                    "file `{}` is too large: {size} bytes exceeds the limit of {} bytes",
+                    path_uri.inferred_native_path_string(),
+                    OPENAI_FILE_UPLOAD_LIMIT_BYTES,
+                ));
+            }
+            let chunk = futures::stream::once(std::future::ready(Ok(bytes.into())));
+            (size, FileSystemReadStream::new(chunk))
+        }
+        None => (
+            metadata.size,
+            fs.read_file_stream(path_uri, /*sandbox*/ None)
+                .await
+                .map_err(|error| error.to_string())?,
+        ),
+    })
 }
 
 #[cfg(test)]
@@ -349,6 +492,8 @@ mod tests {
 
         let rewritten = build_uploaded_argument_value(
             &step_context,
+            /*read_policy*/ None,
+            /*read_sandbox*/ None,
             &session.services.openai_file_upload_client_pool,
             Some(&auth),
             "file",
@@ -370,6 +515,205 @@ mod tests {
         );
     }
 
+    /// PF-23-S02: once the protected-path rules apply, the upload read goes
+    /// through the sandbox itself, so a link to a denied file swapped in
+    /// after the readability check still reads nothing.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn pf_23_s02_upload_reads_go_through_the_sandbox() {
+        use wiremock::Mock;
+        use wiremock::MockServer;
+        use wiremock::ResponseTemplate;
+        use wiremock::matchers::method;
+        use wiremock::matchers::path;
+
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/backend-api/files"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "file_id": "file_123",
+                "upload_url": format!("{}/upload/file_123", server.uri()),
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/upload/file_123"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/backend-api/files/file_123/uploaded"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "status": "success",
+                "download_url": format!("{}/download/file_123", server.uri()),
+                "file_name": "plain.txt",
+                "file_size_bytes": 5,
+            })))
+            .mount(&server)
+            .await;
+
+        let (session, mut turn_context) = make_session_and_context().await;
+        let client = (*session.services.model_client())
+            .clone()
+            .with_ingress_level(codex_security_policy::SecurityLevel::Moderate)
+            .with_source_envelopes(/*enabled*/ true);
+        session.services.replace_model_client(client);
+        session
+            .services
+            .model_client()
+            .note_unrecorded_input_for_taint();
+        let home = turn_context.config.codex_home.to_path_buf();
+        std::fs::create_dir_all(&home).expect("home");
+        std::fs::write(home.join("auth.json"), "SECRET").expect("auth");
+        let dir = tempdir().expect("temp dir");
+        let cwd = dir.path().canonicalize().expect("canonical");
+        std::os::unix::fs::symlink(home.join("auth.json"), cwd.join("swapped.txt")).expect("link");
+        std::fs::write(cwd.join("plain.txt"), "hello").expect("plain");
+        set_primary_environment_cwd(&mut turn_context, &cwd);
+        let mut config = (*turn_context.config).clone();
+        config.chatgpt_base_url = format!("{}/backend-api", server.uri());
+        turn_context.config = Arc::new(config);
+        let step_context = StepContext::for_test(Arc::new(turn_context));
+        let environment = step_context.environments.primary().expect("environment");
+        let sandbox = crate::security::protected_surface::protect_file_tool_context(
+            &session,
+            &step_context.turn,
+            step_context
+                .turn
+                .file_system_sandbox_context(/*additional_permissions*/ None, environment),
+        );
+        assert!(sandbox.should_run_in_sandbox());
+        let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+        let upload = |sandbox, file: &'static str| {
+            build_uploaded_argument_value(
+                &step_context,
+                /*read_policy*/ None,
+                sandbox,
+                &session.services.openai_file_upload_client_pool,
+                Some(&auth),
+                "file",
+                /*index*/ None,
+                &[],
+                file,
+            )
+        };
+        // Unit tests have no sandbox helper, so a sandboxed read fails here
+        // with that reason: proof that every read took the sandboxed path
+        // (the helper is the one in-process file tools use). Nothing is sent.
+        for file in ["swapped.txt", "plain.txt"] {
+            let error = upload(Some(&sandbox), file)
+                .await
+                .expect_err("read through the sandbox");
+            assert!(error.contains("sandboxed filesystem"), "{error}");
+            assert!(!error.contains("SECRET"), "{error}");
+        }
+        // The same upload without the rules reads directly and is sent once.
+        upload(None, "plain.txt")
+            .await
+            .expect("a plain file uploads");
+    }
+
+    /// #519: an upload read under the protected-path rules that the
+    /// sandbox does not run (here a full-access context; today the rules'
+    /// denials make the sandbox run) checked the path, then read it. A link
+    /// checked while it named a plain file and swapped to a denied one
+    /// before the read uploaded the denied file; the read now checks the
+    /// file it opened and sends nothing.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn issue_519_a_link_swapped_after_the_upload_check_uploads_nothing() {
+        use wiremock::Mock;
+        use wiremock::MockServer;
+        use wiremock::ResponseTemplate;
+        use wiremock::matchers::method;
+
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "file_id": "file_123",
+                "upload_url": format!("{}/upload/file_123", server.uri()),
+                "status": "success",
+                "download_url": format!("{}/download/file_123", server.uri()),
+                "file_name": "upload.txt",
+                "file_size_bytes": 5,
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let (session, mut turn_context) = make_session_and_context().await;
+        let client = (*session.services.model_client())
+            .clone()
+            .with_ingress_level(codex_security_policy::SecurityLevel::Moderate)
+            .with_source_envelopes(/*enabled*/ true);
+        session.services.replace_model_client(client);
+        session
+            .services
+            .model_client()
+            .note_unrecorded_input_for_taint();
+        let home = turn_context.config.codex_home.to_path_buf();
+        std::fs::create_dir_all(&home).expect("home");
+        std::fs::write(home.join("auth.json"), "DUMMY_SECRET_519").expect("auth");
+        let dir = tempdir().expect("temp dir");
+        let cwd = dir.path().canonicalize().expect("canonical");
+        std::fs::write(cwd.join("plain.txt"), "hello").expect("plain");
+        std::os::unix::fs::symlink(cwd.join("plain.txt"), cwd.join("upload.txt")).expect("link");
+        set_primary_environment_cwd(&mut turn_context, &cwd);
+        let mut config = (*turn_context.config).clone();
+        config.chatgpt_base_url = format!("{}/backend-api", server.uri());
+        config
+            .permissions
+            .set_permission_profile(codex_protocol::models::PermissionProfile::Disabled)
+            .expect("full access");
+        turn_context.config = Arc::new(config);
+        let step_context = StepContext::for_test(Arc::new(turn_context));
+        let policy = crate::security::protected_surface::post_taint_read_policy(
+            &session,
+            &step_context.turn,
+        )
+        .expect("protected");
+        let environment = step_context.environments.primary().expect("environment");
+        let sandbox = step_context
+            .turn
+            .file_system_sandbox_context(/*additional_permissions*/ None, environment);
+        assert!(!sandbox.should_run_in_sandbox());
+        let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+        let upload = || {
+            build_uploaded_argument_value(
+                &step_context,
+                Some(&policy),
+                Some(&sandbox),
+                &session.services.openai_file_upload_client_pool,
+                Some(&auth),
+                "file",
+                /*index*/ None,
+                &[],
+                "upload.txt",
+            )
+        };
+        check_upload_readable(&step_context, Some(&policy), "upload.txt").expect("plain passes");
+        upload().await.expect("the plain file uploads");
+        check_upload_readable(&step_context, Some(&policy), "upload.txt").expect("plain passes");
+        std::fs::remove_file(cwd.join("upload.txt")).expect("unlink");
+        std::os::unix::fs::symlink(home.join("auth.json"), cwd.join("upload.txt")).expect("swap");
+        let error = upload().await.expect_err("the swapped link is refused");
+        assert!(error.contains("blocked"), "{error}");
+        let requests = server.received_requests().await.expect("recorded");
+        let sent: Vec<String> = requests
+            .iter()
+            .map(|request| String::from_utf8_lossy(&request.body).into_owned())
+            .collect();
+        assert!(sent.iter().any(|body| body.contains("hello")), "{sent:?}");
+        assert!(
+            !sent.iter().any(|body| body.contains("DUMMY_SECRET_519")),
+            "{sent:?}"
+        );
+    }
+
     #[tokio::test]
     async fn build_uploaded_argument_value_rejects_oversized_file_before_reading() {
         let (session, mut turn_context) = make_session_and_context().await;
@@ -384,6 +728,8 @@ mod tests {
 
         let error = build_uploaded_argument_value(
             &step_context,
+            /*read_policy*/ None,
+            /*read_sandbox*/ None,
             &session.services.openai_file_upload_client_pool,
             Some(&auth),
             "file",
@@ -458,6 +804,8 @@ mod tests {
         let step_context = StepContext::for_test(Arc::new(turn_context));
         let rewritten = rewrite_argument_value_for_openai_files(
             &step_context,
+            /*read_policy*/ None,
+            /*read_sandbox*/ None,
             &session.services.openai_file_upload_client_pool,
             Some(&auth),
             "file",
@@ -571,6 +919,8 @@ mod tests {
         let step_context = StepContext::for_test(Arc::new(turn_context));
         let rewritten = rewrite_argument_value_for_openai_files(
             &step_context,
+            /*read_policy*/ None,
+            /*read_sandbox*/ None,
             &session.services.openai_file_upload_client_pool,
             Some(&auth),
             "files",
@@ -597,9 +947,11 @@ mod tests {
 
     #[tokio::test]
     async fn rewrite_mcp_tool_arguments_for_openai_files_surfaces_upload_failures() {
-        let (mut session, turn_context) = make_session_and_context().await;
-        session.services.auth_manager = crate::test_support::auth_manager_from_auth(
-            CodexAuth::create_dummy_chatgpt_auth_for_testing(),
+        let (session, turn_context) = make_session_and_context().await;
+        session.services.active_auth.replace_for_testing(
+            crate::test_support::auth_manager_from_auth(
+                CodexAuth::create_dummy_chatgpt_auth_for_testing(),
+            ),
         );
         let step_context = StepContext::for_test(Arc::new(turn_context));
         let error = rewrite_mcp_tool_arguments_for_openai_files(

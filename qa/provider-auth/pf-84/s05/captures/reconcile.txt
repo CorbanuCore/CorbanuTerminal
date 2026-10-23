@@ -1,0 +1,20 @@
+Provider-reported usage by (provider, account) from rollouts: threads, final cumulative total tokens
+  kimi-code · account alt: 1 thread(s), 7246 tokens
+  kimi-code · account default: 1 thread(s), 7232 tokens
+  zai · account default: 1 thread(s), 46115 tokens
+  zai · account fake: 2 thread(s), 0 tokens
+  zai · account work: 2 thread(s), 11544 tokens
+Ledger format (applied accounting migrations): [1, 2, 3, 4]
+Ledger by (provider, account): the current estimate of each attempt; attempts and total tokens
+  kimi-code · account alt: 2 attempt(s), 7246 tokens
+  kimi-code · account default: 2 attempt(s), 7232 tokens
+  zai · account default: 6 attempt(s), 46115 tokens
+  zai · account fake: 2 attempt(s), 0 tokens
+  zai · account work: 2 attempt(s), 11544 tokens
+Distinct recorded account objects: ['null', '{"name": "alt", "fingerprint": "406e349faf08"}', '{"name": "fake", "fingerprint": "4619b85db5c7"}', '{"name": "work", "fingerprint": "d944e28c460b"}']
+Throttle state (provider, model, key):
+   ('kimi-code', 'k3', 'account:alt', None)
+   ('kimi-code', 'k3', 'env:KIMI_API_KEY:d03268607523ec8a', None)
+   ('zai', 'glm-5.3-flash', 'account:fake', None)
+   ('zai', 'glm-5.3-flash', 'account:work', None)
+   ('zai', 'glm-5.3-flash', 'env:ZAI_API_KEY:4ac7ce2748dd49e1', None)

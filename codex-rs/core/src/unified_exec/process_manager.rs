@@ -16,9 +16,11 @@ use uuid::Uuid;
 use crate::codex_thread::BackgroundTerminalInfo;
 use crate::exec_env::CODEX_PERMISSION_PROFILE_ENV_VAR;
 use crate::exec_env::CODEX_THREAD_ID_ENV_VAR;
-use crate::exec_env::create_env;
+use crate::exec_env::blocked_provider_auth_env_vars;
+use crate::exec_env::create_shell_tool_env;
 use crate::exec_env::inject_permission_profile_env;
 use crate::exec_env::inject_tasknode_profile_env;
+use crate::exec_env::provider_env_keys;
 use crate::exec_policy::ExecApprovalRequest;
 use crate::sandboxing::ExecOptions;
 use crate::sandboxing::ExecRequest;
@@ -26,6 +28,7 @@ use crate::sandboxing::ExecServerEnvConfig;
 use crate::tools::context::ExecCommandToolOutput;
 use crate::tools::events::ToolEmitter;
 use crate::tools::events::ToolEventCtx;
+use crate::tools::events::ToolEventFailure;
 use crate::tools::events::ToolEventStage;
 use crate::tools::network_approval::DeferredNetworkApproval;
 use crate::tools::network_approval::finish_deferred_network_approval;
@@ -116,8 +119,13 @@ fn apply_unified_exec_env(mut env: HashMap<String, String>) -> HashMap<String, S
     env
 }
 
+/// `blocked_env_vars` are provider credential names the executor must drop
+/// from its own environment too (issue #310). `exclude` runs before `set`, so
+/// a `set` entry still supplies its own value. A name containing `*` or `?`
+/// would act as a pattern here and remove more, never less.
 fn exec_env_policy_from_shell_policy(
     policy: &ShellEnvironmentPolicy,
+    blocked_env_vars: Vec<String>,
 ) -> codex_exec_server::ExecEnvPolicy {
     let mut exclude = policy
         .exclude
@@ -125,6 +133,7 @@ fn exec_env_policy_from_shell_policy(
         .map(std::string::ToString::to_string)
         .collect::<Vec<_>>();
     exclude.push(CODEX_PERMISSION_PROFILE_ENV_VAR.to_string());
+    exclude.extend(blocked_env_vars);
     let mut r#set = policy.r#set.clone();
     r#set.retain(|key, _| !key.eq_ignore_ascii_case(CODEX_PERMISSION_PROFILE_ENV_VAR));
     codex_exec_server::ExecEnvPolicy {
@@ -226,6 +235,16 @@ struct PreparedProcessHandles {
     tty: bool,
 }
 
+/// Why a unified-exec command did not start, and whether a review that
+/// approved it already shows it as running (#466).
+pub(super) struct StartFailure {
+    pub(super) error: UnifiedExecError,
+    pub(super) shown_by_review: bool,
+    /// #873: a policy refused it (before it started, or the launch contract
+    /// at start), so it ends as refused whether or not a review showed it.
+    pub(super) refused_by_policy: bool,
+}
+
 struct InitialExecCommandGuard {
     active: Arc<AtomicBool>,
 }
@@ -273,7 +292,7 @@ async fn finish_deferred_network_approval_for_session(
 
 fn network_approval_error_message(err: ToolError) -> String {
     match err {
-        ToolError::Rejected(message) => message,
+        ToolError::Rejected(message) | ToolError::Declined(message) => message,
         ToolError::Codex(err) => err.to_string(),
     }
 }
@@ -300,6 +319,9 @@ async fn wait_for_late_network_denial(network_cancelled: Option<CancellationToke
     }
 
     tokio::select! {
+        // A denial that is already signalled wins even if the grace period
+        // also elapsed while this task was waiting to be polled.
+        biased;
         _ = network_cancelled.cancelled() => true,
         _ = tokio::time::sleep(LATE_NETWORK_DENIAL_GRACE_PERIOD) => false,
     }
@@ -326,6 +348,114 @@ fn fail_process_with_message(process: &UnifiedExecProcess, message: String) -> U
 
     process.fail_and_terminate(message.clone());
     UnifiedExecError::process_failed(process.failure_message().unwrap_or(message))
+}
+
+/// Issue #443: the command ran, and the sandbox stopped it so quickly that it
+/// ended while starting, before the begin event. Show it like any other
+/// command that ran (begin, then end with its output and exit code).
+async fn emit_denied_at_start(
+    context: &UnifiedExecContext,
+    request: &ExecCommandRequest,
+    cwd: PathUri,
+    output: &codex_protocol::exec_output::ExecToolCallOutput,
+) {
+    let plugin_attribution = emit_begin_at_start(context, request, cwd.clone()).await;
+    emit_exec_end_for_unified_exec(
+        Arc::clone(&context.session),
+        Arc::clone(&context.turn),
+        context.call_id.clone(),
+        request.command.clone(),
+        cwd,
+        Some(request.process_id.to_string()),
+        plugin_attribution,
+        Arc::new(tokio::sync::Mutex::new(HeadTailBuffer::default())),
+        output.aggregated_output.text.clone(),
+        output.exit_code,
+        output.duration,
+    )
+    .await;
+}
+
+/// #873: a command a policy refused before it started (or the launch
+/// contract refused at start) is shown and ends as refused with the reason.
+async fn emit_refused_at_start(
+    context: &UnifiedExecContext,
+    request: &ExecCommandRequest,
+    cwd: PathUri,
+    message: String,
+) {
+    let plugin_attribution = emit_begin_at_start(context, request, cwd.clone()).await;
+    let event_ctx = ToolEventCtx::new(
+        context.session.as_ref(),
+        context.turn.as_ref(),
+        &context.call_id,
+        /*turn_diff_tracker*/ None,
+    );
+    ToolEmitter::unified_exec(
+        &request.command,
+        cwd,
+        ExecCommandSource::UnifiedExecStartup,
+        Some(request.process_id.to_string()),
+        plugin_attribution,
+    )
+    .emit(
+        event_ctx,
+        ToolEventStage::Failure(ToolEventFailure::Refused(message)),
+    )
+    .await;
+}
+
+/// #466: a command a review approved that then could not start (a spawn
+/// error) ends as failed with the reason.
+async fn emit_failed_at_start(
+    context: &UnifiedExecContext,
+    request: &ExecCommandRequest,
+    cwd: PathUri,
+    message: String,
+) {
+    let plugin_attribution = emit_begin_at_start(context, request, cwd.clone()).await;
+    emit_failed_exec_end_for_unified_exec(
+        Arc::clone(&context.session),
+        Arc::clone(&context.turn),
+        context.call_id.clone(),
+        request.command.clone(),
+        cwd,
+        Some(request.process_id.to_string()),
+        plugin_attribution,
+        Arc::new(tokio::sync::Mutex::new(HeadTailBuffer::default())),
+        String::new(),
+        message,
+        Duration::ZERO,
+    )
+    .await;
+}
+
+async fn emit_begin_at_start(
+    context: &UnifiedExecContext,
+    request: &ExecCommandRequest,
+    cwd: PathUri,
+) -> Option<PluginCommandAttribution> {
+    let plugin_attribution = cwd.to_abs_path().ok().and_then(|abs_cwd| {
+        context
+            .turn
+            .plugin_attribution_for_command(&request.command, &abs_cwd)
+    });
+    let event_ctx = ToolEventCtx::new(
+        context.session.as_ref(),
+        context.turn.as_ref(),
+        &context.call_id,
+        /*turn_diff_tracker*/ None,
+    );
+    ToolEmitter::unified_exec(
+        &request.command,
+        cwd,
+        ExecCommandSource::UnifiedExecStartup,
+        Some(request.process_id.to_string()),
+        plugin_attribution.clone(),
+    )
+    .emit(event_ctx, ToolEventStage::Begin)
+    .await;
+    plugin_attribution
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -435,9 +565,24 @@ impl UnifiedExecProcessManager {
             Ok((process, deferred_network_approval)) => {
                 (Arc::new(process), deferred_network_approval)
             }
-            Err(err) => {
+            Err(StartFailure {
+                error,
+                shown_by_review,
+                refused_by_policy,
+            }) => {
                 self.release_process_id(request.process_id).await;
-                return Err(err);
+                if let UnifiedExecError::SandboxDenied { output, .. } = &error {
+                    emit_denied_at_start(context, &request, cwd, output).await;
+                } else if refused_by_policy {
+                    // #873: shown once and ended as refused with the reason,
+                    // like a refused shell command.
+                    emit_refused_at_start(context, &request, cwd, error.to_string()).await;
+                } else if shown_by_review {
+                    // #466: the review showed this command as running;
+                    // end it, or it stays "Running" for good.
+                    emit_failed_at_start(context, &request, cwd, error.to_string()).await;
+                }
+                return Err(error);
             }
         };
         let network_denial_monitor = deferred_network_approval.as_ref().map(|deferred| {
@@ -448,7 +593,7 @@ impl UnifiedExecProcessManager {
             )
         });
 
-        let transcript = Arc::new(tokio::sync::Mutex::new(HeadTailBuffer::default()));
+        let transcript = process.transcript();
         let event_ctx = ToolEventCtx::new(
             context.session.as_ref(),
             context.turn.as_ref(),
@@ -469,7 +614,7 @@ impl UnifiedExecProcessManager {
         );
         emitter.emit(event_ctx, ToolEventStage::Begin).await;
 
-        start_streaming_output(&process, context, Arc::clone(&transcript));
+        start_streaming_output(&process, context);
         let start = Instant::now();
         // Persist live sessions before the initial yield wait so interrupting the
         // turn cannot drop the last Arc and terminate the background process.
@@ -727,6 +872,13 @@ impl UnifiedExecProcessManager {
                     return Err(UnifiedExecError::StdinClosed);
                 }
             } else {
+                if let Some(contract) = crate::security::launch_contract::active() {
+                    contract
+                        .check_stdin(request.input.as_bytes())
+                        .map_err(|denied| UnifiedExecError::ProtectedLaunch {
+                            message: denied.to_string(),
+                        })?;
+                }
                 match process.write(request.input.as_bytes()).await {
                     Ok(()) => {
                         // Give the remote process a brief window to react so that we are
@@ -1166,10 +1318,13 @@ impl UnifiedExecProcessManager {
         request: &ExecCommandRequest,
         cwd: PathUri,
         context: &UnifiedExecContext,
-    ) -> Result<(UnifiedExecProcess, Option<DeferredNetworkApproval>), UnifiedExecError> {
-        let local_policy_env = create_env(
-            &context.turn.config.permissions.shell_environment_policy,
+    ) -> Result<(UnifiedExecProcess, Option<DeferredNetworkApproval>), StartFailure> {
+        let shell_policy = &context.turn.config.permissions.shell_environment_policy;
+        let provider_env_keys = provider_env_keys(&context.turn.config);
+        let local_policy_env = create_shell_tool_env(
+            shell_policy,
             /*thread_id*/ None,
+            provider_env_keys.iter().copied(),
         );
         let mut env = local_policy_env.clone();
         env.insert(
@@ -1182,28 +1337,37 @@ impl UnifiedExecProcessManager {
         let env = apply_unified_exec_env(env);
         let exec_server_env_config = ExecServerEnvConfig {
             policy: exec_env_policy_from_shell_policy(
-                &context.turn.config.permissions.shell_environment_policy,
+                shell_policy,
+                blocked_provider_auth_env_vars(shell_policy, provider_env_keys),
             ),
             local_policy_env,
         };
-        let mut orchestrator = ToolOrchestrator::new();
+        let mut orchestrator = ToolOrchestrator::new().with_handler_basis(request.handler_basis);
         let mut runtime = UnifiedExecRuntime::new(self, request.shell_mode.clone());
+        let live_aggressive = context
+            .session
+            .services
+            .model_client()
+            .live_level_is_aggressive();
         let exec_approval_requirement = context
             .session
             .services
             .exec_policy
-            .create_exec_approval_requirement_for_command(ExecApprovalRequest {
-                command: &request.command,
-                approval_policy: context.turn.approval_policy.value(),
-                permission_profile: context.turn.permission_profile(),
-                windows_sandbox_level: context.turn.windows_sandbox_level,
-                sandbox_permissions: if request.additional_permissions_preapproved {
-                    crate::sandboxing::SandboxPermissions::UseDefault
-                } else {
-                    request.sandbox_permissions
+            .create_exec_approval_requirement(
+                ExecApprovalRequest {
+                    command: &request.command,
+                    approval_policy: context.turn.approval_policy.value(),
+                    permission_profile: context.turn.permission_profile(),
+                    windows_sandbox_level: context.turn.windows_sandbox_level,
+                    sandbox_permissions: if request.additional_permissions_preapproved {
+                        crate::sandboxing::SandboxPermissions::UseDefault
+                    } else {
+                        request.sandbox_permissions
+                    },
+                    prefix_rule: request.prefix_rule.clone(),
                 },
-                prefix_rule: request.prefix_rule.clone(),
-            })
+                live_aggressive,
+            )
             .await;
         let req = UnifiedExecToolRequest {
             command: request.command.clone(),
@@ -1241,7 +1405,7 @@ impl UnifiedExecProcessManager {
             call_id: context.call_id.clone(),
             tool_name: ToolName::plain("exec_command"),
         };
-        orchestrator
+        let result = orchestrator
             .run(
                 &mut runtime,
                 &req,
@@ -1249,23 +1413,48 @@ impl UnifiedExecProcessManager {
                 &context.turn,
                 context.turn.approval_policy.value(),
             )
-            .await
+            .await;
+        let shown_by_review = runtime.shown_by_review();
+        let start_rejected = runtime.start_rejected();
+        result
             .map(|result| (result.output, result.deferred_network_approval))
-            .map_err(|err| match err {
-                ToolError::Codex(err) => match err.details() {
-                    CodexErrorDetails::Sandbox(SandboxErr::Denied { output, .. }) => {
-                        let output = output.as_ref().clone();
-                        let message = if output.aggregated_output.text.is_empty() {
-                            let exit_code = output.exit_code;
-                            format!("Process exited with code {exit_code}")
-                        } else {
-                            output.aggregated_output.text.clone()
-                        };
-                        UnifiedExecError::sandbox_denied(message, output)
+            .map_err(|err| {
+                // #873: a policy refusal is `Rejected` from the orchestrator,
+                // not from the start attempt itself (a setup or spawn
+                // failure); `Declined` is an approval decision.
+                let rejected_by_policy = matches!(err, ToolError::Rejected(_)) && !start_rejected;
+                let error = match err {
+                    ToolError::Codex(err) => match err.details() {
+                        CodexErrorDetails::UnsupportedOperation(message)
+                            if crate::security::launch_contract::is_launch_denial(message) =>
+                        {
+                            UnifiedExecError::ProtectedLaunch {
+                                message: message.clone(),
+                            }
+                        }
+                        CodexErrorDetails::Sandbox(SandboxErr::Denied { output, .. }) => {
+                            let output = output.as_ref().clone();
+                            let message = if output.aggregated_output.text.is_empty() {
+                                let exit_code = output.exit_code;
+                                format!("Process exited with code {exit_code}")
+                            } else {
+                                output.aggregated_output.text.clone()
+                            };
+                            UnifiedExecError::sandbox_denied(message, output)
+                        }
+                        _ => UnifiedExecError::create_process(err.to_string()),
+                    },
+                    ToolError::Rejected(message) | ToolError::Declined(message) => {
+                        UnifiedExecError::Rejected { message }
                     }
-                    _ => UnifiedExecError::create_process(format!("{err:?}")),
-                },
-                other => UnifiedExecError::create_process(format!("{other:?}")),
+                };
+                let refused_by_policy =
+                    rejected_by_policy || matches!(error, UnifiedExecError::ProtectedLaunch { .. });
+                StartFailure {
+                    error,
+                    shown_by_review,
+                    refused_by_policy,
+                }
             })
     }
 

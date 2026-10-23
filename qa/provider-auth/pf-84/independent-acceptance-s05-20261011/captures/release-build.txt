@@ -1,0 +1,10 @@
+# release build: /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s05-indep-rel-20261011/release/corbanu (origin/main d93f5e639d, cargo build --release, default features)
+exec  -> exit=0 reply=pong 
+exec --account work -> exit=0 reply=pong 
+exec --account fake -> exit=1 reply= ERROR: unexpected status 401 Unauthorized: Authentication Failed, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 638713a5-6216-45f2-9c67-79240f63d851
+exec --account ghost -> exit=1 reply= Error: thread/start: thread/start failed: account `ghost` of provider `zai` is not configured; add it with `corbanu account add zai ghost` or pick another with `--account` (see `corbanu account list`)
+accounting attempts in release home: Error: in prepare, no such table: draft_accounting_attempts
+throttle rows:
+zai|glm-5.3-flash|account:work|1
+zai|glm-5.3-flash|env:ZAI_API_KEY:<hash>|1
+zai|glm-5.3-flash|account:fake|1

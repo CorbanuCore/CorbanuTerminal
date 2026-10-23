@@ -143,6 +143,7 @@ impl App {
                     )
                 })?;
             self.claude_pane_transcript_cells.remove(pane_id);
+            self.drop_held_claude_task_of_removed_pane(pane_id);
         }
 
         let native_thread_set = native_thread_ids.iter().copied().collect::<HashSet<_>>();

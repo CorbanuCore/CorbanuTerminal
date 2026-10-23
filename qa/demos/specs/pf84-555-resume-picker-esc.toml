@@ -1,0 +1,53 @@
+# PF-84 #555: Esc in the corbanu resume picker (no default key) quits instead of opening onboarding.
+# Record with
+#   DEMO_CANDIDATE=<corbanu> python3 scripts/demo_video.py record \
+#     qa/demos/specs/pf84-555-resume-picker-esc.toml \
+#     --bin qa/demos/wrappers/pf84-555-resume-picker-esc.sh --sprint ISSUE-555-RESUME --publish
+id = "pf84-555-resume-picker-esc"
+feature = "PF-84 #555: Esc in the corbanu resume picker quits, with no sign-in screen"
+expected = "In a home with no default Z.AI key, the corbanu resume picker shows esc quit; Esc exits with status 0 instead of opening the API-key screen."
+model = "glm-5.3-flash"
+provider = "zai"
+rows = 44
+config = """
+suppress_unstable_features_warning = true
+[features]
+named_accounts = true
+"""
+
+[credentials]
+PF84_ACCOUNT_SEED = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Reply with the single word ping"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*ping\\W*$"
+timeout = 120
+compress = 3
+[[steps]]
+run = "sleep 8"
+[[steps]]
+type = "/exit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Now: corbanu resume"
+[[steps]]
+pause = 2.0
+[[steps]]
+wait = "esc quit"
+timeout = 60
+[[steps]]
+pause = 2.5
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "corbanu resume exited with status 0"
+[[steps]]
+pause = 3.0

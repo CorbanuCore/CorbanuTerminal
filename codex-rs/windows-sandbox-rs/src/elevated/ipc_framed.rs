@@ -80,6 +80,10 @@ pub struct SpawnRequest {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SpawnReady {
     pub process_id: u32,
+    /// #345, ConPTY off the interactive window station: whether its console
+    /// host had started when the runner reported. `None` otherwise.
+    #[serde(default)]
+    pub console_host_started: Option<bool>,
 }
 
 /// Output data sent from runner to parent.

@@ -1,0 +1,113 @@
+# PF-84 follow-up: a mid-session switch between a named OpenAI account and the default account
+# moves connectors, usage (accounting) and the model list with it, not only model requests.
+# The session starts on GLM 5.3 Flash (Z.AI, default account). Off screen, OpenAI account `work`
+# is signed in with the real key from the `openai-api-key` vault label (never shown) and the
+# default OpenAI login gets a fake key so OpenAI is offered in /model. /providers makes `work`
+# this session's OpenAI account; /model switches to an OpenAI model (answered via `work`) and
+# back to GLM (default account). Record with
+#   export CORBANU_TEST_NO_NATIVE_KEYRING=1
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-switch-follow.toml \
+#     --bin <candidate> --sprint PF-84-S06 --publish
+id = "pf84-switch-follow"
+feature = "PF-84: connectors, usage and the model list follow a mid-session account switch"
+expected = "Switching to OpenAI account 'work' and back to the default account (GLM 5.3 Flash) says connectors, usage and the model list now use that account and refreshes the model list; each turn is answered by the account switched to."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "read-only"
+cli_auth_credentials_store = "file"
+[features]
+named_accounts = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+OPENAI_WORK_API_KEY = "openai-api-key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+run = """printf %s "$OPENAI_WORK_API_KEY" | {bin} login --account work --with-api-key 2>&1 | tail -1
+printf sk-fake-default-0001 | {bin} login --with-api-key > /dev/null 2>&1"""
+[[steps]]
+type = "/providers"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "OpenAI · work +Named account · OpenAI API key"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Start a new session on this account"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "requests to openai use account `work`"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/model"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Use Left/Right to switch providers"
+[[steps]]
+key = "Left"
+[[steps]]
+wait = "\\[OpenAI\\]"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "6"
+[[steps]]
+wait = "Select Reasoning Level for GPT-5.6-Luna"
+[[steps]]
+type = "1"
+[[steps]]
+wait = "now use openai account `work`; model list refreshed"
+[[steps]]
+pause = 2.5
+[[steps]]
+type = "Reply with exactly: answered via work"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "• answered via work"
+timeout = 90
+compress = 2
+[[steps]]
+type = "/model"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Use Left/Right to switch providers"
+[[steps]]
+key = "Right"
+[[steps]]
+wait = "\\[Z\\.AI\\]"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Reasoning Level for Z.AI GLM 5.3 Flash"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "now use the default account; model list refreshed"
+[[steps]]
+pause = 2.0
+[[steps]]
+type = "Reply with exactly: answered via default"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "• answered via default"
+timeout = 90
+compress = 2
+[[steps]]
+pause = 3.5

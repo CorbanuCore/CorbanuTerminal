@@ -1,0 +1,3 @@
+45 s after switch-off:
+notes.txt
+Claude turn files: 0

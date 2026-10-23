@@ -1,0 +1,69 @@
+### r7-search-inj
+2026-10-09T19:16:05.648657Z  WARN codex_core::accounting: accounting write did not complete; closing this sampling
+2026-10-09T19:16:05.648710Z  WARN codex_core::accounting: accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+2026-10-09T19:16:05.648735Z  WARN codex_core::accounting: accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected refusal: (code: 1811) qa injected refusal
+2026-10-09T19:16:06.373637Z  WARN codex_core::accounting: accounting write did not complete; closing this sampling
+2026-10-09T19:16:06.373676Z  WARN codex_core::accounting: accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+2026-10-09T19:16:06.373690Z  WARN codex_core::accounting: accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected refusal: (code: 1811) qa injected refusal
+response.compaction.compacting events: 0
+### r7-sws-inj
+2026-10-09T19:16:12.048626Z  WARN codex_core::accounting: accounting write did not complete; closing this sampling
+2026-10-09T19:16:12.048666Z  WARN codex_core::accounting: accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+2026-10-09T19:16:12.048685Z  WARN codex_core::accounting: accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected refusal: (code: 1811) qa injected refusal
+2026-10-09T19:16:12.789364Z  WARN codex_core::accounting: accounting write did not complete; closing this sampling
+2026-10-09T19:16:12.789401Z  WARN codex_core::accounting: accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+2026-10-09T19:16:12.789415Z  WARN codex_core::accounting: accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected refusal: (code: 1811) qa injected refusal
+2026-10-09T19:16:14.843998Z  WARN endpoint_session.execute_with{http.method=POST api.path="alpha/search"}: codex_core::accounting: accounting write did not complete; closing this sampling
+2026-10-09T19:16:14.844044Z  WARN endpoint_session.execute_with{http.method=POST api.path="alpha/search"}: codex_core::accounting: accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+2026-10-09T19:16:14.844063Z  WARN endpoint_session.execute_with{http.method=POST api.path="alpha/search"}: codex_core::accounting: accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected refusal: (code: 1811) qa injected refusal
+2026-10-09T19:16:15.979532Z  WARN codex_core::accounting: accounting write did not complete; closing this sampling
+2026-10-09T19:16:15.979570Z  WARN codex_core::accounting: accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+2026-10-09T19:16:15.979583Z  WARN codex_core::accounting: accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected refusal: (code: 1811) qa injected refusal
+response.compaction.compacting events: 0
+### r7-sws-post
+2026-10-09T19:16:34.333751Z  WARN responses_websocket.stream_request{transport="responses_websocket" api.path="responses"}: codex_core::accounting: accounting write did not complete; closing this sampling
+2026-10-09T19:16:34.333782Z  WARN responses_websocket.stream_request{transport="responses_websocket" api.path="responses"}: codex_core::accounting: accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+2026-10-09T19:16:34.333803Z  WARN responses_websocket.stream_request{transport="responses_websocket" api.path="responses"}: codex_core::accounting: accounting: request sent unrecorded step="observe usage" cause=observe usage: error returned from database: (code: 1811) qa injected observation refusal: (code: 1811) qa in
+2026-10-09T19:16:35.491912Z  WARN responses_websocket.stream_request{transport="responses_websocket" api.path="responses"}: codex_core::accounting: accounting write did not complete; closing this sampling
+2026-10-09T19:16:35.491961Z  WARN responses_websocket.stream_request{transport="responses_websocket" api.path="responses"}: codex_core::accounting: accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+2026-10-09T19:16:35.491983Z  WARN responses_websocket.stream_request{transport="responses_websocket" api.path="responses"}: codex_core::accounting: accounting: request sent unrecorded step="observe usage" cause=observe usage: error returned from database: (code: 1811) qa injected observation refusal: (code: 1811) qa in
+2026-10-09T19:16:37.067446Z  WARN responses_websocket.stream_request{transport="responses_websocket" api.path="responses"}: codex_core::accounting: accounting write did not complete; closing this sampling
+2026-10-09T19:16:37.067491Z  WARN responses_websocket.stream_request{transport="responses_websocket" api.path="responses"}: codex_core::accounting: accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+2026-10-09T19:16:37.067508Z  WARN responses_websocket.stream_request{transport="responses_websocket" api.path="responses"}: codex_core::accounting: accounting: request sent unrecorded step="observe usage" cause=observe usage: error returned from database: (code: 1811) qa injected observation refusal: (code: 1811) qa in
+response.compaction.compacting events: 0
+### r8-t2-readonly
+2026-10-09T19:27:39.757986Z ERROR codex_core::accounting: developer accounting failed step="open sampling" cause=open accounting store: error returned from database: (code: 8) attempt to write a readonly database: (code: 8) attempt to write a readonly database
+2026-10-09T19:27:39.758031Z  WARN codex_core::accounting: accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting_responses.rs:87:20
+2026-10-09T19:27:39.758045Z DEBUG codex_core::accounting: sampling did not open error=Fatal error: developer accounting failed
+2026-10-09T19:27:39.758057Z  WARN codex_core::accounting: accounting: request sent unrecorded step="resolve sampling" cause=Fatal error: developer accounting failed
+2026-10-09T19:27:41.235898Z ERROR codex_core::accounting: developer accounting failed step="open sampling" cause=open accounting store: error returned from database: (code: 8) attempt to write a readonly database: (code: 8) attempt to write a readonly database
+2026-10-09T19:27:41.235935Z  WARN codex_core::accounting: accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting_responses.rs:87:20
+2026-10-09T19:27:41.235950Z DEBUG codex_core::accounting: sampling did not open error=Fatal error: developer accounting failed
+2026-10-09T19:27:41.235965Z  WARN codex_core::accounting: accounting: request sent unrecorded step="resolve sampling" cause=Fatal error: developer accounting failed
+2026-10-09T19:27:42.613147Z ERROR codex_core::accounting: developer accounting failed step="open sampling" cause=open accounting store: error returned from database: (code: 8) attempt to write a readonly database: (code: 8) attempt to write a readonly database
+2026-10-09T19:27:42.613207Z  WARN codex_core::accounting: accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting_responses.rs:87:20
+2026-10-09T19:27:42.613225Z DEBUG codex_core::accounting: sampling did not open error=Fatal error: developer accounting failed
+2026-10-09T19:27:42.613237Z  WARN codex_core::accounting: accounting: request sent unrecorded step="resolve sampling" cause=Fatal error: developer accounting failed
+2026-10-09T19:27:43.933972Z ERROR codex_core::accounting: developer accounting failed step="open sampling" cause=open accounting store: error returned from database: (code: 8) attempt to write a readonly database: (code: 8) attempt to write a readonly database
+2026-10-09T19:27:43.934049Z  WARN codex_core::accounting: accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting_responses.rs:87:20
+2026-10-09T19:27:43.934068Z DEBUG codex_core::accounting: sampling did not open error=Fatal error: developer accounting failed
+2026-10-09T19:27:43.934081Z  WARN codex_core::accounting: accounting: request sent unrecorded step="resolve sampling" cause=Fatal error: developer accounting failed
+response.compaction.compacting events: 2
+### r8-t3-busy
+2026-10-09T19:28:11.723737Z  WARN codex_core::accounting: accounting: state DB busy; retrying step="open accounting store" retries=1 waited_ms=5198 cause=error returned from database: (code: 5) database is locked: (code: 5) database is locked
+2026-10-09T19:28:16.298030Z  WARN codex_core::accounting: accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting_responses.rs:87:20
+2026-10-09T19:28:42.510071Z  WARN codex_core::accounting: accounting: state DB busy; retrying step="open accounting store" retries=1 waited_ms=5184 cause=error returned from database: (code: 5) database is locked: (code: 5) database is locked
+2026-10-09T19:28:47.774948Z  WARN codex_core::accounting: accounting: state DB busy; retrying step="open accounting store" retries=2 waited_ms=10449 cause=error returned from database: (code: 5) database is locked: (code: 5) database is locked
+2026-10-09T19:28:53.121219Z ERROR codex_core::accounting: developer accounting failed step="open sampling" cause=after 2 contended retries over 15795 ms: open accounting store: error returned from database: (code: 5) database is locked: (code: 5) database is locked
+2026-10-09T19:28:53.121389Z  WARN codex_core::accounting: accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting_responses.rs:87:20
+2026-10-09T19:28:53.121431Z DEBUG codex_core::accounting: sampling did not open error=Fatal error: developer accounting failed
+2026-10-09T19:28:53.121461Z  WARN codex_core::accounting: accounting: request sent unrecorded step="resolve sampling" cause=Fatal error: developer accounting failed
+2026-10-09T19:29:16.972225Z  WARN codex_core::accounting: accounting: state DB busy; retrying step="open accounting store" retries=1 waited_ms=5194 cause=error returned from database: (code: 5) database is locked: (code: 5) database is locked
+2026-10-09T19:29:22.263445Z  WARN codex_core::accounting: accounting: state DB busy; retrying step="open accounting store" retries=2 waited_ms=10485 cause=error returned from database: (code: 5) database is locked: (code: 5) database is locked
+2026-10-09T19:29:27.572273Z ERROR codex_core::accounting: developer accounting failed step="open sampling" cause=after 2 contended retries over 15794 ms: open accounting store: error returned from database: (code: 5) database is locked: (code: 5) database is locked
+2026-10-09T19:29:27.572421Z  WARN codex_core::accounting: accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting_responses.rs:87:20
+2026-10-09T19:29:27.572469Z DEBUG codex_core::accounting: sampling did not open error=Fatal error: developer accounting failed
+2026-10-09T19:29:27.572500Z  WARN codex_core::accounting: accounting: request sent unrecorded step="resolve sampling" cause=Fatal error: developer accounting failed
+2026-10-09T19:30:05.800454Z  WARN codex_core::accounting: accounting: state DB busy; retrying step="open accounting store" retries=1 waited_ms=5199 cause=error returned from database: (code: 5) database is locked: (code: 5) database is locked
+2026-10-09T19:30:08.624670Z  INFO codex_core::accounting: accounting write succeeded after state DB contention step="open accounting store" retries=1 waited_ms=8023
+response.compaction.compacting events: 2

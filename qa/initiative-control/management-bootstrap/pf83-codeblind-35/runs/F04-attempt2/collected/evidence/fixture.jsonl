@@ -1,0 +1,5 @@
+{"time_ns": 1791250294306273000, "utc": "2026-10-06T01:31:34Z", "label": "F01-after-work1", "files": {"events.txt": "F04-work1-started\n", "input.txt": "permission-test\n"}}
+{"time_ns": 1791250317387051000, "utc": "2026-10-06T01:31:57Z", "label": "F02-after-restricted-select", "files": {"events.txt": "F04-work1-started\nF04-slow-started\nF04-slow-finished\n", "input.txt": "permission-test\n"}}
+{"time_ns": 1791250333085259000, "utc": "2026-10-06T01:32:13Z", "label": "F03-probe-gated-before-decline", "files": {"events.txt": "F04-work1-started\nF04-slow-started\nF04-slow-finished\n", "input.txt": "permission-test\n"}}
+{"time_ns": 1791250348631622000, "utc": "2026-10-06T01:32:28Z", "label": "F04-after-decline", "files": {"events.txt": "F04-work1-started\nF04-slow-started\nF04-slow-finished\n", "input.txt": "permission-test\n"}}
+{"time_ns": 1791250361518983000, "utc": "2026-10-06T01:32:41Z", "label": "F05-final", "files": {"events.txt": "F04-work1-started\nF04-slow-started\nF04-slow-finished\n", "input.txt": "permission-test\n"}}

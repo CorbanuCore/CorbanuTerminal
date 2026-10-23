@@ -674,6 +674,7 @@ mod thread_processor_behavior_tests {
     async fn derive_config_from_params_uses_session_thread_config_model_provider() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let session_provider = ModelProviderInfo {
+            account: None,
             name: "session".to_string(),
             base_url: Some("http://127.0.0.1:8061/api/codex".to_string()),
             env_key: None,
@@ -697,6 +698,7 @@ mod thread_processor_behavior_tests {
             requires_openai_auth: false,
             supports_websockets: true,
             supports_standalone_web_search: false,
+            billing: None,
         };
         let config_manager = ConfigManager::new(
             temp_dir.path().to_path_buf(),
@@ -742,8 +744,7 @@ mod thread_processor_behavior_tests {
         Ok(())
     }
 
-    #[test]
-    fn collect_resume_override_mismatches_includes_service_tier() {
+    fn resume_mismatch_fixture() -> (ThreadResumeParams, ThreadConfigSnapshot) {
         let cwd = test_path_buf("/tmp").abs();
         let request = ThreadResumeParams {
             thread_id: "thread-1".to_string(),
@@ -751,6 +752,7 @@ mod thread_processor_behavior_tests {
             path: None,
             model: None,
             model_provider: None,
+            provider_account: None,
             service_tier: Some(Some("priority".to_string())),
             cwd: None,
             runtime_workspace_roots: None,
@@ -794,11 +796,127 @@ mod thread_processor_behavior_tests {
             parent_thread_id: None,
             thread_source: None,
             originator: "test_originator".to_string(),
+            provider_account: None,
         };
 
+        (request, config_snapshot)
+    }
+
+    #[test]
+    fn collect_resume_override_mismatches_includes_service_tier() {
+        let (request, config_snapshot) = resume_mismatch_fixture();
         assert_eq!(
             collect_resume_override_mismatches(&request, &config_snapshot),
             vec!["service_tier requested=Some(\"priority\") active=Some(\"flex\")".to_string()]
+        );
+    }
+
+    /// PF-84-S03 follow-up: a running thread never changes account. Resuming
+    /// it with another account is a reported mismatch; the same account,
+    /// qualified or not, is not.
+    #[test]
+    fn collect_resume_override_mismatches_includes_provider_account() {
+        let (mut request, mut config_snapshot) = resume_mismatch_fixture();
+        request.service_tier = None;
+        config_snapshot.model_provider_id = "zai".to_string();
+        config_snapshot.provider_account = Some("zai:main".to_string());
+
+        request.provider_account = Some("fake".to_string());
+        assert_eq!(
+            collect_resume_override_mismatches(&request, &config_snapshot),
+            vec!["provider_account requested=zai:fake active=Some(\"zai:main\")".to_string()]
+        );
+        for same in ["main", "zai:main"] {
+            request.provider_account = Some(same.to_string());
+            assert_eq!(
+                collect_resume_override_mismatches(&request, &config_snapshot),
+                Vec::<String>::new(),
+                "{same}"
+            );
+        }
+        // A thread on its default account is a mismatch for any named one.
+        config_snapshot.provider_account = Some("zai:default".to_string());
+        request.provider_account = Some("zai:main".to_string());
+        assert_eq!(
+            collect_resume_override_mismatches(&request, &config_snapshot),
+            vec!["provider_account requested=zai:main active=Some(\"zai:default\")".to_string()]
+        );
+    }
+
+    /// PF-84 (#425): another provider's `--account` cannot mismatch a running
+    /// thread; an account of the thread's own provider still can.
+    #[test]
+    fn collect_resume_override_mismatches_ignores_another_providers_account() {
+        let cwd = test_path_buf("/tmp").abs();
+        let request = ThreadResumeParams {
+            thread_id: "thread-1".to_string(),
+            history: None,
+            path: None,
+            model: None,
+            model_provider: None,
+            provider_account: None,
+            service_tier: None,
+            cwd: None,
+            runtime_workspace_roots: None,
+            approval_policy: None,
+            approvals_reviewer: None,
+            sandbox: None,
+            permissions: None,
+            config: None,
+            base_instructions: None,
+            developer_instructions: None,
+            personality: None,
+            exclude_turns: false,
+            initial_turns_page: None,
+        };
+        let config_snapshot = ThreadConfigSnapshot {
+            model: "gpt-5".to_string(),
+            model_provider_id: "zai".to_string(),
+            service_tier: Some("flex".to_string()),
+            approval_policy: codex_protocol::protocol::AskForApproval::OnRequest,
+            approvals_reviewer: codex_protocol::config_types::ApprovalsReviewer::User,
+            permission_profile: codex_protocol::models::PermissionProfile::Disabled,
+            active_permission_profile: None,
+            environments: TurnEnvironmentSelections::new(cwd, Vec::new()),
+            workspace_roots: Vec::new(),
+            profile_workspace_roots: Vec::new(),
+            ephemeral: false,
+            reasoning_effort: None,
+            reasoning_summary: None,
+            personality: None,
+            collaboration_mode: CollaborationMode {
+                mode: ModeKind::Default,
+                settings: Settings {
+                    model: "gpt-5".to_string(),
+                    reasoning_effort: None,
+                    developer_instructions: None,
+                },
+            },
+            session_source: SessionSource::Cli,
+            history_mode: Default::default(),
+            forked_from_thread_id: None,
+            parent_thread_id: None,
+            thread_source: None,
+            originator: "test_originator".to_string(),
+            provider_account: Some("zai:work".to_string()),
+        };
+
+        let mismatches = |selection: &str| {
+            let mut request = request.clone();
+            request.provider_account = Some(selection.to_string());
+            collect_resume_override_mismatches(&request, &config_snapshot)
+        };
+        assert_eq!(
+            [
+                mismatches("kimi-code:alt"),
+                mismatches("work"),
+                mismatches("main")
+            ],
+            [
+                Vec::<String>::new(),
+                Vec::new(),
+                vec!["provider_account requested=zai:main active=Some(\"zai:work\")".to_string()],
+            ]
         );
     }
 
@@ -847,6 +965,51 @@ mod thread_processor_behavior_tests {
                 },
             },
         ))]
+    }
+
+    fn turn_context(model_provider: &str, provider_account: Option<&str>) -> RolloutItem {
+        let mut item = serde_json::json!({
+            "cwd": test_path_buf("/tmp/persisted-workspace"),
+            "approval_policy": "never",
+            "sandbox_policy": {"type": "danger-full-access"},
+            "model": "glm-5.3-flash",
+            "model_provider": model_provider,
+            "summary": "auto",
+        });
+        if let Some(account) = provider_account {
+            item["provider_account"] = serde_json::Value::String(account.to_string());
+        }
+        RolloutItem::TurnContext(serde_json::from_value(item).expect("turn context"))
+    }
+
+    #[test]
+    fn resume_restores_the_newest_recorded_provider_account() {
+        let history = [
+            turn_context("kimi", Some("work")),
+            turn_context("zai", Some("fake")),
+        ];
+        assert_eq!(
+            [
+                recorded_provider_account(&history, /*resumed_provider_id*/ None),
+                recorded_provider_account(&history, Some("zai")),
+                // The thread resumes on another provider: the account stays put.
+                recorded_provider_account(&history, Some("kimi")),
+                // The newest turn recorded no account (named accounts were off).
+                recorded_provider_account(
+                    &[
+                        turn_context("zai", Some("fake")),
+                        turn_context("zai", /*provider_account*/ None)
+                    ],
+                    Some("zai"),
+                ),
+            ],
+            [
+                Some("zai:fake".to_string()),
+                Some("zai:fake".to_string()),
+                None,
+                None,
+            ]
+        );
     }
 
     #[test]
@@ -905,6 +1068,87 @@ mod thread_processor_behavior_tests {
                 .as_ref()
                 .is_none_or(|overrides| !overrides.contains_key("model_reasoning_effort"))
         );
+    }
+
+    #[test]
+    fn resume_service_tier_restores_saved_value_or_standard_without_global_leakage() {
+        let mut history = persisted_workspace_permission_history();
+        for tier in [None, Some("priority"), Some("flex")] {
+            let RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) = &mut history[0]
+            else {
+                panic!("fixture")
+            };
+            event.thread_settings.service_tier = tier.map(str::to_string);
+            let mut overrides = ConfigOverrides::default();
+            merge_persisted_service_tier(&history, /*request_overrides*/ None, &mut overrides);
+            assert_eq!(overrides.service_tier, Some(tier.map(str::to_string)));
+        }
+        let mut overrides = ConfigOverrides::default();
+        merge_persisted_service_tier(&[], /*request_overrides*/ None, &mut overrides);
+        assert_eq!(overrides.service_tier, Some(None));
+    }
+
+    #[test]
+    fn resume_service_tier_keeps_explicit_tier_or_model_override() {
+        for mut overrides in [
+            ConfigOverrides {
+                service_tier: Some(Some("priority".to_string())),
+                ..Default::default()
+            },
+            ConfigOverrides {
+                service_tier: Some(None),
+                ..Default::default()
+            },
+            ConfigOverrides {
+                model: Some("explicit-model".to_string()),
+                ..Default::default()
+            },
+        ] {
+            let before = overrides.service_tier.clone();
+            merge_persisted_service_tier(
+                &persisted_workspace_permission_history(),
+                /*request_overrides*/ None,
+                &mut overrides,
+            );
+            assert_eq!(overrides.service_tier, before);
+        }
+        let mut overrides = ConfigOverrides::default();
+        let request = HashMap::from([("service_tier".to_string(), serde_json::json!("flex"))]);
+        merge_persisted_service_tier(
+            &persisted_workspace_permission_history(),
+            Some(&request),
+            &mut overrides,
+        );
+        assert_eq!(overrides.service_tier, None);
+    }
+
+    #[test]
+    fn resume_service_tier_recovers_settings_before_compaction_suffix() {
+        let mut durable = persisted_workspace_permission_history();
+        let RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) = &mut durable[0] else {
+            panic!("fixture")
+        };
+        event.thread_settings.service_tier = Some("priority".to_string());
+        let mut suffix = vec![RolloutItem::Compacted(
+            codex_protocol::protocol::CompactedItem {
+                message: "checkpoint".to_string(),
+                replacement_history: Some(Vec::new()),
+                window_number: Some(1),
+                first_window_id: None,
+                previous_window_id: None,
+                window_id: None,
+            },
+        )];
+        let checkpoint = suffix[0].clone();
+        prepend_missing_resume_settings(&mut suffix, &durable);
+        assert_eq!(suffix.len(), 2);
+        assert_eq!(
+            serde_json::to_value(&suffix[1]).unwrap(),
+            serde_json::to_value(checkpoint).unwrap()
+        );
+        let mut overrides = ConfigOverrides::default();
+        merge_persisted_service_tier(&suffix, /*request_overrides*/ None, &mut overrides);
+        assert_eq!(overrides.service_tier, Some(Some("priority".to_string())));
     }
 
     #[test]

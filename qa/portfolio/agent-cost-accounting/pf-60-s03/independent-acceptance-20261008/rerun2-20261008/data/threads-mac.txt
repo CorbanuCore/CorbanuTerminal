@@ -1,0 +1,12 @@
+mac no-usage home mh-nousage2 (developer-accounting build, real clock, cwd sindresorhus/is-plain-obj 666df7c)
+nu-zai      01a11caf-d115-7f91-b2c7-d1dbcb0808e2  built-in zai
+nu-proxy    01a11caf-e7b7-7693-8644-82c713c5e05f  zaiproxy   (pass-through proxy :18471)
+nu-nousage  01a11cb0-2d3b-7102-802a-020b79ac8654  zainousage (proxy :18472 strips `usage`)
+nu-partial  01a11cb0-4338-7f60-8bf2-9687043291e9  zaipartial (proxy :18473 drops `completion_tokens` only)
+
+mac default-build home mh-default2 (no developer-accounting feature, cwd chalk/ansi-regex f923667)
+def-zai     01a11cba-262d-7032-a774-ca7bffe30f5b  built-in zai
+
+aborted (not evidence; see README incidents)
+mh-nousage  nu-zai 01a11cae-0ec4-7950-ba85-69d7aa58a41e completed; nu-proxy/nu-nousage/nu-partial failed: proxies not running
+mh-default  def-zai 01a11cb9-1d36-7c70-a3be-c2d88e2a9de4 completed; then opened by the developer-accounting binary by mistake

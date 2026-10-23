@@ -67,11 +67,54 @@ impl App {
         }
     }
 
-    pub(crate) fn custom_spawn_member_agent_class(&self, role: SpawnRole) -> Result<AgentClass> {
-        let state = self
+    /// #435: a Troll spawned before any crew exists starts the crew rooted at
+    /// its parent (the main pane, or the bound Nazgul), as recording a member
+    /// does; before, the spawn ended with "Custom crew root was not created."
+    /// Also returns whether this call started the crew, so a spawn that then
+    /// fails can drop it with [`Self::abort_started_custom_spawn_root`].
+    pub(crate) fn custom_spawn_member_agent_class_under(
+        &mut self,
+        role: SpawnRole,
+        root_node_id: &str,
+    ) -> Result<(AgentClass, bool)> {
+        let start = self.spawn_crew.is_none() && role == SpawnRole::Troll;
+        if start {
+            self.ensure_custom_spawn_root(root_node_id).map_err(|err| {
+                eyre!(
+                    "Cannot start a crew for this Troll ({err}). Spawn a Nazgul first (/spawn, Nazgul), then add Trolls under it. No pane was created."
+                )
+            })?;
+        }
+        match self.custom_spawn_member_agent_class(role) {
+            Ok(class) => Ok((class, start)),
+            Err(err) => {
+                if start {
+                    self.abort_started_custom_spawn_root();
+                }
+                Err(err)
+            }
+        }
+    }
+
+    /// Drops a crew [`Self::custom_spawn_member_agent_class_under`] started
+    /// while it still has only its root.
+    pub(crate) fn abort_started_custom_spawn_root(&mut self) {
+        if self
             .spawn_crew
             .as_ref()
-            .ok_or_else(|| eyre!("Custom crew root was not created."))?;
+            .is_some_and(|crew| crew.member_node_by_id.len() <= 1)
+        {
+            self.spawn_crew = None;
+        }
+    }
+
+    pub(crate) fn custom_spawn_member_agent_class(&self, role: SpawnRole) -> Result<AgentClass> {
+        let state = self.spawn_crew.as_ref().ok_or_else(|| {
+            eyre!(
+                "There is no crew to add this {} to yet: spawn a Nazgul first (/spawn, Nazgul). No pane was created.",
+                role.label()
+            )
+        })?;
         if !matches!(state.status, CrewCreationStatus::Ready) {
             return Err(eyre!("Custom crew is not ready for another member."));
         }
@@ -251,7 +294,10 @@ impl App {
         if let Some(runtime) = self.spawn_native_runtime_by_node.get(node_id) {
             return Ok(runtime.clone());
         }
-        if node_id == CODEX_MAIN_PANE_ID {
+        // #435: the spawn tree names the main pane `pane:codex-main`.
+        if node_id == CODEX_MAIN_PANE_ID
+            || node_id.strip_prefix("pane:") == Some(CODEX_MAIN_PANE_ID)
+        {
             return Ok(SavedNativeSpawnRuntime {
                 model: self.chat_widget.current_model().to_string(),
                 provider: self.config.model_provider_id.clone(),
@@ -270,7 +316,7 @@ impl App {
         let profile = pane.profile.profile();
         Ok(SavedNativeSpawnRuntime {
             model: profile.provider_model.to_string(),
-            provider: format!("external-claude:{:?}", pane.profile).to_ascii_lowercase(),
+            provider: pane.profile.crew_runtime_provider_id(),
             reasoning_effort: None,
         })
     }

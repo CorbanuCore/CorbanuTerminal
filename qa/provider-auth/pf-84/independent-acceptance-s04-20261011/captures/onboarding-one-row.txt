@@ -1,0 +1,174 @@
+===== b1-base-dup-rows
+> 3. Provider: Anthropic Claude Account
+     Configured · active · ready
+--
+  4. Provider: Claude Account
+     Configured · active · ready
+
+===== b1-onboarding-rows
+  1. Provider: OpenAI Codex Account
+  2. Provider: OpenAI API Key
+ 3. Provider: Anthropic Claude Account
+  4. Provider: Claude Account
+  5. Corbanu API
+  6. Provider: Anthropic API Key
+  7. Provider: Ambient API Key
+  8. Provider: Kimi Code API Key
+  9. Provider: Z.AI API Key
+ 10. Provider: DeepSeek API Key
+ 11. Provider: OpenRouter API Key
+ 12. Provider: Meta API Key
+ 13. Provider: Baseten API Key
+ 14. Provider: Vercel API Key
+ 15. Provider: Amazon Bedrock
+ 16. Provider: Ollama
+ 17. Provider: LM Studio
+ 18. Done
+
+===== c1-onboarding-rows
+  1. Provider: OpenAI Codex Account
+  2. Provider: OpenAI API Key
+ 3. Provider: Claude Account
+  4. Corbanu API
+  5. Provider: Anthropic API Key
+  6. Provider: Ambient API Key
+  7. Provider: Kimi Code API Key
+  8. Provider: Z.AI API Key
+  9. Provider: DeepSeek API Key
+ 10. Provider: OpenRouter API Key
+ 11. Provider: Meta API Key
+ 12. Provider: Baseten API Key
+ 13. Provider: Vercel API Key
+ 14. Provider: Amazon Bedrock
+ 15. Provider: Ollama
+ 16. Provider: LM Studio
+ 17. Done
+
+===== c1-chooser
+  Welcome to Corbanu Terminal, your crypto-native AI terminal
+> Claude Account
+Configured · active · ready
+> Use configured credentials
+  Add another account
+  Replace with Claude account sign-in
+  Press enter to continue · Press esc to go back
+
+===== c3-onboarding-rows-after-add
+  1. Provider: OpenAI Codex Account
+  2. Provider: OpenAI API Key
+ 3. Provider: Claude Account
+  4. Corbanu API
+  5. Provider: Anthropic API Key
+  6. Provider: Ambient API Key
+  7. Provider: Kimi Code API Key
+  8. Provider: Z.AI API Key
+  9. Provider: DeepSeek API Key
+ 10. Provider: OpenRouter API Key
+ 11. Provider: Meta API Key
+ 12. Provider: Baseten API Key
+ 13. Provider: Vercel API Key
+ 14. Provider: Amazon Bedrock
+ 15. Provider: Ollama
+ 16. Provider: LM Studio
+ 17. Done
+
+===== f3-onboarding-rows
+  1. Provider: OpenAI Codex Account
+  2. Provider: OpenAI API Key
+ 3. Provider: Claude Account
+  4. Corbanu API
+  5. Provider: Anthropic API Key
+  6. Provider: Ambient API Key
+  7. Provider: Kimi Code API Key
+  8. Provider: Z.AI API Key
+  9. Provider: DeepSeek API Key
+ 10. Provider: OpenRouter API Key
+ 11. Provider: Meta API Key
+ 12. Provider: Baseten API Key
+ 13. Provider: Vercel API Key
+ 14. Provider: Amazon Bedrock
+ 15. Provider: Ollama
+ 16. Provider: LM Studio
+ 17. Done
+
+===== f3-flagoff-row
+> 3. Provider: Claude Account
+     Configured · active · ready
+
+===== f3-flagoff-chooser
+  Welcome to Corbanu Terminal, your crypto-native AI terminal
+> Claude Account
+Configured · active · ready
+> Use configured credentials
+  Replace with Claude account sign-in
+  Press enter to continue · Press esc to go back
+
+===== z1-start
+
+===== ob-z-chooser
+                                      
+                _.:*+*+=,             
+              _+*;+,_"+\'*,           
+             ,|\//,=_`."|_*\          
+            ,~/+__*;_,\\|\~|\         
+            ^||||+-*\_,"\|/__         
+           ;|^`~_|'"\;*,./|,"|        
+           /|| |^*|\.=/;*|*|/|        
+           \\, |~"|\ |^""|~\.|        
+           |\,_|'^~|~/+~~|_  |        
+           "||~//||___\_|\|| *        
+           ^*_/+|, /***`/|'~_!        
+            |||\\\,     _=* |         
+             ;|*=_!,  . |*`/`         
+              :|\|/_|`,|",|`          
+               '"=~_+*/.;*            
+                   ````               
+
+  Welcome to Corbanu Terminal, your crypto-native AI terminal
+
+> Z.AI
+Configured · active · ready
+
+> Use configured credentials
+  Add another account
+  Replace with a new API key
+
+  Press enter to continue · Press esc to go back
+
+===== ob-z-dup-name
+                                      
+              _;***"+,                
+             /*|;/\|+;|,              
+            /*""|;\|\""\,             
+           ;*",||~_||_+/^             
+           |_,\|.~"*\/;|\;            
+           \ "|/:/"*_\"\\/            
+          |!  *'=||/||;;"+            
+          /-  \|||^^=||/||            
+          |  .\*;+~+==/\||            
+          ! ._|/,|__,*\\*|            
+           |`"/|*"\,/`+\||            
+           \_~|/\   //"||`            
+            *  *|\ ^`/|/,             
+             |"*\\"*_**;              
+              \/:^*~_\*               
+                                      
+
+  Welcome to Corbanu Terminal, your crypto-native AI terminal
+
+> Add a Z.AI account
+
+Name it: lowercase letters, digits or '-' (for example work).
+
+  obfake
+
+  Press enter to continue · Press esc to go back
+
+Could not save zai account `obfake`: invalid credential label: zai already has an account `obfake`
+
+===== q6-use-configured
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+› Find and fix a bug in @filename
+  Z.AI GLM 5.2 via zai standard · $S/work · Corbanu Terminal · TPS: -- tok/s
+

@@ -1,0 +1,40 @@
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date                            │
+│ information on rate limits and credits                                                   │
+│                                                                                          │
+│  Model:                gpt-5.4 (reasoning medium, summaries auto)                        │
+│  Model provider:       OpenAI - http://127.0.0.1:31285/v1 · account work                 │
+│  Directory:            /tmp/tmp.vSdaBTc26f/ws                                            │
+│  Permissions:          Next turn: Workspace (Ask for approval)                           │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              ChatGPT sign-in · w…@example.com · Plus (account work)            │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12e21-45c9-74c2-972c-f725d402edac                              │
+│                                                                                          │
+│  Token usage:          0 total  (0 input + 0 output)                                     │
+│  Account usage:        work · no usage yet                                               │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly: pong
+
+
+⚠ MCP client for `codex_apps` failed to start: MCP startup failed: handshaking with MCP server failed: Send message
+  error Transport
+  [rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rm
+  cp_client::http_client_adapter::StreamableHttpClientAdapter>>] error: unexpected server response: HTTP 404: , when
+  send initialize request
+
+⚠ MCP startup incomplete (failed: codex_apps)
+
+• openai-mock: authorized as work (token gen 3)
+
+
+› Find and fix a bug in @filename
+
+  gpt-5.4 default · /tmp/tmp.vSdaBTc26f/ws · Corbanu Terminal · TPS: 41.4 tok/s

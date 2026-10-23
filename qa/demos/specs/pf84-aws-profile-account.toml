@@ -1,0 +1,99 @@
+# PF-84-S06 slice A: /providers adds an Amazon Bedrock account that holds only an AWS
+# profile name; the session then runs on it and a mock Bedrock endpoint shows which
+# profile signed the request. Fake ~/.aws files (fake key ids) in the disposable HOME and
+# a local mock endpoint; no AWS account. Record with
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-aws-profile-account.toml \
+#     --bin <candidate> --sprint PF-84-S06 --publish
+id = "pf84-aws-profile-account"
+feature = "PF-84-S06: an Amazon Bedrock account is an AWS profile"
+expected = "Bedrock account work (profile 'work') is added in /providers; this session's request is signed by work's profile key AKIDWORKPROFILE, not the default profile, and /status names account work."
+model = "openai.gpt-5.4"
+provider = "amazon-bedrock"
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "read-only"
+[features]
+named_accounts = true
+[model_providers.amazon-bedrock]
+base_url = "http://127.0.0.1:38461/openai/v1"
+[model_providers.amazon-bedrock.aws]
+region = "us-west-2"
+"""
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+run = """mkdir -p "$HOME/.aws"
+printf '[default]\\nregion = eu-west-1\\n[profile work]\\nregion = us-west-2\\n' > "$HOME/.aws/config"
+printf '[default]\\naws_access_key_id = AKIDDEFAULTPROFILE\\naws_secret_access_key = fake-default\\n[work]\\naws_access_key_id = AKIDWORKPROFILE\\naws_secret_access_key = fake-work\\n' > "$HOME/.aws/credentials"
+(nohup python3 {run}/../../../../provider-auth/pf-84/s06/scripts/mock_bedrock.py --port 38461 --log {logs}/mock-bedrock.jsonl > /dev/null 2>&1 &)
+sleep 1"""
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/providers"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Configure providers"
+[[steps]]
+key = "Up"
+repeat = 3
+[[steps]]
+wait = "› 13\\. Amazon Bedrock"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Add another account"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Account name"
+[[steps]]
+type = "work"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "AWS profile name"
+[[steps]]
+type = "work"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved amazon-bedrock account `work`"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Down"
+[[steps]]
+wait = "› 14\\. Amazon Bedrock · work +Named account · AWS profile `work`"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Start a new session on this account"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "use account `work`"
+[[steps]]
+type = "Reply with exactly: pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "signed by AKIDWORKPROFILE"
+compress = 2
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "account work"
+[[steps]]
+pause = 4.0

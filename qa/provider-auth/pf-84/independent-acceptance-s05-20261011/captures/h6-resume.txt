@@ -1,0 +1,5 @@
+exec resume 01a12b4d-fb47-7cc1-82c1-db830fb0c915 (no --account) -> exit=0 reply=pong
+01a12b4e-15d2-7691-9afa-646247630107|{"name":"work","fingerprint":"96829868dc8d"}
+compact:01a12b4e-4803-7110-81b4-c1129fe8cd01|{"name":"work","fingerprint":"96829868dc8d"}
+01a12b4e-acf0-7532-b372-5de435e4a0fa|{"name":"work","fingerprint":"96829868dc8d"}
+01a12b4f-86e1-7b63-bfef-58ebc0911f22|{"name":"work","fingerprint":"96829868dc8d"}

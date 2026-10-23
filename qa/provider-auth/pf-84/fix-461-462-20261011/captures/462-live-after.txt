@@ -1,0 +1,5 @@
+== after, live GLM 5.3 Flash: home with no credential, -m glm-5.3-flash -c model_provider=zai (forced API path, #462). Real Z.AI key pasted via a deleted tmux buffer; Enter, Enter, trust, then a turn and /status
+› Reply with exactly the word pong and nothing else.
+• pong
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account default             │
+│  Account:              Z.AI API key configured                                           │

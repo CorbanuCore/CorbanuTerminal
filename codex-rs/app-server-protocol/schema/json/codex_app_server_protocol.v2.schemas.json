@@ -9,6 +9,14 @@
       "oneOf": [
         {
           "properties": {
+            "envVar": {
+              "default": null,
+              "description": "The environment variable the key is read from (for example `OPENAI_API_KEY`), or `null` for a saved key.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "type": {
               "enum": [
                 "apiKey"
@@ -170,6 +178,14 @@
     "AccountUpdatedNotification": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
+        "apiKeyEnvVar": {
+          "default": null,
+          "description": "For API key auth, the environment variable the key is read from (for example `OPENAI_API_KEY`), or `null` for a saved key.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "authMode": {
           "anyOf": [
             {
@@ -1968,6 +1984,31 @@
             "params"
           ],
           "title": "Thread/injectItemsRequest",
+          "type": "object"
+        },
+        {
+          "description": "Report a model request the client sent itself, so it reaches the ledger.",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "thread/recordSentModelRequest"
+              ],
+              "title": "Thread/recordSentModelRequestRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ThreadRecordSentModelRequestParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Thread/recordSentModelRequestRequest",
           "type": "object"
         },
         {
@@ -4324,7 +4365,8 @@
         "inProgress",
         "completed",
         "failed",
-        "declined"
+        "declined",
+        "refused"
       ],
       "type": "string"
     },
@@ -8998,6 +9040,49 @@
       "title": "LogoutAccountResponse",
       "type": "object"
     },
+    "LongContextRates": {
+      "description": "API rates for a whole request whose input exceeds a published threshold, such as OpenAI's long-context price for prompts above 272K input tokens.",
+      "properties": {
+        "above_input_tokens": {
+          "description": "The rates apply when the request's input tokens (cached and cache writes included) are strictly more than this.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "cache_write_milli_usd_per_million_tokens": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "cached_input_milli_usd_per_million_tokens": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "input_milli_usd_per_million_tokens": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "output_milli_usd_per_million_tokens": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "above_input_tokens",
+        "input_milli_usd_per_million_tokens",
+        "output_milli_usd_per_million_tokens"
+      ],
+      "type": "object"
+    },
     "ManagedHooksRequirements": {
       "properties": {
         "PermissionRequest": {
@@ -9767,6 +9852,35 @@
         }
       ]
     },
+    "MeteredRates": {
+      "description": "Per-token API rates, in milli-USD per million tokens.",
+      "properties": {
+        "cached_input_milli_usd_per_million_tokens": {
+          "default": null,
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "input_milli_usd_per_million_tokens": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "output_milli_usd_per_million_tokens": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "input_milli_usd_per_million_tokens",
+        "output_milli_usd_per_million_tokens"
+      ],
+      "type": "object"
+    },
     "MigrationDetails": {
       "properties": {
         "commands": {
@@ -10059,6 +10173,15 @@
         },
         {
           "properties": {
+            "cache_write_milli_usd_per_million_tokens": {
+              "description": "The published cache-write price. Omitted means the catalogue states none, not that writes are free.",
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "cached_input_milli_usd_per_million_tokens": {
               "default": null,
               "format": "uint32",
@@ -10079,10 +10202,28 @@
               ],
               "type": "string"
             },
+            "long_context": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/LongContextRates"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Rates for a request whose input exceeds a published threshold."
+            },
             "output_milli_usd_per_million_tokens": {
               "format": "uint32",
               "minimum": 0.0,
               "type": "integer"
+            },
+            "valid_through_utc": {
+              "description": "The last UTC instant (RFC 3339) the provider says these rates hold, such as the end of a promotion. Afterwards the row states no price.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -10093,8 +10234,67 @@
           "type": "object"
         },
         {
+          "description": "Per-token rates that differ between peak windows and the rest of the week.\n\nThe rate that applies is the one in force at the dispatch instant, so a ledger states what a request was actually charged, not a range.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "metered_schedule"
+              ],
+              "type": "string"
+            },
+            "off_peak": {
+              "$ref": "#/definitions/MeteredRates"
+            },
+            "off_peak_dates_utc": {
+              "default": [],
+              "description": "UTC calendar dates (`YYYY-MM-DD`) with no peak at all, such as the provider's published holidays.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "peak": {
+              "$ref": "#/definitions/MeteredRates"
+            },
+            "peak_weekdays": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/WeekdaySet"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "UTC weekdays on which the peak windows apply. Omitted means every day."
+            },
+            "peak_windows": {
+              "description": "Peak windows. Outside every window the off-peak rates apply.",
+              "items": {
+                "$ref": "#/definitions/UtcHourWindow"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "off_peak",
+            "peak",
+            "peak_windows"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The same provider/model route can use subscription capacity or API-key billing.\n\nBoth sides are exact. Runtime consumers resolve the active side from authentication; catalogue consumers that do not know authentication must present both, never guess.",
           "properties": {
+            "api_key_cache_write_milli_usd_per_million_tokens": {
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "api_key_cached_input_milli_usd_per_million_tokens": {
               "default": null,
               "format": "uint32",
@@ -10109,10 +10309,27 @@
               "minimum": 0.0,
               "type": "integer"
             },
+            "api_key_long_context": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/LongContextRates"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "api_key_output_milli_usd_per_million_tokens": {
               "format": "uint32",
               "minimum": 0.0,
               "type": "integer"
+            },
+            "api_key_valid_through_utc": {
+              "description": "As `Metered::valid_through_utc`, for the API-key side only.",
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "kind": {
               "enum": [
@@ -10248,6 +10465,17 @@
         {
           "description": "Non-spawnable models remain visible for existing sessions and manual use.",
           "properties": {
+            "billing": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ModelBilling"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The provider's published price, for cost accounting of manual use. Never used for spawn allocation."
+            },
             "capability": {
               "$ref": "#/definitions/ModelCapabilityTier"
             },
@@ -16585,6 +16813,26 @@
       ],
       "type": "object"
     },
+    "ThreadAccountTokenUsage": {
+      "description": "PF-84: provider-reported token usage of one named provider account: its provider id and account name, never credential material.",
+      "properties": {
+        "account": {
+          "type": "string"
+        },
+        "providerId": {
+          "type": "string"
+        },
+        "usage": {
+          "$ref": "#/definitions/TokenUsageBreakdown"
+        }
+      },
+      "required": [
+        "account",
+        "providerId",
+        "usage"
+      ],
+      "type": "object"
+    },
     "ThreadActiveFlag": {
       "enum": [
         "waitingOnApproval",
@@ -17599,6 +17847,13 @@
                 "null"
               ]
             },
+            "providerAccount": {
+              "description": "The named account the spawned agent uses (`default` included), only while named accounts are on.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "reasoningEffort": {
               "anyOf": [
                 {
@@ -18497,6 +18752,55 @@
       "title": "ThreadRealtimeTranscriptDoneNotification",
       "type": "object"
     },
+    "ThreadRecordSentModelRequestParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "One model request a client sent itself, reported so the operator's ledger can record spend this process never saw.\n\nThe Claude panes bridge is the caller: it posts to a provider from inside the TUI, which does not run the model client. Only routes the server recognises are recorded.",
+      "properties": {
+        "baseUrl": {
+          "description": "The base URL the request went to, and the endpoint underneath it.",
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "providerId": {
+          "description": "The account the client believes it billed. Recorded only when the server knows this provider and the route below is its own.",
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "usage": {
+          "description": "The `usage` object the provider's response carried, if it carried one."
+        }
+      },
+      "required": [
+        "baseUrl",
+        "model",
+        "path",
+        "providerId",
+        "threadId"
+      ],
+      "title": "ThreadRecordSentModelRequestParams",
+      "type": "object"
+    },
+    "ThreadRecordSentModelRequestResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "recorded": {
+          "description": "False when the server is not collecting, or does not recognise the route. Never an error: reporting spend must not fail the work.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "recorded"
+      ],
+      "title": "ThreadRecordSentModelRequestResponse",
+      "type": "object"
+    },
     "ThreadResumeInitialTurnsPageParams": {
       "properties": {
         "itemsView": {
@@ -18969,6 +19273,24 @@
       ],
       "type": "object"
     },
+    "ThreadSettingsUpdateOutcome": {
+      "oneOf": [
+        {
+          "description": "Core applied this operation. Existing command turns retain their authority.",
+          "enum": [
+            "applied"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Application could not be determined. Do not retry automatically.",
+          "enum": [
+            "uncertain"
+          ],
+          "type": "string"
+        }
+      ]
+    },
     "ThreadSettingsUpdatedNotification": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
@@ -19368,6 +19690,16 @@
     "ThreadTokenUsageUpdatedNotification": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
+        "accountUsage": {
+          "description": "PF-84: this thread's provider-reported usage per (provider, named account), `default` included. Sent only while named accounts are on.",
+          "items": {
+            "$ref": "#/definitions/ThreadAccountTokenUsage"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "threadId": {
           "type": "string"
         },
@@ -20232,6 +20564,26 @@
           "type": "object"
         }
       ]
+    },
+    "UtcHourWindow": {
+      "description": "A `[start, end)` window in whole UTC hours; it may wrap past midnight.",
+      "properties": {
+        "end_utc_hour": {
+          "format": "uint8",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "start_utc_hour": {
+          "format": "uint8",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "end_utc_hour",
+        "start_utc_hour"
+      ],
+      "type": "object"
     },
     "Verbosity": {
       "description": "Controls output length/detail on GPT-5 models via the Responses API. Serialized with lowercase values to match the OpenAI API.",

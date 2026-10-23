@@ -2,12 +2,17 @@
 use std::io::Write;
 use std::path::PathBuf;
 
+use anyhow::Context;
 use codex_wallet_daemon::DaemonStatus;
 use codex_wallet_daemon::WalletDaemonClient;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let home = PathBuf::from(std::env::args_os().nth(1).expect("disposable wallet home"));
+    let home = PathBuf::from(
+        std::env::args_os()
+            .nth(1)
+            .context("usage: package_client_probe <disposable wallet home>")?,
+    );
     let result: anyhow::Result<()> = async {
         anyhow::ensure!(!home.exists(), "probe requires a fresh home");
         let client = WalletDaemonClient::new(home);

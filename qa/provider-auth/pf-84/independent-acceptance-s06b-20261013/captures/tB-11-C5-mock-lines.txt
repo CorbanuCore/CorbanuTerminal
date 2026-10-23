@@ -1,0 +1,3 @@
+{"t": 1791879553.535, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDWORKPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai
+{"t": 1791879555.882, "ev": "responses-401", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "fakekey"}, "model": "gpt-5.4"}
+{"t": 1791879557.176, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "tuiwork", "gen": 1, "expired": false}, "model": null}

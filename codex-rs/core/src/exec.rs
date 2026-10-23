@@ -65,6 +65,22 @@ const EXIT_CODE_SIGNAL_BASE: i32 = 128; // conventional shell: 128 + signal
 const EXEC_TIMEOUT_EXIT_CODE: i32 = 124; // conventional timeout exit code
 const CANCELLATION_TERMINATION_GRACE_PERIOD: Duration = Duration::from_millis(50);
 
+#[cfg(test)]
+tokio::task_local! {
+    /// Lets a unit test lengthen the cancellation grace period for the exec it
+    /// awaits, so a loaded runner can't turn "the TERM trap ran" into a race
+    /// against 50 ms (#349). Builds outside tests always use the constant.
+    pub(crate) static CANCELLATION_TERMINATION_GRACE_PERIOD_OVERRIDE: Duration;
+}
+
+fn cancellation_termination_grace_period() -> Duration {
+    #[cfg(test)]
+    if let Ok(period) = CANCELLATION_TERMINATION_GRACE_PERIOD_OVERRIDE.try_with(|period| *period) {
+        return period;
+    }
+    CANCELLATION_TERMINATION_GRACE_PERIOD
+}
+
 // I/O buffer sizing
 const READ_CHUNK_SIZE: usize = 8192; // bytes per read
 const AGGREGATE_BUFFER_INITIAL_CAPACITY: usize = 8 * 1024; // 8 KiB
@@ -406,6 +422,29 @@ pub fn build_exec_request(
             )
         })
         .map_err(CodexErr::from)?;
+    attach_windows_sandbox_filesystem_overrides(
+        &mut exec_req,
+        sandbox_cwd,
+        crate::security::launch_contract::active(),
+    )?;
+    Ok(exec_req)
+}
+
+/// Resolves the Windows sandbox's filesystem overrides (deny-read and
+/// deny-write ACL targets, read and write root overrides) from the request's
+/// final permission profile. Local launch paths call this after the sandbox
+/// transform: without it the Windows backends get no deny-read paths and apply
+/// none of the profile's deny entries (#294). With an armed launch `contract`
+/// an elevated launch also carries the contract's denies, protected or not
+/// (`LaunchContract::windows_deny_read_targets`). A no-op for requests that do
+/// not use a Windows sandbox.
+pub(crate) fn attach_windows_sandbox_filesystem_overrides(
+    exec_req: &mut ExecRequest,
+    sandbox_cwd: &AbsolutePathBuf,
+    #[cfg_attr(not(windows), allow(unused_variables))] contract: Option<
+        &crate::security::launch_contract::LaunchContract,
+    >,
+) -> Result<()> {
     let use_windows_elevated_backend = windows_sandbox_uses_elevated_backend(
         exec_req.windows_sandbox_level,
         exec_req.network.is_some(),
@@ -426,7 +465,26 @@ pub fn build_exec_request(
         )
     }
     .map_err(CodexErr::UnsupportedOperation)?;
-    Ok(exec_req)
+    #[cfg(windows)]
+    if use_windows_elevated_backend
+        && exec_req.sandbox == SandboxType::WindowsRestrictedToken
+        && let Some(contract) = contract
+    {
+        let protected = contract
+            .windows_deny_read_targets(sandbox_cwd)
+            .map_err(CodexErr::UnsupportedOperation)?;
+        let overrides = exec_req
+            .windows_sandbox_filesystem_overrides
+            .get_or_insert_with(|| WindowsSandboxFilesystemOverrides {
+                read_roots_override: None,
+                read_roots_include_platform_defaults: false,
+                write_roots_override: None,
+                additional_deny_read: Default::default(),
+                additional_deny_write_paths: Vec::new(),
+            });
+        overrides.additional_deny_read.extend(protected);
+    }
+    Ok(())
 }
 
 pub(crate) async fn execute_exec_request(
@@ -669,8 +727,8 @@ async fn exec_windows_sandbox(
     let additional_deny_write_paths = windows_sandbox_filesystem_overrides
         .map(|overrides| overrides.additional_deny_write_paths.clone())
         .unwrap_or_default();
-    let additional_deny_read_paths = windows_sandbox_filesystem_overrides
-        .map(|overrides| overrides.additional_deny_read_paths.clone())
+    let additional_deny_read = windows_sandbox_filesystem_overrides
+        .map(|overrides| overrides.additional_deny_read.clone())
         .unwrap_or_default();
     let elevated_read_roots_override = windows_sandbox_filesystem_overrides
         .and_then(|overrides| overrides.read_roots_override.clone());
@@ -697,7 +755,7 @@ async fn exec_windows_sandbox(
                     read_roots_include_platform_defaults:
                         elevated_read_roots_include_platform_defaults,
                     write_roots_override: elevated_write_roots_override.as_deref(),
-                    deny_read_paths_override: &additional_deny_read_paths,
+                    deny_read_override: &additional_deny_read,
                     deny_write_paths_override: &additional_deny_write_paths,
                 },
             )
@@ -711,7 +769,7 @@ async fn exec_windows_sandbox(
                 env,
                 timeout_ms,
                 cancellation,
-                &additional_deny_read_paths,
+                &additional_deny_read.paths(),
                 &additional_deny_write_paths,
                 windows_sandbox_private_desktop,
             )
@@ -1035,7 +1093,7 @@ async fn consume_output(
                         false
                     };
                     match tokio::time::timeout(
-                        CANCELLATION_TERMINATION_GRACE_PERIOD,
+                        cancellation_termination_grace_period(),
                         child.wait(),
                     )
                     .await
@@ -1139,12 +1197,15 @@ async fn read_output<R: AsyncRead + Unpin + Send + 'static>(
                 },
                 chunk,
             });
-            let event = Event {
-                id: stream.sub_id.clone(),
-                msg,
-            };
-            #[allow(clippy::let_unit_value)]
-            let _ = stream.tx_event.send(event).await;
+            // PF-28-S01: hold back bytes that could end in part of a secret.
+            for msg in crate::security::disclosure_gate::gate_event(&stream.sub_id, msg) {
+                let event = Event {
+                    id: stream.sub_id.clone(),
+                    msg,
+                };
+                #[allow(clippy::let_unit_value)]
+                let _ = stream.tx_event.send(event).await;
+            }
             emitted_deltas += 1;
         }
 

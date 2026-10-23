@@ -1,0 +1,52 @@
+# Issue #841 (MOD-30): under Moderate, after untrusted content, a read of Corbanu's own config names Corbanu's own files and says approving cannot unlock them.
+id = "issue841-moderate-corbanu-file-reason"
+feature = "Moderate names Corbanu's own files and says approval cannot unlock them"
+# #1091 (#1077): the note now names the file and says what it is ("is one of Corbanu's own files (such as ...)") instead of "Corbanu's own files this command reads".
+expected = "Under Moderate, after README.md was read, the agent asks to cat Corbanu's config.toml. The prompt's Reason names access to Corbanu's own files (not a security policy change), and its note names config.toml as one of Corbanu's own files (such as its sign-in, vault, config or history), says approving cannot unlock it, and that if you approve the command runs but that read fails."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+security_levels = true
+secretless_agent_launch = true
+secret_output_gate = true
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"README.md" = "# ledger-notes\\n\\nA tiny personal notes tool used as a disposable test project.\\n"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+wait = "model:\\s+glm-5\\.3-flash"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run cat README.md"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "ledger-notes(?:(?!Working).)*\\n› "
+timeout = 180
+compress = 3
+[[steps]]
+type = "Run exactly this shell command: cat {home}/config.toml"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "is\\s+one\\s+of\\s+Corbanu's\\s+own\\s+files\\s+\\(such\\s+as"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 5.0

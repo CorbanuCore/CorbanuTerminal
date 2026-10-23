@@ -257,6 +257,7 @@ fn reference_context_item() -> TurnContextItem {
         file_system_sandbox_policy: None,
         model: "gpt-test".to_string(),
         model_provider: None,
+        provider_account: None,
         comp_hash: None,
         personality: None,
         collaboration_mode: None,
@@ -264,6 +265,7 @@ fn reference_context_item() -> TurnContextItem {
         multi_agent_mode: None,
         realtime_active: Some(false),
         effort: None,
+        security_level: None,
         summary: codex_protocol::config_types::ReasoningSummary::Auto,
     }
 }
@@ -2441,4 +2443,24 @@ fn text_only_items_unchanged() {
     let raw_len = serde_json::to_string(&item).unwrap().len() as i64;
 
     assert_eq!(estimated, raw_len);
+}
+
+/// #578: every snapshot of a session's history shares the flag that keeps the
+/// dropped-compaction-summary log to once per session.
+#[test]
+fn history_snapshots_share_the_foreign_compaction_log_flag() {
+    use std::sync::atomic::Ordering;
+    let history = ContextManager::new();
+    let snapshot = history.clone();
+    assert!(
+        !snapshot
+            .foreign_compaction_warned
+            .swap(true, Ordering::Relaxed)
+    );
+    assert!(history.foreign_compaction_warned.load(Ordering::Relaxed));
+    assert!(
+        !ContextManager::new()
+            .foreign_compaction_warned
+            .load(Ordering::Relaxed)
+    );
 }

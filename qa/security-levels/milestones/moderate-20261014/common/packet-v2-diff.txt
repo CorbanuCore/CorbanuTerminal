@@ -1,0 +1,132 @@
+# diff -r executor-packet/v1 (frozen) stage/packet v2 (owner decision 1, 2026-10-14: rebuild from current origin/main df3d8c5d1c)
+# Only the candidate SHA-256 line of each group prompt changes; design-cases.md, amendments.md, navigation.md, executor-prompt.md and screens are byte-identical (v2 reuses them from v1).
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G01.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G01.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G02.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G02.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G03.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G03.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G04.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G04.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G05.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G05.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G06.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G06.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G07.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G07.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G08.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G08.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G09.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G09.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G10.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G10.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G11.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G11.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G12.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G12.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G13.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G13.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G14.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G14.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G15.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G15.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G16.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G16.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G17.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G17.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G18.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G18.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G19.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G19.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G20.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G20.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G21.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G21.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G22.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G22.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G23.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G23.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G24.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G24.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+diff -r /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet.v1-899cf3e62a/prompts/G25.md /Volumes/CorbanuDrive/Corbanu/.codex-work/moderate-first-20261014/stage/packet/prompts/G25.md
+44c44
+<   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `379d421c34de833119d266eebec15b1d5c2dc0dbeaa4b1a0079050e051442692`.
+---
+>   `/opt/agms/pkg/bin/corbanu`, expected SHA-256 `abd3e6adbf44f234e12fb6a9654d15a7f6b7b6c20ecd61af2ef8e1944ffbb24a`.
+# shasum of the unchanged shared files in v2:
+64ecf9c951f89d645e0b2eb3243dd422c80436f24fadb4d9283a5daa97239c23  design-cases.md
+203685710b74d3cf864ed00e35a5c6e30e10296ea82ec60ab707b09b53da02d1  amendments.md
+b58cdf0c3cbc98aaefd2d356b2cb88d2c9716cdc295dfb9f4224a3ef7b92fde6  navigation.md
+991e5804e4b598b31f51301fc17a7cdea3e89161663c862ceef7a88c017ba983  executor-prompt.md

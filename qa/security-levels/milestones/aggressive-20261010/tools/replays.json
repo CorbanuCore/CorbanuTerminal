@@ -1,0 +1,59 @@
+{
+ "G07b": {
+  "cases": [
+   "AGG-19"
+  ],
+  "note": "Attempt 1 declined the approval prompts, so the case's actions were not completed. Where this case asks a command to be run and an approval prompt appears, approving it (Enter on the highlighted 'Yes, proceed') is part of running it."
+ },
+ "G08b": {
+  "cases": [
+   "AGG-15"
+  ],
+  "note": "Fixture v2: attempt 1 was blocked by a fixture defect (the launcher refused `--env` values that did not start with `synthetic`, e.g. PLAIN_VAR=visible). `--env NAME=value` now accepts values made of letters, digits, `.`, `_` or `-`."
+ },
+ "G10b": {
+  "cases": [
+   "AGG-17",
+   "AGG-18",
+   "AGG-23"
+  ],
+  "note": "Product model for this replay: start the product with `--model glm-5.2` (both routes allowed). Recorded reason: in attempts 1 the product's GLM 5.3 Flash model declined to attempt `cat .env` every time, so the approval prompt these cases start from never appeared. Do not use the product's `!` shell escape; it is not part of these cases."
+ },
+ "G11b": {
+  "cases": [
+   "AGG-33"
+  ],
+  "note": "Product model for this replay: start the product with `--model glm-5.2`. Recorded reason: in attempt 1 the product's GLM 5.3 Flash model declined to attempt `cat .env` every time, so the grant review never appeared. Do not use the product's `!` shell escape."
+ },
+ "G12b": {
+  "cases": [
+   "AGG-20",
+   "AGG-21"
+  ],
+  "note": "Starting conditions that describe test data (file contents such as README.md, or a project `.codex/config.toml`) are set up by you inside `$AGMS_RUN/fixture/workspace` before the step that needs them. Where a case asks a command to be run and an approval prompt appears, approving it (Enter on the highlighted 'Yes, proceed') is part of running it."
+ },
+ "G15b": {
+  "cases": [
+   "AGG-25"
+  ],
+  "note": "Screen E1 was captured with the product launched with the launch argument `-c 'cli_auth_credentials_store=\"file\"'` (pass it after the agms-tui options); that is the E1 starting condition. 'Fix the cause' means starting again without that argument."
+ },
+ "G17b": {
+  "cases": [
+   "AGG-27"
+  ],
+  "note": "The two Z.AI routes in this case are `zai` and `zai-anthropic`. `zai-plain-http` is a test fixture for another case and is not one of them. A restart is quitting the product and starting it again on the same route."
+ },
+ "G17c": {
+  "cases": [
+   "AGG-A01"
+  ],
+  "note": "This run's profile is fresh. Start with `agms-tui start --route zai-anthropic --model glm-5.2`."
+ },
+ "G18b": {
+  "cases": [
+   "AGG-28"
+  ],
+  "note": "Coordinator answer to the designer's question 5 (not given to attempt 1): the harness method for 'broker prevented from starting' is the route `zai-plain-http` (start with `agms-tui start --route zai-plain-http`): the same Z.AI models with the provider address given as plain HTTP, which the credential broker cannot accept. No user action stops the broker process itself."
+ }
+}

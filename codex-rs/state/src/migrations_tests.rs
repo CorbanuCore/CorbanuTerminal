@@ -333,6 +333,7 @@ async fn thread_item_update_ordinals_allow_older_writers() {
         .open_thread_history_db(
             &pre_update_ordinal_migrator,
             /*telemetry_override*/ None,
+            /*init_lock*/ None,
         )
         .await
         .expect("pre-update-ordinal migrations should apply");

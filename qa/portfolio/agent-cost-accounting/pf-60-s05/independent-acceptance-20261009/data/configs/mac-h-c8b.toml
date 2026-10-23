@@ -1,0 +1,8 @@
+model = "glm-5.2"
+model_provider = "zai"
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+service_tier = "default"
+
+[projects."<scratch>/work/repo"]
+trust_level = "trusted"

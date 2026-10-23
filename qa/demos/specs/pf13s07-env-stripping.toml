@@ -1,0 +1,56 @@
+# PF-13-S07 env var stripping route: with all flags on, the agent's environment
+# does not contain ZAI_API_KEY. The secretless launch allowlist strips it.
+# Record with:
+#   export CORBANU_TEST_NO_NATIVE_KEYRING=1
+#   python3 scripts/demo_video.py record qa/demos/specs/pf13s07-env-stripping.toml \
+#     --bin "$CARGO_TARGET_DIR/debug/corbanu" --sprint PF-13-S07 --publish
+id = "pf13s07-env-stripping"
+feature = "Secretless launch strips ZAI_API_KEY from agent env with all boundary flags on"
+expected = "The agent runs env | grep -i KEY and finds no ZAI_API_KEY — the secretless launch allowlist stripped it."
+model = "glm-5.2"
+provider = "zai"
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+security_levels = true
+isolated_credential_broker = true
+secretless_agent_launch = true
+secret_output_gate = true
+url_destination_policy = true
+protected_mode_preflight = true
+source_envelopes = true
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+timeout = 60
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run this shell command and show me the raw output: env | sort | grep -iE 'KEY|TOKEN|SECRET' || echo NO_CREDENTIAL_VARS"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "NO_CREDENTIAL_VARS"
+timeout = 120
+compress = 3
+
+[[steps]]
+pause = 4.0

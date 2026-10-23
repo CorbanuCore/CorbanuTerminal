@@ -1,0 +1,21 @@
+{
+  "base": "e38b4ceec04c50d14699aa8b97f32274f87e66a5",
+  "proposed_files_match_landing_snapshot": true,
+  "replays": [
+    {
+      "label": "landed",
+      "commit": "8928f8c44db55ec50e8c00ed6790845187403299",
+      "controls_passed": 13
+    },
+    {
+      "label": "advanced",
+      "commit": "07bf69ed7afae349aa71842d8f6121bdaba8bc55",
+      "controls_passed": 13
+    }
+  ],
+  "final_verifier_exit": 2,
+  "final_stdout_sha256": "7c0be95732e992bdb92da90ec1868df60a102fb83a35109b4717d03825135190",
+  "final_stdout_matches_content_reference": true,
+  "receipt_assertions_covered": 5,
+  "receipt_negative_controls_passed": 9
+}

@@ -1,0 +1,74 @@
+..............................................................................................................................................Refresh complete; live writeback disabled
+Verified export activated; private server refreshed; timer activation unchanged
+...............................................................................Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+....................../opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 429: 'Too Many Requests'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+.....................................................................................................................................................................................usage: python -m unittest [-h]
+
+Fixed guest runtime. Requires parent-enforced containment; provides no host
+isolation.
+
+options:
+  -h, --help  show this help message and exit
+Synthetic retained evidence: /private/tmp/isolated-transport-tests-5w11oey2
+........................................................................................................................................................................./opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/mock.py:2259: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10b2195d0>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/mock.py:2259: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10bef1f30>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+......................................................F...................................................................................{"reason":"TimeoutExpired","state":"ERROR"}
+{"reason":"TimeoutExpired","state":"ERROR"}
+{"fixture_only":true,"manager":"empty","routing":"deferred","state":"ACTIVE","states":["RECOVERING","READY","ACTIVE"]}
+Refresh complete; live writeback disabled
+...................../opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 500: 'Internal Server Error'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+............/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 429: 'Too Many Requests'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+..................................................................
+======================================================================
+FAIL: test_bridge_live_pane_changes_and_stale_capture_refused (test_owner_tmux.TmuxTests.test_bridge_live_pane_changes_and_stale_capture_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_tmux.py", line 301, in test_bridge_live_pane_changes_and_stale_capture_refused
+    receiver = self.bridge_receiver()
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_tmux.py", line 227, in bridge_receiver
+    self.launch()
+    ~~~~~~~~~~~^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_tmux.py", line 189, in launch
+    self.wait(lambda: "READY" in self.worker.tmux(
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "capture-pane", "-p", "-t", self.worker.meta["session"]).stdout)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_tmux.py", line 184, in wait
+    self.fail("fixture timed out: " + repr(self.worker.tmux(
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "capture-pane", "-p", "-t", self.worker.meta["session"]).stdout))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: fixture timed out: '\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n'
+
+----------------------------------------------------------------------
+Ran 830 tests in 468.496s
+
+FAILED (failures=1)
+Verified publication: manager @ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa · bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb · 2026-09-17T16:55:04+00:00
+Verified publication: manager @ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa · bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb · 2026-09-17T16:55:04+00:00

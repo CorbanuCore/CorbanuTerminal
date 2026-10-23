@@ -1,0 +1,21 @@
+[
+  "Requested: [2026-11-01T05:00:00.000Z, 2026-11-01T07:00:00.000Z); timezone: UTC; grouping: Hour",
+  "Oldest retained aggregate day (ledger): Some(20520); 90-day drill-down cutoff: Some(1793512799000) ms UTC (exclusive)",
+  "Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable \u2014 no",
+  "settlement evidence.",
+  "Range: Unknown parent population: 0 inspectable attempts, excluded from range total",
+  "Ancestry counts cover inspectable slices only; unavailable slices may contain additional unknown ancestry.",
+  "Bucket: [2026-11-01T05:00:00.000Z, 2026-11-01T06:00:00.000Z); effective coverage (requested \u2229 aggregate retention \u2229 snapshot): [2026-11-01T05:00:00.000Z, 2026-11-",
+  "01T06:00:00.000Z)",
+  "Whole bucket within aggregate retention coverage; detail availability checked separately",
+  "Request detail unavailable for this whole UTC day \u2014 compacted history lost request/provider attribution. No total shown. Store checkpoint: 1801288799000; aggregate day floor:",
+  "20484; oldest recorded day: Some(20520); 90-day wall-clock detail cutoff: Some(1793512799000) ms UTC.",
+  "Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.",
+  "Billed cost: unavailable \u2014 no settlement evidence",
+  "Logical requests may have attempts outside this bucket; this UTC hour is not their complete lifetime.",
+  "Precision unsupported outside retained raw detail; compacted days lost request/provider attribution. No bucket total. Whole UTC-day bounds offered: [2026-11-01T00:00:00.000Z,",
+  "2026-11-02T00:00:00.000Z); this does not restore attribution.",
+  "Back",
+  "Refresh",
+  "Close"
+]

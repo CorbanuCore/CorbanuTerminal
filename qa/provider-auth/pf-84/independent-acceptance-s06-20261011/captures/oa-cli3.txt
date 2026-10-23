@@ -1,0 +1,28 @@
+$ run $CAND $S/homes/b3 account list openai
+openai	key	chatgpt_auth	OpenAI API key
+openai	r1	chatgpt_auth	ChatGPT sign-in · r…@example.com · Plus
+openai	r2	chatgpt_auth	ChatGPT sign-in · r…@example.com · Plus
+[exit 0]
+$ run $CAND $S/homes/b3 account rename openai r2 r2b
+Renamed openai account `r2` to `r2b`.
+[exit 0]
+$ run $CAND $S/homes/b3 exec --skip-git-repo-check -C $S/ws --account r2b Reply with exactly: pong
+mock: chatgpt r2 gen3
+mock: chatgpt r2 gen3
+[exit 0]
+   mock: {"t": 1791782604.574, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "r2", "gen": 3, "expired": false}, "model": null}
+$ run $CAND $S/homes/b3 exec --skip-git-repo-check -C $S/ws --account r2 Reply with exactly: pong
+Error: thread/start: thread/start failed: account `r2` of provider `openai` is not signed in; sign in with `corbanu login --account r2` or pick another with `--account` (see `corbanu account list`) (code -32600)
+[exit 1]
+$ run $CAND $S/homes/b3 account remove openai r2b
+Signed out and removed openai account `r2b`.
+[exit 0]
+-- mock during remove:
+   {"t": 1791782605.3, "ev": "revoke", "user": "r2", "kind": "refresh_token"}
+$ run $CAND $S/homes/b3 account list openai
+openai	key	chatgpt_auth	OpenAI API key
+openai	r1	chatgpt_auth	ChatGPT sign-in · r…@example.com · Plus
+[exit 0]
+$ run $CAND $S/homes/b3 exec --skip-git-repo-check -C $S/ws --account r2b Reply with exactly: pong
+Error: thread/start: thread/start failed: account `r2b` of provider `openai` is not signed in; sign in with `corbanu login --account r2b` or pick another with `--account` (see `corbanu account list`) (code -32600)
+[exit 1]

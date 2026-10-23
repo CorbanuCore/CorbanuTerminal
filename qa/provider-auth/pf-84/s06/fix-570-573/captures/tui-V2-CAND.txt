@@ -1,0 +1,14 @@
+
+######## V2 on CAND (corbanu-cand)
+TUI started on Z.AI with --account openai:work, then /model -> OpenAI GPT-6 Luna
+-- mock lines for this turn:
+   {"t": 1791795718.326, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "tuiwork", "gen": 3, "expired": false}, "model": null}
+› Reply with exactly: pong
+⚠ Code Mode is unavailable because failed to spawn code-mode host codex-code-mode-host: host executable was not found. Code mode will
+  fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.
+• mock: chatgpt tuiwork gen3
+› Find and fix a bug in @filename
+  GPT-6 Luna medium · $S/ws · Corbanu Terminal · TPS: 58.1 tok/s
+│  Model provider:       OpenAI - http://127.0.0.1:34741/v1 · account work                 │
+│  Account:              ChatGPT sign-in · t…@example.com · Plus (account work)            │
+send_line: composer never showed the text

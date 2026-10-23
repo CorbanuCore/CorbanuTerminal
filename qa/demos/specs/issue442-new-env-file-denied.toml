@@ -1,0 +1,74 @@
+# #442 (Travis's decision 2026-10-11): under Aggressive, .env files created
+# after the session starts are protected too, not only those the launch
+# preflight found. Here the person creates .env.local mid-session; the
+# agent's next command cannot read it, and the denial is explained.
+id = "issue442-new-env-file-denied"
+feature = "#442: a .env file created mid-session stays unreadable under Aggressive"
+expected = "With Aggressive active, .env.local is created after the session started (synthetic value); the agent's `cat .env.local` is denied by the sandbox and a warning says Aggressive blocked access to it, also for files created during the session."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"notes.txt" = "buy coffee\nreview budget\n"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Aggressive\\?"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+timeout = 60
+[[steps]]
+pause = 2.0
+
+[[steps]]
+run = "printf 'DEMO_SETTING=synthetic-442-new\\n' > {workspace}/.env.local"
+[[steps]]
+type = "I just created .env.local, after this session started. Run exactly this shell command once, even if you expect it to be blocked (the sandbox decides): cat .env.local"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)cat \\.env\\.local.*blocked\\s+access\\s+to(?:(?!Working).)*\n› "
+timeout = 240
+compress = 3
+[[steps]]
+pause = 4.0

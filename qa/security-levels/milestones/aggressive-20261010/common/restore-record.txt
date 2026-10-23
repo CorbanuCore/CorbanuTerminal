@@ -1,0 +1,33 @@
+[restore] lo0: lo0 (skip)
+[restore] anchor matches original: yes
+[restore] per-user rules left: 0
+[restore] accounts left: 0  group: absent
+[restore] sudoers.d:   /opt/agms: absent
+[restore] /Users/neo 750
+[restore] /Users/neo_1 755
+[restore] /opt/homebrew 755
+[restore] /opt/homebrew/bin 775
+[restore] /opt/homebrew/sbin 775
+[restore] mount_virtiofs: mount_virtiofs: fs_tag share not found
+[restore] virtiofs mounted: 0
+[restore] /etc/codex/config.toml restored: yes
+[restore] /etc/hosts unchanged: yes
+[restore] campaign dirs left:        0
+[restore] processes for removed uids:        4
+[restore] guest clock (left at host UTC): 2026-10-11T05:55:43Z
+[restore] done
+82902   610 /usr/sbin/distnoted
+82904   611 /usr/sbin/distnoted
+82906   612 /usr/sbin/distnoted
+82908   613 /usr/sbin/distnoted
+[restore-fix] processes for removed uids:        0
+[restore-fix] virtiofs mounted: 1
+/dev/disk0 on /Volumes/My Shared Files (AppleVirtIOFS, local, nodev, nosuid, automounted)
+[post-restore egress] api.z.ai: 301
+[post-restore egress] github.com curl rc=6
+[post-restore egress] raw.githubusercontent.com curl rc=6
+[post-restore egress] codeload.github.com curl rc=6
+0
+/Users/agent/ag-admin
+ls: /Users/agent/ag-admin: No such file or directory
+[host] 2026-10-11T06:09:08Z utmctl stop "macOS 3" (it was stopped before the campaign; started with utmctl start at 2026-10-10 ~22:05Z). utmctl list: macOS 2 stopped, macOS 3 stopped.

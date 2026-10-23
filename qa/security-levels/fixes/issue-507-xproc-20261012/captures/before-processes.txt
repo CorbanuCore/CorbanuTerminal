@@ -1,0 +1,10 @@
+A pid: 62204
+processes on the home:
+62204 tmux -L agg507x-before1-a -f /dev/null new-session -d -s t -x 160 -y 60 bash <repo-root>/worktrees/agg-ks-xproc-507/qa/security-levels/fixes/issue-507-xproc-20261012/scripts/launch.sh <repo-root>/.codex-work/workers-20261002/agg-dec2/bin/corbanu-main <run>; sleep 99999
+62386 tmux -L agg507x-before1-b -f /dev/null new-session -d -s t -x 160 -y 60 bash <repo-root>/worktrees/agg-ks-xproc-507/qa/security-levels/fixes/issue-507-xproc-20261012/scripts/launch.sh <repo-root>/.codex-work/workers-20261002/agg-dec2/bin/corbanu-main <run>; sleep 99999
+62194 bash -c RUNS=<repo-root>/.codex-work/workers-20261002/agg-dec2/runs bash <repo-root>/worktrees/agg-ks-xproc-507/qa/security-levels/fixes/issue-507-xproc-20261012/scripts/case507x.sh <repo-root>/.codex-work/workers-20261002/agg-dec2/bin/corbanu-main before1 > <run>.out 2>&1
+62197 bash <repo-root>/worktrees/agg-ks-xproc-507/qa/security-levels/fixes/issue-507-xproc-20261012/scripts/case507x.sh <repo-root>/.codex-work/workers-20261002/agg-dec2/bin/corbanu-main before1
+62205 bash -c bash <repo-root>/worktrees/agg-ks-xproc-507/qa/security-levels/fixes/issue-507-xproc-20261012/scripts/launch.sh <repo-root>/.codex-work/workers-20261002/agg-dec2/bin/corbanu-main <run>; sleep 99999
+62207 <repo-root>/.codex-work/workers-20261002/agg-dec2/bin/corbanu-main -C <run>/ws -c log_dir="<run>/logs" -m glm-5.3-flash -c model_provider="zai"
+62387 bash -c bash <repo-root>/worktrees/agg-ks-xproc-507/qa/security-levels/fixes/issue-507-xproc-20261012/scripts/launch.sh <repo-root>/.codex-work/workers-20261002/agg-dec2/bin/corbanu-main <run>; sleep 99999
+62389 <repo-root>/.codex-work/workers-20261002/agg-dec2/bin/corbanu-main -C <run>/ws -c log_dir="<run>/logs" -m glm-5.3-flash -c model_provider="zai"

@@ -1,0 +1,91 @@
+# #688: on a provider without tool namespaces (Z.AI, Chat Completions) an MCP
+# server with 140 tools passes the 128-tool limit. The person is told once which
+# tools are not offered; the next turn does not repeat it.
+id = "issue688-tool-limit-notice-once"
+feature = "#688: tools over the 128-tool limit are reported once"
+expected = "With a 140-tool MCP server on GLM 5.3 Flash (Z.AI), the first turn shows one notice naming the tools not offered to the model; the second turn shows no second notice."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 140
+rows = 44
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+code_mode = false
+code_mode_only = false
+
+[mcp_servers.bulk]
+command = "python3"
+args = ["{workspace}/bulk_mcp_server.py"]
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"bulk_mcp_server.py" = '''#!/usr/bin/env python3
+"""Minimal MCP stdio server with 140 no-op tools (#688 demo)."""
+import json
+import sys
+
+TOOLS = [
+    {"name": f"tool_{i:03}", "description": f"Bulk no-op tool {i}.",
+     "inputSchema": {"type": "object", "properties": {}}}
+    for i in range(140)
+]
+
+
+def send(message):
+    sys.stdout.write(json.dumps(message) + "\n")
+    sys.stdout.flush()
+
+
+for line in sys.stdin:
+    try:
+        message = json.loads(line)
+    except json.JSONDecodeError:
+        continue
+    request_id = message.get("id")
+    if request_id is None:
+        continue
+    method = message.get("method")
+    if method == "initialize":
+        version = message.get("params", {}).get("protocolVersion", "2025-06-18")
+        result = {"protocolVersion": version, "capabilities": {"tools": {}},
+                  "serverInfo": {"name": "bulk", "version": "1.0.0"}}
+    elif method == "tools/list":
+        result = {"tools": TOOLS}
+    elif method == "tools/call":
+        result = {"content": [{"type": "text", "text": "ok"}]}
+    else:
+        send({"jsonrpc": "2.0", "id": request_id,
+              "error": {"code": -32601, "message": f"unknown method {method}"}})
+        continue
+    send({"jsonrpc": "2.0", "id": request_id, "result": result})
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Reply with exactly: pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^• pong"
+timeout = 120
+compress = 2
+[[steps]]
+pause = 3.0
+[[steps]]
+type = "Reply with exactly: ping"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^• ping"
+timeout = 120
+compress = 2
+[[steps]]
+pause = 3.0

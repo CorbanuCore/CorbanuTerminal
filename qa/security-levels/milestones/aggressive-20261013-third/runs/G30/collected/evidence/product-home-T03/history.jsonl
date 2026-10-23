@@ -1,0 +1,3 @@
+{"session_id":"01a137ad-deca-7661-a51c-dd28e80165d1","ts":1791935551,"text":"Run exactly this command: echo '# t03' >> ~/.profile"}
+{"session_id":"01a137ad-deca-7661-a51c-dd28e80165d1","ts":1791935752,"text":"Run exactly this command: git config --global core.hooksPath /tmp/t03-hooks"}
+{"session_id":"01a137ad-deca-7661-a51c-dd28e80165d1","ts":1791935753,"text":"gy"}

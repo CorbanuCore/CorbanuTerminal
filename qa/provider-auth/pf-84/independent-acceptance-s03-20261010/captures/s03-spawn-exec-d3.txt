@@ -1,0 +1,61 @@
+home hS security_level.toml:
+  version = 1
+  level = "aggressive"
+== SP10 Aggressive in force (exec, no approver): spawn account=work (exit 0)
+   exec args: --account main --enable security_levels
+   spawn request: {message, account:"work"}
+   final reply: child-ok
+   thread 01a128c8-69bf provider=zai role=None
+     turn_context provider=zai provider_account=main
+     call spawn_agent_v1 {"message":"Reply with exactly the word child-ok","account":"work"}
+     result {"agent_id":"01a128c8-80d7-79a1-9e66-0ed98d2cca38","nickname":"Godel","account":"work"}
+     call wait_agent_v1 {"targets":["01a128c8-80d7-79a1-9e66-0ed98d2cca38"],"timeout_ms":30000}
+     result {"status":{"01a128c8-80d7-79a1-9e66-0ed98d2cca38":{"completed":"child-ok"}},"timed_out":false}
+       thread 01a128c8-80d7 provider=zai role=None
+         turn_context provider=zai provider_account=work
+== SP11 Aggressive in force (exec): spawn without account (inherit; not a switch) (exit 0)
+   exec args: --account main --enable security_levels
+   spawn request: {message}
+   final reply: child-ok
+   thread 01a128c8-aaeb provider=zai role=None
+     turn_context provider=zai provider_account=main
+     call spawn_agent_v1 {"message":"Reply with exactly the word child-ok"}
+     result {"agent_id":"01a128c8-c439-7e92-b2fb-c8ec4ba456ff","nickname":"James","account":"main"}
+     call wait_agent_v1 {"targets":["01a128c8-c439-7e92-b2fb-c8ec4ba456ff"]}
+     result {"status":{"01a128c8-c439-7e92-b2fb-c8ec4ba456ff":{"completed":"child-ok"}},"timed_out":false}
+       thread 01a128c8-c439 provider=zai role=None
+         turn_context provider=zai provider_account=main
+== SP12 Aggressive in force (exec): spawn account=main (same as the parent) (exit 0)
+   exec args: --account main --enable security_levels
+   spawn request: {message, account:"main"}
+   final reply: child-ok
+   thread 01a128c8-e1e6 provider=zai role=None
+     turn_context provider=zai provider_account=main
+     call spawn_agent_v1 {"message":"Reply with exactly the word child-ok","account":"main"}
+     result {"agent_id":"01a128c8-fbe6-7100-aa30-52c5e09b79fa","nickname":"Descartes","account":"main"}
+     call wait_agent_v1 {"targets":["01a128c8-fbe6-7100-aa30-52c5e09b79fa"],"timeout_ms":30000}
+     result {"status":{"01a128c8-fbe6-7100-aa30-52c5e09b79fa":{"completed":"child-ok"}},"timed_out":false}
+       thread 01a128c8-fbe6 provider=zai role=None
+         turn_context provider=zai provider_account=main
+home hS security_level.toml now:
+  version = 1
+  level = "permissive"
+== SP13 Permissive saved level, security_levels on (exec): spawn account=work (exit 0)
+   exec args: --account main --enable security_levels
+   spawn request: {message, account:"work"}
+   final reply: child-ok
+   thread 01a128c9-2104 provider=zai role=None
+     turn_context provider=zai provider_account=main
+     call spawn_agent_v1 {"account":"work","message":"Reply with exactly the word child-ok"}
+     result {"agent_id":"01a128c9-3b22-7840-8c7a-2daecc34d36e","nickname":"Archimedes","account":"work"}
+     call wait_agent_v1 {"targets":["01a128c9-3b22-7840-8c7a-2daecc34d36e"],"timeout_ms":30000}
+     result {"status":{"01a128c9-3b22-7840-8c7a-2daecc34d36e":{"completed":"child-ok"}},"timed_out":false}
+       thread 01a128c9-3b22 provider=zai role=None
+         turn_context provider=zai provider_account=work
+
+NOTE (executor): in SP10-SP12 above the level was only written to security_level.toml, which this build did not
+pick up: the coordinator turn_context of SP10 (01a128c8-69bf) records security_level = "permissive"
+(approval_policy = "never"), and a TUI run with the same file also recorded "permissive". So these rows show the
+non-Aggressive behaviour (no approval needed). The Aggressive rows are in s03-spawn-exec-d3-config-level.txt
+(level set with the documented `[security] level`, recorded as security_level = "aggressive") and in
+s03-tui-spawn-aggressive-d3.txt.

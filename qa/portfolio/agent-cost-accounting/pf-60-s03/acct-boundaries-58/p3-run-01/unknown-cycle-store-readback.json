@@ -1,0 +1,10 @@
+{
+  "cause": "cycle",
+  "thread": "01a05a43-fc00-7c33-9e5c-9b67c03caab2",
+  "source": "{\"subagent\": {\"thread_spawn\": {\"parent_thread_id\": \"01a05a43-fc00-7c33-9e5c-9b67c03caab2\", \"depth\": 1}}}",
+  "edge_parents": [
+    "01a05a43-fc00-7c33-9e5c-9b67c03caab2"
+  ],
+  "inspect_pid": 88302,
+  "read_at_monotonic_ns": 740254670058708
+}

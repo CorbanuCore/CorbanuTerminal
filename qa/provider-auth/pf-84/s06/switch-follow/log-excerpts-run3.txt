@@ -1,0 +1,9 @@
+# run 3 (head df68e14642) core: account switches
+2026-10-12T06:20:58.820435 account=default
+2026-10-12T06:21:05.811431 account=openai:work
+2026-10-12T06:21:35.542400 account=default
+# run 3 model/list requests
+2026-10-12T06:20:25.930442 rpc.request_id=4
+2026-10-12T06:20:58.826960 rpc.request_id=10
+2026-10-12T06:21:05.816752 rpc.request_id=13
+2026-10-12T06:21:35.547563 rpc.request_id=19

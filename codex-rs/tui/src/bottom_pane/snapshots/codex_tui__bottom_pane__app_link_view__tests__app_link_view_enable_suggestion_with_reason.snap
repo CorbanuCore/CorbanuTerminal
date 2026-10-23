@@ -17,4 +17,4 @@ expression: "render_snapshot(&view, Rect::new(0, 0, 72, view.desired_height(72))
   › 1. Manage on ChatGPT
     2. Enable app
     3. Back
-  Use tab / ↑ ↓ to move, enter to select, esc to close
+  Use ↑ ↓ to move, enter to select, esc to close

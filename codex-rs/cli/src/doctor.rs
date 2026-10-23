@@ -4095,10 +4095,13 @@ mod tests {
         let addr = listener.local_addr().expect("listener address");
         let server = std::thread::spawn(move || {
             let (mut head_stream, _) = listener.accept().expect("accept HEAD probe request");
+            let (release_head, head_released) = std::sync::mpsc::channel::<()>();
+            // Never answer HEAD; hold the connection until GET has been answered
+            // so HEAD can only end by timing out.
             let head = std::thread::spawn(move || {
                 let mut request = [0; 1024];
                 let _ = head_stream.read(&mut request);
-                std::thread::sleep(Duration::from_millis(50));
+                let _ = head_released.recv();
             });
 
             let (mut get_stream, _) = listener.accept().expect("accept GET probe request");
@@ -4109,14 +4112,15 @@ mod tests {
                     b"HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
                 )
                 .expect("write response");
+            let _ = release_head.send(());
             head.join().expect("HEAD holder should finish");
         });
 
-        let status = mcp_http_probe_url_with_timeout(
-            &format!("http://{addr}/mcp"),
-            Duration::from_millis(10),
-        )
-        .await;
+        // Each probe builds its own client inside this budget; 10 ms let a
+        // loaded CI runner time out the GET as well.
+        let status =
+            mcp_http_probe_url_with_timeout(&format!("http://{addr}/mcp"), Duration::from_secs(1))
+                .await;
         server.join().expect("probe server thread should finish");
 
         assert_eq!(status, Ok("HTTP 405".to_string()));

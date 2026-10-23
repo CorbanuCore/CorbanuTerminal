@@ -64,6 +64,7 @@ use crate::onboarding::provider_setup::ProviderSetupAction;
 use crate::onboarding::provider_setup::ProviderSetupPhase;
 use crate::onboarding::provider_setup::ProviderSetupSession;
 use crate::provider_status_host::ProviderStatusHost;
+use crate::selection_list::list_position_label;
 use crate::terminal_hyperlinks::HyperlinkLine;
 use crate::terminal_hyperlinks::mark_buffer_hyperlinks;
 use crate::terminal_hyperlinks::visible_lines;
@@ -100,6 +101,10 @@ pub(crate) fn mark_underlined_hyperlink(buf: &mut Buffer, area: Rect, url: &str)
 use super::onboarding_screen::StepState;
 
 mod headless_chatgpt_login;
+mod named_account;
+#[cfg(test)]
+#[path = "auth/named_account_tests.rs"]
+mod named_account_tests;
 
 #[derive(Clone)]
 pub(crate) enum SignInState {
@@ -133,6 +138,25 @@ pub(crate) enum SignInState {
     },
     ClaudeAccountConfigured {
         source: codex_provider_auth::ClaudeCredentialSource,
+    },
+    /// PF-84-S04: what to do with a configured provider's single row.
+    ConfiguredProviderChoice {
+        entry_index: usize,
+        highlighted: usize,
+    },
+    AccountNameEntry {
+        entry_index: usize,
+        value: String,
+    },
+    AccountValueEntry {
+        entry_index: usize,
+        name: codex_vault::ProviderAccountName,
+        /// Masked on screen; edited in place and wiped when dropped.
+        value: zeroize::Zeroizing<String>,
+    },
+    AccountSaving,
+    AccountSaved {
+        message: String,
     },
     Complete,
 }
@@ -278,6 +302,9 @@ impl ContinueWithDeviceCodeState {
 
 impl KeyboardHandler for AuthModeWidget {
     fn handle_key_event(&mut self, key_event: KeyEvent) {
+        if self.handle_named_account_key_event(&key_event) {
+            return;
+        }
         if self.handle_api_key_entry_key_event(&key_event) {
             return;
         }
@@ -309,7 +336,8 @@ impl KeyboardHandler for AuthModeWidget {
             let sign_in_state = { (*self.sign_in_state.read().unwrap()).clone() };
             match sign_in_state {
                 SignInState::PickMode => {
-                    self.handle_sign_in_option(self.highlighted_mode);
+                    let highlighted = self.effective_highlight(&self.displayed_sign_in_options());
+                    self.handle_sign_in_option(highlighted);
                 }
                 SignInState::ChatGptSuccessMessage | SignInState::ChatGptSuccess => {
                     self.finish_openai_account_setup();
@@ -337,6 +365,9 @@ impl KeyboardHandler for AuthModeWidget {
     }
 
     fn handle_paste(&mut self, pasted: String) {
+        if self.handle_named_account_paste(&pasted) {
+            return;
+        }
         if !self.handle_claude_auth_paste(&pasted) {
             let _ = self.handle_api_key_entry_paste(pasted);
         }
@@ -385,37 +416,46 @@ pub(crate) fn catalog_sign_in_options_from_statuses(
                     | ProviderSetupCapability::StatusOnly { .. }
             )
         });
-        for capability in entry.setup_capabilities.iter() {
-            let option = match capability {
-                ProviderSetupCapability::OpenAiAccount => Some(SignInOption::DeviceCode),
-                ProviderSetupCapability::ClaudeAccount => Some(SignInOption::AnthropicAccount),
-                ProviderSetupCapability::CorbanuPlan => Some(SignInOption::CorbanuPlan),
-                ProviderSetupCapability::ApiKey { .. } => api_key_options
-                    .iter()
-                    .position(|candidate| {
-                        candidate.target.provider_id == entry.id
-                            && candidate.capability == *capability
-                    })
-                    .map(SignInOption::ProviderApiKey),
-                ProviderSetupCapability::Local { .. }
-                | ProviderSetupCapability::CommandAuth { .. }
-                | ProviderSetupCapability::StatusOnly { .. } => None,
-            };
-            if let Some(option) = option {
-                options.push(option);
-            }
-        }
-        if status.is_some_and(|status| {
+        let offer_existing = status.is_some_and(|status| {
             super::provider_setup::provider_should_offer_existing_selection(
                 status,
                 has_noninteractive_capability,
             )
-        }) && !entry.runtime_provider_ids.is_empty()
-        {
+        }) && !entry.runtime_provider_ids.is_empty();
+        if offer_existing {
+            // PF-84-S04: a configured provider gets exactly one row; its setup
+            // methods ("Replace with ...") and "Add another account" sit behind it.
             options.push(SignInOption::ProviderRuntime(entry_index));
+        } else {
+            options.extend(entry_setup_options(entry, api_key_options));
         }
     }
     options
+}
+
+/// The setup rows one catalog entry offers while it is not configured.
+pub(crate) fn entry_setup_options(
+    entry: &codex_provider_auth::ProviderCatalogEntry,
+    api_key_options: &[ApiKeyProviderOption],
+) -> Vec<SignInOption> {
+    entry
+        .setup_capabilities
+        .iter()
+        .filter_map(|capability| match capability {
+            ProviderSetupCapability::OpenAiAccount => Some(SignInOption::DeviceCode),
+            ProviderSetupCapability::ClaudeAccount => Some(SignInOption::AnthropicAccount),
+            ProviderSetupCapability::CorbanuPlan => Some(SignInOption::CorbanuPlan),
+            ProviderSetupCapability::ApiKey { .. } => api_key_options
+                .iter()
+                .position(|candidate| {
+                    candidate.target.provider_id == entry.id && candidate.capability == *capability
+                })
+                .map(SignInOption::ProviderApiKey),
+            ProviderSetupCapability::Local { .. }
+            | ProviderSetupCapability::CommandAuth { .. }
+            | ProviderSetupCapability::StatusOnly { .. } => None,
+        })
+        .collect()
 }
 
 #[derive(Clone)]
@@ -442,6 +482,10 @@ pub(crate) struct AuthModeWidget {
     pub provider_status_host: ProviderStatusHost,
     pub provider_statuses: Arc<RwLock<ProviderStatusCatalog>>,
     pub provider_auth_action_tx: tokio::sync::mpsc::UnboundedSender<ProviderAuthAction>,
+    /// PF-84-S04: provider id -> how it takes a named account; empty while
+    /// the `named_accounts` feature is off.
+    pub named_account_methods:
+        std::collections::BTreeMap<String, Vec<crate::provider_named_accounts::AddAccountMethod>>,
 }
 
 impl AuthModeWidget {
@@ -503,27 +547,51 @@ impl AuthModeWidget {
         self.error.read().unwrap().clone()
     }
 
-    /// Returns whether the auth flow is currently in API-key entry mode.
-    pub(crate) fn is_api_key_entry_active(&self) -> bool {
-        self.sign_in_state.read().is_ok_and(|guard| {
-            matches!(
-                &*guard,
-                SignInState::ApiKeyEntry(_)
-                    | SignInState::ClaudeManagedTokenEntry(_)
-                    | SignInState::ClaudeCodeLoginCodeEntry { .. }
-            )
+    /// Returns whether a text field (an API key, a Claude token or code, or a
+    /// named account's name or value) has focus, or its value is being saved.
+    /// While it does, every printable key is text, never a shortcut: a
+    /// non-bracketed paste with a newline starts the save while the rest of
+    /// the value is still arriving.
+    pub(crate) fn is_text_entry_active(&self) -> bool {
+        // Exhaustive on purpose: a new state must decide whether it takes text.
+        self.sign_in_state.read().is_ok_and(|guard| match &*guard {
+            SignInState::ApiKeyEntry(_)
+            | SignInState::ApiKeySaving
+            | SignInState::ClaudeManagedTokenEntry(_)
+            | SignInState::ClaudeManagedTokenSaving
+            | SignInState::ClaudeCodeLoginCodeEntry { .. }
+            | SignInState::AccountNameEntry { .. }
+            | SignInState::AccountValueEntry { .. }
+            | SignInState::AccountSaving => true,
+            SignInState::PickMode
+            | SignInState::ChatGptContinueInBrowser(_)
+            | SignInState::ChatGptDeviceCode(_)
+            | SignInState::ChatGptSuccessMessage
+            | SignInState::ChatGptSuccess
+            | SignInState::ApiKeyConfigured { .. }
+            | SignInState::ClaudeAuthMethodChoice { .. }
+            | SignInState::ClaudeCodeLoginChecking
+            | SignInState::ClaudeCodeLoginPending { .. }
+            | SignInState::ClaudeCodeLoginReady { .. }
+            | SignInState::ClaudeAccountConfigured { .. }
+            | SignInState::ConfiguredProviderChoice { .. }
+            | SignInState::AccountSaved { .. }
+            | SignInState::Complete => false,
         })
     }
 
-    /// Returns whether the API-key entry field currently contains any text.
-    pub(crate) fn api_key_entry_has_text(&self) -> bool {
-        self.sign_in_state.read().is_ok_and(|guard| match &*guard {
+    /// The focused text field's current value, for tests.
+    #[cfg(test)]
+    pub(crate) fn text_entry_value(&self) -> Option<String> {
+        match &*self.sign_in_state.read().unwrap() {
             SignInState::ApiKeyEntry(state) | SignInState::ClaudeManagedTokenEntry(state) => {
-                !state.value.is_empty()
+                Some(state.value.clone())
             }
-            SignInState::ClaudeCodeLoginCodeEntry { value, .. } => !value.is_empty(),
-            _ => false,
-        })
+            SignInState::ClaudeCodeLoginCodeEntry { value, .. }
+            | SignInState::AccountNameEntry { value, .. } => Some(value.clone()),
+            SignInState::AccountValueEntry { value, .. } => Some(value.to_string()),
+            _ => None,
+        }
     }
 
     fn confirm_binding(&self) -> KeyBinding {
@@ -605,7 +673,7 @@ impl AuthModeWidget {
 
         let current_index = options
             .iter()
-            .position(|option| *option == self.highlighted_mode)
+            .position(|option| *option == self.effective_highlight(&options))
             .unwrap_or(0);
         let next_index =
             (current_index as isize + delta).rem_euclid(options.len() as isize) as usize;
@@ -645,7 +713,7 @@ impl AuthModeWidget {
             }
             SignInOption::ApiKey => {
                 if self.is_api_login_allowed() {
-                    self.begin_provider(OPENAI_PROVIDER_ID);
+                    self.begin_provider(&self.api_key_entry_provider_id());
                     self.start_api_key_entry();
                 } else {
                     self.disallow_api_login();
@@ -658,7 +726,9 @@ impl AuthModeWidget {
                 }
             }
             SignInOption::ProviderRuntime(index) => {
-                self.select_provider_runtime_option(index);
+                if !self.open_configured_choice(index) {
+                    self.select_existing_provider(index);
+                }
             }
             SignInOption::CorbanuPlan => {
                 let queued = !self
@@ -691,6 +761,26 @@ impl AuthModeWidget {
         }
     }
 
+    /// The catalog provider the API-key field saves to. Setup must begin for
+    /// this provider, or its completion is ignored and onboarding loops (#462).
+    fn api_key_entry_provider_id(&self) -> String {
+        self.selected_api_key_option.as_ref().map_or_else(
+            || OPENAI_PROVIDER_ID.to_string(),
+            |option| option.target.provider_id.as_str().to_string(),
+        )
+    }
+
+    /// Begins provider setup when onboarding opens straight on API-key entry
+    /// (config already names the provider), as choosing the row would.
+    pub(crate) fn begin_initial_api_key_entry(&self) {
+        if matches!(
+            &*self.sign_in_state.read().unwrap(),
+            SignInState::ApiKeyEntry(_)
+        ) {
+            self.begin_provider(&self.api_key_entry_provider_id());
+        }
+    }
+
     fn begin_provider(&self, provider_id: &str) {
         let Some(entry) = self.provider_status_host.catalog().get(provider_id) else {
             return;
@@ -703,7 +793,20 @@ impl AuthModeWidget {
             });
     }
 
-    fn select_provider_runtime_option(&mut self, index: usize) {
+    /// How a setup row reads behind a configured provider ("Replace with ...").
+    fn sign_in_option_method(&self, option: SignInOption) -> String {
+        match option {
+            SignInOption::ChatGpt | SignInOption::DeviceCode => {
+                "OpenAI account sign-in".to_string()
+            }
+            SignInOption::AnthropicAccount => "Claude account sign-in".to_string(),
+            SignInOption::ApiKey | SignInOption::ProviderApiKey(_) => "a new API key".to_string(),
+            SignInOption::CorbanuPlan => "Corbanu API".to_string(),
+            SignInOption::ProviderRuntime(_) | SignInOption::Done => "setup".to_string(),
+        }
+    }
+
+    fn select_existing_provider(&mut self, index: usize) {
         let Some(entry) = self.provider_status_host.catalog().entries().get(index) else {
             self.set_error(Some(
                 "Selected provider is no longer available.".to_string(),
@@ -722,7 +825,7 @@ impl AuthModeWidget {
             },
         );
         if transition.applied {
-            self.set_error(None);
+            self.set_error(/*message*/ None);
         } else {
             self.set_error(Some("Selected provider could not be applied.".to_string()));
         }
@@ -809,7 +912,7 @@ impl AuthModeWidget {
             }
         }
         *self.provider_statuses.write().unwrap() = self.provider_status_host.resolve();
-        self.set_error(None);
+        self.set_error(/*message*/ None);
         if self.provider_picker_enabled() {
             *self.sign_in_state.write().unwrap() = SignInState::PickMode;
         } else {
@@ -843,9 +946,22 @@ impl AuthModeWidget {
         let Some(entry) = self.provider_status_host.catalog().get(provider_id) else {
             return fallback.to_string();
         };
-        if session.snapshot().usable.contains(&entry.id) {
+        let local_runtime = entry
+            .setup_capabilities
+            .iter()
+            .any(|capability| matches!(capability, ProviderSetupCapability::Local { .. }));
+        let snapshot = session.snapshot();
+        // Ollama and LM Studio are never probed, so neither "ready" nor
+        // "unavailable" would be true: say what is known.
+        if local_runtime && snapshot.configured.contains(&entry.id) {
+            if snapshot.usable.contains(&entry.id) {
+                "Local (not checked) · active".to_string()
+            } else {
+                "Local (not checked)".to_string()
+            }
+        } else if snapshot.usable.contains(&entry.id) {
             "Configured · active · ready".to_string()
-        } else if session.snapshot().configured.contains(&entry.id) {
+        } else if snapshot.configured.contains(&entry.id) {
             "Configured · unavailable".to_string()
         } else {
             fallback.to_string()
@@ -868,6 +984,27 @@ impl AuthModeWidget {
         } else {
             self.api_key_provider_name.clone()
         }
+    }
+
+    /// The highlighted row. A setup row that turned into its provider's single
+    /// configured row (PF-84-S04) keeps the focus on that row.
+    fn effective_highlight(&self, options: &[SignInOption]) -> SignInOption {
+        if options.contains(&self.highlighted_mode) {
+            return self.highlighted_mode;
+        }
+        self.provider_status_host
+            .catalog()
+            .entries()
+            .iter()
+            .enumerate()
+            .find(|(entry_index, entry)| {
+                options.contains(&SignInOption::ProviderRuntime(*entry_index))
+                    && entry_setup_options(entry, &self.api_key_provider_options)
+                        .contains(&self.highlighted_mode)
+            })
+            .map_or(self.highlighted_mode, |(entry_index, _)| {
+                SignInOption::ProviderRuntime(entry_index)
+            })
     }
 
     fn select_provider_api_key_option(&mut self, index: usize) -> bool {
@@ -928,12 +1065,13 @@ impl AuthModeWidget {
             ]
         };
 
+        let highlighted_row = self.effective_highlight(&self.displayed_sign_in_options());
         let create_mode_item = |idx: usize,
                                 selected_mode: SignInOption,
                                 text: &str,
                                 description: &str|
          -> Vec<Line<'static>> {
-            let is_selected = self.highlighted_mode == selected_mode;
+            let is_selected = highlighted_row == selected_mode;
             let caret = if is_selected { ">" } else { " " };
 
             let line1 = if is_selected {
@@ -1106,6 +1244,7 @@ impl AuthModeWidget {
             );
             footer_lines.push("".into());
         }
+        let instructions_line = footer_lines.len();
         footer_lines.push(Line::from(vec![
             "  Use ↑/↓ to choose · Press ".dim(),
             self.confirm_binding().into(),
@@ -1132,14 +1271,28 @@ impl AuthModeWidget {
             .wrap(Wrap { trim: false })
             .render(header_area, buf);
 
+        let highlighted = self.effective_highlight(&displayed_options);
         let selected_option_index = displayed_options
             .iter()
-            .position(|option| *option == self.highlighted_mode)
+            .position(|option| *option == highlighted)
             .unwrap_or(0);
         let selected_end_line = selected_option_index.saturating_mul(3).saturating_add(2);
         let option_scroll = selected_end_line
             .saturating_sub(options_height.saturating_sub(1) as usize)
             .min(u16::MAX as usize) as u16;
+        // #1288: rows exist beyond the visible window.
+        if option_lines.len() > options_height as usize
+            && let Some(line) = footer_lines.get_mut(instructions_line)
+        {
+            let position = format!(
+                " · {}",
+                list_position_label(Some(selected_option_index), displayed_options.len())
+            )
+            .dim();
+            if line.width() + position.width() <= area.width as usize {
+                line.push_span(position);
+            }
+        }
         Paragraph::new(option_lines)
             .wrap(Wrap { trim: false })
             .scroll((option_scroll, 0))
@@ -2193,7 +2346,12 @@ impl StepStateProvider for AuthModeWidget {
             | SignInState::ClaudeCodeLoginChecking
             | SignInState::ClaudeCodeLoginPending { .. }
             | SignInState::ClaudeCodeLoginReady { .. }
-            | SignInState::ClaudeCodeLoginCodeEntry { .. } => StepState::InProgress,
+            | SignInState::ClaudeCodeLoginCodeEntry { .. }
+            | SignInState::ConfiguredProviderChoice { .. }
+            | SignInState::AccountNameEntry { .. }
+            | SignInState::AccountValueEntry { .. }
+            | SignInState::AccountSaving
+            | SignInState::AccountSaved { .. } => StepState::InProgress,
             SignInState::ChatGptSuccess
             | SignInState::ApiKeyConfigured { .. }
             | SignInState::ClaudeAccountConfigured { .. } => StepState::InProgress,
@@ -2263,6 +2421,13 @@ impl WidgetRef for AuthModeWidget {
                 Paragraph::new("✓ Anthropic Claude account configured".fg(Color::Green))
                     .render(area, buf);
             }
+            SignInState::ConfiguredProviderChoice { .. }
+            | SignInState::AccountNameEntry { .. }
+            | SignInState::AccountValueEntry { .. }
+            | SignInState::AccountSaving
+            | SignInState::AccountSaved { .. } => {
+                self.render_named_account_state(area, buf, &sign_in_state);
+            }
             SignInState::Complete => {}
         }
     }
@@ -2279,7 +2444,7 @@ pub(super) fn maybe_open_auth_url_in_browser(request_handle: &AppServerRequestHa
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::legacy_core::config::ConfigBuilder;
     use codex_app_server_client::AppServerRequestHandle;
@@ -2310,7 +2475,7 @@ mod tests {
         "originator=codex_cli_rs"
     );
 
-    async fn widget_forced_chatgpt() -> (AuthModeWidget, TempDir) {
+    pub(crate) async fn widget_forced_chatgpt() -> (AuthModeWidget, TempDir) {
         let codex_home = TempDir::new().unwrap();
         let codex_home_path = codex_home.path().to_path_buf();
         let config = ConfigBuilder::default()
@@ -2386,11 +2551,12 @@ mod tests {
             provider_status_host,
             provider_statuses: Arc::new(RwLock::new(provider_statuses)),
             provider_auth_action_tx,
+            named_account_methods: std::collections::BTreeMap::new(),
         };
         (widget, codex_home)
     }
 
-    fn buffer_text(buf: &Buffer, area: Rect) -> String {
+    pub(super) fn buffer_text(buf: &Buffer, area: Rect) -> String {
         let mut out = String::new();
         for y in area.top()..area.bottom() {
             for x in area.left()..area.right() {
@@ -2539,6 +2705,55 @@ mod tests {
         );
     }
 
+    /// #1288: when the providers do not fit, the footer says which row is
+    /// selected out of how many, and follows the selection.
+    #[tokio::test]
+    async fn provider_picker_shows_position_when_rows_exceed_the_window() {
+        let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        widget.forced_login_method = None;
+        widget.highlighted_mode = SignInOption::ProviderApiKey(0);
+        widget.api_key_provider_options = vec![
+            api_key_option("openai", "OpenAI", "OPENAI_API_KEY"),
+            api_key_option("ambient", "Ambient", "AMBIENT_API_KEY"),
+            api_key_option("zai", "Z.AI", "ZAI_API_KEY"),
+            api_key_option("openrouter", "OpenRouter", "OPENROUTER_API_KEY"),
+            api_key_option("baseten", "Baseten", "BASETEN_API_KEY"),
+            api_key_option("vercel", "Vercel", "AI_GATEWAY_API_KEY"),
+        ];
+        let total = widget.displayed_sign_in_options().len();
+        let render = |widget: &AuthModeWidget, height: u16| {
+            let area = Rect::new(0, 0, 80, height);
+            let mut buf = Buffer::empty(area);
+            widget.render_pick_mode(area, &mut buf);
+            buffer_text(&buf, area)
+        };
+
+        let rendered = render(&widget, /*height*/ 32);
+        assert!(
+            rendered.contains(&format!(
+                "Use ↑/↓ to choose · Press enter to continue · 2 / {total}"
+            )),
+            "rendered:\n{rendered}"
+        );
+
+        widget.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        let rendered = render(&widget, /*height*/ 32);
+        assert!(
+            rendered.contains(&format!("· 3 / {total}")),
+            "rendered:\n{rendered}"
+        );
+
+        let rendered = render(&widget, /*height*/ 60);
+        assert!(
+            rendered.contains("Provider: Amazon Bedrock") && rendered.contains("Done"),
+            "every row fits:\n{rendered}"
+        );
+        assert!(
+            !rendered.contains(&format!(" / {total}")),
+            "no position when every row fits:\n{rendered}"
+        );
+    }
+
     #[tokio::test]
     async fn forced_api_policy_rejects_device_code_selection() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
@@ -2614,13 +2829,49 @@ mod tests {
         assert_eq!(widget.login_status, LoginStatus::NotAuthenticated);
     }
 
+    /// #462: with the picker off (config names an API-key provider), the
+    /// "Provide your ... API key" row begins setup for that provider, so the
+    /// saved key's completion is not ignored.
+    #[tokio::test]
+    async fn api_key_row_begins_setup_for_the_selected_provider() {
+        let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        widget.forced_login_method = Some(ForcedLoginMethod::Api);
+        let option = api_key_option("zai", "Z.AI", "ZAI_API_KEY");
+        widget.api_key_provider_options = vec![option.clone()];
+        widget.selected_api_key_option = Some(option);
+        assert!(!widget.provider_picker_enabled());
+
+        widget.handle_sign_in_option(SignInOption::ApiKey);
+
+        let entry = widget
+            .provider_status_host
+            .catalog()
+            .get("zai")
+            .expect("Z.AI catalog entry");
+        assert_eq!(
+            widget
+                .provider_setup_session
+                .read()
+                .unwrap()
+                .snapshot()
+                .phase,
+            crate::onboarding::provider_setup::ProviderSetupPhase::Authenticating {
+                provider_id: entry.id.clone(),
+            }
+        );
+        assert!(matches!(
+            &*widget.sign_in_state.read().unwrap(),
+            SignInState::ApiKeyEntry(_)
+        ));
+    }
+
     #[tokio::test]
     async fn provider_api_key_save_is_single_flight() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
         widget.forced_login_method = None;
         widget.api_key_provider_options =
             vec![api_key_option("deepseek", "DeepSeek", "DEEPSEEK_API_KEY")];
-        assert!(widget.select_provider_api_key_option(0));
+        assert!(widget.select_provider_api_key_option(/*index*/ 0));
         *widget.sign_in_state.write().unwrap() =
             SignInState::ApiKeyEntry(ApiKeyInputState::default());
 
@@ -2701,6 +2952,57 @@ mod tests {
             Some(codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID)
         );
         assert!(widget.provider_setup_session.read().unwrap().can_finish());
+    }
+
+    /// Ollama and LM Studio are never probed, so their onboarding rows do not
+    /// claim "ready".
+    #[tokio::test]
+    async fn local_runtime_rows_say_not_checked() {
+        let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        widget.forced_login_method = None;
+        let option = catalog_sign_in_options(
+            &widget.provider_status_host,
+            &widget.api_key_provider_options,
+        )
+        .into_iter()
+        .find(|option| {
+            let SignInOption::ProviderRuntime(index) = option else {
+                return false;
+            };
+            widget
+                .provider_status_host
+                .catalog()
+                .entries()
+                .get(*index)
+                .is_some_and(|entry| {
+                    entry.runtime_provider_ids.iter().any(|runtime| {
+                        runtime.as_str() == codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID
+                    })
+                })
+        })
+        .expect("Ollama explicit-selection option");
+        widget.highlighted_mode = option;
+
+        let area = Rect::new(0, 0, 80, 32);
+        let mut buf = Buffer::empty(area);
+        widget.render_pick_mode(area, &mut buf);
+        let visible = buffer_text(&buf, area)
+            .lines()
+            .map(str::trim_end)
+            .collect::<Vec<_>>()
+            .join("\n");
+        insta::assert_snapshot!("local_runtime_rows_not_checked", visible);
+
+        // Selected, it is active, still not checked.
+        widget.handle_sign_in_option(option);
+        let mut buf = Buffer::empty(area);
+        widget.render_pick_mode(area, &mut buf);
+        let rendered = buffer_text(&buf, area);
+        assert!(
+            rendered.contains("Local (not checked) · active"),
+            "rendered:\n{rendered}"
+        );
+        assert!(!rendered.contains("ready"), "rendered:\n{rendered}");
     }
 
     #[tokio::test]
@@ -3042,7 +3344,7 @@ Your account and billing path change only after success. Esc keeps the current m
     #[tokio::test]
     async fn device_code_guidance_keeps_numbered_steps_and_cancel_visible() {
         let (widget, _tmp) = widget_forced_chatgpt().await;
-        widget.set_animations_suppressed(true);
+        widget.set_animations_suppressed(/*suppressed*/ true);
         let state = ContinueWithDeviceCodeState::ready(
             "request-1".to_string(),
             "login-1".to_string(),

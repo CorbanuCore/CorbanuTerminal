@@ -22,13 +22,15 @@ use crate::tools::context::ToolPayload;
 use crate::tools::context::boxed_tool_output;
 use crate::tools::events::ToolEmitter;
 use crate::tools::events::ToolEventCtx;
-use crate::tools::handlers::apply_granted_turn_permissions;
 use crate::tools::handlers::apply_patch_spec::create_apply_patch_freeform_tool;
 use crate::tools::handlers::emit_model_edit_compat_metric;
 use crate::tools::handlers::emit_model_edit_fallback_activated_metric;
+use crate::tools::handlers::read_granted_permissions;
 use crate::tools::handlers::resolve_tool_environment;
 use crate::tools::handlers::updated_hook_command;
+use crate::tools::handlers::with_granted_permissions;
 use crate::tools::hook_names::HookToolName;
+use crate::tools::orchestrator::HandlerBasis;
 use crate::tools::orchestrator::ToolOrchestrator;
 use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::PostToolUsePayload;
@@ -50,7 +52,6 @@ use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::FileChange;
 use codex_protocol::protocol::PatchApplyUpdatedEvent;
 use codex_sandboxing::policy_transforms::effective_file_system_sandbox_policy;
-use codex_sandboxing::policy_transforms::merge_permission_profiles;
 use codex_sandboxing::policy_transforms::normalize_additional_permissions;
 use codex_tools::ToolName;
 use codex_tools::ToolSpec;
@@ -254,6 +255,8 @@ fn write_permissions_for_paths(
     file_system_sandbox_policy: &codex_protocol::permissions::FileSystemSandboxPolicy,
     cwd: &AbsolutePathBuf,
 ) -> Option<AdditionalPermissionProfile> {
+    // #606: as the sandboxes, nothing through a writable link they leave out.
+    let excluded = file_system_sandbox_policy.writable_links_into_read_only_paths(cwd.as_path());
     let write_paths = file_paths
         .iter()
         .map(|path| {
@@ -262,7 +265,11 @@ fn write_permissions_for_paths(
                 .into_path_buf()
         })
         .filter(|path| {
-            !file_system_sandbox_policy.can_write_path_with_cwd(path.as_path(), cwd.as_path())
+            !file_system_sandbox_policy.can_write_path_outside_excluded_links(
+                path.as_path(),
+                cwd.as_path(),
+                &excluded,
+            )
         })
         .collect::<BTreeSet<_>>()
         .into_iter()
@@ -283,21 +290,7 @@ fn write_permissions_for_paths(
 
 /// Extracts the raw patch text used as the command-shaped hook input for apply_patch.
 fn apply_patch_payload_command(payload: &ToolPayload) -> Option<String> {
-    match payload {
-        ToolPayload::Custom { input } => Some(input.clone()),
-        ToolPayload::Function { arguments } => {
-            let value: serde_json::Value = serde_json::from_str(arguments).ok()?;
-            match value {
-                serde_json::Value::String(input) => Some(input),
-                serde_json::Value::Object(map) => map
-                    .get("input")
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_string),
-                _ => None,
-            }
-        }
-        _ => None,
-    }
+    payload.freeform_input()
 }
 
 async fn effective_patch_permissions(
@@ -313,16 +306,9 @@ async fn effective_patch_permissions(
 )> {
     let file_paths = file_paths_for_action(action);
     let native_cwd = cwd.to_abs_path()?;
-    let granted_permissions = merge_permission_profiles(
-        session
-            .granted_session_permissions(environment_id)
-            .await
-            .as_ref(),
-        session
-            .granted_turn_permissions(environment_id)
-            .await
-            .as_ref(),
-    );
+    // #1057: read once, so every grant that widens the policy (and so may
+    // let the patch through unasked) is also carried by the request.
+    let granted_permissions = read_granted_permissions(session, environment_id).await;
     let base_file_system_sandbox_policy = turn.file_system_sandbox_policy();
     let file_system_sandbox_policy = effective_file_system_sandbox_policy(
         &base_file_system_sandbox_policy,
@@ -332,14 +318,12 @@ async fn effective_patch_permissions(
         .iter()
         .map(PathUri::to_abs_path)
         .collect::<Result<Vec<_>, _>>()?;
-    let effective_additional_permissions = apply_granted_turn_permissions(
-        session,
-        environment_id,
+    let effective_additional_permissions = with_granted_permissions(
+        granted_permissions,
         native_cwd.as_path(),
         crate::sandboxing::SandboxPermissions::UseDefault,
         write_permissions_for_paths(&native_file_paths, &file_system_sandbox_policy, &native_cwd),
-    )
-    .await;
+    );
 
     Ok((
         file_paths,
@@ -349,6 +333,7 @@ async fn effective_patch_permissions(
 }
 
 fn patch_permissions_without_path_matching(
+    turn: &TurnContext,
     action: &ApplyPatchAction,
 ) -> (
     Vec<PathUri>,
@@ -356,7 +341,8 @@ fn patch_permissions_without_path_matching(
     codex_protocol::permissions::FileSystemSandboxPolicy,
 ) {
     // TODO(anp): Make permission matching operate on PathUri. Until then, foreign paths skip
-    // permission matching; a managed turn still fails closed at the platform sandbox boundary.
+    // permission matching. They are still assessed against the turn's own policy, never an
+    // unrestricted one, so a restricted turn asks (or rejects) instead of auto-approving (#713).
     (
         file_paths_for_action(action),
         crate::tools::handlers::EffectiveAdditionalPermissions {
@@ -364,7 +350,7 @@ fn patch_permissions_without_path_matching(
             additional_permissions: None,
             permissions_preapproved: false,
         },
-        codex_protocol::permissions::FileSystemSandboxPolicy::unrestricted(),
+        turn.file_system_sandbox_policy(),
     )
 }
 
@@ -447,8 +433,14 @@ impl ApplyPatchHandler {
             ));
         };
         let fs = turn_environment.environment.get_filesystem();
-        let sandbox = turn
-            .file_system_sandbox_context(/*additional_permissions*/ None, turn_environment);
+        let sandbox = crate::security::protected_surface::protect_file_tool_context(
+            &session,
+            &turn,
+            turn.file_system_sandbox_context(
+                /*additional_permissions*/ None,
+                turn_environment,
+            ),
+        );
         match codex_apply_patch::verify_apply_patch_args(
             args,
             turn_environment.cwd(),
@@ -458,6 +450,8 @@ impl ApplyPatchHandler {
         .await
         {
             codex_apply_patch::MaybeApplyPatchVerified::Body(changes) => {
+                // #1057: taken before the grants are read.
+                let handler_basis = HandlerBasis::now(session.as_ref());
                 let (file_paths, effective_additional_permissions, file_system_sandbox_policy) =
                     effective_patch_permissions(
                         session.as_ref(),
@@ -467,7 +461,9 @@ impl ApplyPatchHandler {
                         turn_environment.cwd(),
                     )
                     .await
-                    .unwrap_or_else(|_| patch_permissions_without_path_matching(&changes));
+                    .unwrap_or_else(|_| {
+                        patch_permissions_without_path_matching(turn.as_ref(), &changes)
+                    });
                 match apply_patch::apply_patch(turn.as_ref(), &file_system_sandbox_policy, changes)
                     .await
                 {
@@ -502,7 +498,8 @@ impl ApplyPatchHandler {
                                 .permissions_preapproved,
                         };
 
-                        let mut orchestrator = ToolOrchestrator::new();
+                        let mut orchestrator =
+                            ToolOrchestrator::new().with_handler_basis(Some(handler_basis));
                         let mut runtime = ApplyPatchRuntime::new();
                         let tool_ctx = ToolCtx {
                             session: session.clone(),
@@ -651,8 +648,11 @@ pub(crate) async fn intercept_apply_patch(
     tool_name: &str,
     source: InterceptedPatchSource,
 ) -> Result<Option<FunctionToolOutput>, FunctionCallError> {
-    let sandbox =
-        turn.file_system_sandbox_context(/*additional_permissions*/ None, &turn_environment);
+    let sandbox = crate::security::protected_surface::protect_file_tool_context(
+        &session,
+        &turn,
+        turn.file_system_sandbox_context(/*additional_permissions*/ None, &turn_environment),
+    );
     match codex_apply_patch::maybe_parse_apply_patch_verified(command, cwd, fs, Some(&sandbox))
         .await
     {
@@ -661,6 +661,8 @@ pub(crate) async fn intercept_apply_patch(
                 turn.record_strict_apply_patch_parse_success();
                 reject_apply_patch_if_fallback_active(&turn, "strict_apply_patch_shell")?;
             }
+            // #1057: taken before the grants are read.
+            let handler_basis = HandlerBasis::now(session.as_ref());
             let (approval_keys, effective_additional_permissions, file_system_sandbox_policy) =
                 effective_patch_permissions(
                     session.as_ref(),
@@ -670,7 +672,9 @@ pub(crate) async fn intercept_apply_patch(
                     cwd,
                 )
                 .await
-                .unwrap_or_else(|_| patch_permissions_without_path_matching(&changes));
+                .unwrap_or_else(|_| {
+                    patch_permissions_without_path_matching(turn.as_ref(), &changes)
+                });
             match apply_patch::apply_patch(turn.as_ref(), &file_system_sandbox_policy, changes)
                 .await
             {
@@ -705,7 +709,8 @@ pub(crate) async fn intercept_apply_patch(
                             .permissions_preapproved,
                     };
 
-                    let mut orchestrator = ToolOrchestrator::new();
+                    let mut orchestrator =
+                        ToolOrchestrator::new().with_handler_basis(Some(handler_basis));
                     let mut runtime = ApplyPatchRuntime::new();
                     let tool_ctx = ToolCtx {
                         session: session.clone(),

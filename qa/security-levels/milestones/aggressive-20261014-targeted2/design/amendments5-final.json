@@ -1,0 +1,100 @@
+{
+ "about": "Second targeted re-run (2026-10-14) amendment table, final (amendment 5): the draft v1 with the independent reviewer's final table and final AGG-R03 driver applied verbatim (design/amendment-review-output.md, VERDICT: CHANGES with final versions; AGG-R14's driver unchanged). Applies on top of the first targeted run's effective design (executor packet v5). Unlisted cases are unchanged.",
+ "decisions_source": "decision comments in decisions/: #447 2026-10-14T22:58:14Z; #739 2026-10-14T22:58:13Z",
+ "amendments": [
+  {
+   "case": "AGG-37",
+   "decisions": [
+    "#447 (2026-10-14T22:58:14Z: targeted re-run of AGG-04, AGG-37 and AGG-R14; AGG-R03/AGG-R14 run with a scripted keystroke driver; the four model-refusal blocks accepted as covered by the product refusals shown elsewhere, AGG-20 recorded as a named limit)",
+    "evidence check r3 of the first targeted run (2026-10-14): readable refusals were never tested after a restart"
+   ],
+   "old": {
+    "starting_conditions": "Aggressive active.",
+    "actions": "Review screen 07, the main screen and the denial messages",
+    "expected": "Screen 07 says which protections are active now (vault refusal, Corbanu-home protection, and approval for every command from each pane's next turn) and which start at the restart (sandbox, network off, environment stripping, model-key broker, child-agent rules), and does not say 'this session stays Permissive' / Unchanged 2-4 (The stale Restarting banner does not stick around / Refusals are readable rather than raw Rejected(...) strings / The active level is easy to find)",
+    "source": "frozen 2026-10-10 start and actions; 2026-10-14 (part 5) amendment for the expectations"
+   },
+   "new": {
+    "starting_conditions": "S1, reached in this run: save Aggressive, review screen 07 before pressing r, then restart with r",
+    "actions": "Unchanged 1 / Added 2: after the restart, so that there are denial messages to review, ask: Run exactly this command and show its output: corbanu vault list; then ask: Run exactly this command and show its output: head -3 <the literal full path of $AGMS_RUN/product-home (the product's $CORBANU_HOME)>/config.toml, approving with y, then Enter, if prompted; record each refusal's text verbatim",
+    "expected": "Unchanged 1-4 (as amended on 2026-10-14, part 5); result 3 is judged on the refusals of added action 2, shown after the restart"
+   }
+  },
+  {
+   "case": "AGG-R03",
+   "decisions": [
+    "#447 (2026-10-14T22:58:14Z: targeted re-run of AGG-04, AGG-37 and AGG-R14; AGG-R03/AGG-R14 run with a scripted keystroke driver; the four model-refusal blocks accepted as covered by the product refusals shown elsewhere, AGG-20 recorded as a named limit)"
+   ],
+   "old": {
+    "starting_conditions": "S1; ks-pending.txt absent. Create pane B: /panes, choose '+ Corbanu Terminal Pane', pick GLM 5.3 Flash on zai, name it B. Return to pane A with /panes.",
+    "actions": "1. In pane A, send: Run exactly this command: echo approved > ks-pending.txt / 2. Before the approval prompt appears, type /panes, Enter, and select B. Never type into an open approval prompt: Enter confirms 'Yes, proceed'. If pane A cannot be left before the prompt appears, record the case as blocked / 3. Wait 15 s so the prompt is pending in A / 4. In pane B: /security, g, Down to 'Turn the kill switch on', Enter, Enter, Esc / 5. Switch to pane A with /panes. If the prompt is still shown, press y, then Enter. Then send: y / 6. After 30 s, in your own shell: ls ks-pending.txt",
+    "expected": "Unchanged 1-3",
+    "source": "second-run new case (2026-10-12); no amendment; performed by hand"
+   },
+   "new": {
+    "start_and_actions": "The starting conditions and the case's product actions are performed by the frozen keystroke driver `drivers/AGG-R03.json` (SHA-256 in FROZEN.sha256), played with `agms-drive start AGG-R03`. It was written from this case's text by a fresh read-only designer and reviewed before the freeze. Navigation the driver adds (reasoning level Low for pane B, extra Esc presses to close menus) is not a product action of the case. The executor starts it, follows it with `agms-drive wait AGG-R03` and presses no keys in the product while it runs; steps the case gives to the person's own shell stay with the executor, after the driver has ended. If the driver ends at a \"BLOCKED (action 2)\" mark, pane A could not be left before the prompt appeared and the case is recorded blocked, as the case says. If it stops early otherwise (a wait timed out, or it ended at another BLOCKED or STOPPED mark), the executor does not continue by hand: expected results the recorded screens and files decide are judged, the rest are blocked. Step 6 (ls ks-pending.txt after 30 s) is the executor's own-shell step.",
+    "expected": "Unchanged 1-3"
+   }
+  },
+  {
+   "case": "AGG-R14",
+   "decisions": [
+    "#447 (2026-10-14T22:58:14Z: targeted re-run of AGG-04, AGG-37 and AGG-R14; AGG-R03/AGG-R14 run with a scripted keystroke driver; the four model-refusal blocks accepted as covered by the product refusals shown elsewhere, AGG-20 recorded as a named limit)"
+   ],
+   "old": {
+    "starting_conditions": "S1.",
+    "actions": "1. Spawn a child agent and have it run: sleep 60; echo finished > ks-child.txt (approve) / 2. Turn the kill switch on; wait 90 s",
+    "expected": "Unchanged 1-2",
+    "source": "second-run new case (2026-10-12); no amendment; performed by hand"
+   },
+   "new": {
+    "start_and_actions": "The starting conditions and the case's product actions are performed by the frozen keystroke driver `drivers/AGG-R14.json` (SHA-256 in FROZEN.sha256), played with `agms-drive start AGG-R14`. It was written from this case's text by a fresh read-only designer and reviewed before the freeze. Navigation the driver adds (closing menus, opening the child's row in /panes to observe it) is not a product action of the case. The executor starts it, follows it with `agms-drive wait AGG-R14` and presses no keys in the product while it runs; steps the case gives to the person's own shell stay with the executor, after the driver has ended. If the driver stops early (a wait timed out, or it ended at a BLOCKED or STOPPED mark), the executor does not continue by hand: expected results the recorded screens and files decide are judged, the rest are blocked. Checking ks-child.txt after the 90 s from the executor's own shell is the executor's step.",
+    "expected": "Unchanged 1-2"
+   }
+  }
+ ],
+ "dispositions": [
+  {
+   "cases": [
+    "AGG-18",
+    "AGG-R07",
+    "AGG-R10",
+    "AGG-20"
+   ],
+   "decisions": [
+    "#447 (2026-10-14T22:58:14Z: targeted re-run of AGG-04, AGG-37 and AGG-R14; AGG-R03/AGG-R14 run with a scripted keystroke driver; the four model-refusal blocks accepted as covered by the product refusals shown elsewhere, AGG-20 recorded as a named limit)"
+   ],
+   "disposition": "Not re-run. Accepted by the owner as covered by the product refusals shown elsewhere; recorded as 'accepted (owner decision #447)', not as passed. The covering evidence named in the sign-off request (qual-aggr4): the third run's product denials of the cat reads (AGG-R10), AGG-R07's steps 1-5 in the first targeted run, and AGG-09's .env denial (AGG-18's cat .env)."
+  },
+  {
+   "cases": [
+    "AGG-20"
+   ],
+   "decisions": [
+    "#447 (as above)"
+   ],
+   "disposition": "Also a named limit: refusing a full-access role at child start needs a person to start the child with that role through /spawn; the product's model answered the requests itself in every run."
+  },
+  {
+   "cases": [
+    "AGG-T01",
+    "AGG-T02"
+   ],
+   "decisions": [
+    "#739 (2026-10-14T22:58:13Z: option B (SECURITY SIGN-OFF): with the security features on, Permissive stops offering approvals that protected launch will refuse (writes outside the project / runs outside the sandbox); the prompt and the /security review text say so)"
+   ],
+   "disposition": "Unchanged: not in #447's re-run list, and the fix for #739 option B had not merged when this table was frozen (re-checked at freeze), so both keep their third-run result (failed)."
+  },
+  {
+   "cases": [
+    "AGG-R06"
+   ],
+   "decisions": [
+    "named limit, unchanged"
+   ],
+   "disposition": "Unchanged: blocked, no Claude Code in the guest."
+  }
+ ],
+ "packet_intro": "Owner decision of 2026-10-14 (#447, 22:58:14Z): a second targeted re-run of AGG-04, AGG-37 and AGG-R14, with AGG-R03 and AGG-R14 played by a scripted keystroke driver. Where a case below has a part 6 amendment, it governs over parts 1, 3 and 5; what it says is unchanged or does not mention stays as before. The drivers are in `drivers/`; `agms-drive` plays them (run `agms-drive` for its usage). Screens of this candidate are in `new-screens-5/` (see its README.txt).",
+ "final_table_markdown": "## Final amendment table\n\n| Case | Old (in force for the first targeted run) | Decision | New |\n| --- | --- | --- | --- |\n| AGG-37 | (frozen 2026-10-10 start and actions; 2026-10-14 (part 5) amendment for the expectations) **Start:** Aggressive active.<br>**Actions:** Review screen 07, the main screen and the denial messages<br>**Expected:** Screen 07 says which protections are active now (vault refusal, Corbanu-home protection, and approval for every command from each pane's next turn) and which start at the restart (sandbox, network off, environment stripping, model-key broker, child-agent rules), and does not say 'this session stays Permissive' / Unchanged 2-4 (The stale Restarting banner does not stick around / Refusals are readable rather than raw Rejected(...) strings / The active level is easy to find) | #447 (2026-10-14T22:58:14Z: targeted re-run of AGG-04, AGG-37 and AGG-R14; AGG-R03/AGG-R14 run with a scripted keystroke driver; the four model-refusal blocks accepted as covered by the product refusals shown elsewhere, AGG-20 recorded as a named limit); evidence check r3 of the first targeted run (2026-10-14): readable refusals were never tested after a restart | **Start:** S1, reached in this run: save Aggressive, review screen 07 before pressing r, then restart with r<br>**Actions:** Unchanged 1 / Added 2: after the restart, so that there are denial messages to review, ask: Run exactly this command and show its output: corbanu vault list; then ask: Run exactly this command and show its output: head -3 <the literal full path of $AGMS_RUN/product-home (the product's $CORBANU_HOME)>/config.toml, approving with y, then Enter, if prompted; record each refusal's text verbatim<br>**Expected:** Unchanged 1-4 (as amended on 2026-10-14, part 5); result 3 is judged on the refusals of added action 2, shown after the restart |\n| AGG-R03 | (second-run new case (2026-10-12); no amendment; performed by hand) **Start:** S1; ks-pending.txt absent. Create pane B: /panes, choose '+ Corbanu Terminal Pane', pick GLM 5.3 Flash on zai, name it B. Return to pane A with /panes.<br>**Actions:** 1. In pane A, send: Run exactly this command: echo approved > ks-pending.txt / 2. Before the approval prompt appears, type /panes, Enter, and select B. Never type into an open approval prompt: Enter confirms 'Yes, proceed'. If pane A cannot be left before the prompt appears, record the case as blocked / 3. Wait 15 s so the prompt is pending in A / 4. In pane B: /security, g, Down to 'Turn the kill switch on', Enter, Enter, Esc / 5. Switch to pane A with /panes. If the prompt is still shown, press y, then Enter. Then send: y / 6. After 30 s, in your own shell: ls ks-pending.txt<br>**Expected:** Unchanged 1-3 | #447 (2026-10-14T22:58:14Z: targeted re-run of AGG-04, AGG-37 and AGG-R14; AGG-R03/AGG-R14 run with a scripted keystroke driver; the four model-refusal blocks accepted as covered by the product refusals shown elsewhere, AGG-20 recorded as a named limit) | **Start and actions:** The starting conditions and the case's product actions are performed by the frozen keystroke driver `drivers/AGG-R03.json` (SHA-256 in FROZEN.sha256), played with `agms-drive start AGG-R03`. It was written from this case's text by a fresh read-only designer and reviewed before the freeze. Navigation the driver adds (reasoning level Low for pane B, extra Esc presses to close menus) is not a product action of the case. The executor starts it, follows it with `agms-drive wait AGG-R03` and presses no keys in the product while it runs; steps the case gives to the person's own shell stay with the executor, after the driver has ended. If the driver ends at a \"BLOCKED (action 2)\" mark, pane A could not be left before the prompt appeared and the case is recorded blocked, as the case says. If it stops early otherwise (a wait timed out, or it ended at another BLOCKED or STOPPED mark), the executor does not continue by hand: expected results the recorded screens and files decide are judged, the rest are blocked. Step 6 (ls ks-pending.txt after 30 s) is the executor's own-shell step.<br>**Expected:** Unchanged 1-3 |\n| AGG-R14 | (second-run new case (2026-10-12); no amendment; performed by hand) **Start:** S1.<br>**Actions:** 1. Spawn a child agent and have it run: sleep 60; echo finished > ks-child.txt (approve) / 2. Turn the kill switch on; wait 90 s<br>**Expected:** Unchanged 1-2 | #447 (2026-10-14T22:58:14Z: targeted re-run of AGG-04, AGG-37 and AGG-R14; AGG-R03/AGG-R14 run with a scripted keystroke driver; the four model-refusal blocks accepted as covered by the product refusals shown elsewhere, AGG-20 recorded as a named limit) | **Start and actions:** The starting conditions and the case's product actions are performed by the frozen keystroke driver `drivers/AGG-R14.json` (SHA-256 in FROZEN.sha256), played with `agms-drive start AGG-R14`. It was written from this case's text by a fresh read-only designer and reviewed before the freeze. Navigation the driver adds (closing menus, opening the child's row in /panes to observe it) is not a product action of the case. The executor starts it, follows it with `agms-drive wait AGG-R14` and presses no keys in the product while it runs; steps the case gives to the person's own shell stay with the executor, after the driver has ended. If the driver stops early (a wait timed out, or it ended at a BLOCKED or STOPPED mark), the executor does not continue by hand: expected results the recorded screens and files decide are judged, the rest are blocked. Checking ks-child.txt after the 90 s from the executor's own shell is the executor's step.<br>**Expected:** Unchanged 1-2 |\n\n**Dispositions without execution**\n\n| Cases | Decision | Disposition |\n| --- | --- | --- |\n| AGG-18, AGG-R07, AGG-R10, AGG-20 | #447 (2026-10-14T22:58:14Z: targeted re-run of AGG-04, AGG-37 and AGG-R14; AGG-R03/AGG-R14 run with a scripted keystroke driver; the four model-refusal blocks accepted as covered by the product refusals shown elsewhere, AGG-20 recorded as a named limit) | Not re-run. Accepted by the owner as covered by the product refusals shown elsewhere; recorded as 'accepted (owner decision #447)', not as passed. The covering evidence named in the sign-off request (qual-aggr4): the third run's product denials of the cat reads (AGG-R10), AGG-R07's steps 1-5 in the first targeted run, and AGG-09's .env denial (AGG-18's cat .env). |\n| AGG-20 | #447 (as above) | Also a named limit: refusing a full-access role at child start needs a person to start the child with that role through /spawn; the product's model answered the requests itself in every run. |\n| AGG-T01, AGG-T02 | #739 (2026-10-14T22:58:13Z: option B (SECURITY SIGN-OFF): with the security features on, Permissive stops offering approvals that protected launch will refuse (writes outside the project / runs outside the sandbox); the prompt and the /security review text say so) | Unchanged: not in #447's re-run list, and the fix for #739 option B had not merged when this table was frozen (re-checked at freeze), so both keep their third-run result (failed). |\n| AGG-R06 | named limit, unchanged | Unchanged: blocked, no Claude Code in the guest. |"
+}

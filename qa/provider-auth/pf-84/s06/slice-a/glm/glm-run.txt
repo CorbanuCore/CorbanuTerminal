@@ -1,0 +1,38 @@
+Corbanu Terminal v0.1.48
+--------
+workdir: /var/folders/3p/j2_d1_f57vz5d0tj3ycvjg9w0000gn/T/tmp.Ftch1iJ6qN/ws
+model: glm-5.3-flash
+provider: zai
+approval: never
+sandbox: danger-full-access
+session id: 01a12dc4-48d6-7092-a453-309cd6138b8a
+--------
+user
+Run this shell command exactly once and show its last 3 lines verbatim in a code block: CODEX_HOME=/var/folders/3p/j2_d1_f57vz5d0tj3ycvjg9w0000gn/T/tmp.Ftch1iJ6qN/corbanu CORBANU_TEST_NO_NATIVE_KEYRING=1 /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s06-accounts/debug/corbanu exec --skip-git-repo-check -C /var/folders/3p/j2_d1_f57vz5d0tj3ycvjg9w0000gn/T/tmp.Ftch1iJ6qN/ws -c model_provider="amazon-bedrock" -m openai.gpt-5.4 --account fake 'Reply with exactly: pong' 2>&1 | tail -3 . Do not retry it or change the account. Then, on a new last line, reply with the single word pong yourself.
+{"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":32825,"ms_to_response_headers":8839,"ms_to_first_sse_byte":8842,"ms_to_first_parsed_data_event":8842,"ms_to_first_actionable_event":8843,"total_stream_ms":8845,"comment_frame_count":0,"parsed_event_count":57,"x_request_id":"290039a4-8cd2-4006-ac09-52bac1009c62","generation_id":"202610120940011cc831cc8879429c","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+exec
+/bin/bash -lc "CODEX_HOME=/var/folders/3p/j2_d1_f57vz5d0tj3ycvjg9w0000gn/T/tmp.Ftch1iJ6qN/corbanu CORBANU_TEST_NO_NATIVE_KEYRING=1 /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s06-accounts/debug/corbanu exec --skip-git-repo-check -C /var/folders/3p/j2_d1_f57vz5d0tj3ycvjg9w0000gn/T/tmp.Ftch1iJ6qN/ws -c model_provider=\"amazon-bedrock\" -m openai.gpt-5.4 --account fake 'Reply with exactly: pong' 2>&1 | tail -3" in /var/folders/3p/j2_d1_f57vz5d0tj3ycvjg9w0000gn/T/tmp.Ftch1iJ6qN/ws
+ succeeded in 374ms:
+Reply with exactly: pong
+ERROR: Fatal error: account `fake` of provider `amazon-bedrock` uses AWS profile `nosuchprofile`, which cannot be used: failed to load AWS credentials: the credential provider was not enabled. Check that the profile is in ~/.aws/config or ~/.aws/credentials (or the files AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE name) and that its credentials work; for an SSO profile run `aws sso login --profile nosuchprofile`. Corbanu never falls back to another profile or to environment credentials.
+ERROR: Fatal error: account `fake` of provider `amazon-bedrock` uses AWS profile `nosuchprofile`, which cannot be used: failed to load AWS credentials: the credential provider was not enabled. Check that the profile is in ~/.aws/config or ~/.aws/credentials (or the files AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE name) and that its credentials work; for an SSO profile run `aws sso login --profile nosuchprofile`. Corbanu never falls back to another profile or to environment credentials.
+
+{"tag":"corbanu_call_metrics","call_index":2,"attempt_number":1,"request_byte_size":34909,"ms_to_response_headers":5587,"ms_to_first_sse_byte":5588,"ms_to_first_parsed_data_event":5588,"ms_to_first_actionable_event":5588,"total_stream_ms":7822,"comment_frame_count":0,"parsed_event_count":270,"x_request_id":"9fc38dcd-33c0-4dee-b1e0-b54761572d1d","generation_id":"202610120940101a34e61c6af84c0b","provider":null,"finish_reason":"ok","retry_linkage":{"same_turn_attempt_index":1}}
+corbanu
+```text
+Reply with exactly: pong
+ERROR: Fatal error: account `fake` of provider `amazon-bedrock` uses AWS profile `nosuchprofile`, which cannot be used: failed to load AWS credentials: the credential provider was not enabled. Check that the profile is in ~/.aws/config or ~/.aws/credentials (or the files AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE name) and that its credentials work; for an SSO profile run `aws sso login --profile nosuchprofile`. Corbanu never falls back to another profile or to environment credentials.
+ERROR: Fatal error: account `fake` of provider `amazon-bedrock` uses AWS profile `nosuchprofile`, which cannot be used: failed to load AWS credentials: the credential provider was not enabled. Check that the profile is in ~/.aws/config or ~/.aws/credentials (or the files AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE name) and that its credentials work; for an SSO profile run `aws sso login --profile nosuchprofile`. Corbanu never falls back to another profile or to environment credentials.
+```
+
+pong
+tokens used
+14,466
+```text
+Reply with exactly: pong
+ERROR: Fatal error: account `fake` of provider `amazon-bedrock` uses AWS profile `nosuchprofile`, which cannot be used: failed to load AWS credentials: the credential provider was not enabled. Check that the profile is in ~/.aws/config or ~/.aws/credentials (or the files AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE name) and that its credentials work; for an SSO profile run `aws sso login --profile nosuchprofile`. Corbanu never falls back to another profile or to environment credentials.
+ERROR: Fatal error: account `fake` of provider `amazon-bedrock` uses AWS profile `nosuchprofile`, which cannot be used: failed to load AWS credentials: the credential provider was not enabled. Check that the profile is in ~/.aws/config or ~/.aws/credentials (or the files AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE name) and that its credentials work; for an SSO profile run `aws sso login --profile nosuchprofile`. Corbanu never falls back to another profile or to environment credentials.
+```
+
+pong
+exit 0

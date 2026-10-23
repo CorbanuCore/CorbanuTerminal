@@ -126,6 +126,6 @@ impl RootChildRun {
     }
 }
 
-#[cfg(all(test, feature = "synthetic-fixture"))]
+#[cfg(test)]
 #[path = "root_tests.rs"]
 mod tests;

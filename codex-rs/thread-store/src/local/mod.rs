@@ -59,6 +59,7 @@ use crate::SearchThreadsParams;
 use crate::StoredModelContext;
 use crate::StoredThread;
 use crate::StoredThreadHistory;
+use crate::ThreadMetadataPatch;
 use crate::ThreadOccurrenceSearchPage;
 use crate::ThreadPage;
 use crate::ThreadSearchPage;
@@ -92,6 +93,9 @@ pub struct LocalThreadStore {
     writer_lock_coordinator: Arc<WriterLockCoordinator>,
     state_db: Option<StateDbHandle>,
     thread_history_db: Arc<OnceCell<sqlx::SqlitePool>>,
+    /// Best-effort metadata patches put off while the state DB was busy, per
+    /// thread; applied with the thread's next metadata update (#359).
+    deferred_metadata: Arc<std::sync::Mutex<HashMap<ThreadId, ThreadMetadataPatch>>>,
 }
 
 struct LiveRecorderEntry {
@@ -200,7 +204,37 @@ impl LocalThreadStore {
             writer_lock_coordinator,
             state_db,
             thread_history_db: Arc::new(OnceCell::new()),
+            deferred_metadata: Arc::default(),
         }
+    }
+
+    /// Keep `patch` for `thread_id`'s next metadata update, after any patch
+    /// already kept (#359).
+    fn defer_metadata(&self, thread_id: ThreadId, patch: ThreadMetadataPatch) {
+        let mut deferred = self
+            .deferred_metadata
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match deferred.get_mut(&thread_id) {
+            Some(kept) => kept.merge(patch),
+            None => {
+                deferred.insert(thread_id, patch);
+            }
+        }
+    }
+
+    fn take_deferred_metadata(&self, thread_id: ThreadId) -> Option<ThreadMetadataPatch> {
+        self.deferred_metadata
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&thread_id)
+    }
+
+    fn has_deferred_metadata(&self, thread_id: ThreadId) -> bool {
+        self.deferred_metadata
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains_key(&thread_id)
     }
 
     /// Return the state DB handle used by local rollout writers.
@@ -801,6 +835,7 @@ mod tests {
                 file_system_sandbox_policy: None,
                 model: model.to_string(),
                 model_provider: Some(model_provider.to_string()),
+                provider_account: None,
                 comp_hash: None,
                 personality: None,
                 collaboration_mode: None,
@@ -808,6 +843,7 @@ mod tests {
                 multi_agent_mode: None,
                 realtime_active: None,
                 effort: None,
+                security_level: None,
                 summary: ReasoningSummary::Auto,
             })
         };
@@ -914,6 +950,7 @@ mod tests {
                     codex_protocol::protocol::TokenCountEvent {
                         info: None,
                         rate_limits: None,
+                        account_usage: None,
                     },
                 )),
                 RolloutItem::EventMsg(EventMsg::TurnComplete(TurnCompleteEvent {
@@ -1040,6 +1077,7 @@ mod tests {
                 codex_protocol::protocol::TokenCountEvent {
                     info: None,
                     rate_limits: None,
+                    account_usage: None,
                 },
             ))])
             .await

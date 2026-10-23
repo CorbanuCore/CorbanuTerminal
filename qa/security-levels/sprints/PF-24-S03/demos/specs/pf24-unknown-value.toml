@@ -1,0 +1,36 @@
+# An unknown stored level (written before launch by wrappers/seed-unknown.sh)
+# fails visibly and enforces Aggressive, never Permissive.
+id = "pf24-unknown-value"
+feature = "Unknown stored level fails closed"
+expected = "Startup warns that the stored level is unreadable and Aggressive is enforced; /status and /security both show Aggressive active, never Permissive."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Stored security level is unreadable"
+[[steps]]
+pause = 3.0
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Aggressive enforced"
+[[steps]]
+pause = 2.5
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Stored level is unreadable"
+[[steps]]
+pause = 3.5

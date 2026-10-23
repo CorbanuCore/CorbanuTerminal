@@ -1,0 +1,5 @@
+$ python3 qa/code-blind-functional/check.py qa/initiative-control/management-bootstrap/pf83-codeblind-35/design.json qa/initiative-control/management-bootstrap/pf83-codeblind-35/results.json <package/corbanu sha256 e552180a…e758f6 extracted from the increment-27 archive>
+BLOCKED: missing designer
+exit 1
+
+Recorded as the honest state (no acceptance implied): the original designer packet (identity, access record, brief, screenshots) was never supplied, so design.json leaves those unattested. Past that, the gate would stop on the first unresolved case (F03 blocked); F05 failed and seven cases are blocked. All 11 per-case schema-2 execution/isolation receipts and every evidence hash validate with the checker's own execution()/artifact() functions.

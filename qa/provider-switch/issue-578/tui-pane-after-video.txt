@@ -1,0 +1,14 @@
+› Reply with exactly: openai-one
+⚠ Using OPENAI_API_KEY from your environment — billed per use to that API key. Sign in or unset it to change.
+• openai-one
+• Model changed to Z.AI GLM 5.3 Flash via Z.AI low
+› Reply with exactly: glm-two
+• glm-two
+• Model changed to GPT-5.6-Luna via OpenAI low
+› Reply with exactly: openai-three
+⚠ Using OPENAI_API_KEY from your environment — billed per use to that API key. Sign in or unset it to change.
+• openai-three
+› Reply with exactly: openai-four
+• openai-four
+› Write tests for @filename
+  GPT-5.6-Luna low · /Volumes/CorbanuDrive/Corbanu/worktrees/fix-578-cross-provider-items/qa/demos/out/ISSUE-578/pf578-…

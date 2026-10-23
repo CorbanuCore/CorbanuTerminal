@@ -1,0 +1,8 @@
+c9c54475551c37cfafdfbb11c7426b13bbd558d1dcd4902d908d7bdb57de9587  codex-rs/tasknode-session/src/session_validity.rs
+93e651ae24443a1fb961aea056cbdccd310662c7756065e1d7417fbda37b4c5e  codex-rs/tasknode-session/src/session_validity_tests.rs
+dada4c529348ef13f536b22ad890f78b35064af4d3f5db2a8d0614c6d88b2dd0  codex-rs/tasknode-session/src/client.rs
+facff13b4c2b327072c3e11d7f766bbcfedc99708103cbede42abb76afb8cc0b  codex-rs/tasknode-session/src/lib.rs
+725b59b7f1be5af93009aa241ab8d8660a4ccc348d365bf637a641e8caf8ae9b  qa/initiative-control/pf-80-s01/native-validity/receipt.md
+2374a3ec1be32cf84565df1a530a088c0f0fc38399c4613d45383e1adeb1d1e7  docs/research/tasknode-integration/native-validity-allocation.md
+c0e201a4831d6ad4f689d243165931ff7e0e59e7ff04f0d8bc6f6b51edb0963c  /Volumes/CorbanuDrive/Corbanu/.codex-work/tasknode-beta.Rf2AJJ/tasknode-source/server/tasknode-terminal-routes.js
+cf60470b2d48852001276506c6c855f88b751ca78c1790d187a9eca30c6a7683  /Volumes/CorbanuDrive/Corbanu/.codex-work/tasknode-beta.Rf2AJJ/tasknode-source/server/repositories/terminal-auth.js

@@ -1,0 +1,66 @@
+# PF-33-S02: inherited upstream proxy (run with HTTPS_PROXY=http://127.0.0.1:18734).
+id = "pf33s02-upstream-proxy-flag-off"
+feature = "Control: with url_destination_policy off, agent traffic leaves through the inherited upstream proxy"
+expected = "Same setup, flag off: the request returns 200 and the host-side proxy log shows CONNECT httpbin.org:443."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[sandbox_workspace_write]
+network_access = true
+
+[features]
+url_destination_policy = false
+
+[features.network_proxy]
+enabled = true
+allow_local_binding = true
+
+[features.network_proxy.domains]
+"httpbin.org" = "allow"
+"postman-echo.com" = "allow"
+
+[features.network_proxy.unix_sockets]
+"/tmp/pf33s02.sock" = "allow"
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"check.sh" = '''curl -sS -w '\nHTTP %{http_code}\n' https://httpbin.org/get | tail -2
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run sh check.sh once and show its output verbatim."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = 'HTTP [0-9]{3}'
+timeout = 300
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+
+[[steps]]
+type = '!grep -c "CONNECT httpbin.org" /tmp/pf33s02-fixtures/upstream.log; grep -ho "denied http[s] (host=[^)]*)" {logs}/*.log | sort -u'
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = '└ [0-9]+'
+timeout = 30
+
+[[steps]]
+pause = 4.0

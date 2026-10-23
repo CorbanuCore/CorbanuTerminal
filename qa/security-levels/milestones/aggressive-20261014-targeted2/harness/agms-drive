@@ -1,0 +1,182 @@
+#!/usr/bin/python3
+"""Scripted keystroke driver for the code-blind executor (amendment 5, 2026-10-14).
+
+Plays a frozen, reviewed sequence of terminal actions (a driver file under /opt/agms/packet/drivers/) through
+`agms-tui`, so every key, text, wait and screen is recorded exactly as for hand-driven runs (actions.jsonl,
+screens.jsonl, pty.raw). The driver only presses keys and records; the executor judges the outcomes.
+
+usage:
+  agms-drive start CASE      play /opt/agms/packet/drivers/CASE.json in the background (log: evidence/driver-CASE.log)
+  agms-drive wait CASE [S]   print new log lines; return when the driver has ended or after S seconds (default 50)
+  agms-drive log CASE        print the whole driver log
+  agms-drive run CASE        play in the foreground (same log)
+
+Driver file: {"case": ID, "steps": [STEP...]}. STEP is an object with "do":
+  start   {"args": [...]}                    agms-tui start ARGS
+  text    {"text": "..."}                    agms-tui text TEXT (no Enter)
+  key     {"keys": ["Enter", ...]}           agms-tui key KEYS
+  wait    {"regex": R, "seconds": N, "on_timeout": "stop"|"continue"}   agms-tui wait R N
+  sleep   {"seconds": N}
+  screen  {"label": L}                       agms-tui screen L
+  fixture {"label": L}                       agms-tui fixture L
+  if      {"regex": R, "then": [...], "else": [...]}   branch on the current screen (recorded as a screen)
+  mark    {"text": "..."}                    a labelled UTC time stamp in the log
+  stop    {}                                 agms-tui stop
+Every step may carry "id" and "why" (shown in the log).
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+RUN = os.environ.get("AGMS_RUN", "")
+DRIVERS = "/opt/agms/packet/drivers"
+TUI = "/opt/agms/bin/agms-tui"
+
+
+def log_path(case):
+    return os.path.join(RUN, "evidence", "driver-%s.log" % case)
+
+
+def utc():
+    t = time.time()
+    return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(t)) + ".%03dZ" % int((t % 1) * 1000)
+
+
+class Driver:
+    def __init__(self, case):
+        self.case = case
+        self.out = open(log_path(case), "a", buffering=1)
+        self.n = 0
+
+    def say(self, text):
+        self.out.write("%s %s\n" % (utc(), text))
+
+    def tui(self, *args):
+        res = subprocess.run([TUI] + list(args), capture_output=True, text=True)
+        body = (res.stdout or "").rstrip("\n")
+        if res.stderr.strip():
+            body += "\n[stderr] " + res.stderr.strip()
+        return res.returncode, body
+
+    def screen_now(self, label):
+        return self.tui("screen", label)[1]
+
+    def steps(self, steps, depth=0):
+        for step in steps:
+            self.n += 1
+            do = step.get("do")
+            tag = "#%d%s %s" % (self.n, (" [" + step["id"] + "]") if step.get("id") else "", do)
+            if step.get("why"):
+                tag += " (" + step["why"] + ")"
+            if do == "start":
+                rc, body = self.tui("start", *step.get("args", []))
+                self.say("%s %s -> rc=%d" % (tag, json.dumps(step.get("args", [])), rc))
+                self.out.write(body + "\n")
+            elif do == "text":
+                rc, _ = self.tui("text", step["text"])
+                self.say("%s %s -> rc=%d" % (tag, json.dumps(step["text"]), rc))
+            elif do == "key":
+                rc, _ = self.tui("key", *step["keys"])
+                self.say("%s %s -> rc=%d" % (tag, " ".join(step["keys"]), rc))
+            elif do == "wait":
+                secs = str(step.get("seconds", 60))
+                rc, body = self.tui("wait", step["regex"], secs)
+                self.say("%s %s %ss -> %s" % (tag, json.dumps(step["regex"]), secs,
+                                             "matched" if rc == 0 else "TIMEOUT"))
+                self.out.write(body + "\n")
+                if rc != 0 and step.get("on_timeout", "stop") == "stop":
+                    self.say("DRIVER-STOPPED at step #%d: wait timed out (on_timeout=stop)" % self.n)
+                    return False
+            elif do == "sleep":
+                time.sleep(float(step["seconds"]))
+                self.say("%s %ss" % (tag, step["seconds"]))
+            elif do == "screen":
+                body = self.screen_now(step.get("label", "driver-screen"))
+                self.say("%s %s" % (tag, step.get("label", "")))
+                self.out.write(body + "\n")
+            elif do == "fixture":
+                rc, body = self.tui("fixture", step.get("label", "driver-fixture"))
+                self.say("%s %s -> rc=%d" % (tag, step.get("label", ""), rc))
+                self.out.write(body + "\n")
+            elif do == "if":
+                body = self.screen_now("driver-if:" + step["regex"])
+                hit = re.search(step["regex"], body) is not None
+                self.say("%s %s -> %s" % (tag, json.dumps(step["regex"]), "then" if hit else "else"))
+                if not self.steps(step.get("then" if hit else "else", []), depth + 1):
+                    return False
+            elif do == "mark":
+                self.say("%s MARK %s" % (tag, step.get("text", "")))
+            elif do == "stop":
+                rc, _ = self.tui("stop")
+                self.say("%s -> rc=%d" % (tag, rc))
+            else:
+                self.say("DRIVER-STOPPED at step #%d: unknown step %r" % (self.n, do))
+                return False
+        return True
+
+    def play(self):
+        path = os.path.join(DRIVERS, self.case + ".json")
+        data = open(path, "rb").read()
+        import hashlib
+        self.say("DRIVER-BEGIN %s sha256=%s" % (path, hashlib.sha256(data).hexdigest()))
+        try:
+            ok = self.steps(json.loads(data)["steps"])
+            self.say("DRIVER-END %s" % ("completed all steps" if ok else "stopped early"))
+        except Exception as exc:  # recorded, never hidden
+            self.say("DRIVER-END error: %r" % (exc,))
+
+
+def main(argv):
+    if len(argv) < 2 or argv[0] not in ("start", "wait", "log", "run"):
+        print(__doc__)
+        return 64
+    cmd, case = argv[0], argv[1]
+    if not re.fullmatch(r"[A-Za-z0-9-]+", case) or not os.path.isfile(os.path.join(DRIVERS, case + ".json")):
+        print("no driver for %s in %s" % (case, DRIVERS))
+        return 64
+    if not RUN:
+        print("AGMS_RUN is not set")
+        return 64
+    if cmd == "run":
+        Driver(case).play()
+        return 0
+    if cmd == "start":
+        if os.path.exists(log_path(case)):
+            print("driver %s was already started; see: agms-drive log %s" % (case, case))
+            return 1
+        if os.fork() == 0:
+            os.setsid()
+            if os.fork() == 0:
+                devnull = os.open(os.devnull, os.O_RDWR)
+                for fd in (0, 1, 2):
+                    os.dup2(devnull, fd)
+                Driver(case).play()
+            os._exit(0)
+        time.sleep(1)
+        print("driver %s started; follow it with: agms-drive wait %s" % (case, case))
+        return 0
+    path = log_path(case)
+    if cmd == "log":
+        print(open(path).read() if os.path.exists(path) else "no log yet")
+        return 0
+    limit = float(argv[2]) if len(argv) > 2 else 50.0
+    seen_file = path + ".seen"
+    seen = int(open(seen_file).read() or 0) if os.path.exists(seen_file) else 0
+    deadline = time.time() + limit
+    while True:
+        text = open(path).read() if os.path.exists(path) else ""
+        done = "DRIVER-END" in text
+        if done or time.time() > deadline:
+            sys.stdout.write(text[seen:])
+            with open(seen_file, "w") as f:
+                f.write(str(len(text)))
+            print("\n[driver %s]" % ("ENDED" if done else "still running"))
+            return 0
+        time.sleep(1)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

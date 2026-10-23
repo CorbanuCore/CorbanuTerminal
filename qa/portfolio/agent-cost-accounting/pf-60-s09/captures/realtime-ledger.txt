@@ -1,0 +1,12 @@
+$ ledger: attempts on this home (thread, admission time UTC, turn label, model)
+01a13d5c-8ed0-7852-bbbc-80101e80e6b6|2026-10-15T02:20:39Z|prewarm:9a279e54-5470-400c-9735-3031ca29e42b|gpt-6-luna
+01a13d5d-fb21-7360-846f-8034410c7f5a|2026-10-15T02:22:12Z|prewarm:384729f8-2d80-49c3-9a54-855bbfa05cdc|gpt-6-luna
+01a13d5e-ebf0-7e50-96ef-3357954192ea|2026-10-15T02:23:14Z|prewarm:3a9dfcfd-a027-4790-a61c-d4d5aa8d4e45|gpt-6-luna
+01a13d63-835e-74d1-818a-8cee2ff4d1c0|2026-10-15T02:28:15Z|prewarm:62e08703-f52a-4a5c-b4de-ab62ae6bccfa|gpt-6-luna
+01a13d63-bfb0-76f3-a283-725b50ba474e|2026-10-15T02:28:30Z|prewarm:362c47d2-d5c3-468d-87df-84c7d2d55b31|gpt-6-luna
+01a13d63-c9cc-7201-ae63-e2f153918d89|2026-10-15T02:28:33Z|prewarm:801c6a21-8d77-405a-9368-0dd42a564994|gpt-6-luna
+01a13d63-c9cc-7201-ae63-e2f153918d89|2026-10-15T02:28:34Z|realtime:01a13d63-d016-72c1-a3ba-6a612b16ab8c|gpt-realtime-1.5
+01a13d78-d372-7fd3-863a-16eb8f87ccdf|2026-10-15T02:51:32Z|prewarm:aaa43668-715e-4e67-baee-aeaba47bb2a2|gpt-6-luna
+01a13d78-e309-7f32-ada3-0a5cb3c79371|2026-10-15T02:51:35Z|realtime:01a13d78-e428-76b1-9896-9d29c76acd6d|gpt-realtime-1.5
+01a13db0-9d30-7a82-805e-0419e5a43ddb|2026-10-15T03:52:28Z|realtime:01a13db0-a0d7-78e0-9f6c-874b1f3d3076|gpt-live-1-boulder-alpha
+01a13db0-9d30-7a82-805e-0419e5a43ddb|2026-10-15T03:52:28Z|prewarm:e90f5206-7730-4bab-9a0d-8bb57ec12086|gpt-6-luna

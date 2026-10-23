@@ -788,14 +788,12 @@ pub(super) async fn guardian_review_session_config(
         )
     };
 
-    let guardian_model_info = session
-        .services
-        .models_manager
-        .get_model_info(
-            guardian_model.as_str(),
-            &turn.config.to_models_manager_config(),
-        )
-        .await;
+    let guardian_model_info = crate::model_info_for_provider::model_info_for_config(
+        &session.services.models_manager,
+        guardian_model.as_str(),
+        &turn.config,
+    )
+    .await;
     let mut spawn_config = build_guardian_review_session_config(
         turn.config.as_ref(),
         live_network_config,

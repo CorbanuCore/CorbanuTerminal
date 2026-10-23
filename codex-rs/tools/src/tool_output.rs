@@ -50,6 +50,13 @@ pub trait ToolOutput: Send {
     fn code_mode_result(&self, payload: &ToolPayload) -> JsonValue {
         response_input_to_code_mode_result(self.to_response_item("", payload))
     }
+
+    /// What this result told the model, without per-call metadata such as
+    /// chunk ids or wall time. Two calls whose results have the same identity
+    /// gave the model no new information.
+    fn result_identity(&self, payload: &ToolPayload) -> JsonValue {
+        self.code_mode_result(payload)
+    }
 }
 
 impl<T> ToolOutput for Box<T>
@@ -86,6 +93,10 @@ where
 
     fn code_mode_result(&self, payload: &ToolPayload) -> JsonValue {
         (**self).code_mode_result(payload)
+    }
+
+    fn result_identity(&self, payload: &ToolPayload) -> JsonValue {
+        (**self).result_identity(payload)
     }
 }
 

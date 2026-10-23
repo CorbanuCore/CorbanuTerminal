@@ -1,0 +1,27 @@
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     glm-5.3-flash low   /model to change │
+│ directory: /tmp/pf84sw2.EJHD/ws                 │
+╰─────────────────────────────────────────────────╯
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: /tmp/pf84sw2.EJHD/ws             │
+╰─────────────────────────────────────────────╯
+To continue this session, run corbanu resume 01a12ea5-5bed-7c62-969e-975952c4926c
+• New session: requests to openai use account `work`.
+• Model changed to GPT-5.6-Luna via OpenAI low
+• Connectors, usage and the model list now use openai account `work`; model list refreshed.
+› Reply with exactly: work-ok
+⚠ Code Mode is unavailable because failed to spawn code-mode host /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/fix-pf84-switch-follow/
+  debug/codex-code-mode-host: host executable was not found. Code mode will fail closed; enable `features.code_mode_host` and install
+  `codex-code-mode-host`.
+• work-ok
+• Model changed to Z.AI GLM 5.3 Flash via Z.AI low
+• Connectors, usage and the model list now use the default account; model list refreshed.
+› Reply with exactly: default-ok
+• default-ok
+› Use /skills to list available skills
+  Z.AI GLM 5.3 Flash via zai low · /tmp/pf84sw2.EJHD/ws · Corbanu Terminal · TPS: 1.4 tok/s

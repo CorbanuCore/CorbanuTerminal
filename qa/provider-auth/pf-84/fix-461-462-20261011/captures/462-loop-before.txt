@@ -1,0 +1,6 @@
+== before: config names kimi-code; after saving the key and pressing Enter
+  Welcome to Corbanu Terminal, your crypto-native AI terminal
+  Connect a Kimi Code API key to use Corbanu Terminal
+> 1. Provide your Kimi Code API key
+     Pay for what you use
+  Use ↑/↓ to choose · Press enter to continue

@@ -2101,6 +2101,44 @@ async fn request_user_input_interrupt_pauses_active_goal_turn() {
     }
 }
 
+/// #787: an Esc that reaches an agent's question before it was drawn, or in
+/// the second after, neither interrupts the turn nor pauses the goal; once
+/// the question has been on screen that long, Esc does both.
+#[tokio::test]
+async fn issue_787_dropped_esc_neither_interrupts_nor_pauses_the_goal() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.bottom_pane
+        .set_request_input_guard(crate::bottom_pane::REQUEST_INPUT_GUARD);
+    let thread_id = start_active_goal_turn(&mut chat);
+    chat.handle_request_user_input_now(ToolRequestUserInputParams {
+        thread_id: thread_id.to_string(),
+        item_id: "call-1".to_string(),
+        turn_id: "turn-1".to_string(),
+        questions: Vec::new(),
+        auto_resolution_ms: None,
+    });
+    let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+
+    chat.handle_key_event(esc);
+    chat.pre_draw_tick();
+    chat.handle_key_event(esc);
+    let events: Vec<AppEvent> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
+    assert!(
+        !events.iter().any(|event| matches!(
+            event,
+            AppEvent::CodexOp(Op::Interrupt) | AppEvent::SetThreadGoalStatus { .. }
+        )),
+        "a dropped Esc interrupted or paused: {events:?}"
+    );
+
+    std::thread::sleep(
+        crate::bottom_pane::REQUEST_INPUT_GUARD + std::time::Duration::from_millis(100),
+    );
+    chat.handle_key_event(esc);
+    assert_matches!(rx.try_recv(), Ok(AppEvent::CodexOp(Op::Interrupt)));
+    assert_goal_paused_event(&mut rx, thread_id);
+}
+
 fn start_active_goal_turn(chat: &mut ChatWidget) -> ThreadId {
     let thread_id = ThreadId::new();
     chat.set_feature_enabled(Feature::Goals, /*enabled*/ true);
@@ -3298,7 +3336,7 @@ async fn status_line_model_with_reasoning_includes_fast_for_fast_capable_models(
     set_fast_mode_test_catalog(&mut chat);
     assert!(get_available_model(&chat, "gpt-5.4").supports_fast_mode());
     chat.refresh_status_line();
-    let test_cwd = test_path_display("/tmp/project");
+    let test_cwd = test_cwd_display();
 
     assert_eq!(
         status_line_text(&chat),
@@ -3666,6 +3704,7 @@ async fn session_configured_clears_goal_status_footer() {
         message_history: None,
         network_proxy: None,
         rollout_path: Some(rollout_file.path().to_path_buf()),
+        provider_account: None,
     });
 
     assert_eq!(chat.current_goal_status_indicator, None);

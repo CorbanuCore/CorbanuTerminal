@@ -1,0 +1,125 @@
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     gpt-5.6-terra low   /model to change │
+│ directory: ~/corbanu-rtx/pf60s04-ia/work/ws     │
+╰─────────────────────────────────────────────────╯
+
+› Reply with the single word LUNA.
+• LUNA
+› /model/exit
+⚠ This session was recorded with model `gpt-5.6-luna` but is resuming with `gpt-5.6-terra`. Consider switching back to `gpt-5.6-luna` as it may affect Codex
+  performance.
+› Reply with the single word TERRA.
+⚠ Code Mode is unavailable because failed to spawn code-mode host <rtx-home>/corbanu-rtx/pf60s04-ia/bin/codex-code-mode-host: host executable was not found.
+  Code mode will fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.
+• TERRA
+  Attempt, components and original price
+  Requested UTC day: 2026-10-10
+› Provider: OpenAI
+  Model: GPT-5.6-Terra
+  Billing: Pay per use
+  Estimated cost: $0.034386 (rounded)
+  Tokens: 13,732 tokens
+  —— Details ——
+  Billed cost: OpenAI doesn't report its charges, so any cost here is an estimate — check OpenAI's bill.
+  Request: ae2ed2b6-d1bc-4620-b558-155413c1048c
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Provider: OpenAI
+› Model: GPT-5.6-Terra
+› Billing: Pay per use
+› Estimated cost: $0.034386 (rounded)
+› Tokens: 13,732 tokens
+› —— Details ——
+› Billed cost: OpenAI doesn't report its charges, so any cost here is an estimate — check OpenAI's bill.
+› Request: ae2ed2b6-d1bc-4620-b558-155413c1048c
+› Attempt: ffed6229-8dfb-4d96-b607-7be41cb23c69
+  Attempt: ffed6229-8dfb-4d96-b607-7be41cb23c69
+› Thread: 01a1247a-b973-7073-847c-3996cc248ad2
+  Thread: 01a1247a-b973-7073-847c-3996cc248ad2
+› Turn: 01a1247b-dc43-7ff2-8d0f-5d360fd4697b
+  Turn: 01a1247b-dc43-7ff2-8d0f-5d360fd4697b
+› Provider: openai
+  Provider: openai
+› Model: gpt-5.6-terra
+  Model: gpt-5.6-terra
+› Opaque scope: 8dc20aad-c93f-4f6b-9163-581c96bbf469
+  Opaque scope: 8dc20aad-c93f-4f6b-9163-581c96bbf469
+› Arithmetic dialect: Inclusive
+  Arithmetic dialect: Inclusive
+› Admission time: 2026-10-10T06:24:19.581Z
+  Admission time: 2026-10-10T06:24:19.581Z
+› Retry predecessor: none
+  Retry predecessor: none
+› Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+› Estimated token cost for recorded attempts: $0.034386 (rounded)
+  Estimated token cost for recorded attempts: $0.034386 (rounded)
+› Billing basis: pay per use
+  Billing basis: pay per use
+› Input: 13726
+  Input: 13726
+› Noncached input (derived for inclusive input): 3 (derived)
+  Noncached input (derived for inclusive input): 3 (derived)
+› Cache read: 0 (reported)
+  Cache read: 0 (reported)
+› Cache write: 13723
+  Cache write: 13723
+› Output: 6
+  Output: 6
+› Reasoning (subset, not separately billed): 0 (reported)
+  Reasoning (subset, not separately billed): 0 (reported)
+› Total (not separately billed): 13732
+  Total (not separately billed): 13732
+› Noncached input cost: $0.000006; exact USD 0.000006
+  Noncached input cost: $0.000006; exact USD 0.000006
+› Cache read cost: $0.000000; exact USD 0
+  Cache read cost: $0.000000; exact USD 0
+› Cache write cost: $0.034308 (rounded); exact USD 0.0343075
+  Cache write cost: $0.034308 (rounded); exact USD 0.0343075
+› Output cost: $0.000072; exact USD 0.000072
+  Output cost: $0.000072; exact USD 0.000072
+› Known subtotal exact USD: 0.0343855
+  Known subtotal exact USD: 0.0343855
+› Price ID: 49e090b3-e380-4c13-83f2-987d894afefd
+  Price ID: 49e090b3-e380-4c13-83f2-987d894afefd
+› Price source: NativeCatalog; reference 4664aff0-3715-5975-aad7-3e0c457435dc
+  Price source: NativeCatalog; reference 4664aff0-3715-5975-aad7-3e0c457435dc
+› Price currency/unit: Usd / PerMillionTokens
+  Price currency/unit: Usd / PerMillionTokens
+› Price observed/approved: 2026-10-10T06:24:19.581Z / 2026-10-10T06:24:19.581Z
+  Price observed/approved: 2026-10-10T06:24:19.581Z / 2026-10-10T06:24:19.581Z
+› Price effective interval: [2026-10-10T06:24:19.581Z, unbounded)
+  Price effective interval: [2026-10-10T06:24:19.581Z, unbounded)
+› Noncached input rate: 2 USD per million tokens
+  Noncached input rate: 2 USD per million tokens
+› Cache read rate: 0.2 USD per million tokens
+  Cache read rate: 0.2 USD per million tokens
+› Cache write rate: 2.5 USD per million tokens
+  Cache write rate: 2.5 USD per million tokens
+› Output rate: 12 USD per million tokens
+  Output rate: 12 USD per million tokens
+› Long-context price: above 272000 input tokens, the whole request is priced at:
+  Long-context price: above 272000 input tokens, the whole request is priced at:
+›   Noncached input rate: 4 USD per million tokens
+    Noncached input rate: 4 USD per million tokens
+›   Cache read rate: 0.4 USD per million tokens
+    Cache read rate: 0.4 USD per million tokens
+›   Cache write rate: 5 USD per million tokens
+    Cache write rate: 5 USD per million tokens
+›   Output rate: 18 USD per million tokens
+    Output rate: 18 USD per million tokens
+› Long-context price not applied: input 13726 ≤ 272000
+  Long-context price not applied: input 13726 ≤ 272000
+› Evidence revision 10; source 3d15ff0d-5f77-409a-8351-dfe521e092d1; sequence 10; presence patch
+  Evidence revision 10; source 3d15ff0d-5f77-409a-8351-dfe521e092d1; sequence 10; presence patch
+› {"input":13726,"read":0,"write":13723,"output":6,"reasoning":0,"total":13732}
+  {"input":13726,"read":0,"write":13723,"output":6,"reasoning":0,"total":13732}
+› Snapshot is not current; newer activity is unverified
+  Snapshot is not current; newer activity is unverified
+› Back
+  Back
+› Refresh
+  Refresh
+› Close

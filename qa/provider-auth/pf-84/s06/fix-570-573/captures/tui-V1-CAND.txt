@@ -1,0 +1,14 @@
+
+######## V1 on CAND (corbanu-cand)
+TUI started on OpenAI with --account work (control)
+-- mock lines for this turn:
+   {"t": 1791795664.488, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "tuiwork", "gen": 3, "expired": false}, "model": null}
+  [rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rmcp_client::http_client_adapter::StreamableHttpClie
+  ntAdapter>>] error: unexpected server response: HTTP 404: , when send initialize request
+⚠ MCP startup incomplete (failed: codex_apps)
+• mock: chatgpt tuiwork gen3
+› Run /review on my current changes
+  gpt-5.4 medium · $S/ws · Corbanu Terminal · TPS: 44.8 tok/s
+│  Model provider:       OpenAI - http://127.0.0.1:34741/v1 · account work                 │
+│  Account:              ChatGPT sign-in · t…@example.com · Plus (account work)            │
+send_line: composer never showed the text

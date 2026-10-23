@@ -1,0 +1,45 @@
+
+
+› Run exactly this command and show its output: curl -sS -m 8 -o /dev/null -w "%{http_code}" https://example.com/
+
+
+✔ You approved Corbanu to run curl -sS -m 8 -o /dev/null -w "%{http_code}" https://example.com/ this time
+
+• Ran curl -sS -m 8 -o /dev/null -w "%{http_code}" https://example.com/
+  └ curl: (6) Could not resolve host: example.com
+    000
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Ran the command exactly as given. Output:
+
+  curl: (6) Could not resolve host: example.com
+  000
+
+  Exit code: 6. The sandbox's network access is restricted, so DNS lookup for example.com failed and curl reported HTTP code 000.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Run exactly this command and show its output: printf x > ../outside-host-check.txt; ls -l ../outside-host-check.txt
+
+
+◦ Running printf x > ../outside-host-check.txt; ls -l ../outside-host-check.txt
+
+
+  Would you like to run the following command?
+
+  Environment: local
+
+  Reason: Security level Aggressive blocks writing `../outside-host-check.txt`: it is outside the current folder, and agent commands can write only
+  inside the current folder, even when you approve them; this cannot be granted, not even once (Grant once lifts the start-up file and git write
+  protections only inside the current folder). To allow it, a person can switch to Permissive in /security (it applies after a restart).
+
+  $ printf x > ../outside-host-check.txt; ls -l ../outside-host-check.txt
+
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for commands that start with `printf x > ../outside-host-check.txt; ls -l ../outside-host-check.txt`
+  3. No, and tell Corbanu Terminal what to do differently (esc)
+
+  A letter in brackets only highlights its option; enter confirms it. Options that last beyond this request: choose with ↑/↓, then enter.
+  Press enter to confirm or esc to cancel

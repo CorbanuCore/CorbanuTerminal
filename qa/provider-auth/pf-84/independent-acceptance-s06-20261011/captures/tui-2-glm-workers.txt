@@ -1,0 +1,26 @@
+› Run the shell command: bash workers.sh   Then copy its full output verbatim in a code block, and finally on its own line write the word pong.
+• Ran bash workers.sh
+  └ --- worker: -c model_provider="amazon-bedrock" -m openai.gpt-5.4 --account work
+    mock: sigv4 AKIDWORKPROFILE us-west-2
+    … +10 lines (ctrl + t to view transcript)
+    mock: chatgpt tuiwork gen1
+    exit=0
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+• --- worker: -c model_provider="amazon-bedrock" -m openai.gpt-5.4 --account work
+  mock: sigv4 AKIDWORKPROFILE us-west-2
+  exit=0
+  --- worker: -c model_provider="amazon-bedrock" -m openai.gpt-5.4 --account gone
+  ERROR: Fatal error: account `gone` of provider `amazon-bedrock` uses AWS profile `nosuchprofile`, which cannot be used: failed to load AWS credentials: the credentials
+  provider was not properly configured: ProfileFile pr
+  exit=1
+  --- worker: -c model_provider="openai" -m gpt-5.4 --account fake
+  ERROR: OpenAI (openai) account `fake` was rejected. Sign it in again with `corbanu login --account fake` (add `--with-api-key` for an API key), or choose another
+  account. The default OpenAI credential is unchanged.
+  exit=1
+  --- worker: -c model_provider="openai" -m gpt-5.4 --account work
+  mock: chatgpt tuiwork gen1
+  exit=0
+  pong
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+› Find and fix a bug in @filename
+  Z.AI GLM 5.3 Flash via zai default · /Volumes/CorbanuDrive/Corbanu/.codex-work/s06acc/ws · Corbanu Terminal · TPS: 23.4 tok/s

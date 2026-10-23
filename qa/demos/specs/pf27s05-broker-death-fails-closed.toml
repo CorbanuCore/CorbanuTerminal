@@ -1,0 +1,65 @@
+# PF-27-S05: with broker_model_auth, a dead broker fails model requests closed; Core never falls back to the raw key.
+id = "pf27s05-broker-death-fails-closed"
+feature = "Model-client auth in the broker: when the broker dies, model requests fail instead of using the key directly"
+expected = "The first prompt is answered through the broker. After the broker process is killed, the next prompt fails with 'the isolated credential broker is unavailable'; no request is sent with the key."
+model = "glm-5.2"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+suppress_unstable_features_warning = true
+
+[features]
+broker_model_auth = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Reply with exactly one line: first answer via the broker"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "(?m)^. first answer via the broker"
+timeout = 240
+compress = 3
+
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+
+[[steps]]
+type = '!pkill -P $PPID -f -- --codex-run-as-credential-broker; echo "broker killed: $?"'
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "broker killed: 0"
+timeout = 30
+
+[[steps]]
+type = "Reply with exactly one line: second answer"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "credential broker is unavailable"
+timeout = 240
+compress = 3
+
+[[steps]]
+pause = 4.0

@@ -1,0 +1,12 @@
+test suite::named_account_login_restrictions::resumed_named_thread_keeps_the_default_login ... FAILED
+
+failures:
+
+--
+thread 'suite::named_account_login_restrictions::resumed_named_thread_keeps_the_default_login' (2205729) panicked at exec/tests/suite/named_account_login_restrictions.rs:444:5:
+assertion `left == right` failed: default login changed
+  left: None
+ right: Some([123, 10, 32, 32, 34, 97, 117, 116, 104, 95, 109, 111, 100, 101, 34, 58, 32, 34, 97, 112, 105, 107, 101, 121, 34, 44, 10, 32, 32, 34, 79, 80, 69, 78, 65, 73, 95, 65, 80, 73, 95, 75, 69, 89, 34, 58, 32, 34, 115, 107, 45, 100, 101, 102, 97, 117, 108, 116, 45, 108, 111, 103, 105, 110, 45, 53, 55, 48, 34, 10, 125])
+--
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 91 filtered out; finished in 2.55s
+

@@ -1,0 +1,6 @@
+model = "vercel/moonshotai/kimi-k3"
+model_provider = "vercel"
+service_tier = "default"
+
+[projects."<scratch>/work/repo"]
+trust_level = "trusted"

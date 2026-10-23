@@ -1,0 +1,31 @@
+===== v1-vault-before (/vault -> View credentials, metadata only)
+• Saved zpx account `aa1`. Use it from /providers, `--account aa1` or a spawn `account`.
+• Saved zpx account `aa2`. Use it from /providers, `--account aa2` or a spawn `account`.
+  View credentials
+  Select a credential to inspect or copy.
+  3 credential(s) stored
+  Search credentials
+› Provider: zpx  Stored as zpx; vault label provider/zpx/accounts/aa1/api_key
+  Provider: zpx  Stored as zpx; vault label provider/zpx/accounts/aa2/api_key
+  Provider: zpx  Stored as zpx; vault label provider/zpx/accounts/quota/api_key
+  Press enter to confirm or esc to go back
+
+===== v1-vault-after (after /providers Remove aa1)
+  View credentials
+  Select a credential to inspect or copy.
+  2 credential(s) stored
+  Search credentials
+› Provider: zpx  Stored as zpx; vault label provider/zpx/accounts/aa2/api_key
+  Provider: zpx  Stored as zpx; vault label provider/zpx/accounts/quota/api_key
+  Press enter to confirm or esc to go back
+
+===== rename aa2 -> quota (existing name)
+■ Could not rename zpx account `aa2`: invalid credential label: zpx already has an account `quota`
+zpx	aa2	api_key
+zpx	quota	api_key
+
+===== c4: hC2 restart, /providers Claude rows
+  2. Claude Account · default  Enabled · configured · current · this session · default for new sessions
+  3. Claude Account · cfg      Named account · Claude Code login · fp 61539973a31e
+  4. Claude Account · fake     Named account · subscription token · fp cece2dac3657
+  5. Claude Account · work     Named account · subscription token · fp b60a5d2de764

@@ -1,0 +1,143 @@
+{
+ "note": "Model-visible tool sets observed by the guest mediators over the whole run (all clones), by request role (executor = the tester's corbanu exec; product = the TUI under test). Names only; no bodies or headers. Per-clone logs: common/<clone>/mediator-final.jsonl.gz; per-run windows: runs/*/mediator-window.jsonl.",
+ "observed_tool_sets": [
+  {
+   "role": "executor",
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "structured_edit",
+    "structured_write",
+    "view_image",
+    "spawn_agent_v1",
+    "send_input_v1",
+    "wait_agent_v1",
+    "close_agent_v1",
+    "resume_agent_v1",
+    "get_goal",
+    "create_goal",
+    "update_goal"
+   ],
+   "requests": 1466
+  },
+  {
+   "role": "product",
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "list_mcp_resources",
+    "list_mcp_resource_templates",
+    "read_mcp_resource",
+    "update_plan",
+    "request_user_input",
+    "structured_edit",
+    "structured_write",
+    "view_image",
+    "spawn_agent_v1",
+    "send_input_v1",
+    "wait_agent_v1",
+    "close_agent_v1",
+    "resume_agent_v1",
+    "get_goal",
+    "create_goal",
+    "update_goal",
+    "mcp__notes__post_note",
+    "mcp__notes__read_shared_note"
+   ],
+   "requests": 49
+  },
+  {
+   "role": "product",
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "structured_edit",
+    "structured_write",
+    "view_image",
+    "spawn_agent",
+    "send_message",
+    "followup_task",
+    "wait_agent",
+    "interrupt_agent",
+    "list_agents",
+    "get_goal",
+    "create_goal",
+    "update_goal"
+   ],
+   "requests": 6
+  },
+  {
+   "role": "product",
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "structured_edit",
+    "structured_write",
+    "view_image",
+    "spawn_agent_v1",
+    "send_input_v1",
+    "wait_agent_v1",
+    "close_agent_v1",
+    "resume_agent_v1",
+    "get_goal",
+    "create_goal",
+    "update_goal"
+   ],
+   "requests": 151
+  },
+  {
+   "role": "product",
+   "tools": [
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "view_image",
+    "spawn_agent_v1",
+    "send_input_v1",
+    "wait_agent_v1",
+    "close_agent_v1",
+    "resume_agent_v1"
+   ],
+   "requests": 34
+  },
+  {
+   "role": "product",
+   "tools": [
+    "web_search",
+    "exec_command",
+    "write_stdin",
+    "update_plan",
+    "request_user_input",
+    "structured_edit",
+    "structured_write",
+    "view_image",
+    "spawn_agent_v1",
+    "send_input_v1",
+    "wait_agent_v1",
+    "close_agent_v1",
+    "resume_agent_v1",
+    "get_goal",
+    "create_goal",
+    "update_goal"
+   ],
+   "requests": 1
+  }
+ ],
+ "refused_connects": {
+  "127.0.0.1:18602": 272,
+  "ab.chatgpt.com:443": 18,
+  "api.github.com:443": 170,
+  "chatgpt.com:443": 324,
+  "codeload.github.com:443": 272,
+  "github.com:443": 434,
+  "qwen.agms.test:80": 272,
+  "raw.githubusercontent.com:443": 272
+ }
+}

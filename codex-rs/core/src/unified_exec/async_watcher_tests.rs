@@ -29,7 +29,13 @@ struct StreamingOutputHarness {
     rx_event: async_channel::Receiver<Event>,
 }
 
-async fn streaming_output_harness() -> anyhow::Result<StreamingOutputHarness> {
+type TestProcess = (
+    Arc<UnifiedExecProcess>,
+    tokio::sync::broadcast::Sender<Vec<u8>>,
+    tokio::sync::oneshot::Sender<i32>,
+);
+
+async fn spawn_test_process() -> anyhow::Result<TestProcess> {
     let (writer_tx, _writer_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
     let (stdout_tx, stdout_rx) = tokio::sync::broadcast::channel::<Vec<u8>>(8);
     let (exit_tx, exit_rx) = tokio::sync::oneshot::channel::<i32>();
@@ -48,10 +54,15 @@ async fn streaming_output_harness() -> anyhow::Result<StreamingOutputHarness> {
         UnifiedExecProcess::from_spawned(spawned, SandboxType::None, Box::new(NoopSpawnLifecycle))
             .await?,
     );
+    Ok((process, stdout_tx, exit_tx))
+}
+
+async fn streaming_output_harness() -> anyhow::Result<StreamingOutputHarness> {
+    let (process, stdout_tx, exit_tx) = spawn_test_process().await?;
     let (session, turn, rx_event) = make_session_and_context_with_rx().await;
     let context = UnifiedExecContext::new(session, turn, "streaming-output-test".to_string());
-    let transcript = Arc::new(tokio::sync::Mutex::new(HeadTailBuffer::default()));
-    start_streaming_output(&process, &context, Arc::clone(&transcript));
+    let transcript = process.transcript();
+    start_streaming_output(&process, &context);
 
     Ok(StreamingOutputHarness {
         process,
@@ -99,6 +110,43 @@ async fn streaming_output_finishes_on_close_without_waiting_for_grace() -> anyho
         b"LATE-OUTPUT-MARKER"
     );
 
+    Ok(())
+}
+
+/// The end event's transcript holds output produced before the streaming
+/// task subscribed and more chunks than its channel holds, so a late or
+/// lagging subscriber cannot drop the head or middle of a large output.
+#[tokio::test]
+async fn transcript_keeps_output_the_streaming_task_never_received() -> anyhow::Result<()> {
+    const CHUNKS: usize = 200;
+    let (process, stdout_tx, exit_tx) = spawn_test_process().await?;
+    let transcript = process.transcript();
+    let polled = process.output_handles().output_buffer;
+    let mut expected = Vec::new();
+    for index in 0..CHUNKS {
+        let chunk = format!("chunk-{index:03}\n").into_bytes();
+        expected.extend_from_slice(&chunk);
+        stdout_tx.send(chunk).expect("send output");
+        // The driver channel is small; let the output task take each chunk.
+        while polled.lock().await.total_bytes() < expected.len() {
+            tokio::task::yield_now().await;
+        }
+    }
+
+    let (session, turn, _rx_event) = make_session_and_context_with_rx().await;
+    let context = UnifiedExecContext::new(session, turn, "late-subscriber-test".to_string());
+    let drained = process.output_drained_notify();
+    let drained = drained.notified();
+    tokio::pin!(drained);
+    start_streaming_output(&process, &context);
+    exit_tx.send(0).expect("send exit");
+    drop(stdout_tx);
+    (&mut drained).await;
+
+    assert_eq!(
+        transcript.lock().await.to_bytes_with_omission_marker(),
+        expected
+    );
     Ok(())
 }
 

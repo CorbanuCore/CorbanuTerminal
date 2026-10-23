@@ -1,0 +1,10 @@
+cold boot to ssh 11.7
+suspend 5.1
+private MB after suspend 2868
+resume to ssh 5.2
+warm-marker
+12:13  up 15 secs, 0 users, load averages: 3.33 0.75 0.27
+clone of suspended 0.0 s; files: config.json disk.img nvram.bin state.vzvmsave 
+clone-of-suspended to ssh 16.2
+warm-marker
+12:14  up 27 secs, 0 users, load averages: 3.67 0.94 0.34

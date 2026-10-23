@@ -1,0 +1,17 @@
+---
+source: tui/src/bottom_pane/security_level_picker_tests.rs
+expression: rendered
+---
+start.
+Unchanged: model and provider, MCP servers, apps and hooks (they run outside the
+sandbox), wallet scopes, and commands you have already allowed permanently (they
+skip the prompt but stay sandboxed). `corbanu exec` that you start yourself
+and IDE sessions are not covered yet, except that they also hold provider keys
+in the credential broker and, while they run on this Corbanu home, take Core's
+Aggressive protections and approval for every command.
+The rows above take effect when you restart Corbanu Terminal (you can restart
+right after saving); this session keeps its current settings until then. Your
+config.toml is not modified.
+Core's level stays Permissive: raising it needs the activation preflight (the
+protected_mode_preflight feature).
+↑/↓ scroll · n refuse/pass · enter confirm and save · esc back, nothing changes

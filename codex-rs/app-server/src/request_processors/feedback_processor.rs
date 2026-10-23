@@ -90,7 +90,7 @@ impl FeedbackRequestProcessor {
             upload_tags.insert("effort".to_string(), format!("{reasoning_effort:?}"));
         }
 
-        let auth = self.auth_manager.auth_cached();
+        let auth = self.auth_manager.session_auth_cached();
         if let Some(chatgpt_user_id) = auth
             .as_ref()
             .and_then(codex_login::CodexAuth::get_chatgpt_user_id)
@@ -469,6 +469,7 @@ mod tests {
                     file_system_sandbox_policy: None,
                     model: (*model).to_string(),
                     model_provider: None,
+                    provider_account: None,
                     comp_hash: None,
                     personality: None,
                     collaboration_mode: None,
@@ -476,6 +477,7 @@ mod tests {
                     multi_agent_mode: None,
                     realtime_active: None,
                     effort: effort.clone(),
+                    security_level: None,
                     summary: ReasoningSummary::Auto,
                 }),
             }

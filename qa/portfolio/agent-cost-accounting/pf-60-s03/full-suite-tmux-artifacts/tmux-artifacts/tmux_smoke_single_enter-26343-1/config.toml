@@ -1,0 +1,6 @@
+model = "gpt-5.6-terra"
+model_provider = "openai"
+suppress_unstable_features_warning = true
+
+[projects."/Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915"]
+trust_level = "trusted"

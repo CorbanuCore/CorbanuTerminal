@@ -1,9 +1,13 @@
 use std::fs::File;
 use std::path::Path;
 use std::path::PathBuf;
+#[cfg(unix)]
+use std::process::Child;
 use std::process::Command;
 use std::process::Output;
 use std::process::Stdio;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use self::http_client::StartupSyncHttpClient;
@@ -33,6 +37,7 @@ const CURATED_PLUGINS_RELATIVE_DIR: &str = ".tmp/plugins";
 const CURATED_PLUGINS_SHA_FILE: &str = ".tmp/plugins.sha";
 const CURATED_PLUGINS_SYNC_LOCK_FILE: &str = ".tmp/plugins.sync.lock";
 const CURATED_PLUGINS_BACKUP_ARCHIVE_FALLBACK_VERSION: &str = "export-backup";
+const SYNC_CANCELLED: &str = "curated plugin sync cancelled at shutdown";
 const CURATED_PLUGINS_GIT_TIMEOUT: Duration = Duration::from_secs(30);
 const CURATED_PLUGINS_HTTP_TIMEOUT: Duration = Duration::from_secs(30);
 const CURATED_PLUGINS_BACKUP_ARCHIVE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -96,9 +101,13 @@ fn curated_plugins_sha_path(codex_home: &Path) -> PathBuf {
     codex_home.join(CURATED_PLUGINS_SHA_FILE)
 }
 
+/// Syncs the curated plugins repo into `codex_home`. Setting `cancel` stops
+/// it at the next check: a running `git` is killed (with its children) and
+/// no fallback transport starts (#477).
 pub fn sync_openai_plugins_repo(
     codex_home: &Path,
     http_client_factory: HttpClientFactory,
+    cancel: &AtomicBool,
 ) -> Result<String, String> {
     #[cfg(target_os = "macos")]
     let git_binary = match which::which("git") {
@@ -114,6 +123,7 @@ pub fn sync_openai_plugins_repo(
         GITHUB_API_BASE_URL,
         CURATED_PLUGINS_BACKUP_ARCHIVE_API_URL,
         &http_client_factory,
+        cancel,
     )
 }
 
@@ -123,13 +133,20 @@ fn sync_openai_plugins_repo_with_transport_overrides(
     api_base_url: &str,
     backup_archive_api_url: &str,
     http_client_factory: &HttpClientFactory,
+    cancel: &AtomicBool,
 ) -> Result<String, String> {
     let _file_guard = lock_curated_plugins_startup_sync(codex_home)?;
+    if cancel.load(Ordering::SeqCst) {
+        return Err(SYNC_CANCELLED.to_string());
+    }
 
     let git_sync_result = match git_binary {
-        Some(git_binary) => sync_openai_plugins_repo_via_git(codex_home, git_binary),
+        Some(binary) => sync_openai_plugins_repo_via_git(codex_home, Git { binary, cancel }),
         None => Err("git executable is unavailable".to_string()),
     };
+    if git_sync_result.is_err() && cancel.load(Ordering::SeqCst) {
+        return Err(SYNC_CANCELLED.to_string());
+    }
 
     match git_sync_result {
         Ok(remote_sha) => {
@@ -160,6 +177,8 @@ fn sync_openai_plugins_repo_with_transport_overrides(
                         Err(format!(
                             "git sync failed for curated plugin sync: {err}; GitHub HTTP sync failed for curated plugin sync: {http_err}; export archive fallback skipped because a local curated plugins snapshot already exists"
                         ))
+                    } else if cancel.load(Ordering::SeqCst) {
+                        Err(format!("{SYNC_CANCELLED}: {http_err}"))
                     } else {
                         // The export archive is a lagging backup path. Only use it to bootstrap a
                         // missing local curated snapshot, never to refresh an existing one.
@@ -204,14 +223,11 @@ fn lock_curated_plugins_startup_sync(codex_home: &Path) -> Result<File, String> 
     Ok(lock_file)
 }
 
-fn sync_openai_plugins_repo_via_git(
-    codex_home: &Path,
-    git_binary: &Path,
-) -> Result<String, String> {
+fn sync_openai_plugins_repo_via_git(codex_home: &Path, git: Git<'_>) -> Result<String, String> {
     let repo_path = curated_plugins_repo_path(codex_home);
     let sha_path = codex_home.join(CURATED_PLUGINS_SHA_FILE);
-    let remote_sha = git_ls_remote_head_sha(git_binary)?;
-    let local_sha = read_local_git_or_sha_file(&repo_path, &sha_path, git_binary);
+    let remote_sha = git_ls_remote_head_sha(git)?;
+    let local_sha = read_local_git_or_sha_file(&repo_path, &sha_path, git);
 
     if local_sha.as_deref() == Some(remote_sha.as_str()) && repo_path.join(".git").is_dir() {
         return Ok(remote_sha);
@@ -220,25 +236,25 @@ fn sync_openai_plugins_repo_via_git(
     let staged_repo_dir = prepare_curated_repo_parent_and_temp_dir(&repo_path)?;
     run_git_in_repo(
         staged_repo_dir.path(),
-        git_binary,
+        git,
         &["init"],
         "git init curated plugins repo",
     )?;
 
     if repo_path.join(".git").is_dir() {
-        fetch_curated_plugins_commit(&repo_path, &remote_sha, git_binary)?;
+        fetch_curated_plugins_commit(&repo_path, &remote_sha, git)?;
         fetch_curated_plugins_commit_from_source(
             staged_repo_dir.path(),
             &repo_path,
             CURATED_PLUGINS_FETCH_REF,
-            git_binary,
+            git,
         )?;
     } else {
-        fetch_curated_plugins_commit(staged_repo_dir.path(), &remote_sha, git_binary)?;
+        fetch_curated_plugins_commit(staged_repo_dir.path(), &remote_sha, git)?;
     }
 
-    reset_curated_plugins_checkout(staged_repo_dir.path(), git_binary)?;
-    let fetched_sha = git_head_sha(staged_repo_dir.path(), git_binary)?;
+    reset_curated_plugins_checkout(staged_repo_dir.path(), git)?;
+    let fetched_sha = git_head_sha(staged_repo_dir.path(), git)?;
     if fetched_sha != remote_sha {
         return Err(format!(
             "curated plugins fetch HEAD mismatch: expected {remote_sha}, got {fetched_sha}"
@@ -254,13 +270,13 @@ fn sync_openai_plugins_repo_via_git(
 fn fetch_curated_plugins_commit(
     repo_path: &Path,
     remote_sha: &str,
-    git_binary: &Path,
+    git: Git<'_>,
 ) -> Result<(), String> {
     fetch_curated_plugins_commit_from(
         repo_path,
         OPENAI_PLUGINS_GIT_URL.as_ref(),
         remote_sha,
-        git_binary,
+        git,
         "git fetch curated plugins repo",
     )
 }
@@ -269,13 +285,13 @@ fn fetch_curated_plugins_commit_from_source(
     repo_path: &Path,
     source_repo_path: &Path,
     remote_sha: &str,
-    git_binary: &Path,
+    git: Git<'_>,
 ) -> Result<(), String> {
     fetch_curated_plugins_commit_from(
         repo_path,
         source_repo_path,
         remote_sha,
-        git_binary,
+        git,
         "git copy fetched curated plugins commit",
     )
 }
@@ -284,31 +300,31 @@ fn fetch_curated_plugins_commit_from(
     repo_path: &Path,
     source: &Path,
     source_revision: &str,
-    git_binary: &Path,
+    git: Git<'_>,
     context: &str,
 ) -> Result<(), String> {
     let fetch_refspec = format!("+{source_revision}:{CURATED_PLUGINS_FETCH_REF}");
-    let mut command = git_command(git_binary);
+    let mut command = git.command();
     command
         .arg("-C")
         .arg(repo_path)
         .args(["fetch", "--depth", "1", "--no-tags"])
         .arg(source)
         .arg(fetch_refspec);
-    let output = run_git_command_with_timeout(&mut command, context, CURATED_PLUGINS_GIT_TIMEOUT)?;
+    let output = git.run(&mut command, context)?;
     ensure_git_success(&output, context)
 }
 
-fn reset_curated_plugins_checkout(repo_path: &Path, git_binary: &Path) -> Result<(), String> {
+fn reset_curated_plugins_checkout(repo_path: &Path, git: Git<'_>) -> Result<(), String> {
     run_git_in_repo(
         repo_path,
-        git_binary,
+        git,
         &["reset", "--hard", CURATED_PLUGINS_FETCH_REF],
         "git reset curated plugins repo",
     )?;
     run_git_in_repo(
         repo_path,
-        git_binary,
+        git,
         &["clean", "-fdx"],
         "git clean curated plugins repo",
     )
@@ -316,13 +332,13 @@ fn reset_curated_plugins_checkout(repo_path: &Path, git_binary: &Path) -> Result
 
 fn run_git_in_repo(
     repo_path: &Path,
-    git_binary: &Path,
+    git: Git<'_>,
     args: &[&str],
     context: &str,
 ) -> Result<(), String> {
-    let mut command = git_command(git_binary);
+    let mut command = git.command();
     command.arg("-C").arg(repo_path).args(args);
-    let output = run_git_command_with_timeout(&mut command, context, CURATED_PLUGINS_GIT_TIMEOUT)?;
+    let output = git.run(&mut command, context)?;
     ensure_git_success(&output, context)
 }
 
@@ -615,13 +631,9 @@ fn write_curated_plugins_sha(sha_path: &Path, remote_sha: &str) -> Result<(), St
     })
 }
 
-fn read_local_git_or_sha_file(
-    repo_path: &Path,
-    sha_path: &Path,
-    git_binary: &Path,
-) -> Option<String> {
+fn read_local_git_or_sha_file(repo_path: &Path, sha_path: &Path, git: Git<'_>) -> Option<String> {
     if repo_path.join(".git").is_dir()
-        && let Ok(sha) = git_head_sha(repo_path, git_binary)
+        && let Ok(sha) = git_head_sha(repo_path, git)
     {
         return Some(sha);
     }
@@ -629,17 +641,13 @@ fn read_local_git_or_sha_file(
     read_sha_file(sha_path)
 }
 
-fn git_ls_remote_head_sha(git_binary: &Path) -> Result<String, String> {
-    let mut command = git_command(git_binary);
+fn git_ls_remote_head_sha(git: Git<'_>) -> Result<String, String> {
+    let mut command = git.command();
     command
         .arg("ls-remote")
         .arg("https://github.com/openai/plugins.git")
         .arg("HEAD");
-    let output = run_git_command_with_timeout(
-        &mut command,
-        "git ls-remote curated plugins repo",
-        CURATED_PLUGINS_GIT_TIMEOUT,
-    )?;
+    let output = git.run(&mut command, "git ls-remote curated plugins repo")?;
     ensure_git_success(&output, "git ls-remote curated plugins repo")?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -657,8 +665,9 @@ fn git_ls_remote_head_sha(git_binary: &Path) -> Result<String, String> {
     Ok(sha.to_string())
 }
 
-fn git_head_sha(repo_path: &Path, git_binary: &Path) -> Result<String, String> {
-    let output = git_command(git_binary)
+fn git_head_sha(repo_path: &Path, git: Git<'_>) -> Result<String, String> {
+    let output = git
+        .command()
         .arg("-C")
         .arg(repo_path)
         .arg("rev-parse")
@@ -682,9 +691,29 @@ fn git_head_sha(repo_path: &Path, git_binary: &Path) -> Result<String, String> {
     Ok(sha)
 }
 
+/// The `git` the sync runs, and the flag that cancels it.
+#[derive(Clone, Copy)]
+struct Git<'a> {
+    binary: &'a Path,
+    cancel: &'a AtomicBool,
+}
+
+impl Git<'_> {
+    fn command(self) -> Command {
+        git_command(self.binary)
+    }
+
+    fn run(self, command: &mut Command, context: &str) -> Result<Output, String> {
+        run_git_command_with_timeout(command, context, CURATED_PLUGINS_GIT_TIMEOUT, self.cancel)
+    }
+}
+
 fn git_command(git_binary: &Path) -> Command {
     let mut command = Command::new(git_binary);
-    command.env("GIT_OPTIONAL_LOCKS", "0");
+    // In its own process group `git` must never wait on the terminal.
+    command
+        .env("GIT_OPTIONAL_LOCKS", "0")
+        .env("GIT_TERMINAL_PROMPT", "0");
     for name in REPOSITORY_LOCAL_GIT_ENVIRONMENT_VARIABLES {
         command.env_remove(name);
     }
@@ -718,13 +747,24 @@ fn run_git_command_with_timeout(
     command: &mut Command,
     context: &str,
     timeout: Duration,
+    cancel: &AtomicBool,
 ) -> Result<Output, String> {
+    // A separate process group, so cancelling also stops the helpers `git`
+    // starts (`index-pack`, `remote-https`) before the clone is removed, and
+    // so they die with this process (`GitProcessGroup`).
+    if cancel.load(Ordering::SeqCst) {
+        return Err(format!("{context}: {SYNC_CANCELLED}"));
+    }
+    #[cfg(unix)]
+    let group = GitProcessGroup::new(command);
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|err| format!("failed to run {context}: {err}"))?;
+    #[cfg(unix)]
+    let pgid = group.pgid(&child);
 
     let start = std::time::Instant::now();
     loop {
@@ -738,21 +778,18 @@ fn run_git_command_with_timeout(
             Err(err) => return Err(format!("failed to poll {context}: {err}")),
         }
 
-        if start.elapsed() >= timeout {
-            match child.try_wait() {
-                Ok(Some(_)) => {
-                    return child
-                        .wait_with_output()
-                        .map_err(|err| format!("failed to wait for {context}: {err}"));
-                }
-                Ok(None) => {}
-                Err(err) => return Err(format!("failed to poll {context}: {err}")),
-            }
-
+        let cancelled = cancel.load(Ordering::SeqCst);
+        if cancelled || start.elapsed() >= timeout {
+            #[cfg(unix)]
+            kill_git_process_group(&mut child, pgid);
+            #[cfg(not(unix))]
             let _ = child.kill();
             let output = child
                 .wait_with_output()
-                .map_err(|err| format!("failed to wait for {context} after timeout: {err}"))?;
+                .map_err(|err| format!("failed to wait for {context} after kill: {err}"))?;
+            if cancelled {
+                return Err(format!("{context}: {SYNC_CANCELLED}"));
+            }
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
             return if stderr.is_empty() {
                 Err(format!("{context} timed out after {}s", timeout.as_secs()))
@@ -766,6 +803,92 @@ fn run_git_command_with_timeout(
 
         std::thread::sleep(Duration::from_millis(100));
     }
+}
+
+/// The process group `git` runs in (#1202). A `/bin/sh` watchdog leads it
+/// and blocks reading a pipe that only this process holds open. However this
+/// process ends (normal exit, SIGHUP when its terminal closes, SIGKILL) the
+/// kernel closes the pipe, `read` returns and the watchdog kills the whole
+/// group, so `git` and its helpers never outlive Corbanu and keep writing into
+/// its home. When the command finishes, dropping this kills what is left of
+/// the group and reaps the watchdog. The watchdog ignores the terminal's
+/// signals, so only the pipe or a kill ends it. If it can't start, `git` leads
+/// its own group as before and only the timeout and cancel flag stop it. On
+/// macOS std sets close-on-exec on the pipe just after creating it, so a
+/// child another thread spawns in that moment may hold the write end open;
+/// then the watchdog fires only once that child exits too (cancel, timeout
+/// and the end of the command still kill the group).
+#[cfg(unix)]
+struct GitProcessGroup {
+    watchdog: Option<(Child, libc::pid_t)>,
+}
+
+#[cfg(unix)]
+impl GitProcessGroup {
+    /// Starts the watchdog and puts `command` in its group.
+    fn new(command: &mut Command) -> Self {
+        use std::os::unix::process::CommandExt;
+
+        let watchdog = Command::new("/bin/sh")
+            .args(["-c", "trap '' HUP INT QUIT TERM; read -r line; kill -9 0"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .process_group(0)
+            .spawn()
+            .and_then(|watchdog| {
+                let pgid = libc::pid_t::try_from(watchdog.id()).map_err(std::io::Error::other)?;
+                Ok((watchdog, pgid))
+            });
+        match watchdog {
+            Ok((watchdog, pgid)) => {
+                command.process_group(pgid);
+                Self {
+                    watchdog: Some((watchdog, pgid)),
+                }
+            }
+            Err(err) => {
+                warn!(error = %err, "curated plugin sync: git lifetime watchdog failed to start");
+                command.process_group(0);
+                Self { watchdog: None }
+            }
+        }
+    }
+
+    /// The group to kill: the watchdog's, or `git`'s own without one.
+    fn pgid(&self, git: &Child) -> Option<libc::pid_t> {
+        match &self.watchdog {
+            Some((_, pgid)) => Some(*pgid),
+            None => libc::pid_t::try_from(git.id()).ok(),
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for GitProcessGroup {
+    fn drop(&mut self) {
+        if let Some((watchdog, pgid)) = self.watchdog.as_mut() {
+            // SAFETY: `kill` takes no pointers. The unreaped watchdog leads
+            // the group, so its id can't have been reused.
+            unsafe {
+                libc::kill(-*pgid, libc::SIGKILL);
+            }
+            let _ = watchdog.wait();
+        }
+    }
+}
+
+/// Kills `git` and every helper in its group; the caller reaps it.
+#[cfg(unix)]
+fn kill_git_process_group(child: &mut Child, pgid: Option<libc::pid_t>) {
+    if let Some(pgid) = pgid {
+        // SAFETY: `kill` takes no pointers. `-pgid` names the group `git`
+        // runs in; its unreaped leader keeps that id from being reused.
+        unsafe {
+            libc::kill(-pgid, libc::SIGKILL);
+        }
+    }
+    let _ = child.kill();
 }
 
 fn ensure_git_success(output: &Output, context: &str) -> Result<(), String> {
@@ -1077,10 +1200,17 @@ fn extract_zipball_to_dir(bytes: &[u8], destination: &Path) -> Result<(), String
         let mut entry = archive
             .by_index(index)
             .map_err(|err| format!("failed to read curated plugins zip entry: {err}"))?;
+        let name = entry
+            .name()
+            .map_err(|error| format!("failed to decode curated plugins zip entry name: {error}"))?;
+        if zip_name_is_rooted(&name) {
+            return Err(format!(
+                "curated plugins zip entry `{name}` escapes extraction root"
+            ));
+        }
         let Some(relative_path) = entry.enclosed_name() else {
             return Err(format!(
-                "curated plugins zip entry `{}` escapes extraction root",
-                entry.name()
+                "curated plugins zip entry `{name}` escapes extraction root"
             ));
         };
 
@@ -1099,7 +1229,7 @@ fn extract_zipball_to_dir(bytes: &[u8], destination: &Path) -> Result<(), String
             continue;
         }
 
-        let output_path = destination.join(&output_relative);
+        let output_path = checked_zip_path(destination, &output_relative)?;
         if entry.is_dir() {
             std::fs::create_dir_all(&output_path).map_err(|err| {
                 format!(
@@ -1130,35 +1260,66 @@ fn extract_zipball_to_dir(bytes: &[u8], destination: &Path) -> Result<(), String
                 output_path.display()
             )
         })?;
-        apply_zip_permissions(&entry, &output_path)?;
+        apply_zip_permissions(entry.unix_mode(), &output_path)?;
     }
 
     Ok(())
 }
 
+// zip 9's `enclosed_name` strips a leading root, drive or UNC prefix and returns a
+// relative path. Refuse such names on every platform, as zip 2 did.
+fn zip_name_is_rooted(name: &str) -> bool {
+    name.starts_with(['/', '\\'])
+        || (name.as_bytes().get(1) == Some(&b':')
+            && name.as_bytes().first().is_some_and(u8::is_ascii_alphabetic))
+}
+
+// The caller validates archive components before this check. Existing symlinks
+// must not redirect archive writes or permission changes outside its destination.
+fn checked_zip_path(destination: &Path, relative: &Path) -> Result<PathBuf, String> {
+    let mut output = PathBuf::new();
+    for part in std::iter::once(destination.as_os_str())
+        .chain(relative.components().map(std::path::Component::as_os_str))
+    {
+        output.push(part);
+        match std::fs::symlink_metadata(&output) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err("curated plugins zip path contains an existing symlink".to_owned());
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("failed to check curated plugins zip path: {error}")),
+        }
+    }
+    Ok(output)
+}
+
 #[cfg(unix)]
-fn apply_zip_permissions(entry: &zip::read::ZipFile<'_>, output_path: &Path) -> Result<(), String> {
+fn apply_zip_permissions(mode: Option<u32>, output_path: &Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
 
-    let Some(mode) = entry.unix_mode() else {
+    let Some(mode) = mode else {
         return Ok(());
     };
-    std::fs::set_permissions(output_path, std::fs::Permissions::from_mode(mode)).map_err(|err| {
-        format!(
-            "failed to set permissions on curated plugins file {}: {err}",
-            output_path.display()
-        )
-    })
+    std::fs::set_permissions(output_path, std::fs::Permissions::from_mode(mode & 0o777)).map_err(
+        |err| {
+            format!(
+                "failed to set permissions on curated plugins file {}: {err}",
+                output_path.display()
+            )
+        },
+    )
 }
 
 #[cfg(not(unix))]
-fn apply_zip_permissions(
-    _entry: &zip::read::ZipFile<'_>,
-    _output_path: &Path,
-) -> Result<(), String> {
+fn apply_zip_permissions(_mode: Option<u32>, _output_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
 #[cfg(test)]
 #[path = "startup_sync_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "archive_migration_tests.rs"]
+mod archive_migration_tests;

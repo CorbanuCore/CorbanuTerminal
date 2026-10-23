@@ -1,0 +1,98 @@
+
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     loading   /model to change                │
+│ directory: /Volumes/CorbanuDrive/…/final-a/workspace │
+╰──────────────────────────────────────────────────────╯
+
+
+› Explain this codebase
+
+  Z.AI GLM 5.2 via zai standard · <run>/workspace …
+
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.2   /model to change                │
+│ directory: /Volumes/CorbanuDrive/…/final-a/workspace │
+╰──────────────────────────────────────────────────────╯
+
+
+› Run exactly this shell command once, without changing it: corbanu exec hi 2>&1 | grep -c 'set to refuse'; env -u
+  CORBANU_SECURITY_ORIGIN corbanu exec hi 2>&1 | grep -c 'set to refuse'; CODEX_HOME=$PWD corbanu exec hi 2>&1 | grep
+  -c 'set to refuse'; corbanu mcp-server </dev/null 2>&1 | grep -c 'never allowed'; corbanu hi </dev/null 2>&1 | grep
+  -c 'approval prompts'; corbanu tasknode status 2>&1 | grep -c 'credentials' . Then tell me the six output lines.
+
+
+✔ You approved Corbanu to run corbanu exec hi 2>&1 | grep -c 'set to refuse'; env -u CORBANU_SECURITY_ORIGI... this time
+
+• Ran corbanu exec hi 2>&1 | grep -c 'set to refuse'; env -u CORBANU_SECURITY_ORIGIN corbanu exec hi 2>&1 | grep -c 'set
+  │ to refuse'; CODEX_HOME=$PWD corbanu exec hi 2>&1 | grep -c 'set to refuse'; corbanu mcp-server </dev/null 2>&1 |
+  │ grep -c 'never allowed'; corbanu hi </dev/null 2>&1 | grep -c 'approval prompts'; corbanu tasknode status 2>&1 |
+  │ … +1 lines
+  └ 1
+    1
+    … +2 lines (ctrl + t to view transcript)
+    1
+    1
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• The six output lines are:
+
+  1
+  1
+  1
+  1
+  1
+  1
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Run exactly this shell command once, without changing it: env -u CORBANU_SECURITY_ORIGIN CODEX_HOME=$PWD HOME=$PWD
+  corbanu exec hi 2>&1 | grep -o 'was started by an agent command' . Then tell me the output.
+
+
+✔ You approved Corbanu to run env -u CORBANU_SECURITY_ORIGIN CODEX_HOME=$PWD HOME=$PWD corbanu exec hi 2>&1... this time
+/ T R A N S C R I P T / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / /
+
+
+› Run exactly this shell command once, without changing it: corbanu exec --skip-git-repo-check -s danger-full-access
+  'say hi' 2>&1 | grep -E 'Aggressive|Ignored|Error'; corbanu hi </dev/null 2>&1 | grep -o 'Interactive sessions are
+  never allowed there' . Then tell me in one sentence what happened.
+
+
+✔ You approved Corbanu to run corbanu exec --skip-git-repo-check -s danger-full-access 'say hi' 2>&1 | grep... this time
+
+$ corbanu exec --skip-git-repo-check -s danger-full-access 'say hi' 2>&1 | grep -E 'Aggressive|Ignored|Error'; corbanu
+    hi </dev/null 2>&1 | grep -o 'Interactive sessions are never allowed there'
+Security level Aggressive is enforced because an agent command under Aggressive started this run (/Volumes/CorbanuDrive/
+Corbanu/.codex-work/workers-20261002/r4-runs/final-a/home).
+Ignored --sandbox.
+2026-10-06T20:21:09.307801Z TRACE codex.exec{otel.kind="internal"}: codex_core::exec_policy: exec policy rules loaded
+rules=Policy { rules_by_program: {"pfterminal": [PrefixRule { pattern: PrefixPattern { first: "pfterminal", rest:
+[Single("vault")] }, decision: Forbidden, justification: Some("Security level Aggressive: agents cannot use the Corbanu
+vault.") }], "codex": [PrefixRule { pattern: PrefixPattern { first: "codex", rest: [Single("vault")] }, decision:
+Forbidden, justification: Some("Security level Aggressive: agents cannot use the Corbanu vault.") }], "pfterminal-
+debug": [PrefixRule { pattern: PrefixPattern { first: "pfterminal-debug", rest: [Single("vault")] }, decision:
+Forbidden, justification: Some("Security level Aggressive: agents cannot use the Corbanu vault.") }], "corbanu":
+[PrefixRule { pattern: PrefixPattern { first: "corbanu", rest: [Single("vault")] }, decision: Forbidden, justification:
+Some("Security level Aggressive: agents cannot use the Corbanu vault.") }], "corbanu-debug": [PrefixRule { pattern:
+PrefixPattern { first: "corbanu-debug", rest: [Single("vault")] }, decision: Forbidden, justification: Some("Security
+level Aggressive: agents cannot use the Corbanu vault.") }]}, network_rules: [], host_executables_by_name: {} }
+Error: failed to initialize in-process app-server client: Operation not permitted (os error 1)
+Interactive sessions are never allowed there
+✓ • 0ms
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• The corbanu exec call enforced the Aggressive security level (ignoring the requested danger-full-access sandbox) and
+  failed to initialize, while the corbanu hi interactive session was refused outright.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────── 100% ─
+ ↑/↓ to scroll   pgup/pgdn to page   home/end to jump
+ q to quit   esc to edit prev
+

@@ -171,6 +171,7 @@ pub(super) async fn shutdown_thread(
         }
     }
     sync_materialized_rollout_path(store, thread_id, rollout_path.as_path()).await?;
+    super::update_thread_metadata::flush_deferred_metadata(store, thread_id).await;
     if let Some(metrics) = codex_otel::global()
         && let Ok(metadata) = tokio::fs::metadata(rollout_path).await
     {

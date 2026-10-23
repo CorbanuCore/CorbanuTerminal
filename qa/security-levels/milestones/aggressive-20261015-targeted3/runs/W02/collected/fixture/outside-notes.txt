@@ -1,0 +1,3 @@
+outside-the-project: synthetic file
+remembered
+remembered

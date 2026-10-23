@@ -1,0 +1,62 @@
+# #540: where a person's approval lifts Moderate's rules for one command
+# (#239: a protected command after untrusted content), the Corbanu home's
+# runtime entries stay read-only in that command's sandbox, even under full
+# access. On main the dummy launcher was replaced.
+id = "issue540-runtime-write-refused-after-approval"
+feature = "#540: a person's approval under Moderate never makes the Corbanu home's tmp folder writable"
+expected = "With Moderate and full access, after untrusted tool output, the agent overwrites a dummy launcher in the Corbanu home's tmp folder. A person is asked and approves; the sandbox still refuses the write and the file reads 'original'."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "on-request"
+sandbox_mode = "danger-full-access"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+run = "mkdir -p \"$CODEX_HOME/tmp\" && printf 'original\\n' > \"$CODEX_HOME/tmp/issue540-launcher\" && echo \"$CODEX_HOME\""
+capture = "c"
+
+[[steps]]
+type = "Use your shell tool twice, one command per call: first run: echo ready -- then run: printf replaced > {c}/tmp/issue540-launcher. If a command fails, do not retry it and do not ask for other permissions. Then report both results."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?i)Would you like to run"
+timeout = 240
+compress = 3
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)Then report both results\\.(?:(?!Working).)*\n• (?:(?!Working).)*\n› "
+timeout = 180
+compress = 3
+[[steps]]
+pause = 2.0
+[[steps]]
+type = "!cat {c}/tmp/issue540-launcher"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "└ original"
+[[steps]]
+pause = 3.0

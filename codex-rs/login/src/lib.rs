@@ -9,6 +9,15 @@ mod pkce;
 mod server;
 mod success_page;
 
+/// #1201: unit tests that run a provider-auth helper hold this for reading;
+/// the one test that spawns a copy of this test binary holds it for writing.
+/// On the Windows test lane, helper runs that normally take milliseconds
+/// stalled for seconds while the process spawned copies of itself. The test
+/// whose helper hit its 10 s timeout runs, in its shard, just before the one
+/// that spawns.
+#[cfg(test)]
+pub(crate) static TEST_CHILD_PROCESSES: std::sync::RwLock<()> = std::sync::RwLock::new(());
+
 pub use codex_config::types::AuthCredentialsStoreMode;
 pub use codex_http_client::BuildCustomCaTransportError as BuildLoginHttpClientError;
 pub use device_code_auth::DeviceCode;
@@ -42,41 +51,68 @@ pub use auth::ExternalAuthRefreshContext;
 pub use auth::ExternalAuthRefreshReason;
 pub use auth::ExternalBearerCachePolicy;
 pub use auth::KIMI_CODE_API_KEY_ENV_VAR;
+pub use auth::NamedChatgptAccount;
+pub use auth::NamedSignInSummary;
+pub use auth::OPENAI_API_KEY_ENV_FALLBACK_NOTICE;
 pub use auth::OPENAI_API_KEY_ENV_VAR;
 pub use auth::OpenAiAuthMetadata;
+pub use auth::PROVIDER_ACCOUNT_ENV_VAR;
+pub use auth::PreviousSignIn;
 pub use auth::ProviderApiKeyStorageMetadata;
 pub use auth::ProviderApiKeyStorageMetadataSnapshot;
 pub use auth::ProviderApiKeyStorageSource;
 pub use auth::REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR;
 pub use auth::REVOKE_TOKEN_URL_OVERRIDE_ENV_VAR;
 pub use auth::RefreshTokenError;
+pub use auth::SessionSignIn;
+pub use auth::SessionSignInRegistration;
 pub use auth::UnauthorizedRecovery;
+pub use auth::current_named_sign_in;
 pub use auth::default_client;
+pub use auth::default_login_left_unenforced;
 pub use auth::delete_provider_api_key;
+pub use auth::email_hint;
 pub use auth::enforce_login_restrictions;
+pub use auth::leave_default_login_unenforced;
 pub use auth::legacy_codex_home_for_product_home;
 pub use auth::load_auth_dot_json;
+pub use auth::login_named_account_with_api_key;
 pub use auth::login_with_access_token;
 pub use auth::login_with_api_key;
 pub use auth::login_with_bedrock_api_key;
 pub use auth::login_with_provider_api_key;
 pub use auth::logout;
 pub use auth::logout_all_credentials;
+pub use auth::logout_named_account_with_revoke;
 pub use auth::logout_with_revoke;
 pub use auth::logout_with_revoke_all_credentials;
+pub use auth::named_account_restriction_error;
+pub use auth::named_account_summary;
 pub use auth::oauth_client_id;
+pub use auth::openai_auth_metadata_from_config;
+pub use auth::provider_account_api_key;
+pub use auth::provider_account_aws_profile;
+pub use auth::provider_account_holds;
+pub use auth::provider_account_sign_in;
 pub use auth::provider_api_key_from_auth_storage;
 pub use auth::provider_api_key_id_from_vault_label;
 pub use auth::provider_api_key_metadata_from_auth_storage;
 pub use auth::provider_api_key_metadata_snapshot_from_auth_storage;
+pub use auth::provider_api_key_storage_revision;
 pub use auth::read_ambient_api_key_from_env;
 pub use auth::read_codex_access_token_from_env;
 pub use auth::read_openai_api_key_from_env;
+pub use auth::revoke_replaced_sign_in;
+pub use auth::same_user_sign_ins;
 pub use auth::save_auth;
+pub use auth::save_named_account_auth;
 pub use auth::suppress_provider_api_key;
 pub use auth::validate_provider_auth_command;
+pub use auth::validate_provider_auth_command_for_account;
 pub use auth_env_telemetry::AuthEnvTelemetry;
 pub use auth_env_telemetry::collect_auth_env_telemetry;
+pub use codex_vault::ProviderAccountKind;
+pub use codex_vault::ProviderAccountSignIn;
 pub use codex_vault::claude_auth_selection_revision_path;
 pub use outbound_proxy::AuthRouteConfig;
 pub use token_data::TokenData;

@@ -36,7 +36,7 @@ impl RemoteControlRequestProcessor {
     ) -> Result<RemoteControlEnableResponse, JSONRPCErrorError> {
         let handle = self.handle()?;
         let status = if ephemeral {
-            handle.enable_ephemeral().map_err(map_enable_error)?
+            handle.enable_ephemeral().await.map_err(map_enable_error)?
         } else {
             handle
                 .enable(app_server_client_name)

@@ -1,0 +1,6 @@
+== before account-name field after typing 'qa-probe'
+TUI_EXITED rc=0
+== before account-key field after typing 'abc-q-synthetic-461-secret-tail'
+TUI_EXITED rc=0
+== before default-key field after typing 'qsynthetic-461-default-QQ'
+TUI_EXITED rc=0

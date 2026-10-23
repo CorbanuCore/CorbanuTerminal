@@ -1,0 +1,102 @@
+# PF-24-S02 (GLM 5.2 pass): a downgrade is reviewed, saved, kept strict until restart, then applied (GLM 5.2).
+id = "pf24s02-glm-downgrade"
+feature = "Downgrade lists removed protections and applies at the next start"
+expected = "From Aggressive (confirmed, restarted), choosing Permissive lists the protections removed at the next start; Enter saves it, Core stays Aggressive in this session, and after r restart GLM's read of the hidden Corbanu home file works again."
+model = "glm-5.2"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "!printf 'shipped-%s\\n' v2-canary > {home}/team-notes.txt && echo seeded"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "seeded"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Core's level is Aggressive now in this session"
+[[steps]]
+pause = 2.0
+[[steps]]
+wait = "r restart now"
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Restarting Corbanu Terminal[\\s\\S]*Corbanu Terminal \\(v[\\s\\S]*› "
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Aggressive"
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Protections removed at the next start"
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Core.s level stays Aggressive in this session[\\s\\S]*is Permissive from the next start"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Restarting Corbanu Terminal[\\s\\S]*Corbanu Terminal \\(v[\\s\\S]*› "
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this command and quote its output: cat \"$(printf '../ho%s/team-notes.txt' me)\""
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "shipped-v2-canary"
+timeout = 240
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+[[steps]]
+pause = 4.0

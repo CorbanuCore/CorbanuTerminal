@@ -1,0 +1,12 @@
+  Cost — this conversation
+  Requested UTC day: 2026-10-12
+› Today (UTC) in this conversation:
+  • OpenAI · account work · GPT-6 Luna — Billing basis not declared. 1 request, 129 tokens. Counted neither as money spent nor as subscription work.
+  Other conversations on this day, not included above: 8 requests in 5 conversations.
+  • Amazon Bedrock · account work · openai.gpt-5.4 — Pay per use. 2 requests, 258 tokens. Estimated cost: no price available.
+  • OpenAI · account fake · gpt-5.4 — Billing basis not declared. 1 request, 0 tokens. Counted neither as money spent nor as subscription work. 1 attempt refused by
+  the provider (HTTP 401) — no charge.
+  • OpenAI · account work · gpt-5.4 — Billing basis not declared. 1 request, 129 tokens. Counted neither as money spent nor as subscription work.
+  • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 4 requests, 33,441 tokens. Estimated cost: $0.003558 (rounded).
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

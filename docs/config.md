@@ -29,7 +29,7 @@ These providers are compiled into Corbanu Terminal:
 | `claude-plan`    | Claude Plan    | Claude Code account route               | Claude Code login    | Messages         |
 | `ambient`        | Ambient        | `https://api.ambient.xyz/v1`            | `AMBIENT_API_KEY`    | Chat Completions |
 | `kimi-code`      | Kimi Code      | `https://api.kimi.com/coding/v1`        | `KIMI_API_KEY`       | Chat Completions |
-| `zai`            | Z.AI           | `https://api.z.ai/api/coding/paas/v4`   | `ZAI_API_KEY`        | Chat Completions |
+| `zai`            | Z.AI           | `https://api.z.ai/api/paas/v4`          | `ZAI_API_KEY`        | Chat Completions |
 | `deepseek`       | DeepSeek       | `https://api.deepseek.com`              | `DEEPSEEK_API_KEY`   | Responses        |
 | `openrouter`     | OpenRouter     | `https://openrouter.ai/api/v1`          | `OPENROUTER_API_KEY` | Chat Completions |
 | `meta`           | Meta           | `https://api.meta.ai/v1`                | `MODEL_API_KEY`      | Responses        |
@@ -73,7 +73,7 @@ DeepSeek direct:
 
 ```toml
 model_provider = "deepseek"
-model = "deepseek-v4-flash"
+model = "deepseek-flash"
 ```
 
 Z.AI:
@@ -139,7 +139,7 @@ You can also select a model per run:
 ```bash
 corbanu -m glm-5.2
 corbanu -m gpt-5.6-luna
-corbanu -m deepseek-v4-flash
+corbanu -m deepseek-flash
 corbanu -m deepseek/deepseek-v4-flash-0731
 corbanu -m zai-org/GLM-5.2
 corbanu -m zai/glm-5.2
@@ -147,6 +147,26 @@ corbanu -m zai/glm-5.2-fast
 ```
 
 The model picker maps these model slugs to the correct built-in provider.
+
+## Reopen Warm-Up
+
+When you reopen a conversation (`/resume`, restarting Corbanu on it) or fork it (`/side`, editing an earlier
+message, including the first one) on a provider that uses a WebSocket connection, such as OpenAI, Corbanu sends one warm-up request to prime
+the model's cache, so the first reply is faster. It is billed like any request (the session's instructions and
+tools, typically 10,000 to 15,000 input tokens), and Corbanu says so once it has been sent. To skip it, set this at
+the top level of `config.toml` (or pass `-c skip_reopen_warmup=true`):
+
+```toml
+skip_reopen_warmup = true
+```
+
+The first reply after reopening may then be slower, and when approvals go to the auto-reviewer, its session starts at
+the first review instead of on reopen. A new conversation still warms up, and so do sub-agents.
+
+App-server clients that start a thread only for realtime voice (`thread/start`, then `thread/realtime/start`) get
+the new-conversation warm-up too, on the thread's text model, which realtime uses only for handoffs (and the
+optional end-of-session transcript turn). Pass a cheap
+`model` on `thread/start` to make it cheaper; see "Realtime-only threads" in `codex-rs/app-server/README.md` (#1045).
 
 ## Vault And Secrets
 
@@ -170,6 +190,162 @@ provider/ai_gateway_api_key
 Do not put long-lived provider keys in `experimental_bearer_token` unless you
 are intentionally running an automation-only setup. For interactive use, use
 onboarding or `/vault`.
+
+<a id="model-key-broker"></a>
+
+### Model key broker (`broker_model_auth`)
+
+With `broker_model_auth` on, provider API keys are held by a separate
+credential broker process, and the broker sends every model request for
+Corbanu. Keys saved in the vault are read only by the broker. Keys in the
+environment are moved to the broker when the session starts and removed from
+Corbanu's environment. If the broker
+can't start, model requests are refused, never sent directly, and the error
+message names the setting and how to turn it off.
+
+Limits:
+
+- Sign-in tokens (ChatGPT sign-in, API-key login, `experimental_bearer_token`)
+  are still read by Corbanu and then passed to the broker.
+- Command, AWS and header-based provider sign-ins aren't brokered.
+- Realtime conversations and websockets are off.
+- Provider URLs that use plain HTTP, an IPv6 address or a query string can't be
+  brokered, so those requests are refused.
+
+The default depends on the security level:
+
+| Level                                                                           | Default                         |
+| ------------------------------------------------------------------------------- | ------------------------------- |
+| Permissive                                                                      | off                             |
+| Moderate or Aggressive (`[security] level`, or the level chosen in `/security`) | on, on macOS, Linux and Windows |
+
+On other systems it stays off, because the broker isn't supported there. A value
+you set yourself always wins over the level's default; only a managed policy
+outranks it. A project's `.codex/config.toml` doesn't change it under
+Moderate or Aggressive:
+
+```toml
+[features]
+broker_model_auth = false   # or true, at any level
+```
+
+`-c features.broker_model_auth=false` and `--disable broker_model_auth` work
+the same way. A level you choose in `/security` while Corbanu is running takes
+effect when Corbanu restarts; a `[security] level` in config applies from the
+next new session. Under Moderate or Aggressive with the broker off, Corbanu
+shows a startup warning and `/security` reports the level as partial. What
+the levels protect and their limits are on
+[Moderate security level](security-moderate.md) and
+[Aggressive security level: protected files](security-aggressive.md).
+
+### Protected launch (`secretless_agent_launch`)
+
+With `secretless_agent_launch` on, every agent command runs inside the OS
+sandbox, with only allowlisted environment variables, and can't read these
+files:
+
+- Corbanu's own: its vault (`secrets`), sign-in files (`auth.json`,
+  `.credentials.json`, `provider_auth.json`, `.env`), config (`config.toml`,
+  `managed_config.toml`), `wallet`, history (`history.jsonl`), session
+  transcripts (`sessions`, `archived_sessions`), logs (`log`), shell
+  snapshots (`shell_snapshots`), its runtime folder (`run`), its databases
+  (`*.sqlite*` at the top of its home), the database init lock
+  (`pfterminal_db_init.lock`), the GPU controller lock
+  (`gpu-controller.lock`), pending accounting records
+  (`accounting-pending`), databases recovery set aside (`db-backups` in its
+  home, `<home>.db-backups` beside it), and the credential broker's runtime
+  folder. If you keep the databases in a separate folder (`sqlite_home` or
+  `CODEX_SQLITE_HOME`), commands can't read that folder's databases, init
+  lock, GPU controller lock, pending accounting records and backups
+  (`db-backups` in it, `<folder>.db-backups` beside it) either. On Linux a
+  backup folder beside a folder is covered only when it exists at the
+  command's start.
+- CLI tokens: the files `~/.netrc`, `~/.git-credentials`,
+  `~/.config/gh/hosts.yml`, `~/.aws/credentials`, `~/.docker/config.json`,
+  `~/.npmrc` and Claude's sign-in (`~/.claude/.credentials.json`, and
+  `.credentials.json` in `CLAUDE_CONFIG_DIR` when set); on Windows also
+  `_netrc` in your profile folder, the GitHub CLI's `hosts.yml` in
+  `%APPDATA%`, the whole Google Cloud CLI folder `%APPDATA%\gcloud` (its
+  credentials and config), and Cargo's `credentials.toml` and `credentials`
+  (in `CARGO_HOME`, by default `%USERPROFILE%\.cargo`).
+- On macOS, your keychains (`~/Library/Keychains`).
+
+On Windows, one of these that doesn't exist when a command starts isn't
+covered for that command (such as a backup recovery creates while it runs),
+except Corbanu's own folders inside its home (`secrets`, `wallet`, `run`,
+`shell_snapshots`, `log`, `sessions`, `archived_sessions`,
+`accounting-pending`, `db-backups`) and files created directly in its home.
+
+Approving a command never unlocks these, at any level; under Moderate the
+approval prompt names such a file and says so. Nothing runs outside the
+sandbox at any level. At Permissive, Corbanu therefore doesn't offer it
+(#739):
+
+- A command that asks to run outside the sandbox isn't run, and you aren't
+  asked. Corbanu says it isn't possible here. (If your own permission profile
+  denies reads, you're asked as before and the command runs in the sandbox.)
+- After a sandbox denial, "retry without sandbox?" isn't offered.
+- A command that a remembered approval or allow rule ("don't ask again")
+  matches still skips the prompt, but runs inside the sandbox. Corbanu says so
+  the first time in a session.
+
+Moderate and Aggressive keep their own handling: Moderate still asks you about
+such a request, because approving lifts its file protections for that command,
+and runs it inside the sandbox. Without the feature, Permissive works as
+configured.
+
+### Kill switch
+
+`/security` → `g` → "Turn the kill switch on" stops the work running in every
+pane, Claude panes included, and refuses model turns until a person turns it
+off there. Messages and tasks from other agents that arrive meanwhile wait (a
+Claude pane keeps only the newest task; a task for a Corbanu pane you opened
+yourself in `/panes` is refused instead, like a typed message), and
+`/orchestrate` assignments and whips are paused. Turning the switch off
+restarts nothing: no pane starts a turn, and paused assignments stay paused
+until you run `/orchestrate resume <id>`. Waiting messages and tasks go with
+each pane's next turn, when someone types in it or it gets new work.
+
+<a id="shell-environment"></a>
+
+## Shell Environment
+
+Commands the model runs (shell commands and long-running exec sessions, at
+every `/security` level) start with Corbanu's environment, filtered by
+`[shell_environment_policy]`. Provider API key variables are then removed, so
+a command can't read the key Corbanu uses to talk to the model. That covers
+every built-in provider's key variable (`OPENAI_API_KEY`, `CODEX_API_KEY`,
+`ANTHROPIC_API_KEY`, `ZAI_API_KEY`, `OPENROUTER_API_KEY`, `KIMI_API_KEY`,
+`DEEPSEEK_API_KEY` and the rest of the table above), a few other credentials
+Corbanu reads (`CODEX_ACCESS_TOKEN`, `AZURE_OPENAI_API_KEY`,
+`ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `AWS_BEARER_TOKEN_BEDROCK`)
+and the `env_key` of any provider you configure. Corbanu itself still reads
+them, and the session's shell snapshot leaves them out too, even when a shell
+startup file such as `~/.zshrc` exports them.
+
+To hand Corbanu's value of one of these variables to commands on purpose, name
+it exactly in `include_only` (keep `"*"` to leave the rest of the environment
+alone), or the equivalent `filters = { "*" = "include", OPENROUTER_API_KEY = "include" }`:
+
+```toml
+[shell_environment_policy]
+include_only = ["*", "OPENROUTER_API_KEY"]
+```
+
+Wildcards such as `"*_API_KEY"` never pass a provider key through. A `set`
+entry gives commands the value written in `config.toml` instead, never the
+inherited one. When the default excludes are on
+(`ignore_default_excludes = false`), names containing `KEY`, `SECRET` or
+`TOKEN` are removed before `include_only` is applied, so for those only `set`
+works. For a one-off command, prefer
+fetching the key from the vault inside that command:
+`OPENROUTER_API_KEY="$(corbanu vault auth-helper provider/openrouter_api_key)" my-tool`.
+
+MCP servers started over stdio only receive a short list of basic variables
+plus the ones named in that server's `env_vars` or `env`, so a provider key
+reaches one only if you list it there. A shell profile that exports a key
+itself (for example a login shell reading `~/.zprofile`) is outside this
+filter.
 
 <a id="telegram"></a>
 

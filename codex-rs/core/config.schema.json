@@ -359,6 +359,32 @@
       },
       "type": "object"
     },
+    "BillingBasis": {
+      "description": "How work on a route is paid for.",
+      "oneOf": [
+        {
+          "description": "Covered by a membership or plan; never counted as money spent.",
+          "enum": [
+            "subscription"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Charged per request from a balance or card.",
+          "enum": [
+            "pay_per_use"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Runs on the user's own machine; no charge.",
+          "enum": [
+            "local"
+          ],
+          "type": "string"
+        }
+      ]
+    },
     "BundledSkillsConfig": {
       "additionalProperties": false,
       "properties": {
@@ -463,6 +489,9 @@
             "auth_elicitation": {
               "type": "boolean"
             },
+            "broker_model_auth": {
+              "type": "boolean"
+            },
             "browser_use": {
               "type": "boolean"
             },
@@ -506,6 +535,9 @@
               "type": "boolean"
             },
             "connectors": {
+              "type": "boolean"
+            },
+            "contained_external_agents": {
               "type": "boolean"
             },
             "current_time_reminder": {
@@ -586,6 +618,9 @@
             "in_app_updates": {
               "type": "boolean"
             },
+            "isolated_credential_broker": {
+              "type": "boolean"
+            },
             "item_ids": {
               "type": "boolean"
             },
@@ -619,6 +654,9 @@
             "multi_agent_v2": {
               "$ref": "#/definitions/FeatureToml_for_MultiAgentV2ConfigToml"
             },
+            "named_accounts": {
+              "type": "boolean"
+            },
             "network_proxy": {
               "$ref": "#/definitions/FeatureToml_for_NetworkProxyConfigToml"
             },
@@ -638,6 +676,9 @@
               "type": "boolean"
             },
             "prevent_idle_sleep": {
+              "type": "boolean"
+            },
+            "protected_mode_preflight": {
               "type": "boolean"
             },
             "realtime_conversation": {
@@ -691,6 +732,15 @@
             "secret_auth_storage": {
               "type": "boolean"
             },
+            "secret_output_gate": {
+              "type": "boolean"
+            },
+            "secretless_agent_launch": {
+              "type": "boolean"
+            },
+            "security_levels": {
+              "type": "boolean"
+            },
             "shell_snapshot": {
               "type": "boolean"
             },
@@ -710,6 +760,9 @@
               "type": "boolean"
             },
             "sleep_tool": {
+              "type": "boolean"
+            },
+            "source_envelopes": {
               "type": "boolean"
             },
             "sqlite": {
@@ -758,6 +811,9 @@
               "type": "boolean"
             },
             "unified_exec_zsh_fork": {
+              "type": "boolean"
+            },
+            "url_destination_policy": {
               "type": "boolean"
             },
             "use_agent_identity": {
@@ -1711,7 +1767,7 @@
     },
     "ModelProviderInfo": {
       "additionalProperties": false,
-      "description": "Serializable representation of a provider definition.",
+      "description": "Serializable representation of a provider definition.\n\n`Debug` (in `provider_debug.rs`) redacts credentials: provider definitions are logged, for example when a session is configured.",
       "properties": {
         "auth": {
           "allOf": [
@@ -1732,6 +1788,14 @@
         "base_url": {
           "description": "Base URL for the provider's OpenAI-compatible API.",
           "type": "string"
+        },
+        "billing": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/BillingBasis"
+            }
+          ],
+          "description": "How this provider's work is paid for: `subscription`, `pay_per_use` or `local`. Overrides the built-in declaration for unusual setups; when unset, the built-in table decides from the route and credential used, and an unknown route is shown as not declared."
         },
         "chat_completions_provider": {
           "description": "Optional `provider` object to include in Chat Completions request bodies. This is used by OpenRouter-compatible routes for provider routing preferences such as `order`, `sort`, `allow_fallbacks`, and `require_parameters`."
@@ -3627,7 +3691,7 @@
               "$ref": "#/definitions/KeybindingsSpec"
             }
           ],
-          "description": "Approve with exec-policy prefix when that option exists."
+          "description": "Approve with exec-policy prefix or allow a host in the future. Options that last beyond one request are chosen only with the arrow keys and Enter, so pressing it explains how."
         },
         "approve_for_session": {
           "allOf": [
@@ -3635,7 +3699,7 @@
               "$ref": "#/definitions/KeybindingsSpec"
             }
           ],
-          "description": "Approve for session when that option exists."
+          "description": "Approve for session. Options that last beyond one request are chosen only with the arrow keys and Enter, so pressing it explains how."
         },
         "cancel": {
           "allOf": [
@@ -5154,6 +5218,9 @@
         "auth_elicitation": {
           "type": "boolean"
         },
+        "broker_model_auth": {
+          "type": "boolean"
+        },
         "browser_use": {
           "type": "boolean"
         },
@@ -5197,6 +5264,9 @@
           "type": "boolean"
         },
         "connectors": {
+          "type": "boolean"
+        },
+        "contained_external_agents": {
           "type": "boolean"
         },
         "current_time_reminder": {
@@ -5277,6 +5347,9 @@
         "in_app_updates": {
           "type": "boolean"
         },
+        "isolated_credential_broker": {
+          "type": "boolean"
+        },
         "item_ids": {
           "type": "boolean"
         },
@@ -5310,6 +5383,9 @@
         "multi_agent_v2": {
           "$ref": "#/definitions/FeatureToml_for_MultiAgentV2ConfigToml"
         },
+        "named_accounts": {
+          "type": "boolean"
+        },
         "network_proxy": {
           "$ref": "#/definitions/FeatureToml_for_NetworkProxyConfigToml"
         },
@@ -5329,6 +5405,9 @@
           "type": "boolean"
         },
         "prevent_idle_sleep": {
+          "type": "boolean"
+        },
+        "protected_mode_preflight": {
           "type": "boolean"
         },
         "realtime_conversation": {
@@ -5382,6 +5461,15 @@
         "secret_auth_storage": {
           "type": "boolean"
         },
+        "secret_output_gate": {
+          "type": "boolean"
+        },
+        "secretless_agent_launch": {
+          "type": "boolean"
+        },
+        "security_levels": {
+          "type": "boolean"
+        },
         "shell_snapshot": {
           "type": "boolean"
         },
@@ -5401,6 +5489,9 @@
           "type": "boolean"
         },
         "sleep_tool": {
+          "type": "boolean"
+        },
+        "source_envelopes": {
           "type": "boolean"
         },
         "sqlite": {
@@ -5449,6 +5540,9 @@
           "type": "boolean"
         },
         "unified_exec_zsh_fork": {
+          "type": "boolean"
+        },
+        "url_destination_policy": {
           "type": "boolean"
         },
         "use_agent_identity": {
@@ -5797,6 +5891,14 @@
       },
       "type": "object"
     },
+    "provider_accounts": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": null,
+      "description": "PF-84 (`named_accounts` feature): the account each provider uses, keyed by provider id, for example `zai = \"work\"`. Unlisted providers and `\"default\"` use today's credentials.",
+      "type": "object"
+    },
     "realtime": {
       "allOf": [
         {
@@ -5866,6 +5968,10 @@
       ],
       "description": "User-level skill config entries keyed by SKILL.md path."
     },
+    "skip_reopen_warmup": {
+      "description": "When `true`, reopening a conversation (resume, restart, `/side` or any other fork) does not send the paid warm-up request that primes the model's cache; the first reply after reopening may be slower. Defaults to `false`.",
+      "type": "boolean"
+    },
     "sqlite_home": {
       "allOf": [
         {
@@ -5873,6 +5979,10 @@
         }
       ],
       "description": "Directory where Codex stores the SQLite state DB. Defaults to `$CODEX_SQLITE_HOME` when set. Otherwise uses `$CODEX_HOME`."
+    },
+    "strict_rules": {
+      "description": "When `true`, a `.rules` exec-policy file that fails to parse stops the session from starting instead of falling back to requirements-only rules with a warning, and `forbidden` rules also match, best effort, wrapped forms of a command (`env …`, `sh -c '…'`, a path to or another case of the program, options before a subcommand). This is name matching, not a containment boundary. Defaults to `false`.",
+      "type": "boolean"
     },
     "suppress_unstable_features_warning": {
       "description": "Suppress warnings about unstable (under development) features.",

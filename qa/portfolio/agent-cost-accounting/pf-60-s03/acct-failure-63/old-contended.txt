@@ -1,0 +1,16 @@
+Reading additional input from stdin...
+Corbanu Terminal v0.1.48
+--------
+workdir: /Volumes/CorbanuDrive/Corbanu/.codex-work/acct63/work
+model: Qwen3.8-Flash-Next-Uncensored-MLX-Serve-mixed-4-8bit
+provider: localmlx
+approval: never
+sandbox: read-only
+session id: 01a103e4-bf99-7d83-a2a0-681f67b0c270
+--------
+user
+Reply with the single word OK.
+warning: Model metadata for `Qwen3.8-Flash-Next-Uncensored-MLX-Serve-mixed-4-8bit` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+ERROR: Fatal error: Native Anthropic accounting failed; request stopped without a repair send
+ERROR: Fatal error: Native Anthropic accounting failed; request stopped without a repair send
+EXIT:1

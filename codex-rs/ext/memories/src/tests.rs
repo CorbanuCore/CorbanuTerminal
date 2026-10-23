@@ -186,6 +186,8 @@ async fn prompt_contribution_uses_memory_summary_when_enabled() {
 
     assert_eq!(fragments.len(), 1);
     assert_eq!(fragments[0].slot(), PromptSlot::DeveloperPolicy);
+    // PF-30-S02: model-written memories never carry host standing.
+    assert!(fragments[0].is_stored_data());
     assert!(
         fragments[0]
             .text()

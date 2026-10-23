@@ -358,6 +358,9 @@ pub enum ThreadItem {
         model: Option<String>,
         /// Reasoning effort requested for the spawned agent, when applicable.
         reasoning_effort: Option<ReasoningEffort>,
+        /// The named account the spawned agent uses (`default` included),
+        /// only while named accounts are on.
+        provider_account: Option<String>,
         /// Last known status of the target agents, when available.
         agents_states: HashMap<String, CollabAgentState>,
     },
@@ -898,6 +901,7 @@ impl From<CoreTurnItem> for ThreadItem {
                 prompt: call.prompt,
                 model: call.model,
                 reasoning_effort: call.reasoning_effort,
+                provider_account: call.provider_account,
                 agents_states: call
                     .agents_states
                     .into_iter()
@@ -1004,6 +1008,7 @@ pub enum CommandExecutionStatus {
     Completed,
     Failed,
     Declined,
+    Refused,
 }
 
 impl From<CoreExecCommandStatus> for CommandExecutionStatus {
@@ -1019,6 +1024,7 @@ impl From<CoreCommandExecutionStatus> for CommandExecutionStatus {
             CoreCommandExecutionStatus::Completed => Self::Completed,
             CoreCommandExecutionStatus::Failed => Self::Failed,
             CoreCommandExecutionStatus::Declined => Self::Declined,
+            CoreCommandExecutionStatus::Refused => Self::Refused,
         }
     }
 }
@@ -1029,6 +1035,7 @@ impl From<&CoreExecCommandStatus> for CommandExecutionStatus {
             CoreExecCommandStatus::Completed => CommandExecutionStatus::Completed,
             CoreExecCommandStatus::Failed => CommandExecutionStatus::Failed,
             CoreExecCommandStatus::Declined => CommandExecutionStatus::Declined,
+            CoreExecCommandStatus::Refused => CommandExecutionStatus::Refused,
         }
     }
 }
@@ -1670,3 +1677,7 @@ pub struct ToolRequestUserInputAnswer {
 pub struct ToolRequestUserInputResponse {
     pub answers: HashMap<String, ToolRequestUserInputAnswer>,
 }
+
+#[cfg(test)]
+#[path = "refusal_status_tests.rs"]
+mod refusal_status_tests;

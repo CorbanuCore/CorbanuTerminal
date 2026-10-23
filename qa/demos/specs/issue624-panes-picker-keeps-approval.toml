@@ -1,0 +1,91 @@
+# #624 (AGG-R03): keys pressed in the /panes picker never answer an approval that arrives underneath.
+id = "issue624-panes-picker-keeps-approval"
+feature = "#624: the /panes picker keeps its keys while an approval waits"
+expected = "An approval that arrives while /panes is open waits under the picker, which says a request is waiting; the picker's keys switch to pane B without answering it, B says Main needs approval, and back on Main the same command is still waiting for a decision (file not written)."
+model = "glm-5.3-flash"
+provider = "zai"
+args = ["-a", "untrusted"]
+cols = 130
+rows = 40
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "/panes"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "\\+ Corbanu Terminal Pane"
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Model and Effort"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Reasoning Level"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Name Corbanu Terminal pane"
+[[steps]]
+key = "C-u"
+[[steps]]
+type = "B"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Created and switched to Corbanu Terminal pane B"
+[[steps]]
+type = "/panes"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Corbanu Terminal - B"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switched to|Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run this exact shell command and nothing else: echo approved > ks-pending.txt"
+[[steps]]
+key = "Enter"
+[[steps]]
+type = "/panes"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "A request is waiting; it shows when you close this"
+timeout = 90
+compress = 2
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Approval needed in Main"
+[[steps]]
+pause = 2.0
+[[steps]]
+run = "test ! -e '{workspace}/ks-pending.txt' && echo 'ks-pending.txt not written'"
+[[steps]]
+type = "/panes"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "› Corbanu Terminal - Main"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Would you like to run the following command\\?"
+[[steps]]
+pause = 4.0

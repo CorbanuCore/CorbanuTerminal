@@ -1,0 +1,107 @@
+# tmux replay of G11b (AGG-33) for #626: approve "don't ask again" under Permissive, switch to Aggressive, same command.
+id = "replay-g11b-agg33"
+feature = "Replay G11b / AGG-33 (#626)"
+expected = "Under Aggressive the remembered Permissive approval is not applied: the person is asked and the prompt says why; the rule stays in rules/default.rules."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 44
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"notes.txt" = "buy coffee\nreview budget\n"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this shell command once, unchanged: echo '# expiry-probe' >> ~/.zshrc"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "don't ask again for commands that start with"
+timeout = 240
+compress = 2
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "You approved Corbanu to always run commands that start with"
+timeout = 60
+[[steps]]
+wait = "(?s)always run commands.*\\n• "
+timeout = 180
+compress = 2
+[[steps]]
+pause = 1.0
+[[steps]]
+run = "cat {home}/rules/default.rules"
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "enter confirm and save"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+timeout = 60
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Z.AI GLM 5.3 Flash via zai"
+timeout = 60
+compress = 2
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Aggressive"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Escape"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this shell command once, unchanged: echo '# expiry-probe' >> ~/.zshrc"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)Reason: .*remembered approval.*was not\\s+applied"
+timeout = 240
+compress = 2
+[[steps]]
+pause = 4.0
+[[steps]]
+run = "grep -c expiry-probe {home}/rules/default.rules; cat \"$HOME/.zshrc\" 2>/dev/null || echo no-zshrc"
+[[steps]]
+pause = 1.0

@@ -16,8 +16,14 @@ use zeroize::Zeroize;
 pub const IPC_PROTOCOL_VERSION: u32 = 1;
 pub const MAX_FRAME_BYTES: usize = 16 * 1024;
 const MAC_BYTES: usize = 32;
+/// Length of a pipe peer challenge and of its proof (#390).
+pub const PIPE_CHALLENGE_BYTES: usize = 32;
+pub const PIPE_PROOF_BYTES: usize = MAC_BYTES;
 const MAX_ID_BYTES: usize = 128;
 const MAX_PATH_BYTES: usize = 1_024;
+const MAX_HOST_BYTES: usize = 253;
+/// Bound on the checked DNS answers one provider request may pin.
+pub const MAX_PINNED_ADDRS: usize = 16;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -208,6 +214,131 @@ struct BrokerFramePayload {
     operation: BrokerOperation,
 }
 
+/// Typed provider request accepted by the user-session credential broker.
+///
+/// The broker substitutes the provider's credential header for this exact
+/// HTTPS destination only. The operation carries no header name, header value
+/// or body, so it cannot express generic resolve-to-string or injection.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderRequestOperation {
+    host: String,
+    port: u16,
+    method: String,
+    path: String,
+    /// The DNS answers Core's destination guard checked for `host`. When
+    /// present, the broker dials only these and never resolves `host` itself.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pinned_addrs: Vec<std::net::IpAddr>,
+}
+
+impl ProviderRequestOperation {
+    pub fn new(
+        host: impl Into<String>,
+        port: u16,
+        method: impl Into<String>,
+        path: impl Into<String>,
+    ) -> Result<Self, BrokerFrameError> {
+        let operation = Self {
+            host: host.into(),
+            port,
+            method: method.into(),
+            path: path.into(),
+            pinned_addrs: Vec::new(),
+        };
+        operation.validate()?;
+        Ok(operation)
+    }
+
+    /// Pins the connection to these checked answers (at most
+    /// [`MAX_PINNED_ADDRS`], at least one).
+    pub fn with_pinned_addrs(
+        mut self,
+        addrs: impl IntoIterator<Item = std::net::IpAddr>,
+    ) -> Result<Self, BrokerFrameError> {
+        self.pinned_addrs = addrs.into_iter().collect();
+        if self.pinned_addrs.is_empty() {
+            return Err(BrokerFrameError::UnsupportedOperation);
+        }
+        self.validate()?;
+        Ok(self)
+    }
+
+    /// Checked answers to dial instead of resolving `host`; empty when unpinned.
+    pub fn pinned_addrs(&self) -> &[std::net::IpAddr] {
+        &self.pinned_addrs
+    }
+
+    pub const fn scheme(&self) -> &'static str {
+        "https"
+    }
+
+    pub fn host(&self) -> &str {
+        &self.host
+    }
+
+    pub const fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn method(&self) -> &str {
+        &self.method
+    }
+
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
+    fn validate(&self) -> Result<(), BrokerFrameError> {
+        let host_valid = !self.host.is_empty()
+            && self.host.len() <= MAX_HOST_BYTES
+            && self.host.bytes().all(|byte| {
+                byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'-')
+            });
+        let method_valid = matches!(
+            self.method.as_str(),
+            "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE"
+        );
+        let path_valid = self.path.len() <= MAX_PATH_BYTES
+            && self.path.starts_with('/')
+            && self.path.bytes().all(|byte| byte.is_ascii_graphic())
+            && !self.path.contains('#');
+        let pins_valid = self.pinned_addrs.len() <= MAX_PINNED_ADDRS;
+        if !host_valid || self.port == 0 || !method_valid || !path_valid || !pins_valid {
+            return Err(BrokerFrameError::UnsupportedOperation);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum ProviderFrameKind {
+    ProviderRequest,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProviderFramePayload {
+    protocol_version: u32,
+    frame_kind: ProviderFrameKind,
+    sequence: u64,
+    binding: BrokerBinding,
+    credential: CredentialReference,
+    request: ProviderRequestOperation,
+}
+
+/// Authenticated provider request after MAC, version and shape checks.
+///
+/// Callers still own binding, replay-window and credential-generation checks.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VerifiedProviderRequest {
+    pub sequence: u64,
+    pub binding: BrokerBinding,
+    pub credential: CredentialReference,
+    pub request: ProviderRequestOperation,
+}
+
 /// Length-prefixed payload plus HMAC-SHA256 tag.
 pub struct SignedBrokerFrame(Vec<u8>);
 
@@ -256,6 +387,108 @@ impl BrokerChannelMac {
             operation,
         };
         let payload = serde_json::to_vec(&payload).map_err(|_| BrokerFrameError::MalformedFrame)?;
+        self.seal(payload)
+    }
+
+    /// Signs one typed provider request. Its payload is domain-separated from
+    /// [`BrokerOperation`] frames, so neither verifier accepts the other.
+    pub fn sign_provider_request(
+        &self,
+        binding: BrokerBinding,
+        sequence: u64,
+        credential: CredentialReference,
+        request: ProviderRequestOperation,
+    ) -> Result<SignedBrokerFrame, BrokerFrameError> {
+        binding.validate()?;
+        credential.validate()?;
+        request.validate()?;
+        if sequence == 0 {
+            return Err(BrokerFrameError::InvalidSequence);
+        }
+        let payload = ProviderFramePayload {
+            protocol_version: IPC_PROTOCOL_VERSION,
+            frame_kind: ProviderFrameKind::ProviderRequest,
+            sequence,
+            binding,
+            credential,
+            request,
+        };
+        let payload = serde_json::to_vec(&payload).map_err(|_| BrokerFrameError::MalformedFrame)?;
+        self.seal(payload)
+    }
+
+    pub fn verify_provider_request(
+        &self,
+        frame: &SignedBrokerFrame,
+    ) -> Result<VerifiedProviderRequest, BrokerFrameError> {
+        let payload = self.open(frame)?;
+        let payload: ProviderFramePayload =
+            serde_json::from_slice(&payload).map_err(|_| BrokerFrameError::MalformedFrame)?;
+        if payload.protocol_version != IPC_PROTOCOL_VERSION {
+            return Err(BrokerFrameError::UnsupportedProtocol);
+        }
+        payload.binding.validate()?;
+        payload.credential.validate()?;
+        payload.request.validate()?;
+        if payload.sequence == 0 {
+            return Err(BrokerFrameError::InvalidSequence);
+        }
+        Ok(VerifiedProviderRequest {
+            sequence: payload.sequence,
+            binding: payload.binding,
+            credential: payload.credential,
+            request: payload.request,
+        })
+    }
+
+    /// #390: the broker's answer to a controller's challenge on one Windows
+    /// data-pipe connection, bound to both process ids as the broker sees
+    /// them. A same-user process can add instances of a live pipe that
+    /// report the broker's process id, so the controller sends a request
+    /// only after this answer checks out. The leading `u32::MAX` length can
+    /// never start a frame, so no frame tag equals a proof.
+    pub fn pipe_peer_proof(
+        &self,
+        challenge: &[u8; PIPE_CHALLENGE_BYTES],
+        client_pid: u32,
+        server_pid: u32,
+    ) -> [u8; MAC_BYTES] {
+        self.pipe_peer_mac(challenge, client_pid, server_pid)
+            .finalize()
+            .into_bytes()
+            .into()
+    }
+
+    /// Checks [`Self::pipe_peer_proof`] in constant time.
+    pub fn verify_pipe_peer_proof(
+        &self,
+        challenge: &[u8; PIPE_CHALLENGE_BYTES],
+        client_pid: u32,
+        server_pid: u32,
+        proof: &[u8],
+    ) -> bool {
+        self.pipe_peer_mac(challenge, client_pid, server_pid)
+            .verify_slice(proof)
+            .is_ok()
+    }
+
+    fn pipe_peer_mac(
+        &self,
+        challenge: &[u8; PIPE_CHALLENGE_BYTES],
+        client_pid: u32,
+        server_pid: u32,
+    ) -> HmacSha256 {
+        #[expect(clippy::expect_used, reason = "HMAC accepts keys of any length")]
+        let mut mac = HmacSha256::new_from_slice(&self.0).expect("HMAC key");
+        mac.update(&u32::MAX.to_be_bytes());
+        mac.update(b"corbanu broker data pipe peer v1");
+        mac.update(challenge);
+        mac.update(&client_pid.to_be_bytes());
+        mac.update(&server_pid.to_be_bytes());
+        mac
+    }
+
+    fn seal(&self, payload: Vec<u8>) -> Result<SignedBrokerFrame, BrokerFrameError> {
         if payload.len() > MAX_FRAME_BYTES - MAC_BYTES - size_of::<u32>() {
             return Err(BrokerFrameError::FrameTooLarge);
         }
@@ -273,10 +506,7 @@ impl BrokerChannelMac {
         Ok(SignedBrokerFrame(wire))
     }
 
-    pub(crate) fn verify(
-        &self,
-        frame: &SignedBrokerFrame,
-    ) -> Result<VerifiedBrokerRequest, BrokerFrameError> {
+    fn open(&self, frame: &SignedBrokerFrame) -> Result<Vec<u8>, BrokerFrameError> {
         validate_wire_length(frame.as_bytes())?;
         let (length, rest) = frame.as_bytes().split_at(size_of::<u32>());
         let payload_len = u32::from_be_bytes(
@@ -291,8 +521,16 @@ impl BrokerChannelMac {
         mac.update(payload);
         mac.verify_slice(tag)
             .map_err(|_| BrokerFrameError::AuthenticationFailed)?;
+        Ok(payload.to_vec())
+    }
+
+    pub(crate) fn verify(
+        &self,
+        frame: &SignedBrokerFrame,
+    ) -> Result<VerifiedBrokerRequest, BrokerFrameError> {
+        let payload = self.open(frame)?;
         let payload: BrokerFramePayload =
-            serde_json::from_slice(payload).map_err(|_| BrokerFrameError::MalformedFrame)?;
+            serde_json::from_slice(&payload).map_err(|_| BrokerFrameError::MalformedFrame)?;
         if payload.protocol_version != IPC_PROTOCOL_VERSION {
             return Err(BrokerFrameError::UnsupportedProtocol);
         }

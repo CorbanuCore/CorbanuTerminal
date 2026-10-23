@@ -1,0 +1,80 @@
+# PF-41-S01: an injected failure (Core's security state overwritten) is shown as Blocked in the inspector after a
+# restart; confirming a level in /security and restarting recovers. Record with
+#   PF24_CANDIDATE=<corbanu> --bin qa/security-levels/sprints/PF-24-S03/demos/wrappers/restart-once.sh
+id = "pf41-inspector-failure-recovery"
+feature = "Inspector shows a blocked state and its recovery"
+expected = "security_state.json is overwritten by a shell command; after a restart the inspector shows Blocked (session stopped). Confirming Permissive in /security and restarting brings it back to Permissive with a live policy."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+secretless_agent_launch = true
+secret_output_gate = true
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "!printf '{broken' > {home}/security_state.json && echo injected"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "injected"
+[[steps]]
+type = "/exit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "restarting Corbanu Terminal[\\s\\S]*Corbanu Terminal \\(v[\\s\\S]*› "
+timeout = 60
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "i inspect"
+[[steps]]
+key = "i"
+[[steps]]
+wait = "Blocked: this session is stopped"
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "Escape"
+[[steps]]
+key = "Up"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "enter confirm and save"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "r restart now"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Restarting Corbanu Terminal[\\s\\S]*Corbanu Terminal \\(v[\\s\\S]*› "
+timeout = 60
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "i inspect"
+[[steps]]
+key = "i"
+[[steps]]
+wait = "Live policy: Permissive in force"
+[[steps]]
+pause = 4.0

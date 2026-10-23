@@ -1,0 +1,6 @@
+run-plain: provider-reported usage summed over 2 thread rollouts (last token count of each)
+   ('zai', 'personal') {'input': 4434, 'cached': 0, 'output': 3, 'reasoning': 0, 'total': 4437}
+   ('zai', 'work') {'input': 7768, 'cached': 22464, 'output': 138, 'reasoning': 57, 'total': 30370}
+run-da: provider-reported usage summed over 2 thread rollouts (last token count of each)
+   ('zai', 'personal') {'input': 3847, 'cached': 576, 'output': 16, 'reasoning': 13, 'total': 4439}
+   ('zai', 'work') {'input': 14589, 'cached': 15552, 'output': 112, 'reasoning': 33, 'total': 30253}

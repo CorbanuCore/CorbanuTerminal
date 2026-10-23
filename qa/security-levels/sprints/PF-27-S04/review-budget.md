@@ -18,6 +18,188 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Reviews39/40 actually dispatched2026-09-13 01:30:17UTC and completed exit0,
+findings[], patch correct, confidence0.92/0.88. Original system-preflight-
+20260913/{astra39,fable40}.{json,txt,exit,started.txt} retained. Same frozen
+source19f662493/Rust09f723 and exact final30-command proof; no repairs or
+extra opinion. Scoped extension used2/remaining0, preserving history1–38
+and all original failures. Manager receiving remains a separate gate.
+
+System-preflight reviews39 Astra High and40 Fable5.1 High via Corbanu/private
+TMUX reserved September13 01:29UTC under manager allocationab985f5f8.
+Two scoped extension slots reserved / zero unreserved; preserve1–38 and all
+original attempts, with no reset or additional unchanged-code opinion.
+Frozen source19f6624938c53e0c9709e1b25ada4a44fd13267e,
+Rust09f72396304d80a82cf466e220378f763ea8313b, baseae2a4c9407983d1877fce18f66d054d7cf90aa7e.
+Final actual-key RTX TMUX30 commands plus suite0, strict lint, five new cases,
+retained proof and invariant modules/source/fixtures completed. Actual dispatch
+timestamps and structured outcomes will be recorded separately. No native,
+main/push or scope-expansion authority; findings return to the integrator.
+
+Reviews37/38 actually dispatched2026-09-13 00:49:58UTC; both completed exit0,
+findings[], patch correct, confidence0.91/0.85. Original descriptor-root-session-
+20260912/{astra37,fable38}.{json,txt,exit,started.txt} retained. Same frozen
+source74263bbbc/Rustb7275b0c and exact final29-command proof; no runtime changes,
+repairs or extra opinion. This scoped extension used2/remaining0; preserve all
+history1–36 and original attempts. Manager receiving remains a separate gate.
+
+Root-session reviews37 Astra High and38 Fable5.1 High through Corbanu/private
+TMUX reserved September13 00:49UTC under allocation06bf29c29 and clarification
+44b39817a; manager reconfirmed continuation. Two scoped extension slots reserved,
+zero unreserved; this does not reset history1–36 or the six-hour accounting.
+Frozen source74263bbbc5bf2163f571947c6828fbf108866c3f/Rustb7275b0c0433f081d6423463993abc658141a6a7,
+base2c63e4cd535b89c5e5bee02f435c1a35760e855c. Final actual-key RTX TMUX29 command
+exits plus suite0, seven new cases and full retained proof, strict lint/parity,
+unchanged source/modules/artifacts. Actual dispatch times/outcomes pending.
+No extra opinion, scope expansion, main/push or native authority.
+
+Reviews35/36 dispatched2026-09-12 23:15:26UTC and both completed exit0,
+findings[], patch correct, confidence0.90/0.82. Original descriptor-root-dispatch-
+20260912/{astra35,fable36}.{json,txt,exit,started.txt} retained. Same frozen
+c7d48e482/Rustbd56b597 and exact final proof; no source repairs or extra opinion.
+This scoped extension used2/remaining0; preserve1–34 and all original failures.
+Manager receiving and next literal allocation are separate; no native authority.
+
+Descriptor-pair dispatch reviews35 AstraHigh and36 Fable5.1High Corbanu/TMUX
+reserved September12 23:14UTC, manager allocation23d8e54a1. Two scoped extension
+slots reserved / zero unreserved; actual dispatch timestamps/outcomes follow.
+Frozen sourcec7d48e4822293ec0899311be63fbd08848516ba0, Rustbd56b597e348d2924da21706c594c20a868bace4,
+base12e0bc2d8a6f207bddfa79916b3f2b2eb24f65c8. Final actual RTX TMUX28 command
+exits plus suite0, strict affected lint and invariant locks/source, actual
+six-case dispatch complete. Preserve historical1–34, all failures and original
+six-hour accounting; no reset, extra opinion, main/push or native authority.
+
+Reviews33/34 actually dispatched 2026-09-12 22:19:22 UTC and completed exit0,
+findings[], patch correct (Astra confidence0.92, Fable0.80). Both inspect the same
+frozen d776e938d/Rustb48e9c4f source and final evidence; no runtime changes or
+extra review. Original descriptor-root-compat-20260912/{astra33,fable34} JSON,
+text, exit and start receipts retained. Two-pass scoped extension used2/remaining0;
+history1–32 and original failures remain. Manager receiving proof is next.
+
+Descriptor compatibility reviews33 AstraHigh and34 Fable5.1High Corbanu/TMUX
+reserved September12 22:19UTC under manager2623711d4/relay459efbc4c. New scoped
+extension2 reserved/0 unreserved; historical1–32, original exits and scheduled
+window remain unchanged, not reset. Frozen source d776e938d8a0c07cc9b50b1d6a818d9f6feb0c11,
+Rustb48e9c4f9cb89e814b8bdabd6069be86cc47badd; baseline6b393f134. Final actual RTX
+TMUX all26 exits0; default/OS/transport/retained regressions, strict scopedlint,
+Cargo/Bazel/source invariance complete. Record actual dispatch timestamps and
+outcomes separately; no unallocated extra review or privileged activation.
+
+Review32 dispatched21:27:12UTC and completedexit1: patchcorrect/no blocking
+runtime defect; independent checks confirm repairedhash/892lines/all18tracked
+zeroexits and logs. SoleP3 stale case-map count eight vs ten verified and fixed
+as documentation-only; no runtime change or additional opinion. Original
+descriptor-admission-20260912/fable32.{json,txt,exit} retained. Corrective
+extension used1/remaining0; no reset, no claim helperexit0. All1–32 preserved.
+StageB source7839f9f65/Rust5a4ee88b remains exact final tested source; qualified
+private increment handed to manager for receiving, no push/native permission.
+
+CorrectiveFable32 reserved September12 21:26UTC before dispatch, manager251074ef7.
+Frozen repairedsource7839f9f653a3471bb9bbed19ebc7bed43308bbe3/Rust5a4ee88b5fe4c9b946842a4709f9b88f85c54c79;
+review/size baseline remains6d770938c, measured892/same7paths/hard900. Actual
+unchanged-runtime regression failedexit100, repaired focused8/full18exits pass,
+fix/fmt/strictlint/parity/source/locks final. Original30/31 preserved and both
+findings accepted in scope. One corrective extension reserved; none unreserved,
+no reset or additional Astra. Outcome pending; record actual dispatch timestamp.
+
+Reviews30/31 dispatched21:13:07UTC, both completed exit1. Astra30 P2 buffered
+EOF accepted after source/kernel confirmation; manager251074ef7 authorizes only
+the shutdown-check fix and corresponding actual regression within same7/hard900.
+Fable31 judged runtime correct but found the bazel-parity.exit receipt ignored
+by root bazel-*; verified, accepted and original existing exit0 now force-added.
+Both findings belong to this exact increment; no different contract/scope.
+Preserve originals descriptor-admission-20260912/{astra30,fable31}.{json,txt,exit}.
+Manager grants exactly one corrective Fable32 after failing regression, repair,
+format and full proof. Not yet reserved/dispatched; no reset or extra opinion.
+
+StageB reviews30 AstraHigh and31 Fable5.1High Corbanu/privateTMUX reserved
+September12 21:11UTC before dispatch, exact sourceb59999635298069831165f0fab08cd6be862f419,
+Rust194ff9575e4016d2c3b45ddd639945fbbbc836ab over accepted6d770938c.
+Measured863 across7paths within manager3e76ee4ec hard900 test/runner exception;
+all18 final TMUX/command exits0, strict lint/parity/unchangedsource/locks pass.
+Two explicit extension slots reserved, none remaining unreserved; old1–29 and
+their scheduled-window accounting preserved. Results pending; no source push.
+
+StageB allocation manager67273f7e grants two necessary new-source reviews:
+30 AstraHigh and31 Fable5.1High Corbanu/privateTMUX, after final B proof.
+0 dispatched/2 available in this explicit extension; preserve1–29 and the
+scheduled current-window five used. Scope/baseline in admission allocation,
+not an unchanged A review. Reserve each pass before dispatch; no source push.
+
+Reviews28/29 completed exit0/findings[], patch correct. No accepted/actionable
+findings, no code repair and no additional review. Originals under
+descriptor-pair-20260912/{astra28,fable29}.{json,txt,exit}; reviewed source
+e0eb9eac4/Rustf64820d0 unchanged. Extension2 used/0 available; scheduled5 used
+and all previous outcomes preserved. StageB needs its separate allocation.
+
+Stage A review28 reserved September12 20:18UTC before dispatch: Astra High
+over62956038e, frozen sourcee0eb9eac4/Rustf64820d0ca0312efbb612f208fb20636b6f547cf,
+614 changed code/test/fixture lines and final RTX/TMUX/lint/parity receipts.
+Review29 reserved at the same time: Fable5.1High via Corbanu/private TMUX on
+the same scoped candidate. New manager extension2 reserved/0 unreserved;
+scheduled window prior5 used retained, no reset. Both outcomes pending.
+
+Manager staged disposition now assigns the still-undispatched28/29 extension
+to descriptor-pair-a-allocation-20260912.md (identity and lifecycle only).
+No review consumed to choose the split. StageB needs a later explicit allowance;
+do not borrow/reset A's slots or review the unqualified combined WIPdb971e9b8.
+
+September12 manager accepted descriptor-pair-next-20260912.md and grants +2
+necessary scoped new-stage reviews:28 Astra High and29 Fable5.1High through
+Corbanu/private TMUX. Both are planned, not dispatched. Preserve scheduled
+window17:25:45–23:25:45Z five used and all previous extensions/results. Reserve
+each at actual dispatch; no clean-code repeat or early reset. Receiving proof
+needed no new review. Required corrective extension goes to integration owner.
+
+Owner increment review25 reserved September12 18:42UTC before dispatch:
+Astra High overfb7523f4b, frozen Rust30aebfb77785fe5108276a651a4005fca3c5bae3
+and final RTX/TMUX receipts. Window17:25:45–23:25:45Z now3 used/2 available.
+Review26 Fable5.1High remains allocated but not yet dispatched. No adapter rerun.
+
+Review25 completed exit0/findings[], patch correct. Review26 reserved September12
+18:43:25UTC before dispatch: Fable5.1High via Corbanu/private TMUX on the same
+Rust30aebfb7 and actual execution receipts. Window now4 used/1 available.
+
+Review26 exit1, patch correct, P2 non-test expect_used lint finding reproduced
+by strict feature-enabled just clippy. Accepted in scope; small explicit
+reservation-error/internal-invariant handling correction4d830cbb3, runtime
+contract unchanged. Final lint/tests and Fable27 correction closeout use the
+remaining scheduled slot; reserve27 at actual dispatch, not in this note.
+
+Review27 reserved September12 18:52UTC before dispatch: Fable5.1High via
+Corbanu/private TMUX correction diff overfe007f32b. Rust7e488200 and strict
+Clippy/default3/TMUX focused8/real3/profile2/service52 final-source receipts.
+Window now5 used/0 available; do not repeat a clean pass or reset early.
+
+Review27 completed exit0/findings[], patch correct. Accepted Fable26 lint finding
+is repaired; the feature-enabled strict lint and final-source tests pass.
+No further pass required. Original25/26/27 JSON/text/exit receipts are under
+descriptor-owner-20260912/. All historical budgets/outcomes remain preserved.
+
+Review23 reserved/dispatched September12 17:49UTC: Astra High, adapter source
+30b471a47/Rust2d270c5c overc5b05d9d8, actual OS/TMUX receipts. Window17:25:45Z–
+23:25:45Z now1 used/4 available; history1–22 retained. Review24 Fable remains
+planned, not yet dispatched.
+
+Review23 completed exit0/findings[]; adapter source/evidence judged correct under
+its explicit preconditions. Review24 reserved/dispatched September12 17:51:33UTC:
+Fable5.1High through established Corbanu wrapper in private TMUX, unchanged
+Rust2d270c5c plus final OS receipts. Current window2 used/3 available; no further
+pass planned absent an actionable finding.
+
+Review24 completed exit0/findings[] (patch correct). No accepted/rejected
+findings or runtime repairs were needed for either review23 or24. Close this
+adapter stage at2 used/3 available in the active six-hour window; do not spend
+another review merely to restate clean results. Originals:
+`descriptor-launch-20260912/{astra23,fable24}.{json,txt,exit}`.
+Adapter stage allocation September12 17:29UTC: current scheduled window is
+17:25:45Z through23:25:45Z, five available and zero dispatched. Plan two necessary
+passes (next numbers23 Astra High,24 Fable5.1High through Corbanu/TMUX), reserving
+each at actual dispatch; this statement consumes no pass. Historical22 and
+earlier outcomes remain unchanged; three remaining slots are contingency, not a
+target. Isolated-adapter implementation authority is separately recorded in the
+accepted descriptor-launch proposal, not inferred from this budget.
+
 Reviews 1–6 are spent; preserve their existing records. Review 6 is documented
 in [resumed service evidence](resume-20260911/README.md).
 

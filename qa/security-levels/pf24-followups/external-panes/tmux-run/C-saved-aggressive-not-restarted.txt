@@ -1,0 +1,53 @@
+
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     loading   /model to change                    │
+│ directory: /Volumes/CorbanuDrive/…/panes-final/workspace │
+╰──────────────────────────────────────────────────────────╯
+
+
+› Use /skills to list available skills
+
+  Z.AI GLM 5.2 via zai standard · <run>/worksp…
+
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     glm-5.2   /model to change                    │
+│ directory: /Volumes/CorbanuDrive/…/panes-final/workspace │
+╰──────────────────────────────────────────────────────────╯
+
+■ Claude panes are off under security level Aggressive: Claude Code would run outside Corbanu's sandbox with your
+environment and network. Choose Permissive in /security and restart to use them; /panes switches back to Main.
+
+
+› Use /skills to list available skills
+
+  Z.AI GLM 5.2 via zai standard · <run>/worksp…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

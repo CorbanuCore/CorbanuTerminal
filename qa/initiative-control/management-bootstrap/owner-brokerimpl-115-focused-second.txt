@@ -1,0 +1,23 @@
+test_binding_and_upstream_validation (test_qualification_broker.BrokerTests.test_binding_and_upstream_validation) ... ok
+test_compact_and_nonstream_json_paths (test_qualification_broker.BrokerTests.test_compact_and_nonstream_json_paths) ... ok
+test_credential_is_read_at_each_use (test_qualification_broker.BrokerTests.test_credential_is_read_at_each_use) ... ok
+test_credentials_and_prompt_never_appear_in_evidence_or_logs (test_qualification_broker.BrokerTests.test_credentials_and_prompt_never_appear_in_evidence_or_logs) ... ok
+test_evidence_failure_after_upstream_headers_releases_no_sse (test_qualification_broker.BrokerTests.test_evidence_failure_after_upstream_headers_releases_no_sse) ... ok
+test_missing_unreadable_and_invalid_credential (test_qualification_broker.BrokerTests.test_missing_unreadable_and_invalid_credential) ... ok
+test_missing_upstream_ids_never_use_client_inventions (test_qualification_broker.BrokerTests.test_missing_upstream_ids_never_use_client_inventions) ... ok
+test_no_proxy_environment_or_redirect_following (test_qualification_broker.BrokerTests.test_no_proxy_environment_or_redirect_following) ... ok
+test_port_owner_observes_broker_and_replacement_listener (test_qualification_broker.BrokerTests.test_port_owner_observes_broker_and_replacement_listener) ... ok
+test_port_owner_tool_error_is_unknown (test_qualification_broker.BrokerTests.test_port_owner_tool_error_is_unknown) ... ok
+test_routes_methods_and_framing_are_closed (test_qualification_broker.BrokerTests.test_routes_methods_and_framing_are_closed) ... ok
+test_startup_records_actual_process_and_bound_socket (test_qualification_broker.BrokerTests.test_startup_records_actual_process_and_bound_socket) ... ok
+test_startup_refuses_unwritable_evidence_and_overlap (test_qualification_broker.BrokerTests.test_startup_refuses_unwritable_evidence_and_overlap) ... ok
+test_stream_is_incremental_exact_and_joined_to_upstream (test_qualification_broker.BrokerTests.test_stream_is_incremental_exact_and_joined_to_upstream) ... ok
+test_tool_call_round_trip_preserves_call_and_output (test_qualification_broker.BrokerTests.test_tool_call_round_trip_preserves_call_and_output) ... ok
+test_unwritable_evidence_blocks_before_upstream (test_qualification_broker.BrokerTests.test_unwritable_evidence_blocks_before_upstream) ... ok
+test_upstream_error_is_logged_without_its_body (test_qualification_broker.BrokerTests.test_upstream_error_is_logged_without_its_body) ... ok
+test_wrong_and_absent_bearer_are_distinct_refusals (test_qualification_broker.BrokerTests.test_wrong_and_absent_bearer_are_distinct_refusals) ... ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 1.449s
+
+OK

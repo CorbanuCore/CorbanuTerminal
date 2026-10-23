@@ -1,0 +1,52 @@
+# PF-23-S03: a level stored by a confirmed transition is enforced at the next session start over a lower config.
+id = "pf23s03-stored-level-next-session"
+feature = "A stored security level is enforced at the next start"
+expected = "config.toml says Permissive. After security_state.json (written by a confirmed transition) stores Aggressive, the next session enforces Aggressive from its first command: a hidden Corbanu home read gets Operation not permitted."
+model = "glm-5.2"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "permissive"
+
+[features]
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "!printf 'shipped-%s\\n' v2-canary > {home}/team-notes.txt && printf '%s' '{\"version\":1,\"level\":\"aggressive\",\"revocations\":{\"schema_version\":1,\"generation\":0,\"kill_switch_active\":false}}' > {home}/security_state.json && echo stored"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "stored"
+[[steps]]
+pause = 1.5
+[[steps]]
+type = "/new"
+[[steps]]
+key = "Enter"
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "Run exactly this command and quote its output: cat \"$(printf '../ho%s/team-notes.txt' me)\""
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "[Oo]peration not permitted"
+timeout = 240
+compress = 3
+[[steps]]
+wait = "(?m)^› "
+timeout = 240
+compress = 1
+[[steps]]
+pause = 4.0

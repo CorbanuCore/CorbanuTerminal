@@ -1,0 +1,90 @@
+# #439 (AGG-05/12): Aggressive refusals name the level and the way forward.
+id = "agg-439-refusals-named"
+feature = "#439: Aggressive refusals name the level"
+expected = "Under Aggressive an approved touch /tmp/... is denied with a warning that security level Aggressive blocked it (approving does not lift it; /security changes the level); an approved curl gets the no-network warning."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Z.AI GLM 5.3 Flash via zai"
+timeout = 60
+compress = 2
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this shell command and nothing else: touch /tmp/agg-demo-probe"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Press enter to confirm"
+timeout = 180
+compress = 2
+[[steps]]
+key = "y"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Security level Aggressive blocked this command"
+timeout = 180
+compress = 2
+[[steps]]
+pause = 3.0
+[[steps]]
+type = "Run exactly this shell command: curl -sS -m 10 -I https://example.com"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Press enter to confirm"
+timeout = 180
+compress = 2
+[[steps]]
+key = "y"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "looks blocked by security level Aggressive"
+timeout = 180
+compress = 2
+[[steps]]
+pause = 3.0

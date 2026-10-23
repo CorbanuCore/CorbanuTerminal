@@ -1,0 +1,57 @@
+# PF-84-S05: usage attributed per account. The coordinator runs on the default
+# Z.AI account; a spawned agent runs on account `work` (the same real key
+# enrolled under a second name) and another on account `fake` (a fake key).
+# /cost then shows one row per account: default and work with tokens, fake
+# with its one failed request and no spend. Needs a developer-accounting
+# debug build. Record with
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-usage-by-account.toml \
+#     --bin <candidate> --sprint PF-84-S05 --publish
+id = "pf84-usage-by-account"
+feature = "PF-84-S05: usage grouped by provider and account"
+expected = "/cost lists Z.AI · account default, account work (a spawned agent) and account fake (401: one request, no tokens, no cost)."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 140
+rows = 40
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+[features]
+named_accounts = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+run = "printf %s \"$ZAI_API_KEY\" | {bin} account add zai work >/dev/null && printf pf84-s05-demo-fake-zai-key-0005 | {bin} account add zai fake >/dev/null && echo enrolled work and fake"
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Reply with the single word pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*pong\\W*$"
+timeout = 120
+compress = 3
+[[steps]]
+type = "Use the spawn_agent tool exactly once with account set to work and the message 'Reply with the single word pong'. Wait for it, then use spawn_agent exactly once with account set to fake and the same message, and wait for it. Do not retry either on another account. Finally reply with the word done."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*done\\W*$"
+timeout = 300
+compress = 5
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "account fake"
+timeout = 60
+[[steps]]
+pause = 6.0

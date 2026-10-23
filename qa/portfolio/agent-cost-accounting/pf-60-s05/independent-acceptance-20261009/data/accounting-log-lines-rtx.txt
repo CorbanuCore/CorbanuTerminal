@@ -1,0 +1,17 @@
+l-c6fut-t2.err: 2026-10-09T13:28:58.334927Z accounting: ledger written in a newer format; collection off for this session
+l-c7-t2.err: 2026-10-09T13:38:34.684700Z accounting write did not complete; closing this sampling
+l-c7-t2.err: 2026-10-09T13:38:34.684754Z accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+l-c7-t2.err: 2026-10-09T13:38:34.684770Z accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected store failure: (code: 1811) qa injected store failure
+l-c7-t2.err: 2026-10-09T13:38:36.848130Z accounting write did not complete; closing this sampling
+l-c7-t2.err: 2026-10-09T13:38:36.848203Z accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+l-c7-t2.err: 2026-10-09T13:38:36.848220Z accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected store failure: (code: 1811) qa injected store failure
+l-c7-t2.err: 2026-10-09T13:38:40.870969Z accounting write did not complete; closing this sampling
+l-c7-t2.err: 2026-10-09T13:38:40.871022Z accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+l-c7-t2.err: 2026-10-09T13:38:40.871037Z accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected store failure: (code: 1811) qa injected store failure
+l-c7-t2.err: 2026-10-09T13:38:42.872570Z accounting write did not complete; closing this sampling
+l-c7-t2.err: 2026-10-09T13:38:42.872604Z accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+l-c7-t2.err: 2026-10-09T13:38:42.872617Z accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected store failure: (code: 1811) qa injected store failure
+l-c7-t2.err: 2026-10-09T13:38:46.202221Z accounting write did not complete; closing this sampling
+l-c7-t2.err: 2026-10-09T13:38:46.202254Z accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+l-c7-t2.err: 2026-10-09T13:38:46.202268Z accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected store failure: (code: 1811) qa injected store failure
+l-c9-eph.err: 2026-10-09T13:26:23.742321Z accounting: this session's model requests are not recorded accounting.excluded="ephemeral_session"

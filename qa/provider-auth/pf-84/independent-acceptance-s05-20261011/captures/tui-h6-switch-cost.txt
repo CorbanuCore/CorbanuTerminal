@@ -1,0 +1,31 @@
+[0] › Today (UTC) in this conversation:
+[1] › • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 1 request, 7,649 tokens. Estimated cost: $0.001092 (rounded).
+[2] › Other conversations on this day, not included above: 16 requests in 6 conversations.
+[3] › • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 8 requests, 54,801+ tokens. Estimated cost: at least $0.005448 (rounded) (1 attempt had incomplete
+[4] › usage).
+[5] › • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 2 requests, tokens not reported. Estimated cost: not available — usage incomplete.
+[6] › • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 6 requests, 39,280 tokens. Estimated cost: $0.005802 (rounded).
+[7] › Other conversations' estimated cost: at least $0.011250 (rounded) (3 attempts had incomplete usage).
+[8] › To see those requests, open that conversation with /resume and run /cost there.
+[9] › Next step for requests with incomplete usage: check the bill from Z.AI. Their provider did not report every token count, so the estimate is missing or only a lower
+[10] › bound.
+[11] › Costs are estimates from published prices; Z.AI doesn't report its charges — check Z.AI's bill.
+--- final viewport ---
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.3-flash   /model to change          │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s05acc/ws │
+╰──────────────────────────────────────────────────────╯
+  Cost — this conversation
+  Requested UTC day: 2026-10-11
+  • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 2 requests, tokens not reported. Estimated cost: not available — usage incomplete.
+  • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 6 requests, 39,280 tokens. Estimated cost: $0.005802 (rounded).
+  Other conversations' estimated cost: at least $0.011250 (rounded) (3 attempts had incomplete usage).
+  To see those requests, open that conversation with /resume and run /cost there.
+  Next step for requests with incomplete usage: check the bill from Z.AI. Their provider did not report every token count, so the estimate is missing or only a lower
+  bound.
+  Costs are estimates from published prices; Z.AI doesn't report its charges — check Z.AI's bill.
+› Select a provider below to see its requests.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

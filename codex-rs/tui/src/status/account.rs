@@ -4,5 +4,9 @@ pub(crate) enum StatusAccountDisplay {
         email: Option<String>,
         plan: Option<String>,
     },
-    ApiKey,
+    ApiKey {
+        /// The environment variable the key is read from, such as
+        /// `OPENAI_API_KEY`; `None` for a saved key.
+        env_var: Option<String>,
+    },
 }

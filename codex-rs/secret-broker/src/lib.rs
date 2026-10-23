@@ -6,9 +6,11 @@ pub mod ipc;
 pub mod journal_adapter;
 #[cfg(target_os = "linux")]
 pub mod linux_transport;
+pub mod output_gate;
 pub mod platform_contract;
 pub mod resolver;
 mod resolver_types;
+pub mod response_gate;
 
 pub use ipc::BrokerBinding;
 pub use ipc::BrokerChannelMac;
@@ -16,7 +18,9 @@ pub use ipc::BrokerOperation;
 pub use ipc::CredentialReference;
 pub use ipc::ObservedPeer;
 pub use ipc::OpenAiResponsesOperation;
+pub use ipc::ProviderRequestOperation;
 pub use ipc::SignedBrokerFrame;
+pub use ipc::VerifiedProviderRequest;
 pub use resolver::BrokerRuntime;
 pub use resolver_types::BackendDispatchError;
 pub use resolver_types::BrokerAuditError;

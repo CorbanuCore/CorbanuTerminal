@@ -108,7 +108,12 @@ rotation within the same reported authority does not invalidate it.
 Existing installations without a saved Corbanu choice retain their historical
 behavior: a nonblank `CLAUDE_CODE_OAUTH_TOKEN` is used first, otherwise the
 current platform store is used, including a macOS file-only legacy profile when
-the corresponding Keychain record is absent. Once you successfully choose a
+the corresponding Keychain record is absent. This holds everywhere: `corbanu
+exec`, the TUI, and Claude panes. In `/providers` the Claude row then reads
+"Ready · CLAUDE_CODE_OAUTH_TOKEN from the environment", and Claude Plan models
+and panes run without saving the token. Nothing binds the token in this state:
+a different value in the environment is simply used. Choosing a method in
+`/providers` replaces this behavior with that exact method. Once you successfully choose a
 method in `/providers`, that exact source is persisted; a failure never falls
 through to the environment or another store.
 

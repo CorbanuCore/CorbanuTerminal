@@ -18,15 +18,21 @@ workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+bytes = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 codex-process-hardening = { workspace = true }
 ctor = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true, features = ["client", "server", "http1"] }
+hyper-util = { workspace = true, features = ["tokio"] }
 libc = { workspace = true }
 reqwest = { workspace = true, features = ["blocking", "json", "rustls-tls"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tiny_http = { workspace = true }
+tokio = { workspace = true, features = ["rt", "net", "time", "sync", "macros", "io-util"] }
 zeroize = { workspace = true }
 
 [dev-dependencies]
+codex-utils-cargo-bin = { workspace = true }
 pretty_assertions = { workspace = true }

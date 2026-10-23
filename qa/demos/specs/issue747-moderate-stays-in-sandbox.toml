@@ -1,0 +1,55 @@
+# Issue #747 (D3): under Moderate an approved request to run outside the sandbox stays in it; the prompt says so.
+id = "issue747-moderate-stays-in-sandbox"
+feature = "Moderate never runs a command outside the sandbox"
+expected = "Under Moderate ([security] level in config), the agent asks to run a write outside the project outside the sandbox. The prompt says it still runs inside the sandbox; approved, the write is refused by the sandbox (not by Protected launch) and the file outside is not written."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Run exactly this shell command with sandbox_permissions set to require_escalated (justification: write the notes): echo moderate-check >> ../outside/notes.txt"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "still runs[\\s\\S]*inside the sandbox"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "y"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Operation not permitted(?:(?!Working).)*\\n› "
+timeout = 180
+compress = 3
+[[steps]]
+pause = 1.0
+[[steps]]
+run = "test ! -e {outside}/notes.txt && echo 'outside/notes.txt was not written'"
+[[steps]]
+pause = 3.0

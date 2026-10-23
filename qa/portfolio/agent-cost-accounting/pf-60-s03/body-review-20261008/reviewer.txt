@@ -1,0 +1,3 @@
+model: claude-opus-5-5-plan
+provider: claude-plan
+session id: 01a11b19-9f7b-72b3-bee8-f7e6fce62af7

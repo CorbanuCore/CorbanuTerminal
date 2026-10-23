@@ -1,0 +1,11 @@
+# macOS home mh-del: `find sessions archived_sessions` taken right after the two failed real-clock deletes (mac-c9-03)
+# and before the faked-clock retry (mac-c9-06). Transcribed from the executor terminal; <scratch> redacted.
+# Before the deletes, m1's rollouts were under sessions/2026/10/09 and m2's (with its subagent's) under sessions/2026/10/10;
+# no pre-delete listing was captured on macOS (the Linux capture rtx-c15-08 / rtx-c15-12 has before/after listings).
+<scratch>/mh-del/sessions
+<scratch>/mh-del/sessions/2026
+<scratch>/mh-del/sessions/2026/10
+<scratch>/mh-del/sessions/2026/10/10
+<scratch>/mh-del/sessions/2026/10/10/rollout-2026-10-10T12-00-00-01a125af-2e58-7800-9ab3-1118cd91644e.jsonl   (mk)
+<scratch>/mh-del/sessions/2026/10/10/rollout-2026-10-10T11-00-00-01a12578-3fd8-7a80-ba8d-45d1cbfc0f9e.jsonl   (m3)
+<scratch>/mh-del/sessions/2026/10/09                                                                         (empty)

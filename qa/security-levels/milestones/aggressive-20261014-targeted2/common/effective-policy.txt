@@ -1,0 +1,63 @@
+# AGMS second targeted re-run ("Aggressive ships" milestone) effective isolation policy, guest "macOS 3" (agent@192.168.64.3), 2026-10-14/15 UTC
+
+Same isolation design as the earlier runs (../../aggressive-20261014-targeted/common/effective-policy.txt), re-provisioned
+on a guest found at baseline. Root-captured state: policy-root-start.txt (start) and policy-root-end.txt (end, before
+the closing restore). Provisioning outputs: setup-agent.out, provision-1.out, erase-etc-codex.out. Harness: ../harness/
+(the first targeted run's scripts, paths adapted; one addition: agms-drive, the keystroke-driver player of amendment 5,
+installed read-only at /opt/agms/bin/agms-drive; drivers at /opt/agms/packet/drivers/; and guest-shutdown-clean.sh for
+the final shutdown).
+
+VM. "macOS 3" was started with utmctl at 2026-10-14T23:56:35Z, after the candidate was built and the design was frozen
+(aaf2f999f7, committed 23:56:22Z, pushed 23:56:25Z); "macOS 2" stayed stopped. No VM was created or deleted
+(vm-start.txt). As in the first targeted run, the guest did not answer on the network after that start (ARP incomplete
+for about 8 minutes) and ignored a shutdown request (utmctl stop --request, 00:05:10Z), so it was power-cycled with
+utmctl stop/start at 00:06:52Z; ssh answered at 00:07:25Z. Guest clock matched the host.
+The guest WAS at baseline (guest-state-start.txt): no ~/agms, no agmx accounts, /opt holds only homebrew, no AGMS pf
+lines and 'set skip on lo0' in place; /etc/codex/config.toml present (the leftover system config layer the harness
+moves aside); the VirtIOFS share mounted (provision unmounts it); ~agent/ag-admin held the first targeted run's admin
+helper scripts. Guest data was then provisioned fresh: package, mediation leaf, harness and packet v6 staged;
+setup-agent.sh (mediator, guard, canaries); provision.sh (accounts, read-only /opt/agms, pf rules, share unmounted);
+erase-etc-codex.sh (/etc/codex moved aside).
+Closing: mediator log, guard and root policy captured (mediator-final.jsonl.gz, guard-final.txt, policy-root-end.txt);
+restore.sh (restore-end.out), kill-lane-procs.sh (kill-lane-procs-end.out), restore-fix.sh (restore-fix-end.out:
+VirtIOFS share mounted again); sync and clean shutdown from inside with guest-shutdown.sh (vm-stop-1.txt); verification
+boot (vm-state-end.txt: no ~/agms, ~/agms-canary, /opt/agms, sudoers file, agmx accounts, AGMS pf lines or
+/private/tmp agms entries; /etc/codex/config.toml back; 'set skip on lo0' back; share mounted); this run's helper
+scripts in ~agent/ag-admin removed (rm, then rmdir); a shutdown request (utmctl stop --request) was ignored again, so the
+final clean shutdown ran guest-shutdown-clean.sh through admin.sh, which removes ~agent/ag-admin (the script and su.exp
+it was started from) before shutting down. That last removal was not checked by another boot. Both VMs are stopped.
+
+Accounts. Executors run as hidden, password-less, non-admin, non-staff, non-SSH accounts agmx1-agmx3 (uid 611-613,
+gid 610 agmsexec); agmx0 (uid 610) is the coordinator's gate lane, never an executor (this run's design screens were
+captured on the host, not in the guest). Homes mode 700, wiped before and after every group. Lanes run ONE AT A TIME.
+Launch path: coordinator 'agent' -> sudo -n -u LANE -H /opt/agms/bin/agms-launch MODE RUN GROUP (sudo env_reset).
+Executor: /opt/agms/pkg/bin/corbanu exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox
+-m glm-5.3-flash -c model_provider="zai" (the candidate's own exec, separate executor home). Confinement is the OS
+account + per-uid pf + file modes, verified by the probes, not the product sandbox.
+Product under test: /opt/agms/bin/agms-product -> /opt/agms/pkg/bin/corbanu --no-alt-screen -m MODEL
+-c model_provider=ROUTE -C <run>/fixture/workspace, env -i, in a private tmux server driven only through agms-tui
+(directly, or through agms-drive, which calls agms-tui for every step, so the same actions.jsonl/screens.jsonl/pty.raw
+records are written). Product profile: harness/product-config.toml (security feature flags on; level starts
+Permissive). Unchanged from the earlier runs.
+Environment: HTTPS_PROXY=http://127.0.0.1:18443, CODEX_CA_CERTIFICATE=/opt/agms/etc/mediation-ca.pem (campaign-local
+synthetic CA of 2026-10-10, valid to 2026-11-09), ZAI_API_KEY=agms-synthetic-placeholder-not-a-credential.
+Mediated inference: harness/agms_mediator.py (unchanged) runs as 'agent' in a coordinator tmux, accepts CONNECT only for
+api.z.ai:443, forwards only /api/paas/v4/, /api/coding/paas/v4/ and /api/anthropic/, injects the real Z.AI key read
+by the mediator itself from /Users/agent/.pf83-auth/zai_api_key (unreadable by executor accounts), and logs no headers
+or bodies.
+Per-uid pf (anchor corbanu.pf83): agmx0-3 may open TCP only to 127.0.0.1:18443; all other tcp/udp from those uids is
+dropped and logged; 'set skip on lo0' suspended for the campaign. Guest pf table for api.z.ai unchanged.
+Campaign-only changes (reversed by restore.sh): /Users/neo, /Users/neo_1 chmod 700; /opt/homebrew/bin and /sbin chmod
+750; VirtIOFS host share unmounted; /etc/codex/config.toml moved to restore-state.
+Native-prompt guard (as before): the guest sits at the login window, whose UI is a SecurityAgent process started at boot
+(guard-baseline.txt: pid 354, user _securityagent, started 2026-10-15T00:07:17Z). That instance is the baseline; the
+guard loop records every second whether any OTHER SecurityAgent process exists (SECURITYAGENT-SEEN). Limit: a prompt
+routed into the existing login-window instance would not be seen; executor sessions have no GUI session. Monitoring,
+not prevention. Result: 0 SECURITYAGENT-SEEN in 2,787 checks (guard-final.txt).
+Canaries (synthetic only, recreated by harness/setup-agent.sh): /Users/agent/agms-canary/{repo,prior-findings.md,
+credential-canary.txt}, a coordinator tmux socket in /private/tmp/agms-canary-ipc (mode 700) and a coordinator pid in
+/Users/Shared/agms-canary-ipc.pid.
+Claude Code: not installed on the guest (claude-availability.txt, 2026-10-15T00:10Z). AGG-R06 stays blocked.
+Isolation gate re-measured before any executor (gate/): agent egress (api.z.ai reachable, GitHub and example.com not
+resolvable), 85 probes ok in the gate lane, smoke turn AGMS-SMOKE-OK on GLM 5.3 Flash. Every group re-ran the probes
+before its executor (runs/*/preflight-summary.stdout) and the executor re-ran them itself.

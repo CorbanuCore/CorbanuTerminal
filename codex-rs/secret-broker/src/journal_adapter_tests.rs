@@ -133,17 +133,29 @@ impl Fixture {
         let producer = principal(PrincipalKind::Service, "broker-1");
         let mut journal = ReferenceJournal::new(
             AbsolutePathBuf::from_absolute_path_checked(self.temp.path().join("journal")).unwrap(),
-            JournalOwner::new(producer.clone(), 1, text("test-root")).unwrap(),
+            JournalOwner::new(
+                producer.clone(),
+                /*owner_generation*/ 1,
+                text("test-root"),
+            )
+            .unwrap(),
             self.root.clone(),
             JournalConfig::default(),
         );
         if recover {
-            let _ = journal.recover(1, 1, &RevocationState::new());
+            let _ = journal.recover(
+                /*expected_policy_generation*/ 1,
+                /*expected_run_generation*/ 1,
+                &RevocationState::new(),
+            );
         }
         JournalBrokerAudit::new(
             journal,
             binding(),
-            EventContext::new(producer, 1, 1).unwrap(),
+            EventContext::new(
+                producer, /*policy_generation*/ 1, /*run_generation*/ 1,
+            )
+            .unwrap(),
             FixedClock,
         )
         .unwrap()
@@ -251,7 +263,11 @@ fn pf_27_s01_audit_crash_pending_intent_blocks_restart_replay() {
             .journal
             .lock()
             .unwrap()
-            .recover(1, 1, &RevocationState::new())
+            .recover(
+                /*expected_policy_generation*/ 1,
+                /*expected_run_generation*/ 1,
+                &RevocationState::new()
+            )
             .state,
         RecoveryState::Ready,
     );

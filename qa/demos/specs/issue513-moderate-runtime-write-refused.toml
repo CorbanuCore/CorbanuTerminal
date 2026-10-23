@@ -1,0 +1,54 @@
+# #513: under Moderate (permission requests on), an additional write
+# permission for the Corbanu home's tmp folder (it holds the sandbox
+# launchers) is refused and explained before anyone is asked; on main it was
+# approved and the dummy launcher was replaced.
+id = "issue513-moderate-runtime-write-refused"
+feature = "#513: an additional write permission never reopens the Corbanu home's tmp folder under Moderate"
+expected = "With Moderate and permission requests on, the agent asks to overwrite a dummy launcher in the Corbanu home's tmp folder with an additional write permission. It is refused before any approval prompt, with an explanation naming Moderate and /security; the file still reads 'original'."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+exec_permission_approvals = true
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+run = "mkdir -p \"$CODEX_HOME/tmp\" && printf 'original\\n' > \"$CODEX_HOME/tmp/issue513-launcher\" && echo \"$CODEX_HOME\""
+capture = "c"
+
+[[steps]]
+type = "Call your shell tool exactly once to run: printf replaced > {c}/tmp/issue513-launcher -- with sandbox_permissions set to with_additional_permissions and additional_permissions set to {\"file_system\":{\"write\":[\"{c}/tmp\"]}}. Then report the result."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)Security level Moderate\\s+blocked\\s+writing\\s+to(?:(?!Working).)*\n› "
+timeout = 240
+compress = 3
+[[steps]]
+pause = 3.0
+[[steps]]
+type = "!cat {c}/tmp/issue513-launcher"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "└ original"
+[[steps]]
+pause = 3.0

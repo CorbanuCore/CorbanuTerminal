@@ -1,0 +1,3 @@
+== before: /status in a Z.AI-only home (onboarded with a synthetic Z.AI key; auth.json present: no)
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4                               │
+│  Account:              OpenAI API key configured (run corbanu login to use ChatGPT)      │

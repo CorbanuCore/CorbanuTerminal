@@ -24,8 +24,9 @@ Route work through the repository's canonical policy; do not restate it.
    completed sprint so it leaves the current documentation view.
    For user-facing work, follow the root policy's code-blind functional-design
    gate and `qa/code-blind-functional/README.md`: fresh-context test proposals
-   from intent/screenshots only, preserved cases, exact-package execution and
-   an independent evidence check within the existing review budget. Do not
+   from intent/screenshots only, preserved cases, independent permission-isolated
+   exact-package execution with schema-2 receipts and a separate evidence reviewer;
+   keep design/review within the recorded allowance. Do not
    declare human-test readiness while a mandatory case or prerequisite is open.
 9. For a release, read `benchmarks/README.md` and the versioned record under
    `qa/release/<version>/` before deciding readiness.

@@ -1,0 +1,26 @@
+## enrolment in t1 (zai-configured home)
+$ run $S/bin/corbanu-cand $S/homes/t1 account add amazon-bedrock work --kind aws-profile --value work
+Saved amazon-bedrock account `work` (aws_profile).
+[exit 0]
+$ run $S/bin/corbanu-cand $S/homes/t1 account add amazon-bedrock gone --kind aws-profile --value nosuchprofile
+Saved amazon-bedrock account `gone` (aws_profile).
+[exit 0]
+{}(#573: ChatGPT sign-in of a named account while model_provider = zai)
+$ run $S/bin/corbanu-cand $S/homes/t1 login --account work --device-auth --experimental_issuer http://127.0.0.1:34731
+Welcome to Codex [v[90m0.1.48[0m]
+[90mOpenAI's command-line coding agent[0m
+Signed in OpenAI account `work` (ChatGPT sign-in · t…@example.com · Plus).
+[exit 0]
+$ run $S/bin/corbanu-cand $S/homes/t1 login --account fake --with-api-key
+Reading API key from stdin...
+Signed in OpenAI account `fake` (OpenAI API key).
+[exit 0]
+$ run $S/bin/corbanu-cand $S/homes/t1 account list
+amazon-bedrock	gone	aws_profile	profile nosuchprofile
+amazon-bedrock	work	aws_profile	profile work
+openai	fake	chatgpt_auth	OpenAI API key
+openai	work	chatgpt_auth	ChatGPT sign-in · t…@example.com · Plus
+[exit 0]
+config.toml
+secrets
+tmp

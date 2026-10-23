@@ -44,6 +44,12 @@ const DEFAULT_TITLE: &str = "Add vault credential";
 const LABEL_PROMPT: &str = "Label (for example: ambient/prod)";
 const SECRET_PROMPT: &str = "Secret value (masked — not shown, not stored in chat)";
 const SECRET_CONFIRM_PROMPT: &str = "Confirm the value (masked)";
+/// #855: shown when the value entered is the text of an error message.
+pub(crate) const ERROR_TEXT_REJECTED: &str =
+    "That is an error message, not a credential. Copy the credential again and paste it.";
+/// Shorter values are not matched against shown errors (they could occur in
+/// any text).
+const MIN_SHOWN_ERROR_MATCH_CHARS: usize = 16;
 
 /// Which field is currently active in the two-step entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,6 +71,7 @@ pub(crate) struct VaultSecretEntryView {
     confirm_secret: bool,
     first_secret: String,
     validation_error: Option<String>,
+    shown_errors: Vec<String>,
     on_submit: VaultSecretSubmitted,
     on_cancel: Option<VaultSecretCancelled>,
     textarea: TextArea,
@@ -88,6 +95,7 @@ impl VaultSecretEntryView {
             confirm_secret: false,
             first_secret: String::new(),
             validation_error: None,
+            shown_errors: Vec::new(),
             on_submit,
             on_cancel: None,
             textarea: TextArea::new(),
@@ -116,6 +124,7 @@ impl VaultSecretEntryView {
             confirm_secret: false,
             first_secret: String::new(),
             validation_error: None,
+            shown_errors: Vec::new(),
             on_submit,
             on_cancel: None,
             textarea: TextArea::new(),
@@ -145,6 +154,7 @@ impl VaultSecretEntryView {
             confirm_secret: false,
             first_secret: String::new(),
             validation_error: None,
+            shown_errors: Vec::new(),
             on_submit,
             on_cancel: Some(on_cancel),
             textarea: TextArea::new(),
@@ -173,6 +183,7 @@ impl VaultSecretEntryView {
             confirm_secret: true,
             first_secret: String::new(),
             validation_error: None,
+            shown_errors: Vec::new(),
             on_submit,
             on_cancel: None,
             textarea: TextArea::new(),
@@ -194,6 +205,34 @@ impl VaultSecretEntryView {
         let mut view = Self::new_confirmed_secret(label, title, status, secret_prompt, on_submit);
         view.on_cancel = Some(on_cancel);
         view
+    }
+
+    /// #855: also refuses a value that is the text of one of `shown_errors`
+    /// (error messages shown in the transcript, which a person can copy and
+    /// then paste here by mistake; the field is masked, so they cannot see
+    /// it). The text of a vault error message is always refused.
+    pub(crate) fn rejecting_shown_errors(mut self, shown_errors: Vec<String>) -> Self {
+        self.shown_errors = shown_errors;
+        self
+    }
+
+    /// Matching ignores ASCII case and line wrapping (a copy from a narrow
+    /// terminal has line breaks). A value that is only part of a shown error
+    /// is refused only if it has a space in it: a credential has none, so a
+    /// token that an error happened to quote is still accepted.
+    fn is_error_text(&self, raw: &str) -> bool {
+        if codex_vault::is_vault_error_text(raw) {
+            return true;
+        }
+        let value = codex_vault::normalized_for_matching(raw);
+        self.shown_errors.iter().any(|shown| {
+            let shown = codex_vault::normalized_for_matching(shown);
+            shown.chars().count() >= MIN_SHOWN_ERROR_MATCH_CHARS
+                && (value.contains(shown.as_str())
+                    || (value.chars().count() >= MIN_SHOWN_ERROR_MATCH_CHARS
+                        && value.contains(' ')
+                        && shown.contains(value.as_str())))
+        })
     }
 
     fn handle_key_event_at(&mut self, key_event: KeyEvent, now: Instant) {
@@ -244,6 +283,13 @@ impl VaultSecretEntryView {
                 // meaningful for PEM blobs, seed phrases, and pasted keys); only reject
                 // all-whitespace as empty.
                 if raw.trim().is_empty() {
+                    return;
+                }
+                if self.is_error_text(&raw) {
+                    let mut raw = raw;
+                    raw.zeroize();
+                    self.validation_error = Some(ERROR_TEXT_REJECTED.to_string());
+                    self.reset_textarea();
                     return;
                 }
                 if self.confirm_secret {

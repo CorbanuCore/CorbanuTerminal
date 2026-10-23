@@ -1,0 +1,12 @@
+        PASS [   1.091s] (1/4) codex-core::all suite::accounting_responses::accounting_side_conversation_is_recorded_under_its_conversation
+     Summary [  42.049s] 4 tests run: 1 passed, 3 failed, 4402 skipped
+    Error: ledger holds ["01a13a61-7aa3-7693-915b-3101f7ea5314", "side:01a13a61-7b46-7a21-9241-637305ef1dc1", "side:01a13a61-7b46-7a21-9241-637305ef1dc1"]
+    Error: ledger holds ["01a13a61-7aa3-7f03-9f64-f0bbdd334253", "side:01a13a61-7b44-7823-b875-6fdf9473fc6b", "side:01a13a61-7b44-7823-b875-6fdf9473fc6b"]
+    Error: ledger holds ["01a13a61-cc08-7911-85a3-74c0c566279b", "side:01a13a61-cc7a-7e41-8cf6-b13892b34f77", "side:01a13a61-cc7a-7e41-8cf6-b13892b34f77"]
+    Error: ledger holds ["01a13a61-cc3a-7703-a5b2-d65d6832aaf1", "side:01a13a61-cc9f-7370-a3ca-2f370859e491", "side:01a13a61-cc9f-7370-a3ca-2f370859e491"]
+  TRY 1 FAIL [   1.200s] (───) codex-core::all suite::accounting_side_forks::accounting_other_temporary_forks_are_labelled_fork
+  TRY 1 FAIL [  21.140s] (───) codex-core::all suite::accounting_side_forks::accounting_sub_agent_spawned_from_side_is_recorded_under_the_conversation
+  TRY 1 FAIL [  21.188s] (───) codex-core::all suite::accounting_side_forks::accounting_guardian_review_inside_side_is_recorded_under_the_conversation
+  TRY 2 FAIL [   0.703s] (2/4) codex-core::all suite::accounting_side_forks::accounting_other_temporary_forks_are_labelled_fork
+  TRY 2 FAIL [  20.776s] (3/4) codex-core::all suite::accounting_side_forks::accounting_sub_agent_spawned_from_side_is_recorded_under_the_conversation
+  TRY 2 FAIL [  20.832s] (4/4) codex-core::all suite::accounting_side_forks::accounting_guardian_review_inside_side_is_recorded_under_the_conversation

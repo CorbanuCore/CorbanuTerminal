@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a120bd-f077-7632-9251-502c8489b524"}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 401 Unauthorized: {\"error\":\"API key is invalid or revoked\"}, url: https://api.corbanu.com/v1/messages"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: {\"error\":\"API key is invalid or revoked\"}, url: https://api.corbanu.com/v1/messages"}}

@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"01a120b8-f44e-7922-a0ca-fd3f471eb02c"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Skill descriptions were shortened to fit the 2% skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest."}}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 401 Unauthorized: Missing Authentication header, url: https://openrouter.ai/api/v1/chat/completions, cf-ray: a47d85f96efe295a-PHX"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: Missing Authentication header, url: https://openrouter.ai/api/v1/chat/completions, cf-ray: a47d85f96efe295a-PHX"}}

@@ -1,0 +1,26 @@
+$ /usage requests 2026-06-01T00:00:00Z 2026-06-01T02:00:00Z hour
+  Recorded request range
+  Requested: [2026-06-01T00:00:00.000Z, 2026-06-01T02:00:00.000Z); timezone: UTC; grouping: Hour
+  Retention: request detail kept since 2026-07-10T11:31:22.937Z; oldest daily total kept none
+  Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost:
+  unavailable — no settlement evidence.
+  Snapshot is not current; newer activity is unverified
+  Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+  Ancestry counts cover inspectable slices only; unavailable slices may contain additional unknown ancestry.
+  Other conversations are not included in this view; /cost covers only the open conversation.
+  ↑↓ scroll · Enter open · Esc back/close
+  Range total unavailable — partial or unavailable buckets excluded; no partial total.
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-06-01T00:00:00.000Z, 2026-06-01T01:00:00.000Z): [2026-06-01T00:00:00.000Z, 2026-
+  06-01T01:00:00.000Z)
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-06-01T01:00:00.000Z, 2026-06-01T02:00:00.000Z): [2026-06-01T01:00:00.000Z, 2026-
+  06-01T02:00:00.000Z)
+  —— Open ——
+  → Hour [2026-06-01T00:00:00.000Z, 2026-06-01T01:00:00.000Z)
+  → Hour [2026-06-01T01:00:00.000Z, 2026-06-01T02:00:00.000Z)
+--- last screen:
+  Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [2026-06-01T01:00:00.000Z, 2026-06-01T02:00:00.000Z): [2026-06-01T01:00:00.000Z, 2026-
+  06-01T02:00:00.000Z)
+  —— Open ——
+  → Hour [2026-06-01T00:00:00.000Z, 2026-06-01T01:00:00.000Z)
+› → Hour [2026-06-01T01:00:00.000Z, 2026-06-01T02:00:00.000Z)
+  ↑↓ scroll · Enter open · Esc back/close

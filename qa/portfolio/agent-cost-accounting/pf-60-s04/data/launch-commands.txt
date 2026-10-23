@@ -1,0 +1,20 @@
+### logs/q1.launch.sh
+#!/bin/bash
+<rtx-home>/corbanu-rtx/pf60s04-qual/bin/corbanu -C <rtx-home>/corbanu-rtx/pf60s04-qual/work/ws -c log_dir=\"<rtx-home>/corbanu-rtx/pf60s04-qual/homes/q1/logs\" -m gpt-5.4 -c model_provider=\"openai\" -c service_tier=\"priority\" resume 01a123ec-106c-71a0-b0cc-ea1a36d48b7c 2>>"$CODEX_HOME/logs/stderr.log"
+echo EXITED $?; sleep 600
+### logs/q2.launch.sh
+#!/bin/bash
+<rtx-home>/corbanu-rtx/pf60s04-qual/bin/corbanu -C <rtx-home>/corbanu-rtx/pf60s04-qual/work/ws -c log_dir=\"<rtx-home>/corbanu-rtx/pf60s04-qual/homes/q2/logs\" -m deepseek-v4-flash -c model_provider=\"deepseek-retry\" 2>>"$CODEX_HOME/logs/stderr.log"
+echo EXITED $?; sleep 600
+### logs/q3.launch.sh
+#!/bin/bash
+<rtx-home>/corbanu-rtx/pf60s04-qual/bin/corbanu -C <rtx-home>/corbanu-rtx/pf60s04-qual/work/ws -c log_dir=\"<rtx-home>/corbanu-rtx/pf60s04-qual/homes/q3/logs\" -m glm-5.2 -c model_provider=\"zai\" 2>>"$CODEX_HOME/logs/stderr.log"
+echo EXITED $?; sleep 600
+### logs/q4.launch.sh
+#!/bin/bash
+<rtx-home>/corbanu-rtx/pf60s04-qual/bin/corbanu -C <rtx-home>/corbanu-rtx/pf60s04-qual/work/ws -c log_dir=\"<rtx-home>/corbanu-rtx/pf60s04-qual/homes/q4/logs\" -m k3 -c model_provider=\"kimi-code\" resume 01a12407-4a7a-7051-bc21-579adc75924d 2>>"$CODEX_HOME/logs/stderr.log"
+echo EXITED $?; sleep 600
+### logs/smoke.launch.sh
+#!/bin/bash
+<rtx-home>/corbanu-rtx/pf60s04-qual/bin/corbanu -C <rtx-home>/corbanu-rtx/pf60s04-qual/work/ws -c log_dir=\"<rtx-home>/corbanu-rtx/pf60s04-qual/homes/smoke/logs\" -m gpt-5.4 -c model_provider=\"openai\" 2>>"$CODEX_HOME/logs/stderr.log"
+echo EXITED $?; sleep 600

@@ -1,0 +1,17 @@
+---
+source: tui/src/chatwidget/tests/guardian.rs
+assertion_line: 287
+expression: normalize_snapshot_paths(term.backend().vt100().screen().contents())
+---
+
+
+
+✔ Request approved for permission request: Need write access for generated
+  report assets.
+
+• Working (0s • esc to interrupt)
+
+
+› Ask Corbanu Terminal to do anything
+
+  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Terminal · TPS: -- tok/s

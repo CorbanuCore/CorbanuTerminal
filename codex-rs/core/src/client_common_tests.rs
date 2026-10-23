@@ -166,6 +166,169 @@ fn non_openai_context_adapter_keeps_only_latest_dynamic_sections() {
     assert!(!serialized.contains("old model"));
 }
 
+fn skills(body: &str) -> String {
+    format!("<skills_instructions>{body}</skills_instructions>")
+}
+
+fn developer_context(sections: Vec<(String, Option<&'static str>)>) -> ResponseItem {
+    crate::context_manager::updates::build_developer_update_item(
+        sections
+            .into_iter()
+            .map(|(text, source_id)| {
+                crate::context_manager::updates::ContextSection::new(text, source_id)
+            })
+            .collect(),
+    )
+    .expect("developer context")
+}
+
+fn user_message(text: &str) -> ResponseItem {
+    ResponseItem::Message {
+        id: None,
+        role: "user".to_string(),
+        content: vec![ContentItem::InputText {
+            text: text.to_string(),
+        }],
+        phase: None,
+        internal_chat_message_metadata_passthrough: None,
+    }
+}
+
+#[test]
+fn non_openai_context_adapter_keeps_newest_copy_of_each_source_sharing_a_marker() {
+    let mut items = vec![
+        developer_context(vec![
+            (skills("host"), Some("host_skills")),
+            (skills("thread"), Some("thread_skills")),
+            (skills("executor v1"), Some("skills")),
+        ]),
+        user_message("turn"),
+        developer_context(vec![(skills("executor v2"), Some("skills"))]),
+    ];
+
+    retain_latest_contextual_developer_fragments(&mut items);
+
+    assert_eq!(
+        items,
+        vec![
+            developer_context(vec![
+                (skills("host"), Some("host_skills")),
+                (skills("thread"), Some("thread_skills")),
+            ]),
+            user_message("turn"),
+            developer_context(vec![(skills("executor v2"), Some("skills"))]),
+        ]
+    );
+}
+
+#[test]
+fn non_openai_context_adapter_collapses_repeated_copies_of_one_source() {
+    let mut items = vec![
+        developer_context(vec![
+            ("Persistent role doctrine.".to_string(), None),
+            (skills("host v1"), Some("host_skills")),
+        ]),
+        user_message("turn"),
+        developer_context(vec![(skills("host v2"), Some("host_skills"))]),
+        developer_context(vec![(skills("host v3"), Some("host_skills"))]),
+    ];
+
+    retain_latest_contextual_developer_fragments(&mut items);
+
+    assert_eq!(
+        items,
+        vec![
+            developer_context(vec![("Persistent role doctrine.".to_string(), None)]),
+            user_message("turn"),
+            developer_context(vec![(skills("host v3"), Some("host_skills"))]),
+        ]
+    );
+}
+
+#[test]
+fn non_openai_context_adapter_keeps_latest_unattributed_section_per_marker() {
+    // Rollouts persisted before producers were recorded carry no attribution.
+    let legacy = || {
+        vec![
+            developer_context(vec![(skills("host"), None), (skills("thread"), None)]),
+            user_message("turn"),
+            developer_context(vec![(skills("executor"), None)]),
+        ]
+    };
+    let mut items = legacy();
+    retain_latest_contextual_developer_fragments(&mut items);
+    assert_eq!(items, legacy().split_off(1));
+
+    // Newer attributed sections replace legacy ones; a newer unattributed one replaces all.
+    let mut items = vec![
+        developer_context(vec![(skills("legacy"), None)]),
+        developer_context(vec![
+            (skills("host"), Some("host_skills")),
+            (skills("thread"), Some("thread_skills")),
+        ]),
+    ];
+    retain_latest_contextual_developer_fragments(&mut items);
+    assert_eq!(
+        items,
+        vec![developer_context(vec![
+            (skills("host"), Some("host_skills")),
+            (skills("thread"), Some("thread_skills")),
+        ])]
+    );
+
+    let mut items = vec![
+        developer_context(vec![(skills("host"), Some("host_skills"))]),
+        developer_context(vec![(skills("unattributed"), None)]),
+    ];
+    retain_latest_contextual_developer_fragments(&mut items);
+    assert_eq!(
+        items,
+        vec![developer_context(vec![(skills("unattributed"), None)])]
+    );
+}
+
+#[test]
+fn context_fragment_sources_are_not_sent_to_providers() {
+    let mut attributed = developer_context(vec![(skills("host"), Some("host_skills"))]);
+    let unattributed = developer_context(vec![(skills("host"), None)]);
+    let request = |input| ResponsesApiRequest {
+        model: "gpt-5.4".to_string(),
+        instructions: String::new(),
+        previous_response_id: None,
+        input,
+        tools: None,
+        tool_choice: "auto".to_string(),
+        parallel_tool_calls: true,
+        reasoning: None,
+        store: false,
+        stream: true,
+        stream_options: None,
+        include: vec![],
+        prompt_cache_key: None,
+        service_tier: None,
+        text: None,
+        client_metadata: None,
+        thinking_budget: None,
+        emit_usage: None,
+        enable_thinking: None,
+        reasoning_effort: None,
+        provider_options: None,
+    };
+
+    assert_eq!(
+        serde_json::to_value(request(vec![attributed.clone()])).expect("json"),
+        serde_json::to_value(request(vec![unattributed])).expect("json"),
+    );
+
+    attributed.set_turn_id_if_missing("turn-1");
+    let mut expected = developer_context(vec![(skills("host"), None)]);
+    expected.set_turn_id_if_missing("turn-1");
+    assert_eq!(
+        serde_json::to_value(request(vec![attributed])).expect("json"),
+        serde_json::to_value(request(vec![expected])).expect("json"),
+    );
+}
+
 #[test]
 fn serializes_text_verbosity_when_set() {
     let input: Vec<ResponseItem> = vec![];

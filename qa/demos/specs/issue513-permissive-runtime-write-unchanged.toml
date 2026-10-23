@@ -1,0 +1,55 @@
+# #513: Permissive is unchanged: an additional write permission request is
+# asked for and, once approved, the command runs as before.
+id = "issue513-permissive-runtime-write-unchanged"
+feature = "#513: Permissive additional write permissions are unchanged"
+expected = "Under Permissive (with permission requests on), the agent asks to overwrite a dummy file in the Corbanu home's tmp folder with an additional write permission; the approval shows it, and after approval the file reads 'replaced'."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+exec_permission_approvals = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+run = "mkdir -p \"$CODEX_HOME/tmp\" && printf 'original\\n' > \"$CODEX_HOME/tmp/issue513-launcher\" && echo \"$CODEX_HOME\""
+capture = "c"
+
+[[steps]]
+type = "Call your shell tool exactly once to run: printf replaced > {c}/tmp/issue513-launcher -- with sandbox_permissions set to with_additional_permissions and additional_permissions set to {\"file_system\":{\"write\":[\"{c}/tmp\"]}}. Then report the result."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?i)Would you like to run"
+timeout = 240
+compress = 3
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)Then report the result\\.(?:(?!Working).)*\n• (?:(?!Working).)*\n› "
+timeout = 180
+compress = 3
+[[steps]]
+pause = 2.0
+[[steps]]
+type = "!cat {c}/tmp/issue513-launcher"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "└ replaced"
+[[steps]]
+pause = 3.0

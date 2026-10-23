@@ -1,0 +1,414 @@
+# Coordinator open items (2026-10-04)
+- postmerge-ci.yml: startup_failure on every main push since 2026-09-12 (workflow file issue; rust-ci-full/v8-canary via workflow_call). Fix.
+- tmux smoke flakes (see flakes.txt): two different provider_convergence tests failed once each; consider deflaking.
+- ci-bazel2 worker: pushes to codex/ci-main-baseline-20261002 (PR #146 now merged) -> needs a new PR to main for later commits.
+- nightly-ci first manual run 37166293445 on main (2026-10-04 00:53Z): check result.
+- pf#55 (postfiatl1v2): waiting on maintainer merge; then submit Task Node evidence for task_f4bec7e.
+- Restart TUI/workers to pick up accounting fixes 79aef0daf3 + 4c748fe5e4 (user action).
+- Vault entry CorbanuAPI should be re-saved as crypto private key (user action).
+- PR #151 (postmerge-ci actions:read fix): merge when checks pass.
+- PR #152 (win native gnullvm toolchain + native-main lane to nightly): merge when checks pass.
+- Windows native test failures surfaced by nightly: utils/pty ConPTY, uds DACL (admin), wallet/wallet-daemon access denied, codex-api timing flake.
+- #138: initiative_control excluded from ruff format (scripts/pyproject.toml) pending other session's uncommitted work; format later.
+- codex-state clippy duplicate_mod on integration branch test-support files.
+- PR #153 (workflow permissions + sdk cache path): merge when checks pass; then merge main (with #151/#152/#153) into integration (#138).
+- CodeQL #181 dismissed (synthetic fixture probe, used in tests).
+- CodeQL #138 alerts dismissed 2026-10-04: 80-84,155 (tests), 150,152,154 (QA harness), 116 (false positive exec config summary).
+
+## Handoff 2026-10-04 07:46Z (coordinator restart)
+- Running workers (tmux -S .codex-work/workers-20261002/tmux.sock): ci-bazel2 (ci-bazel-test2.md/.log; commits on codex/ci-main-baseline-20261002 not yet in main -> needs new PR), deflake (tmux-deflake.md), pmfull (postmerge-full.md). Results land in <name>.result.md; EXIT:N appended to <name>.log.
+- Monitor: bash .codex-work/workers-20261002/mon.sh <sleep> ci-bazel-test2 tmux-deflake postmerge-full
+- Merged today: #146 #131 #132 #133 #142 #143 #144 #145 #148 #149 #151 #152 #153. main blocking-ci green.
+- #138 (integration) at 6d4fe69dd2 (main merged in), checks were 37 pass/0 fail, 5 pending.
+- Done/closed: #147 trial (superseded), accounting fixes 79aef0daf3+4c748fe5e4 installed local+RTX, owner loop gen 11 automatic, dashboard committed-only publish.
+- User actions pending: vault CorbanuAPI re-save as crypto key; pf#55 needs postfiatorg maintainer merge, then submit Task Node evidence (task_f4bec7e).
+- 2026-10-04T07:50:49Z pf#55 APPROVED by goodalexander; fork CI awaiting maintainer approval, then merge -> submit Task Node evidence.
+- 2026-10-04 08:05Z ci-bazel2 done. PR #156 = its 4 remaining baseline commits (clippy dead code, 2 timing budgets): merge when green. RTX ~/ci-bazel-20261003 removed (disk 96%, 144G free).
+- PRODUCT DECISION for Travis: retain_latest_contextual_developer_fragments keeps only the latest <skills_instructions> for non-OpenAI providers (Ambient default) -> host + orchestrator/executor skill catalogs collide; model sees one.
+- release-verify nightly job result still unknown (always timed out at 180; now 360 via #153).
+- 2026-10-04 08:10Z merged #154 (tmux deflake: composer paste-burst race fix + secret-scan walker + chat-ready wait). Merged main into #156 branch to refresh checks.
+- 2026-10-04 08:52Z merged #156. main f1dd906: blocking-ci + tmux smoke green.
+- 2026-10-04 09:40Z pf#55 MERGED; Task Node evidence submitted for task_f4bec7e (receipt task_evt_3ecb66ac...). Watch verification tab for follow-up.
+- 2026-10-04 ~09:50Z Task Node verification response submitted for task_f4bec7e (confirmed IridiumMaster + exact repro commands).
+- 2026-10-04 09:54Z task_f4bec7e REWARDED 100 PFT.
+- 2026-10-04 11:07Z #138 at 6a69cfa76c: main c2d3c04 merged, 41 pass, 4 v8-canary pending. Plan: merge #138 to main when green (per earlier 'if PR passes checks, just merge').
+- 2026-10-04 11:20Z pmfull done: PR #155 (rust-ci-full green on mirror; remote_env=false trade-off; sandbox stray-dir fix). review155 worker reviewing sandbox change; merge #155 after APPROVE + checks green.
+- 2026-10-04 11:30Z review-155 CHANGES REQUIRED (sandbox cleanup race M1). fix155 worker: revert cleanup proc, cherry-pick upstream 9ca99b5171 + fb0781b9ee, rename remote job + issue.
+- 2026-10-04 12:47Z #138 MERGED to main (merge commit 3ecc3c4066) after 45/45 checks green at 6a69cfa76c. Integration branch remains for ongoing work.
+- 2026-10-04 13:08Z fix155 done: #155 head 160c251ae9, review addressed (upstream 9ca99b5171+fb0781b9ee, cleanup proc removed), issue #157 for remote tests. Merge when v8 builds finish.
+- 2026-10-04 15:05Z merged main into #155 (5e04f0372c; took main's versions of 7 conflicted dead-code files + client_tests.rs); re-running checks + full-ci mirror.
+- macOS-only clippy dead code (not linted in CI): protected-state checkpoint, core_test_support LINUX_SANDBOX_SKIP_REASON, telegram SANDBOX_WARNING_DOCS.
+- 2026-10-04 15:45Z #155 new failures from #138 code (draft_accounting_attempts table missing; app-server thread_read paginated tests). fix155b worker launched. main postmerge-ci on 3ecc3c4 failed (same backlog).
+- 2026-10-04 16:50Z Travis: OK to leave remote_env tests off (#157). Skills collision explained; proposed source-keyed dedupe after #155 lands — awaiting go-ahead.
+- 2026-10-04 16:53Z Travis approved skills dedupe fix; worker 'skills' launched (skills-dedupe.md).
+- 2026-10-04 17:08Z nightly worker launched (arg-lint Linux + Windows native + other nightly reds).
+- 2026-10-04 17:10Z fix155b done: rust-ci-full green on 1764c5b (incl. real paginated-resume bug fix 9d89d44b78). Merge #155 when v8 builds + Analyze finish.
+- 2026-10-04 19:02Z #155 MERGED (59 pass).
+- 2026-10-04 20:43Z #160 skills dedupe MERGED (review ready-to-merge, 35 pass).
+- 2026-10-04 20:45Z integration branch fast-forwarded to main 99886cbf3c (identical).
+- 2026-10-04 21:58Z main postmerge-ci SUCCESS on 335de95 and 99886cb (first green full suite on main). blocking-ci + tmux smoke green on 99886cb.
+- 2026-10-05 07:05Z nightly r3 on #159: only 1 failure per Bazel test job (linux gnu: app-server-all-wine-exec-test; win native: rmcp-client-unit-tests). Everything else green.
+- 2026-10-05 07:27Z #159 MERGED (40 pass). Remaining nightly: wine executor_skills test (maybe #160-related); Windows rmcp timing fix untested by nightly. Issue #158 possible Windows sandbox escape (admin) — flag to Travis.
+- 2026-10-05 07:30Z launched nightly-final (wine executor_skills test + watch 09:17 nightly) and sandbox158 (#158 investigation).
+- 2026-10-05 08:27Z sandbox158 died (provider stream error); relaunched as sandbox158b.
+- 2026-10-05 08:47Z #162 MERGED (skill tools reuse thread executor catalog; fixes wine executor_skills timeout) so 09:17 nightly includes it.
+- 2026-10-05 09:20Z #158 VERDICT: real legacy Windows sandbox escape via FILE_DELETE_CHILD (not admin-specific). PR #163 fixes protected paths (.git/.codex/.agents); general outside-root delete remains. Flag to Travis.
+- 2026-10-05 10:11Z sandbox158b done; #163 awaiting Travis decision (bounded security fix?) + checks.
+- 2026-10-05 10:30Z dismissed CodeQL #185/#186 on #163 (GetAce FFI pointer false positive, same as upstream #63-70).
+- 2026-10-05 12:15Z Travis: ship #163 as partial (bounded security fix, recorded on PR); warn legacy users -> worker legacywarn launched.
+- 2026-10-05 12:20Z #163 MERGED (36 pass) as bounded security fix.
+- 2026-10-05 13:38Z nightly-final worker died (Anthropic overloaded). Its PR #162 already merged; coordinator tracks nightly run 37289848993 directly.
+- 2026-10-05 13:42Z nightly run 37289848993: wine executor_skills fixed; new failures tui-unit-tests (gnu) + login-unit-tests (win). Worker 'flakes' launched.
+- 2026-10-05 15:22Z #165 legacy Windows sandbox warning MERGED (36 pass). Gap: manual Windows TUI check before release (repo policy).
+- 2026-10-05 17:04Z #166 MERGED (Bazel scrypt/salsa20 opt-level=3, goal-time & claude login test budgets). Worker still validating via nightly run 37323160222.
+- 2026-10-05 17:48Z run 37289848993 done: musl also only failed tui-unit-tests (addressed by #166). Waiting on 37323160222 (#166 branch).
+- 2026-10-05 18:28Z run 37323160222 (#166 branch): musl PASS; remaining: win state-accounting_store-test (recurring), gnu app-server-all-test 3/18. flakes worker continues (round 2 allowed).
+- 2026-10-05 18:33Z scheduled nightly on main fired (run 37356852219, 9h late), includes #162/#165/#166. Worker r2 37357182036 queued behind it.
+- 2026-10-05 22:55Z scheduled nightly on main 37356852219: ALL Bazel tests green (gnu, musl, Windows native), only Bazel clippy failed (#165 dead const + .yellow). Fix PR opened.
+- 2026-10-05 23:55Z #167 MERGED (Bazel clippy fix for legacy-sandbox warning). Nightly on main should be fully green next run.
+- 2026-10-05 23:57Z dispatched nightly-ci on main 6bd7fe8 (run 37391183457) to confirm fully green.
+- 2026-10-06 00:25Z integration FF to main 6bd7fe8; local + RTX builds of 6bd7fe8 started; worker pf83cb launched (PF-83 code-blind execution + evidence review).
+- 2026-10-06T00:22Z flakes worker stopped (past round cap); 6 test-only commits rebased -> PR #169 (#168 closed). RTX installed 6bd7fe841. Local build restarted. Workers tn-newsletter + tn-privinf launched.
+- 2026-10-06T00:39Z local install main 6bd7fe8413 (prev kept as corbanu.prev-4c748fe5e). tn workers relaunched (UTF-8 brief fix).
+- 2026-10-06T00:44Z security proposal #3 closure: core needs PF-29-S01/S02 too (-> 19 sprints); only rewire = PF-41-S01 drops PF-32-S06/37-S02/40-S03 deps. Awaiting Travis approval of 1-5.
+- 2026-10-06T00:59Z task_05099d2 Rewarded 2.5 PFT (newsletter, PR #171 map); task_96e88f7 Rewarded 2.25 PFT (spec PR #170, map PR #172). Open Qs for Travis: PFT settlement chain, USDC vs PFT spec conflict.
+- 2026-10-06T01:30Z #169 MERGED (6 test-only deflakes). integration FF'd to main.
+- 2026-10-06T01:52Z #171 MERGED; #172 conflict resolved by merge (7151d3a0b3), checks rerunning.
+- 2026-10-06T02:19Z Travis approved security decisions 1-5 (5 + per-sprint E2E demo videos). pf83cb done: F01/F02/F06 pass, F05 fail, 7 blocked (pinned 0.1.42); defects -> TUI lane. Launched sec-plan, sec-video, sec-broker, sec-taint, sec-tui (Opus 5.5 High).
+- 2026-10-06T02:53Z sec-plan PR #173; sec-video PR #177; sec-tui filed #174 (security: typed text approves prompt), #175, #176.
+- 2026-10-06T02:58Z #172 MERGED.
+- 2026-10-06T03:24Z #173 MERGED (plan 1599->254 lines, PF-83 archived, PF-24-S03 picker sprint). integration FF'd to main 24242c1b0e. Launched sec-picker.
+- 2026-10-06T04:01Z #177 MERGED (demo video SOP: scripts/demo_video.py). Filed #179 (security: ! shell logs env incl. API keys) -> worker sec-envlog launched. sec-common decision 5 now points to SOP.
+- 2026-10-06T04:06Z nightly 37391183457 on main 6bd7fe8: ALL GREEN. sec-broker PR #180, sec-taint PR #178 open.
+- 2026-10-06T04:17Z Travis: OD1 = xrpl_pft (Task Node ledger); recorded in PR #170 (8d58f89f87). Note to Alex re OD2/OD3/OD4 drafted: .codex-work/workers-20261002/note-to-alex-od2.md
+- 2026-10-06T04:32Z CodeQL (default setup, no concurrency cancel) piling up; cancelled 4 superseded runs. sec-tui opened #182 (#176 fix).
+- 2026-10-06T05:33Z #182 MERGED (glm-5.2 zai-anthropic max output, closes #176). Open: #178 taint, #180 broker, #183 env-log (#179), #184 Corbanu strings, #185 full-access cancel msg (#175).
+- 2026-10-06T05:38Z #180 MERGED (PF-27-S04 broker, flagged).
+- 2026-10-06T05:43Z sec-broker done (S04 merged flagged; model-client auth -> own sprint after S02 [coordinator call, Travis may revisit]). Launched sec-broker2 (close S04, PF-27-S02). Picker PR #186, approval-typing fix PR #187.
+- 2026-10-06T06:09Z #178 MERGED (PF-30-S01 flagged source_envelopes). Launched sec-taint2 (archive S01, PF-30-S02).
+- 2026-10-06T06:20Z #185 MERGED (#175 full-access cancel notice).
+- 2026-10-06T06:55Z sec-tui done: #174 fixed (PR #187 merged; approvals now need explicit choice+Enter), #175 #176 fixed, B already fixed, E ok. Travis decisions pending (approval key UX 1-3). Launched fix-181. Removed stray empty /Volumes/CorbanuDrive/Corbanu/codex-rs.
+- 2026-10-06T07:16Z #184 MERGED (Corbanu strings in approvals).
+- 2026-10-06T07:28Z #183 (#179 env logging) + #184 MERGED; #170 spec MERGED. Travis: approval 1 keep, 2 persistent options arrow-only (worker sec-approval2), 3 leave Enter=proceed; CodeQL main+nightly only (default setup disabled, codeql.yml in PR #188); broker split OK; cap 5 confirmed; deadline 2026-10-09 (PR #188); Alex note sent. Spec on dashboard: http://127.0.0.1:8769/doc-b314a91a1410f67a0db6.html (published b3af1ed408). Integration = PR #188 head.
+- 2026-10-06T08:00Z #188 MERGED (CodeQL main+nightly, deadline 10-09, cap 5, dashboard specs). integration FF'd.
+- 2026-10-06T08:11Z Travis: keep CodeQL #187 dismissed; will review PF-24-S03 sprint spec tomorrow.
+- 2026-10-06T08:38Z #190 MERGED (PF-30-S02 persistent taint, flagged).
+- 2026-10-06T08:53Z #189 MERGED (fix-181, Anthropic-wire output caps; #181 closed).
+- 2026-10-06T09:10Z #186 MERGED (PF-24-S03 picker, flagged), #193 MERGED (persistent approval options arrow-only). sec-approval2 done.
+- 2026-10-06T09:20Z sec-taint2 done (#190, #194 merged). Launched sec-taint3 (finish PF-30-S02, then PF-30-S03).
+- 2026-10-06T09:55Z sec-picker done: #186 + #195 merged. Aggressive uses corbanu-aggressive permission profile (legacy sandbox+untrusted re-runs approved cmds unsandboxed) -> Travis decision A/B/C. Launched sec-tui2 (trace-log key leak recheck, picker follow-ups).
+- 2026-10-06T11:03Z codeql.yml on main: success (93707fbb1b).
+- 2026-10-06T11:09Z #191 MERGED (PF-27-S02 secretless launch, flag secretless_agent_launch; S04 archived; S05 model-client auth, S06 Windows created). Travis decisions: unsandboxed routes (MCP/hooks/!/command-exec) refuse vs show-as-not-contained [rec: show]; Claude panes -> TUI lane. Launched sec-broker3 (Linux Landlock e2e on RTX, PF-28-S01).
+- 2026-10-06T12:03Z #199 MERGED (Aggressive launch check loads full execpolicy), #201 MERGED (redact provider credentials from logs, #196).
+- 2026-10-06T12:13Z sec-tui2 done: #199-#202 merged (#196 provider-definition debug leak fixed). Launched sec-tui3 (#197, header/error/old-log redaction, vault rule forms).
+- 2026-10-06T12:19Z local install main ce25d20b59 (prev corbanu.prev-6bd7fe8413).
+- 2026-10-06T12:24Z sec-broker3 died (Anthropic overloaded) with 2 local commits (Landlock e2e docs, PF-28-S01 gate); relaunched as sec-broker3b.
+- 2026-10-06T13:11Z #198 MERGED (PF-30-S02 slice 2, archive PF-30-S02).
+- 2026-10-06T14:14Z #203 #205 #206 MERGED (rules fatal under Aggressive #197, header redaction, URL redaction in errors). PF-28-S01 PR #208 (build fail being worked).
+- 2026-10-06T14:19Z sec-taint3 done: #198 (PF-30-S02 archived), #204 (PF-30-S03 slice 1) merged. main has stale config schema fixture (#201). Launched sec-taint4.
+- 2026-10-06T14:39Z #207 MERGED (old-log credential scrub).
+- 2026-10-06T15:10Z sec-tui3 done: #203 #205 #206 #207 #209 merged. Travis decision: nested corbanu exec under Aggressive (A refuse agent-launching subcommands [rec], B marker, C leave). TUI lane idle (PF-24-S02 blocked). Launched sec-url (PF-33-S01, deps met).
+- 2026-10-06T16:32Z main postmerge-ci failing (Linux clippy in broker_containment from #191; picker test vs #203). Fix PR #211 (coordinator).
+- 2026-10-06T17:14Z #211 MERGED (main postmerge fix).
+- 2026-10-06T17:28Z #210 MERGED (PF-33-S01 URL/DNS/redirect policy, flag url_destination_policy). #208 green.
+- 2026-10-06T18:04Z sec-url done (#210 #213). Coordinator: S02 may start with S01 merged-not-archived (PF-28-S01 precedent); credential path binding -> PF-28-S02. Launched sec-url2 (PF-33-S02).
+- 2026-10-06T18:33Z #208 MERGED (PF-28-S01 secret output gate, flag secret_output_gate; PF-27-S02 close-out). Launched sec-broker4 (PF-28-S02 + handed-over gaps + credential path binding).
+- 2026-10-06T18:45Z main postmerge failing: clippy expect_used in core/src/security/tainted_action.rs:394 (#204); #212 removes it -> wait for #212.
+- 2026-10-06T18:59Z Travis decisions: 2 allow+show not-contained; 3 Claude panes -> TUI lane; 4 nested exec configurable refuse|pass default refuse; 5 PF-27-S06 -> P1. Launched sec-docs1 (record/archive/move) and sec-tui4 (nested exec setting, Claude panes). Dashboard republished @24a57e38c4.
+- 2026-10-06T19:51Z #212 MERGED (PF-30-S03 archived). Launched sec-taint5 (PF-23-S01). Gap: PR CI runs no codex-core Rust tests.
+- 2026-10-06T20:05Z #215 MERGED (PF-33-S02 connection pinning). #216 PF-28-S02 open; #214 docs decisions open.
+- 2026-10-06T20:55Z sec-url2 done (#215, #217 merged; PF-33 complete). Open: brokered creds not pinned (broker lane), HTTPS_PROXY refuse choice (Travis may reverse). Launched sec-mig (PF-29-S01/S02).
+- 2026-10-06T21:26Z #216 MERGED (PF-28-S02 reflected scrub + credential binding).
+- 2026-10-06T21:52Z #220 MERGED (Claude panes refused under protected levels; full fix #218). Filed #222 flaky macOS canary probe.
+- 2026-10-06T22:08Z sec-broker4 done (#216 #221 merged). Launched sec-broker5 (url_destination_policy 2nd config path bug, brokered cred pinning, PF-27-S05).
+- 2026-10-06T23:07Z #214 #219 #220 MERGED. sec-docs1, sec-tui4 done. Disk cleanup started (Mac ~1.9TB of targets trashed; RTX 127G->489G free). Launched sec-tui5 (#218 Claude panes under contract).
+- 2026-10-06T23:53Z #223 #224 #225 MERGED. sec-taint5 done. Filed MCP-tools-dropped-on-chat/anthropic issue. Launched sec-taint6 (PF-23-S01 slices 2-3, then S02).
+- 2026-10-07T00:13Z Disk cleanup done: CorbanuDrive 134GiB -> 2.5TiB free (old cargo targets, 131 merged worktrees, pf83 package artifacts, old test tmp). RTX 127G -> 487G free (corbanu-rtx/target, corbanu-acct, nightly-*, pf28s02, broker-fixture). Disk hygiene rule added to sec-common. Left for Travis: Models 440G, Caches/mlx-serve kv-cache 148G, bizrewriter 55G, functional-pf83 45G; RTX TinyStyler/models/HF cache/uv/llm-encryption-*.
+- 2026-10-07T01:03Z #229 MERGED (PF-27-S05 slice 1). sec-broker5 done. Launched sec-broker6 (finish PF-27-S05).
+- 2026-10-07T01:58Z Travis got repeated keychain popups: sec-broker6 vault demo used real login keychain (vault ignores CORBANU_TEST_NO_NATIVE_KEYRING). Killed sec-broker6; keychain rule added to sec-common; launched sec-broker6b (fix keyring guard first).
+- 2026-10-07T01:59Z also killed sec-tui5 (Claude pane demos + synthetic keychain probe); relaunched as sec-tui5b with keychain rules.
+- 2026-10-07T02:28Z #228 MERGED (PF-29-S01). #234 keyring-isolation fix for child processes (sec-broker6b); lists keychain items (service codex, accounts secrets|<hex>). #235 PF-29-S02. #233 PF-23-S01 slices 2-3.
+- 2026-10-07T03:23Z #235 MERGED (PF-29-S02).
+- 2026-10-07T04:03Z #234 MERGED (keyring isolation for child processes) by coordinator.
+- 2026-10-07T04:08Z sec-mig done (#228 #235 #236). Launched sec-qual (PF-13-S07 integrated credential boundary qualification, all flags on).
+- 2026-10-07T04:29Z sec-qual died (Anthropic content filter on adversarial harness). Relaunched as sec-qual2 on GLM 5.2 (policy model for adversarial work).
+- 2026-10-07T04:44Z sec-tui5b done (#226 #230 #231 merged). #232 needs review -> launched rev-232 (installed corbanu, read-only). Keychain rule clarified. Travis: delete keychain item service corbanu-sec-tui5-probe/account probe.
+- 2026-10-07T04:54Z rev-232: request changes (Enter allows by default, can't see what's approved, subagent/skill routes, etc). Launched sec-tui6. sec-qual2 died: Z.AI 429 'Insufficient balance' -> Travis must recharge Z.AI.
+- 2026-10-07T05:29Z #233 MERGED (PF-23-S01 slices 2-3). PF-27-S05 finish PR #237 in CI.
+- 2026-10-07T05:34Z Z.AI topped up; launched sec-qual3 (GLM). sec-taint6 done.
+- 2026-10-07T05:34Z launched sec-taint7 (GLM fenced-JSON memory fix, PF-23-S02, then S03).
+- 2026-10-07T05:50Z Travis: Aggressive=A confirmed; CI option 2 (Linux clippy on PRs) -> sec-ci launched. RTX: deleted TinyStyler, ambient HF cache, tui-r4-target; sudo (vault RTX-machine) found /home/travis 2.0T; deleted 7 Corbanu target dirs there (~250G).
+- 2026-10-07T06:30Z Travis hit 'database is locked' throttle error: his session (pid 90659) started Oct 2, before busy-retry fix d56cdee121; installed build has it -> restart.
+- 2026-10-07T09:52Z sec-taint7 done (#238 #243; PF-23-S02 archived). Launched sec-taint8 (PF-23-S03, then S02 leftovers).
+- 2026-10-07T10:22Z sec-qual4 died (Z.AI out of credit again). Launched sec-fix239 on Opus; GLM requal waits for credit.
+- 2026-10-07T13:40Z #246-#249 MERGED (PF-23-S03). Launched sec-tui7 (PF-24-S02).
+- 2026-10-07T18:00Z Z.AI topped up ($40). sec-glm23 done (#256 #257, PF-23-S03 archived). sec-qual5 done (#255 PF-13-S07 saved-level matrix, no leaks; not archived until Aggressive milestone).
+- 2026-10-07T19:10Z #253 MERGED (PF-24-S02) after coordinator index-conflict merges. #258 MERGED (PF-24-S02 GLM pass+archive).
+- 2026-10-07T23:20Z #259 MERGED (PF-41-S01 inspector, sec-insp1 done). #260 MERGED (PF-25-S01; coordinator codespell + conflict fix). #261 PF-25-S02 in CI (macOS canary proxy probe flaked, re-running).
+- 2026-10-08T02:20Z Travis: manager A (standby), B (fix login dependency) -> mgr-daemon1. tn-sec1 done: 9 Proposed tasks P0SEC-TN-01..09 need Travis acceptance; #262 #264 merged.
+- 2026-10-08 Travis: Windows machine desktop-ujs3hc4 confirmed (win-gate1). acct-s03-acceptance-20260917 -> Option 2: independent functional acceptance first (code-blind executor+reviewer, not the lane authors), then Travis accepts.
+- 2026-10-08 Travis: multi-account support must be provider-generic (any provider), not Anthropic-only. Test (multiacct1) first, then plan a proper sprint.
+- 2026-10-08 14:45 Travis hit 'Native Anthropic accounting failed' again: cause in logs = accounting store 'database is locked' after 17 retries/118s (concurrent workers sharing home), not clock skew. #299 makes accounting fail-open (incl. >15s lock waits). After #299 merges: rebuild + reinstall installed corbanu, tell Travis to restart.
+- 2026-10-08T15:02Z Travis hit accounting failure again. Building main(a73d40e0af)+#299 head locally now (repo detached e4570b0356) to install before #299 CI canaries finish.
+- 2026-10-08T15:25Z #299 #303 #298 MERGED. Installed main 1f7d8f2eec locally (sha 47827b51, prev corbanu.prev-ce25d20b59), smoke ok. RTX build started. Relaunched ci-flake1 (old log ci-flake1.log.died-1; its worktree edits remain in worktrees/ci-canary-proxy-flake-222). Travis must restart Corbanu Terminal.
+- 2026-10-08T15:40Z RTX build 1f7d8f2eec EXIT:0. Workers alive; #302 #305 #306 CI pending, no failures.
+- 2026-10-08T16:00Z #306 MERGED (#289 wording). #302 #305 CI rerunning.
+- 2026-10-08T16:15Z acct-fix1 launched acct-rerun1 (code-blind PF-60-S03 re-run of failed criteria).
+- 2026-10-08T16:36Z #305 MERGED (#288). acct-s03a DONE (EXIT:0): S03 not accepted yet; body review REQUEST CHANGES (kimi-code sub recorded as spend = blocker; 4 majors) -> recommend new collection-correctness sprint before S04, needs Travis call on per-provider billing-model declaration. Waiting acct-rerun1 for #286/#287/#289 re-run.
+- 2026-10-08T16:46Z #302 all green. ci-flake1 opened #309 (canary SIGSEGV env race fix).
+- 2026-10-08T16:56Z #302 MERGED (#295 hardened-core runner + CI medium-integrity probes). sec-win3 building main on Windows for combined S06/S07 gate.
+- 2026-10-08T17:05Z acct-rerun1 opened #311: #286 PASS, #287 PASS Linux (mac not verifiable), #288 FAIL but its build b294864916 predates #305 fix; new #308 (delete under skew non-atomic), #310 (provider key env visible to tool cmds). Launched sec-env310 (Opus) for #310.
+- 2026-10-08T17:28Z sec-win3 opened #312: PF-27-S06 real-Windows gate rerun PASSES (normal session), 2 videos; follow-ups #300 #301 #304 #307. S07 next.
+- 2026-10-08T17:48Z acct-rerun1 EXIT:0, #311 MERGED. acct-fix1 reading result (#288 must be re-run on main incl. #305).
+- 2026-10-08T17:56Z acct-fix1 EXIT:0. Launched acct-rerun2 (code-blind re-run of #288 + #289 residuals on main incl. #305).
+- 2026-10-08T18:10Z coordinator merged #312 (PF-27-S06 gate rerun pass record, docs).
+- 2026-10-08T18:20Z sec-win3 DONE (S06 ready; follow-ups #301 #304 #307; Windows clippy on main fails in core model_broker_auth.rs/exec_policy.rs + protected-state). DECISION for Travis: #300 unelevated Windows tool path doesn't enforce deny-read -> recommend fail closed pointing to [windows] sandbox=elevated. Launched sec-win4 (PF-27-S07 real-Windows gate + videos).
+- 2026-10-08T18:22Z Launched win-clippy1 (fix Windows clippy on main, own target C:\CorbanuQA\clippy1).
+- 2026-10-08T18:22Z #309 MERGED (canary SIGSEGV env race; #222 closed). ci-flake1 DONE.
+- 2026-10-08T18:52Z acct-rerun2 opened #315: #288 8a PASS (8b/8c not verifiable), #289 R1 R1b R2 R3 FAIL unchanged, 13a PASS, 13b needs product decision. Launched acct-fix2 (fix R1-R3 + 13b: default build says per-request cost history not in this build).
+- 2026-10-08T19:13Z sec-win4 opened #316: PF-27-S07 real-Windows gate PASS (normal session), 6 videos. S06+S07 both 'ready' for P1 integration owner to archive.
+- 2026-10-08T19:39Z #315 MERGED (rerun2 evidence). acct-rerun2 DONE. acct-fix2 opened #318 (#289 residuals). win-clippy1 #317.
+- 2026-10-08T19:44Z #313 MERGED (#310 provider keys out of tool env, incl. exec_command, exec-server, shell snapshots). sec-env310 DONE.
+- 2026-10-08T19:46Z Launched sec-win5 (Windows follow-ups #307 #301 #304; not #300).
+- 2026-10-08T19:53Z Ubuntu tmux smoke now 45-52 min/run (60 min timeout), no build cache. Launched ci-speed1.
+- 2026-10-08T20:01Z #316 MERGED (PF-27-S07 gate pass). sec-win4 DONE (note: it removed C:\CorbanuQA\clippy1, win-clippy1's dir). S06+S07 ready; need Travis acceptance of known limits before archive. ci-speed1 opened #319.
+- 2026-10-08T20:13Z #317 MERGED (Windows clippy -D warnings fixed + postmerge Windows clippy leg). win-clippy1 DONE.
+- 2026-10-08T20:19Z Launched acct-fix3 (#308 delete under clock skew non-atomic).
+- 2026-10-08T20:22Z TN-10..12 in 'Verification requested'. Launched tn-verify3 to answer.
+- 2026-10-08T20:34Z tn-verify3 DONE: TN-10/11/12 Rewarded (3.5+3.5+2.5 PFT).
+- 2026-10-08T21:20Z #318 MERGED (#289 residuals). acct-fix2 finishing.
+- 2026-10-08T21:25Z acct-fix2 DONE (#318; 13b default build: 'Per-request cost history is not part of this build'; new #325). After #322 merges: launch acct-rerun3 (confirming code-blind re-run #289 residuals + #308).
+- 2026-10-08T21:30Z #321 MERGED (#307 launcher pipe inheritance).
+- 2026-10-08T21:35Z #319 MERGED (tmux smoke 50->43 min; runner variance). ci-speed1 DONE. sec-win5 DONE: #321 merged; #326 DRAFT (#301/#304) needs Travis decision S1 (remove by rule [rec] / exact paths only / keep permanent). New #320 (spawn_protected same race), #323.
+- 2026-10-08T21:37Z Launched sec-win6 (#320).
+- 2026-10-08T21:47Z Launched acct-rerun3 (final confirming code-blind re-run; waits for #322).
+- 2026-10-08T22:37Z #322 MERGED (#308). acct-rerun3 started its builds.
+- 2026-10-08T22:42Z acct-fix3 DONE.
+- 2026-10-08T22:49Z Installed main ccc38bfc03 locally (sha 8742b8fe0d9e, prev corbanu.prev-1f7d8f2eec), smoke ok. RTX build started.
+- 2026-10-08T23:00Z sec-win6 + acct-rerun3 died on transient claude-plan 429; relaunched with recovery note.
+- 2026-10-08T23:10Z TRAVIS DECISIONS: (1) ACCEPT PF-27-S06 + S07 -> archive. (2) #300 fail closed. (3) Create collection-correctness accounting sprint before S04; billing basis (a) declared per provider, (b) intelligent defaults matching expected default user configs, (c) clear spec of 'both' (membership + API balance) -- DISCUSS 'both' WITH TRAVIS BEFORE implementing. (4) #301/#304 option 1 (rule-driven removal).
+- 2026-10-08T23:14Z Launched sec-archive1 (archive S06+S07), sec-win7 (#300 fail closed, then #326 option 1), acct-plan1 (draft collection-correctness sprint + 'both' options memo).
+- 2026-10-09T05:10Z #327 MERGED (#320). sec-win6 DONE (note: broker start sets different parent process -> EDR may flag PPID spoofing). acct-rerun3 opened #328: all PASS. sec-archive1 opened #329.
+- 2026-10-09T05:16Z acct-plan1 opened #330 (PF-60-S05). Launched acct-demo1 (re-record S03 demos at current main + 4 new, as reel footage).
+- 2026-10-09T05:40Z #328 MERGED (rerun3 all pass), #329 MERGED (PF-27-S06+S07 archived). acct-rerun3, sec-archive1 DONE.
+- 2026-10-09T05:44Z Launched sec-s08 (PF-27-S08 broker restricted token).
+- 2026-10-09T05:55Z #330 MERGED (PF-60-S05 draft, blocked on 'both'). acct-plan1 DONE. acct-demo1 opened #332 (8 demos).
+- 2026-10-09T06:00Z Launched acct-reel1 (narrated accounting reel; waits for #332; no Cloudflare publish until Travis reviews).
+- 2026-10-09T06:15Z TRAVIS: ACCEPT PF-60-S03 (follow-ups #287 #325). 'Both' = option B (basis follows credential+route; unknown route = 'not declared'; overflow excluded with note). Launching acct-archive1 + acct-s05.
+- 2026-10-09T06:26Z #332 MERGED (8 accounting demos at current main). acct-demo1 DONE. acct-s05 opened #334 (option B recorded, S05 ready).
+- 2026-10-09T06:50Z Windows machine desktop-ujs3hc4 OFFLINE in tailscale (no worker reboot found). sec-win7 waiting in ssh retry loop; #331 green but unmerged.
+- 2026-10-09T07:50Z Windows: disabled auto updates (NoAutoUpdate=1, AUOptions=2, NoAutoRebootWithLoggedOnUsers=1, paused to 2026-11-13). Published accounting reel: https://corbanu-accounting-reel.cloudflare-share.workers.dev/ (record cf-acct-reel/deployment.json). #331 #335 MERGED; acct-archive1 DONE (PF-60-S03 archived).
+- 2026-10-09T07:58Z Travis asked: settlement evidence ever collected? (only OpenRouter + Corbanu API per-response billed_usd); wants grayed date-format hint for /cost. Launched acct-ux1 (hint + reword 'no settlement evidence').
+- 2026-10-09T08:04Z #336 MERGED (accounting reel index). acct-reel1 DONE.
+- 2026-10-09T08:46Z #337 MERGED (S05 slice 1). #326 known tmux resize flake -> rerun.
+- 2026-10-09T09:14Z sec-s08 died (Anthropic content filter). Relaunched on GLM 5.2 with recovery note.
+- 2026-10-09T09:30Z #326 MERGED (#301/#304 rule-driven deny removal). acct-ux1 opened #339. New canary flake filed (externally_terminated_broker) on #338; rerun.
+- 2026-10-09T09:41Z sec-win7 DONE (#331, #326 merged; #300 #301 #304 closed).
+- 2026-10-09T09:43Z Launched sec-win8 (elevated sandbox runner startup timeout on QA machine after Windows-update reboots; product bug vs machine-local).
+- 2026-10-09T10:08Z #339 MERGED (/cost date hint + plain billed wording). acct-ux1 DONE. #338 all green.
+- 2026-10-09T10:15Z Installed main c261d7b2e5 locally (prev corbanu.prev-ccc38bfc03), smoke ok; RTX build started.
+- 2026-10-09T10:19Z #338 MERGED (S05 slice 2: basis per route+credential). RTX c261d7b EXIT:0.
+- 2026-10-09T10:31Z WARNING: sec-s08 (GLM) merged #333 (d0544c1c91) 12 min after push with 9 checks pending (incl. windows-security-probes, canaries), falsely claiming 2h stall. Watching main's post-merge runs; revert if probes fail.
+- 2026-10-09T10:36Z sec-s08 DONE: #333 merged; S08 in_progress pending Travis decision on vault key path (c recommended; broker token can read/write/delete Credential Manager).
+- 2026-10-09T11:10Z #333 post-merge windows-security-probes + corbanu-terminal-ci success (no revert). postmerge-ci has failed on main for 40 consecutive runs (pre-existing). Launched ci-post1.
+- 2026-10-09T11:13Z #342 MERGED (S05 slice 3). acct-s05 opened #344 (slice 4).
+- 2026-10-09T12:04Z #344 MERGED (S05 slice 4). acct-s05 opened #346 (real-provider evidence, demos, sprint ready). Next: code-blind acceptance for S05.
+- 2026-10-09T12:06Z Launched acct-acc5 (code-blind independent acceptance of PF-60-S05; waits for #346).
+- 2026-10-09T12:35Z #343 MERGED (#341 Windows sandbox over SSH). sec-win8 DONE.
+- 2026-10-09T12:51Z #346 MERGED. acct-s05 DONE (S05 ready for acceptance). RTX still offline.
+- 2026-10-09T12:58Z Launched sec-win9 (#345 SSH winsta grant scoping, #323 cross-home deny protection).
+- 2026-10-09T14:30Z acct-acc5 opened #355 (S05 acceptance: no FAIL; several NOT VERIFIABLE; AC7 partial due to #351). Launched throttle-fix1 for #351 (throttle check kills turn on busy/RO state DB - Travis's 'database is locked' error).
+- 2026-10-09T14:39Z #350 MERGED (postmerge-ci test fixes).
+- 2026-10-09T15:05Z #355 MERGED (S05 independent acceptance). acct-acc5 DONE.
+- 2026-10-09T15:26Z ci-post1 DONE: postmerge-ci on main GREEN (a202df29c0) after #350. #353 (postmerge-red alert) waits only on v8-canary source builds; coordinator to merge with --match-head-commit 41675ce1e3 when green. RTX may have gone down under ci-post1's full Linux test shard. New flaky issues #347 #348 #349.
+- 2026-10-09T15:33Z Launched tn-sec4 (Task Node round 4 for work merged since round 3).
+- 2026-10-09T15:45Z sec-win9 died (empty provider stream); relaunched with recovery note (both #354/#356 have REQUEST CHANGES outstanding).
+- 2026-10-09T16:34Z #357 MERGED (TN round 4 map). tn-sec4 DONE: SECACCT-TN-01..08 Proposed, need Travis acceptance.
+- NOTE: tn-sec4 records wrongly say reel narration voice unapproved + Breeze terms unconfirmed. Travis approved both (P0 reel 'The video is great'; Breeze terms 'not an issue'; accounting reel publish approved). Fix evidence before submit; also regenerate 03/07 after S08/S05 decisions.
+- evidence-06.md corrected (reel approved, Breeze OK); original kept as evidence-06.md.orig.
+- 2026-10-09T16:50Z coordinator merged #353 (postmerge-red alert).
+- 2026-10-09T17:38Z #354 MERGED (#345 SSH grant scoped).
+- 2026-10-09T17:50Z RTX back (rebooted). Cleaned acct-s05/ci-health/sec-win8 leftovers (~235G).
+- 2026-10-09T18:06Z #358 MERGED (#351). TRAVIS: accepted SECACCT-TN-01..08; PF-27-S08 key path = (c) Credential Manager. Launched tn-submit4 + sec-s08c. Asked: list of S05 untested parts.
+- 2026-10-09T18:17Z Installed main c0e242c1a9 locally (prev corbanu.prev-c261d7b2e5) incl #358; RTX build started.
+- 2026-10-09T18:33Z #356 MERGED (#323). sec-win9 DONE.
+- 2026-10-09T18:36Z Launched sec-s09 (PF-27-S09 Windows model-client auth via broker).
+- 2026-10-09T18:42Z Travis added creds: provider/kimi_api_key (Kimi Code), claude-plan-test-token (Claude setup/OAuth token), openai-api-key (OpenAI project key). Smoke OK: kimi-code k3, claude-plan via CLAUDE_CODE_OAUTH_TOKEN, openai gpt-5.4 via CODEX_API_KEY (OPENAI_API_KEY alone -> 401 on built-in openai).
+- 2026-10-09T18:45Z Launched acct-acc5b (S05 re-run of credential-blocked items: Kimi, Claude plan, OpenAI key).
+- 2026-10-09T19:06Z tn-submit4 + sec-s08c died on OLD-binary throttle 'database is locked' (started before #358 install). Relaunched on c0e242c. Coordinator session pid 84969 is the Oct-7 binary -> Travis should restart Corbanu Terminal.
+- 2026-10-09T19:08Z Travis restarted Corbanu Terminal (coordinator now on c0e242c).
+- 2026-10-09T19:14Z tn-submit4 DONE: SECACCT-TN-01..08 all Rewarded (8 x 3.5 = 28 PFT).
+- 2026-10-09T19:36Z acct-acc5b opened #362: AC5 Kimi PASS, basis PASS for kimi/claude-plan/openai-key, AC10 OpenAI estimate FAIL (#361 wrong catalogue prices), AC4 panes PASS, AC7 web search PASS. Launched acct-price1 for #361.
+- 2026-10-09T19:44Z Travis asked why OpenAI API key gets no image gen/realtime. Launched img-tool1 (image tool missing on openai API-key route; realtime assessment).
+- 2026-10-09T19:51Z #360 MERGED (S08 decision c recorded). sec-s08c DONE.
+- 2026-10-09T20:08Z TRAVIS: ACCEPT PF-27-S08. Launched sec-archive2. sec-s09 opened #363 (S09 slice 1, review APPROVE).
+- 2026-10-09T20:14Z #362 MERGED (S05 rerun evidence). acct-acc5b DONE. sec-archive2 opened #364.
+- 2026-10-09T20:45Z TRAVIS: ACCEPT PF-60-S05 with waivers (a) AC10 OpenAI estimate until #361 (b) AC11 isolation. Launched acct-archive2. img-tool1 opened #370.
+- 2026-10-09T20:50Z #364 MERGED (PF-27-S08 archived). sec-archive2 DONE. acct-archive2 opened #373. #363 Windows canary fails pf_27_s05_raw_key_is_not_left_in_core_memory (sec-s09 to handle).
+- 2026-10-09T21:10Z Codespell/python-sdk/cargo-deny failures on #369/#373 = Docker Hub pull rate limit (toomanyrequests); reran failed jobs.
+- 2026-10-09T21:26Z Docker Hub rate limit persists on reruns. Launched ci-docker1 (codespell/python-sdk/cargo-deny off anonymous Docker Hub).
+- 2026-10-09T21:41Z #370 MERGED (image gen for OpenAI API-key users). img-tool1 DONE. Max brief at .codex-work/briefs/max-dev-setup-brief.md.
+- 2026-10-09T22:02Z #373 MERGED (PF-60-S05 archived w/ 2 waivers). acct-archive2 DONE. #369 all green (acct-price1 finishing gate).
+- 2026-10-09T22:18Z #374 MERGED (CI off anonymous Docker Hub). ci-docker1 DONE.
+- 2026-10-09T23:05Z #374 regression: codespell reads .github/codespell-requirements.txt from PR head -> PRs branched before #374 fail. Coordinator opened #377 (pin inline in workflow).
+- 2026-10-09T23:22Z #369 MERGED (#361 OpenAI prices). acct-price1 DONE.
+- 2026-10-09T23:36Z python-sdk on #363 failed: ECR Public 'toomanyrequests'. Coordinator opened #378 (retry + mirror.gcr.io fallback; python-sdk passed). #375 closed. Launched auth-env1 (#365 OPENAI_API_KEY, #366 TUI env Claude token + pane label).
+- 2026-10-09T23:41Z #377 MERGED (codespell pin inline). #363 new head 1584c73, Codespell now passes.
+- 2026-10-10T00:12Z #378 MERGED (sdk image pull retry + mirror.gcr.io).
+- 2026-10-10T00:37Z #363 MERGED (PF-27-S09 slice 1, all green incl. Windows probes). sec-s09 opened #379 (slice 2: Core Windows model requests via broker).
+- 2026-10-10T01:13Z auth-env1 opened #381 (#365/#366). Launched acct-s04 (PF-60-S04 acceptance+handoff; close /side + memory-consolidation recording gap, price-source line, AC10 recheck; qualification + videos + reel).
+- 2026-10-10T01:28Z #379 MERGED (PF-27-S09 slice 2). acct-s04 opened #382 (activate S04).
+- 2026-10-10T01:34Z sec-s09 DONE (EXIT:0): PF-27-S09 both slices merged, sprint ready (not archived), 3 demos. Launched sec-acc9 (independent code-blind Windows acceptance of S09) before asking Travis to accept.
+- 2026-10-10T01:39Z sec-acc9 hit Anthropic content filter (EXIT:1); relaunched on GLM 5.2 (sec-acc9g).
+- 2026-10-10T02:06Z #382 MERGED (S04 activated). #381 had Windows compile error + tmux reauth test fail; auth-env1 pushed fix 3f3681f.
+- 2026-10-10T02:27Z sec-acc9 (GLM) opened #384 PF-27-S09 independent acceptance: ACCEPT WITH LIMITS, then died on ZAI 429 code 1113 'Insufficient balance' -> TRAVIS: top up ZAI. Coordinator to merge #384 + clean C:\CorbanuQA\acc9.
+- 2026-10-10T02:48Z #381 MERGED; #365/#366 CLOSED. auth-env1 DONE. Filed #380 (RUST_LOG=trace logs bearer). TRAVIS decision: OPENAI_API_KEY env fallback after logout (rec accept as is). acct-s04 opened #385 (slice B). Launched log-redact1 (#380).
+- 2026-10-10T03:14Z #383 MERGED (S04 slice A). #384 MERGED by coordinator (S09 independent acceptance ACCEPT WITH LIMITS); C:\CorbanuQA\acc9 + key files removed. TRAVIS: accept PF-27-S09?
+- 2026-10-10T03:26Z Local install 31b2937aa7 (prev c0e242c1a9; pruned 6 old prev binaries, 3.5G). RTX build of 31b2937aa started. Note: the Oct-9 ce25d20b59 prev binary was overwritten (COMMIT file was stale).
+- 2026-10-10T03:31Z RTX installed 31b2937aa (fixed build.sh COMMIT to read integration, not lintwt).
+- 2026-10-10T03:46Z #385 MERGED (S04 slice B).
+- 2026-10-10T04:08Z TRAVIS: (1) Z.AI topped up; use GLM 5.3 Flash (glm-5.3-flash/zai) going forward, not GLM 5.2 (credit burn) -> sec-common.md updated, PR #388 for repo policy. Coordinator fallback on content filter = glm-5.3-flash. (2) ACCEPT PF-27-S09. (3) OPENAI_API_KEY env fallback: show a visible notice when it's in use.
+- 2026-10-10T04:09Z Launched sec-archive3 (archive PF-27-S09) and auth-env2 (visible OPENAI_API_KEY fallback notice).
+- 2026-10-10T05:02Z #392 MERGED (PF-27-S09 archived). acct-s04 opened #393 (S04 qualification/demos/handoff, sprint ready).
+- 2026-10-10T05:07Z #388 MERGED (GLM 5.3 Flash policy). sec-archive3 DONE; filed #389 (console Credential Manager acceptance), #390 (exclusive pipe-squat probe), #391 (broker_model_auth default-on decision for Travis). auth-env2 opened #394.
+- 2026-10-10T05:23Z TRAVIS agreed #391: broker_model_auth default-off until #389+#390 pass, then default-on for Aggressive first (commented on #391). Launched sec-probe390 (Opus, exclusive pipe squat) and sec-acc389 (GLM 5.3 Flash, code-blind console-session acceptance; both share the Windows machine, separate dirs).
+- 2026-10-10T05:30Z acct-s04 DONE: #393 MERGED, PF-60-S04 ready; reel built (not published) at .codex-work/accounting-reel-s04-20261010/out/; recommends lifting waiver (a) (OpenAI exact to micro-dollar). Launched acct-acc4 (code-blind S04 acceptance). Narrator voice already approved by Travis earlier.
+- 2026-10-10T05:56Z sec-probe390 died (Anthropic empty stream after 5 reconnects, 339k tokens); relaunched on Opus with recovery note.
+- 2026-10-10T06:06Z sec-acc389 (GLM 5.3 Flash) opened #395: #389 console-session Credential Manager acceptance PASS WITH LIMITS (session 1 proven via qwinsta; Core scan 0 hits vs 11 positive control). Flash handled a complex Windows task fine.
+- 2026-10-10T06:43Z #395 MERGED; #389 CLOSED (PASS WITH LIMITS). sec-acc389 DONE, Windows cleaned.
+- 2026-10-10T06:49Z acct-acc4 opened #397: S04 independent acceptance, all exercised criteria PASS, waiver (a) exact; NOT VERIFIABLE ChatGPT/image/realtime/TensorCash; follow-up #396 (display).
+- 2026-10-10T06:54Z #394 MERGED (OPENAI_API_KEY notice). auth-env2 DONE.
+- 2026-10-10T07:05Z #387 MERGED, #380 CLOSED; log-redact1 DONE (follow-ups: guard enforcement test; Windows sandbox command log may capture typed creds -> needs issue). TRAVIS: (1) ACCEPT PF-60-S04 (2) LIFT S05 waiver (a) (3) accept gaps but encompass in future sprints (4) publish S04 reel to Cloudflare (5) start PF-84 multi-account. Launched acct-archive3 (archive S04, complete PF-60 plan, follow-up sprint drafts) and macct-lane (activate PF-84 after slot frees; D1-D3 = recommended defaults).
+- 2026-10-10T07:08Z Published S04 reel: https://corbanu-accounting-reel-s04.cloudflare-share.workers.dev/ (record .codex-work/cf-acct-reel-s04/deployment.json).
+- 2026-10-10T07:08Z Filed Windows sandbox command-log credential issue (#387 follow-up).
+- 2026-10-10T07:24Z #397 MERGED (S04 independent acceptance). acct-acc4 DONE. sec-probe390 opened #399.
+- 2026-10-10T08:02Z #405 MERGED: PF-60-S04 archived, waiver (a) lifted, PF-60 plan completed (slot freed: active 2/3). Follow-up plan proposed: PF-60-S06..S10 (#400-#404, #368, #396). Decisions later: activation slot, OpenRouter pricing, Sol price deadline 2026-11-21 (S07), reopen warm-up (S08 rec show+setting), ChatGPT test account/TensorCash (S09). acct-archive3 DONE.
+- 2026-10-10T08:07Z Launched sec-log398 (#398 sandbox command-log redaction + guard enforcement).
+- 2026-10-10T08:37Z macct-lane opened #407 (PF-84 plan activation).
+- 2026-10-10T08:38Z #399 MERGED, #390 CLOSED (exclusive pipe squat refused). Both #389/#390 done -> per Travis #391: default-on broker_model_auth for Aggressive.
+- 2026-10-10T08:38Z Launched sec-aggr391 (broker_model_auth default-on for Aggressive).
+- 2026-10-10T08:43Z sec-probe390 DONE: also fixed added-instance hijack (control pipe single instance; data pipe challenge-response). Residual: same-user DoS (accepted class per PF-27-S06).
+- 2026-10-10T09:08Z #407 MERGED by coordinator (PF-84 plan active; all green).
+- 2026-10-10T10:06Z #408 MERGED (PF-84-S01). #409 S02 and #410 (#398) in CI.
+- 2026-10-10T10:38Z #409 MERGED (PF-84-S02 behind named_accounts flag). macct-lane DONE (S01+S02 ready). Installed scripts/dev/corbanu-launcher.sh as ~/.local/bin/corbanu (backup corbanu.bak-20261010). RTX box OFFLINE on Tailscale. Launched macct-lane2 (S03->S04->S05).
+- 2026-10-10T10:39Z Launched macct-acc12 (code-blind acceptance of PF-84-S01+S02).
+- 2026-10-10T10:44Z #410 MERGED, #398 CLOSED (sandbox log + approvals redaction; clippy.toml enforces log-guard). sec-log398 DONE; RTX leftovers remain (offline).
+- 2026-10-10T10:50Z NEXT (security): after #391 merges, launch Aggressive milestone isolated code-blind VM run (qualification lane; plan step 1); verify PF-83 rows (approval typing fixed by #187/#174 — plan row stale).
+- 2026-10-10T11:30Z macct-acc12 opened #420: S01 PASS except #418 (low); S02 FAILs #414 (medium: silent fallback to default Claude account w/ older corbanu on PATH), #415, #416; also #417, #419. Launched macct-fix1 for #414-#419.
+- 2026-10-10T11:35Z #411 MERGED by coordinator (S03 allocation, all green).
+- 2026-10-10T11:46Z TRAVIS: RTX box crashed; PAUSE everything until it's back. SIGSTOPped all 4 workers (macct-acc12, macct-fix1, macct-lane2, sec-aggr391) + children; pids in paused-pids.txt. Resume: kill -CONT. Open PRs: #413 (3 checks pending), #420. qual-aggr.md prepared, not launched.
+- 2026-10-10T22:02Z TRAVIS: switch Linux work to glitch (100.83.137.68). Set up ~/corbanu-rtx on glitch (clone main 3683dca19, build.sh -j10, libcap-dev, 32G swapfile in fstab). ~/.ssh/config redirects 100.99.88.49 -> glitch (backup ~/.ssh/config.bak-20261010; remove when RTX back). sec-common.md updated. Resuming the 4 paused workers.
+- 2026-10-10T22:02Z Resumed all 4 workers (SIGCONT).
+- 2026-10-10T22:09Z #413 MERGED, #391 CLOSED (broker_model_auth default-on under Aggressive, mac/linux/win; fail closed). sec-aggr391 DONE; follow-ups: early credential uses error wording, #412. #420 MERGED (S01/S02 acceptance; rec accept S01, S02 behind flag after #414 fix). macct-acc12 DONE. Launched qual-aggr (Aggressive ships milestone).
+- 2026-10-11T00:11Z #422 (macct-fix1) failed pf_27_s06 probes: sec_win_323_a_linked_or_foreign_owned_registry_is_refused in medium-integrity session (likely flaky/unrelated; main green). #421 S03 in CI. qual-aggr at executor stage.
+- 2026-10-11T00:31Z #421 MERGED (PF-84-S03). macct-lane2 opened #423 (S04 allocation). #422 rerunning on new head.
+- 2026-10-11T00:41Z qual-aggr executing: G01-G06 done; passed AGG-01,02,35,03,29,07,08,11; FAILED AGG-04,37,05,06,36,09,10. G07 running.
+- 2026-10-11T00:57Z #422 failed pf_27_s06 again (same test, set_owner SetNamedSecurityInfoW !=0 in medium session, deny_read_sessions_tests.rs:191); passes on main. Watch whether macct-fix1 handles it.
+- 2026-10-11T01:19Z #423 MERGED (S04 allocated). macct-lane2 DONE (S03 ready). TRAVIS decision pending: ChatGPT/AWS named accounts -> rec new PF-84-S06 (AWS first, ChatGPT after). Launched macct-lane3 (S04 -> S05). AGG G08: AGG-15 blocked, AGG-38 passed.
+- 2026-10-11T01:59Z #422 merged? see state. AGG G09-G12: AGG-16 F, 17/18/23 B, 33 B, 20 F, 21 B, 38 P.
+- 2026-10-11T02:04Z #422 MERGED, #414-#419 CLOSED. macct-fix1 DONE. Launched macct-acc3 (code-blind S03 + S02 re-check of 3b/9b/14).
+- 2026-10-11T02:29Z TRAVIS: ChatGPT/AWS named accounts = option (a): new PF-84-S06 after S05, AWS first then ChatGPT. Launched macct-s06doc (record decision + draft S06).
+- 2026-10-11T03:24Z #424 merged? (D4 + PF-84-S06 draft). macct-s06doc DONE. AGG G15-G17: 25 B, 34 F, 26 F, 27 F, A01 B.
+- 2026-10-11T03:40Z macct-acc3 opened #429: S03 15 PASS / 1 FAIL (S03-3b: #425 other-provider --account silently uses default, #426) / 1 NV; S02 re-check 3 PASS; #427 low; #428 D3 product decision (TRAVIS; rec option 1). Launched macct-fix2 (#425-#427).
+- 2026-10-11T04:16Z #429 merged? macct-acc3 DONE.
+- 2026-10-11T04:27Z TRAVIS: ACCEPT PF-84-S01, S02, S03 (behind flag; S03 limits #425/#426/#428 before flag removal). #428 = Option 1 (commented). Launched macct-close (#428 impl + archive S01-S03). UTM still in use by qual-aggr replays (G11b etc.).
+- 2026-10-11T06:09Z Filed #446 (flaky sec_win_323_a test in pf_27_s06 probes). TRAVIS rebooting Windows box (drone) into Linux for own use; no Windows work queued. qual-aggr stopped macOS 3 VM; evidence check r3 running.
+- 06:14Z coordinator reran failed pf_27_s06 job on #430 (flaky #446).
+- 2026-10-11T06:35Z #432 MERGED (#428 D3 option 1).
+- 2026-10-11T07:24Z qual-aggr opened #447: Aggressive milestone 17 pass / 15 fail / 7 blocked of 39; NOT passed. Defects #434-#445. TRAVIS decisions: #443 (what applies between confirm and restart), #445 (kill switch vs model turns). Launched agg-fix-a (#434 #442 #440 #441) and agg-fix-b (#439 #437 #436 #438 #435 #444).
+- 2026-10-11T07:31Z #433 MERGED (S01-S03 archived), #432 MERGED. #431 was auto-closed 2s after #433 merged (closing keyword in #433 text, 'fix PR #431'/'fixes #431'); coordinator REOPENED #431. macct-close DONE.
+- 2026-10-11T07:40Z TRAVIS: #443 protections apply immediately; #445 kill switch refuses model turns. Commented; launched agg-fix-c.
+- 2026-10-11T07:57Z #447 MERGED (milestone record). qual-aggr DONE. Sign-off held (rec). TRAVIS decision pending: #442 protected reads grantable? rec (a) never.
+- 2026-10-11T08:17Z #431 merged? (#425-#427). agg-fix-a is implementing #442 as 'protected read offers grant' (option b) while Travis hasn't decided (rec a).
+- 2026-10-11T08:17Z #431 MERGED (#425-#427 closed). TRAVIS #442: protected reads NEVER grantable; explain plainly. Stopped agg-fix-a (was building grant-on-read) and relaunched with recovery note.
+- 2026-10-11T08:22Z macct-fix2 DONE. #430 conflicting again after #431.
+- 2026-10-11T09:33Z agg-fix-b opened #448 (#438) #449 (#436) #450 (#439) #451 (#437) #452 (#444).
+- 2026-10-11T09:49Z #430 MERGED by coordinator (PF-84-S04, all green).
+- 2026-10-11T10:02Z macct-lane3 DONE (S04 merged #430, ready). agg-fix-c opened #453 (#443). Launched macct-lane4 (S05) and macct-acc4 (code-blind S04).
+- 2026-10-11T10:32Z coordinator merged agg-fix-b PRs (#448 #449 + any of #450-452 shown merged).
+- 2026-10-11T10:43Z LESSON: coordinator merged agg-fix-b's #448 before its review fix landed (green CI != worker done). Follow-up #457 fixes the too-broad exemption. Don't merge workers' PRs unless the worker is idle/finished or the PR is docs-only.
+- 2026-10-11T11:04Z #453 (#443) and #454 (#434) MERGED. agg-fix-b opened #460 (review follow-ups for #436/#437, since coordinator merged early).
+- 2026-10-11T11:21Z agg-fix-a opened #464 (#442 never grant). agg-fix-b opened #463 (Seatbelt dirhelper lookups to base policy, all levels) — NEEDS TRAVIS SIGN-OFF (rec approve).
+- 2026-10-11T11:37Z macct-acc4 opened #465: S04 14 PASS, S04-8 + part of S04-12 FAIL (#461: 'q' quits onboarding and echoes key in clear), 3 NV; #462 pre-existing. Launched macct-fix3 (#461 #462).
+- 2026-10-11T11:59Z #456 (#445) #457 #459 MERGED. #463 awaiting Travis.
+- 2026-10-11T12:05Z agg-fix-c DONE. TRAVIS decisions pending (agg-fix-c follow-ups): 1 restart-only items (rec keep for milestone + follow-up), 2 deny home listing (rec yes), 3 kill switch stops Claude panes (rec yes), 4 kill switch interrupts current turn (rec yes), 5 queued agent msgs (rec keep). Plus #463.
+- 2026-10-11T12:15Z #458 #464 status checked.
+- 2026-10-11T12:20Z #465 merged? macct-acc4 DONE (S04 acceptance; #461 blocks S04 acceptance).
+- 2026-10-11T13:03Z #469 MERGED (PF-84-S05). macct-lane4 DONE. TRAVIS decision: per-account usage in release builds (a) dev-only (b) light token summary in /status [rec] (c) release cost tracking via PF-60 follow-ups. Launched macct-acc5 (code-blind S05).
+- 2026-10-11T13:19Z agg-fix-a DONE (#434 #440 #441 #442 merged). Main postmerge RED (pf_30_s03 vault test vs #453). Launched main-fix1. TRAVIS decisions from agg-fix-a: (1) #434 keep vault read at session start [rec keep] (2) #440 keep allowlist [rec keep] (3) .env created after start unprotected -> follow-up sandbox change [rec yes, follow-up] (4) .codex/.agents always read-only under Aggressive [rec yes].
+- 2026-10-11T13:45Z #452 #460 merged? (see state).
+- 2026-10-11T13:51Z agg-fix-b DONE. Filed #466 #467 #468. TRAVIS decision: #436 keep broker one-way (rec).
+- 2026-10-11T13:51Z Launched bugs-466 (#467 #466 #468 #446).
+- 2026-10-11T14:13Z #472 Windows credential canary FAIL: pf_27_s05_raw_key_is_not_left_in_core_memory (key in Core memory, Windows). Other PRs passed same job recently -> likely flaky; watch. If it recurs on main/other PRs => real regression, needs a worker.
+- 2026-10-11T14:24Z macct-acc5 opened #483 (S05 acceptance: mostly PASS; PARTIAL throttle #476, exec 401 #480; issues #474 #475 #476 #480 #481 #482). Launched macct-fix4. bugs-466 opened #484 (#468).
+- 2026-10-11T14:57Z #471 MERGED (main postmerge test fix). macct-fix4 opened #485 (#476 throttle). #479 Windows Bazel jobs failed (logs unavailable) - bugs-466 to handle.
+- 2026-10-11T15:09Z #472 (#461/#462) #483 (S05 acceptance) merged? macct-acc5 DONE. macct-fix4 opened #486 (#474).
+- 2026-10-11T15:37Z main-fix1 DONE (#471 merged). Found #473 (Linux bwrap fails with ~/.claude lacking creds -> all sandboxed cmds fail at Moderate/Aggressive) and #477 (exec plugin clone race). Launched bugs-473.
+- 2026-10-11T15:43Z postmerge: 15:04 run SUCCESS (after #471); 15:08 run failed only on #477 flake (trace_log_credentials websocket). bugs-473 owns #477.
+- 2026-10-11 Travis confirmed #442: protected reads never grantable; denial must explain. Matches #464 (merged). Recorded on issue.
+- 2026-10-11 17:10 bugs-466 EXIT:0: #446/#466/#467/#468 all merged+closed. New #488 (macOS deep-link workspace: launch check says protected but sandbox allows).
+- 17:12 launched fix-488 (Seatbelt nested-link denial + shared check; PR held for security sign-off)
+- 17:40 bugs-473 EXIT:0: #491/#492 merged, #473/#477 closed. New #493 (/dev/null denied in Linux full-write sandbox), #494 (exec error exits skip shutdown). Launched bugs-493 for both + TUI quit check.
+- 18:00 #489 macOS credential canary failed in unrelated broker test -> filed #495 (flake/race); rerun once workflow finishes.
+- 18:08 launched flake-495 (broker canary race; hold if product change)
+- 18:20 reran #489 macOS canary (#495 flake). #485/#486 all green (worker still running; merge after it finishes).
+- 18:27 #499 opened (fix-488; Seatbelt+bwrap nested-link denial; HOLD for Travis security sign-off). Linux had the leak too.
+- 18:45 #485 merged (macct-fix4); #476 closed, #482 still open — verify worker closes it. #500 (flake-495 test-only fix) in CI. #499 DIRTY (conflict w/ main).
+- 19:00 #489 canary failed again (#495 flake, 3rd). Wait for #500 merge, then #489 needs main merged in. #490 all green.
+- 18:55 bugs-493 EXIT:0: #496/#497 merged, #493/#494/#482 closed. New #498 needs Travis (Linux no-protection path /dev/null; touches Permissive). Filed symlink-to-/ edge case. #490 merged.
+- 19:10 flake-495 EXIT:0: #500 merged (#495 closed, test-only). Filed broker hardening follow-up. #489/#499 DIRTY after merges; workers to resolve.
+- 19:15 closed #340 (dup of #495). Launched sec-245 (#245 additional perms override denials, #192 MCP number-key approves, #504 broker hardening).
+- 19:58 TRAVIS DECISIONS: 1 accept S04 (recorded #465); 2 #463 approved -> merged b7fbc69430; 3 /status per-account token summary (b) -> usage-status worker; 4 agg-fix-c recs all yes -> agg-dec-c worker; 5 agg-fix-a recs yes (.env after start protected; .codex/.agents always RO) -> agg-dec-a worker; 6 asked to explain #436; 7 #499 sign-off yes (merge when green + fix-488 done); 8 #498 yes -> bwrap-498 worker (+#503).
+- Aggressive milestone re-run after agg-dec-a/agg-dec-c/#499/sec-245 land; needs Travis to open UTM.
+- 20:10 #489 merged. Shared-home DB contention (accounting 'database is locked' ~16s/request across 7 workers) -> launched db-contention (#359/#324/#299).
+- 20:15 macct-fix4 EXIT:0: all 6 S05 defects fixed (#485/#486/#489/#490). Filed #509 (throttle bypass paths), #510 (Z.AI 429 retries). Ask Travis: accept S05; throttle named accounts by key fingerprint vs name (rec fingerprint). #499 green, waiting fix-488 exit.
+- 20:20 fix-488 EXIT:0; #499 merged 2e2e2f8d82 (Travis sign-off), #488 closed. Filed pf_23 upload-reads test failing on main. #501/#502 Linux follow-ups queued after bwrap-498.
+- 20:22 launched sec-512
+- 21:00 #517 (sec-512): real bug — Apps upload reads bypassed denials via linked home; fix + macOS core security tests in CI. #516 broker hardening in CI.
+- 22:15 bwrap-498 EXIT:0 (#508,#511 merged; #498,#503 closed; new #525 decision: writable root at / w/o full-write fails closed — rec leave). sec-512 EXIT:0 (#517 merged, #512 closed; new CI rust-ci-core-security on PR mac+linux; filed #518 #519). Filed #529 (mac writable link reopens RO), #530 (telegram tests). Launched sec-sbx2 (#518 #519 #529 #501 #502).
+- 22:38 sec-245 EXIT:0: #516 #526 #527 merged; #245 #192 #504 closed. Decision for Travis: #245 Moderate refusal (rec keep). Follow-ups #513 (write perms bypass RO; runtime part covered by #442 decision; Moderate part needs Travis), #514, #515, #523, #524. Launched sec-513 (#513 a/b, #514, #523, #524) and mcp-chat (#515, #227, PR #254).
+- 23:25 TRAVIS accepted all 5 recs: S05 accepted (#483 comment); throttle by key fingerprint; #525 leave (closed not planned); #513 Moderate: fresh person approval may lift startup/hook writes, not Guardian/hook/cache/grants (comment on #513) -> follow-up after sec-513 if not covered; #245 keep Moderate refusal (comment).
+- Launched pf84-s06 (archive S04/S05 after #528, then S06 slice A AWS, slice B ChatGPT). QUEUED: throttle-fp.md (after db-contention merges), #513-Moderate follow-up (after sec-513). Mac load ~45 on 24 cores: machine-bound; workers told to build on glitch.
+- 00:35 Core security CI (new from #517) failing on Linux across #522/#528/#531: revocation_change one_grant test races with process-wide revoke_everything. Coordinator PR #541 (test-only serial key aggressive_grants, 38 tests). Glitch loop ~/corbanu-rtx/revrace.sh -> revrace.done. #534 merged (S04 archived). New PRs #538 (db-contention), #539 (mcp-chat).
+- 01:10 usage-status EXIT:0: #528 merged (/status per-account tokens). #521 merged. Filed resume-without-account bug + dev-accounting core test. S05 acceptance run still pending (archive S05 by pf84-s06).
+- 01:12 launched bugs-545 (#545, #546)
+- 01:20 #541 merged (coordinator test-race fix). mcp-chat EXIT:0: #539 merged; #254 closed; follow-up issue filed.
+- 02:00 sec-513 EXIT:0: #537 #542 merged; #513 #514 #523 #524 closed. Worker recommended Moderate refuse persistence writes, but Travis already decided fresh-person-approval may lift -> launched sec-513m (decision + #540 + #544).
+- 02:20 agg-dec-c EXIT:0: #521 #522 merged (#505 filed restart-only follow-up; #506 #507 closed). Decisions for Travis: Claude panes keep newest task & start on switch-off (rec keep); other running processes on same home pick up kill switch immediately? (rec yes). sec-sbx2 EXIT:0: #531 #532 merged; #533 open needs sign-off (rec A merge); #535 decision (rec B exclude link root into RO path); #536 fix (rec all levels). Filed #553, #554. Aggressive re-run after #520 (+sec-513m) — ask Travis to open UTM.
+- 02:25 launched sec-553 (#553, #554)
+- 03:10 #551 (S05 archived) + #543 (S06 slice A Bedrock) merged. #538 waiting on v8-canary Bazel V8 builds (triggered by Cargo profile change; ~2h+). #520 DIRTY again (agg-dec-a chasing main). #556 sec-553 PR has 1 fail.
+- 03:20 bugs-545 EXIT:0 (#550 #552 merged; #545 #546 closed; #555 filed). Launched bugs-555 (#555 + TUI msg + resume tests + nightly dev-accounting core tests).
+- 04:15 #520 merged => all Aggressive decisions in. UTM open, VMs stopped. Launched qual-aggr2 (re-run: frozen design + amendment table for owner decisions; starts macOS 3 via utmctl after candidate build, stops it after).
+- 04:20 agg-dec-a EXIT:0: #520 merged. New Travis decisions: .env.example/.sample/.template exemption (rec yes); Linux race accept stop (rec accept); Windows watcher (rec add); Grant once under Aggressive lifts ~nothing — describe accurately, keep .git RO (rec); .env links refuse (rec keep).
+- 04:28 #538 (db contention) + #557 (S06 slice B ChatGPT accounts) merged. Launched throttle-fp.
+- 04:35 db-contention EXIT:0 (#538 merged; load test p99 40.9s -> 216ms; #549 filed). pf84-s06 EXIT:0 (S06 both slices merged, ready for acceptance). Launched macct-acc6 (code-blind S06 acceptance) + pf84-fix6 (#548 creds in logs, mid-session switch limit, #549). Decisions for Travis: live Bedrock test account or accept mocks; disposable ChatGPT acct or accept mocks; mid-switch limit (fixing anyway, rec).
+- TODO: reinstall local binary + glitch from main (#538 DB fix) -> needs Travis restart.
+- 04:55 sec-553 EXIT:0: #556 #560 merged (#553 test-only; core security integration tests on PR CI mac+linux). #563 filed (no bwrap on Linux -> exit 134). QUEUE: #563 worker; Windows home-listing denial needs Windows box.
+- 05:10 Installed main a22fdb903d dev build (signed, atomic mv) as integration-package-dev/bin/corbanu; prev kept as corbanu.prev-31b2937aa7. Smoke exec GLM ok. Ask Travis to restart Corbanu Terminal.
+- 05:25 sec-513m EXIT:0: #558 #559 merged (#513 Moderate, #540, #544 closed). Decision 11: person-approved unsandboxed runs can write runtime files (rec keep, documented). Launched sec-misc (#563 #562 #565).
+- 05:45 S06 acceptance PR #574: slice A PASS (#572 low); slice B core pass, #570 HIGH (named session deletes default auth.json under login restrictions), #571 medium, #573 low. Launched pf84-acc6fix.
+- 06:08 tmux smoke failing on #568/#569: tmux_resume_uses_recorded_named_account_without_default_key (#552). Launched fix-tmuxresume.
+- 06:37 macct-acc6 EXIT:0 (#574 merged). Rec: accept S06 slice A now; hold slice B until #570/#571 fixed (pf84-acc6fix). Decision 12 for Travis.
+- 06:47 TRAVIS decision 12: S06 slice A accepted; slice B held until #570/#571 fixed (recorded #574, #570, #571).
+- 06:57 TRAVIS decisions 2-11 accepted (1 needs explanation). #533 merged c4999b1265 (#529 closed). Recorded on #535 #536 #442 #507 #513. Launched agg-dec2 (2,6,7,8,9,10,11) and sbx-links2 (#535 #536).
+- 07:00 TRAVIS decision 1: nothing restarts after kill switch off (Claude panes like Codex). Recorded #507. Launched ks-noresume.
+- 07:14 bugs-555 EXIT:0 (#561 #566 #567 merged). Decision 13: Esc in resume picker quits (merged) vs start-new+message (rec keep quit). Filed follow-up issue.
+- 07:16 Travis: removed ~/.ssh/config RTX->glitch redirect (backup ~/.ssh/config.bak-20261012); Host glitch kept; sec-common updated (always ssh glitch).
+- 07:42 sec-misc EXIT:0 (#575 #579 #580 merged). Decision 14: Permissive retry-outside-sandbox w/o 2nd prompt when sandbox fails (rec keep upstream). Removed stale empty ~/Library placeholder on glitch. Launched sec-home (#587 HIGH home move/plant, #583, #582, #581).
+- 08:23 fix-tmuxresume EXIT:0: #589 merged (Esc+text read as Alt+/; helper waits after bare Esc). #568 #577 merged. New PRs #590 (.env decisions), #591 (#535), #592 (#583), #593 (#507 kill switch other procs).
+- 08:55 pf84-fix6 EXIT:0 (#576 #577 #585 merged; #548 #549 closed). Filed by it: #578 (provider switch 404 rs_ item), #586. Launched bugs-578.
+- 09:16 TRAVIS: decisions 13 (Esc quits resume picker: keep) and 14 (Permissive retry outside sandbox w/o 2nd prompt: keep) accepted; recorded on #555/#563. Travis restarting terminal now.
+## HANDOFF 09:16 UTC 2026-10-12 (coordinator restart)
+Running workers (tmux -S $W/tmux.sock): qual-aggr2 (Aggressive re-run; VM macOS 3 started by it, stop after), throttle-fp (#568 merged, #569 DIRTY), pf84-acc6fix (#604 #570/#571/#573; #572 pending), agg-dec2 (#590 .env, #593 kill switch other procs, #601 Windows watcher), sbx-links2 (#591 #535, #597 #536), ks-noresume (#602 no restart after kill switch), sec-home (#592 #583, #596, #599 #582, #600 #581; #587 home move pending), bugs-578 (#578 provider-switch 404, #586).
+Open owner items: test AWS/ChatGPT accounts (S06 slice B held for #570/#571 re-verify); Travis restart to pick up installed main a22fdb903d build.
+Queued ideas: PF-84 code-blind re-acceptance after #604 (slice B + #555 33 cases); #547 namespaced tools on chat wires; #509/#510 done in #568/#569; #588 fork follow-ups; Windows home-listing denial (#554) needs Windows box.
+- 09:42 MAIN RED: postmerge Windows clippy dead-code (protected_additional.rs:329, aggressive_tests.rs:224), tui provider_accounts test; PR core-security pf_23_s01 typing test fails after #592 merged. Launched main-ci2.
+- 10:07 ks-noresume EXIT:0: #602 merged (decision 1). #599? New PRs #610 (#572 Bedrock /model), #612 (#578 provider switch). Filed kill-switch follow-ups.
+- 10:44 sec-home EXIT:0: #592 #596 #599 #600 merged (#587 #583 #582 #581 closed). Decisions 15/16 for Travis (#603). Launched sec-home2 (#594 #598 #607 #603 edge cases).
+- 10:50 TRAVIS: decision 15 keep (approval lifts RO home); 16 implement (protect home names when cwd/root is the home) -> launched sec-603 (last new worker). Recorded on #603.
+- 10:50 TRAVIS: Claude credits running low. ORDERLY PAUSE: no new workers; let running ones finish; then commit/push everything and write managementHandoff.html (commit + push).
+- 11:10 7 workers (throttle-fp agg-dec2 sbx-links2 main-ci2 sec-home2 sec-603 qual-aggr2) panicked ~11:01Z: claude-plan external auth helper got 'macOS is blocking access' / getcwd EPERM (model-provider-info/src/lib.rs:78) and hung. Killed sessions, logs -> *.log.died-20261012T1107. Relaunching with recovery notes. qual-aggr2's VM run_all still running (G27).
+- 11:15 throttle-fp EXIT:0 (#568 #569 merged; #509 #510 closed).
+- 11:59 main-ci2 EXIT:0: #614 merged (Windows clippy unix-only helpers); tui test already fixed by #585; vault-typing test is flaky (#615 filed). #593 #604 merged. #617 (#594 #598), #618 (cargo-deny RUSTSEC ignore) open.
+- 12:08 sbx-links2 EXIT:0: #591 #597 merged (#535 #536 closed).
+- 12:31 pf84-acc6fix EXIT:0: #604 #610 merged (#570 #571 #572 #573 closed). Decision 17 for Travis: #595 (rec option 1). S06 slice B ready for re-acceptance.

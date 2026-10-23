@@ -1,0 +1,73 @@
+test_outstanding_count_age_and_review_recovery_on_manager_and_dashboard (test_decision_manager.ManagerTests.test_outstanding_count_age_and_review_recovery_on_manager_and_dashboard) ... ok
+test_legacy_quarantine_unknown_pruned_age_clears_only_after_review (test_decision_manager.ManagerTests.test_legacy_quarantine_unknown_pruned_age_clears_only_after_review) ... ok
+test_supervisor_reason_precedes_quarantine_without_hiding_count (test_decision_manager.ManagerTests.test_supervisor_reason_precedes_quarantine_without_hiding_count) ... 
+  test_supervisor_reason_precedes_quarantine_without_hiding_count (test_decision_manager.ManagerTests.test_supervisor_reason_precedes_quarantine_without_hiding_count) (reason='observation-unavailable') ... ERROR
+  test_supervisor_reason_precedes_quarantine_without_hiding_count (test_decision_manager.ManagerTests.test_supervisor_reason_precedes_quarantine_without_hiding_count) (reason='observation-stale') ... ERROR
+  test_supervisor_reason_precedes_quarantine_without_hiding_count (test_decision_manager.ManagerTests.test_supervisor_reason_precedes_quarantine_without_hiding_count) (reason='event-flush-failed') ... ERROR
+test_expired_history_is_not_outstanding_and_review_does_not_discard_held (test_decision_manager.ManagerTests.test_expired_history_is_not_outstanding_and_review_does_not_discard_held) ... ok
+test_unbound_expiry_without_route_is_durable_and_cannot_be_resurrected (test_slack_transport.TransportTests.test_unbound_expiry_without_route_is_durable_and_cannot_be_resurrected) ... ok
+test_route_at_or_after_deadline_delivers_retained_reply_once (test_slack_transport.TransportTests.test_route_at_or_after_deadline_delivers_retained_reply_once) ... 
+  test_route_at_or_after_deadline_delivers_retained_reply_once (test_slack_transport.TransportTests.test_route_at_or_after_deadline_delivers_retained_reply_once) (delay=60) ... ERROR
+test_routed_reply_waits_for_queue_capacity_past_deadline (test_slack_transport.TransportTests.test_routed_reply_waits_for_queue_capacity_past_deadline) ... ok
+test_outstanding_quarantine_survives_pruning_then_exact_review_clears_it (test_slack_transport.TransportTests.test_outstanding_quarantine_survives_pruning_then_exact_review_clears_it) ... ERROR
+
+======================================================================
+ERROR: test_supervisor_reason_precedes_quarantine_without_hiding_count (test_decision_manager.ManagerTests.test_supervisor_reason_precedes_quarantine_without_hiding_count) (reason='observation-unavailable')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_manager.py", line 1040, in test_supervisor_reason_precedes_quarantine_without_hiding_count
+    health = surface["supervisor_health"]
+             ~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'supervisor_health'
+
+======================================================================
+ERROR: test_supervisor_reason_precedes_quarantine_without_hiding_count (test_decision_manager.ManagerTests.test_supervisor_reason_precedes_quarantine_without_hiding_count) (reason='observation-stale')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_manager.py", line 1040, in test_supervisor_reason_precedes_quarantine_without_hiding_count
+    health = surface["supervisor_health"]
+             ~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'supervisor_health'
+
+======================================================================
+ERROR: test_supervisor_reason_precedes_quarantine_without_hiding_count (test_decision_manager.ManagerTests.test_supervisor_reason_precedes_quarantine_without_hiding_count) (reason='event-flush-failed')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_manager.py", line 1040, in test_supervisor_reason_precedes_quarantine_without_hiding_count
+    health = surface["supervisor_health"]
+             ~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'supervisor_health'
+
+======================================================================
+ERROR: test_route_at_or_after_deadline_delivers_retained_reply_once (test_slack_transport.TransportTests.test_route_at_or_after_deadline_delivers_retained_reply_once) (delay=60)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_slack_transport.py", line 1469, in test_route_at_or_after_deadline_delivers_retained_reply_once
+    deadline = self.store.read("transport")["held_human"][key]["expires_at"]
+               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+KeyError: 'EvLate1'
+
+======================================================================
+ERROR: test_outstanding_quarantine_survives_pruning_then_exact_review_clears_it (test_slack_transport.TransportTests.test_outstanding_quarantine_survives_pruning_then_exact_review_clears_it)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_slack_transport.py", line 1507, in test_outstanding_quarantine_survives_pruning_then_exact_review_clears_it
+    self.review_gap()
+    ~~~~~~~~~~~~~~~^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_slack_transport.py", line 339, in review_gap
+    self.transport.qualify(ui_evidence(), dict(review, **self.session_review()))
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/slack_transport.py", line 730, in qualify
+    with self.store.lock(), locked(self.store) as value:
+         ~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_alerts.py", line 83, in lock
+    raise d.Invalid() from None
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+----------------------------------------------------------------------
+Ran 8 tests in 10.863s
+
+FAILED (errors=5)

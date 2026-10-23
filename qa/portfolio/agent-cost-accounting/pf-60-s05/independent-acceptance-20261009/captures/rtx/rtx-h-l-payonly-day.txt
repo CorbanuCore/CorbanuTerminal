@@ -1,0 +1,46 @@
+$ /cost
+╭───────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)         │
+│                                       │
+│ model:     glm-5.2   /model to change │
+│ directory: ~/pf60-s05-indep/work/repo │
+╰───────────────────────────────────────╯
+
+  Cost — this conversation
+  Requested UTC day: 2026-10-09
+  Today (UTC) in this conversation: no recorded requests.
+  Other conversations on this day, not included above: 4 requests in 3 conversations.
+  • DeepSeek · DeepSeek V4.1 Flash (Direct) — Pay per use. 1 request, 7,322 tokens. Estimated cost: $0.000234 (rounded).
+  • OpenRouter · Ambient GLM 5.2 — Pay per use. 1 request, 6,438 tokens. Billed by OpenRouter: $0.001803 (rounded).
+  • Z.AI · Z.AI GLM 5.2 — Pay per use. 2 requests, 12,989 tokens. Estimated cost: $0.005014 (rounded).
+  Other conversations' estimated cost: at least $0.005248 (rounded) (1 attempt had no price).
+  To see those requests, open that conversation with /resume and run /cost there.
+  Next step for requests with no price: check the bill from OpenRouter. No published price covers them, so no cost is shown for them here.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Costs are estimates from published prices; DeepSeek and Z.AI don't report their charges — check their bills.
+  —— Details ——
+  No recorded attempts in this conversation or its subagents; collection coverage unknown.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z)
+  Read at: 2026-10-09T13:31:42.818Z; ledger current to: 2026-10-09T13:26:22.357Z (320461 ms behind)
+  Retention: request detail kept since 2026-07-11T13:31:42.818Z; daily totals kept since 2025-10-10; oldest recorded day in this conversation none
+  Known subtotal exact USD: none — no recorded attempts in this conversation
+  Input: 0
+  Noncached input (derived for inclusive input): 0
+  Cache read: 0
+  Cache write: 0
+  Output: 0
+  Reasoning (subset, not separately billed): 0
+  Total (not separately billed): 0
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Unknown parent population: 0 attempts, excluded from root total
+  —— Open ——
+  → Root's own attempts (none)
+  → Descendant attempts (none)
+  → Unknown provider/model attribution (none)
+  → Unknown parent population (none)
+  Refresh
+  Close

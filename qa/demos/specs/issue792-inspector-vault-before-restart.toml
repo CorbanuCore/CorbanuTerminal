@@ -1,0 +1,71 @@
+# Issue #792 (AGG-04, replay Q02b): before the restart, the inspector's Vault row says what Core enforces.
+id = "issue792-inspector-vault-before-restart"
+feature = "#792: the inspector's Vault row before the restart"
+expected = "After confirming Aggressive without restarting, the inspector's This session rows say the vault store and sign-in file are unreadable to agent commands (also when approved), that vault commands are refused and that approved commands stay inside the sandbox."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 160
+rows = 50
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Escape"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session"
+[[steps]]
+key = "i"
+[[steps]]
+wait = "(?s)This session.*Vault: the vault store and sign-in file are unreadable"
+[[steps]]
+pause = 5.0
+[[steps]]
+run = "tmux -L \"$(ls -t \"${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)\" | grep '^demo-issue792-inspector-vault-before-restart-' | head -1)\" capture-pane -p -t demo > {run}/inspector-792-before-restart.txt"
+[[steps]]
+pause = 1.0

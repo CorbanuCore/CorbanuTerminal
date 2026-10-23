@@ -1,0 +1,5 @@
+## cand: codex_core::accounting WARN/ERROR lines since the two Aggressive sessions started (home z5)
+2026-10-13 09:40:03|WARN|accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting_transport.rs:72:23
+2026-10-13 09:40:03|WARN|accounting: request sent unrecorded step="admit attempt" cause=accounting route mismatch
+2026-10-13 09:40:33|WARN|accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting_transport.rs:72:23
+2026-10-13 09:40:33|WARN|accounting: request sent unrecorded step="admit attempt" cause=accounting route mismatch

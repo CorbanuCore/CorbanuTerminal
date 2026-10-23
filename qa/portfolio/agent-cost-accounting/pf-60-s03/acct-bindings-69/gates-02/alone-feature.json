@@ -1,0 +1,31 @@
+{
+  "lane": "alone-feature",
+  "command": [
+    "just",
+    "test",
+    "-p",
+    "codex-core",
+    "suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity",
+    "--features",
+    "codex-core/developer-accounting"
+  ],
+  "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+  "base": "a06048a8a4cd1422c9ef80dcef5503ee297d8d4c",
+  "environment": {
+    "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+    "CARGO_BUILD_JOBS": "2",
+    "CARGO_INCREMENTAL": "0",
+    "NEXTEST_TEST_THREADS": "4",
+    "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+    "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+  },
+  "exit": 0,
+  "elapsed_seconds": 35.832870960235596,
+  "log_sha256": "c543f0125990e1d3ace65e2fe721ffb7bed054ccefbfb92615c406dad3477671",
+  "failure_lines": [],
+  "target_test_lines": [
+    "SLOW [> 30.000s] (\u2500\u2500\u2500) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity",
+    "PASS [  31.743s] (1/1) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity"
+  ],
+  "summaries": []
+}

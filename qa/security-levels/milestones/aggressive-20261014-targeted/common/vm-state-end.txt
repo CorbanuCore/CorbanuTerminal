@@ -1,0 +1,21 @@
+2026-10-14T11:38:34Z verification boot: utmctl start
+2026-10-14T11:38:47Z ssh reachable
+ls: /Users/agent/agms: No such file or directory
+ls: /Users/agent/agms-canary: No such file or directory
+ls: /etc/sudoers.d/agms-codeblind: No such file or directory
+ls: /opt/agms: No such file or directory
+0
+-rw-r--r--  1 root  wheel  82 Sep 17 22:00 /etc/codex/config.toml
+0
+1
+agadmin-1791977879-628.sh
+agadmin-1791977883-733.sh
+agadmin-1791977886-763.sh
+agadmin-1791977895-835.sh
+su.exp
+2026-10-14T11:38:48Z clean shutdown
+Connection to 192.168.64.3 closed by remote host.
+2026-10-14T11:38:59Z final:
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3

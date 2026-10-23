@@ -1,0 +1,30 @@
+== Z1 named main (real key) (exit 0)
+   args: -c provider_accounts.zai="main"
+   | pong
+   | tokens used
+== Z2 named fake (fake key) (exit 1)
+   args: -c provider_accounts.zai="fake"
+   | ERROR: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: 5b63d81b-5b4a-4f9b-a1aa-56f0a01a0603
+   | {"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":29440,"ms_to_response_headers":412,"ms_to_first_sse_byte":null,"ms_to_first_parsed_data_event":null,"ms_to_first_actionable_event":null,"total_stream_ms":413,"comment_frame_count":0,"parsed_event_count":0,"x_request_id":null,"generation_id":null,"provider":null,"finish_reason":"error: http 401 Unauthorized: Some(\"{\\\"error\\\":{\\\"code\\\":\\\"401\\\",\\\"message\\\":\\\"token expired or incorrect\\\"}}\")","retry_linkage":{"same_turn_attempt_index":1}}
+== Z3 named ghost (not enrolled) (exit 1)
+   args: -c provider_accounts.zai="ghost"
+   | ERROR: Fatal error: account `ghost` of provider `zai` has no stored API key; add it with `corbanu account add zai ghost` or choose another account
+== Z4 default account, no stored default key and no env (exit 1)
+   args: 
+   | ERROR: Missing environment variable: `ZAI_API_KEY`. Run `/providers` and select the matching provider key:
+== Z5 default account via env (real) (exit 0)
+   args:  (env ZAI_API_KEY=<real key, redacted>)
+   | pong
+   | tokens used
+== Z6 named fake with REAL key in env: must stay on fake (401) (exit 1)
+   args: -c provider_accounts.zai="fake" (env ZAI_API_KEY=<real key, redacted>)
+   | ERROR: unexpected status 401 Unauthorized: token expired or incorrect, url: https://api.z.ai/api/paas/v4/chat/completions, request id: fbd35d68-a09d-4bd1-85d9-b8f7773b9fff
+   | {"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":29440,"ms_to_response_headers":393,"ms_to_first_sse_byte":null,"ms_to_first_parsed_data_event":null,"ms_to_first_actionable_event":null,"total_stream_ms":393,"comment_frame_count":0,"parsed_event_count":0,"x_request_id":null,"generation_id":null,"provider":null,"finish_reason":"error: http 401 Unauthorized: Some(\"{\\\"error\\\":{\\\"code\\\":\\\"401\\\",\\\"message\\\":\\\"token expired or incorrect\\\"}}\")","retry_linkage":{"same_turn_attempt_index":1}}
+== Z7 named ghost with REAL key in env: must fail closed (exit 1)
+   args: -c provider_accounts.zai="ghost" (env ZAI_API_KEY=<real key, redacted>)
+   | ERROR: Fatal error: account `ghost` of provider `zai` has no stored API key; add it with `corbanu account add zai ghost` or choose another account
+== Z8 flag OFF, selector fake, real env key: today = env key works (exit 0)
+   args: --disable named_accounts -c provider_accounts.zai="fake" (env ZAI_API_KEY=<real key, redacted>)
+   | pong
+   | tokens used
+   | warning: `[provider_accounts]` is ignored because the `named_accounts` feature is off; every provider uses its default account.

@@ -601,6 +601,7 @@ fn turn_context(root: &Path, turn_id: &str) -> RolloutItem {
         file_system_sandbox_policy: None,
         model: "test-model".to_string(),
         model_provider: Some("test-provider".to_string()),
+        provider_account: None,
         comp_hash: None,
         personality: None,
         collaboration_mode: None,
@@ -608,6 +609,7 @@ fn turn_context(root: &Path, turn_id: &str) -> RolloutItem {
         multi_agent_mode: None,
         realtime_active: None,
         effort: None,
+        security_level: None,
         summary: ReasoningSummary::Auto,
     })
 }

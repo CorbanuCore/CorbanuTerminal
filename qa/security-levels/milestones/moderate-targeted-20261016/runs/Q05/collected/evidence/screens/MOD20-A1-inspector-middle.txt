@@ -1,0 +1,45 @@
+
+✔ You approved Corbanu to run cat /Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/secrets/.v... this time
+
+• Explored
+  └ Read .vault.lock
+
+⚠ Secretless agent launch blocked access to `/Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/secrets/.vault.lock`: at every security
+  level, Moderate included, agent commands can't read Corbanu's own files (such as its sign-in, vault, config and history) or common CLI tokens, even
+  when you approve them, so changing the level would not allow it.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Blocked:
+
+  cat: /Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/secrets/.vault.lock: Operation not permitted
+
+  This is a vault file — blocked at every security level (like the config and history files), so switching to Permissive wouldn't help. You'd need to
+  read it yourself outside the agent sandbox.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+Security inspector (read only)
+● Protected: Moderate; every required control observed or checked at launch
+Observed 19s ago, policy generation 0.1
+  [on] Untrusted content: labelled; session tainted (5 batches): protected actions need your fresh approval. Taint is kept with the conversation and
+      stays on resume [observed: session]
+  [off] Protected boundary: no preflight applies (protected_mode_preflight off, or not Aggressive) [resolved: launch preflight]
+
+Grants
+  Held: none. Grants are never saved: a restart, level change, revocation or the kill switch ends them [observed: Core policy]
+
+Agents
+  [on] main session: Moderate [observed: Core policy]
+  [set] Nested agents: on macOS and Linux, `corbanu exec` and `review` started by an agent command run with Moderate enforced, also pointed at another
+      Corbanu home; with this Corbanu home, which they cannot write inside the sandbox, they run in a Corbanu home of their own, without your config,
+      sign-in or model keys. Interactive sessions, `app-server`, `mcp-server` and credential commands they start are refused [configured: /security]
+
+Not contained
+  [not contained] MCP servers: notes run outside the OS sandbox with the environment allowlist; allowed because you configured or started it
+      [resolved: config]
+  [not contained] Hooks: run outside the OS sandbox with the environment allowlist; allowed because you configured or started it [resolved: features]
+  [not contained] `!` shell commands: run outside the OS sandbox with the environment allowlist; allowed because you configured or started it [fixed]
+  [not contained] App-server command/exec: runs outside the OS sandbox with the environment allowlist; allowed because you configured or started it
+      [fixed]
+21 more lines below · ↑/↓ scroll · r refresh · esc back to /security

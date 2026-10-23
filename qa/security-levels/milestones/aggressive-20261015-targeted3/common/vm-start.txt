@@ -1,0 +1,22 @@
+2026-10-15T21:33:10Z
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3
+Error from event: The operation couldn’t be completed. (OSStatus error -2700.)
+Invalid virtual machine configuration. A directory sharing device configuration is invalid.
+start-rc=0
+ssh: connect to host 192.168.64.3 port 22: Operation timed out
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3
+2026-10-15T21:43:26Z start failed: UTM 'A directory sharing device configuration is invalid' (OSStatus -2700). macOS 3's UTM registry shares /Volumes/FASTDRIVE2/z23; FASTDRIVE2 (disk8s1) and T9 (disk6s2) were unmounted on the host at 2026-10-15T21:25:42Z (system log: Finder/DiskArbitration unmount, not this run). VM never booted; status: stopped
+2026-10-15T22:49:39Z /Volumes/FASTDRIVE2/z23 present again (not mounted by this run); lock retaken
+2026-10-15T22:49:47Z
+start-rc=0
+ssh open 2026-10-15T22:50:01Z
+up
+2026-10-15T22:50:04Z
+26.2
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 started  macOS 3

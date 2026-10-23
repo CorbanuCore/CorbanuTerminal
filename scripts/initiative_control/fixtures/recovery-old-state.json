@@ -1,0 +1,21 @@
+{
+  "source_namespace": "synthetic-recovery-delivery-control",
+  "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "posting_enabled": false,
+  "enrollment_verified": false,
+  "delivered": 0,
+  "report": {
+    "run_id": "recovery-synthetic-1",
+    "sprint_id": "PF-76-S01",
+    "machine": "synthetic-machine",
+    "role": "builder",
+    "agent": "synthetic",
+    "session_id": "synthetic-session",
+    "status": "awaiting_review",
+    "summary": "Synthetic historical delivery-control observation; human acceptance pending.",
+    "updated_at": "2026-09-10T10:00:00Z",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "branch": "synthetic/recovery",
+    "worktree": "/synthetic/recovery"
+  }
+}

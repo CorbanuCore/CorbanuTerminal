@@ -20,6 +20,7 @@ use crate::tools::handlers::apply_patch::intercept_apply_patch;
 use crate::tools::handlers::implicit_granted_permissions;
 use crate::tools::handlers::normalize_and_validate_additional_permissions;
 use crate::tools::handlers::parse_arguments;
+use crate::tools::orchestrator::HandlerBasis;
 use crate::tools::orchestrator::ToolOrchestrator;
 use crate::tools::runtimes::shell::ShellRequest;
 use crate::tools::runtimes::shell::ShellRuntime;
@@ -87,9 +88,24 @@ async fn run_exec_like(args: RunExecLikeArgs) -> Result<FunctionToolOutput, Func
         .r#set
         .clone();
     crate::exec_env::inject_tasknode_profile_env(&mut explicit_env_overrides, &turn.config);
+    // Issue #245: under Aggressive a protected path is never opened.
+    if let Some(refusal) = crate::security::protected_reads::additional_permission_refusal(
+        &session,
+        &turn,
+        additional_permissions.as_ref(),
+        exec_params.cwd.as_path(),
+    )
+    .await
+    {
+        crate::security::protected_reads::notify(&session, &turn, refusal.clone()).await;
+        crate::security::protected_reads::record_permission_refusal(&session);
+        return Err(FunctionCallError::RespondToModel(refusal));
+    }
     let exec_permission_approvals_enabled =
         session.features().enabled(Feature::ExecPermissionApprovals);
     let requested_additional_permissions = additional_permissions.clone();
+    // #1057: taken before the grants are read.
+    let handler_basis = HandlerBasis::now(session.as_ref());
     let effective_additional_permissions = apply_granted_turn_permissions(
         session.as_ref(),
         &turn_environment.environment_id,
@@ -175,21 +191,25 @@ async fn run_exec_like(args: RunExecLikeArgs) -> Result<FunctionToolOutput, Func
     );
     emitter.begin(event_ctx).await;
 
+    let live_aggressive = session.services.model_client().live_level_is_aggressive();
     let exec_approval_requirement = session
         .services
         .exec_policy
-        .create_exec_approval_requirement_for_command(ExecApprovalRequest {
-            command: &exec_params.command,
-            approval_policy: turn.approval_policy.value(),
-            permission_profile: turn.permission_profile(),
-            windows_sandbox_level: turn.windows_sandbox_level,
-            sandbox_permissions: if effective_additional_permissions.permissions_preapproved {
-                codex_protocol::models::SandboxPermissions::UseDefault
-            } else {
-                effective_additional_permissions.sandbox_permissions
+        .create_exec_approval_requirement(
+            ExecApprovalRequest {
+                command: &exec_params.command,
+                approval_policy: turn.approval_policy.value(),
+                permission_profile: turn.permission_profile(),
+                windows_sandbox_level: turn.windows_sandbox_level,
+                sandbox_permissions: if effective_additional_permissions.permissions_preapproved {
+                    codex_protocol::models::SandboxPermissions::UseDefault
+                } else {
+                    effective_additional_permissions.sandbox_permissions
+                },
+                prefix_rule,
             },
-            prefix_rule,
-        })
+            live_aggressive,
+        )
         .await;
 
     let req = ShellRequest {
@@ -211,7 +231,7 @@ async fn run_exec_like(args: RunExecLikeArgs) -> Result<FunctionToolOutput, Func
         justification: exec_params.justification.clone(),
         exec_approval_requirement,
     };
-    let mut orchestrator = ToolOrchestrator::new();
+    let mut orchestrator = ToolOrchestrator::new().with_handler_basis(Some(handler_basis));
     let mut runtime = ShellRuntime::for_shell_command(shell_runtime_backend);
     let tool_ctx = ToolCtx {
         session: session.clone(),

@@ -295,6 +295,47 @@ async fn approval_keys_include_move_destination() {
     assert_eq!(keys.len(), 2);
 }
 
+/// #713: a patch whose paths aren't native to this host skips path matching,
+/// but a restricted turn must still ask for it instead of auto-approving it.
+#[tokio::test]
+async fn foreign_patch_paths_are_not_auto_approved_under_a_restricted_turn() {
+    use crate::apply_patch::apply_patch;
+    use crate::tools::sandboxing::ExecApprovalRequirement;
+    use codex_protocol::models::PermissionProfile;
+    use codex_protocol::protocol::AskForApproval;
+
+    let (_session, mut turn) = make_session_and_context().await;
+    turn.approval_policy = crate::config::Constrained::allow_any(AskForApproval::OnRequest);
+    turn.permission_profile = PermissionProfile::workspace_write();
+    // Make the platform sandbox available on every OS (Windows tests default
+    // to no sandbox, where the old fallback would ask anyway).
+    turn.windows_sandbox_level = codex_protocol::config_types::WindowsSandboxLevel::RestrictedToken;
+    let foreign = if cfg!(windows) {
+        "file:///tmp/remote/new.txt"
+    } else {
+        "file:///C:/remote/new.txt"
+    };
+    let path = PathUri::parse(foreign).expect("foreign path URI");
+    assert!(path.to_abs_path().is_err(), "{foreign} must not be native");
+    let action = ApplyPatchAction::new_add_for_test(&path, "content".to_string());
+
+    let (_, _, policy) = patch_permissions_without_path_matching(&turn, &action);
+    let InternalApplyPatchInvocation::DelegateToRuntime(apply) =
+        apply_patch(&turn, &policy, action).await
+    else {
+        panic!("expected the patch to go to the runtime");
+    };
+    assert!(!apply.auto_approved);
+    assert!(
+        matches!(
+            apply.exec_approval_requirement,
+            ExecApprovalRequirement::NeedsApproval { .. }
+        ),
+        "{:?}",
+        apply.exec_approval_requirement
+    );
+}
+
 #[tokio::test]
 async fn shell_intercept_uses_consecutive_grammar_failures_and_rejects_after_fallback() {
     let (session, turn) = make_session_and_context().await;
@@ -424,4 +465,60 @@ fn write_permissions_for_paths_keep_dirs_outside_workspace_root() {
             .and_then(|roots| roots.write),
         Some(vec![expected_outside])
     );
+}
+
+/// #1057: the grants that widen the patch's policy (and so may let it
+/// through unasked) are read once and carried by the request, so a
+/// transition after that read is noticed by the orchestrator (it refuses a
+/// request carrying permissions read before a transition).
+#[tokio::test]
+async fn issue_1057_grants_that_widen_the_patch_policy_are_carried() {
+    let (session, turn) = make_session_and_context().await;
+    let outside = TempDir::new().expect("tempdir");
+    let outside_root = outside.path().abs();
+    session
+        .record_granted_request_permissions_for_turn(
+            &codex_protocol::request_permissions::RequestPermissionsResponse {
+                permissions: codex_protocol::request_permissions::RequestPermissionProfile {
+                    file_system: Some(
+                        codex_protocol::models::FileSystemPermissions::from_read_write_roots(
+                            /*read*/ None,
+                            Some(vec![outside_root.clone()]),
+                        ),
+                    ),
+                    ..Default::default()
+                },
+                scope: codex_protocol::request_permissions::PermissionGrantScope::Session,
+                strict_auto_review: false,
+            },
+            codex_exec_server::LOCAL_ENVIRONMENT_ID,
+            /*originating_turn_state*/ None,
+            session.services.authority_marker(),
+        )
+        .await;
+    let turn_environment = turn
+        .environments
+        .primary()
+        .cloned()
+        .expect("test turn should have a primary environment");
+    let path = PathUri::from_abs_path(&outside_root.join("new.txt"));
+    let action = ApplyPatchAction::new_add_for_test(&path, "content".to_string());
+
+    let (_, effective, policy) = effective_patch_permissions(
+        &session,
+        &turn,
+        &turn_environment.environment_id,
+        &action,
+        turn_environment.cwd(),
+    )
+    .await
+    .expect("native paths");
+
+    assert_ne!(
+        policy,
+        turn.file_system_sandbox_policy(),
+        "the grant widens the policy"
+    );
+    assert!(effective.additional_permissions.is_some(), "and is carried");
+    assert!(effective.permissions_preapproved);
 }

@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a120be-0e9a-72f1-8f85-276097a15862"}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 401 Unauthorized: Invalid bearer token, url: https://bedrock-mantle.us-east-1.api.aws/openai/v1/responses, request id: req_hnpubu4k3rxttygaop4uvmek2lxt7thlays7xytw47l66gnf6p7q"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: Invalid bearer token, url: https://bedrock-mantle.us-east-1.api.aws/openai/v1/responses, request id: req_hnpubu4k3rxttygaop4uvmek2lxt7thlays7xytw47l66gnf6p7q"}}

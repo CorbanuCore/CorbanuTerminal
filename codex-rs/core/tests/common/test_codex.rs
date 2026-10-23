@@ -59,8 +59,7 @@ use wiremock::MockServer;
 
 use crate::TempDirExt;
 use crate::TestEnvironment;
-use crate::load_default_config_for_test;
-use crate::load_default_config_for_test_with_cloud_config_bundle;
+use crate::load_default_config_for_test_in;
 use crate::responses::WebSocketTestServer;
 use crate::responses::output_value_to_text;
 use crate::responses::start_mock_server;
@@ -251,6 +250,29 @@ fn remote_exec_server_url() -> Result<String> {
     Ok(listen_url.to_string())
 }
 
+/// `NO_PROXY` for a test that points the process at a test HTTP proxy: `base`
+/// plus the remote exec-server host in the remote lane. The websocket dialer
+/// matches `NO_PROXY` by host name only, not by CIDR range, so a private range
+/// in `base` doesn't keep the exec-server connection out of the proxy.
+pub fn no_proxy_with_remote_exec_server(base: &str) -> String {
+    let host = std::env::var(REMOTE_EXEC_SERVER_URL_ENV_VAR)
+        .ok()
+        .and_then(|url| {
+            let authority = url.trim().split_once("://")?.1.split('/').next()?;
+            let host = match authority.strip_prefix('[') {
+                Some(rest) => rest.split(']').next()?,
+                None => authority
+                    .rsplit_once(':')
+                    .map_or(authority, |(host, _port)| host),
+            };
+            (!host.is_empty()).then(|| host.to_string())
+        });
+    match host {
+        Some(host) => format!("{base},{host}"),
+        None => base.to_string(),
+    }
+}
+
 fn remote_test_instance_id() -> String {
     let instance = REMOTE_TEST_INSTANCE_COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("{}-{instance}", std::process::id())
@@ -304,9 +326,36 @@ pub struct TestCodexBuilder {
     external_time_provider: Option<Arc<dyn TimeProvider>>,
     code_mode_host_program: Option<PathBuf>,
     history_mode: Option<ThreadHistoryMode>,
+    auth_in_home: bool,
+    config_folder: Option<PathBuf>,
+    session_cwd_is_workspace_root: bool,
 }
 
 impl TestCodexBuilder {
+    /// Build the config for `folder`, which becomes its workspace root, as
+    /// for a session started there. The session itself still runs in its own
+    /// folder, which is then outside its workspace roots unless `folder`
+    /// contains it. By default a local session's config is built for the
+    /// session's own folder and a remote session's for a local temporary
+    /// folder (see [`Self::with_session_cwd_as_workspace_root`]); never for
+    /// the crate's source tree, which is the test process's working folder.
+    pub fn with_config_folder(mut self, folder: impl Into<PathBuf>) -> Self {
+        self.config_folder = Some(folder.into());
+        self
+    }
+
+    /// Build the config for the session's own working folder, which becomes
+    /// its workspace root, as in a real session (#1098); this replaces
+    /// [`Self::with_config_folder`]. This is the default for a local session
+    /// (#1120); tests whose checks depend on it pin it with this call. For a
+    /// local session only: a remote test environment's folder is not on this
+    /// machine, so by default a remote session's config is built for a local
+    /// temporary folder instead.
+    pub fn with_session_cwd_as_workspace_root(mut self) -> Self {
+        self.session_cwd_is_workspace_root = true;
+        self
+    }
+
     pub fn with_config<T>(mut self, mutator: T) -> Self
     where
         T: FnOnce(&mut Config) + Send + 'static,
@@ -315,8 +364,26 @@ impl TestCodexBuilder {
         self
     }
 
+    /// Records the session's paid requests to `endpoint` in the home's cost
+    /// ledger, for crates that cannot name core's accounting configuration.
+    pub fn with_direct_responses_accounting(self, endpoint: String) -> Self {
+        self.with_config(move |config| {
+            config.accounting = codex_core::config::AccountingMode::DirectOpenAiResponsesHttp {
+                scope: Default::default(),
+                approved_endpoint: endpoint,
+            };
+        })
+    }
+
     pub fn with_auth(mut self, auth: CodexAuth) -> Self {
         self.auth = auth;
+        self
+    }
+
+    /// Gives the session's auth manager the test home, so credentials kept in
+    /// that home's vault (such as named provider accounts) are readable.
+    pub fn with_auth_in_home(mut self) -> Self {
+        self.auth_in_home = true;
         self
     }
 
@@ -556,7 +623,12 @@ impl TestCodexBuilder {
         include_local_environment: bool,
     ) -> anyhow::Result<TestCodex> {
         let (config, fallback_cwd) = self
-            .prepare_config(base_url, &home, test_env.cwd().clone())
+            .prepare_config(
+                base_url,
+                &home,
+                test_env.cwd().clone(),
+                /*session_folder_is_local*/ test_env.local_cwd_temp_dir().is_some(),
+            )
             .await?;
         let exec_server_url = self
             .exec_server_url
@@ -592,7 +664,16 @@ impl TestCodexBuilder {
         for setup in workspace_setups {
             setup(config.cwd.clone(), Arc::clone(&file_system)).await?;
         }
-        let cwd = test_env.local_cwd_temp_dir().unwrap_or(fallback_cwd);
+        let cwd = test_env
+            .local_cwd_temp_dir()
+            .unwrap_or_else(|| Arc::clone(&fallback_cwd));
+        // The temporary folder the config was built for lives as long as
+        // the test's runtime, as `home` does (a test may keep only parts of
+        // `TestCodex`).
+        tokio::spawn(async move {
+            let _config_folder = fallback_cwd;
+            std::future::pending::<()>().await;
+        });
         Box::pin(self.build_from_config(
             config,
             cwd,
@@ -623,7 +704,14 @@ impl TestCodexBuilder {
                     config.codex_home.clone(),
                 ))
             });
-        let auth_manager = codex_core::test_support::auth_manager_from_auth(auth.clone());
+        let auth_manager = if self.auth_in_home {
+            codex_core::test_support::auth_manager_from_auth_with_home(
+                auth.clone(),
+                config.codex_home.to_path_buf(),
+            )
+        } else {
+            codex_core::test_support::auth_manager_from_auth(auth.clone())
+        };
         let thread_manager = ThreadManager::new(
             &config,
             auth_manager.clone(),
@@ -705,6 +793,16 @@ impl TestCodexBuilder {
             }
         };
 
+        // Tests often destructure `TestCodex { codex, .. }`, which would delete
+        // CODEX_HOME while the live session still reads per-turn state (the
+        // provider request ledger) from it. Keep the directory until the test's
+        // runtime shuts down instead.
+        let home_guard = Arc::clone(&home);
+        tokio::spawn(async move {
+            let _home_guard = home_guard;
+            std::future::pending::<()>().await;
+        });
+
         Ok(TestCodex {
             home,
             cwd,
@@ -721,6 +819,7 @@ impl TestCodexBuilder {
         base_url: String,
         home: &TempDir,
         cwd_override: AbsolutePathBuf,
+        session_folder_is_local: bool,
     ) -> anyhow::Result<(Config, Arc<TempDir>)> {
         let model_provider = ModelProviderInfo {
             base_url: Some(base_url),
@@ -733,11 +832,29 @@ impl TestCodexBuilder {
         for hook in self.pre_build_hooks.drain(..) {
             hook(home.path());
         }
-        let mut config = if let Some(cloud_config_bundle) = self.cloud_config_bundle.take() {
-            load_default_config_for_test_with_cloud_config_bundle(home, cloud_config_bundle).await
+        // The folder a config is built for becomes its workspace root, a
+        // writable root of sandboxed commands. Never build it for the test
+        // process's own working folder (the crate's source tree, e.g.
+        // `codex-rs/core`). Build it for the session's own folder
+        // (`cwd_override`), as in a real session (#1120), unless the test
+        // picked another folder. A remote session's folder is not on this
+        // machine: build its config for the local temporary folder, so the
+        // session runs outside its workspace roots.
+        let config_folder = if self.session_cwd_is_workspace_root {
+            cwd_override.to_path_buf()
+        } else if let Some(folder) = self.config_folder.clone() {
+            folder
+        } else if session_folder_is_local {
+            cwd_override.to_path_buf()
         } else {
-            load_default_config_for_test(home).await
+            cwd.path().to_path_buf()
         };
+        let mut config = load_default_config_for_test_in(
+            home,
+            self.cloud_config_bundle.take().unwrap_or_default(),
+            &config_folder,
+        )
+        .await;
         // Keep generic tests stable when the bundled catalog default changes. Tests that need a
         // specific model can still override this with a config mutator.
         config.model = Some("gpt-5.5".to_string());
@@ -1241,6 +1358,9 @@ pub fn test_codex() -> TestCodexBuilder {
         external_time_provider: None,
         code_mode_host_program: None,
         history_mode: None,
+        auth_in_home: false,
+        config_folder: None,
+        session_cwd_is_workspace_root: false,
     }
 }
 

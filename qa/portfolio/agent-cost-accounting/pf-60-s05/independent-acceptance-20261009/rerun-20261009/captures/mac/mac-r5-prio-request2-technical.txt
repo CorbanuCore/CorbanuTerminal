@@ -1,0 +1,52 @@
+  Attempt, components and original price
+  Requested UTC day: 2026-10-09
+  Provider: OpenAI
+  Model: GPT-5.6-Luna
+  Billing: Pay per use
+  Estimated cost: no price available
+  Next step for requests with no price: check the bill from OpenAI. No published price covers them, so no cost is shown for them here.
+  Tokens: 17,348 tokens
+  —— Details ——
+  Billed cost: OpenAI doesn't report its charges, so any cost here is an estimate — check OpenAI's bill.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Request: d8afb925-0964-441a-b26d-d307ef481bf2
+  Attempt: 48720e01-97af-4d12-b1b5-2bf2159c4553
+  Thread: 01a12208-5742-7b42-88b4-fe1e283aa6f1
+  Turn: 01a12208-5903-7152-9982-af35e5fdd721
+  Provider: openai
+  Model: gpt-5.6-luna
+  Opaque scope: 1aa6edf5-5ade-4ecc-bd86-eb02cbc23c0f
+  Arithmetic dialect: Inclusive
+  Admission time: 2026-10-09T18:58:55.982Z
+  Retry predecessor: none
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.
+  Billing basis: pay per use
+  Input: 17343
+  Noncached input (derived for inclusive input): 3 (derived)
+  Cache read: 0 (reported)
+  Cache write: 17340
+  Output: 5
+  Reasoning (subset, not separately billed): 0 (reported)
+  Total (not separately billed): 17348
+  Noncached input cost: unknown — rate unavailable
+  Cache read cost: $0.000000; exact USD 0
+  Cache write cost: unknown — rate unavailable
+  Output cost: unknown — rate unavailable
+  Known subtotal exact USD: none — no price for these attempts
+  Price ID: fa1c1ae5-6551-41ba-9191-b8598f1a2bfd
+  Price source: NativeCatalog; reference 93856563-5323-59e9-a9eb-f0abcc5a0237
+  Price currency/unit: Usd / PerMillionTokens
+  Price observed/approved: 2026-10-09T18:58:55.982Z / 2026-10-09T18:58:55.982Z
+  Price effective interval: [2026-10-09T18:58:55.982Z, unbounded)
+  Rate unavailable for Noncached input
+  Rate unavailable for Cache read
+  Rate unavailable for Cache write
+  Rate unavailable for Output
+  Evidence revision 9; source 97b6b7a9-0977-414d-b507-18c2a2b74abe; sequence 9; presence patch
+  {"input":17343,"read":0,"write":17340,"output":5,"reasoning":0,"total":17348}
+  Snapshot is not current; newer activity is unverified
+  Back
+  Refresh
+  Close

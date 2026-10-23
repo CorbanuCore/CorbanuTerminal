@@ -1,0 +1,4 @@
+{"Z": "group Z of the design (zai). FUP-24 applies to this group's own screens and output only.",
+ "O": "group O of the design (openai, gpt-6-luna). FUP-10 is the audit amendment 12 places after FUP-09, FUP-12, FUP-14 and FUP-25 (the final audit); FUP-25 (new, amendment 18) runs last, after FUP-16. FUP-24 applies to this group's own screens and output only.",
+ "R": "group R of the design (realtime). FUP-24 applies to this group's own screens and output only.",
+ "M": "group M of the design (moonshot). Read /opt/agms/packet/d3.txt first and follow amendment 19. FUP-24 applies to this group's own screens and output only."}

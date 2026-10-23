@@ -1,0 +1,72 @@
+# PF-60-S07 / #368: a provider the user configures at Moonshot's Kimi Open Platform (https://api.moonshot.ai/v1) is
+# priced from Moonshot's published K3 rates, keyed by that route, with cache writes at the five-minute rate.
+# No Moonshot key is available, so the request goes through a local HTTPS stand-in for api.moonshot.ai (a CONNECT
+# proxy with a throwaway CA, set by HTTPS_PROXY and CODEX_CA_CERTIFICATE in the recorder's environment) that answers
+# with Moonshot's documented usage shape: 10,000 prompt tokens (2,000 cached, 7,168 written), 500 output.
+# Expected: 832 x $3 + 2,000 x $0.30 + 7,168 x $3 + 500 x $15 per million = $0.032100.
+id = "pf60s07-moonshot-route-cost"
+feature = "/cost prices a user-configured Moonshot route (api.moonshot.ai/v1) from Moonshot's published rates (#368)"
+expected = "Against a local stand-in for api.moonshot.ai, /cost reads 'Estimated cost: $0.032100' for kimi-k3, and the technical page shows the cache read and the five-minute cache write priced at Moonshot's K3 rates."
+model = "kimi-k3"
+provider = "kimi"
+rows = 46
+cols = 150
+config = """
+suppress_unstable_features_warning = true
+
+[model_providers.kimi]
+name = "Kimi"
+base_url = "https://api.moonshot.ai/v1"
+env_key = "MOONSHOT_API_KEY"
+wire_api = "chat"
+"""
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with the single word OK."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Hello from the Moonshot stand-in"
+timeout = 60
+[[steps]]
+type = "/cost"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Estimated cost: \\$0\\.032100"
+[[steps]]
+pause = 4
+# Up from the first line wraps to Close; seven steps up is "Request 1".
+[[steps]]
+key = "Up"
+repeat = 7
+[[steps]]
+wait = "› → Request 1"
+[[steps]]
+pause = 1
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Billing: Pay per use"
+[[steps]]
+pause = 2
+[[steps]]
+key = "Up"
+repeat = 4
+[[steps]]
+wait = "› → Technical details"
+[[steps]]
+pause = 1
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Attempt, components and original price"
+[[steps]]
+key = "Down"
+repeat = 30
+[[steps]]
+wait = "Cache write cost: \\$0\\.021504"
+[[steps]]
+pause = 4

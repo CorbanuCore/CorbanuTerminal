@@ -1,0 +1,10 @@
+{
+  "cause": "absent-ancestor",
+  "thread": "01a05a43-fc00-7c33-9e5c-9b67c03caab2",
+  "source": "{\"subagent\": {\"thread_spawn\": {\"parent_thread_id\": \"7fcbdd75-536c-46fd-a3ca-4e4b8f106854\", \"depth\": 1}}}",
+  "edge_parents": [
+    "7fcbdd75-536c-46fd-a3ca-4e4b8f106854"
+  ],
+  "inspect_pid": 87657,
+  "read_at_monotonic_ns": 740231593385916
+}

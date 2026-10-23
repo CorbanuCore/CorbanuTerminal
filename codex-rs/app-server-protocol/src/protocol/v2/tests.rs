@@ -294,9 +294,11 @@ fn thread_resume_response_round_trips_initial_turns_page() {
         }),
         turns_backwards_cursor: Some("turns_head".to_string()),
         items_backwards_cursor: Some("items_head".to_string()),
+        provider_account: Some("zai:work".to_string()),
     };
 
     let value = serde_json::to_value(&response).expect("serialize thread resume response");
+    assert_eq!(value["providerAccount"], json!("zai:work"));
     assert_eq!(
         value["thread"]["section"],
         json!({
@@ -3040,6 +3042,7 @@ fn core_turn_item_into_thread_item_converts_supported_variants() {
         prompt: Some("continue".to_string()),
         model: None,
         reasoning_effort: None,
+        provider_account: Some("work".to_string()),
         agents_states: [(receiver_thread_id, CoreAgentStatus::Completed(None))]
             .into_iter()
             .collect(),
@@ -3056,6 +3059,7 @@ fn core_turn_item_into_thread_item_converts_supported_variants() {
             prompt: Some("continue".to_string()),
             model: None,
             reasoning_effort: None,
+            provider_account: Some("work".to_string()),
             agents_states: [(
                 receiver_thread_id.to_string(),
                 CollabAgentState {
@@ -4777,4 +4781,30 @@ fn realtime_start_deserializes_client_handoff_channel_prefixes() {
             ("final".to_string(), vec!["[DONE]".to_string()]),
         ]))
     );
+}
+
+/// #1038: the first-message-edit mark is an experimental camelCase flag,
+/// omitted when false, so an ordinary thread/start is unchanged on the wire.
+#[test]
+fn thread_start_reopened_by_prompt_edit_wire_shape() {
+    let plain = serde_json::to_value(ThreadStartParams::default()).expect("serialize");
+    assert_eq!(plain.get("reopenedByPromptEdit"), None);
+    let marked = ThreadStartParams {
+        reopened_by_prompt_edit: true,
+        ..Default::default()
+    };
+    assert_eq!(
+        serde_json::to_value(&marked).expect("serialize")["reopenedByPromptEdit"],
+        json!(true)
+    );
+    let parsed: ThreadStartParams =
+        serde_json::from_value(json!({ "reopenedByPromptEdit": true })).expect("deserialize");
+    assert!(parsed.reopened_by_prompt_edit);
+    let reason = crate::experimental_api::ExperimentalApi::experimental_reason(
+        &crate::ClientRequest::ThreadStart {
+            request_id: crate::RequestId::Integer(1),
+            params: marked,
+        },
+    );
+    assert_eq!(reason, Some("thread/start.reopenedByPromptEdit"));
 }

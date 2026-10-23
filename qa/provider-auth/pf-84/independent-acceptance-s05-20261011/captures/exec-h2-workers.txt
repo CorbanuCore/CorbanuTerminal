@@ -1,0 +1,30 @@
+=== zp-default: corbanu exec -m glm-5.3-flash -c model_provider="zproxy" ===
+exit=0
+thread 01a12b23-8ed5-79f3-a144-7eea6c028c06
+reply 'pong'
+usage {"cache_write_input_tokens": 0, "cached_input_tokens": 4864, "input_tokens": 9311, "output_tokens": 109, "reasoning_output_tokens": 74}
+stderr(last 4):
+  Reading additional input from stdin...
+  {"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":19987,"ms_to_response_headers":5829,"ms_to_first_sse_byte":5829,"ms_to_first_parsed_data_event":5829,"ms_to_first_actionable_event":5829,"total_stream_ms":5849,"comment_frame_count":0,"parsed_event_count":17,"x_reque
+  {"tag":"corbanu_call_metrics","call_index":2,"attempt_number":1,"request_byte_size":20484,"ms_to_response_headers":6572,"ms_to_first_sse_byte":6572,"ms_to_first_parsed_data_event":6572,"ms_to_first_actionable_event":6572,"total_stream_ms":6593,"comment_frame_count":0,"parsed_event_count":63,"x_reque
+=== zp-work: corbanu exec -m glm-5.3-flash -c model_provider="zproxy" --account work ===
+exit=0
+thread 01a12b23-c2a7-7162-8491-9e5f11de2ada
+reply 'pong'
+usage {"cache_write_input_tokens": 0, "cached_input_tokens": 0, "input_tokens": 4613, "output_tokens": 3, "reasoning_output_tokens": 0}
+stderr(last 4):
+  Reading additional input from stdin...
+  {"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":19987,"ms_to_response_headers":4556,"ms_to_first_sse_byte":4556,"ms_to_first_parsed_data_event":4556,"ms_to_first_actionable_event":4556,"total_stream_ms":4574,"comment_frame_count":0,"parsed_event_count":3,"x_reques
+=== zp-fake: corbanu exec -m glm-5.3-flash -c model_provider="zproxy" --account fake ===
+exit=1
+thread 01a12b23-d967-7733-a18d-0d4ef1721945
+error {"type": "error", "message": "unexpected status 401 Unauthorized: Authentication Failed, url: http://127.0.0.1:18451/chat/completions, request id: bc78e7ab-8648-4d27-9b80-39737c18fd94"}
+turn.failed {"type": "turn.failed", "error": {"message": "unexpected status 401 Unauthorized: Authentication Failed, url: http://127.0.0.1:18451/chat/completions, request id: bc78e7ab-8648-4d27-9b80-39737c18fd94"}}
+stderr(last 4):
+  Reading additional input from stdin...
+  {"tag":"corbanu_call_metrics","call_index":1,"attempt_number":1,"request_byte_size":19987,"ms_to_response_headers":423,"ms_to_first_sse_byte":null,"ms_to_first_parsed_data_event":null,"ms_to_first_actionable_event":null,"total_stream_ms":423,"comment_frame_count":0,"parsed_event_count":0,"x_request_
+=== zp-ghost: corbanu exec -m glm-5.3-flash -c model_provider="zproxy" --account ghost ===
+exit=1
+stderr(last 4):
+  Reading additional input from stdin...
+  Error: thread/start: thread/start failed: account `ghost` of provider `zproxy` is not configured; add it with `corbanu account add zproxy ghost` or pick another with `--account` (see `corbanu account list`) (code -32600)

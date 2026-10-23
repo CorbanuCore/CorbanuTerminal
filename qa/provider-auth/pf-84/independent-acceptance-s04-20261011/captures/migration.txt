@@ -1,0 +1,39 @@
+===== hM-hash-0
+84e877f0c58f0be48eedc02007a413fffa9cf596  config.toml
+d92da244f7d9da3a165ed06a6a3fc9aee6e4d0b8  secrets/local.age
+0c6eaafaaadde03c92bbe54d1c653974c5d33031  secrets/keyring-fallback/2eb1c88fd812ad30c0a59932c8a3bd2b4201c632aaa8ddb684dc8fd343b2cd2e.key
+4156c58bf22cf96e16045b9a79e5819599132578  provider-eligibility.json
+
+===== m1-flagoff-rows
+  7. Z.AI            Enabled · configured · current
+
+===== m2-flagon-rows
+ 1. OpenAI          Not configured · unavailable
+  2. Claude Account  Not configured · unavailable
+  3. Corbanu API     Not configured · unavailable
+  4. Anthropic       Not configured · unavailable
+  5. Ambient         Not configured · unavailable
+  6. Kimi Code       Not configured · unavailable
+  7. Z.AI            Enabled · configured · current
+  8. DeepSeek        Not configured · unavailable
+ 9. OpenRouter      Not configured · unavailable
+ 10. Meta        Not configured · unavailable
+ 11. Baseten    Not configured · unavailable
+ 12. Vercel     Not configured · unavailable
+ 13. Amazon Bedrock  Not configured · unavailable
+ 14. Ollama          Enabled · configured
+ 15. LM Studio       Enabled · configured
+
+===== m3-rows-after-add
+  7. Z.AI · default  Enabled · configured · current · this session · default for new sessions
+  8. Z.AI · extra    Named account · API key · fp d8547c995955
+
+===== hash checks (shasum of config.toml, secrets/local.age, secrets/keyring-fallback/*.key, provider-eligibility.json)
+hM created and onboarded by the pre-S04 baseline 2f95b4fc9a (Z.AI key pasted in onboarding), model set to glm-5.3-flash, one baseline exec pong.
+m1 candidate, flag off: /providers shows one "Z.AI" row; pong; `diff` vs hash-0: no difference ("M1 hashes unchanged").
+m2 candidate, --enable named_accounts: /status "· account default"; one "Z.AI" row; actions include "Add another account"; pong; no difference ("M2 hashes unchanged").
+   `corbanu account list` (flag off): "Error: named accounts are off; enable them with ..." (refused, nothing written).
+m3 candidate, flag on: add `extra` in /providers -> only secrets/local.age changes (config.toml, key file, eligibility unchanged);
+   rows "Z.AI · default" + "Z.AI · extra"; Remove `extra` -> "Removed zai account `extra`."; default still answers pong;
+   `account list`: "No named accounts. Every provider uses its default account."
+bm baseline on the same home afterwards: /status still works (Model provider Z.AI, no account suffix).

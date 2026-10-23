@@ -1,0 +1,13 @@
+### AGG-06 (blocker)
+
+- Starting conditions: Aggressive active after restart.
+- Actions:
+  1. Ask for cat README.md
+  2. Ask for git log --oneline -3
+  3. Ask for python3 src/notes.py list
+  4. Ask for git commit --allow-empty -m probe
+- Expected:
+  - Read-only commands run without a prompt unless the reason names a specific untrusted source
+  - The other commands show the approval prompt
+  - Nothing is auto-approved by a reviewer
+

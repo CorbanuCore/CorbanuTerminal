@@ -39,6 +39,11 @@ pub(crate) struct EventProcessorWithHumanOutput {
     final_message_rendered: bool,
     emit_final_message_on_shutdown: bool,
     last_total_token_usage: Option<ThreadTokenUsage>,
+    /// Config warnings already printed; the session repeats them once (#419).
+    shown_config_warnings: Vec<String>,
+    /// PF-84 (#480): what to print when the provider rejects the named
+    /// account this session runs on; `None` on the default account.
+    rejected_account_message: Option<String>,
 }
 
 impl EventProcessorWithHumanOutput {
@@ -64,7 +69,25 @@ impl EventProcessorWithHumanOutput {
             final_message_rendered: false,
             emit_final_message_on_shutdown: false,
             last_total_token_usage: None,
+            shown_config_warnings: Vec::new(),
+            rejected_account_message: config
+                .model_providers
+                .get(&config.model_provider_id)
+                .and_then(|provider| provider.account.as_ref())
+                .and_then(|account| rejected_account_message(config, &account.to_string())),
         }
+    }
+
+    /// The error lines for a failed turn: the error, then (#480) the named
+    /// account it was rejected on and how to replace its credential.
+    fn failed_turn_lines(&self, error: &codex_app_server_protocol::TurnError) -> Vec<String> {
+        let rejected = error
+            .codex_error_info
+            .as_ref()
+            .is_some_and(codex_app_server_protocol::CodexErrorInfo::is_credential_rejection);
+        std::iter::once(error.to_string())
+            .chain(self.rejected_account_message.clone().filter(|_| rejected))
+            .collect()
     }
 
     fn render_item_started(&self, item: &ThreadItem) {
@@ -127,36 +150,18 @@ impl EventProcessorWithHumanOutput {
                 duration_ms,
                 ..
             } => {
-                let duration_suffix = duration_ms
-                    .map(|duration_ms| format!(" in {duration_ms}ms"))
-                    .unwrap_or_default();
-                match status {
-                    CommandExecutionStatus::Completed => {
-                        eprintln!(
-                            "{}",
-                            format!(" succeeded{duration_suffix}:").style(self.green)
-                        );
+                let style = match status {
+                    CommandExecutionStatus::Completed => self.green,
+                    CommandExecutionStatus::Failed => self.red,
+                    CommandExecutionStatus::Declined | CommandExecutionStatus::Refused => {
+                        self.yellow
                     }
-                    CommandExecutionStatus::Failed => {
-                        let exit_code = exit_code.unwrap_or(1);
-                        eprintln!(
-                            "{}",
-                            format!(" exited {exit_code}{duration_suffix}:").style(self.red)
-                        );
-                    }
-                    CommandExecutionStatus::Declined => {
-                        eprintln!(
-                            "{}",
-                            format!(" declined{duration_suffix}:").style(self.yellow)
-                        );
-                    }
-                    CommandExecutionStatus::InProgress => {
-                        eprintln!(
-                            "{}",
-                            format!(" in progress{duration_suffix}:").style(self.dimmed)
-                        );
-                    }
-                }
+                    CommandExecutionStatus::InProgress => self.dimmed,
+                };
+                eprintln!(
+                    "{}",
+                    command_status_header(&status, exit_code, duration_ms).style(style)
+                );
                 if let Some(output) = aggregated_output
                     && !output.trim().is_empty()
                 {
@@ -211,6 +216,10 @@ impl EventProcessorWithHumanOutput {
 }
 
 impl EventProcessor for EventProcessorWithHumanOutput {
+    fn set_provider_account(&mut self, config: &Config, account: &str) {
+        self.rejected_account_message = rejected_account_message(config, account);
+    }
+
     fn print_config_summary(
         &mut self,
         config: &Config,
@@ -239,6 +248,7 @@ impl EventProcessor for EventProcessorWithHumanOutput {
                     notification.summary,
                     details
                 );
+                self.shown_config_warnings.push(notification.summary);
                 CodexStatus::Running
             }
             ServerNotification::Warning(notification) => self.process_warning(notification.message),
@@ -321,7 +331,9 @@ impl EventProcessor for EventProcessorWithHumanOutput {
                     self.final_message_rendered = false;
                     self.emit_final_message_on_shutdown = false;
                     if let Some(error) = notification.turn.error {
-                        eprintln!("{} {}", "ERROR:".style(self.red).style(self.bold), error);
+                        for line in self.failed_turn_lines(&error) {
+                            eprintln!("{} {line}", "ERROR:".style(self.red).style(self.bold));
+                        }
                     }
                     CodexStatus::InitiateShutdown
                 }
@@ -369,6 +381,14 @@ impl EventProcessor for EventProcessorWithHumanOutput {
     }
 
     fn process_warning(&mut self, message: String) -> CodexStatus {
+        if let Some(index) = self
+            .shown_config_warnings
+            .iter()
+            .position(|shown| *shown == message)
+        {
+            self.shown_config_warnings.swap_remove(index);
+            return CodexStatus::Running;
+        }
         eprintln!(
             "{} {message}",
             "warning:".style(self.yellow).style(self.bold)
@@ -548,6 +568,47 @@ fn should_print_final_message_to_tty(
     final_message.is_some() && !final_message_rendered && stdout_is_terminal && stderr_is_terminal
 }
 
+/// The status line printed before a finished command's output. A refusal
+/// says only that the command was refused: a network-policy refusal can
+/// arrive after the command ran (#873), and the reason that follows says
+/// what happened.
+fn command_status_header(
+    status: &CommandExecutionStatus,
+    exit_code: Option<i32>,
+    duration_ms: Option<i64>,
+) -> String {
+    let duration_suffix = duration_ms
+        .map(|duration_ms| format!(" in {duration_ms}ms"))
+        .unwrap_or_default();
+    match status {
+        CommandExecutionStatus::Completed => format!(" succeeded{duration_suffix}:"),
+        CommandExecutionStatus::Failed => {
+            let exit_code = exit_code.unwrap_or(1);
+            format!(" exited {exit_code}{duration_suffix}:")
+        }
+        CommandExecutionStatus::Declined => format!(" declined{duration_suffix}:"),
+        CommandExecutionStatus::Refused => " refused:".to_string(),
+        CommandExecutionStatus::InProgress => format!(" in progress{duration_suffix}:"),
+    }
+}
+
 #[cfg(test)]
 #[path = "event_processor_with_human_output_tests.rs"]
 mod tests;
+
+/// PF-84 (#480): the account line for a rejected credential, as the TUI shows
+/// it, for `account` (`<provider>:<name>`); `None` for the default account.
+fn rejected_account_message(config: &Config, account: &str) -> Option<String> {
+    let (provider_id, name) = account.split_once(':')?;
+    if name == "default" {
+        return None;
+    }
+    let provider = config.model_providers.get(provider_id);
+    let display_name = provider.map_or(provider_id, |provider| provider.name.as_str());
+    Some(codex_model_provider_info::named_account_rejection_message(
+        display_name,
+        provider_id,
+        name,
+        provider,
+    ))
+}

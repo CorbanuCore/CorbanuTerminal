@@ -2,7 +2,7 @@
 sprint_id: "PF-26-S01"
 title: "Security harnesses and standards crosswalk"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-26"
 execution_order: 15
 owner: "Jim Ricketts"
@@ -25,8 +25,8 @@ updated: 2026-08-27
 
 ## Plan linkage
 
-- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
+- Upstream: [plan touch record](../../../plans/completed/main-2026-10-08-p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md)
 - Feature: `PF-26`
 - Acceptance advanced: every adopted control has an executable fixture and named owner; product results remain pending until final qualification.
 

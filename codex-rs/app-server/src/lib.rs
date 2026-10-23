@@ -61,10 +61,12 @@ use codex_config::TextRange as CoreTextRange;
 use codex_core::ExecPolicyError;
 use codex_core::check_execpolicy_for_warnings;
 use codex_core::config::find_codex_home;
+use codex_core::windows_sandbox::WindowsSandboxLevelExt;
 use codex_exec_server::EnvironmentManager;
 use codex_exec_server::ExecServerRuntimePaths;
 use codex_features::Feature;
 use codex_feedback::CodexFeedback;
+use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::protocol::SessionSource;
 use codex_rollout::state_db as rollout_state_db;
 use codex_state::log_db;
@@ -79,7 +81,6 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::Registry;
-use tracing_subscriber::util::SubscriberInitExt;
 
 const SQLITE_RECOVERY_CONFIG_WARNING_SUMMARY: &str = "Codex rebuilt its local database.";
 
@@ -116,6 +117,7 @@ mod outgoing_message;
 mod request_processors;
 mod request_serialization;
 mod server_request_error;
+mod settings_confirmation;
 mod skills_watcher;
 mod thread_state;
 mod thread_status;
@@ -454,6 +456,18 @@ impl Default for AppServerRuntimeOptions {
     }
 }
 
+/// PF-84-S06 (#595): with named accounts on, this server (standalone or a
+/// local daemon a TUI reuses) never logs out a default OpenAI login its login
+/// restrictions rule out and never uses it: its default-login managers treat
+/// such a login as absent and a thread on it is refused with the reason, as
+/// in a TUI or exec process whose session runs on a named account. Call
+/// before any auth manager is built.
+fn leave_ruled_out_default_login_in_place(config: &Config) {
+    if config.named_accounts_enabled() {
+        codex_login::leave_default_login_unenforced();
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn run_main_with_transport_options(
     arg0_paths: Arg0DispatchPaths,
@@ -504,6 +518,7 @@ pub async fn run_main_with_transport_options(
         .await
     {
         Ok(config) => {
+            leave_ruled_out_default_login_in_place(&config);
             let discovered_thread_config_loader = configured_thread_config_loader(&config);
             config_manager
                 .replace_thread_config_loader(Arc::clone(&discovered_thread_config_loader));
@@ -543,6 +558,7 @@ pub async fn run_main_with_transport_options(
             })?
         }
     };
+    leave_ruled_out_default_login_in_place(&config);
     let code_mode_session_provider: Option<Arc<dyn CodeModeSessionProvider>> =
         match &runtime_options.code_mode_host_transport {
             CodeModeHostTransport::Local => None,
@@ -631,9 +647,14 @@ pub async fn run_main_with_transport_options(
             range: None,
         });
     }
-    if let Some(warning) =
-        codex_core::config::system_bwrap_warning(config.permissions.permission_profile())
-    {
+    let platform_sandbox_warnings = [
+        codex_core::config::system_bwrap_warning(config.permissions.permission_profile()),
+        codex_core::config::legacy_windows_sandbox_warning(
+            WindowsSandboxLevel::from_config(&config),
+            config.permissions.permission_profile(),
+        ),
+    ];
+    for warning in platform_sandbox_warnings.into_iter().flatten() {
         config_warnings.push(ConfigWarningNotification {
             summary: warning,
             details: None,
@@ -650,12 +671,12 @@ pub async fn run_main_with_transport_options(
     let stderr_fmt: StderrLogLayer = match log_format_from_env() {
         LogFormat::Json => tracing_subscriber::fmt::layer()
             .json()
-            .with_writer(std::io::stderr)
+            .with_writer(codex_log_guard::RedactingMakeWriter::new(std::io::stderr))
             .with_span_events(tracing_subscriber::fmt::format::FmtSpan::FULL)
             .with_filter(EnvFilter::from_default_env())
             .boxed(),
         LogFormat::Default => tracing_subscriber::fmt::layer()
-            .with_writer(std::io::stderr)
+            .with_writer(codex_log_guard::RedactingMakeWriter::new(std::io::stderr))
             .with_span_events(tracing_subscriber::fmt::format::FmtSpan::FULL)
             .with_filter(EnvFilter::from_default_env())
             .boxed(),
@@ -669,14 +690,16 @@ pub async fn run_main_with_transport_options(
         .map(|layer| layer.with_filter(log_db::default_filter()));
     let otel_logger_layer = otel.as_ref().and_then(|o| o.logger_layer());
     let otel_tracing_layer = otel.as_ref().and_then(|o| o.tracing_layer());
-    let _ = tracing_subscriber::registry()
-        .with(stderr_fmt)
-        .with(feedback_layer)
-        .with(feedback_metadata_layer)
-        .with(log_db_layer)
-        .with(otel_logger_layer)
-        .with(otel_tracing_layer)
-        .try_init();
+    let _ = codex_log_guard::guard(
+        tracing_subscriber::registry()
+            .with(stderr_fmt)
+            .with(feedback_layer)
+            .with(feedback_metadata_layer)
+            .with(log_db_layer)
+            .with(otel_logger_layer)
+            .with(otel_tracing_layer),
+    )
+    .try_init();
     for warning in &config_warnings {
         match &warning.details {
             Some(details) => error!("{} {}", warning.summary, details),
@@ -705,6 +728,21 @@ pub async fn run_main_with_transport_options(
             "remote control is disabled by managed requirements",
         ));
     }
+    // Older builds logged sandboxed command lines verbatim (#398), and
+    // feedback uploads attach the current sandbox log.
+    #[cfg(target_os = "windows")]
+    std::thread::spawn({
+        let sandbox_dir = codex_windows_sandbox::sandbox_dir(&config.codex_home);
+        move || {
+            if let Err(err) = codex_state::scrub_sandbox_logs_once(&sandbox_dir) {
+                tracing::warn!("failed to scrub old secrets from the sandbox logs: {err}");
+            }
+            // #158: put back integrity labels a crashed sandbox session left.
+            if let Err(err) = codex_windows_sandbox::repair_stale_integrity_labels() {
+                tracing::warn!("failed to repair stale sandbox integrity labels: {err:#}");
+            }
+        }
+    });
     let installation_id = resolve_installation_id(&config.codex_home).await?;
     let transport_shutdown_token = CancellationToken::new();
     let mut transport_accept_handles = Vec::<JoinHandle<()>>::new();
@@ -750,6 +788,7 @@ pub async fn run_main_with_transport_options(
 
     let auth_manager =
         AuthManager::shared_from_config(&config, /*enable_codex_api_key_env*/ false).await;
+    follow_configured_session_account(&auth_manager, &config, /*embedded*/ false);
 
     let remote_control_enabled = remote_control_policy == RemoteControlPolicy::Allowed
         && remote_control_explicitly_requested
@@ -1148,6 +1187,7 @@ pub async fn run_main_with_transport_options(
                 }
             };
 
+            processor.cancel_plugin_sync();
             if !shutdown_state.forced() {
                 futures::future::join_all(
                     connections
@@ -1346,6 +1386,51 @@ fn loader_overrides_with_test_user_config_file(
     let _ = test_user_config_file;
 
     Ok(loader_overrides)
+}
+
+/// PF-84-S06 (#658): until a thread starts, the server's own ChatGPT backend
+/// requests (plugin listings, settings, usage, analytics) use the account the
+/// configuration starts the session on, never the default login when that is
+/// a named sign-in account. Where the account is known only when a thread
+/// starts, none of them is sent until then: an embedded server of a resume or
+/// fork launch with named accounts on (which leaves the default login in
+/// place), and a standalone server or daemon with named accounts on whose
+/// home uses named sign-in accounts, so its clients may choose another
+/// account per thread. In a home with only the default login (#1085) such a
+/// server uses it until a session on a named account (one enrolled while it
+/// runs) registers, and never again after that.
+pub(crate) fn follow_configured_session_account(
+    auth_manager: &Arc<AuthManager>,
+    config: &Config,
+    embedded: bool,
+) {
+    let mut hold_once_named = false;
+    let sign_in = match codex_model_provider::session_sign_in(&config.model_provider) {
+        codex_login::SessionSignIn::Default if embedded => {
+            if codex_login::default_login_left_unenforced() {
+                codex_login::SessionSignIn::Unknown
+            } else {
+                codex_login::SessionSignIn::Default
+            }
+        }
+        codex_login::SessionSignIn::Default if config.named_accounts_enabled() => {
+            // Blocking, once at startup: an initialised vault is decrypted
+            // (which can read the OS keychain) to read its account metadata.
+            if config.uses_named_sign_in_accounts() {
+                codex_login::SessionSignIn::Unknown
+            } else {
+                hold_once_named = true;
+                codex_login::SessionSignIn::Default
+            }
+        }
+        sign_in => sign_in,
+    };
+    auth_manager.register_configured_sign_in(sign_in);
+    // After the registration, which would otherwise overwrite a hold that a
+    // named session already registered set.
+    if hold_once_named {
+        auth_manager.hold_configured_sign_in_once_named();
+    }
 }
 
 fn analytics_rpc_transport(transport: &AppServerTransport) -> AppServerRpcTransport {

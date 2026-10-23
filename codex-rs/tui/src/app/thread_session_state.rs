@@ -92,6 +92,7 @@ impl App {
                 // thread-scoped state from the currently active session.
                 session.collaboration_mode = None;
                 session.personality = None;
+                session.provider_account = None;
             }
             session
         } else {
@@ -118,6 +119,7 @@ impl App {
                 message_history: None,
                 network_proxy: None,
                 rollout_path: thread.path.clone(),
+                provider_account: None,
             }
         };
         session.thread_id = thread_id;
@@ -216,6 +218,7 @@ mod tests {
             message_history: None,
             network_proxy: None,
             rollout_path: Some(PathBuf::new()),
+            provider_account: None,
         }
     }
 

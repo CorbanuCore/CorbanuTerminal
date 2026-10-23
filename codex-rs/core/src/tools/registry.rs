@@ -52,6 +52,12 @@ pub use codex_tools::ToolExposure;
 /// Implementers provide the shared `ToolExecutor` behavior plus optional
 /// core-owned metadata for hooks, telemetry, tool search, and argument diffs.
 pub(crate) trait CoreToolRuntime: ToolExecutor<ToolInvocation> {
+    /// Who provides this tool, for the PF-23-S01 protected-surface matrix.
+    /// Tools from MCP servers, the client or extension crates override it.
+    fn tool_origin(&self) -> crate::security::protected_surface::ToolOrigin {
+        crate::security::protected_surface::ToolOrigin::Builtin
+    }
+
     /// Returns a readiness wait for this exact tool before taking the execution gate.
     fn wait_until_ready<'a>(&'a self, _session: &'a Arc<Session>) -> Option<BoxFuture<'a, ()>> {
         None
@@ -67,6 +73,13 @@ pub(crate) trait CoreToolRuntime: ToolExecutor<ToolInvocation> {
     /// Whether cancellation should let the handler finish teardown before the
     /// host returns an aborted tool response.
     fn waits_for_runtime_cancellation(&self) -> bool {
+        false
+    }
+
+    /// Whether calling this tool repeatedly with identical arguments is normal
+    /// use, as for polling a running process or waiting on agents. Such tools
+    /// are exempt from the consecutive identical-call guard.
+    fn repeated_identical_calls_are_polling(&self) -> bool {
         false
     }
 
@@ -286,6 +299,14 @@ impl ToolExecutor<ToolInvocation> for ExposureOverride {
 }
 
 impl CoreToolRuntime for ExposureOverride {
+    fn tool_origin(&self) -> crate::security::protected_surface::ToolOrigin {
+        self.handler.tool_origin()
+    }
+
+    fn repeated_identical_calls_are_polling(&self) -> bool {
+        self.handler.repeated_identical_calls_are_polling()
+    }
+
     fn wait_until_ready<'a>(&'a self, session: &'a Arc<Session>) -> Option<BoxFuture<'a, ()>> {
         self.handler.wait_until_ready(session)
     }
@@ -628,6 +649,18 @@ impl ToolRegistry {
             }
         }
 
+        // PF-23-S01: after untrusted content, a route the security level has
+        // not classified (or a policy request an automatic reviewer would
+        // answer) needs the human.
+        if let Err(refusal) =
+            crate::security::protected_surface::check_dispatch(&invocation, tool.tool_origin())
+                .await
+        {
+            let err = FunctionCallError::RespondToModel(refusal);
+            dispatch_trace.record_failed(&err);
+            return Err(err);
+        }
+
         notify_tool_start(&invocation).await;
 
         if let Some(pre_tool_use_payload) = tool.pre_tool_use_payload(&invocation) {
@@ -843,7 +876,13 @@ async fn handle_any_tool(
 ) -> Result<AnyToolResult, FunctionCallError> {
     let call_id = invocation.call_id.clone();
     let payload = invocation.payload.clone();
-    let output = tool.handle(invocation.clone()).await?;
+    // #878: a broker refusal of auth a tool resolves (web search, image
+    // generation) is this session's.
+    let output = crate::model_broker_auth::refusals::owned_by(
+        invocation.session.thread_id,
+        tool.handle(invocation.clone()),
+    )
+    .await?;
     if output.contains_external_context()
         && invocation.turn.config.memories.disable_on_external_context
     {

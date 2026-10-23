@@ -1,0 +1,2 @@
+-rw-r--r--  1 root  wheel  82 Sep 17 22:00 /etc/codex/config.toml
+f4db2b3d685aa58a8bde048543f6073f1a43d698183ee6e4a55b09d7d03cb8a0  /etc/codex/config.toml

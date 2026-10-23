@@ -1,0 +1,44 @@
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                         │
+│                                                       │
+│ model:     gpt-5.4   /model to change                 │
+│ directory: /Volumes/…/worktrees/acct-inspect-20260915 │
+╰───────────────────────────────────────────────────────╯
+
+
+› PF53 request after restart
+
+
+• pf53 restart request
+
+
+› Run /review on my current changes
+
+  gpt-5.4 via pf53-loopback default · /Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915 · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

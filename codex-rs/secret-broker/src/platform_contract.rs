@@ -320,7 +320,12 @@ mod tests {
     fn accepts_complete_current_supported_report() {
         let results = supported_results();
         assert_eq!(
-            validate_protected_mode_report(&report(&results), TARGET_ID, PROBE_SHA256, 1_500),
+            validate_protected_mode_report(
+                &report(&results),
+                TARGET_ID,
+                PROBE_SHA256,
+                /*now_unix_seconds*/ 1_500
+            ),
             Ok(ProtectedModeAuthorization(()))
         );
     }
@@ -331,14 +336,24 @@ mod tests {
         let mut candidate = report(&results);
         candidate.contract_version = "corbanu.platform-containment/unknown";
         assert_eq!(
-            validate_protected_mode_report(&candidate, TARGET_ID, PROBE_SHA256, 1_500),
+            validate_protected_mode_report(
+                &candidate,
+                TARGET_ID,
+                PROBE_SHA256,
+                /*now_unix_seconds*/ 1_500
+            ),
             Err(ResultRejection::UnknownContract)
         );
 
         candidate.contract_version = CONTRACT_VERSION;
         candidate.fixture_protocol = "corbanu.platform-probe/unknown";
         assert_eq!(
-            validate_protected_mode_report(&candidate, TARGET_ID, PROBE_SHA256, 1_500),
+            validate_protected_mode_report(
+                &candidate,
+                TARGET_ID,
+                PROBE_SHA256,
+                /*now_unix_seconds*/ 1_500
+            ),
             Err(ResultRejection::UnknownFixtureProtocol)
         );
     }
@@ -350,7 +365,12 @@ mod tests {
         candidate.measured_at_unix_seconds = 2_000;
         candidate.expires_at_unix_seconds = 2_500;
         assert_eq!(
-            validate_protected_mode_report(&candidate, TARGET_ID, PROBE_SHA256, 1_500),
+            validate_protected_mode_report(
+                &candidate,
+                TARGET_ID,
+                PROBE_SHA256,
+                /*now_unix_seconds*/ 1_500
+            ),
             Err(ResultRejection::FutureDated)
         );
     }
@@ -361,7 +381,12 @@ mod tests {
         let mut candidate = report(&results);
         candidate.expires_at_unix_seconds = candidate.measured_at_unix_seconds;
         assert_eq!(
-            validate_protected_mode_report(&candidate, TARGET_ID, PROBE_SHA256, 900),
+            validate_protected_mode_report(
+                &candidate,
+                TARGET_ID,
+                PROBE_SHA256,
+                /*now_unix_seconds*/ 900
+            ),
             Err(ResultRejection::InvalidExpiry)
         );
     }
@@ -372,7 +397,12 @@ mod tests {
         results[0].status = CapabilityStatus::Untested;
         results[0].observation = Observation::Unavailable;
         assert_eq!(
-            validate_protected_mode_report(&report(&results), TARGET_ID, PROBE_SHA256, 1_500),
+            validate_protected_mode_report(
+                &report(&results),
+                TARGET_ID,
+                PROBE_SHA256,
+                /*now_unix_seconds*/ 1_500
+            ),
             Err(ResultRejection::UntestedCapability(
                 Capability::ProcessIdentity
             ))
@@ -387,7 +417,12 @@ mod tests {
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         ] {
             assert_eq!(
-                validate_protected_mode_report(&report(&results), TARGET_ID, malformed, 1_500),
+                validate_protected_mode_report(
+                    &report(&results),
+                    TARGET_ID,
+                    malformed,
+                    /*now_unix_seconds*/ 1_500
+                ),
                 Err(ResultRejection::WrongProbeIdentity)
             );
         }
@@ -397,7 +432,12 @@ mod tests {
     fn rejects_wrong_target() {
         let results = supported_results();
         assert_eq!(
-            validate_protected_mode_report(&report(&results), OTHER_TARGET_ID, PROBE_SHA256, 1_500,),
+            validate_protected_mode_report(
+                &report(&results),
+                OTHER_TARGET_ID,
+                PROBE_SHA256,
+                /*now_unix_seconds*/ 1_500,
+            ),
             Err(ResultRejection::WrongTargetIdentity)
         );
     }
@@ -406,7 +446,12 @@ mod tests {
     fn rejects_stale_report() {
         let results = supported_results();
         assert_eq!(
-            validate_protected_mode_report(&report(&results), TARGET_ID, PROBE_SHA256, 2_000),
+            validate_protected_mode_report(
+                &report(&results),
+                TARGET_ID,
+                PROBE_SHA256,
+                /*now_unix_seconds*/ 2_000
+            ),
             Err(ResultRejection::Stale)
         );
     }
@@ -416,7 +461,12 @@ mod tests {
         let mut results = supported_results();
         results[9].capability = Capability::ProcessIdentity;
         assert_eq!(
-            validate_protected_mode_report(&report(&results), TARGET_ID, PROBE_SHA256, 1_500),
+            validate_protected_mode_report(
+                &report(&results),
+                TARGET_ID,
+                PROBE_SHA256,
+                /*now_unix_seconds*/ 1_500
+            ),
             Err(ResultRejection::DuplicateCapability)
         );
     }
@@ -425,7 +475,12 @@ mod tests {
     fn rejects_missing_capability() {
         let results = supported_results();
         assert_eq!(
-            validate_protected_mode_report(&report(&results[..9]), TARGET_ID, PROBE_SHA256, 1_500,),
+            validate_protected_mode_report(
+                &report(&results[..9]),
+                TARGET_ID,
+                PROBE_SHA256,
+                /*now_unix_seconds*/ 1_500,
+            ),
             Err(ResultRejection::MissingCapability(
                 Capability::ProtectedStore
             ))
@@ -438,7 +493,12 @@ mod tests {
         results[0].status = CapabilityStatus::Unsupported;
         results[0].observation = Observation::Allowed;
         assert_eq!(
-            validate_protected_mode_report(&report(&results), TARGET_ID, PROBE_SHA256, 1_500),
+            validate_protected_mode_report(
+                &report(&results),
+                TARGET_ID,
+                PROBE_SHA256,
+                /*now_unix_seconds*/ 1_500
+            ),
             Err(ResultRejection::UnsupportedCapability(
                 Capability::ProcessIdentity
             ))
@@ -449,7 +509,12 @@ mod tests {
     fn rejects_wrong_probe_identity() {
         let results = supported_results();
         assert_eq!(
-            validate_protected_mode_report(&report(&results), TARGET_ID, OTHER_PROBE_SHA256, 1_500,),
+            validate_protected_mode_report(
+                &report(&results),
+                TARGET_ID,
+                OTHER_PROBE_SHA256,
+                /*now_unix_seconds*/ 1_500,
+            ),
             Err(ResultRejection::WrongProbeIdentity)
         );
     }
@@ -460,7 +525,12 @@ mod tests {
         let mut candidate = report(&results);
         candidate.protected_mode_eligible = false;
         assert_eq!(
-            validate_protected_mode_report(&candidate, TARGET_ID, PROBE_SHA256, 1_500),
+            validate_protected_mode_report(
+                &candidate,
+                TARGET_ID,
+                PROBE_SHA256,
+                /*now_unix_seconds*/ 1_500
+            ),
             Err(ResultRejection::EligibilityClaimMismatch)
         );
     }
@@ -470,7 +540,12 @@ mod tests {
         let mut results = supported_results();
         results[0].observation = Observation::Error;
         assert_eq!(
-            validate_protected_mode_report(&report(&results), TARGET_ID, PROBE_SHA256, 1_500),
+            validate_protected_mode_report(
+                &report(&results),
+                TARGET_ID,
+                PROBE_SHA256,
+                /*now_unix_seconds*/ 1_500
+            ),
             Err(ResultRejection::StatusObservationMismatch(
                 Capability::ProcessIdentity
             ))

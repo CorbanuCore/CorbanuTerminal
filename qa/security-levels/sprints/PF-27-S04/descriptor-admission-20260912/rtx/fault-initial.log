@@ -1,0 +1,65 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-admission-20260912/codex-rs/secret-broker-service)
+error[E0277]: `(dyn Fn() -> Result<bool, std::io::Error> + 'static)` cannot be sent between threads safely
+   --> secret-broker-service/src/launch/manifest/pair_admission_tests.rs:57:16
+    |
+ 57 | impl Child for Probe {
+    |                ^^^^^ `(dyn Fn() -> Result<bool, std::io::Error> + 'static)` cannot be sent between threads safely
+    |
+    = help: the trait `std::marker::Send` is not implemented for `(dyn Fn() -> Result<bool, std::io::Error> + 'static)`
+    = note: required for `std::ptr::Unique<(dyn Fn() -> Result<bool, std::io::Error> + 'static)>` to implement `std::marker::Send`
+note: required because it appears within the type `Box<(dyn Fn() -> Result<bool, std::io::Error> + 'static)>`
+   --> /home/travis/.rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:234:12
+    |
+234 | pub struct Box<
+    |            ^^^
+note: required because it appears within the type `admission::tests::Probe`
+   --> secret-broker-service/src/launch/manifest/pair_admission_tests.rs:56:8
+    |
+ 56 | struct Probe(Box<dyn Fn() -> io::Result<bool>>);
+    |        ^^^^^
+note: required by a bound in `manifest::spawn::Child`
+   --> secret-broker-service/src/launch/manifest/spawn.rs:186:25
+    |
+186 | pub(super) trait Child: Send + 'static {
+    |                         ^^^^ required by this bound in `Child`
+
+error[E0277]: `(dyn Fn() -> Result<bool, std::io::Error> + 'static)` cannot be sent between threads safely
+   --> secret-broker-service/src/launch/manifest/pair_admission_tests.rs:65:18
+    |
+ 65 | impl Process for Probe {
+    |                  ^^^^^ `(dyn Fn() -> Result<bool, std::io::Error> + 'static)` cannot be sent between threads safely
+    |
+help: the trait `manifest::spawn::Child` is not implemented for `admission::tests::Probe`
+      but trait `Child` is implemented for it
+   --> secret-broker-service/src/launch/manifest/pair_admission_tests.rs:57:1
+    |
+ 57 | impl Child for Probe {
+    | ^^^^^^^^^^^^^^^^^^^^
+    = note: required for `std::ptr::Unique<(dyn Fn() -> Result<bool, std::io::Error> + 'static)>` to implement `std::marker::Send`
+note: required because it appears within the type `Box<(dyn Fn() -> Result<bool, std::io::Error> + 'static)>`
+   --> /home/travis/.rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:234:12
+    |
+234 | pub struct Box<
+    |            ^^^
+note: required because it appears within the type `admission::tests::Probe`
+   --> secret-broker-service/src/launch/manifest/pair_admission_tests.rs:56:8
+    |
+ 56 | struct Probe(Box<dyn Fn() -> io::Result<bool>>);
+    |        ^^^^^
+note: required for `admission::tests::Probe` to implement `manifest::spawn::Child`
+   --> secret-broker-service/src/launch/manifest/spawn.rs:186:18
+    |
+186 | pub(super) trait Child: Send + 'static {
+    |                  ^^^^^
+note: required by a bound in `admission::Process`
+   --> secret-broker-service/src/launch/manifest/pair_admission.rs:22:37
+    |
+ 22 | pub(in super::super) trait Process: Child {
+    |                                     ^^^^^ required by this bound in `Process`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `codex-secret-broker-service` (lib test) due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: command `/home/travis/.rustup/toolchains/1.95.0-x86_64-unknown-linux-gnu/bin/cargo test --no-run --message-format json-render-diagnostics --package codex-secret-broker-service --features synthetic-fixture --locked` exited with code 101
+error: recipe `test` failed on line 82 with exit code 101

@@ -1,0 +1,2 @@
+Error loading config.toml: model_providers contains reserved built-in provider IDs: `zai`. Built-in providers cannot be overridden. Rename your custom provider (for example, `openai-custom`).
+probe: ZAI_API_KEY=placeholder-not-a-key CORBANU_TEST_NO_NATIVE_KEYRING=1 CODEX_HOME=<scratch>/homes/mh-repoint ... corbanu-acct exec --json --skip-git-repo-check -s read-only -c 'model_providers.zai.base_url="http://127.0.0.1:18474/api/paas/v4"' "Say hi"  -> exit 1, proxy on 18474 received 0 requests

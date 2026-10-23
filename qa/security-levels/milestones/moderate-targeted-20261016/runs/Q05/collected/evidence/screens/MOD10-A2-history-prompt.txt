@@ -1,0 +1,45 @@
+
+
+• Explored
+  └ Read config.toml
+
+⚠ Secretless agent launch blocked access to `/Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/config.toml`: at every security level,
+  Moderate included, agent commands can't read Corbanu's own files (such as its sign-in, vault, config and history) or common CLI tokens, even when
+  you approve them, so changing the level would not allow it.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• The command ran but was blocked:
+
+  cat: /Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/config.toml: Operation not permitted
+
+  Corbanu Terminal's sandbox prevents agent commands from reading its own config files (including config.toml) at every security level — even with
+  approval — since they may contain sign-in or credential data. If you need to view or edit that file, you'll need to do it yourself outside the agent
+  sandbox.
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Run: cat /Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/history.jsonl
+
+
+• Exploring
+  └ Read history.jsonl
+
+
+  Would you like to run the following command?
+
+  Environment: local
+
+  Reason: Security level: this is access to Corbanu's own files or security settings (its config, rules, hooks, skills, history or sign-in state)
+  after untrusted content entered the session. Approve only if you asked for it; a cached or automatic approval does not count. Corbanu's own files
+  this command reads (its sign-in, vault, config or history) stay unreadable to agent commands even if you approve (secretless agent launch), so
+  approving cannot unlock them.
+
+  $ cat /Users/agmx2/runs/agms-Q05-agmx2-20261016T110934Z/product-home/history.jsonl
+
+› 1. Yes, proceed (y)
+  2. No, and tell Corbanu Terminal what to do differently (esc)
+
+  A letter in brackets only highlights its option; enter confirms it.
+  Press enter to confirm or esc to cancel

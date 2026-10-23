@@ -1,0 +1,154 @@
+# PF-83 campaign-35 effective isolation policy (captured as root on the guest, 2026-10-06)
+
+Known gap (evidence check r1): the macOS process table, including other accounts' command lines, is readable by every account. Lanes ran concurrently, so an executor could see other lanes' process command lines (prompts, pf83-tui arguments). Only F03-attempt2 ran `ps aux`. No probe covered this. Next campaign: run lanes sequentially or one executor per VM.
+
+Executors run as hidden, password-less, non-admin, non-SSH accounts pf83x1-3 (uid 602-604, gid 601).
+Launch path: coordinator 'agent' -> sudo -n -u LANE -H /opt/pf83/bin/pf83-launch MODE RUN CASE (sudo env_reset;
+launcher sets the entire environment). Executor: /opt/pf83/pkg/corbanu exec --json --skip-git-repo-check
+--dangerously-bypass-approvals-and-sandbox -m glm-5.2 -c model_provider="zai" (the product's own seatbelt is
+not nested inside another sandbox; confinement is the OS account + pf + file modes below). Product under test:
+/opt/pf83/bin/pf83-product -> /opt/pf83/pkg/corbanu --no-alt-screen -m glm-5.2 -c model_provider=ROUTE in a
+private tmux server at $PF83_RUN/tmux.sock (pf83-tui). Launcher environment PATH=/opt/pf83/bin:/usr/bin:/bin:/usr/sbin:/sbin; CORRECTION (evidence check r1): the executor's shell tool runs `bash -lc`, so macOS path_helper prepends /usr/local/bin, /opt/homebrew/bin and system paths (observed in runs/F10/executor-events.jsonl), so the executor could invoke any world-executable tool on those paths; confinement rests on the OS account, file modes and per-uid pf, which the probes verify, not on PATH. Product (pf83-product, env -i) PATH=/opt/pf83/bin:/usr/bin:/bin:/usr/sbin:/sbin.
+HTTPS_PROXY=http://127.0.0.1:18443, CODEX_CA_CERTIFICATE=/opt/pf83/etc/mediation-ca.pem (campaign-local synthetic CA),
+ZAI_API_KEY=pf83-synthetic-placeholder-not-a-credential, private CORBANU_HOME/TMPDIR under $PF83_RUN.
+Mediated inference: harness/pf83_mediator.py runs as 'agent' (not an executor), accepts CONNECT only for api.z.ai:443,
+terminates TLS with a leaf for api.z.ai signed by the synthetic CA, forwards only /api/coding/paas/v4/ and /api/anthropic/,
+and injects the real transport credential, which no executor account can read. It logs no headers or bodies.
+Campaign-only changes (all restored afterwards; see restore record): /Users/neo and /Users/neo_1 chmod 700; unrelated
+PostgreSQL socket chmod 700; VirtIOFS host share unmounted; 'set skip on lo0' suspended so loopback is filtered per uid.
+
+    ## pfctl -a corbanu.pf83 -vsr (2026-10-06T01:23:44Z)
+    pass out quick on lo0 inet proto tcp from any to 127.0.0.1 port = 18443 user = 602 flags S/SA keep state
+      [ Evaluations: 84013     Packets: 21461     Bytes: 58170273    States: 32    ]
+      [ Inserted: uid 0 pid 52267 ]
+    pass out quick on lo0 inet proto tcp from any to 127.0.0.1 port = 18443 user = 603 flags S/SA keep state
+      [ Evaluations: 984       Packets: 16392     Bytes: 40162150    States: 0     ]
+      [ Inserted: uid 0 pid 52267 ]
+    pass out quick on lo0 inet proto tcp from any to 127.0.0.1 port = 18443 user = 604 flags S/SA keep state
+      [ Evaluations: 433       Packets: 13007     Bytes: 31839784    States: 0     ]
+      [ Inserted: uid 0 pid 52267 ]
+    block drop out log quick proto tcp all user = 602
+      [ Evaluations: 45977     Packets: 1695      Bytes: 105136      States: 0     ]
+      [ Inserted: uid 0 pid 52267 ]
+    block drop out log quick proto tcp all user = 603
+      [ Evaluations: 44053     Packets: 1828      Bytes: 113328      States: 0     ]
+      [ Inserted: uid 0 pid 52267 ]
+    block drop out log quick proto tcp all user = 604
+      [ Evaluations: 42225     Packets: 1208      Bytes: 74816       States: 0     ]
+      [ Inserted: uid 0 pid 52267 ]
+    block drop out log quick proto udp all user = 602
+      [ Evaluations: 42910     Packets: 0         Bytes: 0           States: 0     ]
+      [ Inserted: uid 0 pid 52267 ]
+    block drop out log quick proto udp all user = 603
+      [ Evaluations: 1854      Packets: 0         Bytes: 0           States: 0     ]
+      [ Inserted: uid 0 pid 52267 ]
+    block drop out log quick proto udp all user = 604
+      [ Evaluations: 1854      Packets: 0         Bytes: 0           States: 0     ]
+      [ Inserted: uid 0 pid 52267 ]
+    pass quick on lo0 all no state
+      [ Evaluations: 77603     Packets: 69118     Bytes: 131929277   States: 0     ]
+      [ Inserted: uid 0 pid 52267 ]
+    pass in quick on en0 inet proto tcp from 192.168.64.1 to (en0) port = 22 flags S/SA keep state
+      [ Evaluations: 8485      Packets: 13324     Bytes: 15448952    States: 4     ]
+      [ Inserted: uid 0 pid 52267 ]
+    pass out quick on en0 inet proto tcp from (en0) port = 22 to 192.168.64.1 flags S/SA keep state
+      [ Evaluations: 8260      Packets: 0         Bytes: 0           States: 0     ]
+      [ Inserted: uid 0 pid 52267 ]
+    pass out quick on en0 inet proto udp from any port = 68 to 192.168.64.1 port = 67 keep state
+      [ Evaluations: 8309      Packets: 4         Bytes: 1368        States: 0     ]
+      [ Inserted: uid 0 pid 52267 ]
+    pass in quick on en0 inet proto icmp from 192.168.64.1 to (en0) icmp-type echoreq keep state
+      [ Evaluations: 8307      Packets: 0         Bytes: 0           States: 0     ]
+      [ Inserted: uid 0 pid 52267 ]
+    pass out quick on en0 inet proto tcp from (en0) to <__automatic_513e4f68_0> port = 443 flags S/SA keep state
+      [ Evaluations: 8307      Packets: 112993    Bytes: 136448352   States: 21    ]
+      [ Inserted: uid 0 pid 52267 ]
+    block drop log quick on en0 all
+      [ Evaluations: 7460      Packets: 7460      Bytes: 508858      States: 0     ]
+      [ Inserted: uid 0 pid 52267 ]
+    
+    ## pfctl -sI -v (lo0)
+    lo0
+    
+    ## /etc/sudoers.d/pf83-codeblind
+    agent ALL=(pf83x1,pf83x2,pf83x3) NOPASSWD: ALL
+    
+    ## executor accounts
+    uid=602(pf83x1) gid=601(pf83exec) groups=601(pf83exec),12(everyone),61(localaccounts),701(com.apple.sharepoint.group.1),100(_lpoperator)
+    dsAttrTypeNative:IsHidden: 1 NFSHomeDirectory: /Users/pf83x1 PrimaryGroupID: 601 UniqueID: 602 UserShell: /bin/bash 
+    no pf83x1 is NOT a member of admin
+    no pf83x1 is NOT a member of com.apple.access_ssh
+    no pf83x1 is NOT a member of staff
+    uid=603(pf83x2) gid=601(pf83exec) groups=601(pf83exec),12(everyone),61(localaccounts),701(com.apple.sharepoint.group.1),100(_lpoperator)
+    dsAttrTypeNative:IsHidden: 1 NFSHomeDirectory: /Users/pf83x2 PrimaryGroupID: 601 UniqueID: 603 UserShell: /bin/bash 
+    no pf83x2 is NOT a member of admin
+    no pf83x2 is NOT a member of com.apple.access_ssh
+    no pf83x2 is NOT a member of staff
+    uid=604(pf83x3) gid=601(pf83exec) groups=601(pf83exec),12(everyone),61(localaccounts),701(com.apple.sharepoint.group.1),100(_lpoperator)
+    dsAttrTypeNative:IsHidden: 1 NFSHomeDirectory: /Users/pf83x3 PrimaryGroupID: 601 UniqueID: 604 UserShell: /bin/bash 
+    no pf83x3 is NOT a member of admin
+    no pf83x3 is NOT a member of com.apple.access_ssh
+    no pf83x3 is NOT a member of staff
+    
+    ## modes
+    /Users/agent drwx------ agent:staff
+    /Users/neo drwx------ neo:staff
+    /Users/neo_1 drwx------ neo2:staff
+    /Users/pf83x1 drwx------ pf83x1:pf83exec
+    /Users/pf83x2 drwx------ pf83x2:pf83exec
+    /Users/pf83x3 drwx------ pf83x3:pf83exec
+    /opt/pf83 drwxr-xr-x root:wheel
+    /opt/pf83/pkg dr-xr-xr-x root:wheel
+    /opt/pf83/pkg/codex-code-mode-host -r-xr-xr-x root:wheel
+    /opt/pf83/pkg/corbanu -r-xr-xr-x root:wheel
+    /opt/pf83/pkg/corbanu-acp -r-xr-xr-x root:wheel
+    /opt/pf83/pkg/corbanu-walletd -r-xr-xr-x root:wheel
+    /opt/pf83/bin dr-xr-xr-x root:wheel
+    /opt/pf83/bin/pf83-launch -r-xr-xr-x root:wheel
+    /opt/pf83/bin/pf83-probe -r-xr-xr-x root:wheel
+    /opt/pf83/bin/pf83-product -r-xr-xr-x root:wheel
+    /opt/pf83/bin/pf83-tui -r-xr-xr-x root:wheel
+    /opt/pf83/bin/tmux -r-xr-xr-x root:wheel
+    /opt/pf83/etc/mediation-ca.pem -r--r--r-- root:wheel
+    /opt/pf83/etc/tmux.conf -r--r--r-- root:wheel
+    /opt/pf83/packet dr-xr-xr-x root:wheel
+    /private/tmp/.s.PGSQL.5432 srwx------ neo2:wheel
+    
+    ## host share mounts
+    none mounted
+    
+    ## machine
+    ProductName:		macOS
+    ProductVersion:		26.2
+    BuildVersion:		25C56
+    IOPlatformUUID F9AABE1C-BA2C-55D7-9859-A6ED560D3218
+    Neos-Virtual-Machine.local
+    arm64
+
+## /opt/pf83 digests (from provisioning)
+    510a7286ada3d1cbc200f67018dcef04cbb64c46436286ce05381332ca024958  package-manifest.json
+    f99578408d9f6424724809eeb52b4f23b4d0889a24b939d12a71448d25fdb1c0  pkg/codex-code-mode-host
+    e552180a2dfc5457a93881cc4822054e18a4a90e8bf86f67008238e461e758f6  pkg/corbanu
+    e65e681a7a00cdbf330194e232edca02cd241c4beeb8e7b8539a228334814c8f  pkg/corbanu-acp
+    d27f1348bbde699e06a210e4bf692c29b72b945cfc92860c486a89b19f551a11  pkg/corbanu-walletd
+    7af49cc22af716e373c76f71275b1f4b9a8c63435f761b0b979ab43d2150ea5e  bin/pf83-launch
+    e0547b23acb820857f998d8cd9afe35c7babfb3ba4a80396819ccfbc0a556440  bin/pf83-probe
+    27b42bbe2d0d26122ad1e526baf2363349644c32f9dde4e72b83141c62de0bb0  bin/pf83-product
+    4a1ec3acf244d0527a3f28ec43752ac343af722ca88ab75349d689d2e34cf2ee  bin/pf83-tui
+    1d101560ca3d4fb6f86bb53e6d9946e7b98444343d1fdab4a2a6e72980e232a5  bin/tmux
+    d225f020bd64059ec001ecf50f5e15e71dad69b1e75a32bab58a48933c47ba7e  etc/mediation-ca.pem
+    a0f824f720159d0da7f3d7f4a1e8844229a6a84d54cf280a094a1ffb08c2b3e2  etc/tmux.conf
+    c97bf701cd7aff2e26f08884f35dbc9a4fc33b1eef14eee6328d2ea1f1411726  /opt/pf83/packet/original-F01-F11.md
+    ceb2efa7bee7c5c0f4db0f409ae342622cb6a5340193b1f013eabb4e44bcf947  /opt/pf83/packet/navigation.md
+    b1ff4d3c8ac10cdcd9fff45da67bff53b51d7bb61f5d893d33b78a32bb7e9e06  /opt/pf83/packet/prompts/F04.md
+    809c56df9965e6f88c693ff66187c1a20708d226a73ad6d0b4f186a82175f442  /opt/pf83/packet/prompts/F10.md
+    2708b05bd98b8180efdba8ebcd7a2a069902ac7fff70aabca42e46dbb7ec8c39  /opt/pf83/packet/prompts/F11.md
+    48a1f7350f3872d9253705d1ea342c704c738707aa5e0c20247ed4feb0dd3a72  /opt/pf83/packet/prompts/F01.md
+    e6e2d078e47215d5cc03df0834e38d083cd0cf3a57997c279c7724f38c75d58c  /opt/pf83/packet/prompts/F05.md
+    fe5435277e0f02a7beca866c43344ce809c61b1e827cda223699e331e6040fac  /opt/pf83/packet/prompts/F08.md
+    697ddde27a379a9d732546869e56c7b6118e90d7d852081b17f87c962f7f3af3  /opt/pf83/packet/prompts/F09.md
+    65362c863ada03b22baabc0cca756e03585979eac4f77cbcee02df7a3ecc3028  /opt/pf83/packet/prompts/F02.md
+    dca76b2d4637cd2668403cf8ef42d136eed2abc503c94c787e6b3e0975af9e74  /opt/pf83/packet/prompts/F06.md
+    0418db83e2f096a38b0e6336ba59b591df96c28329ba3ea979c62b71b1d20c56  /opt/pf83/packet/prompts/F07.md
+    32596e3d28004ca12306cda5c5125d3dad31f71adc082c592c2d6d87dec13dd6  /opt/pf83/packet/prompts/F03.md
+    991e5804e4b598b31f51301fc17a7cdea3e89161663c862ceef7a88c017ba983  /opt/pf83/packet/executor-prompt.md

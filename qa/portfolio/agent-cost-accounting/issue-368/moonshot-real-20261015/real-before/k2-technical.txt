@@ -1,0 +1,50 @@
+Attempt, components and original price
+Requested UTC day: 2026-10-15
+Provider: kimi
+Model: kimi-k2.7-code
+Billing: Pay per use
+Estimated cost: at least $0.000044 (1 attempt had incomplete usage)
+Next step for requests with incomplete usage: check the bill from kimi. Their provider did not report every token count, so the estimate is missing or
+only a lower bound.
+Tokens: 11,572 tokens
+—— Details ——
+Billed cost: kimi doesn't report its charges, so any cost here is an estimate — check kimi's bill.
+Request: 50ff5779-39b5-47f1-945f-859027c3403c
+Attempt: 924874f4-c412-4037-a43d-c268a09a17ac
+Thread: 01a14185-068e-7493-be88-ff5fb07553ba
+Turn: 01a14185-3d23-7c82-a016-0cb3274f7f31
+Account: default
+Opaque scope: 548fba4c-9fb5-4811-baac-1eff67c9ca04
+Arithmetic dialect: Inclusive
+Admission time: 2026-10-15T21:43:33.512Z
+Retry predecessor: none
+Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+Known estimated token cost: $0.000044 + unknown costs
+Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
+Billing basis: pay per use
+Input: 11561
+Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+Cache read: unknown — no retained numeric evidence
+Cache write: unknown — no retained numeric evidence
+Output: 11
+Reasoning (subset, not separately billed): 8
+Total (not separately billed): 11572
+Noncached input cost: unknown — no retained numeric evidence
+Cache read cost: unknown — no retained numeric evidence
+Cache write cost: unknown — no retained numeric evidence
+Output cost: $0.000044; exact USD 0.000044
+Known subtotal exact USD: 0.000044
+Price ID: b4603579-88d1-4754-ae37-8680f37750be
+Price source: NativeCatalog; reference 58223fc7-4865-5065-b185-e6e77d9aa5b1
+Price currency/unit: Usd / PerMillionTokens
+Price observed/approved: 2026-10-15T21:43:33.512Z / 2026-10-15T21:43:33.512Z
+Price effective interval: [2026-10-15T21:43:33.512Z, unbounded)
+Noncached input rate: 0.95 USD per million tokens
+Cache read rate: 0.19 USD per million tokens
+Cache write rate: 0.95 USD per million tokens
+Output rate: 4 USD per million tokens
+Evidence revision 12; source 1187d00d-e2e2-45c9-8bdf-f0fb90a30ef1; sequence 12; presence patch {"input":11561,"output":11,"reasoning":8,"total":11572}
+Snapshot is not current; newer activity is unverified
+Back
+Refresh
+Close

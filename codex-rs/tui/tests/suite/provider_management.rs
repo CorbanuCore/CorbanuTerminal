@@ -9,8 +9,6 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::ensure;
 use core_test_support::responses;
-use sha2::Digest;
-use sha2::Sha256;
 use tempfile::tempdir;
 use uuid::Uuid;
 use wiremock::Mock;
@@ -19,6 +17,8 @@ use wiremock::ResponseTemplate;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
+use crate::support::file_hash::sha256_file;
+use crate::support::secret_scan;
 use crate::support::tmux::CommandSpec;
 use crate::support::tmux::SessionSpec;
 use crate::support::tmux::TerminalSize;
@@ -68,7 +68,7 @@ async fn tmux_astra_selection_cancel_restart_and_request() -> Result<()> {
     for restart in [false, true] {
         let session = tmux.new_session(SessionSpec::new(
             "astra-selector",
-            TerminalSize::new(140, 44),
+            TerminalSize::new(/*columns*/ 140, /*rows*/ 44),
             CommandSpec::new(&fixture.binary)
                 .env("CODEX_HOME", fixture.home.path())
                 .env("CORBANU_HOME", fixture.home.path())
@@ -200,7 +200,7 @@ async fn tmux_ambient_model_picker_offers_only_glm() -> Result<()> {
     let tmux = fixture.tmux()?;
     let session = tmux.new_session(SessionSpec::new(
         "ambient-glm-only",
-        TerminalSize::new(140, 44),
+        TerminalSize::new(/*columns*/ 140, /*rows*/ 44),
         CommandSpec::new(&fixture.binary)
             .env("CODEX_HOME", fixture.home.path())
             .env("CORBANU_HOME", fixture.home.path())
@@ -919,7 +919,7 @@ fn session_spec(
 ) -> SessionSpec {
     SessionSpec::new(
         name,
-        TerminalSize::new(140, 44),
+        TerminalSize::new(/*columns*/ 140, /*rows*/ 44),
         CommandSpec::new(binary)
             .env("CODEX_HOME", home)
             .env("CORBANU_HOME", home)
@@ -1085,7 +1085,7 @@ fn register_evidence(tmux: &TmuxServer, home: &Path, binary: &Path) -> Result<()
         .modified()?
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
-    let hash = format!("{:x}", Sha256::digest(fs::read(binary)?));
+    let hash = sha256_file(binary)?;
     fs::write(
         home.join("binary.sha256"),
         format!("{hash}  {}\n", binary.display()),
@@ -1121,7 +1121,7 @@ fn capture_success(
     canaries: &[&str],
 ) -> Result<()> {
     let viewport = pane.capture_viewport()?;
-    let scrollback = pane.capture_scrollback_tail(4_000)?;
+    let scrollback = pane.capture_scrollback_tail(/*lines*/ 4_000)?;
     let directory = PathBuf::from("target/tmux-artifacts").join(format!("pf54-{scenario}"));
     fs::create_dir_all(&directory)?;
     fs::write(directory.join("viewport.txt"), &viewport)?;
@@ -1165,42 +1165,14 @@ fn capture_success(
 fn tree_contains_except_custody(root: &Path, needle: &[u8]) -> Result<bool> {
     // These exact home-level files are credential custody, not transcripts.
     // Files with the same names elsewhere remain subject to the leak scan.
-    for entry in fs::read_dir(root)? {
-        let path = entry?.path();
-        if path == root.join("provider_auth.json") || path == root.join("auth.json") {
-            continue;
-        }
-        if tree_contains(&path, needle)? {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+    let custody = [root.join("provider_auth.json"), root.join("auth.json")];
+    secret_scan::tree_contains(root, needle, &|path| {
+        custody.iter().any(|file| path == file)
+    })
 }
 
 fn tree_contains(root: &Path, needle: &[u8]) -> Result<bool> {
-    let metadata = match fs::symlink_metadata(root) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(error) => return Err(error.into()),
-    };
-    let file_type = metadata.file_type();
-    if file_type.is_symlink() {
-        return Ok(false);
-    }
-    if file_type.is_file() {
-        let bytes = fs::read(root)?;
-        return Ok(bytes.windows(needle.len()).any(|window| window == needle));
-    }
-    if !file_type.is_dir() {
-        return Ok(false);
-    }
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
-        if tree_contains(&entry.path(), needle)? {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+    secret_scan::tree_contains(root, needle, &|_| false)
 }
 
 fn synthetic_canary(label: &str) -> String {

@@ -947,7 +947,11 @@ allow_local_binding = true
                 .set_permission_profile(permission_profile_for_config)
                 .expect("set permission profile");
         });
-    let test = builder.build_with_auto_env(server).await?;
+    // Local executor only (#708, #722): this "limited"-mode proxy needs MITM, which a
+    // remote executor's proxy refuses, and in "full" mode a denial made by the
+    // remote proxy doesn't end the command as failed (the host's denial monitor
+    // only sees its own proxy).
+    let test = builder.build(server).await?;
     assert!(
         test.config.permissions.network.is_some(),
         "expected managed network proxy config to be present"

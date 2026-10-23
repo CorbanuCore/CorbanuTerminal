@@ -1,0 +1,7 @@
+openai-api-key (value non-empty): remote scratch 0 files; evidence dir 0 files
+provider/zai_api_key (value non-empty): remote scratch 0 files; evidence dir 0 files
+provider/kimi_api_key (value non-empty): remote scratch 0 files; evidence dir 0 files
+claude-plan-test-token (value non-empty): remote scratch 0 files; evidence dir 0 files
+key-shaped (sk-..., sk-ant-..., Bearer <20+>) in evidence dir: 0 files
+key-shaped in remote scratch (homes, logs, cap, work): 96 files
+  of which outside homes/*/.tmp/plugins/ (bundled plugin documentation, identical in every home): 0 files; logs, captures and work: 0

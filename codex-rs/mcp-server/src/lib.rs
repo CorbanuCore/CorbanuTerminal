@@ -108,16 +108,18 @@ pub async fn run_main(
     );
 
     let fmt_layer = tracing_subscriber::fmt::layer()
-        .with_writer(std::io::stderr)
+        .with_writer(codex_log_guard::RedactingMakeWriter::new(std::io::stderr))
         .with_filter(EnvFilter::from_default_env());
     let otel_logger_layer = otel.as_ref().and_then(|provider| provider.logger_layer());
     let otel_tracing_layer = otel.as_ref().and_then(|provider| provider.tracing_layer());
 
-    let _ = tracing_subscriber::registry()
-        .with(fmt_layer)
-        .with(otel_logger_layer)
-        .with(otel_tracing_layer)
-        .try_init();
+    let _ = codex_log_guard::guard(
+        tracing_subscriber::registry()
+            .with(fmt_layer)
+            .with(otel_logger_layer)
+            .with(otel_tracing_layer),
+    )
+    .try_init();
 
     // Set up channels.
     let (incoming_tx, mut incoming_rx) = mpsc::channel::<IncomingMessage>(CHANNEL_CAPACITY);

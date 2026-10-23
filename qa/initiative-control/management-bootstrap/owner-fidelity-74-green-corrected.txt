@@ -1,0 +1,11 @@
+test_resolved_decision_slack_line_survives_omission_with_slack_on (test_decision_feed.SlackProjectionTests.test_resolved_decision_slack_line_survives_omission_with_slack_on) ... ok
+test_resolved_decision_slack_line_survives_omission_with_slack_off (test_decision_feed.SlackProjectionTests.test_resolved_decision_slack_line_survives_omission_with_slack_off) ... ok
+test_historical_resolutions_also_retain_their_answered_revisions (test_decision_feed.ProjectionRegressionTests.test_historical_resolutions_also_retain_their_answered_revisions) ... ok
+test_omitted_settled_history_is_distinct_from_unavailable_status (test_attention.DecisionRenderingTests.test_omitted_settled_history_is_distinct_from_unavailable_status) ... ok
+test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) ... ok
+test_busy_coordinator_returns_partial_status_through_cli (test_owner_daemon.ActivationVisibilityTests.test_busy_coordinator_returns_partial_status_through_cli) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 1.433s
+
+OK

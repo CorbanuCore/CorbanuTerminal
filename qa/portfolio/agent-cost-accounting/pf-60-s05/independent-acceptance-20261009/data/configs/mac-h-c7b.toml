@@ -1,0 +1,3 @@
+model = "glm-5.2"
+model_provider = "zai"
+model_auto_compact_token_limit = 12700

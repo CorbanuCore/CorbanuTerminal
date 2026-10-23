@@ -1,0 +1,9 @@
+{"type":"thread.started","thread_id":"01a120bf-af95-7b63-aba3-07eff56b3ecf"}
+{"type":"turn.started"}
+{"type":"error","message":"Reconnecting... 1/5 (stream disconnected before completion: error sending request for url (http://127.0.0.1:18471/api/paas/v4/chat/completions))"}
+{"type":"error","message":"Reconnecting... 2/5 (stream disconnected before completion: error sending request for url (http://127.0.0.1:18471/api/paas/v4/chat/completions))"}
+{"type":"error","message":"Reconnecting... 3/5 (stream disconnected before completion: error sending request for url (http://127.0.0.1:18471/api/paas/v4/chat/completions))"}
+{"type":"error","message":"Reconnecting... 4/5 (stream disconnected before completion: error sending request for url (http://127.0.0.1:18471/api/paas/v4/chat/completions))"}
+{"type":"error","message":"Reconnecting... 5/5 (stream disconnected before completion: error sending request for url (http://127.0.0.1:18471/api/paas/v4/chat/completions))"}
+{"type":"error","message":"stream disconnected before completion: error sending request for url (http://127.0.0.1:18471/api/paas/v4/chat/completions)"}
+{"type":"turn.failed","error":{"message":"stream disconnected before completion: error sending request for url (http://127.0.0.1:18471/api/paas/v4/chat/completions)"}}

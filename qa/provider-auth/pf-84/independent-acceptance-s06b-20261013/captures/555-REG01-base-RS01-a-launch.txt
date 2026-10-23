@@ -1,0 +1,11 @@
+Error:
+   0: Failed to resume session from $S/homes/o1/sessions/2026/10/13/rollout-2026-10-13T01-14-03-01a13453-65a1-7d72-80d8-640
+05d5a4b28.jsonl: thread/resume failed during TUI bootstrap: thread/resume failed: failed to load configuration: the thread's recorded account zai:work: named accounts nee
+d the `named_accounts` feature (`--enable named_accounts`); resume with `--account zai:default` to use the default credentials instead (code -32600)
+
+Location:
+   tui/src/app.rs:1037
+
+Backtrace omitted. Run with RUST_BACKTRACE=1 environment variable to display it.
+Run with RUST_BACKTRACE=full to include source snippets.
+EXITED-1

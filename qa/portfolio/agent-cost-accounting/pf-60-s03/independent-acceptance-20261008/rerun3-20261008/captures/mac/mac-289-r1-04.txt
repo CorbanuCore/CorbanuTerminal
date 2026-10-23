@@ -1,0 +1,15 @@
+$ /usage   (sent: menu)
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:     glm-5.2   /model to change                 │
+│ directory: <corbanu-root>/…/repos/is-plain-obj │
+╰───────────────────────────────────────────────────────╯
+› Read readme.md and summarize it in one sentence.
+• is-plain-obj is a small npm package that checks whether a value is a plain object (created by {}, new Object(), or Object.create(null)), with support for cross-realm detection.
+• Per-request cost history is not part of this build.
+• Per-request cost history is not part of this build.
+• Per-request cost history is not part of this build.
+■ Sign in with ChatGPT to view OpenAI account usage.
+› Explain this codebase
+  Z.AI GLM 5.2 via zai standard · <scratch>/repos/is-plain-obj · Corbanu Terminal · TPS: -- tok/s

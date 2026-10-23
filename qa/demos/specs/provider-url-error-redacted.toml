@@ -1,0 +1,33 @@
+# Errors shown in the TUI no longer print credentials from the provider URL.
+# The provider points at a local server that answers 401
+# (python3 fake401.py 47401); its URL has fake userinfo and a fake `key`
+# query value. Before, the error cell printed both.
+id = "provider-url-error-redacted"
+feature = "Provider URL credentials are redacted in errors"
+expected = "A 401 from a provider whose URL holds user:pass and ?key=… shows the URL as http://REDACTED:REDACTED@…?key=REDACTED."
+model = "glm-5.2"
+provider = "demo401"
+config = """
+suppress_unstable_features_warning = true
+[model_providers.demo401]
+name = "Demo 401"
+base_url = "http://demo-user:fake-demo-pass-0002@127.0.0.1:47401/v1"
+query_params = { key = "fake-demo-query-0001" }
+wire_api = "responses"
+request_max_retries = 0
+stream_max_retries = 0
+"""
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "say hi"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "key=REDACTED"
+timeout = 60
+[[steps]]
+pause = 4.0

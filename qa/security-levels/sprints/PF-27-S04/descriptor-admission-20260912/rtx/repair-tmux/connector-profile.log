@@ -1,0 +1,8 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+────────────
+ Nextest run ID 159d356e-159e-4d0c-a63d-029fb06cda66 with nextest profile: local
+    Starting 1 test across 7 binaries (69 tests skipped)
+        PASS [   0.002s] (1/1) codex-secret-broker-service launch::manifest::elf::tests::pf_27_s01_elf_profile_frozen_artifacts_as_data
+────────────
+     Summary [   0.003s] 1 test run: 1 passed, 69 skipped

@@ -1,0 +1,45 @@
+# Aggressive active (stored before launch by wrappers/seed-aggressive.sh).
+# A spawned sub-agent gets the same approvals, sandbox and environment.
+id = "pf24-child-inherits"
+feature = "Aggressive: child agents inherit it"
+expected = "The sub-agent's command asks for approval in the child thread; after approving, its write outside the folder is denied and the canary variable is absent."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"child-probe.sh" = """
+echo child > ../outside/c.txt && echo child-outside-written || echo child-outside-denied
+printenv DEMO_VAULT_CANARY | wc -c | sed 's/^ */child-canary-bytes=/'
+"""
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Do not run any command yourself. Spawn one sub-agent whose only task is to run the shell command bash child-probe.sh without requesting escalated permissions and report its raw output. Wait for it and repeat its output."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Thread: Agent \\("
+timeout = 240
+compress = 2
+[[steps]]
+pause = 2.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)child-outside-denied.*child-canary-bytes=0"
+timeout = 240
+compress = 2
+[[steps]]
+pause = 3.0

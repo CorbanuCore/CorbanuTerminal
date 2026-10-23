@@ -63,17 +63,76 @@ pub(crate) fn include_runtime_model(
 #[derive(Debug)]
 pub(crate) struct ModelCatalog {
     models: RwLock<Vec<ModelPreset>>,
+    /// Ids [`ModelCatalog::set_provider_models`] added, per provider.
+    provider_model_ids: RwLock<std::collections::HashMap<String, Vec<String>>>,
+    /// Numbers the background checks that decide those models; only the
+    /// newest one's answer is applied.
+    provider_models_check: std::sync::atomic::AtomicU64,
+    /// Ids of the models the app server's `model/list` returned; the rest
+    /// (runtime and GPU providers) are added here.
+    listed_ids: RwLock<Vec<String>>,
     provider_policy: RwLock<Option<crate::chatwidget::provider_model_policy::ProviderModelPolicy>>,
     session_recovery_only: AtomicBool,
+    /// D86/#1193: the newest background answer to "which providers have a
+    /// named account in this home", with the number of the check that
+    /// produced it; `None` until one has answered or when the vault could
+    /// not be read. `/status` reads this instead of the vault.
+    named_account_providers: RwLock<(u64, Option<std::collections::BTreeSet<String>>)>,
+    /// Numbers the background checks that compute it.
+    named_account_check: std::sync::atomic::AtomicU64,
 }
 
 impl ModelCatalog {
     pub(crate) fn new(models: Vec<ModelPreset>) -> Self {
         Self {
             models: RwLock::new(models),
+            provider_model_ids: RwLock::new(std::collections::HashMap::new()),
+            provider_models_check: std::sync::atomic::AtomicU64::new(0),
+            listed_ids: RwLock::new(Vec::new()),
             provider_policy: RwLock::new(None),
             session_recovery_only: AtomicBool::new(false),
+            named_account_providers: RwLock::new((0, None)),
+            named_account_check: std::sync::atomic::AtomicU64::new(0),
         }
+    }
+
+    /// Records which of the models came from `model/list`.
+    pub(crate) fn mark_listed(&self, listed: &[ModelPreset]) {
+        *self
+            .listed_ids
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            listed.iter().map(|preset| preset.id.clone()).collect();
+    }
+
+    /// PF-84: replaces the `model/list` models with a fresh list (fetched
+    /// with the sign-in of the account the session now uses), keeping the
+    /// models added for runtime and GPU providers.
+    pub(crate) fn replace_listed_models(&self, listed: Vec<ModelPreset>) {
+        let mut listed_ids = self
+            .listed_ids
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut models = self
+            .models
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let new_ids: Vec<String> = listed.iter().map(|preset| preset.id.clone()).collect();
+        // An added model the new list now carries itself is dropped.
+        let added: Vec<ModelPreset> = models
+            .drain(..)
+            .filter(|preset| {
+                !listed_ids.contains(&preset.id)
+                    && !listed.iter().any(|listed| {
+                        listed.id == preset.id
+                            || (listed.model == preset.model
+                                && listed.provider_id == preset.provider_id)
+                    })
+            })
+            .collect();
+        *models = listed;
+        models.extend(added);
+        *listed_ids = new_ids;
     }
 
     pub(crate) fn set_session_recovery_only(&self, session_only: bool) {
@@ -178,6 +237,95 @@ impl ModelCatalog {
                 continue;
             };
             include_runtime_model(&mut models, &model, runtime_provider_id);
+        }
+    }
+
+    /// #1193: starts a new named-account check and returns its number.
+    pub(crate) fn begin_named_account_check(&self) -> u64 {
+        self.named_account_check.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    /// #1193: records check `generation`'s answer (`None`: the vault could
+    /// not be read) unless a newer check has answered already.
+    pub(crate) fn set_named_account_providers(
+        &self,
+        generation: u64,
+        providers: Option<std::collections::BTreeSet<String>>,
+    ) {
+        let mut cached = self
+            .named_account_providers
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if generation > cached.0 {
+            *cached = (generation, providers);
+        }
+    }
+
+    /// #1193: whether `provider_id` has a named account in this home, from
+    /// the cached answer; `None` while unknown. Never reads the vault.
+    pub(crate) fn provider_has_named_account(&self, provider_id: &str) -> Option<bool> {
+        self.named_account_providers
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .1
+            .as_ref()
+            .map(|providers| providers.contains(provider_id))
+    }
+
+    /// Starts a new provider-models check and returns its number.
+    pub(crate) fn begin_provider_models_check(&self) -> u64 {
+        self.provider_models_check.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    /// Whether `generation` is the newest provider-models check.
+    pub(crate) fn is_latest_provider_models_check(&self, generation: u64) -> bool {
+        self.provider_models_check.load(Ordering::SeqCst) == generation
+    }
+
+    /// Sets the models offered for `runtime_provider_id` beyond its own list:
+    /// the ones added by an earlier call are removed (except `current_model`,
+    /// the one the session is on, which stays as it was), then `presets` are
+    /// added as models of that provider, skipping models the catalog already
+    /// lists for it. They never become the default.
+    pub(crate) fn set_provider_models(
+        &self,
+        runtime_provider_id: &str,
+        presets: Vec<ModelPreset>,
+        current_model: Option<&str>,
+    ) {
+        let mut added = self
+            .provider_model_ids
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut models = self
+            .models
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let previous = added.remove(runtime_provider_id).unwrap_or_default();
+        let kept = current_model
+            .map(|model| format!("{runtime_provider_id}:{model}"))
+            .filter(|id| previous.contains(id));
+        models.retain(|preset| !previous.contains(&preset.id) || Some(&preset.id) == kept.as_ref());
+        let mut ids = kept.into_iter().collect::<Vec<_>>();
+        for mut preset in presets {
+            if models.iter().any(|listed| {
+                listed.model == preset.model
+                    && listed
+                        .provider_id
+                        .as_deref()
+                        .or_else(|| canonical_catalog_provider(&listed.model))
+                        == Some(runtime_provider_id)
+            }) {
+                continue;
+            }
+            preset.id = format!("{runtime_provider_id}:{}", preset.model);
+            preset.provider_id = Some(runtime_provider_id.to_string());
+            preset.is_default = false;
+            ids.push(preset.id.clone());
+            models.push(preset);
+        }
+        if !ids.is_empty() {
+            added.insert(runtime_provider_id.to_string(), ids);
         }
     }
 

@@ -1,0 +1,62 @@
+# Issue #839 (MOD-24): after the credential broker refuses a model request whose provider URL it cannot serve, the inspector shows the model-key broker as degraded.
+id = "issue839-inspector-broker-refusal-degraded"
+feature = "Inspector: a model request the broker refused shows it degraded"
+expected = "Under Moderate with a plain-HTTP provider URL, the turn is refused (the URL cannot be brokered) and nothing is sent. /security → i: the top line says Moderate degraded: Model key broker, and its row says why."
+model = "glm-5.3-flash"
+provider = "zaihttp"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[model_providers.zaihttp]
+name = "Z.AI plain-HTTP test route"
+base_url = "http://127.0.0.1:18443/api/paas/v4"
+env_key = "ZAI_API_KEY"
+wire_api = "chat"
+
+[features]
+security_levels = true
+secretless_agent_launch = true
+secret_output_gate = true
+source_envelopes = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Reply with exactly: pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "cannot be brokered"
+timeout = 60
+[[steps]]
+pause = 3.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Security level"
+[[steps]]
+key = "i"
+[[steps]]
+wait = "Moderate degraded: [^\\n]*Model key broker"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Down"
+repeat = 14
+[[steps]]
+wait = "Model key broker: the last model request was refused"
+[[steps]]
+pause = 4.0

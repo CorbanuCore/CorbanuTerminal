@@ -1,0 +1,23 @@
+2026-10-16T11:08:57Z pulling ghcr.io/cirruslabs/macos-tahoe-vanilla:26.6.2 (cached after the first pull)
+pulling ghcr.io/cirruslabs/macos-tahoe-vanilla:26.6.2...
+pulling manifest...
+ghcr.io/cirruslabs/macos-tahoe-vanilla@sha256:eeec54bfe1f076e27786c5d92b89187a05b1d109b5071eb2dcdf02d596e34640 image is already cached and linked!
+2026-10-16T11:08:58Z slot ok (UTM running: 1, Tart running: 0)
+2026-10-16T11:08:58Z prep guest at 192.168.64.4
+256 SHA256:/Piqe+nofqu652p8xpvIbfYWy+YI91VhAjJODeTv3vE tart-qa-base (ED25519)
+spawn ssh -o UserKnownHostsFile=/Volumes/CorbanuDrive/Corbanu/.codex-work/tart-eval/keys/known_hosts -o StrictHostKeyChecking=yes -o HostKeyAlias=tart-qa-base -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive admin@192.168.64.4 umask 077; mkdir -p ~/.ssh; printf '%s\n' 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHDz8o/yMxyqqeBOyRDO98mi/JNsK9d1WP6bWRFYqvJB tart-qa-eval' >> ~/.ssh/authorized_keys; echo KEY-INSTALLED
+admin@tart-qa-base's password: 
+KEY-INSTALLED
+assessments enabled
+installing Command Line Tools for Xcode 27.0-27.0
+Python 3.9.6
+git version 2.54.0 (Apple Git-157)
+ProductName:		macOS
+ProductVersion:		26.6.2
+BuildVersion:		25G83
+System Integrity Protection status: enabled.
+arm64
+2026-10-16T11:11:45Z shutting the prep guest down
+OS     CPU Memory Disk  DiskFormat Size  Display  MACAddress        State  
+darwin 8   16384  50 GB raw        28 GB 1024x768 72:76:f4:5e:d8:14 stopped
+2026-10-16T11:11:48Z base ready: corbanu-qa-base

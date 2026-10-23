@@ -70,6 +70,11 @@ pub(super) async fn resolve_provider_auth(
     }
 }
 
+/// SigV4 auth from an already-loaded context (a named account's profile).
+pub(super) fn sigv4_auth_provider(context: AwsAuthContext) -> SharedAuthProvider {
+    Arc::new(BedrockMantleSigV4AuthProvider::new(context))
+}
+
 fn non_empty_env_var_from(
     name: &'static str,
     env_var: impl Fn(&'static str) -> std::result::Result<String, std::env::VarError>,

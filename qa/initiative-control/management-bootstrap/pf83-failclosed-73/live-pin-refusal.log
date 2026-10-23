@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-failclosed-73/dispatch_guard.py", line 75, in <module>
+    raise SystemExit(guarded(args.harness, args.packets, args.bundle, command))
+                     ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-failclosed-73/dispatch_guard.py", line 59, in guarded
+    result = check(harness, packets, bundle)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-failclosed-73/dispatch_guard.py", line 44, in check
+    require(candidate_pin(harness / "fixtures.py") == expected,
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            "harness/packet candidate disagreement; dispatch refused")
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-handoff-70/verify_bundle.py", line 19, in require
+    raise ValueError(message)
+ValueError: harness/packet candidate disagreement; dispatch refused

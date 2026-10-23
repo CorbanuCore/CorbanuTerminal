@@ -1,0 +1,3 @@
+#!/bin/sh
+printf 'AGG-38 hook ran at %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> .hook-runs.txt
+echo 'AGG-38 harmless hook ran'

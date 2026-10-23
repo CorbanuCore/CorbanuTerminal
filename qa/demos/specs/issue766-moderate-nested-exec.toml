@@ -1,0 +1,60 @@
+# #766: under Moderate, `corbanu exec` started by an agent command runs with
+# Moderate enforced: with this Corbanu home (which the agent command cannot
+# read or write) in a home of its own, and pointed at another home too. On
+# main the first stopped at start ("Error loading config.toml … Operation not
+# permitted") and the second ran at that home's level.
+id = "issue766-moderate-nested-exec"
+feature = "#766: nested corbanu exec runs with Moderate"
+expected = "Under config Moderate with the milestone flags, an agent command that starts corbanu exec in the same Corbanu home gets the notice that Moderate is enforced and that it runs in a home of its own; pointed at another Corbanu home it is still held to Moderate."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Run exactly this shell command and show me its output: corbanu exec --skip-git-repo-check -m glm-5.3-flash -c model_provider=zai hi </dev/null 2>&1 | head -1"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)runs\\s+in\\s+a\\s+Corbanu\\s+home\\s+of\\s+its\\s+own(?:(?!Working).)*\n› "
+timeout = 240
+compress = 3
+[[steps]]
+pause = 3.0
+
+[[steps]]
+type = "Now run exactly this and show its output: mkdir -p other && env CORBANU_HOME=$PWD/other PFTERMINAL_HOME=$PWD/other CODEX_HOME=$PWD/other HOME=$PWD corbanu exec --skip-git-repo-check -m glm-5.3-flash -c model_provider=zai hi </dev/null 2>&1 | head -1"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)Ran mkdir -p other(?:(?!Working).)*Moderate\\s+is\\s+enforced\\s+because\\s+an\\s+agent\\s+command(?:(?!Working).)*\n› "
+timeout = 240
+compress = 3
+[[steps]]
+pause = 3.0

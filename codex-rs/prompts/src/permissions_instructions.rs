@@ -120,6 +120,15 @@ impl PermissionsInstructions {
         self.text.clone()
     }
 
+    /// Appends one more section, e.g. what a security level blocks (#439).
+    pub fn with_note(mut self, note: &str) -> Self {
+        append_section(&mut self.text, note);
+        if !self.text.ends_with('\n') {
+            self.text.push('\n');
+        }
+        self
+    }
+
     #[cfg(test)]
     fn from_permissions_with_network(
         sandbox_mode: SandboxMode,

@@ -1,0 +1,5 @@
+2026-10-14T07:33:36Z
+EXIT:0
+2026-10-14T07:35:53Z
+f141adf3e8fb172b8dc99c82ba8a6a3bab98cde6d4fe6240f64d5095d584c5e5  /Users/Neo/.local/bin/corbanu
+corbanu 0.1.48

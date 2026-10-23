@@ -1,0 +1,16 @@
+{
+  "command": [
+    "python3",
+    "-B",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/summarize.py"
+  ],
+  "exit": 0,
+  "script_sha256": "420e4a31be49b7f182bb0228006d9ec5f085f368921b4b5c66562da20b179616",
+  "counts": {
+    "rust": 342,
+    "monetary_checks": 147,
+    "semantic_mutations": 159,
+    "viewport_bindings": 45
+  },
+  "evidence": "Validates retained round-72 evidence; not a new mutation execution."
+}

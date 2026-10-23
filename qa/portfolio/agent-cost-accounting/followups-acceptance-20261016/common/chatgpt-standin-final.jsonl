@@ -1,0 +1,361 @@
+{"t": 1792121163.265, "event": "get", "path": "/backend-api/x", "who": "none", "upgrade": null}
+{"t": 1792121176.216, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792121275.937, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792121276.536, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792121366.47, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792121366.659, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792121463.743, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792121464.379, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792121658.539, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792121658.758, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792121971.721, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792121971.952, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792122335.046, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792122335.294, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792122795.593, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792122796.114, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792122947.951, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792122948.172, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792123691.132, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792123691.401, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792124798.699, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792124798.889, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792124809.592, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792124809.867, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792124839.127, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792124839.328, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792124842.086, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792124842.362, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792125054.711, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792125055.356, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792125183.144, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792125183.413, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792125505.044, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792125505.315, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792125589.182, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792125589.436, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792125738.011, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792125738.306, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792125798.263, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792125798.611, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792125823.712, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792125823.982, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792126011.623, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792126012.002, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792126282.479, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792126282.733, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792126288.939, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792126289.185, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792126303.826, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792126304.068, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792126314.207, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792126314.502, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792126413.266, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792126413.546, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792126430.848, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792126431.111, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792126440.949, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792126441.195, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792126454.651, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792126454.882, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792126784.682, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792126785.191, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792126887.709, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792126887.965, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792127437.658, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792127437.931, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792127707.24, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792127707.519, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792127930.996, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792127931.295, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792128518.928, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792128519.46, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792128677.088, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792128677.325, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792128944.191, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792128944.407, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792128968.14, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792128968.375, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792129333.851, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792129334.121, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792129596.403, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792129596.64, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792129661.579, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792129661.837, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792129869.066, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792129869.339, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792129906.653, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792129906.895, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792129982.435, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792129982.658, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792130046.65, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792130046.91, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792130728.587, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792130728.851, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792131037.356, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792131037.872, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792131116.174, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792131116.378, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792131166.637, "event": "sign-in", "user": "work"}
+{"t": 1792131166.93, "event": "refresh", "user": "work", "from_gen": 1, "to_gen": 2}
+{"t": 1792131167.836, "event": "get", "path": "/backend-api/codex/models", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131167.858, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131167.858, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131167.859, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131167.923, "event": "get", "path": "/backend-api/plugins/featured", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131167.987, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131167.987, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131167.987, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131168.046, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131168.11, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131168.366, "event": "get", "path": "/backend-api/wham/rate-limit-reset-credits", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131168.367, "event": "get", "path": "/backend-api/wham/usage", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131168.439, "event": "get", "path": "/backend-api/codex/models", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131168.502, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131168.502, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131168.669, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131168.67, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131168.67, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131168.734, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131168.735, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131168.735, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131168.797, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131169.129, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131169.13, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131169.201, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131169.201, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131169.297, "event": "get", "path": "/backend-api/codex/responses", "who": "work (token gen 2)", "upgrade": "websocket"}
+{"t": 1792131169.448, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131169.448, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131169.449, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131169.512, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131169.512, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131169.513, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131169.582, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131169.738, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131169.739, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131169.739, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131170.313, "event": "get", "path": "/backend-api/connectors/directory/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131183.632, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131183.713, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131183.714, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131183.801, "event": "get", "path": "/backend-api/wham/settings/user", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131183.891, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131183.892, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131183.892, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131183.957, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131184.028, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131184.028, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131184.029, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131184.312, "event": "responses", "who": "work (token gen 2)", "host": "chatgpt.com", "path": "/backend-api/codex/responses", "model": null, "service_tier": null, "reply": "text"}
+{"t": 1792131348.029, "event": "get", "path": "/backend-api/codex/models", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131528.21, "event": "get", "path": "/backend-api/codex/models", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.123, "event": "get", "path": "/backend-api/codex/models", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.123, "event": "get", "path": "/backend-api/plugins/featured", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.191, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.191, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.191, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.257, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.257, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.258, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.317, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.383, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.646, "event": "get", "path": "/backend-api/wham/rate-limit-reset-credits", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.646, "event": "get", "path": "/backend-api/wham/usage", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.725, "event": "get", "path": "/backend-api/codex/models", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.788, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.788, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.956, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.957, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131692.957, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.027, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.097, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.097, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.098, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.376, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.376, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.437, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.438, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.514, "event": "get", "path": "/backend-api/codex/responses", "who": "work (token gen 2)", "upgrade": "websocket"}
+{"t": 1792131693.655, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.656, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.656, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.72, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.796, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.797, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.797, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.936, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.936, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131693.937, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131694.395, "event": "get", "path": "/backend-api/connectors/directory/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131703.363, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131703.448, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131703.448, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131703.529, "event": "get", "path": "/backend-api/wham/settings/user", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131703.612, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131703.612, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131703.613, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131703.68, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131703.68, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131703.681, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131703.74, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131704.111, "event": "responses", "who": "work (token gen 2)", "host": "chatgpt.com", "path": "/backend-api/codex/responses", "model": null, "service_tier": null, "reply": "text"}
+{"t": 1792131872.304, "event": "get", "path": "/backend-api/codex/models", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131977.84, "event": "get", "path": "/backend-api/plugins/featured", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131977.847, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131977.847, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131977.847, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131977.908, "event": "get", "path": "/backend-api/codex/models", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131977.97, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131977.971, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131977.971, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131978.027, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131978.079, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131978.33, "event": "get", "path": "/backend-api/wham/rate-limit-reset-credits", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131978.33, "event": "get", "path": "/backend-api/wham/usage", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131978.403, "event": "get", "path": "/backend-api/codex/models", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131978.463, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131978.464, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131978.629, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131978.63, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131978.63, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131978.695, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131978.764, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131978.764, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131978.764, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131979.006, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131979.006, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131979.126, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131979.126, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131979.215, "event": "get", "path": "/backend-api/codex/responses", "who": "work (token gen 2)", "upgrade": "websocket"}
+{"t": 1792131979.28, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131979.28, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131979.28, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131979.334, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131979.398, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131979.399, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131979.399, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131979.529, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131979.529, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131979.53, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131980.083, "event": "get", "path": "/backend-api/connectors/directory/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131997.875, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131997.939, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131997.94, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131998.022, "event": "get", "path": "/backend-api/wham/settings/user", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131998.106, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131998.107, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131998.108, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131998.168, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131998.168, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131998.168, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131998.248, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792131998.615, "event": "responses", "who": "work (token gen 2)", "host": "chatgpt.com", "path": "/backend-api/codex/responses", "model": null, "service_tier": null, "reply": "text"}
+{"t": 1792132158.08, "event": "get", "path": "/backend-api/codex/models", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.047, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.047, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.048, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.049, "event": "get", "path": "/backend-api/plugins/featured", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.117, "event": "get", "path": "/backend-api/codex/models", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.179, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.18, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.18, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.251, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.331, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.635, "event": "get", "path": "/backend-api/wham/usage", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.636, "event": "get", "path": "/backend-api/wham/rate-limit-reset-credits", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.706, "event": "get", "path": "/backend-api/codex/models", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.806, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.807, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.989, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.989, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132195.99, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.06, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.148, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.148, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.149, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.405, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.405, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.526, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.526, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.629, "event": "get", "path": "/backend-api/codex/responses", "who": "work (token gen 2)", "upgrade": "websocket"}
+{"t": 1792132196.697, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.697, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.698, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.765, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.766, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.766, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.829, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.98, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.98, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132196.981, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132197.628, "event": "get", "path": "/backend-api/connectors/directory/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132205.698, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132205.764, "event": "get", "path": "/backend-api/ps/plugins/list", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132205.764, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132205.846, "event": "get", "path": "/backend-api/wham/settings/user", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132205.919, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132205.919, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132205.92, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132205.981, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132205.981, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132205.982, "event": "get", "path": "/backend-api/ps/plugins/installed", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132206.036, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132206.346, "event": "responses", "who": "work (token gen 2)", "host": "chatgpt.com", "path": "/backend-api/codex/responses", "model": null, "service_tier": null, "reply": "imagegen"}
+{"t": 1792132206.506, "event": "images", "who": "work (token gen 2)", "host": "chatgpt.com", "path": "/backend-api/codex/images/generations"}
+{"t": 1792132206.711, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 2)", "upgrade": null}
+{"t": 1792132206.981, "event": "responses", "who": "work (token gen 2)", "host": "chatgpt.com", "path": "/backend-api/codex/responses", "model": null, "service_tier": null, "reply": "text"}
+{"t": 1792132401.827, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792132402.57, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792132515.344, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792132515.673, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792133245.835, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792133246.222, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792133489.451, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792133489.846, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792133714.852, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792133715.138, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792133907.772, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792133908.061, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792133918.707, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792133918.951, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792134358.924, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792134359.184, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792134570.906, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792134571.225, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792134734.823, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792134735.561, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792134884.889, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792134885.147, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792134927.815, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792134928.074, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792134950.537, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792134950.792, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792135002.229, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792135002.496, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792135041.766, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792135042.01, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792135528.873, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792135529.388, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792135612.473, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792135612.704, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792135997.517, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792135997.731, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792136169.794, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792136170.031, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792136348.522, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792136348.736, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792136532.13, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792136532.42, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792136712.896, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792136713.194, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792136745.289, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792136745.531, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792136863.192, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792136863.471, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792137069.731, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792137070.039, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792137244.135, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792137244.358, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}
+{"t": 1792137379.05, "event": "get", "path": "/backend-api/plugins/featured", "who": "none", "upgrade": null}
+{"t": 1792137379.336, "event": "get", "path": "/backend-api/plugins/export/curated", "who": "none", "upgrade": null}

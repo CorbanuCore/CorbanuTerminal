@@ -1,0 +1,91 @@
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       loading   /model to change                 │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+
+› Find and fix a bug in @filename
+
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: -- tok/s
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       glm-5.3-flash   /model to change           │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+
+› Run the shell command ./workers.sh in the current directory and show me its full output verbatim. Then reply with exactly the word pong on its own line.
+
+
+• Ran ./workers.sh
+  └ --- worker: -c model_provider="amazon-bedrock" -m openai.gpt-5.4 --account work
+    mock: sigv4 AKIDWORKPROFILE us-west-2
+    … +10 lines (ctrl + t to view transcript)
+    mock: chatgpt tuiwork gen1
+    exit=0
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• --- worker: -c model_provider="amazon-bedrock" -m openai.gpt-5.4 --account work
+  mock: sigv4 AKIDWORKPROFILE us-west-2
+  exit=0
+  --- worker: -c model_provider="amazon-bedrock" -m openai.gpt-5.4 --account gone
+  ERROR: Fatal error: account gone of provider amazon-bedrock uses AWS profile nosuchprofile, which cannot be used: failed to load AWS credentials: the credentials
+  provider was not properly configured: ProfileFile pr
+  exit=1
+  --- worker: -c model_provider="openai" -m gpt-5.4 --account fake
+  ERROR: OpenAI (openai) account fake was rejected. Sign it in again with corbanu login --account fake (add --with-api-key for an API key), or choose another account. The
+  default OpenAI credential is unchanged.
+  ERROR: unexpected status 401 Unauthorized: Incorrect API key, url: http://127.0.0.1:34731/v1/responses
+  exit=1
+  --- worker: -c model_provider="openai" -m gpt-5.4 --account work
+  mock: chatgpt tuiwork gen1
+  exit=0
+
+  pong
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/status
+
+╭────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                                 │
+│                                                                                                │
+│  Model:                Z.AI GLM 5.3 Flash                                                      │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account default                   │
+│  Directory:            $S/ws                    │
+│  Permissions:          Next turn: Full Access                                                  │
+│  Security:             Requested Permissive; effective protection unverified (/security)       │
+│  Agents.md:            <none>                                                                  │
+│  Account:              Z.AI API key configured                                                 │
+│  Collaboration mode:   Default                                                                 │
+│  Session:              01a13457-d062-77f3-a679-878bc5e60cc2                                    │
+│                                                                                                │
+│  Token usage:          9.88K total  (9.28K input + 605 output)                                 │
+│  Context window:       100% left (8.35K used / 950K)                                           │
+│  Account usage:        default · 9,276 input · 6,016 cached input · 605 output (252 reasoning) │
+│  Limits:               data not available yet                                                  │
+╰────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+  Cost — this conversation
+  Requested UTC day: 2026-10-13
+
+› Today (UTC) in this conversation:
+  • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 2 requests, 15,897 tokens. Estimated cost: $0.001874 (rounded).
+  Other conversations on this day, not included above: 15 requests in 14 conversations.
+  • Amazon Bedrock · account work · openai.gpt-5.4 — Pay per use. 3 requests, 387 tokens. Estimated cost: no price available.
+  • OpenAI · account default · GPT-6 Luna — Billing basis not declared. 1 request, 129 tokens. Counted neither as money spent nor as subscription work.
+  • OpenAI · account fake · gpt-5.4 — Billing basis not declared. 2 requests, 0 tokens. Counted neither as money spent nor as subscription work. 2 attempts refused by
+  the provider (HTTP 401) — no charge.
+  • OpenAI · account fake · GPT-6 Luna — Billing basis not declared. 1 request, 0 tokens. Counted neither as money spent nor as subscription work. 1 attempt refused
+
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

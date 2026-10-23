@@ -1,0 +1,18 @@
+## clean-up record, 2026-10-13T09:55:28Z
+$ ls $S   (scratch folder after rm -r of homes, fake HOMEs, bin, ws, pathbin, sockets)
+  build.sh
+  logs
+  review-brief.md
+  review-brief2.md
+  review-r1.err
+  review-r1.md
+  review-r2.err
+  review-r2.md
+  review-r3.err
+  review-r3.md
+$ ls -d /Volumes/CorbanuDrive/Corbanu/.codex-work/targets/s06b*
+  ls: .codex-work/targets/s06b*: No such file or directory
+$ ls -d /Volumes/CorbanuDrive/Corbanu/worktrees/s06b-acceptance-base-20261013
+  ls: worktrees/s06b-acceptance-base-20261013: No such file or directory
+$ ssh glitch 'ls -d ~/corbanu-rtx/s06b*'
+  ls: cannot access '~/corbanu-rtx/s06b*': No such file or directory

@@ -1,0 +1,349 @@
+{
+  "source_commit": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
+  "snapshot_commit": "78b7f9c92b62af63ed81bf6c13a1d984078c1f09",
+  "snapshot_tree": "2377cfd8450e96f4820be6a0d11a175b60e57a68",
+  "snapshot_kind": "Full clean local Git checkout of proposed QA; not an integration commit.",
+  "checkout": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/target/final-checkout",
+  "status_before": "",
+  "status_after": "",
+  "no_network": true,
+  "package_absent": true,
+  "package_launched": false,
+  "proposed_file_sha256": {
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md": "6f50dd49303a3d128674b93348285ea58c8f69debdc865bf3eedd802fad86bc9",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/scope.json": "cc59f846a5c60310a787f0bab19a89f731bb82c1e7816f56ee0552023c9f0e5c",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-disclose-105/RETURN.md": "519d395fac2847a6ae7bf00ae628e1bef59151704491784f8b20d76b5a2a671f",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-disclose-105/review-provenance.json": "9ac6cafe4d658167c0b995b5281927c44982bf8a074a6d6c122a446a466fc00f",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/inventory-correction.json": "460d6cb5f02724123db05d102c469af4fd274d791a430889da054686970809b4",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py": "ded2cd90fe9740a48885e4879b00b94744213682889f24a9b64fd7dce1b90e45",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/before-acceptance.txt": "ec5c2da8f2760b5ef219f16f7e103d9b7f9fe5d930e68aabc708adaa4a94fb87",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/before-correction.txt": "72fdb723e1ab27fbda7e62ebf84f60ca6de5d93bbc5374aea749dcaf71e1d4a1",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/before-inventory.txt": "cb8a70050303d4fc3c625b5baae9bb2d95bea7b7830196d43ca602caa1063a63",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/before-reference-manifest.txt": "f472d0828903c9261ed321cbd2ad71b3a4780697c67df4d4a03bcd0ec5f6c4b5",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/before-reference.txt": "97316af06e636192bd1086eafae4bc7acb6c03b5faa95239adfd48096209db60",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/before-verifier.py": "f64435d28a5d95885ea80c8c59c143596de2b904e76d1f1ad362031e74ab8f9d",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/before.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/before.stdout.txt": "bd84782bb90ec65db4ed4ceeab8053d1cf02fb85883e56b437c643d6f9e1e69c",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/controls.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/controls.stdout.txt": "16c06b68ab4e9a0d0d0002c59b3b26eb257932e2a69fa85a51c42c7ad1ca71a6",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/drift-disposable-optimized.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/drift-disposable-optimized.stdout.txt": "956c5ae2d1c67e3e65593af87e16630db5071adbbb70261c4fa3233074dba950",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/drift-disposable.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/drift-disposable.stdout.txt": "956c5ae2d1c67e3e65593af87e16630db5071adbbb70261c4fa3233074dba950",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/drift-optimized.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/drift-optimized.stdout.txt": "956c5ae2d1c67e3e65593af87e16630db5071adbbb70261c4fa3233074dba950",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/drift.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/drift.stdout.txt": "956c5ae2d1c67e3e65593af87e16630db5071adbbb70261c4fa3233074dba950",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gate.py": "b31dcd6b6ec6db0c664bcc3213729b0a88606c2c424f42653114e398d6fab486",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gates-01/core-default.json": "79a8a4c53da998de3982026ad9012b1e0da5acca5ac5f52db531975ac45578f7",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gates-01/core-default.log.gz": "23e44f54ec62f7c5b5bd3c8ef3d1357f9a3605990e93aa09fb37b413eefe0e8f",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gates-01/core-feature.json": "65c9f05594331b9248a94401a3dc0c37c67cbb66573ecf67984ca9733ee44730",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gates-01/core-feature.log.gz": "36d537da789138d826fe765b0a54726c0cbae31f76e7206e6941a558a41b8e47",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gates-01/prerequisites.json": "fca93c4359b3ec83eac7711971490e5d02ad08cf49e9e582ab922d686617666a",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gates-01/prerequisites.log.gz": "f0aae65337610d1e2585d3b4c01137e35051b4eb43b8fcde0afeb3ad363f6cb6",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gates-01/tui.json": "24aa6641fa6c97f0291d202e25f4013cb1c837293b71711eaa935811e763b514",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gates-01/tui.log.gz": "55723ba279a979fdbc1919251df9370a5ca97d920bbc5efc6a655c5a769dbdf6",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/identifier-controls.json": "cf02316a21fa7b187c4bf07f4438b32751f51bc53ca4bde86429027c492fdafb",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/refresh.json": "5bc063960c7bd7984af240d78779e439ac0d3ba44a38ecbba1a6bd7d9d09e2d4",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/refresh.py": "a025b82caf22338602f322c36b7ec88418835ae68fb5ba2113ab3518a46414db",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/refreshed.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/refreshed.stdout.txt": "c0c52beb096b3aeb4a54676e57356b3ac3b804f28ccdb42f49f07dfdc081eecc",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/simulate_disposable.py": "e785542ae36ed4f9d30ec3d5e3e17580ca803fbbb23b1224a5163f5848b18005",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/simulation-working-tree.json": "840e2aaa1550587e5138c705ca2e72679eb3708cffc7facf10215f7ad0c78dbf",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/simulation.json": "8677fa193573231b047fd3c2db04e3edadeef9caaed626f6d82d5363fb5fa95e",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/verify_clean.py": "3a24cba449089131dba2fba53792f1071be3ffcefb60ac09532c25734b00cd75",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt": "c0c52beb096b3aeb4a54676e57356b3ac3b804f28ccdb42f49f07dfdc081eecc",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/reference.json": "980d5943532b5f3294dc20591087238465557e0654398b6c4f94aacc71a1433e"
+  },
+  "controls": {
+    "kind": "clean sparse Git checkout of proposed QA snapshot, then independent corruption controls",
+    "source_base": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
+    "snapshot": "91ae0157edf9cc64de21cf7b915a4b206a9212ad",
+    "run_directory": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-a996axgo",
+    "ignored_package_absent": true,
+    "clean_before_and_after": true,
+    "no_network": true,
+    "no_package_launch": true,
+    "cases": [
+      {
+        "case": "clean-checkout",
+        "exit": 2,
+        "expected_exit": 2,
+        "passed": true,
+        "stdout_sha256": "c0c52beb096b3aeb4a54676e57356b3ac3b804f28ccdb42f49f07dfdc081eecc"
+      },
+      {
+        "case": "clean-finalizer",
+        "exit": 3,
+        "expected_exit": 3,
+        "passed": true,
+        "stdout_sha256": "74d53f2c34be0124631703b919fc7a5fc3c02ed569712967a2d929c424d918a7"
+      },
+      {
+        "case": "local-package-absent-refusal",
+        "exit": 3,
+        "expected_exit": 3,
+        "passed": true,
+        "stdout_sha256": "74d53f2c34be0124631703b919fc7a5fc3c02ed569712967a2d929c424d918a7"
+      },
+      {
+        "case": "wrong-claim",
+        "exit": 3,
+        "expected_exit": 3,
+        "passed": true,
+        "stdout_sha256": "68e5a8245d2a0290106104b9bbf34fdba634929ccb8592dcb3e761aaf58325c6"
+      },
+      {
+        "case": "corrupt-viewport",
+        "exit": 3,
+        "expected_exit": 3,
+        "passed": true,
+        "stdout_sha256": "757cf292d7674974fe0b1e763423b3ffdb87976d0f935a6039579ca7161738ad"
+      },
+      {
+        "case": "missing-log",
+        "exit": 3,
+        "expected_exit": 3,
+        "passed": true,
+        "stdout_sha256": "e027598379cbd4d496e682408a27e4fcce7ad7cec2bb17bd1f352b565f47c656"
+      },
+      {
+        "case": "baseline-count",
+        "exit": 3,
+        "expected_exit": 3,
+        "passed": true,
+        "stdout_sha256": "ff7bd55dfa7eac0c029ef8142565dffe30faabca4713a21ed9c73e6146e35ff2"
+      },
+      {
+        "case": "baseline-identity",
+        "exit": 3,
+        "expected_exit": 3,
+        "passed": true,
+        "stdout_sha256": "65a6e9ffb4dc56c76a3ad2e7a57f6301b68a1e5cce301bc003ae28b8a45423e8"
+      },
+      {
+        "case": "baseline-exit",
+        "exit": 3,
+        "expected_exit": 3,
+        "passed": true,
+        "stdout_sha256": "6af2654ddb6b6e7a24f40fdc0619593515ebcc2d599da52b2904a9bafeaa4643"
+      },
+      {
+        "case": "baseline-missing",
+        "exit": 3,
+        "expected_exit": 3,
+        "passed": true,
+        "stdout_sha256": "1471b709ea2bb36273f24d9d2de0056bcf82c49ddc506dbfc774f314527db77d"
+      },
+      {
+        "case": "baseline-duplicate",
+        "exit": 3,
+        "expected_exit": 3,
+        "passed": true,
+        "stdout_sha256": "5a170778d249f457b83a26b66ccd16ae6ffed14eb46bd97e6aa8a0672ee087d7"
+      },
+      {
+        "case": "local-package-disagreement",
+        "exit": 3,
+        "expected_exit": 3,
+        "passed": true,
+        "stdout_sha256": "b3b88955bf790d52df48b00998c03a7ec181a0f9b566cd63ee229725a3076dc7"
+      },
+      {
+        "case": "local-package-agreement-refusal",
+        "exit": 3,
+        "expected_exit": 3,
+        "passed": true,
+        "stdout_sha256": "08b5fbd854ea1aff98a519ff8308d30d050a82aa09015dcb2a2a683ed71247e3"
+      }
+    ]
+  },
+  "gates": [
+    {
+      "lane": "prerequisites",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "-p",
+        "codex-cli",
+        "--bin",
+        "codex",
+        "-p",
+        "codex-rmcp-client",
+        "-p",
+        "codex-code-mode-host",
+        "--bins"
+      ],
+      "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+      "base": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
+      "environment": {
+        "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_INCREMENTAL": "0",
+        "NEXTEST_TEST_THREADS": "4",
+        "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+        "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+      },
+      "exit": 0,
+      "isolation_banner": false,
+      "elapsed_seconds": 3.582012176513672,
+      "log_sha256": "05a5c1bf65e9a56321e2b3a9e14ef639f3d23a4211f5a02268a15b6b44f37993",
+      "failure_lines": [],
+      "target_test_lines": []
+    },
+    {
+      "lane": "core-default",
+      "command": [
+        "just",
+        "test",
+        "-p",
+        "codex-core",
+        "accounting"
+      ],
+      "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+      "base": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
+      "environment": {
+        "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_INCREMENTAL": "0",
+        "NEXTEST_TEST_THREADS": "4",
+        "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+        "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+      },
+      "exit": 0,
+      "isolation_banner": true,
+      "elapsed_seconds": 49.3556809425354,
+      "log_sha256": "2abfef945e545cda827c680a5c2812bfe6fe160249fb5a92b104d7b2f0ce52d1",
+      "failure_lines": [],
+      "target_test_lines": [
+        "SLOW [> 30.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity",
+        "PASS [  30.894s] (124/124) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity"
+      ],
+      "summaries": [
+        [
+          "124",
+          "124 passed (1 slow), 3545 skipped"
+        ]
+      ],
+      "run": 124,
+      "passed": 124,
+      "failed": 0,
+      "timed_out": 0,
+      "flaky": 0,
+      "skipped": 3545,
+      "leaky": 0
+    },
+    {
+      "lane": "core-feature",
+      "command": [
+        "just",
+        "test",
+        "-p",
+        "codex-core",
+        "accounting",
+        "--features",
+        "codex-core/developer-accounting"
+      ],
+      "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+      "base": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
+      "environment": {
+        "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_INCREMENTAL": "0",
+        "NEXTEST_TEST_THREADS": "4",
+        "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+        "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+      },
+      "exit": 0,
+      "isolation_banner": true,
+      "elapsed_seconds": 49.27855205535889,
+      "log_sha256": "9a6dd2f7eb77a40c796572c92a831ecbbf4b1cc34156d1b1da35e8d757dc8228",
+      "failure_lines": [],
+      "target_test_lines": [
+        "SLOW [> 30.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity",
+        "PASS [  31.878s] (127/127) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity"
+      ],
+      "summaries": [
+        [
+          "127",
+          "127 passed (1 slow), 3545 skipped"
+        ]
+      ],
+      "run": 127,
+      "passed": 127,
+      "failed": 0,
+      "timed_out": 0,
+      "flaky": 0,
+      "skipped": 3545,
+      "leaky": 0
+    },
+    {
+      "lane": "tui",
+      "command": [
+        "just",
+        "test",
+        "-p",
+        "codex-tui",
+        "usage"
+      ],
+      "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+      "base": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
+      "environment": {
+        "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_INCREMENTAL": "0",
+        "NEXTEST_TEST_THREADS": "4",
+        "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+        "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+      },
+      "exit": 0,
+      "isolation_banner": true,
+      "elapsed_seconds": 3.730976104736328,
+      "log_sha256": "a1b4f3aa674a68ce65db1843917d292b65790e68b63de20ead37ba24f2a81ea8",
+      "failure_lines": [],
+      "target_test_lines": [],
+      "summaries": [
+        [
+          "91",
+          "91 passed, 4078 skipped"
+        ]
+      ],
+      "run": 91,
+      "passed": 91,
+      "failed": 0,
+      "timed_out": 0,
+      "flaky": 0,
+      "skipped": 4078,
+      "leaky": 0
+    }
+  ],
+  "runs": [
+    {
+      "name": "final-optimized",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "-O",
+        "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py"
+      ],
+      "exit": 2,
+      "stderr_empty": true,
+      "stdout_sha256": "c0c52beb096b3aeb4a54676e57356b3ac3b804f28ccdb42f49f07dfdc081eecc",
+      "exact_reference_match": true
+    },
+    {
+      "name": "final",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py"
+      ],
+      "exit": 2,
+      "stderr_empty": true,
+      "stdout_sha256": "c0c52beb096b3aeb4a54676e57356b3ac3b804f28ccdb42f49f07dfdc081eecc",
+      "exact_reference_match": true
+    }
+  ]
+}

@@ -23,7 +23,7 @@ use codex_protocol::protocol::ExecCommandSource;
 use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use core_test_support::TempDirExt;
-use core_test_support::load_default_config_for_test;
+use core_test_support::load_default_config_for_test_in;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_function_call;
@@ -90,7 +90,8 @@ async fn remote_models_get_model_info_uses_longest_matching_prefix() -> Result<(
     .await;
 
     let codex_home = TempDir::new()?;
-    let config = load_default_config_for_test(&codex_home).await;
+    let cwd = TempDir::new()?;
+    let config = load_default_config_for_test_in(&codex_home, Default::default(), cwd.path()).await;
 
     let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
     let provider = ModelProviderInfo {
@@ -1228,11 +1229,9 @@ fn bundled_model_slug() -> String {
 }
 
 fn bundled_default_model_slug() -> String {
-    // Every caller constructs an OpenAI provider-specific models manager. Do
-    // not use the product-wide preset default here: PFTerminal's product
-    // default is Ambient, while this fixture is explicitly testing OpenAI's
-    // bundled fallback behavior.
-    "gpt-5.6-sol".to_string()
+    // Every caller constructs an OpenAI provider-specific models manager and
+    // tests OpenAI's bundled default, which is also the product default.
+    "gpt-6-sol".to_string()
 }
 
 fn test_remote_model(slug: &str, visibility: ModelVisibility, priority: i32) -> ModelInfo {

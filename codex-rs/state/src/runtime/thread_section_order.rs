@@ -113,7 +113,7 @@ LIMIT ?
             ));
         }
 
-        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut tx = crate::runtime::db_lock::begin_immediate(&self.pool).await?;
         let thread_id = thread_id.to_string();
         let current_section = sqlx::query_scalar::<_, Option<String>>(
             "SELECT thread_section_id FROM threads WHERE id = ?",
@@ -191,7 +191,7 @@ LIMIT ?
 }
 
 async fn section_move_position(
-    tx: &mut sqlx::Transaction<'_, Sqlite>,
+    tx: &mut sqlx::SqliteConnection,
     section: &str,
     thread_id: &str,
     before_thread_id: Option<&str>,
@@ -204,7 +204,7 @@ async fn section_move_position(
             )
             .bind(before_thread_id)
             .bind(section)
-            .fetch_optional(&mut **tx)
+            .fetch_optional(&mut *tx)
             .await?
             .flatten()
             .ok_or_else(|| {
@@ -216,7 +216,7 @@ async fn section_move_position(
             .bind(section)
             .bind(upper)
             .bind(thread_id)
-            .fetch_one(&mut **tx)
+            .fetch_one(&mut *tx)
             .await?;
             match lower {
                 Some(lower) if i128::from(upper) - i128::from(lower) > 1 => Some(i64::try_from(
@@ -232,7 +232,7 @@ async fn section_move_position(
             )
             .bind(section)
             .bind(thread_id)
-            .fetch_one(&mut **tx)
+            .fetch_one(&mut *tx)
             .await?;
             max_position
                 .unwrap_or_default()
@@ -253,7 +253,7 @@ async fn section_move_position(
 }
 
 async fn renumber_section_positions(
-    tx: &mut sqlx::Transaction<'_, Sqlite>,
+    tx: &mut sqlx::SqliteConnection,
     section: &str,
     excluded_thread_id: Option<&str>,
 ) -> anyhow::Result<()> {
@@ -274,7 +274,7 @@ WHERE threads.id = ranked.id
     .bind(section)
     .bind(excluded_thread_id)
     .bind(excluded_thread_id)
-    .execute(&mut **tx)
+    .execute(&mut *tx)
     .await?;
     Ok(())
 }

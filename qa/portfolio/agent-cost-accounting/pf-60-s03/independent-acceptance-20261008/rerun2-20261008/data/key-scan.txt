@@ -1,0 +1,5 @@
+Key scan, 2026-10-08T18:42:54Z, executor host (macOS).
+command: grep -rlF "$(~/.local/bin/corbanu vault auth-helper provider/zai_api_key)" <this dir> <scratch>/logs <scratch>/cap <scratch>/homes <scratch>/review | wc -l
+  (helper substituted directly on the consuming grep; -l prints file names only; binary files such as the sqlite log/state DBs are included)
+result: 0 files
+scope: this evidence dir; every exec stdout/stderr (RUST_LOG=codex_api=trace) incl. aborted runs; all TUI captures; all disposable homes (config, sessions, sqlite DBs, stderr.log); the reviewer's copy

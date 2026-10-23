@@ -5,10 +5,12 @@
 //! events and enforces flow-level safety rules that cut across individual step
 //! widgets.
 //!
-//! In particular, onboarding quit handling has a text-entry guard for API-key
-//! input: the printable `q` quit key is treated as text input while the user is
-//! editing a non-empty API-key field, while control/alt chords remain available
-//! as explicit exit shortcuts.
+//! In particular, onboarding quit handling has a text-entry guard: while any
+//! text field has focus (an API key, a Claude token or code, or a named
+//! account's name or value) or its value is saving, the printable `q` quit key
+//! is text, even in an empty field. Control chords (Ctrl+C, Ctrl+D) remain explicit exits. Quitting
+//! on a printable key mid-entry would drop the rest of a typed or non-bracketed
+//! pasted secret onto the user's shell (#461).
 
 use codex_app_server_client::AppServerEvent;
 use codex_app_server_client::AppServerRequestHandle;
@@ -118,14 +120,6 @@ pub(crate) struct OnboardingResult {
     pub deferred_provider_setup: Option<DeferredProviderSetup>,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-struct ApiKeyEntryContext {
-    /// True when onboarding is currently rendering the API-key entry state.
-    active: bool,
-    /// True when the API-key input field currently contains user text.
-    has_text: bool,
-}
-
 fn provider_api_key_options(host: &ProviderStatusHost) -> Vec<ApiKeyProviderOption> {
     host.catalog()
         .entries()
@@ -230,23 +224,20 @@ impl OnboardingScreen {
         let mut api_key_provider_name = config.model_provider.name.clone();
         let mut api_key_env_var = config.model_provider.env_key.clone();
         let api_key_provider_options = provider_api_key_options(&provider_status_host);
-        let selected_provider_index = if api_key_provider_options.is_empty() {
-            None
-        } else {
-            Some(
-                api_key_provider_options
-                    .iter()
-                    .position(|provider| {
-                        provider.target.provider_id.as_str() == api_key_provider_id
-                    })
-                    .unwrap_or(0),
-            )
-        };
+        // The first option stands in only when the screen will name that option too (the
+        // override below). Otherwise the screen names the configured provider, and saving the
+        // key to another provider would report success for the wrong one.
+        let first_option_stands_in =
+            api_key_env_var.is_none() || config.model_provider.requires_openai_auth;
+        let selected_provider_index = api_key_provider_options
+            .iter()
+            .position(|provider| provider.target.provider_id.as_str() == api_key_provider_id)
+            .or_else(|| first_option_stands_in.then_some(0));
         let selected_api_key_option = selected_provider_index
             .and_then(|index| api_key_provider_options.get(index))
             .cloned();
         if let Some(provider) = selected_api_key_option.as_ref()
-            && (api_key_env_var.is_none() || config.model_provider.requires_openai_auth)
+            && first_option_stands_in
         {
             api_key_provider_id = provider.target.provider_id.as_str().to_string();
             api_key_provider_name = provider.name.clone();
@@ -274,8 +265,38 @@ impl OnboardingScreen {
                 } else {
                     SignInState::PickMode
                 };
+            let named_account_methods = if config
+                .features
+                .enabled(codex_features::Feature::NamedAccounts)
+            {
+                config
+                    .model_providers
+                    .iter()
+                    .map(|(id, provider)| {
+                        (
+                            id.clone(),
+                            crate::provider_named_accounts::add_methods(id, provider)
+                                .into_iter()
+                                // Onboarding takes pasted secrets; paths, AWS profiles and OpenAI sign-ins are in /providers.
+                                .filter(|method| {
+                                    !matches!(
+                                        method,
+                                        crate::provider_named_accounts::AddAccountMethod::ClaudeConfigDir
+                                            | crate::provider_named_accounts::AddAccountMethod::AwsProfile
+                                            | crate::provider_named_accounts::AddAccountMethod::ChatgptDeviceCode
+                                            | crate::provider_named_accounts::AddAccountMethod::OpenaiApiKey
+                                    )
+                                })
+                                .collect::<Vec<_>>(),
+                        )
+                    })
+                    .filter(|(_, methods)| !methods.is_empty())
+                    .collect()
+            } else {
+                std::collections::BTreeMap::new()
+            };
             if let Some(app_server_request_handle) = app_server_request_handle {
-                steps.push(Step::Auth(AuthModeWidget {
+                let widget = AuthModeWidget {
                     request_frame: tui.frame_requester(),
                     highlighted_mode,
                     error: Arc::new(RwLock::new(None)),
@@ -299,7 +320,10 @@ impl OnboardingScreen {
                     provider_status_host,
                     provider_statuses: Arc::new(RwLock::new(provider_statuses)),
                     provider_auth_action_tx,
-                }));
+                    named_account_methods,
+                };
+                widget.begin_initial_api_key_entry();
+                steps.push(Step::Auth(widget));
             } else {
                 tracing::warn!("skipping onboarding login step without app-server request handle");
             }
@@ -475,39 +499,29 @@ impl OnboardingScreen {
         }
     }
 
-    fn api_key_entry_context(&self) -> ApiKeyEntryContext {
-        self.steps
-            .iter()
-            .find_map(|step| {
-                if let Step::Auth(widget) = step {
-                    Some(ApiKeyEntryContext {
-                        active: widget.is_api_key_entry_active(),
-                        has_text: widget.api_key_entry_has_text(),
-                    })
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_default()
+    fn text_entry_active(&self) -> bool {
+        self.steps.iter().any(|step| {
+            if let Step::Auth(widget) = step {
+                widget.is_text_entry_active()
+            } else {
+                false
+            }
+        })
     }
 }
 
 impl KeyboardHandler for OnboardingScreen {
     /// Route key events to onboarding steps while preserving text-entry safety.
     ///
-    /// In API-key entry mode, printable quit bindings are suppressed only after
-    /// the user has started typing in the API-key field. This keeps the
-    /// printable `q` quit key usable on an empty field while protecting in-progress
-    /// text entry from accidental exits. Control/alt quit chords still work as
-    /// emergency exits.
+    /// While a text field has focus, printable quit bindings are text. Control
+    /// quit chords still work as emergency exits.
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         if !matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
             return;
         }
-        let api_key_entry_context = self.api_key_entry_context();
         let should_quit = key_event.kind == KeyEventKind::Press
             && keys::QUIT.is_pressed(key_event)
-            && !suppress_quit_while_typing_api_key(key_event, api_key_entry_context);
+            && !is_text_key_in_text_field(key_event, self.text_entry_active());
         if should_quit {
             if self.is_auth_in_progress() {
                 self.cancel_auth_if_active();
@@ -553,18 +567,10 @@ impl KeyboardHandler for OnboardingScreen {
     }
 }
 
-/// Returns `true` when a quit shortcut should be ignored as text input.
-///
-/// This only applies while API-key entry is active and the key is a printable
-/// character without control/alt modifiers and there is already text in the
-/// input field. Empty input intentionally does not trigger suppression so
-/// the printable `q` quit key can still exit onboarding.
-fn suppress_quit_while_typing_api_key(
-    key_event: KeyEvent,
-    api_key_entry_context: ApiKeyEntryContext,
-) -> bool {
-    api_key_entry_context.active
-        && api_key_entry_context.has_text
+/// Returns `true` when a key is text for the focused text field, so it must
+/// never act as a shortcut: a printable character without control/alt.
+fn is_text_key_in_text_field(key_event: KeyEvent, text_entry_active: bool) -> bool {
+    text_entry_active
         && matches!(key_event.code, KeyCode::Char(_))
         && !key_event
             .modifiers
@@ -900,15 +906,15 @@ async fn persist_selected_trust(
 
 #[cfg(test)]
 mod tests {
-    use super::ApiKeyEntryContext;
+    use super::KeyboardHandler;
     use super::OnboardingScreen;
     use super::Step;
     use super::StepState;
     use super::StepStateProvider;
     use super::initial_sign_in_option;
+    use super::is_text_key_in_text_field;
     use super::persist_selected_trust;
     use super::provider_api_key_options;
-    use super::suppress_quit_while_typing_api_key;
     use super::visible_step_indices;
     use crate::onboarding::auth::SignInOption;
     use crate::onboarding::auth::catalog_sign_in_options;
@@ -924,51 +930,35 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn suppresses_printable_quit_key_during_api_key_entry() {
-        let suppressed = suppress_quit_while_typing_api_key(
+    fn printable_quit_key_is_text_in_a_text_field_even_when_empty() {
+        // #461: an empty field must not quit either, or a value that starts
+        // with `q` ends the session and the rest reaches the shell.
+        assert!(is_text_key_in_text_field(
             KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
-            ApiKeyEntryContext {
-                active: true,
-                has_text: true,
-            },
-        );
-        assert!(suppressed);
+            /*text_entry_active*/ true,
+        ));
+        assert!(is_text_key_in_text_field(
+            KeyEvent::new(KeyCode::Char('Q'), KeyModifiers::SHIFT),
+            /*text_entry_active*/ true,
+        ));
     }
 
     #[test]
-    fn does_not_suppress_printable_quit_key_when_api_key_input_is_empty() {
-        let suppressed = suppress_quit_while_typing_api_key(
+    fn control_quit_chords_still_quit_from_a_text_field() {
+        for key in ['c', 'd'] {
+            assert!(!is_text_key_in_text_field(
+                KeyEvent::new(KeyCode::Char(key), KeyModifiers::CONTROL),
+                /*text_entry_active*/ true,
+            ));
+        }
+    }
+
+    #[test]
+    fn printable_quit_key_is_a_shortcut_outside_text_fields() {
+        assert!(!is_text_key_in_text_field(
             KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
-            ApiKeyEntryContext {
-                active: true,
-                has_text: false,
-            },
-        );
-        assert!(!suppressed);
-    }
-
-    #[test]
-    fn does_not_suppress_control_quit_key_during_api_key_entry() {
-        let suppressed = suppress_quit_while_typing_api_key(
-            KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL),
-            ApiKeyEntryContext {
-                active: true,
-                has_text: true,
-            },
-        );
-        assert!(!suppressed);
-    }
-
-    #[test]
-    fn does_not_suppress_when_not_in_api_key_entry() {
-        let suppressed = suppress_quit_while_typing_api_key(
-            KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
-            ApiKeyEntryContext {
-                active: false,
-                has_text: true,
-            },
-        );
-        assert!(!suppressed);
+            /*text_entry_active*/ false,
+        ));
     }
 
     #[test]
@@ -1136,5 +1126,169 @@ mod tests {
                 .as_deref()
                 .is_some_and(|error| error.contains("app server unavailable"))
         );
+    }
+
+    fn auth_screen(widget: crate::onboarding::auth::AuthModeWidget) -> OnboardingScreen {
+        let (_provider_auth_action_tx, provider_auth_action_rx) =
+            tokio::sync::mpsc::unbounded_channel();
+        OnboardingScreen {
+            request_frame: FrameRequester::test_dummy(),
+            steps: vec![Step::Auth(widget)],
+            is_done: false,
+            should_exit: false,
+            provider_auth_controller: codex_provider_auth::ProviderAuthController::default(),
+            provider_auth_executor: None,
+            provider_auth_action_rx,
+        }
+    }
+
+    /// #461: every onboarding text field takes `q` as text, from the first
+    /// character on; nothing typed ends onboarding.
+    #[tokio::test]
+    async fn every_onboarding_text_field_types_q_instead_of_quitting() {
+        use crate::onboarding::auth::SignInState;
+
+        let typed = "qprobe-q-key-Q";
+        let (claude_input_tx, _claude_input_rx) = tokio::sync::mpsc::unbounded_channel();
+        let states = [
+            ("API key", SignInState::ApiKeyEntry(Default::default())),
+            (
+                "Claude token",
+                SignInState::ClaudeManagedTokenEntry(Default::default()),
+            ),
+            (
+                "Claude code",
+                SignInState::ClaudeCodeLoginCodeEntry {
+                    input_tx: claude_input_tx,
+                    value: String::new(),
+                },
+            ),
+            (
+                "account name",
+                SignInState::AccountNameEntry {
+                    entry_index: 0,
+                    value: String::new(),
+                },
+            ),
+            (
+                "account value",
+                SignInState::AccountValueEntry {
+                    entry_index: 0,
+                    name: codex_vault::ProviderAccountName::parse("probe").expect("name"),
+                    value: zeroize::Zeroizing::new(String::new()),
+                },
+            ),
+        ];
+        for (field, state) in states {
+            let (widget, _home) = crate::onboarding::auth::tests::widget_forced_chatgpt().await;
+            *widget.sign_in_state.write().unwrap() = state;
+            let mut screen = auth_screen(widget);
+            for character in typed.chars() {
+                let modifiers = if character.is_ascii_uppercase() {
+                    KeyModifiers::SHIFT
+                } else {
+                    KeyModifiers::NONE
+                };
+                screen.handle_key_event(KeyEvent::new(KeyCode::Char(character), modifiers));
+                assert!(
+                    !screen.is_done() && !screen.should_exit(),
+                    "{field}: {character:?} ended onboarding"
+                );
+            }
+            let Step::Auth(widget) = &screen.steps[0] else {
+                panic!("auth step");
+            };
+            assert_eq!(widget.text_entry_value().as_deref(), Some(typed), "{field}");
+        }
+    }
+
+    /// A non-bracketed paste with a newline starts the save while the rest of
+    /// the value is still arriving; those keys must not quit either.
+    #[tokio::test]
+    async fn saving_a_typed_value_does_not_quit_on_q() {
+        use crate::onboarding::auth::SignInState;
+
+        for state in [
+            SignInState::ApiKeySaving,
+            SignInState::ClaudeManagedTokenSaving,
+            SignInState::AccountSaving,
+        ] {
+            let (widget, _home) = crate::onboarding::auth::tests::widget_forced_chatgpt().await;
+            *widget.sign_in_state.write().unwrap() = state;
+            let mut screen = auth_screen(widget);
+            screen.handle_key_event(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+            assert!(!screen.is_done() && !screen.should_exit());
+        }
+    }
+
+    /// Ctrl+C still leaves onboarding from a text field.
+    #[tokio::test]
+    async fn ctrl_c_still_quits_from_an_onboarding_text_field() {
+        use crate::onboarding::auth::SignInState;
+
+        let (widget, _home) = crate::onboarding::auth::tests::widget_forced_chatgpt().await;
+        *widget.sign_in_state.write().unwrap() = SignInState::AccountNameEntry {
+            entry_index: 0,
+            value: String::new(),
+        };
+        let mut screen = auth_screen(widget);
+        screen.handle_key_event(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+        assert!(screen.is_done());
+    }
+
+    /// Outside a text field, `q` is still the quit shortcut.
+    #[tokio::test]
+    async fn q_still_quits_from_the_provider_list() {
+        let (widget, _home) = crate::onboarding::auth::tests::widget_forced_chatgpt().await;
+        let mut screen = auth_screen(widget);
+        screen.handle_key_event(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+        assert!(screen.is_done());
+    }
+
+    /// #462: when config already names the provider, onboarding opens on its
+    /// key entry. Saving must complete that provider's setup, not loop back.
+    #[tokio::test]
+    async fn preset_provider_key_entry_completes_setup_for_that_provider() {
+        use crate::onboarding::auth::SignInState;
+        use crate::onboarding::provider_setup::ProviderSetupAction;
+        use crate::onboarding::provider_setup::ProviderSetupPhase;
+
+        let (mut widget, _home) = crate::onboarding::auth::tests::widget_forced_chatgpt().await;
+        widget.forced_login_method = None;
+        let options = provider_api_key_options(&widget.provider_status_host);
+        let kimi = options
+            .iter()
+            .find(|option| option.target.provider_id.as_str() != "openai")
+            .expect("a non-OpenAI API-key provider")
+            .clone();
+        widget.api_key_provider_options = vec![kimi.clone()];
+        widget.selected_api_key_option = Some(kimi.clone());
+        *widget.sign_in_state.write().unwrap() = SignInState::ApiKeyEntry(Default::default());
+
+        widget.begin_initial_api_key_entry();
+
+        let entry = widget
+            .provider_status_host
+            .catalog()
+            .get(kimi.target.provider_id.as_str())
+            .expect("catalog entry");
+        assert_eq!(
+            widget
+                .provider_setup_session
+                .read()
+                .unwrap()
+                .snapshot()
+                .phase,
+            ProviderSetupPhase::Authenticating {
+                provider_id: entry.id.clone()
+            }
+        );
+        let configured = widget.provider_setup_session.write().unwrap().dispatch(
+            ProviderSetupAction::AuthConfigured {
+                provider_id: entry.id.clone(),
+                runtime_provider_id: entry.runtime_provider_ids.first().expect("runtime").clone(),
+            },
+        );
+        assert!(configured.applied, "the saved key's completion was ignored");
     }
 }

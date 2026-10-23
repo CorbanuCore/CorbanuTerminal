@@ -139,6 +139,7 @@ impl Handler {
                     prompt: None,
                     model: None,
                     reasoning_effort: None,
+                    provider_account: None,
                     agents_states: Default::default(),
                 }),
             )
@@ -214,6 +215,7 @@ impl Handler {
                     prompt: None,
                     model: None,
                     reasoning_effort: None,
+                    provider_account: None,
                     agents_states: HashMap::new(),
                 }),
             )
@@ -224,6 +226,9 @@ impl Handler {
 }
 
 impl CoreToolRuntime for Handler {
+    fn repeated_identical_calls_are_polling(&self) -> bool {
+        true
+    }
     fn matches_kind(&self, payload: &ToolPayload) -> bool {
         matches!(payload, ToolPayload::Function { .. })
     }

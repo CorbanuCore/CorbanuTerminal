@@ -122,7 +122,8 @@ impl ChatWidget {
                     api_key: crate::app_event::ProviderApiKeySecret::new(secret),
                 });
             }),
-        );
+        )
+        .rejecting_shown_errors(self.shown_error_texts());
         self.bottom_pane.show_view(Box::new(view));
     }
 

@@ -1,0 +1,8 @@
+2026-10-15T23:46:02Z sync + guest-shutdown.sh (clean shutdown from inside)
+synced
+System shutdown time has arrived
+Connection to 192.168.64.3 closed by remote host.
+2026-10-15T23:46:14Z status: stopped
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3

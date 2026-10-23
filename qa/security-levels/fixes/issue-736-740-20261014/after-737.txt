@@ -1,0 +1,17 @@
+› Run exactly this shell command once, unchanged: git config --global core.hooksPath /tmp/t03-hooks
+✔ You approved Corbanu to run git config --global core.hooksPath /tmp/t03-hooks this time
+• Ran git config --global core.hooksPath /tmp/t03-hooks
+  └ error: could not lock config file qa/demos/out/issue-737/
+    issue737-gitconfig-no-grant-20261014T051354Z/userhome/.gitconfig: Operation not permitted
+⚠ Security level Aggressive blocks writing `~/.gitconfig`: it is, or leads to, a start-up file outside the current folder, and agent
+  commands can write only inside the current folder, even when you approve them; this cannot be granted, not even once (Grant once lifts the
+  start-up file and git write protections only inside the current folder). To allow it, a person can switch to Permissive in /security (it
+  applies after a restart).
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+• Ran it once unchanged. It failed with code 255:
+  error: could not lock config file .../userhome/.gitconfig: Operation not permitted
+  Security level Aggressive blocks writing ~/.gitconfig outside the workspace, even with approval. You can switch to Permissive in /
+  security, then rerun the command yourself.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+› Run /review on my current changes
+  Z.AI GLM 5.3 Flash via zai default · qa/demos/out/issue-737/issue737-gitconfig-no-grant-…

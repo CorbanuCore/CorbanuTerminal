@@ -1,0 +1,89 @@
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       glm-5.3-flash high   /model to change      │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word ping
+
+
+• ping
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Z.AI GLM 5.3 Flash                                                │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account work                │
+│  Directory:            $S/ws              │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Z.AI API key configured                                           │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a13442-f9c8-72c0-a277-02a7cdac38ff                              │
+│                                                                                          │
+│  Token usage:          6.13K total  (6.12K input + 3 output)                             │
+│  Context window:       100% left (7.41K used / 950K)                                     │
+│  Account usage:        work · 6,124 input · 1,280 cached input · 3 output                │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+/fork
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:       glm-5.3-flash high   /model to change      │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+• Thread forked from 01a13442-f9c8-72c0-a277-02a7cdac38ff
+
+
+› Reply with exactly the word ping
+
+
+• ping
+
+Token usage: total=6,127 input=6,124 (+ 1,280 cached) output=3
+To continue this session, run corbanu resume 01a13442-f9c8-72c0-a277-02a7cdac38ff
+
+
+› Reply with exactly the word resfork
+
+
+• resfork
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Z.AI GLM 5.3 Flash                                                │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account work                │
+│  Directory:            $S/ws              │
+│  Permissions:          Next turn: Full Access                                            │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Z.AI API key configured                                           │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a13445-39c8-7803-ba8e-1ea91704bd1e                              │
+│  Forked from:          01a13442-f9c8-72c0-a277-02a7cdac38ff                              │
+│                                                                                          │
+│  Token usage:          13.6K total  (13.5K input + 31 output)                            │
+│  Context window:       100% left (7.44K used / 950K)                                     │
+│  Account usage:        work · 7,416 input · 28 output (23 reasoning)                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Explain this codebase
+
+  Z.AI GLM 5.3 Flash via zai high · $S/ws · Corbanu Terminal · TPS: 9.6 tok/s

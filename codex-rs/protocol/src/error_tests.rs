@@ -772,3 +772,43 @@ fn usage_limit_reached_with_promo_message() {
         assert_eq!(err.to_string(), expected);
     });
 }
+
+#[test]
+fn user_visible_errors_redact_provider_url_credentials() {
+    let unexpected = UnexpectedResponseError {
+        status: StatusCode::UNAUTHORIZED,
+        body: "bad key".to_string(),
+        user_message: None,
+        url: Some(
+            "https://user:fake-pass@api.example.com/v1/responses?key=fake-query-key".to_string(),
+        ),
+        cf_ray: None,
+        request_id: None,
+        identity_authorization_error: None,
+        identity_error_code: None,
+    };
+    let status = StatusCode::UNAUTHORIZED.to_string();
+    assert_eq!(
+        unexpected.to_string(),
+        format!(
+            "unexpected status {status}: bad key, url: https://REDACTED:REDACTED@api.example.com/v1/responses?key=REDACTED"
+        )
+    );
+
+    let response = RawHttpResponse::builder()
+        .status(StatusCode::TOO_MANY_REQUESTS)
+        .body("")
+        .unwrap();
+    let source = HttpResponse::from(response)
+        .error_for_status_ref()
+        .unwrap_err()
+        .with_url("http://example.com/v1?key=fake-stream-key".parse().unwrap());
+    let err = CodexErr::ResponseStreamFailed(ResponseStreamFailed {
+        source,
+        request_id: None,
+    });
+    assert_eq!(
+        err.to_error_event(/*message_prefix*/ None).message,
+        "Error while reading the server response: HTTP status client error (429 Too Many Requests) for url (http://example.com/v1?key=REDACTED)"
+    );
+}

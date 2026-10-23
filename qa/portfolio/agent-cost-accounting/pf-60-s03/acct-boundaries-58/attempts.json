@@ -1,0 +1,18 @@
+[
+  {
+    "run": "p3-run-01",
+    "exit": 0,
+    "result": "8 buckets, 4 groups, 5 cause-specific store readbacks with fresh inspector PIDs; 48 numeric pages and 48 bucket labels independently audited."
+  },
+  {
+    "run": "boundary-run-01",
+    "exit": 130,
+    "result": "Deliberately interrupted during UTC-zone replay to correct the unexecuted mixed/compact-day expectation and move deletion before compaction; raw attempts preserved. No product failure attributed."
+  },
+  {
+    "run": "boundary-run-02",
+    "exit": 1,
+    "result": "RuntimeError: Timed out: fall-inspect-startup. Product had started; lowercase model header scrolled off screen while footer used GPT-5.6-Sol. Case-sensitive fixture predicate failed. Earlier timezone and deletion cases passed; no later cases claimed."
+  },
+  {"run":"boundary-run-03","exit":0,"result":"26 independent boundary cases passed; final audit also checks four raw attempts and four compact day aggregates against emitted counts, all seven measures and fixed-rate Decimal arithmetic. No product arithmetic failure observed."}
+]

@@ -1,0 +1,72 @@
+# PF-84 #555 (b): a conversation on another provider than the home's resumes there.
+# Record with
+#   DEMO_CANDIDATE=<corbanu> python3 scripts/demo_video.py record \
+#     qa/demos/specs/pf84-555-cross-provider-resume.toml \
+#     --bin qa/demos/wrappers/pf84-555-cross-provider-resume.sh --sprint ISSUE-555-RESUME --publish
+id = "pf84-555-cross-provider-resume"
+feature = "PF-84 #555: resume a Z.AI conversation in a home configured for OpenAI"
+expected = "The home has no OpenAI credentials. corbanu resume picks the conversation on Z.AI account work; no sign-in screen; it answers on work and /status shows account work."
+rows = 44
+config = """
+model = "gpt-5.5"
+model_provider = "openai"
+suppress_unstable_features_warning = true
+[features]
+named_accounts = true
+"""
+
+[credentials]
+PF84_ACCOUNT_SEED = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Reply with the single word ping"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*ping\\W*$"
+timeout = 120
+compress = 3
+[[steps]]
+run = "sleep 8"
+[[steps]]
+type = "/exit"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Now: corbanu resume"
+[[steps]]
+pause = 2.0
+[[steps]]
+wait = "Resume a previous session"
+timeout = 60
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Reply with the single word ping"
+timeout = 60
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "Reply with the single word pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^\\W*pong\\W*$"
+timeout = 120
+compress = 3
+[[steps]]
+run = "sleep 6"
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Account usage:\\s+work"
+[[steps]]
+pause = 4.0

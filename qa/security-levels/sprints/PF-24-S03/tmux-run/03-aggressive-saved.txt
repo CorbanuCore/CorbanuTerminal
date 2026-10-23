@@ -1,0 +1,59 @@
+
+╭────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                      │
+│                                                    │
+│ model:     loading   /model to change              │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/run2/ws │
+╰────────────────────────────────────────────────────╯
+
+
+› Summarize recent commits
+
+  Z.AI GLM 5.2 via zai standard · <run>/ws · Corbanu Terminal · TPS: -- t…
+
+╭────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                      │
+│                                                    │
+│ model:     glm-5.2   /model to change              │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/run2/ws │
+╰────────────────────────────────────────────────────╯
+To continue this session, run corbanu resume 01a10f72-86fc-7172-973e-a690a47b4d97
+=== corbanu exited 0 ; Enter relaunches ===
+
+╭────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                      │
+│                                                    │
+│ model:     glm-5.2   /model to change              │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/run2/ws │
+╰────────────────────────────────────────────────────╯
+
+Saved: Aggressive
+Restart Corbanu Terminal to activate Aggressive. Until then this session stays Permissive. Resume this conversation with /resume
+after restarting.
+
+enter or esc close
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

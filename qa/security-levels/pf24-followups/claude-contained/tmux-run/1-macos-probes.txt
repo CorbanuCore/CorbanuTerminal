@@ -1,0 +1,36 @@
+
+
+• I'll run each command separately, reporting a one-line result for each. Starting with (1):(1) Created inside.txt in
+  the working directory (allowed — inside the workspace).
+
+  Now (2):(2) Blocked — Operation not permitted (sandbox denied reading the home config.toml).
+
+  Now (3):(3) Blocked — Operation not permitted (sandbox denied listing the secrets directory).
+
+  Now (4):(4) Blocked — Could not resolve host (no network egress permitted).
+
+  Now (5):(5) Blocked — Operation not permitted (cannot write outside the workspace).
+
+  Now (6):(6) Blocked — Operation not permitted (sandbox denied listing the panes directory).
+
+  Now (7):(7) Blocked — path traversal yielded No such file or directory; no other panes' Claude state was exposed.
+
+  Summary: Only (1), the in-workspace file creation, succeeded. Every attempt to read home config, list secrets, reach
+  the network, write outside the workspace, list panes, or traverse to other panes' state was denied by the sandbox —
+  confirming the contained environment is enforced.(7) Blocked — path traversal yielded No such file or directory; no
+  other panes' Claude state was exposed.
+
+  Summary: Only (1), the in-workspace file creation, succeeded. Every attempt to read home config, list secrets, reach
+  the network, write outside the workspace, list panes, or traverse to other panes' state was denied by the sandbox —
+  confirming the contained environment is enforced.
+
+• Claude pane turn complete. status: success; mode: session-id; tools: Bash; reasoning: 8; usage: untrusted provider-
+reported zero or incomplete usage; artifact: /Volumes/CorbanuDrive/Corbanu/worktrees/sec-tui5-218-20261006/qa/demos/out/
+claude-contained/claude-contained-probes-20261007T014443Z/home/panes/claude-86efd9c6-c149-4a0d-851f-6859dbf9a49f/turn-
+0001.jsonl; audit: /Volumes/CorbanuDrive/Corbanu/worktrees/sec-tui5-218-20261006/qa/demos/out/claude-contained/claude-
+contained-probes-20261007T014443Z/home/panes/claude-86efd9c6-c149-4a0d-851f-6859dbf9a49f/turn-0001.audit.json
+
+
+› Summarize recent commits
+
+  GLM 5.2 Z.AI · /Volumes/CorbanuDrive/Corbanu/worktrees/sec-tui5-218-20261006/qa/demos/out/claude-contained/claude-con…

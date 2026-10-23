@@ -1,0 +1,40 @@
+== sk0
+grain=day (bucketed by request start)
+  2026-10-08: 2 requests, 13913 tokens, exact USD 0.01231528
+  ALL: 2 requests, 13913 tokens, exact USD 0.01231528
+== sk58s
+grain=day (bucketed by request start)
+  2026-10-08: 4 requests, 27748 tokens, exact USD 0.02437244
+  ALL: 4 requests, 27748 tokens, exact USD 0.02437244
+== sk6d
+grain=day (bucketed by request start)
+  2026-10-02: 8 requests, 57308 tokens, exact USD 0.01963924
+  ALL: 8 requests, 57308 tokens, exact USD 0.01963924
+== sk95d
+grain=day (bucketed by request start)
+  2026-07-05: 11 requests, 79478 tokens, exact USD 0.02831728
+  ALL: 11 requests, 79478 tokens, exact USD 0.02831728
+== sk-after
+grain=day (bucketed by request start)
+  2026-10-08: 2 requests, 13823 tokens, exact USD 0.0048622
+  ALL: 2 requests, 13823 tokens, exact USD 0.0048622
+== sk-predel
+grain=day (bucketed by request start)
+  2026-10-08: 1 requests, 6540 tokens, exact USD 0.00755688
+  ALL: 1 requests, 6540 tokens, exact USD 0.00755688
+== sk-predel2
+grain=day (bucketed by request start)
+  2026-10-08: 1 requests, 6540 tokens, exact USD 0.009162
+  ALL: 1 requests, 6540 tokens, exact USD 0.009162
+== d1
+grain=day (bucketed by request start)
+  2026-10-06: 7 requests, 36646 tokens, exact USD 0.02134052
+  ALL: 7 requests, 36646 tokens, exact USD 0.02134052
+== d2
+grain=day (bucketed by request start)
+  2026-10-07: 7 requests, 36605 tokens, exact USD 0.01309060
+  ALL: 7 requests, 36605 tokens, exact USD 0.01309060
+== dk
+grain=day (bucketed by request start)
+  2026-10-08: 2 requests, 13851 tokens, exact USD 0.00514032
+  ALL: 2 requests, 13851 tokens, exact USD 0.00514032

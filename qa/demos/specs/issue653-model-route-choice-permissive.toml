@@ -1,0 +1,100 @@
+# #653: /model chooses the connection (route) of a model served by several; Permissive.
+id = "issue653-model-route-choice-permissive"
+feature = "#653: /model chooses the connection (OpenAI-style or Claude-style) for GLM 5.3 Flash"
+expected = "Under Permissive, a turn on Z.AI OpenAI-style, then /model switches to GLM 5.3 Flash · Z.AI (Claude-style) and a turn completes on it (Max effort kept), then back to OpenAI-style and a turn completes again."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 140
+rows = 50
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Reply with exactly: openai-route-one"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^• openai-route-one"
+timeout = 120
+compress = 2
+[[steps]]
+type = "/model"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "GLM 5\\.3 Flash · Z\\.AI \\(OpenAI-style\\) \\(current\\)"
+[[steps]]
+key = "Down"
+[[steps]]
+wait = "› 2\\. GLM 5\\.3 Flash · Z\\.AI \\(Claude-style\\)"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Reasoning Level for GLM 5\\.3 Flash · Z\\.AI \\(Claude-style\\)"
+[[steps]]
+wait = "› \\d\\. More reasoning"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Advanced Reasoning"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Model changed to GLM 5\\.3 Flash · Z\\.AI \\(Claude-style\\)"
+[[steps]]
+pause = 1.5
+[[steps]]
+type = "Reply with exactly: claude-route-ok"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^• claude-route-ok"
+timeout = 120
+compress = 2
+[[steps]]
+type = "/model"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "GLM 5\\.3 Flash · Z\\.AI \\(Claude-style\\) \\(current\\)"
+[[steps]]
+key = "Up"
+[[steps]]
+wait = "› 1\\. GLM 5\\.3 Flash · Z\\.AI \\(OpenAI-style\\)"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Reasoning Level for GLM 5\\.3 Flash · Z\\.AI \\(OpenAI-style\\)"
+[[steps]]
+wait = "› \\d\\. More reasoning"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Advanced Reasoning"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Model changed to GLM 5\\.3 Flash · Z\\.AI \\(OpenAI-style\\)"
+[[steps]]
+type = "Reply with exactly: openai-route-ok"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^• openai-route-ok"
+timeout = 120
+compress = 2
+[[steps]]
+pause = 3.0

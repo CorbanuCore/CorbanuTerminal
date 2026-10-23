@@ -41,14 +41,19 @@ use std::sync::atomic::AtomicI64;
 use std::time::Instant;
 use tracing::warn;
 
+pub(crate) mod accounting;
 mod agent_mailbox;
 mod backfill;
+mod busy_retry;
+pub(crate) mod db_lock;
 mod external_agent_config_imports;
 mod goals;
 mod gpu_rentals;
 mod gpu_runtime_providers;
+mod log_scrub;
 mod logs;
 mod memories;
+mod provider_request_fallback;
 mod provider_requests;
 mod recovery;
 mod remote_control;
@@ -69,6 +74,8 @@ pub use goals::GoalAccountingOutcome;
 pub use goals::GoalStore;
 pub use goals::GoalUpdate;
 pub use memories::MemoryStore;
+pub use provider_request_fallback::ProviderRequestThrottled;
+pub use provider_request_fallback::StateDbFallback;
 pub use provider_requests::ProviderRequestBlock;
 pub use provider_requests::ProviderRequestBlockReason;
 pub use provider_requests::ProviderRequestKey;
@@ -105,6 +112,37 @@ pub struct StateRuntime {
     memories: MemoryStore,
     thread_updated_at_millis: Arc<AtomicI64>,
     thread_recency_at_millis: Arc<AtomicI64>,
+    /// When this process last completed the accounting ledger's whole-ledger
+    /// validation (`i64::MIN` if never). It stands for the rest of that UTC hour,
+    /// so a write retried after contention does not validate again.
+    accounting_validated_at_millis: Arc<AtomicI64>,
+    /// This process's copy of the provider-request throttle, used when the
+    /// state DB is busy or read-only; see `provider_request_fallback`.
+    provider_request_memory: Arc<provider_request_fallback::ProviderRequestMemory>,
+    /// Whether this process recently found the state DB's write lock taken.
+    contention: Arc<busy_retry::Contention>,
+    /// This runtime on a pool whose connections wait at most
+    /// `QUICK_BUSY_TIMEOUT` for the write lock; `None` on that view itself.
+    quick: Option<Arc<StateRuntime>>,
+    /// This process's accounting writer, started on first use.
+    accounting_writer: Arc<std::sync::Mutex<Option<accounting::store::AccountingWriter>>>,
+    /// Conversations whose `threads` row this process put off writing while
+    /// the state DB was busy; their ledger records wait for the row.
+    thread_rows_put_off: Arc<std::sync::Mutex<std::collections::HashSet<ThreadId>>>,
+    /// Ledger records the ledger refused, per conversation; see
+    /// `accounting_refusals`.
+    accounting_refusals: Arc<std::sync::Mutex<std::collections::HashMap<ThreadId, u64>>>,
+}
+
+/// How long a write a model request waits on (see [`StateRuntime::quick`])
+/// waits for another connection's write lock before giving up.
+pub const QUICK_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// Whether `error` is the shared state DB being busy: SQLITE_BUSY (another
+/// connection, usually another Corbanu process, held the write lock past the
+/// wait) or no pooled connection free in time.
+pub fn is_state_db_busy(error: &anyhow::Error) -> bool {
+    accounting::store::is_contention(error)
 }
 
 impl StateRuntime {
@@ -145,6 +183,9 @@ impl StateRuntime {
         telemetry_override: Option<&dyn DbTelemetry>,
     ) -> anyhow::Result<Arc<Self>> {
         tokio::fs::create_dir_all(sqlite.home()).await?;
+        // #549: one hold covers adopting legacy names, validation and
+        // creating or migrating every runtime DB.
+        let init_lock = sqlite.lock_runtime_db_init().await;
         sqlite.migrate_legacy_runtime_db_names().await?;
         let state_migrator = runtime_state_migrator();
         let logs_migrator = runtime_logs_migrator();
@@ -165,7 +206,7 @@ impl StateRuntime {
                 )
             })?;
         let pool = match sqlite
-            .open_state_db(&state_migrator, telemetry_override)
+            .open_state_db(&state_migrator, telemetry_override, Some(&init_lock))
             .await
         {
             Ok(db) => Arc::new(db),
@@ -174,8 +215,10 @@ impl StateRuntime {
                 return Err(err);
             }
         };
+        // A new logs database has nothing an older build wrote.
+        let logs_db_is_new = !crate::sqlite::database_has_content(&logs_path);
         let logs_pool = match sqlite
-            .open_logs_db(&logs_migrator, telemetry_override)
+            .open_logs_db(&logs_migrator, telemetry_override, Some(&init_lock))
             .await
         {
             Ok(db) => Arc::new(db),
@@ -186,7 +229,7 @@ impl StateRuntime {
             }
         };
         let goals_pool = match sqlite
-            .open_goals_db(&goals_migrator, telemetry_override)
+            .open_goals_db(&goals_migrator, telemetry_override, Some(&init_lock))
             .await
         {
             Ok(db) => Arc::new(db),
@@ -197,7 +240,7 @@ impl StateRuntime {
             }
         };
         let memories_pool = match sqlite
-            .open_memories_db(&memories_migrator, telemetry_override)
+            .open_memories_db(&memories_migrator, telemetry_override, Some(&init_lock))
             .await
         {
             Ok(db) => Arc::new(db),
@@ -210,6 +253,7 @@ impl StateRuntime {
                 return Err(err);
             }
         };
+        drop(init_lock);
         let started = Instant::now();
         let backfill_state_result = ensure_backfill_state_row_in_pool(pool.as_ref()).await;
         crate::telemetry::record_init_result(
@@ -260,7 +304,17 @@ impl StateRuntime {
             };
         let thread_updated_at_millis = thread_updated_at_millis.unwrap_or(0);
         let thread_recency_at_millis = thread_recency_at_millis.unwrap_or(0);
-        let runtime = Arc::new(Self {
+        let quick_pool = match sqlite.open_state_db_quick(QUICK_BUSY_TIMEOUT).await {
+            Ok(quick_pool) => Some(Arc::new(quick_pool)),
+            Err(err) => {
+                warn!(
+                    "failed to open the short-wait state db pool at {}; using the main pool: {err}",
+                    state_path.display()
+                );
+                None
+            }
+        };
+        let mut runtime = Self {
             thread_goals: GoalStore::new(Arc::clone(&goals_pool)),
             memories: MemoryStore::new(Arc::clone(&memories_pool), Arc::clone(&pool)),
             pool,
@@ -269,14 +323,114 @@ impl StateRuntime {
             default_provider,
             thread_updated_at_millis: Arc::new(AtomicI64::new(thread_updated_at_millis)),
             thread_recency_at_millis: Arc::new(AtomicI64::new(thread_recency_at_millis)),
-        });
+            accounting_validated_at_millis: Arc::new(AtomicI64::new(i64::MIN)),
+            provider_request_memory: Arc::default(),
+            contention: Arc::default(),
+            quick: None,
+            accounting_writer: Arc::default(),
+            thread_rows_put_off: Arc::default(),
+            accounting_refusals: Arc::default(),
+        };
+        runtime.quick = quick_pool.map(|quick_pool| Arc::new(runtime.on_pool(quick_pool)));
+        let runtime = Arc::new(runtime);
         if let Err(err) = runtime.run_logs_startup_maintenance().await {
             warn!(
                 "failed to run startup maintenance for logs db at {}: {err}",
                 logs_path.display(),
             );
         }
+        log_scrub::start(&runtime.logs_pool, &logs_path, logs_db_is_new).await;
         Ok(runtime)
+    }
+
+    /// This runtime with `pool` as its state DB pool; everything else, the
+    /// process-wide clocks and caches included, is shared.
+    fn on_pool(&self, pool: Arc<SqlitePool>) -> Self {
+        Self {
+            sqlite: self.sqlite.clone(),
+            default_provider: self.default_provider.clone(),
+            pool,
+            logs_pool: Arc::clone(&self.logs_pool),
+            thread_goals: self.thread_goals.clone(),
+            memories: self.memories.clone(),
+            thread_updated_at_millis: Arc::clone(&self.thread_updated_at_millis),
+            thread_recency_at_millis: Arc::clone(&self.thread_recency_at_millis),
+            accounting_validated_at_millis: Arc::clone(&self.accounting_validated_at_millis),
+            provider_request_memory: Arc::clone(&self.provider_request_memory),
+            contention: Arc::clone(&self.contention),
+            quick: None,
+            accounting_writer: Arc::clone(&self.accounting_writer),
+            thread_rows_put_off: Arc::clone(&self.thread_rows_put_off),
+            accounting_refusals: Arc::clone(&self.accounting_refusals),
+        }
+    }
+
+    /// This runtime, with state DB writes that wait at most
+    /// `QUICK_BUSY_TIMEOUT` for another connection's write lock instead of
+    /// SQLite's 5 s busy timeout. For writes a model request waits on and that
+    /// can be put off when the lock is taken.
+    pub fn quick(&self) -> &StateRuntime {
+        self.quick.as_deref().unwrap_or(self)
+    }
+
+    /// Whether this process recently found the state DB's write lock held by
+    /// another connection (`is_state_db_busy`) and no write got through since.
+    /// A write that can be put off should then be, without trying.
+    pub fn state_db_contended(&self) -> bool {
+        self.contention.active()
+    }
+
+    /// Record that a write found the state DB's write lock held.
+    pub fn note_state_db_contended(&self) {
+        self.contention.note();
+    }
+
+    /// Record that a write got through.
+    pub fn note_state_db_written(&self) {
+        self.contention.clear();
+    }
+
+    /// Record whether this process put off writing `thread`'s `threads` row
+    /// (`put_off`) or has written it. Ledger records for a conversation whose
+    /// row was put off wait for it instead of being refused.
+    pub fn note_thread_row_put_off(&self, thread: ThreadId, put_off: bool) {
+        let mut rows = self
+            .thread_rows_put_off
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if put_off {
+            rows.insert(thread);
+        } else {
+            rows.remove(&thread);
+        }
+    }
+
+    /// How many of `owner`'s ledger records this process's writer refused so
+    /// far. A record can be refused after the request that made it stopped
+    /// waiting for it; a turn compares the count to report the gap.
+    pub fn accounting_refusals(&self, owner: ThreadId) -> u64 {
+        self.accounting_refusals
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&owner)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    pub(crate) fn note_accounting_refused(&self, owner: ThreadId) {
+        *self
+            .accounting_refusals
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entry(owner)
+            .or_default() += 1;
+    }
+
+    pub(crate) fn thread_row_put_off(&self, thread: ThreadId) -> bool {
+        self.thread_rows_put_off
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains(&thread)
     }
 
     /// Return the SQLite configuration for this runtime.
@@ -297,6 +451,9 @@ impl StateRuntime {
         self.memories.close().await;
         self.thread_goals.close().await;
         self.logs_pool.close().await;
+        if let Some(quick) = self.quick.as_ref() {
+            quick.pool.close().await;
+        }
         self.pool.close().await;
     }
 
@@ -308,7 +465,11 @@ impl StateRuntime {
 
         let memories_migrator = runtime_memories_migrator();
         let pool = sqlite
-            .open_memories_db(&memories_migrator, /*telemetry_override*/ None)
+            .open_memories_db(
+                &memories_migrator,
+                /*telemetry_override*/ None,
+                /*init_lock*/ None,
+            )
             .await?;
         memories::clear_memory_data_in_pool(&pool).await?;
         pool.close().await;
@@ -323,12 +484,21 @@ async fn close_sqlite_pools(pools: &[&SqlitePool]) {
 }
 
 /// Open and migrate the rebuildable paginated thread-history database.
+///
+/// Takes the home's database init lock (#549), so the first call waits while
+/// another process creates or migrates any runtime database of the home (at
+/// most `DB_INIT_LOCK_WAIT`); callers open it once per process.
 pub async fn open_thread_history_db(sqlite: &SqliteConfig) -> anyhow::Result<SqlitePool> {
     tokio::fs::create_dir_all(sqlite.home()).await?;
+    let init_lock = sqlite.lock_runtime_db_init().await;
     sqlite.migrate_legacy_runtime_db_names().await?;
     let migrator = runtime_thread_history_migrator();
     sqlite
-        .open_thread_history_db(&migrator, /*telemetry_override*/ None)
+        .open_thread_history_db(
+            &migrator,
+            /*telemetry_override*/ None,
+            Some(&init_lock),
+        )
         .await
 }
 
@@ -548,7 +718,11 @@ mod tests {
         pool.close().await;
         let tolerant_migrator = runtime_state_migrator();
         let tolerant_pool = sqlite
-            .open_state_db(&tolerant_migrator, /*telemetry_override*/ None)
+            .open_state_db(
+                &tolerant_migrator,
+                /*telemetry_override*/ None,
+                /*init_lock*/ None,
+            )
             .await
             .expect("runtime migrator should tolerate newer applied migrations");
         tolerant_pool.close().await;

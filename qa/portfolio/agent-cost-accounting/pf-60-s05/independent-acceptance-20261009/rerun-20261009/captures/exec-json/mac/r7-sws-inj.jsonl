@@ -1,0 +1,10 @@
+{"type":"thread.started","thread_id":"01a12218-26e1-7723-a536-56676eeacfb5"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Under-development features enabled: standalone_web_search. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in <scratch>/homes/h-r7/config.toml."}}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_1","type":"error","message":"Skill descriptions were shortened to fit the 2% skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest."}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"I’m checking the site’s official domain with web search and will return only the domain string."}}
+{"type":"item.started","item":{"id":"item_3","type":"web_search","id":"call_o803SOwekrjaraB65iXTYCwX","query":"","action":{"type":"other"}}}
+{"type":"item.completed","item":{"id":"item_3","type":"web_search","id":"call_o803SOwekrjaraB65iXTYCwX","query":"Lobsters link aggregator official website domain","action":{"type":"search","query":"Lobsters link aggregator official website domain"}}}
+{"type":"item.completed","item":{"id":"item_4","type":"error","message":"Developer accounting could not record one or more model requests in this turn. They were sent anyway; /cost does not include them. The cause is in the log (target codex_core::accounting)."}}
+{"type":"item.completed","item":{"id":"item_5","type":"agent_message","text":"lobste.rs"}}
+{"type":"turn.completed","usage":{"input_tokens":28308,"cached_input_tokens":11776,"cache_write_input_tokens":0,"output_tokens":86,"reasoning_output_tokens":15}}

@@ -1,0 +1,76 @@
+# #544: in the agent-question view (request_user_input) a number key only
+# highlights its option; typed text never answers and Enter then waits; the
+# arrows and Enter (or a number and Enter) answer. On main a number key
+# answered at once.
+id = "issue544-question-number-key-highlights"
+feature = "#544: a number key does not answer an agent's question"
+expected = "The agent asks a question with two options. Pressing 2 only highlights Blue and the question stays open; typed text is not sent and Enter is ignored. After the arrows, 2 and Enter answer Blue."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 36
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+default_mode_request_user_input = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "Call your request_user_input tool exactly once to ask me one question: id color, header Color, question 'Pick a color', options Red (description warm) and Blue (description cool). Then tell me my choice in one line."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)Pick a color.*Blue"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 3.0
+
+[[steps]]
+key = "2"
+[[steps]]
+wait = "(?s)Pick a color.*› 2\\. Blue"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "x"
+[[steps]]
+wait = "Typed text is not sent while this request is open"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+pause = 2.0
+[[steps]]
+wait = "(?s)Pick a color.*Typed text is not sent while this request is open"
+
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Up"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "2"
+[[steps]]
+wait = "(?s)Pick a color.*› 2\\. Blue"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)Pick a color.*Blue(?:(?!Working).)*\n• (?:(?!Working).)*\n› "
+timeout = 120
+compress = 3
+[[steps]]
+pause = 3.0

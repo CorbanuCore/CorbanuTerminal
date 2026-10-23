@@ -3,6 +3,7 @@
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::AMBIENT_KIMI_K2_7_CODE_MODEL;
 use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
+use codex_model_provider_info::CLAUDE_OPUS_5_5_PLAN_UPSTREAM_MODEL;
 use codex_model_provider_info::OPENROUTER_DEFAULT_MODEL;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
 use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
@@ -40,6 +41,10 @@ pub(crate) struct ClaudeProviderProfile {
     pub(crate) provider_model: &'static str,
     pub(crate) small_model: &'static str,
     pub(crate) base_url: Option<&'static str>,
+    /// The built-in provider whose account this profile's turns are billed to,
+    /// used to report bridge sends for accounting. `None` when this profile
+    /// does not post through a bridge this client can attribute.
+    pub(crate) accounting_provider_id: Option<&'static str>,
     pub(crate) vault_label: Option<&'static str>,
     pub(crate) uses_bare_mode: bool,
     pub(crate) transport: ClaudeProviderTransport,
@@ -50,12 +55,15 @@ impl ClaudeProviderProfileKind {
         match self {
             Self::ClaudePlan => ClaudeProviderProfile {
                 kind: self,
-                title: "Claude Code - Opus 5 Claude Plan",
-                description: "Use Claude Code's native auth with Opus 5 Claude Plan.",
-                claude_model: "opus",
-                provider_model: "opus",
+                // Pinned: Claude Code's `opus` alias follows its newest Opus,
+                // which made this label name a model the pane didn't serve (#366).
+                title: "Claude Code - Opus 5.5 Claude Plan",
+                description: "Use Claude Code's native auth with Claude Opus 5.5 on your Claude plan.",
+                claude_model: CLAUDE_OPUS_5_5_PLAN_UPSTREAM_MODEL,
+                provider_model: CLAUDE_OPUS_5_5_PLAN_UPSTREAM_MODEL,
                 small_model: "haiku",
                 base_url: None,
+                accounting_provider_id: Some(codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID),
                 vault_label: None,
                 uses_bare_mode: false,
                 transport: ClaudeProviderTransport::DirectAnthropic,
@@ -68,6 +76,7 @@ impl ClaudeProviderProfileKind {
                 provider_model: AMBIENT_DEFAULT_MODEL,
                 small_model: "glm-4.7",
                 base_url: Some("https://api.ambient.xyz"),
+                accounting_provider_id: Some(codex_model_provider_info::AMBIENT_PROVIDER_ID),
                 vault_label: Some("provider/ambient_api_key"),
                 uses_bare_mode: true,
                 transport: ClaudeProviderTransport::AmbientChatBridge,
@@ -80,6 +89,7 @@ impl ClaudeProviderProfileKind {
                 provider_model: AMBIENT_KIMI_K2_7_CODE_MODEL,
                 small_model: AMBIENT_KIMI_K2_7_CODE_MODEL,
                 base_url: Some("https://api.ambient.xyz"),
+                accounting_provider_id: Some(codex_model_provider_info::AMBIENT_PROVIDER_ID),
                 vault_label: Some("provider/ambient_api_key"),
                 uses_bare_mode: true,
                 transport: ClaudeProviderTransport::AmbientChatBridge,
@@ -92,6 +102,7 @@ impl ClaudeProviderProfileKind {
                 provider_model: "glm-5.2[1m]",
                 small_model: "glm-4.7",
                 base_url: Some("https://api.z.ai/api/anthropic"),
+                accounting_provider_id: Some(codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID),
                 vault_label: Some("provider/zai_api_key"),
                 uses_bare_mode: true,
                 transport: ClaudeProviderTransport::DirectAnthropic,
@@ -104,6 +115,9 @@ impl ClaudeProviderProfileKind {
                 provider_model: "zai-org/GLM-5.2",
                 small_model: "zai-org/GLM-5.2",
                 base_url: Some("https://inference.baseten.co"),
+                accounting_provider_id: Some(
+                    codex_model_provider_info::BASETEN_ANTHROPIC_PROVIDER_ID,
+                ),
                 vault_label: Some("provider/baseten_api_key"),
                 uses_bare_mode: true,
                 transport: ClaudeProviderTransport::DirectAnthropic,
@@ -116,6 +130,9 @@ impl ClaudeProviderProfileKind {
                 provider_model: "z-ai/glm-5.2",
                 small_model: "z-ai/glm-5.2",
                 base_url: Some("https://openrouter.ai/api"),
+                accounting_provider_id: Some(
+                    codex_model_provider_info::OPENROUTER_ANTHROPIC_PROVIDER_ID,
+                ),
                 vault_label: Some("provider/openrouter_api_key"),
                 uses_bare_mode: true,
                 transport: ClaudeProviderTransport::DirectAnthropic,
@@ -128,6 +145,9 @@ impl ClaudeProviderProfileKind {
                 provider_model: "zai/glm-5.2",
                 small_model: "zai/glm-5.2-fast",
                 base_url: Some("https://ai-gateway.vercel.sh"),
+                accounting_provider_id: Some(
+                    codex_model_provider_info::VERCEL_ANTHROPIC_PROVIDER_ID,
+                ),
                 vault_label: Some("provider/ai_gateway_api_key"),
                 uses_bare_mode: true,
                 transport: ClaudeProviderTransport::AnthropicPassthroughBridge,
@@ -140,6 +160,9 @@ impl ClaudeProviderProfileKind {
                 provider_model: "zai/glm-5.2-fast",
                 small_model: "zai/glm-5.2-fast",
                 base_url: Some("https://ai-gateway.vercel.sh"),
+                accounting_provider_id: Some(
+                    codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID,
+                ),
                 vault_label: Some("provider/ai_gateway_api_key"),
                 uses_bare_mode: true,
                 transport: ClaudeProviderTransport::AnthropicPassthroughBridge,
@@ -156,6 +179,24 @@ impl ClaudeProviderProfileKind {
             .to_string()
     }
 
+    /// Pane-title suffixes this profile used before its current label, so saved
+    /// panes keep their spawn identity.
+    pub(crate) fn legacy_status_model_labels(self) -> &'static [&'static str] {
+        match self {
+            Self::ClaudePlan => &["Opus 5 Claude Plan", "Claude Plan"],
+            _ => &[],
+        }
+    }
+
+    /// A retired label that named a different model than the one served; saved
+    /// pane titles ending in it are relabelled on restore (#366).
+    pub(crate) fn relabelled_status_model_label(self) -> Option<&'static str> {
+        match self {
+            Self::ClaudePlan => Some("Opus 5 Claude Plan"),
+            _ => None,
+        }
+    }
+
     pub(crate) fn native_codex_model(self) -> Option<&'static str> {
         match self {
             Self::ClaudePlan => None,
@@ -167,6 +208,12 @@ impl ClaudeProviderProfileKind {
             Self::VercelGlm52 => Some(VERCEL_DEFAULT_MODEL),
             Self::VercelGlm52Fast => Some(VERCEL_GLM_5_2_FAST_MODEL),
         }
+    }
+
+    /// The runtime provider a Claude Code pane records as a `/spawn` crew member,
+    /// e.g. `external-claude:claudeplan` (`CLAUDE_PLAN_PANE_PROVIDER_ID`).
+    pub(crate) fn crew_runtime_provider_id(self) -> String {
+        format!("external-claude:{self:?}").to_ascii_lowercase()
     }
 
     pub(crate) fn creation_options() -> &'static [Self] {

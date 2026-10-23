@@ -209,7 +209,10 @@ fn project_layers_for_cwd(cwd: &Path) -> Vec<ConfigLayerEntry> {
     };
     let project_root = cwd_dir
         .ancestors()
-        .find(|ancestor| ancestor.join(".git").exists())
+        .find(|ancestor| {
+            let dot_git = ancestor.join(".git");
+            dot_git.is_file() || dot_git.join("HEAD").exists()
+        })
         .unwrap_or(cwd_dir.as_path())
         .to_path_buf();
 
@@ -2899,6 +2902,36 @@ async fn non_git_repo_skills_search_does_not_walk_parents() {
     let outer_dir = tempfile::tempdir().expect("tempdir");
     let nested_dir = outer_dir.path().join("nested/inner");
     fs::create_dir_all(&nested_dir).unwrap();
+
+    write_skill_at(
+        &outer_dir
+            .path()
+            .join(REPO_ROOT_CONFIG_DIR_NAME)
+            .join(SKILLS_DIR_NAME),
+        "outer",
+        "outer-skill",
+        "from outer",
+    );
+
+    let cfg = make_config_for_cwd(&codex_home, nested_dir).await;
+
+    let outcome = load_skills_for_test(&cfg).await;
+    assert!(
+        outcome.errors.is_empty(),
+        "unexpected errors: {:?}",
+        outcome.errors
+    );
+    assert_eq!(outcome.skills.len(), 0);
+}
+
+#[tokio::test]
+async fn incomplete_git_dir_does_not_mark_repo_root_for_skills_search() {
+    let codex_home = tempfile::tempdir().expect("tempdir");
+    let outer_dir = tempfile::tempdir().expect("tempdir");
+    let nested_dir = outer_dir.path().join("nested/inner");
+    fs::create_dir_all(&nested_dir).unwrap();
+    // Empty `.git` dirs are what the Linux sandbox leaves as mount targets.
+    fs::create_dir(outer_dir.path().join(".git")).unwrap();
 
     write_skill_at(
         &outer_dir

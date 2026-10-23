@@ -1,0 +1,66 @@
+$
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     glm-5.2   /model to change                    │
+│ directory: <corbanu-root>/tmp/…/work/repo │
+╰──────────────────────────────────────────────────────────╯
+
+  Reply with exactly: turn two
+• turn two
+  Attempt, components and original price
+  Requested UTC day: 2026-10-09
+  Provider: Z.AI
+  Model: Z.AI GLM 5.2
+  Billing: Covered by your subscription (not billed per request)
+  Same work at API prices: not available
+  Tokens: 12,615 tokens
+  Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+  usage page.
+  —— Details ——
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Request: ac1d4f32-22eb-460d-ac4b-773ebc6f25ff
+  Attempt: cd408eb8-89c5-43e7-af90-34af898d854f
+  Thread: 01a120be-fe18-7813-96a2-6d3f3889726c
+  Turn: 01a120bf-0009-7060-956e-84a8cd7949dd
+  Provider: zai
+  Model: glm-5.2
+  Opaque scope: 73c14d7e-a7e8-40b4-98fe-9372df73ddd6
+  Arithmetic dialect: Inclusive
+  Admission time: 2026-10-09T12:59:10.936Z
+  Retry predecessor: none
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  No recorded attempt here was billed per token.
+  Subscription capacity: 1 of 1 attempts, not billed per token
+  Plan consumption: unavailable — no plan rate or token total for 1 of 1 plan attempts
+  Same tokens at API rates: unavailable — the catalogue states no API price for 1 of 1 plan attempts
+  Plan rate at dispatch: not stated by the vendor
+  Billing basis: subscription (set in your config)
+  Input: 12612
+  Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+  Cache read: 512
+  Cache write: unknown — no retained numeric evidence
+  Output: 3
+  Reasoning (subset, not separately billed): 0 (reported)
+  Total (not separately billed): 12615
+  Noncached input cost: unknown — no retained numeric evidence
+  Cache read cost: unknown — rate unavailable
+  Cache write cost: unknown — no retained numeric evidence
+  Output cost: unknown — rate unavailable
+  Known subtotal exact USD: none — subscription work is not billed per token
+  Price ID: fa2899bc-bd68-465c-90cb-3ce94c2f0ecc
+  Price source: NativeCatalog; reference 7245210d-368a-5520-88fb-230056d58d9e
+  Price currency/unit: Usd / PerMillionTokens
+  Price observed/approved: 2026-10-09T12:59:10.936Z / 2026-10-09T12:59:10.936Z
+  Price effective interval: [2026-10-09T12:59:10.936Z, unbounded)
+  Rate unavailable for Noncached input
+  Rate unavailable for Cache read
+  Rate unavailable for Cache write
+  Rate unavailable for Output
+  Evidence revision 3; source 30003af8-559b-409a-a29b-791f61594921; sequence 3; presence patch
+  {"input":12612,"read":512,"output":3,"reasoning":0,"total":12615}
+  Snapshot is not current; newer activity is unverified
+  Back
+  Refresh
+  Close

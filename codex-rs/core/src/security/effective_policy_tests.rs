@@ -62,13 +62,23 @@ fn effective_policy_composition_never_expands_existing_authority() {
             initialized_policy(level, RevocationState::new());
         let policy = view.snapshot_for_agent(root_id).expect("snapshot");
 
-        assert!(!policy.compose_existing_decision(false, true));
-        assert!(!policy.compose_existing_decision(false, false));
+        assert!(!policy.compose_existing_decision(
+            /*existing_allow*/ false, /*profile_allows*/ true
+        ));
+        assert!(!policy.compose_existing_decision(
+            /*existing_allow*/ false, /*profile_allows*/ false
+        ));
         assert_eq!(
-            policy.compose_existing_decision(true, false),
+            policy.compose_existing_decision(
+                /*existing_allow*/ true, /*profile_allows*/ false
+            ),
             level == SecurityLevel::Permissive
         );
-        assert!(policy.compose_existing_decision(true, true));
+        assert!(
+            policy.compose_existing_decision(
+                /*existing_allow*/ true, /*profile_allows*/ true
+            )
+        );
     }
 }
 
@@ -178,7 +188,7 @@ fn security_inheritance_preserves_authority_identity_and_revocation_state() {
         human(),
         RevocationTarget::KillSwitch { active: true },
         RevocationReason::KillSwitch,
-        100,
+        /*created_at_unix_seconds*/ 100,
     )
     .expect("kill event");
     revocations.apply(&kill).expect("apply kill");
@@ -200,7 +210,10 @@ fn security_inheritance_preserves_authority_identity_and_revocation_state() {
     assert_eq!(child.task_id.as_str(), "task:child-order");
     assert_eq!(child.revocation_generation, 1);
     assert!(child.kill_switch_active);
-    assert!(!child.compose_existing_decision(true, true));
+    assert!(
+        !child
+            .compose_existing_decision(/*existing_allow*/ true, /*profile_allows*/ true)
+    );
     assert_eq!(child.actor_chain.as_slice().first(), Some(&human()));
     assert_eq!(
         child

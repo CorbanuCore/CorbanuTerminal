@@ -1,0 +1,4 @@
+d1           6 requests  exact USD 0.05430952
+def-zai      2 requests  exact USD 0.02462296
+dev-zai      2 requests  exact USD 0.0159218
+proxy:proxy-stripped.jsonl 2 requests  exact USD 0.01734664

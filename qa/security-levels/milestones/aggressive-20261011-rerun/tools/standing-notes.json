@@ -1,0 +1,10 @@
+{
+ "G07": "Where a case asks a command to be run and an approval prompt appears, approving it (Enter on the highlighted 'Yes, proceed') is part of running it.",
+ "G10": "Do not use the product's `!` shell escape; it is not part of these cases. On an approval prompt a letter in brackets only highlights its option; Enter confirms it.",
+ "G11": "Do not use the product's `!` shell escape; it is not part of this case. On an approval prompt a letter in brackets only highlights its option; Enter confirms it.",
+ "G12": "Starting conditions that describe test data (file contents such as README.md, or a project `.codex/config.toml`) are set up by you inside `$AGMS_RUN/fixture/workspace` before the step that needs them. Where a case asks a command to be run and an approval prompt appears, approving it (Enter on the highlighted 'Yes, proceed') is part of running it.",
+ "G15": "Screen E1 was captured with the product launched with the launch argument `-c 'cli_auth_credentials_store=\"file\"'` (pass it after the agms-tui options); that is the E1 starting condition. 'Fix the cause' means starting again without that argument.",
+ "G17": "The two Z.AI routes in AGG-27 are `zai` and `zai-anthropic`. `zai-plain-http` is a test fixture for another case and is not one of them. A restart is quitting the product and starting it again on the same route. AGG-A01 starts from a fresh profile: `agms-tui start --route zai-anthropic --model glm-5.2`.",
+ "G18": "Coordinator answer to the first designer's question 5: the harness method for 'broker prevented from starting' is the route `zai-plain-http` (start with `agms-tui start --route zai-plain-http`): the same Z.AI models with the provider address given as plain HTTP, which the credential broker cannot accept. No user action stops the broker process itself.",
+ "G21": "Coordinator fixture for this group: the system-wide file `/etc/codex/config.toml` that was present when screen E2 was captured has been put back (root-owned; you cannot change it)."
+}

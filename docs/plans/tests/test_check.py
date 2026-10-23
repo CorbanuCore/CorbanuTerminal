@@ -94,28 +94,48 @@ class PlanCheckerTests(unittest.TestCase):
             )
 
     def test_concurrency_metadata_before_sprint_allocation(self):
-        for limit, owner, valid in (
-            (1, "Owner", True),
-            (3, "Owner", False),
-            (2, "", False),
-            (0, "Owner", False),
-            (4, "Owner", False),
-            ("many", "Owner", False),
-            (3, "<owner>", False),
+        three = "broker, untrusted-content, tui"
+        for limit, owner, lanes, valid in (
+            (1, "Owner", "", True),
+            (2, "Owner", "broker, tui", True),
+            (3, "Owner", three, True),
+            (3, "Owner", "", False),
+            (3, "Owner", "broker, tui", False),
+            (3, "Owner", "broker, Broker, tui", False),
+            (2, "", "broker, tui", False),
+            (0, "Owner", three, False),
+            (4, "Owner", three + ", extra", False),
+            ("many", "Owner", three, False),
+            (3, "<owner>", three, False),
         ):
             with (
-                self.subTest(limit=limit, owner=owner),
+                self.subTest(limit=limit, owner=owner, lanes=lanes),
                 tempfile.TemporaryDirectory() as temporary,
             ):
                 root = self.make_root(temporary)
                 text = active_plan("Security").replace(
                     "status: active",
-                    f'status: active\nparallel_sprint_limit: {limit}\nintegration_owner: "{owner}"',
+                    f'status: active\nparallel_sprint_limit: {limit}\n'
+                    f'parallel_lanes: "{lanes}"\nintegration_owner: "{owner}"',
                 )
                 (root / "active/security.md").write_text(text, encoding="utf-8")
                 result = checker.check_plan_root(root)
                 self.assertEqual(result["ok"], valid, result["errors"])
 
+    def test_max_active_sprints_must_match_limit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.make_root(temporary)
+            text = active_plan("Security").replace(
+                "status: active",
+                'status: active\nparallel_sprint_limit: 3\nmax_active_sprints: 1\n'
+                'parallel_lanes: "a, b, c"\nintegration_owner: "Owner"',
+            )
+            (root / "active/security.md").write_text(text, encoding="utf-8")
+            result = checker.check_plan_root(root)
+            self.assertFalse(result["ok"])
+            self.assertTrue(
+                any("parallel_sprint_limit must be 1-3" in e for e in result["errors"])
+            )
 
     def test_three_active_plans_pass(self):
         with tempfile.TemporaryDirectory() as temporary:

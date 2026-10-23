@@ -1,0 +1,33 @@
+$ /cost
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     openai.gpt-5.4   /model to change             │
+│ directory: <corbanu-root>/tmp/…/work/repo │
+╰──────────────────────────────────────────────────────────╯
+
+  Cost — this conversation
+  Requested UTC day: 2026-10-09
+  Today (UTC) in this conversation: no recorded requests.
+  Other conversations on this day, not included above: 1 request in 1 conversation.
+  • Amazon Bedrock · openai.gpt-5.4 — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
+  Other conversations' estimated cost: no price available.
+  To see those requests, open that conversation with /resume and run /cost there.
+  Next step for requests with no price: check the bill from Amazon Bedrock. No published price covers them, so no cost is shown for them here.
+  Costs are estimates from published prices; Amazon Bedrock doesn't report its charges — check Amazon Bedrock's bill.
+  —— Details ——
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  No recorded attempts in this conversation or its subagents; collection coverage unknown.
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z)
+  Read at: 2026-10-09T13:38:07.673Z; ledger current to: 2026-10-09T13:37:48.640Z (19033 ms behind)
+  Retention: request detail kept since 2026-07-11T13:38:07.673Z; daily totals kept since 2025-10-10; oldest recorded day in this conversation none
+  Known subtotal exact USD: none — no recorded attempts in this conversation
+  Input: 0
+  Noncached input (derived for inclusive input): 0
+  Cache read: 0
+  Cache write: 0
+  Output: 0

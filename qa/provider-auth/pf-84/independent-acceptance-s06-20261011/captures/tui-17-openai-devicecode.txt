@@ -1,0 +1,28 @@
+│ model:       gpt-5.4 medium   /model to change         │
+│ directory:   /Volumes/CorbanuDrive/Corbanu/…/s06acc/ws │
+│ permissions: YOLO mode                                 │
+╰────────────────────────────────────────────────────────╯
+  Add account `devcode`
+› 1. Sign in with ChatGPT (device code)  Shows a code to enter in your browser; saved to this account only.
+  2. OpenAI API key                      Paste it into masked entry.
+  Press enter to confirm or esc to go back
+  gpt-5.4 default · /Volumes/CorbanuDrive/Corbanu/.codex-work/s06acc/ws · Corbanu Terminal · TPS: -- tok/s
+• To sign in openai account `devcode`, open http://127.0.0.1:34631/codex/device and enter code MOCK-0001. Waiting for the sign-in…
+• Signed in openai account `devcode` (ChatGPT sign-in · d…@example.com · Plus). Use it from /providers, `--account devcode` or a spawn `account`.
+› 1. OpenAI · default  Enabled · configured · current · this session · default for new sessions
+  2. OpenAI · devcode  Named account · ChatGPT sign-in · d…@example.com · Plus · fp e36338d4256d
+  3. OpenAI · fake     Named account · OpenAI API key · fp 6feffd03f6f9
+  4. OpenAI · tuiadd   Named account · OpenAI API key · fp 2beabe71a07a
+  5. OpenAI · work     Named account · ChatGPT sign-in · t…@example.com · Plus · fp 03c266ec0285
+(removed: a broken before/after check whose path variable was empty; see the direct check at the end)
+• New session: requests to openai use account `devcode`.
+› Reply with exactly: pong
+• mock: chatgpt devcode gen1
+│  Model provider:       OpenAI - http://127.0.0.1:34631/v1 · account devcode              │
+│  Account:              ChatGPT sign-in · d…@example.com · Plus (account devcode)         │
+│  Account usage:        devcode · 120 input · 9 output                                    │
+│  5h limit:             [██████████░░░░░░░░░░] 51% left                                   │
+{"t": 1791782332.065, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "devcode", "gen": 1, "expired": false}, "model": null}
+
+(review fix, 05:32Z): direct check that home t1 has no default login file:
+auth.json entries in $S/homes/t1: 0

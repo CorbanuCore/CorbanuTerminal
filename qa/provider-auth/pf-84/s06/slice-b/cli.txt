@@ -1,0 +1,240 @@
+
+== default login: an API-key login in auth.json
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu login --with-api-key
+Reading API key from stdin...
+Successfully logged in
+[exit 0]
+auth.json sha256: 79ccee43fcc41507
+
+== B3: device-code sign-in into named accounts (default untouched)
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu login --account work --device-auth --experimental_issuer http://127.0.0.1:31285
+
+Welcome to Codex [v[90m0.1.48[0m]
+[90mOpenAI's command-line coding agent[0m
+
+Follow these steps to sign in with ChatGPT using device code authorization:
+
+1. Open this link in your browser and sign in to your account
+   [94mhttp://127.0.0.1:31285/codex/device[0m
+
+2. Enter this one-time code [90m(expires in 15 minutes)[0m
+   [94mMOCK-0001[0m
+
+[90mContinue only if you started this login in Codex. If a website or another person gave you this code, cancel.[0m
+
+Signed in OpenAI account `work` (ChatGPT sign-in · w…@example.com · Plus).
+[exit 0]
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu login --account play --device-auth --experimental_issuer http://127.0.0.1:31285
+
+Welcome to Codex [v[90m0.1.48[0m]
+[90mOpenAI's command-line coding agent[0m
+
+Follow these steps to sign in with ChatGPT using device code authorization:
+
+1. Open this link in your browser and sign in to your account
+   [94mhttp://127.0.0.1:31285/codex/device[0m
+
+2. Enter this one-time code [90m(expires in 15 minutes)[0m
+   [94mMOCK-0001[0m
+
+[90mContinue only if you started this login in Codex. If a website or another person gave you this code, cancel.[0m
+
+Signed in OpenAI account `play` (ChatGPT sign-in · p…@example.com · Plus).
+[exit 0]
+
+== B5: same ChatGPT user under a second account: warned, not refused
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu login --account twin --device-auth --experimental_issuer http://127.0.0.1:31285
+
+Welcome to Codex [v[90m0.1.48[0m]
+[90mOpenAI's command-line coding agent[0m
+
+Follow these steps to sign in with ChatGPT using device code authorization:
+
+1. Open this link in your browser and sign in to your account
+   [94mhttp://127.0.0.1:31285/codex/device[0m
+
+2. Enter this one-time code [90m(expires in 15 minutes)[0m
+   [94mMOCK-0001[0m
+
+[90mContinue only if you started this login in Codex. If a website or another person gave you this code, cancel.[0m
+
+Signed in OpenAI account `twin` (ChatGPT sign-in · w…@example.com · Plus).
+Warning: this is the same ChatGPT user as account(s) `work`. They share that user's usage limits, and signing out of one can end the other's session.
+[exit 0]
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu login --account bad --device-auth --experimental_issuer http://127.0.0.1:31285
+
+Welcome to Codex [v[90m0.1.48[0m]
+[90mOpenAI's command-line coding agent[0m
+
+Follow these steps to sign in with ChatGPT using device code authorization:
+
+1. Open this link in your browser and sign in to your account
+   [94mhttp://127.0.0.1:31285/codex/device[0m
+
+2. Enter this one-time code [90m(expires in 15 minutes)[0m
+   [94mMOCK-0001[0m
+
+[90mContinue only if you started this login in Codex. If a website or another person gave you this code, cancel.[0m
+
+Signed in OpenAI account `bad` (ChatGPT sign-in · b…@example.com · Plus).
+[exit 0]
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu account list openai
+openai	bad	chatgpt_auth	ChatGPT sign-in · b…@example.com · Plus
+openai	play	chatgpt_auth	ChatGPT sign-in · p…@example.com · Plus
+openai	twin	chatgpt_auth	ChatGPT sign-in · w…@example.com · Plus
+openai	work	chatgpt_auth	ChatGPT sign-in · w…@example.com · Plus
+[exit 0]
+auth.json sha256: 79ccee43fcc41507
+
+== B2: concurrent refresh in two accounts (both access tokens expire in 60 s)
+2026-10-12T03:21:25.479277Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 404 Not Found: Unknown error, url: http://127.0.0.1:31285/v1/models?client_version=REDACTED
+2026-10-12T03:21:26.249572Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 404 Not Found: Unknown error, url: http://127.0.0.1:31285/v1/models?client_version=REDACTED
+2026-10-12T03:21:26.296893Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:26.299752Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:26.440022Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:26.441734Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+openai-mock: authorized as work (token gen 3)
+2026-10-12T03:21:25.873830Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 404 Not Found: Unknown error, url: http://127.0.0.1:31285/v1/models?client_version=REDACTED
+2026-10-12T03:21:26.535717Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 404 Not Found: Unknown error, url: http://127.0.0.1:31285/v1/models?client_version=REDACTED
+2026-10-12T03:21:26.602833Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:26.605372Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:26.743246Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:26.744745Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+openai-mock: authorized as play (token gen 3)
+
+== the rotated tokens were saved to each account: no second refresh, no reuse
+2026-10-12T03:21:27.199425Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 404 Not Found: Unknown error, url: http://127.0.0.1:31285/v1/models?client_version=REDACTED
+2026-10-12T03:21:27.225726Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 404 Not Found: Unknown error, url: http://127.0.0.1:31285/v1/models?client_version=REDACTED
+2026-10-12T03:21:27.292170Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:27.294867Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:27.433000Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:27.434428Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+openai-mock: authorized as work (token gen 3)
+2026-10-12T03:21:27.924852Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 404 Not Found: Unknown error, url: http://127.0.0.1:31285/v1/models?client_version=REDACTED
+2026-10-12T03:21:27.952227Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 404 Not Found: Unknown error, url: http://127.0.0.1:31285/v1/models?client_version=REDACTED
+2026-10-12T03:21:28.019074Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:28.020756Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:28.160277Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:28.161758Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+openai-mock: authorized as play (token gen 3)
+
+== default account: its own API key; OPENAI_API_KEY decoy unused
+openai-mock: authorized as api key default
+auth.json sha256: 79ccee43fcc41507
+
+== an expired refresh token: sign in again, default intact
+2026-10-12T03:21:29.115259Z ERROR codex_login::auth::manager: Failed to refresh token: 401 Unauthorized: {"error": {"code": "refresh_token_expired", "message": "refresh token expired"}}
+2026-10-12T03:21:29.130774Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.158568Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.184970Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.219199Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.220263Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 404 Not Found: Unknown error, url: http://127.0.0.1:31285/v1/models?client_version=REDACTED
+2026-10-12T03:21:29.250032Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 404 Not Found: Unknown error, url: http://127.0.0.1:31285/v1/models?client_version=REDACTED
+2026-10-12T03:21:29.277604Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.342412Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.372392Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:29.375170Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:29.376392Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.402558Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.428895Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.533834Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.537768Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:29.539352Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:29.568342Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.634495Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.717856Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.745832Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.771787Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.798183Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.878948Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.905027Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+2026-10-12T03:21:29.930433Z ERROR codex_login::auth::manager: Failed to refresh token: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+ERROR: OpenAI (openai) account `bad` was rejected. Sign it in again with `corbanu login --account bad` (add `--with-api-key` for an API key), or choose another account. The default OpenAI credential is unchanged.
+ERROR: Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again. (account `bad`: sign in again with `corbanu login --account bad`; the default login is unchanged)
+openai-mock: authorized as api key default
+
+== unknown account refused before start
+Error: thread/start: thread/start failed: account `nope` of provider `openai` is not signed in; sign in with `corbanu login --account nope` or pick another with `--account` (see `corbanu account list`) (code -32600)
+
+== B3 logout: only play signed out and revoked
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu logout --account play
+Signed out OpenAI account `play`
+[exit 0]
+$ /home/ambient/corbanu-rtx/pf84s06-target/debug/corbanu account list openai
+openai	bad	chatgpt_auth	ChatGPT sign-in · b…@example.com · Plus
+openai	twin	chatgpt_auth	ChatGPT sign-in · w…@example.com · Plus
+openai	work	chatgpt_auth	ChatGPT sign-in · w…@example.com · Plus
+[exit 0]
+auth.json sha256: 79ccee43fcc41507
+
+== a home with no default login: the named account alone works
+$ CODEX_HOME=<second home> corbanu login --account solo --device-auth
+Signed in OpenAI account `solo` (ChatGPT sign-in · s…@example.com · Plus).
+2026-10-12T03:21:32.855998Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 404 Not Found: Unknown error, url: http://127.0.0.1:31285/v1/models?client_version=REDACTED
+2026-10-12T03:21:33.160698Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 404 Not Found: Unknown error, url: http://127.0.0.1:31285/v1/models?client_version=REDACTED
+2026-10-12T03:21:33.210201Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:33.213030Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:33.352234Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+2026-10-12T03:21:33.353752Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 404: ")
+openai-mock: authorized as solo (token gen 3)
+openai-mock: authorized as api key envdecoy
+default auth.json in the second home: none
+
+== mock events (users and generations only)
+{"t": 1791775280.969, "event": "sign-in", "user": "work"}
+{"t": 1791775281.689, "event": "sign-in", "user": "play"}
+{"t": 1791775282.648, "event": "sign-in", "user": "work-2"}
+{"t": 1791775283.605, "event": "sign-in", "user": "bad-user"}
+{"t": 1791775284.828, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775284.94, "event": "refresh", "user": "work", "from_gen": 1, "to_gen": 2}
+{"t": 1791775284.972, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775285.44, "event": "refresh", "user": "play", "from_gen": 1, "to_gen": 2}
+{"t": 1791775285.478, "event": "refresh", "user": "work", "from_gen": 2, "to_gen": 3}
+{"t": 1791775285.479, "event": "get", "path": "/v1/models", "who": "work (token gen 2)"}
+{"t": 1791775285.873, "event": "get", "path": "/v1/models", "who": "play (token gen 2)"}
+{"t": 1791775286.221, "event": "refresh", "user": "play", "from_gen": 2, "to_gen": 3}
+{"t": 1791775286.249, "event": "get", "path": "/v1/models", "who": "work (token gen 3)"}
+{"t": 1791775286.469, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 3)"}
+{"t": 1791775286.51, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 3)"}
+{"t": 1791775286.535, "event": "get", "path": "/v1/models", "who": "play (token gen 3)"}
+{"t": 1791775286.569, "event": "responses", "who": "work (token gen 3)"}
+{"t": 1791775286.773, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "play (token gen 3)"}
+{"t": 1791775286.812, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "play (token gen 3)"}
+{"t": 1791775286.877, "event": "responses", "who": "play (token gen 3)"}
+{"t": 1791775287.199, "event": "get", "path": "/v1/models", "who": "work (token gen 3)"}
+{"t": 1791775287.199, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775287.225, "event": "get", "path": "/v1/models", "who": "work (token gen 3)"}
+{"t": 1791775287.465, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 3)"}
+{"t": 1791775287.505, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "work (token gen 3)"}
+{"t": 1791775287.566, "event": "responses", "who": "work (token gen 3)"}
+{"t": 1791775287.924, "event": "get", "path": "/v1/models", "who": "play (token gen 3)"}
+{"t": 1791775287.928, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775287.951, "event": "get", "path": "/v1/models", "who": "play (token gen 3)"}
+{"t": 1791775288.192, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "play (token gen 3)"}
+{"t": 1791775288.231, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "play (token gen 3)"}
+{"t": 1791775288.292, "event": "responses", "who": "play (token gen 3)"}
+{"t": 1791775288.487, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775288.772, "event": "responses", "who": "api key default"}
+{"t": 1791775289.115, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775289.115, "event": "refresh-rejected", "user": "bad-user", "reason": "expired"}
+{"t": 1791775289.22, "event": "get", "path": "/v1/models", "who": "bad-user (token gen 1)"}
+{"t": 1791775289.249, "event": "get", "path": "/v1/models", "who": "bad-user (token gen 1)"}
+{"t": 1791775289.596, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "bad-user (token gen 1)"}
+{"t": 1791775289.661, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "bad-user (token gen 1)"}
+{"t": 1791775289.827, "event": "responses-rejected", "who": "bad-user (token gen 1)", "reason": "expired access token"}
+{"t": 1791775289.959, "event": "responses-rejected", "who": "bad-user (token gen 1)", "reason": "expired access token"}
+{"t": 1791775290.087, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775290.364, "event": "responses", "who": "api key default"}
+{"t": 1791775290.688, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775291.067, "event": "revoke", "user": "play"}
+{"t": 1791775291.593, "event": "sign-in", "user": "solo"}
+{"t": 1791775292.54, "event": "refresh", "user": "solo", "from_gen": 1, "to_gen": 2}
+{"t": 1791775292.543, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775292.855, "event": "refresh", "user": "solo", "from_gen": 2, "to_gen": 3}
+{"t": 1791775292.855, "event": "get", "path": "/v1/models", "who": "solo (token gen 2)"}
+{"t": 1791775293.16, "event": "get", "path": "/v1/models", "who": "solo (token gen 3)"}
+{"t": 1791775293.383, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "solo (token gen 3)"}
+{"t": 1791775293.421, "event": "get", "path": "/backend-api/ps/plugins/suggested", "who": "solo (token gen 3)"}
+{"t": 1791775293.483, "event": "responses", "who": "solo (token gen 3)"}
+{"t": 1791775293.623, "event": "get", "path": "/backend-api/plugins/featured", "who": "none"}
+{"t": 1791775293.898, "event": "responses", "who": "api key envdecoy"}

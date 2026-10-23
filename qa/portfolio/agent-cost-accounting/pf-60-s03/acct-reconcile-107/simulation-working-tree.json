@@ -1,0 +1,11 @@
+{
+  "source_commit": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
+  "mutation": "Append one newline to refreshed acceptance.md, run, restore exact original bytes.",
+  "stdout": "drift.stdout.txt",
+  "optimized_stdout": "drift-optimized.stdout.txt",
+  "stdout_sha256": "956c5ae2d1c67e3e65593af87e16630db5071adbbb70261c4fa3233074dba950",
+  "normal_exit": 3,
+  "optimized_exit": 3,
+  "stderr_empty": true,
+  "restored": true
+}

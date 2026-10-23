@@ -61,9 +61,11 @@ impl ContextContributor for MemoriesExtension {
                 return Vec::new();
             }
 
+            // The summary is model-written from earlier sessions, including
+            // tool output, so it never carries host standing.
             build_memory_tool_developer_instructions(&config.codex_home)
                 .await
-                .map(PromptFragment::developer_policy)
+                .map(|text| PromptFragment::developer_policy(text).with_stored_data())
                 .into_iter()
                 .collect()
         })

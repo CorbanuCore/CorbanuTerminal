@@ -1,0 +1,8 @@
+==> Python scripts formatter failed
+$ uv run --frozen --project scripts ruff format scripts
+[Errno 2] No such file or directory: 'uv'
+==> Python SDK formatter failed
+$ uv run --frozen --project sdk/python --only-group format ruff check --fix --fix-only sdk/python
+[Errno 2] No such file or directory: 'uv'
+Formatting failed: Python scripts, Python SDK
+error: recipe `fmt` failed on line 45 with exit code 1

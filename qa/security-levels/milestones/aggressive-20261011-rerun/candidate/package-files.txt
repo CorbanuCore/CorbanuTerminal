@@ -1,0 +1,12 @@
+./bin/codex-code-mode-host
+./bin/corbanu
+./bin/corbanu-acp
+./bin/corbanu-walletd
+./codex-package.json
+./codex-path/rg
+./codex-resources/telegram/dist/AGENTS.md.template
+./codex-resources/telegram/dist/corbanu-terminal-telegram.service
+./codex-resources/telegram/dist/org.corbanu.terminal.telegram.plist
+./codex-resources/telegram/install-telegram-task.ps1
+./codex-resources/telegram/setup-telegram.sh
+./codex-resources/zsh/bin/zsh

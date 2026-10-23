@@ -1,0 +1,69 @@
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:     loading   /model to change                 │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+╰───────────────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: -- tok/s
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:     glm-5.3-flash   /model to change           │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s06bacc/ws │
+╰───────────────────────────────────────────────────────╯
+
+⚠ Stored security level is unreadable or was changed outside /security ($S/homes/z3/security_level.toml is missing but /
+  Volumes/CorbanuDrive/Corbanu/.codex-work/s06bacc/homes/z3/rules/corbanu-security-aggressive.rules exists). Aggressive is enforced; choose a level in /security to repair
+  it.
+
+
+› Reply with exactly the word ping
+
+
+• ping
+
+⚠ Developer accounting could not record one or more model requests in this turn. They were sent anyway; /cost does not include them. The cause is in the log (target
+  codex_core::accounting).
+
+/status
+
+╭────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                                     │
+│                                                                                                    │
+│  Model:                Z.AI GLM 5.3 Flash                                                          │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account personal                      │
+│  Directory:            $S/ws                        │
+│  Permissions:          Next turn: Profile corbanu-aggressive (workspace, untrusted)                │
+│  Security:             Aggressive active; stored level unreadable, Aggressive enforced (/security) │
+│  Agents.md:            <none>                                                                      │
+│  Account:              Z.AI API key configured                                                     │
+│  Collaboration mode:   Default                                                                     │
+│  Session:              01a1347e-3387-7562-a008-19187f2e21f6                                        │
+│                                                                                                    │
+│  Token usage:          8.21K total  (8.17K input + 38 output)                                      │
+│  Context window:       100% left (8.21K used / 950K)                                               │
+│  Account usage:        personal · 8,171 input · 38 output (33 reasoning)                           │
+│  Limits:               data not available yet                                                      │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+  Cost — this conversation
+  Requested UTC day: 2026-10-13
+
+› Today (UTC) in this conversation: no recorded requests.
+  Other conversations on this day, not included above: 4 requests in 2 conversations.
+  • Z.AI · account personal · Z.AI GLM 5.3 Flash — Pay per use. 2 requests, 14,863 tokens. Estimated cost: $0.001204 (rounded).
+  • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 2 requests, 14,896 tokens. Estimated cost: $0.001298 (rounded).
+  Other conversations' estimated cost: $0.002502 (rounded).
+  To see those requests, open that conversation with /resume and run /cost there.
+  Costs are estimates from published prices; Z.AI doesn't report its charges — check Z.AI's bill.
+  —— Details ——
+
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

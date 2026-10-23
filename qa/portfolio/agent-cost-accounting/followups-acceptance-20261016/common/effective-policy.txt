@@ -1,0 +1,88 @@
+# PF-60-S10 (accounting follow-ups) effective isolation policy, guest "macOS 3" (agent@192.168.64.3), 2026-10-16 UTC
+
+Same isolation design as the Aggressive/Moderate milestone runs (qa/security-levels/milestones/*/common/effective-policy.txt),
+re-provisioned on a guest found at baseline, with the accounting changes below. Root-captured state: policy-root-start.txt
+(start) and policy-root-end.txt (end, before the closing restore). Provisioning outputs: setup-agent.out,
+provision-1.out .. provision-4.out, erase-etc-codex.out, packet-v2-install.out, harness-fix1-install.out. Harness:
+../harness/.
+
+Order. Design frozen and pushed at 220c99ed59 (2026-10-16T02:54Z); executor packet v1, harness and candidate manifest
+pushed at 85da58b839 (03:09:56Z); the lock was taken at 03:10:03Z (vm-start.txt). "macOS 2" stayed stopped; no VM was
+created or deleted.
+
+VM start. The first `utmctl start "macOS 3"` (03:10Z) booted to a black display and the guest never answered on the
+network for 13 minutes (ARP incomplete). It was stopped with `utmctl stop` (03:23:34Z) and started once more (03:24:03Z);
+ssh answered at 03:24:18Z. Guest clock = host UTC. The guest was at baseline (guest-state-start.txt): no ~/agms, no agmx
+accounts, no /opt/agms, no ~agent/ag-admin; /etc/codex/config.toml present (moved aside by erase-etc-codex.sh, put back
+by restore.sh); the VirtIOFS share mounted (provision unmounts it).
+
+Accounts. Executors run as hidden, password-less, non-admin, non-staff, non-SSH accounts agmx1-agmx3 (uid 611-613, gid
+610 agmsexec); agmx0 (uid 610) is the coordinator's gate lane, never an executor. Homes mode 700, wiped before and after
+every group. Lanes run ONE AT A TIME (runs/seq.log).
+Launch path: coordinator 'agent' -> sudo -n -u LANE -H /opt/agms/bin/agms-launch MODE RUN GROUP (sudo env_reset).
+Executor: /opt/agms/pkg/bin/corbanu exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox
+-m glm-5.3-flash -c model_provider="zai" (the candidate's own exec, separate executor home, 90-minute alarm).
+Confinement is the OS account + per-uid pf + file modes, verified by the probes, not the product sandbox.
+Product under test: /opt/agms/bin/agms-product ROUTE MODEL -> /opt/agms/pkg/bin/corbanu --no-alt-screen -m MODEL
+<route provider settings> -C <run>/fixture/workspace, env -i, CORBANU_TEST_NO_NATIVE_KEYRING=1, file credential store,
+in a private tmux server driven only through agms-tui (or `agms-tui exec` -> `agms-product --exec` -> `corbanu exec`).
+Product profile: harness/product-config.toml (suppress_unstable_features_warning, check_for_update_on_startup = false;
+no feature flags) plus a trust entry for the run's own test project (agms-launch), so no trust prompt interrupts a case.
+Every key the product could read is a synthetic placeholder ("agms-synthetic-placeholder-not-a-credential").
+
+Routes (agms-product): zai (built-in zai, real), openai (built-in openai, OPENAI_API_KEY placeholder, real, WebSocket
+Responses), moonshot (person-style provider `kimi` or --provider-name NAME at https://api.moonshot.ai/v1, wire_api chat,
+real), chatgpt (built-in openai with a ChatGPT sign-in made by `corbanu login --device-auth` against the stand-in on
+first start; fake tokens), openrouter / vercel (built-in providers, stand-in), corbanu (model `corbanu/deepseek-v4.1-flash`,
+provider chosen by the product's model map, stand-in), custom (person-style provider `mylab` at https://llm.mylab.test/v1,
+`billing = "pay_per_use"`, stand-in).
+
+Relay (harness/acc_mediator.py), run as 'agent' in a coordinator tmux on 127.0.0.1:18443; accepts CONNECT only for the
+listed hosts on :443 and terminates TLS with the campaign-local synthetic CA (created 2026-10-16, valid 7 days; one leaf
+naming every listed host; the CA key never left the host, the leaf key is in ~agent/agms/mediator, unreadable to
+executors):
+- Real hosts, allowlisted paths, transport key injected by the relay from an agent-only file (never visible to an
+  executor; probes check): api.z.ai (/api/paas/v4/, /api/coding/paas/v4/, /api/anthropic/; key file zai_api_key, which
+  predates the campaign), api.openai.com (/v1/responses incl. WebSocket upgrade relayed byte for byte,
+  /v1/images/generations, /v1/images/edits, /v1/models; key file openai_api_key from vault label openai-api-key),
+  api.moonshot.ai (/v1/chat/completions, /v1/models; key file kimi_api_key from vault label kimi_api3; the relay refuses
+  Moonshot POSTs after the 12th). The two campaign key files were piped from `corbanu vault auth-helper` straight into
+  agent-only files (umask 077) and deleted by restore.sh.
+- Stand-in hosts, forwarded as plain HTTP to loopback stand-ins run as 'agent': auth.openai.com, chatgpt.com,
+  ab.chatgpt.com -> harness/chatgpt_standin.py :18601 (PF-60-S09's driver, unchanged); openrouter.ai,
+  ai-gateway.vercel.sh, api.corbanu.com, llm.mylab.test -> harness/acc_standin.py :18602 (fixed usage per model as the
+  packet states; POST /_standin {"omit_charge": bool} is the tester's no-charge control).
+- Logs: host, method, path, status, model, and for real HTTP responses the provider-reported usage object; no headers,
+  request bodies or keys (mediator-final.jsonl.gz, standin-final.jsonl, chatgpt-standin-final.jsonl).
+
+Network. Per-uid pf (anchor corbanu.pf83): agmx0-3 may open TCP only to 127.0.0.1:18443; all other tcp/udp from those
+uids is dropped, so executors and products reach the stand-ins only through the relay. The guest's own policy lets the
+coordinator account reach only the inference addresses on :443; for this campaign provision.sh added Moonshot's two
+addresses (104.18.29.136, 104.18.28.136) to that list and `104.18.29.136 api.moonshot.ai` to /etc/hosts (the guest has
+no DNS); restore.sh restored the original anchor and /etc/hosts.
+
+Gate (common/gate/). Attempt 1 failed before any probe ran: agms-launch could not add the trust entry because the copied
+profile was read-only (fixed: chmod 600). Attempt 2 failed one probe: the probe counted CORBANU_TEST_NO_NATIVE_KEYRING
+as a credential name (fixed: that switch is excluded). Attempt 3 passed 105 of 105 probes, the PTY control, and the
+smoke turn (AGMS-SMOKE-OK). Relay positive controls: relay-positive-controls.txt. Every group re-ran the probes before
+its executor (runs/*/preflight-summary.stdout) and each executor re-ran them itself.
+
+Changes during the run (all recorded in the branch before they were used):
+- Packet v2 (868c3680ee, 05:01Z, before groups E and F): a navigation note for tall /cost pages; prompts E, F, C2, D2.
+- Harness fix 1 and packet v3 (92882a1382, before C2/E2): agms-product's corbanu route failed to start under macOS
+  bash 3.2 (`set -u` with an empty array); replay prompt E2. Installed by harness-fix1-install.sh and checked with one
+  stand-in exec on lane agmx0 (harness-fix1-check.txt).
+
+Groups (runs/seq.log): B 03:29Z, A 03:52Z, C 04:29Z, D 04:58Z, E 05:27Z, F 06:09Z on packet v1 (A-D) and v2 (E, F);
+replays C2 06:32Z (packet v2) and E2 07:24Z (packet v3, harness fix 1); one at a time, lanes agmx1-3 rotating, wiped
+before and after. Every executor ended by itself (exit 0) inside its 90-minute alarm.
+
+Closing: relay, stand-in and guard logs and root policy captured (mediator-final.jsonl.gz, standin-final.jsonl,
+chatgpt-standin-final.jsonl, guard-final.txt: 0 SECURITYAGENT-SEEN in 16,192 checks, policy-root-end.txt); restore.sh
+(restore-end.out: accounts, group, sudoers, /opt/agms, pf rules, campaign key files and campaign dirs removed; original
+anchor and /etc/hosts restored; /etc/codex/config.toml back; 4 lane processes left), kill-lane-procs.sh (0 left),
+restore-fix.sh (VirtIOFS share mounted again); state checked over ssh, then guest-shutdown-clean.sh removed
+~agent/ag-admin and shut down from inside (vm-stop-1.txt, stopped 08:06:19Z); verification boot (vm-state-end.txt: no
+~/agms, ~/agms-canary, /opt/agms, sudoers file, agmx accounts, ag-admin, campaign key files, Moonshot hosts entry or
+anchor addresses; /etc/codex/config.toml present; share mounted), then `utmctl stop` (08:06:47Z). Both VMs stopped; the
+lock was deleted at 08:06:54Z.

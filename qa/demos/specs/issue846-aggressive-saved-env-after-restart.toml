@@ -1,0 +1,65 @@
+# #846 (MOD-29): confirming Aggressive from Moderate, the saved screen says
+# what holds now (credential files in the home folder) and that the
+# project's .env files are denied only after the restart.
+id = "issue846-aggressive-saved-env-after-restart"
+feature = "#846: Aggressive confirmed from Moderate: .env is protected after the restart"
+expected = "From Moderate, the person confirms Aggressive in /security. The saved screen's 'Active now' line names the credential files in your home folder (not 'credential files' in general), and 'Starts when you restart' lists the project's credential files (.env, .env.* and .envrc)."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 120
+rows = 40
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+
+[security]
+version = 1
+level = "moderate"
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+".env" = "# demo\nDEMO_TOKEN=dummy-846\n"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Moderate"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Down"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Aggressive\\?"
+[[steps]]
+wait = "enter confirm and save"
+[[steps]]
+pause = 3.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?s)credential\\s+files\\s+in\\s+your\\s+home\\s+folder.*Starts\\s+when\\s+you\\s+restart:.*project's\\s+credential\\s+files"
+timeout = 60
+[[steps]]
+pause = 6.0

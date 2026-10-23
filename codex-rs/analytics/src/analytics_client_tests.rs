@@ -320,6 +320,7 @@ fn sample_thread_resume_response_with_source(
         initial_turns_page: None,
         turns_backwards_cursor: None,
         items_backwards_cursor: None,
+        provider_account: None,
     })
 }
 
@@ -1516,6 +1517,7 @@ fn app_used_dedupe_is_keyed_by_turn_and_connector() {
     let (sender, _receiver) = mpsc::channel(1);
     let queue = AnalyticsEventsQueue {
         sender,
+        auth_manager: None,
         app_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
         plugin_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
     };
@@ -3561,6 +3563,7 @@ fn plugin_used_dedupe_is_keyed_by_turn_and_plugin() {
     let (sender, _receiver) = mpsc::channel(1);
     let queue = AnalyticsEventsQueue {
         sender,
+        auth_manager: None,
         app_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
         plugin_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
     };
@@ -4578,6 +4581,7 @@ async fn turn_event_counts_completed_tool_items() {
             prompt: Some("help".to_string()),
             model: Some("gpt-5".to_string()),
             reasoning_effort: None,
+            provider_account: None,
             agents_states: Default::default(),
         },
         ThreadItem::SubAgentActivity {

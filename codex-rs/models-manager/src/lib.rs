@@ -50,7 +50,7 @@ mod tests {
                 },
             );
             assert_eq!(resolved.context_window, Some(872_000));
-            let instructions = resolved.get_model_instructions(None);
+            let instructions = resolved.get_model_instructions(/*personality*/ None);
             assert_eq!(instructions, model.base_instructions);
             assert!(instructions.len() < 40_000);
         }
@@ -71,7 +71,7 @@ mod tests {
         model.model_messages = Some(messages);
         let resolved = model_info::with_config_overrides(model, &ModelsManagerConfig::default());
         assert_eq!(
-            resolved.get_model_instructions(None),
+            resolved.get_model_instructions(/*personality*/ None),
             "Native operating contract"
         );
     }

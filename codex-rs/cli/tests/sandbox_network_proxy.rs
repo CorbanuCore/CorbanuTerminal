@@ -96,6 +96,12 @@ fn sandbox_with_network_proxy_allows_explicit_loopback_access() -> Result<()> {
         loop {
             match listener.accept() {
                 Ok((mut stream, _)) => {
+                    // Read the request before answering: closing a socket
+                    // with unread data sends a reset, which can reach the
+                    // proxy before the response and turn it into a 502.
+                    stream.set_nonblocking(false)?;
+                    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+                    read_request_head(&mut stream)?;
                     std::io::Write::write_all(
                         &mut stream,
                         b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n",
@@ -172,5 +178,20 @@ allow_local_binding = false
     );
     server.join().expect("loopback server panicked")?;
 
+    Ok(())
+}
+
+/// Reads an HTTP request up to the end of its head (the test's requests have
+/// no body).
+fn read_request_head(stream: &mut std::net::TcpStream) -> std::io::Result<()> {
+    let mut request = Vec::new();
+    let mut buffer = [0_u8; 1024];
+    while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+        let read = std::io::Read::read(stream, &mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        request.extend_from_slice(&buffer[..read]);
+    }
     Ok(())
 }

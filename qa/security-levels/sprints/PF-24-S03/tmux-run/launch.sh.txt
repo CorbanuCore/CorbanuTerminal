@@ -1,0 +1,8 @@
+#!/bin/bash
+for v in $(compgen -e); do case "$v" in *API_KEY*|*TOKEN*|*SECRET*|*PASSWORD*|*CREDENTIAL*|*_AUTH*) unset "$v";; esac; done
+export FAKE_SERVICE_TOKEN=canary-token-0001 DB_PASSWORD=canary-pass-0001
+cd <run>/ws
+while true; do
+ZAI_API_KEY="$(/Users/Neo/.local/bin/corbanu vault auth-helper provider/zai_api_key)" env HOME=<run>/userhome CODEX_HOME=<run>/home CORBANU_HOME=<run>/home PFTERMINAL_HOME=<run>/home CORBANU_TEST_NO_NATIVE_KEYRING=1 TERM=xterm-256color <candidate> -C <run>/ws -m glm-5.2 -c model_provider=\"zai\" $(cat <run>/extra-args 2>/dev/null)
+echo "=== corbanu exited $? ; Enter relaunches ==="; read
+done

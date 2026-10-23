@@ -1,0 +1,32 @@
+{
+  "core-default": {
+    "summary": "Summary [  51.143s] 124 tests run: 124 passed (1 slow), 3545 skipped",
+    "run": 124,
+    "passed": 124,
+    "skipped": 3545,
+    "nonzero_tests": 0,
+    "failure_names": [],
+    "exit": 0,
+    "nextest_test_threads": 4
+  },
+  "core-feature": {
+    "summary": "Summary [  47.020s] 127 tests run: 127 passed (1 slow), 3545 skipped",
+    "run": 127,
+    "passed": 127,
+    "skipped": 3545,
+    "nonzero_tests": 0,
+    "failure_names": [],
+    "exit": 0,
+    "nextest_test_threads": 4
+  },
+  "tui": {
+    "summary": "Summary [   1.305s] 91 tests run: 91 passed, 4078 skipped",
+    "run": 91,
+    "passed": 91,
+    "skipped": 4078,
+    "nonzero_tests": 0,
+    "failure_names": [],
+    "exit": 0,
+    "nextest_test_threads": 4
+  }
+}

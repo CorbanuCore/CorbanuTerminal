@@ -1,0 +1,32 @@
+3c3
+< Applied on top of `design-cases.md` + `amendments-v2.md`, for the 17 re-run cases only (scope.md). For an amended
+---
+> Applied on top of `design-cases.md` + `amendments.md` (amendments-v2), for the 17 re-run cases only. For an amended
+5c5
+< amendments-v2). Decision labels refer to `decisions.md`: A(n) = the owner's 13 decisions of 2026-10-15; B = #739
+---
+> amendments-v2). Decision labels refer to the owner's decisions listed in the integrator's record (not part of the tester's packet): A(n) = the owner's 13 decisions of 2026-10-15; B = #739
+31c31
+<   Permissive the product therefore does not offer approval to run outside the sandbox (screens 01, 12). Rules saved
+---
+>   Permissive the product therefore does not offer approval to run outside the sandbox (screens-v3 01 and 12). Rules saved
+51c51
+<   request is offered with a Moderate reason (screen 07).
+---
+>   request is offered with a Moderate reason (screens-v3 07).
+68c68
+< - Note: Action 2 (before quitting, still Moderate) is unchanged. Its prompt is expected as in screen 07, and the write
+---
+> - Note: Action 2 (before quitting, still Moderate) is unchanged. Its prompt is expected as in screens-v3 07, and the write
+174c174
+<     instead, choosing "Allow for this session" (screen 09).
+---
+>     instead, choosing "Allow for this session" (screens-v3 09).
+192c192
+<   Under B, a window still at Permissive would not offer the outside-sandbox approval (screen 12). A prompt in B whose
+---
+>   Under B, a window still at Permissive would not offer the outside-sandbox approval (screens-v3 12). A prompt in B whose
+205c205
+< - Note: A(4) fixes the reason for Corbanu's files. The existing expected results apply unchanged (compare screen 10).
+---
+> - Note: A(4) fixes the reason for Corbanu's files. The existing expected results apply unchanged (compare screens-v3 10).

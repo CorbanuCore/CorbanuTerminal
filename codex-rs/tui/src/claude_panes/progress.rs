@@ -60,6 +60,38 @@ pub(crate) fn usage_summary_from_value(value: &Value) -> Option<String> {
     Some(usage.to_string())
 }
 
+/// What a `result` event states the whole turn cost.
+///
+/// The pane emits one of these when a turn ends, carrying the cumulative
+/// numbers for every model request it made. Any other event's usage is one
+/// request's, so only this event is read here.
+pub(crate) fn turn_usage_summary_from_value(value: &Value) -> Option<String> {
+    if value.get("type").and_then(Value::as_str) != Some("result") {
+        return None;
+    }
+    let usage = value.get("usage")?;
+    usage.is_object().then(|| usage.to_string())
+}
+
+/// The last turn total a transcript states, read line by line.
+///
+/// A transcript that does not parse as a whole - a stray non-JSON line from
+/// the CLI, or a tail truncated when the child was killed - can still carry
+/// the line that states what the turn cost. The turn spent that money either
+/// way, so it is read from what is there rather than discarded with the rest.
+pub(crate) fn turn_usage_summary_from_stdout(stdout: &str) -> Option<String> {
+    let mut total = None;
+    for line in stdout.lines().filter(|line| !line.trim().is_empty()) {
+        let Ok(value) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        if let Some(stated) = turn_usage_summary_from_value(&value) {
+            total = Some(stated);
+        }
+    }
+    total
+}
+
 pub(crate) fn usage_status_from_summary(summary: Option<&str>) -> ClaudePaneUsageStatus {
     let Some(summary) = summary else {
         return ClaudePaneUsageStatus::Missing;

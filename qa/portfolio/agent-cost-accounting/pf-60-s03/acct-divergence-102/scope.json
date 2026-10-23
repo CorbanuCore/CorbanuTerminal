@@ -1,0 +1,207 @@
+{
+  "base": "a8dfff98892e60aaa0d7f05321fd7e57b79cdc2a",
+  "self_entry_excluded": true,
+  "files": [
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-criterion-97/RETURN.md",
+      "kind": "modified",
+      "added_lines": 12,
+      "removed_lines": 3,
+      "text_lines": 124,
+      "bytes": 7858,
+      "sha256": "febf23d1fb2a1fd9c6a3b59d8b861f109650535a9ea895d9d138bfeaa74f4432"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md",
+      "kind": "modified",
+      "added_lines": 19,
+      "removed_lines": 2,
+      "text_lines": 247,
+      "bytes": 13612,
+      "sha256": "338baf8fc210e86b49f0debc60a8b2ffe25aac158cc611aadbfd0eee4f1aa819"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/RETURN.md",
+      "kind": "added",
+      "added_lines": 112,
+      "removed_lines": 0,
+      "text_lines": 112,
+      "bytes": 6898,
+      "sha256": "99f938db3a34551b10ed77dacb7605b23988c2ca7a0137184d1fa679852dc701"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/changed-lines.patch",
+      "kind": "added",
+      "added_lines": 152,
+      "removed_lines": 0,
+      "text_lines": 152,
+      "bytes": 9120,
+      "sha256": "6329d0cffb8aba24b8ba639dc321cfed8d8e5bc5145166c89b00bb20de57ae79"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/check_note.py",
+      "kind": "added",
+      "added_lines": 94,
+      "removed_lines": 0,
+      "text_lines": 94,
+      "bytes": 5486,
+      "sha256": "481aecfff7b9a2fbc9fcd32dc71a368f23ff2471bee13bacff8e15509946715f"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/final-check.json",
+      "kind": "added",
+      "added_lines": 175,
+      "removed_lines": 0,
+      "text_lines": 175,
+      "bytes": 6223,
+      "sha256": "3eca6d3adb0b6cb8ef8f86b80e8a4f084c14bbb1e8ebb504761fea075cc45f29"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/finalize.py",
+      "kind": "added",
+      "added_lines": 75,
+      "removed_lines": 0,
+      "text_lines": 75,
+      "bytes": 4099,
+      "sha256": "cfd2e79fc9fd3368c3b56df2d96d5fe5a83e66ff3be5a346d59fca493fbba972"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/gate.py",
+      "kind": "added",
+      "added_lines": 72,
+      "removed_lines": 0,
+      "text_lines": 72,
+      "bytes": 3361,
+      "sha256": "b31dcd6b6ec6db0c664bcc3213729b0a88606c2c424f42653114e398d6fab486"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/gates-01/core-default.json",
+      "kind": "added",
+      "added_lines": 42,
+      "removed_lines": 0,
+      "text_lines": 42,
+      "bytes": 1407,
+      "sha256": "e0ec54ea97e1e8bc0f66e64100c62dc9219d34c554d5d57c22dab9552f29b6be"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/gates-01/core-default.log.gz",
+      "kind": "added",
+      "added_lines": null,
+      "removed_lines": 0,
+      "text_lines": null,
+      "bytes": 4974,
+      "sha256": "7aa4ec4e37ae1fd67d234b284e3f0d2571123b4d72a9a853d22e36aa3d2f93b5"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/gates-01/core-feature.json",
+      "kind": "added",
+      "added_lines": 44,
+      "removed_lines": 0,
+      "text_lines": 44,
+      "bytes": 1463,
+      "sha256": "49a45148ba4ccf9e52a78a3b3213426c686eb50b87a42311c21e9ecf019bc193"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/gates-01/core-feature.log.gz",
+      "kind": "added",
+      "added_lines": null,
+      "removed_lines": 0,
+      "text_lines": null,
+      "bytes": 5047,
+      "sha256": "bbc8bc1a13c36a0a66672609d1fbcb341fc9059411823033ff0200bdeaf5c9e1"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/gates-01/prerequisites.json",
+      "kind": "added",
+      "added_lines": 34,
+      "removed_lines": 0,
+      "text_lines": 34,
+      "bytes": 991,
+      "sha256": "3f258473d70292118048495df51c14f8ba5ce99b243294760833c7b50570615a"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/gates-01/prerequisites.log.gz",
+      "kind": "added",
+      "added_lines": null,
+      "removed_lines": 0,
+      "text_lines": null,
+      "bytes": 3132,
+      "sha256": "14a5f60f3a17b9a5e6d89a359e006d95000b784138b5697397c9707571a7a358"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/gates-01/tui.json",
+      "kind": "added",
+      "added_lines": 39,
+      "removed_lines": 0,
+      "text_lines": 39,
+      "bytes": 1032,
+      "sha256": "b973b4b7fd4c21cdc76ddb2c6c2744ebc7291174a41494a77b094d39e2619b55"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/gates-01/tui.log.gz",
+      "kind": "added",
+      "added_lines": null,
+      "removed_lines": 0,
+      "text_lines": null,
+      "bytes": 6538,
+      "sha256": "a76d77bbf2b331028eefd438213bb6b53c9bfb83fde7723eeb629e86f8a68587"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/note-check-final.json",
+      "kind": "added",
+      "added_lines": 150,
+      "removed_lines": 0,
+      "text_lines": 150,
+      "bytes": 7703,
+      "sha256": "c1ca6a0ad8ad9fbde90212183152d3d33eb8e321fa5b18561d28ea86a220e307"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/note-check.json",
+      "kind": "added",
+      "added_lines": 150,
+      "removed_lines": 0,
+      "text_lines": 150,
+      "bytes": 7699,
+      "sha256": "9e72b88bfdbb98933d386c838a4f0c95c52b1d74a00b3b801e3bb69c8dc71ecc"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/pinned-destination-results.json",
+      "kind": "added",
+      "added_lines": 86,
+      "removed_lines": 0,
+      "text_lines": 86,
+      "bytes": 9189,
+      "sha256": "32de6b5170570bf6085405ca73f940c2b965b3ee64b37859a80523822d6db25b"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/prose-review.md",
+      "kind": "added",
+      "added_lines": 53,
+      "removed_lines": 0,
+      "text_lines": 53,
+      "bytes": 3482,
+      "sha256": "5ac5a2aa6cdb8bd5f317879d70d50801deb720aff98d99c786c7404c08c5add2"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/RETURN.md",
+      "kind": "modified",
+      "added_lines": 16,
+      "removed_lines": 0,
+      "text_lines": 108,
+      "bytes": 6660,
+      "sha256": "9c70cf7a7654614107a66d774052d93047dd3e3eb85161554a8b244247fd5525"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py",
+      "kind": "modified",
+      "added_lines": 19,
+      "removed_lines": 5,
+      "text_lines": 83,
+      "bytes": 4122,
+      "sha256": "761ac11313ab82b32ae73f5e3bd918692861f5504dffe03298b6880b22914ce4"
+    }
+  ],
+  "modified_added": 66,
+  "modified_removed": 10,
+  "new_text_lines": 1278
+}

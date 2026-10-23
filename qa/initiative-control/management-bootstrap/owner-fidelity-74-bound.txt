@@ -1,0 +1,11 @@
+{
+  "feed_bytes": 1048576,
+  "minimum_revision_skeleton": 211,
+  "maximum_rows": 4969,
+  "row_allowance": 1024,
+  "envelope_allowance": 16384,
+  "cache_bound": 5109609,
+  "snapshot_bound": 6158441,
+  "maximal_row_canonical": 440,
+  "maximal_indented_row_increment": 588
+}

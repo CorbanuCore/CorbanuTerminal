@@ -10,6 +10,8 @@ mod bundled_bwrap;
 #[cfg(target_os = "linux")]
 mod bwrap;
 #[cfg(target_os = "linux")]
+mod credential_watch;
+#[cfg(target_os = "linux")]
 mod exec_util;
 #[cfg(target_os = "linux")]
 mod landlock;
@@ -18,7 +20,15 @@ mod launcher;
 #[cfg(target_os = "linux")]
 mod linux_run_main;
 #[cfg(target_os = "linux")]
+mod pinned;
+#[cfg(target_os = "linux")]
+mod placeholder_journal;
+#[cfg(target_os = "linux")]
+mod placeholder_registry;
+#[cfg(target_os = "linux")]
 mod proxy_routing;
+#[cfg(target_os = "linux")]
+mod supervisor;
 
 #[cfg(target_os = "linux")]
 pub fn run_main() -> ! {

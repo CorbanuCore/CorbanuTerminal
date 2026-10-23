@@ -25,6 +25,8 @@ pub type HttpResponse = reqwest::Response;
 pub struct HttpClient {
     inner: reqwest::Client,
     request_logging: RequestLogging,
+    /// PF-27-S05: every connection goes to the credential broker's socket.
+    broker_socket: bool,
 }
 
 impl HttpClient {
@@ -40,10 +42,35 @@ impl HttpClient {
         Self::from_parts(inner, RequestLogging::Disabled)
     }
 
+    /// A client whose every connection goes to the Unix socket `path` (plain
+    /// HTTP for `http://` URLs), never following redirects. Used for Core's
+    /// model requests to the isolated credential broker (PF-27-S05).
+    #[cfg(unix)]
+    pub fn unix_socket(
+        path: &std::path::Path,
+        default_headers: HeaderMap,
+    ) -> Result<Self, HttpError> {
+        reqwest::Client::builder()
+            .default_headers(default_headers)
+            .redirect(reqwest::redirect::Policy::none())
+            .unix_socket(path.to_path_buf())
+            .build()
+            .map(|inner| Self {
+                broker_socket: true,
+                ..Self::new(inner)
+            })
+    }
+
+    /// Whether this client connects only to the credential broker's socket.
+    pub(crate) const fn is_broker_socket(&self) -> bool {
+        self.broker_socket
+    }
+
     pub(crate) fn from_parts(inner: reqwest::Client, request_logging: RequestLogging) -> Self {
         Self {
             inner,
             request_logging,
+            broker_socket: false,
         }
     }
 
@@ -119,9 +146,9 @@ impl HttpClient {
         if self.request_logging == RequestLogging::Enabled {
             tracing::debug!(
                 method = %method,
-                url = %url,
+                url = %crate::redact_url(url),
                 status = %response.status(),
-                headers = ?response.headers(),
+                headers = ?crate::redact_headers(response.headers()),
                 version = ?response.version(),
                 "Request completed"
             );
@@ -132,9 +159,9 @@ impl HttpClient {
         if self.request_logging == RequestLogging::Enabled {
             tracing::debug!(
                 method = %method,
-                url = %url,
+                url = %crate::redact_url(url),
                 status = error.status().map(|status| status.as_u16()),
-                error = %error,
+                error = %crate::redact_reqwest_error(error),
                 "Request failed"
             );
         }
@@ -143,7 +170,7 @@ impl HttpClient {
         if self.request_logging == RequestLogging::Enabled {
             tracing::debug!(
                 method = %method,
-                url = %url,
+                url = %crate::redact_url(url),
                 status = error.status().map(|status| status.as_u16()),
                 is_timeout = error.is_timeout(),
                 is_connect = error.is_connect(),
@@ -251,9 +278,9 @@ impl RequestBuilder {
                 if self.request_logging == RequestLogging::Enabled {
                     tracing::debug!(
                         method = %self.method,
-                        url = %self.url,
+                        url = %crate::redact_url(&self.url),
                         status = %response.status(),
-                        headers = ?response.headers(),
+                        headers = ?crate::redact_headers(response.headers()),
                         version = ?response.version(),
                         "Request completed"
                     );
@@ -266,9 +293,9 @@ impl RequestBuilder {
                     let status = error.status();
                     tracing::debug!(
                         method = %self.method,
-                        url = %self.url,
+                        url = %crate::redact_url(&self.url),
                         status = status.map(|s| s.as_u16()),
-                        error = %error,
+                        error = %crate::redact_reqwest_error(&error),
                         "Request failed"
                     );
                 }

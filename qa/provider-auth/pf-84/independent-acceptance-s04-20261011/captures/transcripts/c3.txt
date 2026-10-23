@@ -1,0 +1,137 @@
+                                      
+                _=+"**+~_             
+               /^||*||\|=\            
+              |//"\/=\|| '\           
+             /// ;' \|\||**|          
+             ||;_   =||*/|`\          
+            |||*|  /|= !| ~.|         
+            \\|   ,||||/*", |         
+            |/; |`||/|||"; `|         
+            \\|~|+~/^||"*+  /         
+            *"__,==\*|._| ,_|         
+            |||+""/*\|;";.~|`         
+             ||* |   `//,  /          
+             \|*  |  /,/_,|           
+              \|~"_*~//+_|            
+               ':._=:__;*             
+                                      
+
+  Welcome to Corbanu Terminal, your crypto-native AI terminal
+
+  Choose a provider account for Corbanu Terminal
+
+  9. Provider: DeepSeek API Key
+     Use a key stored as DEEPSEEK_API_KEY
+
+  10. Provider: OpenRouter API Key
+     Use a key stored as OPENROUTER_API_KEY
+
+  11. Provider: Meta API Key
+     Use a key stored as MODEL_API_KEY
+
+  12. Provider: Baseten API Key
+     Use a key stored as BASETEN_API_KEY
+
+  13. Provider: Vercel API Key
+     Use a key stored as AI_GATEWAY_API_KEY
+
+  14. Provider: Amazon Bedrock
+     Use this provider without an enrollment step
+
+  15. Provider: Ollama
+     Configured · unavailable
+
+  16. Provider: LM Studio
+     Configured · unavailable
+
+> 17. Done
+     Finish provider setup
+
+  Use ↑/↓ to choose · Press enter to continue
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     loading   /model to change                  │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+
+› Improve documentation in @filename
+
+  Claude Opus 5 Plan via claude-plan default · $S/work · Corbanu Terminal · TPS: -- tok/s
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     claude-opus-5-plan   /model to change       │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     claude-opus-5-plan   /model to change       │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+Token usage: total=11,295 input=11,291 output=4
+To continue this session, run corbanu resume 01a12a98-72e6-7890-916c-e795f5742f07
+
+• New session: requests to claude-plan use account `work`.
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     claude-opus-5-plan   /model to change       │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+Token usage: total=6 input=2 (+ 11,289 cached) output=4
+To continue this session, run corbanu resume 01a12a99-12c6-7fd1-9cf2-2469e6a51cb8
+
+• New session: requests to claude-plan use account `fake`.
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Claude Opus 5 Plan                                                │
+│  Model provider:       Claude Plan - https://api.anthropic.com/v1 · account fake         │
+│  Directory:            $S/work                 │
+│  Permissions:          Next turn: Workspace (Ask for approval)                           │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Claude Plan account connected                                     │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12a99-4f52-7173-8a69-c10ce3cccf27                              │
+│                                                                                          │
+│  Token usage:          0 total  (0 input + 0 output)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+⚠ Claude Account (claude-plan) account `fake` was rejected. Replace its token with `corbanu account add claude-plan fake --kind claude-token` (reads stdin) or
+  sign in again in its Claude Code config directory, or choose another account. The default Claude Account credential is unchanged.
+
+■ unexpected status 401 Unauthorized: OAuth access token is invalid., url: https://api.anthropic.com/v1/messages, cf-ray: a48d53877ffa0ab5-DFW
+
+• Saved claude-plan account `cfg`. Use it from /providers, `--account cfg` or a spawn `account`.
+To continue this session, run corbanu resume 01a12a99-4f52-7173-8a69-c10ce3cccf27
+TUI_EXITED rc=0

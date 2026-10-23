@@ -1,0 +1,468 @@
+{"t": 1791780752.715, "ev": "device-usercode"}
+{"t": 1791780752.719, "ev": "sign-in", "user": "deflt"}
+{"t": 1791780752.816, "ev": "device-usercode"}
+{"t": 1791780752.818, "ev": "sign-in", "user": "work"}
+{"t": 1791780753.562, "ev": "device-usercode"}
+{"t": 1791780753.564, "ev": "sign-in", "user": "play"}
+{"t": 1791780754.49, "ev": "device-usercode"}
+{"t": 1791780754.493, "ev": "sign-in", "user": "work~2"}
+{"t": 1791780755.441, "ev": "device-usercode"}
+{"t": 1791780755.444, "ev": "sign-in", "user": "deflt~2"}
+{"t": 1791780756.458, "ev": "device-usercode"}
+{"t": 1791780756.461, "ev": "sign-in", "user": "bad"}
+{"t": 1791780759.072, "ev": "device-usercode"}
+{"t": 1791780759.075, "ev": "sign-in", "user": "play2"}
+{"t": 1791780792.514, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780792.623, "ev": "refresh", "user": "work", "frm": 1, "to": 2}
+{"t": 1791780792.627, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780792.996, "ev": "refresh", "user": "play", "frm": 1, "to": 2}
+{"t": 1791780792.997, "ev": "refresh", "user": "work", "frm": 2, "to": 3}
+{"t": 1791780793.745, "ev": "refresh", "user": "play", "frm": 2, "to": 3}
+{"t": 1791780793.746, "ev": "refresh", "user": "work", "frm": 3, "to": 4}
+{"t": 1791780794.524, "ev": "refresh", "user": "play", "frm": 3, "to": 4}
+{"t": 1791780794.525, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "work", "gen": 4, "expired": false}}
+{"t": 1791780794.525, "ev": "refresh", "user": "work", "frm": 4, "to": 5}
+{"t": 1791780794.931, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "play", "gen": 4, "expired": false}}
+{"t": 1791780795.346, "ev": "refresh", "user": "play", "frm": 4, "to": 5}
+{"t": 1791780795.347, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "work", "gen": 5, "expired": false}}
+{"t": 1791780795.778, "ev": "refresh", "user": "work", "frm": 5, "to": 6}
+{"t": 1791780795.779, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "play", "gen": 5, "expired": false}}
+{"t": 1791780796.326, "ev": "refresh", "user": "play", "frm": 5, "to": 6}
+{"t": 1791780796.722, "ev": "refresh", "user": "work", "frm": 6, "to": 7}
+{"t": 1791780797.108, "ev": "refresh", "user": "play", "frm": 6, "to": 7}
+{"t": 1791780797.11, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780797.11, "ev": "refresh", "user": "work", "frm": 7, "to": 8}
+{"t": 1791780797.127, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780797.505, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780797.523, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780797.901, "ev": "refresh", "user": "play", "frm": 7, "to": 8}
+{"t": 1791780797.902, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780797.902, "ev": "refresh", "user": "work", "frm": 8, "to": 9}
+{"t": 1791780797.905, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780798.289, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780798.292, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780798.673, "ev": "refresh", "user": "play", "frm": 8, "to": 9}
+{"t": 1791780798.674, "ev": "refresh", "user": "work", "frm": 9, "to": 10}
+{"t": 1791780799.442, "ev": "refresh", "user": "play", "frm": 9, "to": 10}
+{"t": 1791780799.442, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780799.443, "ev": "refresh", "user": "work", "frm": 10, "to": 11}
+{"t": 1791780799.444, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780799.835, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780799.836, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780800.227, "ev": "refresh", "user": "play", "frm": 10, "to": 11}
+{"t": 1791780800.227, "ev": "refresh", "user": "work", "frm": 11, "to": 12}
+{"t": 1791780800.983, "ev": "refresh", "user": "play", "frm": 11, "to": 12}
+{"t": 1791780800.984, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780800.984, "ev": "refresh", "user": "work", "frm": 12, "to": 13}
+{"t": 1791780800.986, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780801.35, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780801.351, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780801.707, "ev": "refresh", "user": "play", "frm": 12, "to": 13}
+{"t": 1791780801.707, "ev": "refresh", "user": "work", "frm": 13, "to": 14}
+{"t": 1791780802.426, "ev": "refresh", "user": "play", "frm": 13, "to": 14}
+{"t": 1791780802.427, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780802.429, "ev": "refresh", "user": "work", "frm": 14, "to": 15}
+{"t": 1791780802.43, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780802.792, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780802.794, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780803.15, "ev": "refresh", "user": "play", "frm": 14, "to": 15}
+{"t": 1791780803.15, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work", "gen": 15, "expired": false}}
+{"t": 1791780803.152, "ev": "refresh", "user": "work", "frm": 15, "to": 16}
+{"t": 1791780803.868, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "play", "gen": 15, "expired": false}}
+{"t": 1791780803.869, "ev": "refresh", "user": "play", "frm": 15, "to": 16}
+{"t": 1791780803.87, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780803.87, "ev": "refresh", "user": "work", "frm": 16, "to": 17}
+{"t": 1791780803.871, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780804.246, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780804.247, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780804.608, "ev": "refresh", "user": "play", "frm": 16, "to": 17}
+{"t": 1791780804.609, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780804.611, "ev": "refresh", "user": "work", "frm": 17, "to": 18}
+{"t": 1791780804.612, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780804.973, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780804.974, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780805.329, "ev": "refresh", "user": "play", "frm": 17, "to": 18}
+{"t": 1791780805.33, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work", "gen": 18, "expired": false}}
+{"t": 1791780805.331, "ev": "refresh", "user": "work", "frm": 18, "to": 19}
+{"t": 1791780805.697, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "play", "gen": 18, "expired": false}}
+{"t": 1791780806.063, "ev": "refresh", "user": "play", "frm": 18, "to": 19}
+{"t": 1791780806.064, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780806.065, "ev": "refresh", "user": "work", "frm": 19, "to": 20}
+{"t": 1791780806.066, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780806.439, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780806.441, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780806.811, "ev": "refresh", "user": "play", "frm": 19, "to": 20}
+{"t": 1791780806.811, "ev": "refresh", "user": "work", "frm": 20, "to": 21}
+{"t": 1791780807.527, "ev": "refresh", "user": "play", "frm": 20, "to": 21}
+{"t": 1791780807.528, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780807.528, "ev": "refresh", "user": "work", "frm": 21, "to": 22}
+{"t": 1791780807.529, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780807.887, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780807.888, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780808.248, "ev": "refresh", "user": "play", "frm": 21, "to": 22}
+{"t": 1791780808.248, "ev": "refresh", "user": "work", "frm": 22, "to": 23}
+{"t": 1791780808.967, "ev": "refresh", "user": "play", "frm": 22, "to": 23}
+{"t": 1791780808.968, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780808.968, "ev": "refresh", "user": "work", "frm": 23, "to": 24}
+{"t": 1791780808.969, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780809.334, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780809.336, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780809.691, "ev": "refresh", "user": "play", "frm": 23, "to": 24}
+{"t": 1791780809.692, "ev": "refresh", "user": "work", "frm": 24, "to": 25}
+{"t": 1791780810.4, "ev": "refresh", "user": "play", "frm": 24, "to": 25}
+{"t": 1791780810.402, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780810.402, "ev": "refresh", "user": "work", "frm": 25, "to": 26}
+{"t": 1791780810.403, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780810.757, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780810.758, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780811.107, "ev": "refresh", "user": "play", "frm": 25, "to": 26}
+{"t": 1791780811.108, "ev": "refresh", "user": "work", "frm": 26, "to": 27}
+{"t": 1791780811.813, "ev": "refresh", "user": "play", "frm": 26, "to": 27}
+{"t": 1791780811.814, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780811.814, "ev": "refresh", "user": "work", "frm": 27, "to": 28}
+{"t": 1791780811.815, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780812.18, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780812.181, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780812.544, "ev": "refresh", "user": "play", "frm": 27, "to": 28}
+{"t": 1791780812.545, "ev": "refresh", "user": "work", "frm": 28, "to": 29}
+{"t": 1791780813.259, "ev": "refresh", "user": "play", "frm": 28, "to": 29}
+{"t": 1791780813.26, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780813.261, "ev": "refresh", "user": "work", "frm": 29, "to": 30}
+{"t": 1791780813.261, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780813.616, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780813.617, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780813.967, "ev": "refresh", "user": "play", "frm": 29, "to": 30}
+{"t": 1791780813.967, "ev": "refresh", "user": "work", "frm": 30, "to": 31}
+{"t": 1791780813.987, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "work", "gen": 30, "expired": false}, "model": null}
+{"t": 1791780814.339, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "play", "gen": 30, "expired": false}, "model": null}
+{"t": 1791780814.676, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780823.932, "ev": "refresh", "user": "work", "frm": 31, "to": 32}
+{"t": 1791780823.932, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780824.19, "ev": "refresh", "user": "work", "frm": 32, "to": 33}
+{"t": 1791780824.434, "ev": "refresh", "user": "work", "frm": 33, "to": 34}
+{"t": 1791780824.68, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "work", "gen": 34, "expired": false}}
+{"t": 1791780824.681, "ev": "refresh", "user": "work", "frm": 34, "to": 35}
+{"t": 1791780824.978, "ev": "refresh", "user": "work", "frm": 35, "to": 36}
+{"t": 1791780825.232, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780825.232, "ev": "refresh", "user": "work", "frm": 36, "to": 37}
+{"t": 1791780825.249, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780825.478, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780825.479, "ev": "refresh", "user": "work", "frm": 37, "to": 38}
+{"t": 1791780825.48, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780825.724, "ev": "refresh", "user": "work", "frm": 38, "to": 39}
+{"t": 1791780825.97, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780825.971, "ev": "refresh", "user": "work", "frm": 39, "to": 40}
+{"t": 1791780825.972, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780826.215, "ev": "refresh", "user": "work", "frm": 40, "to": 41}
+{"t": 1791780826.458, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780826.459, "ev": "refresh", "user": "work", "frm": 41, "to": 42}
+{"t": 1791780826.46, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780826.705, "ev": "refresh", "user": "work", "frm": 42, "to": 43}
+{"t": 1791780826.948, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780826.948, "ev": "refresh", "user": "work", "frm": 43, "to": 44}
+{"t": 1791780826.95, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780827.193, "ev": "refresh", "user": "work", "frm": 44, "to": 45}
+{"t": 1791780827.194, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work", "gen": 44, "expired": false}}
+{"t": 1791780827.442, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780827.443, "ev": "refresh", "user": "work", "frm": 45, "to": 46}
+{"t": 1791780827.444, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780827.691, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780827.692, "ev": "refresh", "user": "work", "frm": 46, "to": 47}
+{"t": 1791780827.693, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780827.937, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work", "gen": 47, "expired": false}}
+{"t": 1791780827.938, "ev": "refresh", "user": "work", "frm": 47, "to": 48}
+{"t": 1791780828.186, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780828.186, "ev": "refresh", "user": "work", "frm": 48, "to": 49}
+{"t": 1791780828.187, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780828.436, "ev": "refresh", "user": "work", "frm": 49, "to": 50}
+{"t": 1791780828.687, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780828.687, "ev": "refresh", "user": "work", "frm": 50, "to": 51}
+{"t": 1791780828.688, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780828.936, "ev": "refresh", "user": "work", "frm": 51, "to": 52}
+{"t": 1791780829.187, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780829.187, "ev": "refresh", "user": "work", "frm": 52, "to": 53}
+{"t": 1791780829.188, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780829.433, "ev": "refresh", "user": "work", "frm": 53, "to": 54}
+{"t": 1791780829.679, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780829.68, "ev": "refresh", "user": "work", "frm": 54, "to": 55}
+{"t": 1791780829.68, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780829.926, "ev": "refresh", "user": "work", "frm": 55, "to": 56}
+{"t": 1791780830.17, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780830.171, "ev": "refresh", "user": "work", "frm": 56, "to": 57}
+{"t": 1791780830.172, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780830.418, "ev": "refresh", "user": "work", "frm": 57, "to": 58}
+{"t": 1791780830.663, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780830.664, "ev": "refresh", "user": "work", "frm": 58, "to": 59}
+{"t": 1791780830.664, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780830.91, "ev": "refresh", "user": "work", "frm": 59, "to": 60}
+{"t": 1791780830.923, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "work", "gen": 59, "expired": false}, "model": null}
+{"t": 1791780831.15, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780831.388, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780831.388, "ev": "refresh", "user": "work~2", "frm": 1, "to": 2}
+{"t": 1791780831.634, "ev": "refresh", "user": "work~2", "frm": 2, "to": 3}
+{"t": 1791780831.876, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "work~2", "gen": 3, "expired": false}}
+{"t": 1791780831.877, "ev": "refresh", "user": "work~2", "frm": 3, "to": 4}
+{"t": 1791780832.125, "ev": "refresh", "user": "work~2", "frm": 4, "to": 5}
+{"t": 1791780832.418, "ev": "refresh", "user": "work~2", "frm": 5, "to": 6}
+{"t": 1791780832.665, "ev": "refresh", "user": "work~2", "frm": 6, "to": 7}
+{"t": 1791780832.665, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780832.682, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780832.905, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780832.905, "ev": "refresh", "user": "work~2", "frm": 7, "to": 8}
+{"t": 1791780832.906, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780833.147, "ev": "refresh", "user": "work~2", "frm": 8, "to": 9}
+{"t": 1791780833.388, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780833.388, "ev": "refresh", "user": "work~2", "frm": 9, "to": 10}
+{"t": 1791780833.389, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780833.628, "ev": "refresh", "user": "work~2", "frm": 10, "to": 11}
+{"t": 1791780833.873, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780833.873, "ev": "refresh", "user": "work~2", "frm": 11, "to": 12}
+{"t": 1791780833.874, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780834.117, "ev": "refresh", "user": "work~2", "frm": 12, "to": 13}
+{"t": 1791780834.361, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780834.362, "ev": "refresh", "user": "work~2", "frm": 13, "to": 14}
+{"t": 1791780834.363, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780834.609, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work~2", "gen": 14, "expired": false}}
+{"t": 1791780834.609, "ev": "refresh", "user": "work~2", "frm": 14, "to": 15}
+{"t": 1791780834.849, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780834.849, "ev": "refresh", "user": "work~2", "frm": 15, "to": 16}
+{"t": 1791780834.85, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780835.089, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780835.09, "ev": "refresh", "user": "work~2", "frm": 16, "to": 17}
+{"t": 1791780835.09, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780835.364, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work~2", "gen": 17, "expired": false}}
+{"t": 1791780835.364, "ev": "refresh", "user": "work~2", "frm": 17, "to": 18}
+{"t": 1791780835.605, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780835.605, "ev": "refresh", "user": "work~2", "frm": 18, "to": 19}
+{"t": 1791780835.606, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780835.844, "ev": "refresh", "user": "work~2", "frm": 19, "to": 20}
+{"t": 1791780836.084, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780836.084, "ev": "refresh", "user": "work~2", "frm": 20, "to": 21}
+{"t": 1791780836.085, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780836.324, "ev": "refresh", "user": "work~2", "frm": 21, "to": 22}
+{"t": 1791780836.563, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780836.563, "ev": "refresh", "user": "work~2", "frm": 22, "to": 23}
+{"t": 1791780836.564, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780836.804, "ev": "refresh", "user": "work~2", "frm": 23, "to": 24}
+{"t": 1791780837.046, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780837.047, "ev": "refresh", "user": "work~2", "frm": 24, "to": 25}
+{"t": 1791780837.047, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780837.287, "ev": "refresh", "user": "work~2", "frm": 25, "to": 26}
+{"t": 1791780837.531, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780837.532, "ev": "refresh", "user": "work~2", "frm": 26, "to": 27}
+{"t": 1791780837.532, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780837.776, "ev": "refresh", "user": "work~2", "frm": 27, "to": 28}
+{"t": 1791780838.019, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780838.02, "ev": "refresh", "user": "work~2", "frm": 28, "to": 29}
+{"t": 1791780838.02, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780838.262, "ev": "refresh", "user": "work~2", "frm": 29, "to": 30}
+{"t": 1791780838.278, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "work~2", "gen": 29, "expired": false}, "model": null}
+{"t": 1791780838.504, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780838.727, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780839.24, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "keyacct"}, "model": "gpt-5.4"}
+{"t": 1791780839.489, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780840.011, "ev": "responses-401", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "fakekey"}, "model": "gpt-5.4"}
+{"t": 1791780840.25, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780840.251, "ev": "refresh-rejected", "user": "bad", "why": "expired"}
+{"t": 1791780840.272, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "bad", "gen": 1, "expired": true}}
+{"t": 1791780840.327, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780840.329, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780840.339, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780840.34, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780840.346, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "bad", "gen": 1, "expired": true}}
+{"t": 1791780840.362, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "bad", "gen": 1, "expired": true}}
+{"t": 1791780840.412, "ev": "responses-401", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "bad", "gen": 1, "expired": true}, "model": null}
+{"t": 1791780840.424, "ev": "responses-401", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "bad", "gen": 1, "expired": true}, "model": null}
+{"t": 1791780840.688, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780841.129, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780841.579, "ev": "refresh", "user": "work", "frm": 60, "to": 61}
+{"t": 1791780841.58, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780841.843, "ev": "refresh", "user": "work", "frm": 61, "to": 62}
+{"t": 1791780842.093, "ev": "refresh", "user": "work", "frm": 62, "to": 63}
+{"t": 1791780842.094, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "work", "gen": 62, "expired": false}}
+{"t": 1791780842.343, "ev": "refresh", "user": "work", "frm": 63, "to": 64}
+{"t": 1791780842.632, "ev": "refresh", "user": "work", "frm": 64, "to": 65}
+{"t": 1791780842.885, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780842.886, "ev": "refresh", "user": "work", "frm": 65, "to": 66}
+{"t": 1791780842.902, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780843.134, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780843.134, "ev": "refresh", "user": "work", "frm": 66, "to": 67}
+{"t": 1791780843.135, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780843.387, "ev": "refresh", "user": "work", "frm": 67, "to": 68}
+{"t": 1791780843.642, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780843.642, "ev": "refresh", "user": "work", "frm": 68, "to": 69}
+{"t": 1791780843.643, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780843.896, "ev": "refresh", "user": "work", "frm": 69, "to": 70}
+{"t": 1791780844.149, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780844.149, "ev": "refresh", "user": "work", "frm": 70, "to": 71}
+{"t": 1791780844.152, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780844.4, "ev": "refresh", "user": "work", "frm": 71, "to": 72}
+{"t": 1791780844.654, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780844.655, "ev": "refresh", "user": "work", "frm": 72, "to": 73}
+{"t": 1791780844.655, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780844.942, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work", "gen": 73, "expired": false}}
+{"t": 1791780844.942, "ev": "refresh", "user": "work", "frm": 73, "to": 74}
+{"t": 1791780845.193, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780845.193, "ev": "refresh", "user": "work", "frm": 74, "to": 75}
+{"t": 1791780845.194, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780845.433, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780845.433, "ev": "refresh", "user": "work", "frm": 75, "to": 76}
+{"t": 1791780845.436, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780845.678, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work", "gen": 76, "expired": false}}
+{"t": 1791780845.679, "ev": "refresh", "user": "work", "frm": 76, "to": 77}
+{"t": 1791780845.922, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780845.922, "ev": "refresh", "user": "work", "frm": 77, "to": 78}
+{"t": 1791780845.924, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780846.165, "ev": "refresh", "user": "work", "frm": 78, "to": 79}
+{"t": 1791780846.425, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780846.426, "ev": "refresh", "user": "work", "frm": 79, "to": 80}
+{"t": 1791780846.426, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780846.674, "ev": "refresh", "user": "work", "frm": 80, "to": 81}
+{"t": 1791780846.917, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780846.917, "ev": "refresh", "user": "work", "frm": 81, "to": 82}
+{"t": 1791780846.918, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780847.159, "ev": "refresh", "user": "work", "frm": 82, "to": 83}
+{"t": 1791780847.401, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780847.401, "ev": "refresh", "user": "work", "frm": 83, "to": 84}
+{"t": 1791780847.402, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780847.641, "ev": "refresh", "user": "work", "frm": 84, "to": 85}
+{"t": 1791780847.881, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780847.881, "ev": "refresh", "user": "work", "frm": 85, "to": 86}
+{"t": 1791780847.882, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780848.13, "ev": "refresh", "user": "work", "frm": 86, "to": 87}
+{"t": 1791780848.379, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780848.379, "ev": "refresh", "user": "work", "frm": 87, "to": 88}
+{"t": 1791780848.38, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780848.624, "ev": "refresh", "user": "work", "frm": 88, "to": 89}
+{"t": 1791780848.638, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "work", "gen": 88, "expired": false}, "model": null}
+{"t": 1791780848.873, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780849.085, "ev": "revoke", "user": "play2", "kind": "refresh_token"}
+{"t": 1791780850.013, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780850.444, "ev": "refresh", "user": "work", "frm": 89, "to": 90}
+{"t": 1791780850.445, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780850.702, "ev": "refresh", "user": "work", "frm": 90, "to": 91}
+{"t": 1791780850.952, "ev": "refresh", "user": "work", "frm": 91, "to": 92}
+{"t": 1791780851.202, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "work", "gen": 92, "expired": false}}
+{"t": 1791780851.202, "ev": "refresh", "user": "work", "frm": 92, "to": 93}
+{"t": 1791780851.506, "ev": "refresh", "user": "work", "frm": 93, "to": 94}
+{"t": 1791780851.762, "ev": "refresh", "user": "work", "frm": 94, "to": 95}
+{"t": 1791780851.762, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780851.78, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780852.008, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780852.008, "ev": "refresh", "user": "work", "frm": 95, "to": 96}
+{"t": 1791780852.009, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780852.251, "ev": "refresh", "user": "work", "frm": 96, "to": 97}
+{"t": 1791780852.494, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780852.495, "ev": "refresh", "user": "work", "frm": 97, "to": 98}
+{"t": 1791780852.497, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780852.741, "ev": "refresh", "user": "work", "frm": 98, "to": 99}
+{"t": 1791780852.986, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780852.986, "ev": "refresh", "user": "work", "frm": 99, "to": 100}
+{"t": 1791780852.987, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780853.23, "ev": "refresh", "user": "work", "frm": 100, "to": 101}
+{"t": 1791780853.474, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780853.474, "ev": "refresh", "user": "work", "frm": 101, "to": 102}
+{"t": 1791780853.475, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780853.715, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work", "gen": 102, "expired": false}}
+{"t": 1791780853.715, "ev": "refresh", "user": "work", "frm": 102, "to": 103}
+{"t": 1791780853.958, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780853.958, "ev": "refresh", "user": "work", "frm": 103, "to": 104}
+{"t": 1791780853.959, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780854.201, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780854.207, "ev": "refresh", "user": "work", "frm": 104, "to": 105}
+{"t": 1791780854.208, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780854.456, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work", "gen": 105, "expired": false}}
+{"t": 1791780854.456, "ev": "refresh", "user": "work", "frm": 105, "to": 106}
+{"t": 1791780854.702, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780854.702, "ev": "refresh", "user": "work", "frm": 106, "to": 107}
+{"t": 1791780854.703, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780854.948, "ev": "refresh", "user": "work", "frm": 107, "to": 108}
+{"t": 1791780855.189, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780855.189, "ev": "refresh", "user": "work", "frm": 108, "to": 109}
+{"t": 1791780855.19, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780855.428, "ev": "refresh", "user": "work", "frm": 109, "to": 110}
+{"t": 1791780855.671, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780855.672, "ev": "refresh", "user": "work", "frm": 110, "to": 111}
+{"t": 1791780855.673, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780855.917, "ev": "refresh", "user": "work", "frm": 111, "to": 112}
+{"t": 1791780856.16, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780856.161, "ev": "refresh", "user": "work", "frm": 112, "to": 113}
+{"t": 1791780856.161, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780856.401, "ev": "refresh", "user": "work", "frm": 113, "to": 114}
+{"t": 1791780856.64, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780856.64, "ev": "refresh", "user": "work", "frm": 114, "to": 115}
+{"t": 1791780856.641, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780856.883, "ev": "refresh", "user": "work", "frm": 115, "to": 116}
+{"t": 1791780857.131, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780857.132, "ev": "refresh", "user": "work", "frm": 116, "to": 117}
+{"t": 1791780857.133, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780857.372, "ev": "refresh", "user": "work", "frm": 117, "to": 118}
+{"t": 1791780857.386, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "work", "gen": 117, "expired": false}, "model": null}
+{"t": 1791780857.612, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780857.839, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780858.388, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780858.907, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "keyacct"}, "model": "gpt-5.4"}
+{"t": 1791780859.257, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780859.814, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780859.815, "ev": "refresh", "user": "work", "frm": 118, "to": 119}
+{"t": 1791780860.066, "ev": "refresh", "user": "work", "frm": 119, "to": 120}
+{"t": 1791780860.307, "ev": "refresh", "user": "work", "frm": 120, "to": 121}
+{"t": 1791780860.308, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "work", "gen": 120, "expired": false}}
+{"t": 1791780860.55, "ev": "refresh", "user": "work", "frm": 121, "to": 122}
+{"t": 1791780860.852, "ev": "refresh", "user": "work", "frm": 122, "to": 123}
+{"t": 1791780861.102, "ev": "refresh", "user": "work", "frm": 123, "to": 124}
+{"t": 1791780861.102, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780861.119, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780861.341, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780861.342, "ev": "refresh", "user": "work", "frm": 124, "to": 125}
+{"t": 1791780861.342, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780861.582, "ev": "refresh", "user": "work", "frm": 125, "to": 126}
+{"t": 1791780861.826, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780861.826, "ev": "refresh", "user": "work", "frm": 126, "to": 127}
+{"t": 1791780861.829, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780862.074, "ev": "refresh", "user": "work", "frm": 127, "to": 128}
+{"t": 1791780862.316, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780862.317, "ev": "refresh", "user": "work", "frm": 128, "to": 129}
+{"t": 1791780862.319, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780862.558, "ev": "refresh", "user": "work", "frm": 129, "to": 130}
+{"t": 1791780862.802, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780862.803, "ev": "refresh", "user": "work", "frm": 130, "to": 131}
+{"t": 1791780862.804, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780863.049, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work", "gen": 131, "expired": false}}
+{"t": 1791780863.049, "ev": "refresh", "user": "work", "frm": 131, "to": 132}
+{"t": 1791780863.289, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780863.29, "ev": "refresh", "user": "work", "frm": 132, "to": 133}
+{"t": 1791780863.291, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780863.531, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780863.531, "ev": "refresh", "user": "work", "frm": 133, "to": 134}
+{"t": 1791780863.532, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780863.77, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "work", "gen": 134, "expired": false}}
+{"t": 1791780863.77, "ev": "refresh", "user": "work", "frm": 134, "to": 135}
+{"t": 1791780864.013, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780864.014, "ev": "refresh", "user": "work", "frm": 135, "to": 136}
+{"t": 1791780864.015, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780864.257, "ev": "refresh", "user": "work", "frm": 136, "to": 137}
+{"t": 1791780864.496, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780864.497, "ev": "refresh", "user": "work", "frm": 137, "to": 138}
+{"t": 1791780864.498, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780864.736, "ev": "refresh", "user": "work", "frm": 138, "to": 139}
+{"t": 1791780864.975, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780864.976, "ev": "refresh", "user": "work", "frm": 139, "to": 140}
+{"t": 1791780864.976, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780865.215, "ev": "refresh", "user": "work", "frm": 140, "to": 141}
+{"t": 1791780865.456, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780865.457, "ev": "refresh", "user": "work", "frm": 141, "to": 142}
+{"t": 1791780865.458, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780865.696, "ev": "refresh", "user": "work", "frm": 142, "to": 143}
+{"t": 1791780865.939, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780865.939, "ev": "refresh", "user": "work", "frm": 143, "to": 144}
+{"t": 1791780865.94, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780866.178, "ev": "refresh", "user": "work", "frm": 144, "to": 145}
+{"t": 1791780866.423, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780866.423, "ev": "refresh", "user": "work", "frm": 145, "to": 146}
+{"t": 1791780866.424, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780866.666, "ev": "refresh", "user": "work", "frm": 146, "to": 147}
+{"t": 1791780866.681, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "work", "gen": 146, "expired": false}, "model": null}
+{"t": 1791780866.908, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780867.191, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780867.336, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "codexenv"}, "model": "gpt-5.4"}

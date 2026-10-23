@@ -351,3 +351,58 @@ fn missing_project_dot_codex_config_requires_approval() {
         SafetyCheck::AskUser,
     );
 }
+
+/// #606: a patch through a writable link the sandboxes leave out (#535: it
+/// leads into the workspace's read-only `.git`) is not auto-approved as
+/// constrained to writable paths; the sandbox would deny it anyway.
+#[cfg(unix)]
+#[test]
+fn patch_through_an_excluded_writable_link_is_not_auto_approved() {
+    let tmp = TempDir::new().unwrap();
+    let base = tmp.path().canonicalize().unwrap();
+    let workspace = base.join("ws");
+    std::fs::create_dir_all(workspace.join(".git/hooks")).unwrap();
+    let link = base.join("git-link");
+    std::os::unix::fs::symlink(workspace.join(".git"), &link).unwrap();
+    let workspace = workspace.abs();
+    let link = link.abs();
+    let cwd_uri = PathUri::from_abs_path(&workspace);
+    let permission_profile = PermissionProfile::workspace_write_with(
+        &[workspace.clone(), link.clone()],
+        NetworkSandboxPolicy::Restricted,
+        /*exclude_tmpdir_env_var*/ true,
+        /*exclude_slash_tmp*/ true,
+    );
+    let file_system_sandbox_policy = permission_profile.file_system_sandbox_policy();
+    assert_eq!(
+        file_system_sandbox_policy
+            .writable_links_into_read_only_paths(workspace.as_path())
+            .len(),
+        1
+    );
+    let hook = link.join("hooks").join("pre-commit");
+    let action = ApplyPatchAction::new_add_for_test(&PathUri::from_abs_path(&hook), "x".into());
+    assert!(!is_write_patch_constrained_to_writable_paths(
+        &action,
+        &file_system_sandbox_policy,
+        &cwd_uri,
+    ));
+    assert_eq!(
+        assess_patch_safety(
+            &action,
+            AskForApproval::OnRequest,
+            &permission_profile,
+            &file_system_sandbox_policy,
+            &cwd_uri,
+            WindowsSandboxLevel::Disabled,
+        ),
+        SafetyCheck::AskUser,
+    );
+    let inside = workspace.join("src").join("main.rs");
+    let action = ApplyPatchAction::new_add_for_test(&PathUri::from_abs_path(&inside), "x".into());
+    assert!(is_write_patch_constrained_to_writable_paths(
+        &action,
+        &file_system_sandbox_policy,
+        &cwd_uri,
+    ));
+}

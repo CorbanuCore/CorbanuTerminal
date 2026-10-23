@@ -1,0 +1,18 @@
+$ /usage requests 2026-10-06 2026-10-08 day
+  Cost — this conversation
+  Unavailable — native thread no longer exists.
+  Requested: [2026-10-06T00:00:00.000Z, 2026-10-08T00:00:00.000Z); timezone: UTC; grouping: Day; effective coverage: unavailable; bucket boundaries
+  unavailable
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts outside the selected interval; the selected UTC interval is not their complete lifetime.
+  Refresh
+  Close
+  ↑↓ scroll · Enter open · Esc back/close
+--- last screen:
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+› Billed cost: unavailable — no settlement evidence
+  Logical requests may have attempts outside the selected interval; the selected UTC interval is not their complete lifetime.
+  Refresh
+  Close
+  ↑↓ scroll · Enter open · Esc back/close

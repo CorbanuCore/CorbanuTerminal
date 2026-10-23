@@ -125,7 +125,11 @@ impl RequestUserInputOverlay {
         UnansweredConfirmationData {
             title_line: Line::from(super::UNANSWERED_CONFIRM_TITLE.bold()),
             subtitle_line: Line::from(subtitle.dim()),
-            hint_line: standard_popup_hint_line(),
+            // #544: while Enter is ignored, say why.
+            hint_line: match self.notice() {
+                Some(notice) => Line::from(notice.cyan()),
+                None => standard_popup_hint_line(),
+            },
             rows: self.unanswered_confirmation_rows(),
             state: self.confirm_unanswered.unwrap_or_default(),
         }

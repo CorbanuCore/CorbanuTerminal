@@ -1,0 +1,51 @@
+Desktop
+Documents
+Downloads
+Library
+Movies
+Music
+Pictures
+Public
+ag-admin
+bin
+pf83-cases-29.Y0k1xE
+pf83-pinned
+pf83-preflight-1c5aa9158f3441039641a0cb42957eeb
+pf83-preflight-1fdbaf48ea2e461baadc688f0a4c3414
+pf83-preflight-23ee538914394beba14f9049d356cb61
+pf83-preflight-37b69aa3eb994124b5c74b964152776a
+pf83-preflight-4970d4be039b4f7a8d777e319874f65b
+pf83-preflight-4f53adade244434c91e983aa580e3f6b
+pf83-preflight-623e0506a2154974aacd2800cdc79717
+pf83-preflight-75b70873cb4d4631ab487d32d018fd2b
+pf83-preflight-75efb67c3ef84e359439bf2e6b718399
+pf83-preflight-866344b255324c1f98e4e382dace8d72
+pf83-preflight-93b95bcb43494bf8acd4bca15a8bcc06
+pf83-preflight-95e98c4a645c42b596d5ae75851df886
+pf83-preflight-aa9f15e4a3c54e3191ba9b4ce22b2be4
+pf83-preflight-b7d8b983bce6460dbfc5c4cca7abbf9f
+pf83-preflight-bf9f2377cab84af790af9b2ca7ba7b39
+pf83-preflight-c405e71ccee34f5ba9ffdc3e7bf51bb0
+pf83-preflight-d2676c6b244a4f1d875fe5bbb3906c2d
+pf83-preflight-d476d8a913fa401f8c84ec7aeaa51590
+---
+ls: /Users/agent/agms: No such file or directory
+ls: /Users/agent/agms/restore-state: No such file or directory
+---
+config.toml
+homebrew
+keyfile-present
+0
+10:set skip on lo0
+/dev/disk0 on /Volumes/My Shared Files (AppleVirtIOFS, local, nodev, nosuid, automounted)
+agadmin-1792048624-63762.sh
+agadmin-1792048628-63781.sh
+agadmin-1792048631-63803.sh
+agadmin-1792048639-63835.sh
+agadmin-1792048677-63971.sh
+su.exp
+Deleted Users
+Shared
+agent
+neo
+neo_1

@@ -58,7 +58,7 @@ updated: YYYY-MM-DD
 - [ ] Focused test: `<final-tree command>`
 - [ ] Integration test: `<final-tree command>`
 - [ ] TUI applicability resolved; if applicable, keys and checkpoints recorded.
-- [ ] Every code-blind case dispositioned; exact-package evidence and independent evidence check linked within the shared review budget.
+- [ ] Code-blind cases independently executed under enforced isolation; schema-2 receipts, exact-package evidence and separate evidence check linked (or accepted internal-only N/A).
 
 ## Exit evidence
 

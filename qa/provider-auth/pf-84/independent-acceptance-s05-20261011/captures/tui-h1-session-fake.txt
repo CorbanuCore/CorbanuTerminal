@@ -1,0 +1,47 @@
+# tui-h1-session-fake: bin=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf84-s05-indep-acc-20261011/debug/corbanu home=$S/homes/h1 args: --account fake
+--- after prompt ---
+⚠ Under-development features enabled: named_accounts. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set
+  `suppress_unstable_features_warning = true` in $S/homes/h1/config.toml.
+› Reply with exactly the word pong and nothing else.
+⚠ Z.AI (zai) account `fake` was rejected. Replace its key with `corbanu account add zai fake` (reads stdin), or choose another account. The default Z.AI credential is
+  unchanged.
+■ unexpected status 401 Unauthorized: Authentication Failed, url: https://api.z.ai/api/paas/v4/chat/completions, request id: c2eff5a8-e06c-48ab-a32e-7489d1f27c6c
+› Improve documentation in @filename
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: -- tok/s
+--- /status ---
+/status
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                           │
+│                                                                                          │
+│  Model:                Z.AI GLM 5.3 Flash                                                │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account fake                │
+│  Directory:            $S/ws               │
+│  Permissions:          Next turn: Custom (workspace, never)                              │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Z.AI API key configured                                           │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a12b51-c3b2-7c52-9695-ef6f81f1f7b5                              │
+│                                                                                          │
+│  Token usage:          0 total  (0 input + 0 output)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+› Improve documentation in @filename
+  Z.AI GLM 5.3 Flash via zai default · $S/ws · Corbanu Terminal · TPS: -- tok/s
+--- /cost ---
+  Cost — this conversation
+  Requested UTC day: 2026-10-11
+› Today (UTC) in this conversation:
+  • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 1 request, tokens not reported. Estimated cost: not available — usage incomplete.
+  Other conversations on this day, not included above: 18 requests in 9 conversations.
+  • Kimi Code · account alt · kimi-k3 — Covered by your subscription (not billed per request). 2 requests, 11,357 tokens. Same work at API prices: not available.
+  • Kimi Code · account default · kimi-k3 — Covered by your subscription (not billed per request). 2 requests, 11,421 tokens. Same work at API prices: not available.
+  • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 8 requests, 62,443 tokens. Estimated cost: $0.004958 (rounded).
+  • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 2 requests, tokens not reported. Estimated cost: not available — usage incomplete.
+  • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 4 requests, 27,072 tokens. Estimated cost: $0.003681.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+--- exit ---
+╰──────────────────────────────────────────────────────╯
+To continue this session, run corbanu resume 01a12b51-c3b2-7c52-9695-ef6f81f1f7b5
+EXITED-0

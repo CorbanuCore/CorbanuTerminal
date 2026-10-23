@@ -1,0 +1,11 @@
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/tmp/pf84s04acc/work │
+╰────────────────────────────────────────────────────────╯
+
+• Saved zpx account `quota`. Use it from /providers, `--account quota` or a spawn `account`.
+To continue this session, run corbanu resume 01a12aa5-4779-7e01-a008-d137aaed8fb1
+TUI_EXITED rc=0

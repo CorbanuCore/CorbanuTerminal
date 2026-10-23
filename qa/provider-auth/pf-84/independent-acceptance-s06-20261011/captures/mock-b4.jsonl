@@ -1,0 +1,37 @@
+{"t": 1791780991.379, "ev": "device-usercode"}
+{"t": 1791780991.381, "ev": "sign-in", "user": "named"}
+{"t": 1791780992.887, "ev": "get", "path": "/v1/models", "who": {"scheme": "chatgpt", "user": "named", "gen": 1, "expired": false}}
+{"t": 1791780992.887, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780992.926, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780992.941, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780992.946, "ev": "post-unhandled", "path": "/backend-api/codex/ps/mcp", "who": {"scheme": "none"}}
+{"t": 1791780992.946, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "named", "gen": 1, "expired": false}}
+{"t": 1791780992.963, "ev": "get", "path": "/backend-api/codex/ps/plugins/suggested", "who": {"scheme": "chatgpt", "user": "named", "gen": 1, "expired": false}}
+{"t": 1791780993.019, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "chatgpt", "user": "named", "gen": 1, "expired": false}, "model": null}
+{"t": 1791780993.216, "ev": "device-usercode"}
+{"t": 1791780993.218, "ev": "sign-in", "user": "named"}
+{"t": 1791780994.707, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780995.142, "ev": "device-usercode"}
+{"t": 1791780995.144, "ev": "sign-in", "user": "named"}
+{"t": 1791780996.508, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780996.625, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "none"}, "model": "gpt-5.4"}
+{"t": 1791780996.837, "ev": "device-usercode"}
+{"t": 1791780996.839, "ev": "sign-in", "user": "named"}
+{"t": 1791780998.236, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791780998.369, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "none"}, "model": "gpt-5.4"}
+{"t": 1791780998.534, "ev": "device-usercode"}
+{"t": 1791780998.536, "ev": "sign-in", "user": "deflt"}
+{"t": 1791780998.576, "ev": "device-usercode"}
+{"t": 1791780998.578, "ev": "sign-in", "user": "named"}
+{"t": 1791781000.075, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791781000.553, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "bearer", "canary": "keyacct"}, "model": "gpt-5.4"}
+{"t": 1791781000.712, "ev": "device-usercode"}
+{"t": 1791781000.715, "ev": "sign-in", "user": "deflt"}
+{"t": 1791781000.759, "ev": "device-usercode"}
+{"t": 1791781000.761, "ev": "sign-in", "user": "named"}
+{"t": 1791781002.138, "ev": "get", "path": "/backend-api/codex/plugins/featured", "who": {"scheme": "none"}}
+{"t": 1791781002.287, "ev": "responses", "path": "/v1/responses", "who": {"scheme": "none"}, "model": "gpt-5.4"}
+{"t": 1791781002.442, "ev": "device-usercode"}
+{"t": 1791781002.445, "ev": "sign-in", "user": "deflt"}
+{"t": 1791781002.492, "ev": "device-usercode"}
+{"t": 1791781002.494, "ev": "sign-in", "user": "named"}

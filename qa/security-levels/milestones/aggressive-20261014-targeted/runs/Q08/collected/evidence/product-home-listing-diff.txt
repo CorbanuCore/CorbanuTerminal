@@ -1,0 +1,11 @@
+UTC 2026-10-14T09:48:05Z
+--- /dev/fd/63	2026-10-14 02:48:05
++++ /dev/fd/62	2026-10-14 02:48:05
+@@ -5,6 +5,7 @@
+ /Users/agmx2/runs/agms-Q08-agmx2-20261014T093620Z/product-home/archived_sessions
+ /Users/agmx2/runs/agms-Q08-agmx2-20261014T093620Z/product-home/config.toml
+ /Users/agmx2/runs/agms-Q08-agmx2-20261014T093620Z/product-home/gpu-controller.lock
++/Users/agmx2/runs/agms-Q08-agmx2-20261014T093620Z/product-home/history.jsonl
+ /Users/agmx2/runs/agms-Q08-agmx2-20261014T093620Z/product-home/installation_id
+ /Users/agmx2/runs/agms-Q08-agmx2-20261014T093620Z/product-home/log
+ /Users/agmx2/runs/agms-Q08-agmx2-20261014T093620Z/product-home/panes

@@ -1,0 +1,11 @@
+# hb2: vault created by BASE (bddf6292c4) with named zai account work; then candidate actions
+Saved zai account `work` (api_key).
+  [after BASE account add] local.age 621 bytes sha 61093cb3eed1c4f6
+zai	work	api_key
+  [after CAND account list] local.age 621 bytes sha 61093cb3eed1c4f6
+  [after CAND exec on default] local.age 621 bytes sha 61093cb3eed1c4f6
+  exec --account work exit=0
+  [after CAND exec --account work] local.age 737 bytes sha dd908f01d28eaec4
+  [after 2nd CAND exec --account work] local.age 737 bytes sha dd908f01d28eaec4
+{"name":"work","fingerprint":"1c7d8cadd576"}
+{"name":"work","fingerprint":"1c7d8cadd576"}

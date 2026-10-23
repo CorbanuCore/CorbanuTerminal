@@ -1,0 +1,16 @@
+[
+  "Requested: [2026-10-31T12:00:00.000Z, 2026-11-02T12:00:00.000Z); timezone: UTC; grouping: Day",
+  "Oldest retained aggregate day (ledger): Some(20520); 90-day drill-down cutoff: Some(1786017600000) ms UTC (exclusive)",
+  "Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable \u2014 no",
+  "settlement evidence.",
+  "Range: Unknown parent population: 0 inspectable attempts, excluded from range total",
+  "Range total unavailable \u2014 partial or unavailable buckets excluded; no partial total.",
+  "Effective coverage (requested \u2229 aggregate retention \u2229 snapshot) for [2026-10-31T00:00:00.000Z, 2026-11-01T00:00:00.000Z): [2026-10-31T12:00:00.000Z, 2026-11-01T00:00:00.000Z)",
+  "Effective coverage (requested \u2229 aggregate retention \u2229 snapshot) for [2026-11-01T00:00:00.000Z, 2026-11-02T00:00:00.000Z): [2026-11-01T00:00:00.000Z, 2026-11-02T00:00:00.000Z)",
+  "Effective coverage (requested \u2229 aggregate retention \u2229 snapshot) for [2026-11-02T00:00:00.000Z, 2026-11-03T00:00:00.000Z): [2026-11-02T00:00:00.000Z, 2026-11-02T12:00:00.000Z)",
+  "Day [2026-10-31T00:00:00.000Z, 2026-11-01T00:00:00.000Z)",
+  "Day [2026-11-01T00:00:00.000Z, 2026-11-02T00:00:00.000Z)",
+  "Day [2026-11-02T00:00:00.000Z, 2026-11-03T00:00:00.000Z)",
+  "Refresh",
+  "Close"
+]

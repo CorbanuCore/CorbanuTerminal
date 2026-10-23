@@ -1,0 +1,17 @@
+{"time_ns": 1791249164724420000, "utc": "2026-10-06T01:12:44Z", "label": "FIXTURE-PROBE1", "files": {"events.txt": "", "input.txt": "permission-test\n"}}
+{"time_ns": 1791249174778910000, "utc": "2026-10-06T01:12:54Z", "label": "FIXTURE-DECLINE", "files": {"events.txt": "", "input.txt": "permission-test\n"}}
+{"time_ns": 1791249195199501000, "utc": "2026-10-06T01:13:15Z", "label": "FIXTURE-F05DECL", "files": {"events.txt": "", "input.txt": "permission-test\n"}}
+{"time_ns": 1791249228521225000, "utc": "2026-10-06T01:13:48Z", "label": "FIXTURE-FA", "files": {"events.txt": "", "input.txt": "permission-test\n"}}
+{"time_ns": 1791249245204435000, "utc": "2026-10-06T01:14:05Z", "label": "FIXTURE-F05B", "files": {"events.txt": "PROBE-F05B-FULL\n", "input.txt": "permission-test\n"}}
+{"time_ns": 1791249265405943000, "utc": "2026-10-06T01:14:25Z", "label": "FIXTURE-F04A", "files": {"events.txt": "PROBE-F05B-FULL\nPROBE-F04A-START\nPROBE-F04A-FINISH\n", "input.txt": "permission-test\n"}}
+{"time_ns": 1791249291199973000, "utc": "2026-10-06T01:14:51Z", "label": "FIXTURE-F04B", "files": {"events.txt": "PROBE-F05B-FULL\nPROBE-F04A-START\nPROBE-F04A-FINISH\n", "input.txt": "permission-test\n"}}
+{"time_ns": 1791249311744015000, "utc": "2026-10-06T01:15:11Z", "label": "FIXTURE-F03-SLOWTASK", "files": {"events.txt": "PROBE-F05B-FULL\nPROBE-F04A-START\nPROBE-F04A-FINISH\n", "input.txt": "permission-test\n", "workspace/slowtask.txt": "started\nfinished\n"}}
+{"time_ns": 1791249339339760000, "utc": "2026-10-06T01:15:39Z", "label": "FIXTURE-F03C", "files": {"events.txt": "PROBE-F05B-FULL\nPROBE-F04A-START\nPROBE-F04A-FINISH\nPROBE-F03C-FULL\n", "input.txt": "permission-test\n", "workspace/slowtask.txt": "started\nfinished\n"}}
+{"time_ns": 1791249370503571000, "utc": "2026-10-06T01:16:10Z", "label": "FIXTURE-F05D", "files": {"events.txt": "PROBE-F05B-FULL\nPROBE-F04A-START\nPROBE-F04A-FINISH\nPROBE-F03C-FULL\nPROBE-F05D-ACCEPT\n", "input.txt": "permission-test\n", "workspace/slowtask.txt": "started\nfinished\n"}}
+{"time_ns": 1791249413447567000, "utc": "2026-10-06T01:16:53Z", "label": "FIXTURE-ZA-START", "files": {"events.txt": "", "input.txt": "permission-test\n", "workspace/slowtask.txt": ""}}
+{"time_ns": 1791249446687342000, "utc": "2026-10-06T01:17:26Z", "label": "FIXTURE-ZA-NORUN", "files": {"events.txt": "", "input.txt": "permission-test\n", "workspace/slowtask.txt": ""}}
+{"time_ns": 1791249504548884000, "utc": "2026-10-06T01:18:24Z", "label": "FIXTURE-ZA-FULL", "files": {"events.txt": "", "input.txt": "permission-test\n", "workspace/slowtask.txt": ""}}
+{"time_ns": 1791249511616072000, "utc": "2026-10-06T01:18:31Z", "label": "FIXTURE-ZA-FULL", "files": {"events.txt": "", "input.txt": "permission-test\n", "workspace/slowtask.txt": ""}}
+{"time_ns": 1791249554191950000, "utc": "2026-10-06T01:19:14Z", "label": "FIXTURE-ZA-SWITCH", "files": {"events.txt": "ZA-SWITCH-PROBE\n", "input.txt": "permission-test\n", "workspace/slowtask.txt": ""}}
+{"time_ns": 1791249563443977000, "utc": "2026-10-06T01:19:23Z", "label": "FIXTURE-ZA-SWITCH", "files": {"events.txt": "ZA-SWITCH-PROBE\n", "input.txt": "permission-test\n", "workspace/slowtask.txt": ""}}
+{"time_ns": 1791249597304292000, "utc": "2026-10-06T01:19:57Z", "label": "FIXTURE-ZA-REST-GATE", "files": {"events.txt": "ZA-SWITCH-PROBE\n", "input.txt": "permission-test\n", "workspace/slowtask.txt": ""}}

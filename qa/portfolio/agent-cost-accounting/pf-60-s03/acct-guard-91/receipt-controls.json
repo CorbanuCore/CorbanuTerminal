@@ -1,0 +1,105 @@
+{
+  "python_optimization": 0,
+  "assertions": [
+    "output-match",
+    "stable-tip",
+    "clean-checkout",
+    "command-exit",
+    "empty-stderr"
+  ],
+  "positive_controls": 1,
+  "negative_controls": 9,
+  "cases": [
+    {
+      "case": "actual-advanced-tip",
+      "passed": true
+    },
+    {
+      "case": "output-match",
+      "mutation_path": [
+        "stdout_matches_prior_replay"
+      ],
+      "mutation_value": false,
+      "passed": true,
+      "rejection": "current integration output differs from pinned replay"
+    },
+    {
+      "case": "stable-tip",
+      "mutation_path": [
+        "source_tip_after"
+      ],
+      "mutation_value": "changed-tip",
+      "passed": true,
+      "rejection": "integration tip advanced during replay"
+    },
+    {
+      "case": "clean-checkout-before",
+      "mutation_path": [
+        "status_before"
+      ],
+      "mutation_value": " M synthetic",
+      "passed": true,
+      "rejection": "checkout changed"
+    },
+    {
+      "case": "clean-checkout-after",
+      "mutation_path": [
+        "status_after"
+      ],
+      "mutation_value": " M synthetic",
+      "passed": true,
+      "rejection": "checkout changed"
+    },
+    {
+      "case": "clean-checkout-both",
+      "mutation_path": [],
+      "mutation_value": null,
+      "passed": true,
+      "rejection": "checkout changed"
+    },
+    {
+      "case": "exit-acceptance",
+      "mutation_path": [
+        "commands",
+        0,
+        "exit"
+      ],
+      "mutation_value": 999,
+      "passed": true,
+      "rejection": "('unexpected command exit', {'name': 'acceptance', 'command': ['/opt/homebrew/opt/python@3.14/bin/python3.14', '-B', 'qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py'], 'exit': 999, 'expected_exit': 2, 'stderr_empty': True, 'stdout_sha256': '7c0be95732e992bdb92da90ec1868df60a102fb83a35109b4717d03825135190', 'stderr_sha256': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'})"
+    },
+    {
+      "case": "stderr-acceptance",
+      "mutation_path": [
+        "commands",
+        0,
+        "stderr_empty"
+      ],
+      "mutation_value": false,
+      "passed": true,
+      "rejection": "('command wrote stderr', {'name': 'acceptance', 'command': ['/opt/homebrew/opt/python@3.14/bin/python3.14', '-B', 'qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py'], 'exit': 2, 'expected_exit': 2, 'stderr_empty': False, 'stdout_sha256': '7c0be95732e992bdb92da90ec1868df60a102fb83a35109b4717d03825135190', 'stderr_sha256': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'})"
+    },
+    {
+      "case": "exit-controls",
+      "mutation_path": [
+        "commands",
+        1,
+        "exit"
+      ],
+      "mutation_value": 999,
+      "passed": true,
+      "rejection": "('unexpected command exit', {'name': 'controls', 'command': ['/opt/homebrew/opt/python@3.14/bin/python3.14', '-B', 'qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/check_verifier.py'], 'exit': 999, 'expected_exit': 0, 'stderr_empty': True, 'stdout_sha256': '43d7f00457d3e2ede1bea8b3f304b2f82e48d77b87c602c1b3dc6a66080a4ffd', 'stderr_sha256': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'})"
+    },
+    {
+      "case": "stderr-controls",
+      "mutation_path": [
+        "commands",
+        1,
+        "stderr_empty"
+      ],
+      "mutation_value": false,
+      "passed": true,
+      "rejection": "('command wrote stderr', {'name': 'controls', 'command': ['/opt/homebrew/opt/python@3.14/bin/python3.14', '-B', 'qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/check_verifier.py'], 'exit': 0, 'expected_exit': 0, 'stderr_empty': False, 'stdout_sha256': '43d7f00457d3e2ede1bea8b3f304b2f82e48d77b87c602c1b3dc6a66080a4ffd', 'stderr_sha256': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'})"
+    }
+  ]
+}

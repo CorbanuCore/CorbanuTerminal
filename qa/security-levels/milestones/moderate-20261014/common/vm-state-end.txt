@@ -1,0 +1,19 @@
+2026-10-15T07:17:38Z verification boot: utmctl start
+2026-10-15T07:17:57Z ssh reachable
+campaign paths:
+ls: /Users/agent/agms: No such file or directory
+ls: /Users/agent/agms-canary: No such file or directory
+ls: /etc/sudoers.d/agms-codeblind: No such file or directory
+ls: /opt/agms: No such file or directory
+ls: /private/tmp/agms-canary-ipc: No such file or directory
+agmx accounts: 0
+etc-codex: -rw-r--r--  1 root  wheel  82 Sep 17 22:00 /etc/codex/config.toml
+AGMS lines in pf anchor: 0
+virtiofs mounts: 1
+ag-admin: agadmin-1792048624-63762.sh agadmin-1792048628-63781.sh agadmin-1792048631-63803.sh agadmin-1792048639-63835.sh su.exp 
+2026-10-15T07:17:57Z final clean shutdown
+Connection to 192.168.64.3 closed by remote host.
+2026-10-15T07:18:08Z status: stopped
+UUID                                 Status   Name
+7EB8B75C-21B4-4DB3-9B9F-497C621BEA47 stopped  macOS 2
+4B1BAF7F-F655-4BF9-81DC-7DEFABA23BA6 stopped  macOS 3

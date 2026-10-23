@@ -248,6 +248,56 @@ fn command_execution_started_and_completed_translate_to_thread_events() {
     );
 }
 
+/// #873: a policy refusal keeps its own JSONL status and its reason, so it
+/// is never reported as a declined approval or a failed run.
+#[test]
+fn command_execution_refused_maps_to_refused_status() {
+    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let completed = processor.collect_thread_events(ServerNotification::ItemCompleted(
+        ItemCompletedNotification {
+            item: ThreadItem::CommandExecution {
+                id: "cmd-refused".to_string(),
+                command: "echo blocked".to_string(),
+                cwd: test_path_buf("/tmp/project").abs().into(),
+                process_id: None,
+                plugin_id: None,
+                script_path: None,
+                source: CommandExecutionSource::Agent,
+                status: ApiCommandExecutionStatus::Refused,
+                command_actions: Vec::<CommandAction>::new(),
+                aggregated_output: Some("policy forbids commands starting with `echo`".to_string()),
+                exit_code: Some(-1),
+                duration_ms: Some(0),
+            },
+            thread_id: "thread-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            completed_at_ms: 0,
+        },
+    ));
+    let item = ExecThreadItem {
+        id: "item_0".to_string(),
+        details: ThreadItemDetails::CommandExecution(CommandExecutionItem {
+            command: "echo blocked".to_string(),
+            aggregated_output: "policy forbids commands starting with `echo`".to_string(),
+            exit_code: Some(-1),
+            status: CommandExecutionStatus::Refused,
+        }),
+    };
+    assert_eq!(
+        completed,
+        CollectedThreadEvents {
+            events: vec![ThreadEvent::ItemCompleted(ItemCompletedEvent {
+                item: item.clone(),
+            })],
+            status: CodexStatus::Running,
+        }
+    );
+    assert_eq!(
+        serde_json::to_value(&item).expect("serialize item")["status"],
+        json!("refused")
+    );
+}
+
 #[test]
 fn empty_reasoning_items_are_ignored() {
     let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
@@ -734,6 +784,7 @@ fn collab_spawn_begin_and_end_emit_item_events() {
                 prompt: Some("draft a plan".to_string()),
                 model: Some("gpt-5".to_string()),
                 reasoning_effort: None,
+                provider_account: None,
                 agents_states: std::collections::HashMap::new(),
             },
             thread_id: "thread-parent".to_string(),
@@ -751,6 +802,7 @@ fn collab_spawn_begin_and_end_emit_item_events() {
                 prompt: Some("draft a plan".to_string()),
                 model: Some("gpt-5".to_string()),
                 reasoning_effort: None,
+                provider_account: None,
                 agents_states: std::collections::HashMap::from([(
                     "thread-child".to_string(),
                     ApiCollabAgentState {
@@ -1254,6 +1306,7 @@ fn token_usage_update_is_emitted_on_turn_completion() {
                     },
                     model_context_window: Some(128_000),
                 },
+                account_usage: None,
             },
         ));
     assert_eq!(

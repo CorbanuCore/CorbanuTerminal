@@ -110,6 +110,13 @@ pub trait SecretsBackend: Send + Sync {
         Ok(deleted)
     }
     fn list(&self, scope_filter: Option<&SecretScope>) -> Result<Vec<SecretListEntry>>;
+    /// Several values at once, in the order asked; one read where supported.
+    fn get_many(&self, entries: &[(SecretScope, SecretName)]) -> Result<Vec<Option<String>>> {
+        entries
+            .iter()
+            .map(|(scope, name)| self.get(scope, name))
+            .collect()
+    }
 }
 
 #[derive(Clone)]
@@ -166,6 +173,11 @@ impl SecretsManager {
 
     pub fn delete(&self, scope: &SecretScope, name: &SecretName) -> Result<bool> {
         self.backend.delete(scope, name)
+    }
+
+    /// Several values at once, in the order asked, decrypting the store once.
+    pub fn get_many(&self, entries: &[(SecretScope, SecretName)]) -> Result<Vec<Option<String>>> {
+        self.backend.get_many(entries)
     }
 
     pub fn delete_many(&self, entries: &[(SecretScope, SecretName)]) -> Result<usize> {

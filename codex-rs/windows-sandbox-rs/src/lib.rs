@@ -4,6 +4,7 @@
 
 #[cfg(any(target_os = "windows", test))]
 mod ssh_config_dependencies;
+mod unlabelled_roots;
 
 use std::fmt;
 use std::sync::Arc;
@@ -57,6 +58,8 @@ mod cap;
 #[cfg(target_os = "windows")]
 mod deny_read_acl;
 #[cfg(target_os = "windows")]
+mod deny_read_sessions;
+#[cfg(target_os = "windows")]
 mod deny_read_state;
 #[cfg(target_os = "windows")]
 mod desktop;
@@ -71,7 +74,13 @@ mod hide_users;
 #[cfg(target_os = "windows")]
 mod identity;
 #[cfg(target_os = "windows")]
+mod integrity;
+#[cfg(target_os = "windows")]
+mod integrity_leases;
+#[cfg(target_os = "windows")]
 mod logging;
+#[cfg(target_os = "windows")]
+mod logon_launch;
 #[cfg(target_os = "windows")]
 mod path_normalization;
 #[cfg(target_os = "windows")]
@@ -85,11 +94,16 @@ mod wfp;
 #[cfg(target_os = "windows")]
 mod wfp_setup;
 #[cfg(target_os = "windows")]
+mod window_station;
+#[cfg(target_os = "windows")]
 mod winutil;
 #[cfg(target_os = "windows")]
 mod workspace_acl;
 
+pub mod credential_watch;
 mod deny_read_resolver;
+mod deny_read_targets;
+pub mod local_drive;
 
 #[cfg(target_os = "windows")]
 mod conpty;
@@ -135,7 +149,21 @@ pub(crate) use elevated::runner_pipe;
 #[cfg(target_os = "windows")]
 pub use acl::add_deny_read_ace;
 #[cfg(target_os = "windows")]
+pub use acl::add_deny_read_ace_for_new_files;
+#[cfg(target_os = "windows")]
 pub use acl::add_deny_write_ace;
+#[cfg(target_os = "windows")]
+pub use acl::ensure_explicit_deny_read_ace;
+#[cfg(target_os = "windows")]
+pub use acl::file_link_count;
+#[cfg(target_os = "windows")]
+pub use acl::has_deny_read_ace_for_new_files;
+#[cfg(target_os = "windows")]
+pub use acl::has_exact_deny_read_ace_for_new_files;
+#[cfg(target_os = "windows")]
+pub use acl::has_explicit_deny_read_ace;
+#[cfg(target_os = "windows")]
+pub use acl::remove_deny_read_ace_for_new_files;
 
 #[cfg(target_os = "windows")]
 pub use acl::allow_null_device;
@@ -172,10 +200,28 @@ pub use deny_read_acl::apply_deny_read_acls;
 #[cfg(target_os = "windows")]
 pub use deny_read_acl::plan_deny_read_acl_paths;
 pub use deny_read_resolver::resolve_windows_deny_read_paths;
+pub use deny_read_resolver::resolve_windows_deny_read_targets;
+#[cfg(target_os = "windows")]
+pub use deny_read_sessions::DENY_READ_SYNC_LOCK_WAIT;
+#[cfg(target_os = "windows")]
+pub use deny_read_sessions::DenyReadSessions;
+#[cfg(target_os = "windows")]
+pub use deny_read_sessions::Registration as DenyReadSessionRegistration;
+#[cfg(target_os = "windows")]
+pub use deny_read_sessions::ensure_registry as ensure_deny_read_session_registry;
+#[cfg(target_os = "windows")]
+pub use deny_read_sessions::register_this_process as register_deny_read_session;
+#[cfg(target_os = "windows")]
+pub use deny_read_state::SECRETLESS_LAUNCH_LOCK_FILE;
 #[cfg(target_os = "windows")]
 pub use deny_read_state::sync_persistent_deny_read_acls;
+pub use deny_read_targets::DenyReadRule;
+pub use deny_read_targets::DenyReadRuleTargets;
+pub use deny_read_targets::DenyReadTargets;
 #[cfg(target_os = "windows")]
 pub use desktop::LaunchDesktop;
+#[cfg(target_os = "windows")]
+pub use desktop::mark_as_command_runner;
 #[cfg(target_os = "windows")]
 pub use dpapi::protect as dpapi_protect;
 #[cfg(target_os = "windows")]
@@ -196,6 +242,8 @@ pub use hide_users::hide_newly_created_users;
 pub use identity::require_logon_sandbox_creds;
 #[cfg(target_os = "windows")]
 pub use identity::sandbox_setup_is_complete;
+#[cfg(target_os = "windows")]
+pub use integrity_leases::repair_stale_integrity_labels;
 #[cfg(target_os = "windows")]
 pub use ipc_framed::ErrorPayload;
 #[cfg(target_os = "windows")]
@@ -236,6 +284,22 @@ pub use logging::log_file_path_for_utc_date;
 pub use logging::log_note;
 #[cfg(target_os = "windows")]
 pub use logging::log_writer;
+#[cfg(target_os = "windows")]
+pub use logon_launch::LOGON_LAUNCH_ARG;
+#[cfg(target_os = "windows")]
+pub use logon_launch::LaunchedProcess;
+#[cfg(target_os = "windows")]
+pub use logon_launch::LogonError;
+#[cfg(target_os = "windows")]
+pub use logon_launch::LogonLaunchRequest;
+#[cfg(target_os = "windows")]
+pub use logon_launch::WINDOW_ACCESS_REAPER_ARG;
+#[cfg(target_os = "windows")]
+pub use logon_launch::create_process_with_logon;
+#[cfg(target_os = "windows")]
+pub use logon_launch::run_logon_launcher;
+#[cfg(target_os = "windows")]
+pub use logon_launch::run_window_access_reaper;
 #[cfg(target_os = "windows")]
 pub use path_normalization::canonicalize_path;
 #[cfg(target_os = "windows")]
@@ -319,10 +383,18 @@ pub use unified_exec::spawn_windows_sandbox_session_elevated_for_permission_prof
 pub use unified_exec::spawn_windows_sandbox_session_for_level;
 #[cfg(target_os = "windows")]
 pub use unified_exec::spawn_windows_sandbox_session_legacy;
+pub use unlabelled_roots::legacy_writable_roots;
+pub use unlabelled_roots::unlabelled_roots_mark;
+pub use unlabelled_roots::unlabelled_roots_since;
+pub use unlabelled_roots::unlabelled_writable_root_warning;
 #[cfg(target_os = "windows")]
 pub use wfp::install_wfp_filters_for_account;
 #[cfg(target_os = "windows")]
 pub use wfp_setup::install_wfp_filters;
+#[cfg(target_os = "windows")]
+pub use window_station::WindowAccess;
+#[cfg(target_os = "windows")]
+pub use window_station::wait_for_console_host_start;
 #[cfg(target_os = "windows")]
 pub use windows_impl::CaptureResult;
 #[cfg(target_os = "windows")]
@@ -333,6 +405,8 @@ pub use windows_impl::run_windows_sandbox_capture_with_filesystem_overrides;
 pub use windows_impl::run_windows_sandbox_legacy_preflight;
 #[cfg(target_os = "windows")]
 pub use winutil::quote_windows_arg;
+#[cfg(target_os = "windows")]
+pub use winutil::resolve_sid;
 #[cfg(target_os = "windows")]
 pub use winutil::string_from_sid_bytes;
 #[cfg(target_os = "windows")]
@@ -555,7 +629,8 @@ mod windows_impl {
             capability_roots,
         )?;
         allow_null_device_for_workspace_write(uses_write_capabilities);
-        apply_legacy_session_acl_rules(
+        // Held until the command has exited (#158).
+        let integrity_lease = match apply_legacy_session_acl_rules(
             &permissions,
             codex_home,
             &current_dir,
@@ -567,7 +642,16 @@ mod windows_impl {
                 readonly_sid_str: security.readonly_sid_str.as_deref(),
                 write_root_sids: &security.write_root_sids,
             },
-        )?;
+            /*session*/ true,
+        ) {
+            Ok(lease) => lease,
+            Err(err) => {
+                unsafe {
+                    CloseHandle(security.h_token);
+                }
+                return Err(err);
+            }
+        };
         let (stdin_pair, stdout_pair, stderr_pair) = unsafe { setup_stdio_pipes()? };
         let ((in_r, in_w), (out_r, out_w), (err_r, err_w)) = (stdin_pair, stdout_pair, stderr_pair);
         let spawn_res = unsafe {
@@ -663,6 +747,7 @@ mod windows_impl {
                 GetExitCodeProcess(pi.hProcess, &mut exit_code_u32);
             }
         }
+        let mut descendants_preserved = false;
         if timed_out || cancelled {
             if let Err(job_err) = job.terminate() {
                 log_note(
@@ -686,6 +771,12 @@ mod windows_impl {
                 &format!("capture failed to preserve descendants after root exit: {err}"),
                 logs_base_dir,
             );
+        } else {
+            descendants_preserved = true;
+        }
+
+        if let Some(lease) = integrity_lease {
+            lease.release_after_job(Arc::clone(&job), descendants_preserved);
         }
 
         unsafe {
@@ -739,6 +830,13 @@ mod windows_impl {
         }
 
         ensure_codex_home_exists(codex_home)?;
+        // #158: put back the labels a crashed session left behind.
+        if let Err(err) = super::integrity_leases::repair_stale_integrity_labels() {
+            log_note(
+                &format!("integrity labels: could not repair stale labels: {err:#}"),
+                Some(codex_home.join(".sandbox").as_path()),
+            );
+        }
         let current_dir = cwd.to_path_buf();
         let capability_roots =
             legacy_session_capability_roots(&permissions, &current_dir, env_map, codex_home);
@@ -755,6 +853,7 @@ mod windows_impl {
                 readonly_sid_str: None,
                 write_root_sids: &write_root_sids,
             },
+            /*session*/ false,
         )?;
 
         Ok(())

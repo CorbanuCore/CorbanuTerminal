@@ -75,10 +75,6 @@ impl<'a> TmuxSession<'a> {
         self.server
             .artifacts
             .record_dimensions(format!("{pane_id} split {}={size}", direction.dimension()));
-        Ok(TmuxPane {
-            server: self.server,
-            id: pane_id,
-            pid: pane_pid,
-        })
+        Ok(TmuxPane::new(self.server, pane_id, pane_pid))
     }
 }

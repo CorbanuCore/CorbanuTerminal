@@ -1,0 +1,58 @@
+diff -r executor-packet/navigation.md executor-packet-v2/navigation.md
+30a31,36
+> 
+> Packet v2 navigation note (added 2026-10-16 after the first runs; navigation only, no expected results changed):
+> `/cost` pages are taller than the terminal. The screen shows a window of the page; Up/Down move the selection (the
+> line marked `›`) through every line and scroll the window. The entries you can open (`→ ...` links, `Refresh`,
+> `Close`) are near the bottom, under `—— Open ——`, below `—— Details ——`; reaching them can take 20-40 presses of
+> Down (`agms-tui key Down Down Down ...`). Enter opens the selected `→` line; Esc goes back one level, then closes.
+diff -r executor-packet/prompts/A.md executor-packet-v2/prompts/A.md
+46a47,52
+> Packet v2 navigation note (added 2026-10-16 after the first runs; navigation only, no expected results changed):
+> `/cost` pages are taller than the terminal. The screen shows a window of the page; Up/Down move the selection (the
+> line marked `›`) through every line and scroll the window. The entries you can open (`→ ...` links, `Refresh`,
+> `Close`) are near the bottom, under `—— Open ——`, below `—— Details ——`; reaching them can take 20-40 presses of
+> Down (`agms-tui key Down Down Down ...`). Enter opens the selected `→` line; Esc goes back one level, then closes.
+> 
+diff -r executor-packet/prompts/B.md executor-packet-v2/prompts/B.md
+46a47,52
+> Packet v2 navigation note (added 2026-10-16 after the first runs; navigation only, no expected results changed):
+> `/cost` pages are taller than the terminal. The screen shows a window of the page; Up/Down move the selection (the
+> line marked `›`) through every line and scroll the window. The entries you can open (`→ ...` links, `Refresh`,
+> `Close`) are near the bottom, under `—— Open ——`, below `—— Details ——`; reaching them can take 20-40 presses of
+> Down (`agms-tui key Down Down Down ...`). Enter opens the selected `→` line; Esc goes back one level, then closes.
+> 
+diff -r executor-packet/prompts/C.md executor-packet-v2/prompts/C.md
+46a47,52
+> Packet v2 navigation note (added 2026-10-16 after the first runs; navigation only, no expected results changed):
+> `/cost` pages are taller than the terminal. The screen shows a window of the page; Up/Down move the selection (the
+> line marked `›`) through every line and scroll the window. The entries you can open (`→ ...` links, `Refresh`,
+> `Close`) are near the bottom, under `—— Open ——`, below `—— Details ——`; reaching them can take 20-40 presses of
+> Down (`agms-tui key Down Down Down ...`). Enter opens the selected `→` line; Esc goes back one level, then closes.
+> 
+Only in executor-packet-v2/prompts: C2.md
+diff -r executor-packet/prompts/D.md executor-packet-v2/prompts/D.md
+46a47,52
+> Packet v2 navigation note (added 2026-10-16 after the first runs; navigation only, no expected results changed):
+> `/cost` pages are taller than the terminal. The screen shows a window of the page; Up/Down move the selection (the
+> line marked `›`) through every line and scroll the window. The entries you can open (`→ ...` links, `Refresh`,
+> `Close`) are near the bottom, under `—— Open ——`, below `—— Details ——`; reaching them can take 20-40 presses of
+> Down (`agms-tui key Down Down Down ...`). Enter opens the selected `→` line; Esc goes back one level, then closes.
+> 
+Only in executor-packet-v2/prompts: D2.md
+diff -r executor-packet/prompts/E.md executor-packet-v2/prompts/E.md
+46a47,52
+> Packet v2 navigation note (added 2026-10-16 after the first runs; navigation only, no expected results changed):
+> `/cost` pages are taller than the terminal. The screen shows a window of the page; Up/Down move the selection (the
+> line marked `›`) through every line and scroll the window. The entries you can open (`→ ...` links, `Refresh`,
+> `Close`) are near the bottom, under `—— Open ——`, below `—— Details ——`; reaching them can take 20-40 presses of
+> Down (`agms-tui key Down Down Down ...`). Enter opens the selected `→` line; Esc goes back one level, then closes.
+> 
+diff -r executor-packet/prompts/F.md executor-packet-v2/prompts/F.md
+46a47,52
+> Packet v2 navigation note (added 2026-10-16 after the first runs; navigation only, no expected results changed):
+> `/cost` pages are taller than the terminal. The screen shows a window of the page; Up/Down move the selection (the
+> line marked `›`) through every line and scroll the window. The entries you can open (`→ ...` links, `Refresh`,
+> `Close`) are near the bottom, under `—— Open ——`, below `—— Details ——`; reaching them can take 20-40 presses of
+> Down (`agms-tui key Down Down Down ...`). Enter opens the selected `→` line; Esc goes back one level, then closes.
+> 

@@ -1,0 +1,80 @@
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                         │
+│                                                       │
+│ model:       glm-5.3-flash   /model to change         │
+│ directory:   /Volumes/CorbanuDrive/…/tmp/pf84s05/work │
+│ permissions: YOLO mode                                │
+╰───────────────────────────────────────────────────────╯
+
+
+› Reply with exactly the word pong and nothing else.
+
+
+• pong
+
+
+› Use the spawn_agent tool exactly once with account set to work and the message 'Reply with exactly the word pong and nothing else.'. Wait for it, then use spawn_agent
+  exactly once with account set to fake and the same message, and wait for it. Do not retry either on another account. Finally reply with the word done.
+
+
+• done
+
+■ Restored a legacy /spawn hierarchy in read-only mode. Existing panes remain inspectable, but Corbanu Terminal will not dispatch or replay work until you create a new
+CrewSpec-backed crew.
+
+
+  Cost — this conversation
+  Requested UTC day: 2026-10-11
+
+› Today (UTC) in this conversation:
+  • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 6 requests, 46,115 tokens. Estimated cost: $0.003285 (rounded).
+  • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 1 request, tokens not reported. Estimated cost: not available — usage incomplete.
+  • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 1 request, 4,371 tokens. Estimated cost: $0.000590 (rounded).
+  Other conversations on this day, not included above: 6 requests in 4 conversations.
+  • Kimi Code · account alt · Kimi Code K3 — Covered by your subscription (not billed per request). 2 requests, 7,246 tokens. Same work at API prices: not available.
+  • Kimi Code · account default · Kimi Code K3 — Covered by your subscription (not billed per request). 2 requests, 7,232 tokens. Same work at API prices: not
+  available.
+
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close                                                                                                                                 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

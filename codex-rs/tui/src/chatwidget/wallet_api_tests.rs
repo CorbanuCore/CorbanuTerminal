@@ -104,7 +104,7 @@ fn top_up_amounts_are_exact_and_bounded() {
     for invalid in ["", "0", ".5", "1.", "-1", "1e3", "1.0000001"] {
         assert!(parse_top_up_amount(invalid).is_err(), "{invalid}");
     }
-    assert_eq!(format_usd_micros(7_250_000), "7.25");
+    assert_eq!(format_usd_micros(/*value*/ 7_250_000), "7.25");
 }
 
 #[tokio::test]
@@ -281,9 +281,22 @@ async fn stale_non_key_completion_does_not_reopen_the_api_surface() {
         Ok(CorbanuApiOperationResult::KeyRevoked {
             key_id: "stale-key".to_string(),
         }),
-        None,
+        /*deferred*/ None,
         /*refresh_surface*/ false,
     ));
 
     assert_eq!(chat.bottom_pane.active_view_id(), None);
+}
+
+#[test]
+fn only_a_lapsed_capability_falls_back_to_the_stored_key() {
+    assert!(lapsed_capability("capability_invalid"));
+    assert!(lapsed_capability("locked"));
+    for code in [
+        "corbanu_api_operation_failed",
+        "operation_in_progress",
+        "daemon_upgrade_required",
+    ] {
+        assert!(!lapsed_capability(code), "{code}");
+    }
 }

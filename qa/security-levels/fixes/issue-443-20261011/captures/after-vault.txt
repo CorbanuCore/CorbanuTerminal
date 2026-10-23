@@ -1,0 +1,60 @@
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                          │
+│                                                        │
+│ model:     glm-5.3-flash   /model to change            │
+│ directory: /Volumes/CorbanuDrive/…/runs/after-443-2/ws │
+╰────────────────────────────────────────────────────────╯
+
+
+› Run exactly this command and show its output: corbanu vault list
+
+
+• The command was rejected by Corbanu's security policy:
+
+  Security level Aggressive: agents cannot use the Corbanu vault.
+
+  This means the current security level (Aggressive) blocks AI agents from accessing the vault entirely — it's not something I can work around. You'd need to
+  lower the security level (or use the vault directly yourself via /vault in the TUI) if you want vault commands to be agent-accessible.
+
+
+› Implement {feature}
+
+  Z.AI GLM 5.3 Flash via zai default · <runs>/after-443-2/ws · Corbanu Terminal · TPS: 30.3 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

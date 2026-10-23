@@ -18,9 +18,15 @@ fn policy() -> NetworkProxyState {
 #[tokio::test]
 async fn private_urls_abort_without_http_or_authority_dispatch() {
     let policy = policy();
-    let mut broker = Broker::new(&policy, AuthorityEpoch::new([1; 16], 0, 0).unwrap());
+    let mut broker = Broker::new(
+        &policy,
+        AuthorityEpoch::new(
+            [1; 16], /*policy_revision*/ 0, /*revocation_generation*/ 0,
+        )
+        .unwrap(),
+    );
     let reply = broker
-        .request(1, "http://169.254.169.254/", || {
+        .request(/*id*/ 1, "http://169.254.169.254/", || {
             panic!("no dispatch on private URL")
         })
         .await
@@ -32,7 +38,9 @@ async fn private_urls_abort_without_http_or_authority_dispatch() {
     assert!(broker.visited.is_empty());
     assert!(broker.artifacts.is_empty());
     assert!(matches!(
-        broker.request(3, "https://example.com/", || Ok(())).await,
+        broker
+            .request(/*id*/ 3, "https://example.com/", || Ok(()))
+            .await,
         Err(BrowserError::ResourceLimit)
     ));
 }
@@ -70,7 +78,7 @@ fn downloads_do_not_depend_on_server_filename_or_attachment_header() {
         "application/zip",
         "unknown/type",
     ] {
-        assert!(is_download(media, None));
+        assert!(is_download(media, /*disposition*/ None));
     }
     assert!(is_download(
         "text/html",
@@ -82,7 +90,7 @@ fn downloads_do_not_depend_on_server_filename_or_attachment_header() {
         "image/png",
         "font/woff2",
     ] {
-        assert!(!is_download(media, None));
+        assert!(!is_download(media, /*disposition*/ None));
     }
 }
 

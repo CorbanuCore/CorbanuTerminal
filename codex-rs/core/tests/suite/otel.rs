@@ -1,3 +1,7 @@
+#![allow(
+    clippy::disallowed_methods,
+    reason = "#[traced_test] installs tracing-test's in-memory global subscriber"
+)]
 use codex_core::config::Constrained;
 use codex_features::Feature;
 use codex_otel::SessionTelemetry;

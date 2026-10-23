@@ -1,0 +1,3 @@
+start 2026-10-15T20:55:34Z
+"thread_id":"01a14159-4f52-7541-823b-36ba4844dca3"
+ended 2026-10-15T21:00Z without a reply: macOS blocked the Corbanu home (the program's own provider-auth and session store failed with 'Operation not permitted'); no output; retried once with the same packet (#616 rule)

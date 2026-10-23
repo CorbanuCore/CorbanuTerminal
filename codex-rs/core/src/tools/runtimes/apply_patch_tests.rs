@@ -152,6 +152,82 @@ async fn approval_keys_include_environment_id() {
     );
 }
 
+/// Issue #709: "approve for session" of a patch in one environment is not an
+/// approval of the same path in another; each environment asks on its own.
+#[tokio::test]
+async fn session_approval_does_not_carry_across_environments() {
+    use crate::tools::sandboxing::asking_person;
+    use crate::tools::sandboxing::with_cached_approval;
+
+    let (session, _turn) = crate::session::tests::make_session_and_context().await;
+    let runtime = ApplyPatchRuntime::new();
+    let path_uri = PathUri::from_abs_path(
+        &std::env::temp_dir()
+            .join("issue-709-approval-scope.txt")
+            .abs(),
+    );
+    let keys_for = |environment_id: &str| {
+        runtime.approval_keys(&ApplyPatchRequest {
+            turn_environment: test_turn_environment(environment_id),
+            action: ApplyPatchAction::new_add_for_test(&path_uri, "hello".to_string()),
+            file_paths: vec![path_uri.clone()],
+            changes: HashMap::new(),
+            exec_approval_requirement: ExecApprovalRequirement::NeedsApproval {
+                reason: None,
+                proposed_execpolicy_amendment: None,
+            },
+            additional_permissions: None,
+            permissions_preapproved: false,
+        })
+    };
+    let ask = |keys, decision: ReviewDecision| {
+        let services = &session.services;
+        asking_person(move || {
+            with_cached_approval(
+                services,
+                "apply_patch",
+                keys,
+                /*fresh_human_authority*/ false,
+                move || async move { decision },
+            )
+        })
+    };
+
+    // A person approves the local patch for the session.
+    assert_eq!(
+        ask(keys_for("local"), ReviewDecision::ApprovedForSession).await,
+        (ReviewDecision::ApprovedForSession, true)
+    );
+    // The same path in the remote environment still asks the person.
+    assert_eq!(
+        ask(keys_for("remote"), ReviewDecision::denied("issue 709")).await,
+        (ReviewDecision::denied("issue 709"), true)
+    );
+    // The local approval is still remembered for the local environment.
+    assert_eq!(
+        ask(keys_for("local"), ReviewDecision::denied("issue 709")).await,
+        (ReviewDecision::ApprovedForSession, false)
+    );
+    // And the reverse: a remote session approval does not cover a third
+    // environment, while it covers the remote one.
+    assert_eq!(
+        ask(keys_for("remote"), ReviewDecision::ApprovedForSession).await,
+        (ReviewDecision::ApprovedForSession, true)
+    );
+    assert_eq!(
+        ask(keys_for("remote"), ReviewDecision::denied("issue 709")).await,
+        (ReviewDecision::ApprovedForSession, false)
+    );
+    assert_eq!(
+        ask(
+            keys_for("other-remote"),
+            ReviewDecision::denied("issue 709")
+        )
+        .await,
+        (ReviewDecision::denied("issue 709"), true)
+    );
+}
+
 #[tokio::test]
 async fn sandbox_cwd_uses_patch_action_cwd() {
     let runtime = ApplyPatchRuntime::new();
@@ -300,5 +376,68 @@ async fn no_sandbox_attempt_has_no_file_system_context() {
     assert_eq!(
         ApplyPatchRuntime::file_system_sandbox_context_for_attempt(&req, &attempt),
         None
+    );
+}
+
+/// PF-30-S03: granted permissions preapprove a patch, but not a post-taint
+/// protected one: with fresh human authority the human is asked.
+#[tokio::test]
+async fn pf_30_s03_fresh_authority_ignores_patch_preapproval() {
+    use codex_protocol::protocol::EventMsg;
+    let (session, turn, rx) = crate::session::tests::make_session_and_context_with_rx().await;
+    let path = std::env::temp_dir().join("pf30-s03-preapproved.txt").abs();
+    let req = ApplyPatchRequest {
+        turn_environment: test_turn_environment(codex_exec_server::LOCAL_ENVIRONMENT_ID),
+        action: ApplyPatchAction::new_add_for_test(
+            &PathUri::from_abs_path(&path),
+            "hello".to_string(),
+        ),
+        file_paths: vec![PathUri::from_abs_path(&path)],
+        changes: HashMap::new(),
+        exec_approval_requirement: ExecApprovalRequirement::NeedsApproval {
+            reason: None,
+            proposed_execpolicy_amendment: None,
+        },
+        additional_permissions: None,
+        permissions_preapproved: true,
+    };
+    let ctx = |fresh_human_authority| ApprovalCtx {
+        session: &session,
+        turn: &turn,
+        call_id: "call-preapproved",
+        retry_reason: None,
+        network_approval_context: None,
+        fresh_human_authority,
+    };
+    let mut runtime = ApplyPatchRuntime::new();
+    assert_eq!(
+        runtime
+            .start_approval_async(&req, ctx(/*fresh_human_authority*/ false))
+            .await,
+        ReviewDecision::Approved
+    );
+    let mut runtime = ApplyPatchRuntime::new();
+    let asks_the_human = async {
+        let decision = runtime.start_approval_async(&req, ctx(/*fresh_human_authority*/ true));
+        tokio::pin!(decision);
+        loop {
+            tokio::select! {
+                _ = &mut decision => {
+                    // Decided without a human answer: it must still have asked.
+                    return std::iter::from_fn(|| rx.try_recv().ok())
+                        .any(|event| matches!(event.msg, EventMsg::ApplyPatchApprovalRequest(_)));
+                }
+                event = rx.recv() => {
+                    if matches!(event.map(|event| event.msg), Ok(EventMsg::ApplyPatchApprovalRequest(_))) {
+                        return true;
+                    }
+                }
+            }
+        }
+    };
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_secs(10), asks_the_human)
+            .await
+            .expect("decided in time")
     );
 }

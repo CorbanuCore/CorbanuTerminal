@@ -1,0 +1,89 @@
+# Issue #842 (MOD-32, Travis 2026-10-15): Moderate confirmed in one Corbanu Terminal reaches another running on the same home.
+# The recorded pane is window B. Window A is a second `corbanu` on the same disposable home, started and driven off screen
+# by the `run` steps (its own tmux server); the person confirms Moderate there without restarting.
+id = "issue842-moderate-reaches-other-window"
+feature = "Moderate confirmed in another window applies here too"
+expected = "Two Corbanu Terminals share one home, both Permissive. Moderate is confirmed in the other one; this one says so within about a second, its /security shows Core's level Moderate, and an approved write outside the project stays in the sandbox and is refused."
+model = "glm-5.3-flash"
+provider = "zai"
+config = """
+approval_policy = "on-request"
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+source_envelopes = true
+secret_output_gate = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+wait = "model:\\s+glm-5\\.3-flash"
+[[steps]]
+pause = 1.0
+
+# Window A: another Corbanu Terminal on this home, off screen.
+[[steps]]
+run = """
+tmux -L demo842x-other -f /dev/null new-session -d -s a -x 160 -y 50 "{bin} -C {workspace} -m glm-5.3-flash -c model_provider=zai; sleep 600"
+for i in $(seq 1 60); do tmux -L demo842x-other capture-pane -p -t a | grep -Eq 'model:[[:space:]]+glm-5.3-flash' && exit 0; sleep 1; done
+exit 1
+"""
+timeout = 70
+
+# In window A: /security, Moderate, confirm (no restart).
+[[steps]]
+run = """
+t() { tmux -L demo842x-other "$@"; }
+w() { for i in $(seq 1 30); do t capture-pane -p -t a | grep -Eq -- "$1" && return 0; sleep 0.5; done; return 1; }
+s() { t send-keys -t a -l "$1"; sleep 0.5; t send-keys -t a Enter; }
+s /security; w 'Active in this session: Permissive' || exit 1
+t send-keys -t a Down; sleep 0.3; t send-keys -t a Enter
+w 'Switch to Moderate' || exit 1; sleep 0.5
+for i in $(seq 1 40); do t send-keys -t a Down; done; sleep 0.5
+w 'enter confirm and save' || exit 1; t send-keys -t a Enter
+w 'Active now in this session' || exit 1
+echo "Moderate was confirmed in the other Corbanu Terminal"
+"""
+timeout = 60
+
+[[steps]]
+wait = "Moderate was confirmed in another Corbanu Terminal on this home"
+timeout = 10
+[[steps]]
+pause = 4.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Core's level: Moderate"
+[[steps]]
+pause = 2.5
+[[steps]]
+key = "Escape"
+[[steps]]
+type = "Run exactly this shell command with sandbox_permissions set to require_escalated (justification: write the notes): echo window-b >> ../outside/notes.txt"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "still runs[\\s\\S]*inside the sandbox"
+timeout = 180
+compress = 3
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "y"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Operation not permitted(?:(?!Working).)*\\n› "
+timeout = 180
+compress = 3
+[[steps]]
+run = "tmux -L demo842x-other kill-server; test ! -e {outside}/notes.txt && echo 'outside/notes.txt was not written'"
+[[steps]]
+pause = 3.0

@@ -63,6 +63,7 @@ codex-api = { workspace = true }
 codex-chatgpt = { workspace = true }
 codex-cloud-config = { workspace = true }
 codex-cloud-tasks = { path = "../cloud-tasks" }
+codex-security-policy = { workspace = true }
 codex-utils-cli = { workspace = true }
 dirs = { workspace = true }
 codex-config = { workspace = true }
@@ -79,6 +80,7 @@ codex-git-attribution = { workspace = true }
 codex-git-utils = { workspace = true }
 codex-gpu-market = { workspace = true }
 codex-install-context = { workspace = true }
+codex-log-guard = { workspace = true }
 codex-login = { workspace = true }
 codex-memories-write = { workspace = true }
 codex-mcp = { workspace = true }
@@ -109,7 +111,6 @@ owo-colors = { workspace = true }
 regex-lite = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-sha2 = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 supports-color = { workspace = true }
 sys-locale = { workspace = true }
@@ -145,6 +146,8 @@ windows-sys = { version = "0.52", features = [
 app_test_support = { workspace = true }
 assert_cmd = { workspace = true }
 assert_matches = { workspace = true }
+codex-apply-patch = { workspace = true }
+codex-network-proxy = { workspace = true }
 codex-utils-cargo-bin = { workspace = true }
 futures = { workspace = true }
 insta = { workspace = true }

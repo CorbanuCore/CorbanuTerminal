@@ -1,0 +1,50 @@
+  Attempt, components and original price
+  Requested UTC day: 2026-10-09
+  Provider: OpenAI
+  Model: GPT-5.4-Mini
+  Billing: Pay per use
+  Estimated cost: no price available
+  Next step for requests with no price: check the bill from OpenAI. No published price covers them, so no cost is shown for them here.
+  Tokens: 12,182 tokens
+  —— Details ——
+  Billed cost: OpenAI doesn't report its charges, so any cost here is an estimate — check OpenAI's bill.
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  Request: 17b0a4ba-d2d2-4826-a5e3-793f0d74f621
+  Attempt: 6d639e14-ac7b-4b5c-a6a8-f97a2d47cddf
+  Thread: 01a12216-5f2b-7f20-ba18-11ff0408ee4b
+  Turn: 01a12216-60e4-7973-8c44-e424e4d258bc
+  Provider: openai
+  Model: gpt-5.4-mini
+  Opaque scope: b8dbac09-8cc2-4d76-91ee-4e799a14a1b6
+  Arithmetic dialect: Inclusive
+  Admission time: 2026-10-09T19:14:15.482Z
+  Retry predecessor: none
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.
+  Billing basis: pay per use
+  Input: 12108
+  Noncached input (derived for inclusive input): 12108 (derived)
+  Cache read: 0 (reported)
+  Cache write: 0 (reported)
+  Output: 74
+  Reasoning (subset, not separately billed): 15
+  Total (not separately billed): 12182
+  Noncached input cost: unknown — rate unavailable
+  Cache read cost: $0.000000; exact USD 0
+  Cache write cost: $0.000000; exact USD 0
+  Output cost: unknown — rate unavailable
+  Known subtotal exact USD: none — no price for these attempts
+  Price ID: be6b19a7-53a2-451c-b77d-a3962eb67e31
+  Price source: NativeCatalog; reference d9ba4174-630a-522a-8f83-b4512a5c8aa1
+  Price currency/unit: Usd / PerMillionTokens
+  Price observed/approved: 2026-10-09T19:14:15.482Z / 2026-10-09T19:14:15.482Z
+  Price effective interval: [2026-10-09T19:14:15.482Z, unbounded)
+  Rate unavailable for Noncached input
+  Rate unavailable for Cache read
+  Rate unavailable for Cache write
+  Rate unavailable for Output
+  Evidence revision 51; source a15612bd-3c18-457a-aedd-fda345189f16; sequence 51; presence patch
+  {"input":12108,"read":0,"write":0,"output":74,"reasoning":15,"total":12182}
+  Snapshot is not current; newer activity is unverified
+  Back

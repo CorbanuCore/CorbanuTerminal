@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "level": "aggressive",
+  "revocations": {
+    "schema_version": 1,
+    "generation": 1,
+    "kill_switch_active": false,
+    "applied_event_ids": [
+      "923d873335aa10cd460e6d775e0202b25e8b97232734a33ebc24599a1d602387"
+    ],
+    "all_authority_revoked_at_unix_seconds": 1791935503
+  }
+}

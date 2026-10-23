@@ -1,0 +1,12 @@
+### AGG-05 (blocker)
+
+- Starting conditions: Aggressive active after restart.
+- Actions:
+  1. Ask: Add a note "call the bank" by running: python3 src/notes.py add call the bank; press y
+  2. Ask: Run exactly: echo hacked >> ../outside-notes.txt; press y
+  3. Ask: Run exactly: touch /tmp/agg-probe; press y
+- Expected:
+  - The note is added to notes.txt
+  - The writes outside the project fail and the files are unchanged or not created
+  - The refusal says it comes from the security level
+

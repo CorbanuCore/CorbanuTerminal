@@ -126,6 +126,25 @@ pub struct CrewPolicy {
     pub maximum_spend_usd: Option<f64>,
 }
 
+/// Runtime provider a Claude Code pane on Claude Plan records as a crew member.
+pub const CLAUDE_PLAN_PANE_PROVIDER_ID: &str = "external-claude:claudeplan";
+
+/// Built-in provider id of the Claude Plan subscription
+/// (`codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID`, which this crate does not depend
+/// on; `codex-tui`'s `issue_646` tests use that one, so the two cannot drift apart).
+const CLAUDE_PLAN_PROVIDER_ID: &str = "claude-plan";
+
+/// Whether a non-empty provider allowlist authorizes `provider_id`.
+///
+/// #646 (Travis, 2026-10-13, option A): allowing `claude-plan` also allows Claude Code
+/// panes on Claude Plan, because both spend the same subscription. The exact
+/// `external-claude:claudeplan` entry keeps working.
+fn provider_allowlist_permits(allowlist: &HashSet<&str>, provider_id: &str) -> bool {
+    allowlist.contains(provider_id)
+        || (provider_id == CLAUDE_PLAN_PANE_PROVIDER_ID
+            && allowlist.contains(CLAUDE_PLAN_PROVIDER_ID))
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CrewMemberSpec {
     pub logical_member_id: String,
@@ -192,7 +211,7 @@ impl CrewSpec {
             member.runtime_request.validate(member_id)?;
             if !allowlist.is_empty()
                 && let Some((provider_id, _, _)) = member.runtime_request.exact_parts()
-                && !allowlist.contains(provider_id)
+                && !provider_allowlist_permits(&allowlist, provider_id)
             {
                 return Err(CrewSpecError::ProviderNotAllowed {
                     member_id: member_id.to_string(),

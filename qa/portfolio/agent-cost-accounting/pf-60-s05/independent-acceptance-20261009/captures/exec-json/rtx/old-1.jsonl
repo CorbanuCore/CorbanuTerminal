@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a120a3-fc2a-75f3-934f-7182314268c5"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"old ledger one"}}
+{"type":"turn.completed","usage":{"input_tokens":6415,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":4,"reasoning_output_tokens":1}}

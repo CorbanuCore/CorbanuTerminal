@@ -1,0 +1,10 @@
+{"type":"thread.started","thread_id":"01a12222-7d39-7773-b36a-0dc6c6ce6416"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"The shared state database is read-only. Requests continue, and the provider request limits this Corbanu process knows about still apply; limits shared with other Corbanu processes resume once the database can be written."}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"I’m reading both files and will return just their contents."}}
+{"type":"item.started","item":{"id":"item_2","type":"command_execution","command":"/bin/bash -lc 'cat a.txt b.txt'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_2","type":"command_execution","command":"/bin/bash -lc 'cat a.txt b.txt'","aggregated_output":"alpha\nbeta\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_3","type":"error","message":"Developer accounting could not record one or more model requests in this turn. They were sent anyway; /cost does not include them. The cause is in the log (target codex_core::accounting)."}}
+{"type":"item.completed","item":{"id":"item_4","type":"error","message":"Skill descriptions were shortened to fit the 2% skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest."}}
+{"type":"item.completed","item":{"id":"item_5","type":"agent_message","text":"alpha beta"}}
+{"type":"turn.completed","usage":{"input_tokens":57188,"cached_input_tokens":36480,"cache_write_input_tokens":0,"output_tokens":242,"reasoning_output_tokens":40}}

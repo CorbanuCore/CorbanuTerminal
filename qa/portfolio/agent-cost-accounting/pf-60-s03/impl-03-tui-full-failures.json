@@ -1,0 +1,714 @@
+{
+  "run": {
+    "name": "nextest-run",
+    "tests": "4120",
+    "skipped": "0",
+    "failures": "140",
+    "errors": "0",
+    "uuid": "099247bb-798d-4070-a5d2-a957625c9c94",
+    "timestamp": "2026-09-15T19:42:12.290-07:00",
+    "time": "529.096"
+  },
+  "failures": [
+    {
+      "name": "app::permission_confirmation::tests::permission_confirmation_dispatch_preserves_policy_for_fresh_threads",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::permission_confirmation::tests::permission_confirmation_native_requests_carry_effective_defaults",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::advanced_reasoning_tests::fork_current_session_preserves_conversation_ultra",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::app_server_spawn_preserves_active_thread_yolo_permissions",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::app_server_spawn_treats_hierarchy_role_as_metadata_under_general_worker",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::attach_live_thread_for_selection_accepts_empty_live_threads",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::attach_live_thread_for_selection_rejects_unmaterialized_fallback_threads",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::model_change_refreshes_committed_session_header_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "app::tests::codex_user_pane_remains_interactive_after_liveness_refresh",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::discard_side_thread_removes_agent_navigation_entry",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::dispatch_integration::cold_restored_orc_task_is_readmitted_through_core_mailbox",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::dispatch_integration::direct_orc_task_reaches_provider_through_core_mailbox_without_prompt_wrapper",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::dispatch_integration::duplicate_nazgul_creation_is_rejected_before_spawning_a_thread",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::dispatch_integration::low_context_agent_compacts_and_continues_real_dispatch",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::dispatch_integration::mailbox_delivery_wakes_waiting_target_without_turn_start_fallback",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::dispatch_integration::native_assistant_text_replay_never_becomes_mailbox_work",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::dispatch_integration::operator_pane_dispatch_defers_contended_store_without_blocking_ui",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::dispatch_integration::operator_pane_dispatch_starts_normal_turn_with_target_session_model",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::dispatch_integration::three_real_turns_saturate_and_one_release_schedules_one_followup",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::dispatch_integration::real_event_path_preserves_fifo_when_mailbox_coalesces_turns",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::dispatch_integration::queue_bound_rejection_is_visible_and_accepts_nothing",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::handle_start_side_seeds_navigation_before_thread_started",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::human_addressable_spawn_pane_remains_interactive_after_liveness_refresh",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::in_app_resume_uses_configured_or_explicit_cwd",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::interrupt_without_active_turn_is_treated_as_handled",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "bottom_pane::command_popup::tests::app_command_popup_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "bottom_pane::command_popup::tests::default_command_popup_items_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "app::tests::open_agent_picker_marks_loaded_threads_open",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "chatwidget::tests::exec_flow::image_generation_begin_restores_working_status_after_single_line_preamble",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::exec_flow::preamble_keeps_working_status_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::exec_flow::unified_exec_begin_restores_working_status_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::exec_flow::unified_exec_wait_status_renders_command_in_single_details_row_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::guardian::app_server_guardian_review_denied_renders_denied_request_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::guardian::app_server_guardian_review_timed_out_renders_timed_out_request_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::guardian::guardian_approved_exec_renders_approved_request",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::guardian::guardian_approved_request_permissions_renders_request_summary",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::guardian::guardian_denied_exec_renders_warning_and_denied_request",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::guardian::guardian_cleanup_drops_stale_reviews_and_restores_mcp_status",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "app::tests::override_turn_context_sends_thread_settings_update",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "chatwidget::tests::guardian::guardian_parallel_reviews_render_aggregate_status_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::guardian::guardian_timed_out_exec_renders_warning_and_timed_out_request",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "app::tests::prompt_edit_before_first_prompt_starts_fresh_thread",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::prompt_edit_forks_before_selected_prompt_and_preserves_source",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "chatwidget::tests::mcp_startup::app_server_mcp_startup_failure_renders_warning_history",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::mcp_startup::mcp_startup_header_booting_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::popups_and_settings::astra_model_and_reasoning_picker_snapshots",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::popups_and_settings::model_selection_popup_kimi_code_provider_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::popups_and_settings::model_selection_popup_openai_provider_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::popups_and_settings::model_selection_popup_openrouter_provider_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::popups_and_settings::model_selection_popup_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::popups_and_settings::spawn_model_selection_popup_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::popups_and_settings::spawn_model_selection_popup_deepseek_provider_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::review_mode::review_queues_user_messages_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::side::side_context_label_shows_hidden_side_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::side::slash_side_requests_forked_side_question_while_task_running",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::slash_commands::compact_queues_user_messages_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::slash_commands::pending_token_activity_refresh_renders_above_composer_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::status_and_layout::chatwidget_tall",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::status_and_layout::reasoning_delta_restores_recreated_status_indicator_header",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::status_and_layout::status_widget_active_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::status_surface_previews::status_surface_preview_lines_mixed_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "chatwidget::tests::status_surface_previews::status_surface_preview_lines_hardcoded_only_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "app::tests::remembered_current_cwd_stays_at_launch_across_in_app_resumes",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::remote_resume_keeps_server_only_cwd_out_of_local_config",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::restore_materializes_saved_native_orcs_without_rollouts",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::safety_buffering::active_turn_interrupt_is_nonblocking_and_coalesces_repeated_requests",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::safety_buffering::safety_retry_branch_failure_preserves_unsent_draft",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::safety_buffering::safety_retry_can_retry_a_first_turn_a_second_time",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::safety_buffering::safety_retry_forks_after_the_previous_turn_and_uses_faster_settings",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::safety_buffering::safety_retry_preserves_a_committed_steer_from_the_interrupted_turn",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::safety_buffering::safety_retry_forks_first_turn_and_continues_without_duplicating_prompt",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::safety_buffering::safety_retry_replays_older_interruption_notices",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::selected_and_resumed_threads_use_server_capability_for_v1_and_v2_children",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "history_cell::tests::standalone_unix_update_available_history_cell_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "history_cell::tests::standalone_windows_update_available_history_cell_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "app::tests::session_lifecycle_requests::session_lifecycle_avoids_redundant_subagent_metadata_reads",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::session_lifecycle_requests::fresh_session_applies_requested_name",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::set_thread_goal_draft_materializes_long_objective_and_confirms_before_paste",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::update_memory_settings_updates_current_thread_memory_mode",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app::tests::whole_crew_removal_deletes_mixed_members_and_preserves_bound_main",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "history_cell::tests::session_info_availability_nux_tooltip_snapshot",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "app_server_session::tests::persisted_resume_does_not_forward_implicit_service_tier",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app_server_session::tests::side_fork_excludes_turns_without_clearing_regular_ephemeral_fork",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "app_server_session::tests::side_fork_skips_parent_title_lookup_but_normal_ephemeral_fork_keeps_it",
+      "class": "codex-tui",
+      "type": "test timeout"
+    },
+    {
+      "name": "status::tests::status_snapshot_includes_credits_and_limits",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_cached_limits_hide_credits_without_flag",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_includes_forked_from",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_includes_monthly_limit",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_includes_reasoning_details",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_shows_active_user_defined_profile",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_shows_auto_review_permissions",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_shows_missing_limits_message",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_shows_refreshing_limits_notice",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_shows_stale_limits_message",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_shows_unavailable_limits_message",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_treats_refreshing_empty_limits_as_unavailable",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_truncates_halfwidth_kana_in_narrow_terminal",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_truncates_in_narrow_terminal",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_uses_command_backed_provider_account_identity",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_uses_default_reasoning_when_config_empty",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_uses_generic_limit_labels_for_unsupported_windows",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::transcript_overlay_remeasures_status_after_rate_limit_refresh",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_includes_enterprise_monthly_credit_limit",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "status::tests::status_snapshot_shows_chatgpt_plan_without_email",
+      "class": "codex-tui",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::memory_human_fixture::tmux_memory_human_fixture_rehearsal",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::memory_stage_one_policy::tmux_memory_worker_policy_canary_permissive_and_protected",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::security_profiles::tmux_security_profiles_are_observation_only_at_normal_and_narrow_widths",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::security_profiles::tmux_security_unknown_config_fails_without_permissive_fallback",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::claude_auth::tmux_claude_auth_compatibility_selects_existing_login",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::claude_auth::tmux_first_run_anthropic_account_selects_claude_login_after_success",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::focus_palette::focus_gained_with_unanswered_palette_queries_preserves_immediate_input",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_convergence::tmux_command_auth_is_visible_validated_and_has_no_enrollment_ui",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_convergence::tmux_custom_environment_provider_converges_across_hosts_picker_and_request",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_convergence::tmux_duplicate_model_slug_uses_exact_provider_identity",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_convergence::tmux_exact_replacement_persists_restart_and_request",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_convergence::tmux_existing_install_upgrade_preserves_current_and_request",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_convergence::tmux_fresh_a_then_b_preserves_first_success_across_restart",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_convergence::tmux_inactive_current_cancel_blocks_request_without_switch",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_convergence::tmux_inactive_noncurrent_is_managed_but_not_pickable_then_reactivates",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_convergence::tmux_managed_custom_key_survives_restart_and_request",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_convergence::tmux_missing_profile_current_never_silently_switches",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_convergence::tmux_native_spawn_picker_and_parent_request_share_exact_custom_runtime",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_convergence::tmux_permission_reload_preserves_active_runtime_over_saved_default",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_convergence::tmux_resumed_main_session_retains_exact_runtime_identity",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_management::reauthentication::tmux_reauth_api_key_failure_cancel_replace_and_same_session_request",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_management::reauthentication::tmux_reauth_environment_guidance_does_not_offer_vault_override",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_management::reauthentication::tmux_reauth_openai_account_cancel_then_request_without_model_change",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_management::reauthentication::tmux_reauth_openai_environment_key_preserves_external_ownership",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_management::reauthentication_apps::tmux_untrusted_apps_origin_preserves_account_and_healthy_model_route",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_management::tmux_ambient_model_picker_offers_only_glm",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_management::tmux_astra_selection_cancel_restart_and_request",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_management::tmux_current_deactivate_cancel_is_inert",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_management::tmux_current_exact_replacement_is_persisted_before_deactivation",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_management::tmux_environment_copy_and_eligibility_never_delete_credentials",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_management::tmux_noncurrent_deactivate_reactivate_restart_retains_request_credential",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_management::tmux_pf50_api_key_setup_and_recovery_are_reused",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_management::tmux_pf51_openai_account_cancel_and_retry_are_correlated",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_management::tmux_pf52_claude_recovery_cancel_and_retry_are_reused",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "suite::provider_management::tmux_shared_and_custom_catalog_have_management_status_parity",
+      "class": "codex-tui::all",
+      "type": "test failure with exit code 101"
+    },
+    {
+      "name": "tui_runtime_source_does_not_depend_on_manager_escape_hatches",
+      "class": "codex-tui::manager_dependency_regression",
+      "type": "test failure with exit code 101"
+    }
+  ]
+}

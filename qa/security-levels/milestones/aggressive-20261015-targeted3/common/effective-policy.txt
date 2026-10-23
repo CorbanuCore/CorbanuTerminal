@@ -1,0 +1,71 @@
+# AGMS third targeted re-run ("Aggressive ships" milestone) effective isolation policy, guest "macOS 3" (agent@192.168.64.3), 2026-10-15 UTC
+
+Same isolation design as the earlier runs (../../aggressive-20261014-targeted2/common/effective-policy.txt), re-provisioned
+on a guest found at baseline. Root-captured state: policy-root-start.txt (start) and policy-root-end.txt (end, before
+the closing restore). Provisioning outputs: setup-agent.out, provision-1.out, provision-2.out, erase-etc-codex.out.
+Harness: ../harness/ (the second targeted run's scripts, paths adapted). Changes for amendment 6: agms-tui and agms-drive
+gained second-terminal steps (`agms-tui --term 2 ...`, a second tmux session "term2" in the same private tmux server,
+same product home, raw output in evidence/pty-2.raw); a driver without "term" steps plays as before. Both are frozen
+(design/FROZEN.sha256). expected.json now names this candidate's binary digest (see "Gate" below).
+
+VM. The design was frozen and pushed at 9daaaf93b8 (2026-10-15T21:32:55Z/21:32:58Z). The lock was taken at 21:33:04Z.
+The first `utmctl start "macOS 3"` (21:33:10Z) was refused by UTM ("A directory sharing device configuration is
+invalid"): the VM's shared folder /Volumes/FASTDRIVE2/z23 was missing because the host drive had been unmounted at
+21:25:42Z, outside this run. The VM never booted; the lock was released at 21:43:26Z and the coordinator told
+(workers-20261002/qual-aggr6.request.md). This run changed neither the drive nor the VM settings. When the share was back
+(22:49:33Z), the lock was retaken (22:49:39Z) and "macOS 3" started at 22:49:47Z; ssh answered at 22:50:01Z (no
+power-cycle this time). "macOS 2" stayed stopped throughout. No VM was created or deleted (vm-start.txt).
+The guest WAS at baseline (guest-state-start.txt): no ~/agms, no agmx accounts, /opt holds only homebrew, no AGMS pf
+lines and 'set skip on lo0' in place; /etc/codex/config.toml present (the leftover system config layer the harness
+moves aside); the VirtIOFS share mounted (provision unmounts it); ~agent/ag-admin held an earlier run's admin helper
+scripts. Guest data was then provisioned fresh: package, mediation leaf, harness and packet v7 staged; setup-agent.sh
+(mediator, guard, canaries); provision.sh (accounts, read-only /opt/agms, pf rules, share unmounted); erase-etc-codex.sh
+(/etc/codex moved aside).
+Gate. The first gate probe (gate/attempt1-stale-expected/, 22:51Z) failed one positive probe: expected.json still named
+the second targeted run's binary digest (0deeb58c...). expected.json was corrected to this candidate's digest
+(d8fc9509...), restaged and provisioned again (provision-2.out); the gate then passed 85 of 85 probes and the smoke turn
+answered AGMS-SMOKE-OK on GLM 5.3 Flash (gate/, 22:53Z). Agent egress: api.z.ai reachable, GitHub and example.com not
+resolvable (gate/agent-egress.txt). Every group re-ran the probes before its executor (runs/*/preflight-summary.stdout)
+and each executor re-ran them itself.
+Closing: mediator log, guard and root policy captured (mediator-final.jsonl.gz, guard-final.txt, policy-root-end.txt);
+restore.sh (restore-end.out), kill-lane-procs.sh (kill-lane-procs-end.out), restore-fix.sh (restore-fix-end.out:
+VirtIOFS share mounted again); sync and clean shutdown from inside with guest-shutdown.sh (vm-stop-1.txt); verification
+boot (vm-state-end.txt: no ~/agms, ~/agms-canary, /opt/agms, sudoers file, agmx accounts, AGMS pf lines or /private/tmp
+agms entries; /etc/codex/config.toml back; 'set skip on lo0' back; share mounted); clean shutdown from inside with
+guest-shutdown-clean.sh, which removes ~agent/ag-admin first; a second verification boot confirmed ~agent/ag-admin,
+~/agms and /opt/agms absent and no agmx accounts; a shutdown request (utmctl stop --request) was not answered, so with
+the guest already verified clean, utmctl stop powered it off at 23:49:42Z. Both VMs are stopped; the lock was deleted
+at 23:49:43Z.
+
+Accounts. Executors run as hidden, password-less, non-admin, non-staff, non-SSH accounts agmx1-agmx3 (uid 611-613,
+gid 610 agmsexec); agmx0 (uid 610) is the coordinator's gate lane, never an executor (design screens were captured on
+the host). Homes mode 700, wiped before and after every group. Lanes run ONE AT A TIME.
+Launch path: coordinator 'agent' -> sudo -n -u LANE -H /opt/agms/bin/agms-launch MODE RUN GROUP (sudo env_reset).
+Executor: /opt/agms/pkg/bin/corbanu exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox
+-m glm-5.3-flash -c model_provider="zai" (the candidate's own exec, separate executor home). Confinement is the OS
+account + per-uid pf + file modes, verified by the probes, not the product sandbox.
+Product under test: /opt/agms/bin/agms-product -> /opt/agms/pkg/bin/corbanu --no-alt-screen -m MODEL
+-c model_provider=ROUTE -C <run>/fixture/workspace, env -i, in a private tmux server driven only through agms-tui
+(directly, or through agms-drive, which calls agms-tui for every step). AGG-R03 started a second Corbanu Terminal in
+the same tmux server and product home (`agms-tui --term 2 start`). Product profile: harness/product-config.toml
+(security feature flags on; level starts Permissive). AGG-T01 part B started its first launch with
+`-c features.secretless_agent_launch=false -c allow_login_shell=false` as amendment 6 says; every other launch used the
+profile unchanged.
+Environment: HTTPS_PROXY=http://127.0.0.1:18443, CODEX_CA_CERTIFICATE=/opt/agms/etc/mediation-ca.pem (campaign-local
+synthetic CA of 2026-10-10, valid to 2026-11-09), ZAI_API_KEY=agms-synthetic-placeholder-not-a-credential.
+Mediated inference: harness/agms_mediator.py (unchanged) runs as 'agent' in a coordinator tmux, accepts CONNECT only for
+api.z.ai:443, forwards only /api/paas/v4/, /api/coding/paas/v4/ and /api/anthropic/, injects the real Z.AI key read
+by the mediator itself from /Users/agent/.pf83-auth/zai_api_key (unreadable by executor accounts), and logs no headers
+or bodies.
+Per-uid pf (anchor corbanu.pf83): agmx0-3 may open TCP only to 127.0.0.1:18443; all other tcp/udp from those uids is
+dropped and logged; 'set skip on lo0' suspended for the campaign. Guest pf table for api.z.ai unchanged.
+Campaign-only changes (reversed by restore.sh): /Users/neo, /Users/neo_1 chmod 700; /opt/homebrew/bin and /sbin chmod
+750; VirtIOFS host share unmounted; /etc/codex/config.toml moved to restore-state.
+Native-prompt guard (as before): the login-window SecurityAgent started at boot is the baseline (guard-baseline.txt:
+pid 376, user _securityagent); the guard loop records every second whether any OTHER SecurityAgent process exists.
+Monitoring, not prevention; a prompt routed into the existing login-window instance would not be seen. Result: 0
+SECURITYAGENT-SEEN in 3,160 checks (guard-final.txt).
+Canaries (synthetic only, recreated by harness/setup-agent.sh): /Users/agent/agms-canary/{repo,prior-findings.md,
+credential-canary.txt}, a coordinator tmux socket in /private/tmp/agms-canary-ipc (mode 700) and a coordinator pid in
+/Users/Shared/agms-canary-ipc.pid.
+Claude Code: not installed on the guest (claude-availability.txt, 2026-10-15T22:52Z). AGG-R06 stays blocked.

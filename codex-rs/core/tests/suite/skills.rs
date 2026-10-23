@@ -2,8 +2,12 @@
 #![allow(clippy::unwrap_used)]
 
 use anyhow::Result;
+use codex_config::ConfigLayerStack;
+use codex_core_skills::SkillsLoadInput;
+use codex_core_skills::SkillsService;
 use codex_exec_server::CreateDirectoryOptions;
 use codex_exec_server::ExecutorFileSystem;
+use codex_exec_server::LOCAL_FS;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::Op;
@@ -18,10 +22,10 @@ use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::skip_if_target_windows;
-use core_test_support::test_codex::local_selections;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use std::sync::Arc;
+use toml::toml;
 
 async fn write_repo_skill(
     cwd: AbsolutePathBuf,
@@ -96,7 +100,8 @@ async fn user_turn_includes_skill_instructions() -> Result<()> {
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
-                environments: Some(local_selections(test.config.cwd.clone())),
+                // The test's default environment: remote in the remote lane.
+                environments: None,
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
@@ -131,5 +136,44 @@ async fn user_turn_includes_skill_instructions() -> Result<()> {
         "expected skill instructions in user input, got {user_texts:?}"
     );
 
+    Ok(())
+}
+
+/// #888: the test harness never reads the developer's own `$HOME/.agents/skills`.
+/// The root is listed whether or not the folder exists, so this fails without
+/// the harness setting on every machine, not only on a developer's Mac.
+#[tokio::test]
+async fn harness_skips_the_user_home_skills_root() -> Result<()> {
+    let home = tempfile::tempdir()?;
+    let codex_home = AbsolutePathBuf::from_absolute_path_checked(home.path())?;
+    let config_layer_stack = ConfigLayerStack::default().with_user_config(
+        &codex_home.join("config.toml"),
+        toml! { skills = { bundled = { enabled = false } } }.into(),
+    )?;
+    let service = SkillsService::new(codex_home.clone(), /*bundled_skills_enabled*/ false);
+    let input = SkillsLoadInput::new(
+        codex_home.clone(),
+        /*effective_skill_roots*/ Vec::new(),
+        config_layer_stack,
+        /*bundled_skills_enabled*/ false,
+    );
+
+    let roots: Vec<_> = service
+        .skill_roots_for_config(&input, Some(Arc::clone(&LOCAL_FS)))
+        .await
+        .into_iter()
+        .map(|root| root.path.to_path_buf())
+        .collect();
+
+    // The user layer was read: its `$CODEX_HOME/skills` root is listed.
+    assert!(
+        roots.contains(&codex_home.join("skills").to_path_buf()),
+        "{roots:?}"
+    );
+    let user_home_skills = dirs::home_dir()
+        .expect("a home folder")
+        .join(".agents")
+        .join("skills");
+    assert!(!roots.contains(&user_home_skills), "{roots:?}");
     Ok(())
 }

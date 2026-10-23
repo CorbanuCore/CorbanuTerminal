@@ -1,0 +1,5 @@
+$ realtime_driver.py ... --transport webrtc --sdp-file offer.sdp --version v3 --modality audio
+start: thread/realtime/error
+error: {"threadId": "01a13db0-9d30-7a82-805e-0419e5a43ddb", "message": "{\n    \"error\": {\n        \"message\": \"Your account does not have access to Quicksilver v2 sessions.\",\n        \"type\": \"invalid_request_error\",\n        \"code\": \"quicksilver_v2_access_denied\",\n        \"param\": \"\"\n    }\n}"}
+thread: 01a13db0-9d30-7a82-805e-0419e5a43ddb
+methods seen: ['remoteControl/status/changed', 'thread/realtime/error', 'thread/started']

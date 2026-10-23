@@ -1,0 +1,50 @@
+$ /cost
+  Reply with exactly the word: ok
+
+■ The current provider is unavailable or inactive. Choose an active provider and model, or repair it in /providers.
+• ok
+• Claude pane turn complete. status: success; mode: session-id; tools: none; usage:
+{"input_tokens":2,"cache_creation_input_tokens":26035,"cache_read_input_tokens":0,"cache_creation":
+{"ephemeral_5m_input_tokens":26035,"ephemeral_1h_input_tokens":0},"output_tokens":4,"service_tier":"standard","inference_geo":"global"}; artifact: <rtx-scratch>/homes/h-r4p/panes/claude-c06ee7d4-bb60-47e6-840b-7597127664e9/turn-0001.jsonl; audit: <rtx-scratch>/homes/h-r4p/panes/
+claude-c06ee7d4-bb60-47e6-840b-7597127664e9/turn-0001.audit.json
+  Cost — this conversation
+  Requested UTC day: 2026-10-09
+  Today (UTC) in this conversation:
+  • Claude Plan · Claude Opus 5.5 — Covered by your subscription (not billed per request). 1 request, 26,041 tokens. Same work at API prices: not available.
+  No other conversation recorded requests on this day.
+  Paid usage beyond a plan (usage credits, Extra Usage or extra credits you bought) isn't visible here and is never counted as spent; check your provider's
+  usage page.
+  Subscription work is not billed per request; any figure here is what it would cost at API prices.
+  Select a provider below to see its requests.
+  —— Details ——
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close
+  No recorded attempt here was billed per token.
+  Subscription capacity: 1 of 1 attempts, not billed per token
+  Plan consumption: unavailable — no plan rate or token total for 1 of 1 plan attempts
+  Same tokens at API rates: unavailable — the catalogue states no API price for 1 of 1 plan attempts
+  Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  Day covered (UTC): [2026-10-09T00:00:00.000Z, 2026-10-10T00:00:00.000Z)
+  Read at: 2026-10-09T19:09:32.062Z; ledger current to: 2026-10-09T19:08:48.009Z (44053 ms behind)
+  Retention: request detail kept since 2026-07-11T19:09:32.062Z; daily totals kept since 2025-10-10; oldest recorded day in this conversation 2026-10-09
+  Known subtotal exact USD: none — subscription work is not billed per token
+  Input: 26,037
+  Noncached input (derived for inclusive input): 2
+  Cache read: 0
+  Cache write: 26,035
+  Output: 4
+  Reasoning (subset, not separately billed): not reported (1 attempt)
+  Total (not separately billed): 26,041
+  Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+  Unknown parent population: 0 attempts, excluded from root total
+  —— Open ——
+  → Claude Plan · Claude Opus 5.5 — covered by subscription (1 request)
+  → Request 1 · Claude Plan · Claude Opus 5.5 · covered by subscription
+  → Root's own attempts (1 attempt)
+  → Descendant attempts (none)
+  → Unknown provider/model attribution (none)
+  → Unknown parent population (none)
+  Refresh
+  Close

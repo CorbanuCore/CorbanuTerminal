@@ -1,0 +1,33 @@
+scanned 64110 files under 5 roots for 15 values
+  canary_a: 3 file(s)
+    $S/logs/review.log
+    $EV/scripts/lease.sh
+    $EV/scripts/throttle.sh
+  canary_b: 3 file(s)
+    $S/logs/review.log
+    $EV/scripts/lease.sh
+    $EV/scripts/throttle.sh
+  canary_default: 3 file(s)
+    $S/logs/review.log
+    $EV/scripts/lease.sh
+    $EV/scripts/throttle.sh
+  fake_claude: 2 file(s)
+    $S/logs/review.log
+    $EV/scripts/providers.sh
+  fake_fp1: 1 file(s)
+    $EV/scripts/fingerprint.sh
+  fake_fp2: 1 file(s)
+    $EV/scripts/fingerprint.sh
+  fake_zai_h1: 0 file(s)
+  fake_zai_h2: 0 file(s)
+  fake_zai_h6: 0 file(s)
+  fake_zai_hc: 2 file(s)
+    $S/logs/review.log
+    $EV/scripts/providers.sh
+  fake_zai_hr: 0 file(s)
+  real_claude_plan: 0 file(s)
+  real_kimi: 0 file(s)
+  real_openai: 2 file(s)
+    $S/homes/hc/auth.json
+    $S/homes/hc-try1/auth.json
+  real_zai: 0 file(s)

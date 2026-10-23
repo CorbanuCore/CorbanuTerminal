@@ -6,6 +6,8 @@ use super::IngressError;
 use super::MAX_INGRESS_TEXT_BYTES;
 use super::NativeScreeningCandidate;
 use super::PendingSource;
+use super::structural::LabelledCache;
+use super::structural::MessageOrigin;
 use crate::context::ContextualUserFragment;
 use crate::context::ProvenanceContext;
 use codex_content_security::ContentDigest;
@@ -13,11 +15,21 @@ use codex_content_security::ScreenedContent;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputPayload;
 use codex_protocol::models::ResponseItem;
+use codex_protocol::provenance::RecordedOrigin;
+use codex_protocol::provenance::SOURCE_ORIGIN_RECORD_VERSION;
 use codex_protocol::provenance::SourceDescriptor;
 use codex_protocol::provenance::SourceKind;
+use codex_protocol::provenance::SourceOriginEntry;
+use codex_protocol::provenance::SourceOriginRecord;
+use codex_protocol::provenance::SourceOriginScope;
 use std::collections::HashMap;
 
 const MAX_ADMITTED_ITEMS: usize = 256;
+/// Labelled mode keeps only digests and kinds, so it can hold a long session.
+const MAX_LABELLED_REGISTRATIONS: usize = 65_536;
+/// New registrations not yet written to the rollout. Record seams drain it on
+/// every append; overflow only leaves later content unattributed on resume.
+const MAX_PENDING_ORIGIN_ENTRIES: usize = 4_096;
 
 // Enforce the raw bound while serializing, before allocating a whole oversized
 // history item merely to discover that it cannot enter this bounded carrier.
@@ -40,13 +52,68 @@ fn item_bytes(item: &ResponseItem) -> Result<Vec<u8>, IngressError> {
     Ok(writer.0)
 }
 
+fn item_key(item: &ResponseItem) -> Option<ContentDigest> {
+    serde_json::to_vec(item)
+        .ok()
+        .map(|bytes| ContentDigest::of(&bytes))
+}
+
+/// Role plus exact text parts. Media is excluded so history normalization
+/// that strips images for a text-only model keeps the host registration.
+fn message_key(item: &ResponseItem) -> Option<ContentDigest> {
+    let ResponseItem::Message { role, content, .. } = item else {
+        return None;
+    };
+    let texts: Vec<&str> = content
+        .iter()
+        .filter_map(|part| match part {
+            ContentItem::InputText { text } | ContentItem::OutputText { text }
+                if text != crate::context_manager::IMAGE_CONTENT_OMITTED_PLACEHOLDER
+                    && text != crate::context_manager::AUDIO_CONTENT_OMITTED_PLACEHOLDER =>
+            {
+                Some(text.as_str())
+            }
+            _ => None,
+        })
+        .collect();
+    serde_json::to_vec(&(role, texts))
+        .ok()
+        .map(|bytes| ContentDigest::of(&bytes))
+}
+
 #[derive(Default)]
 pub(crate) struct NativeIngress {
     admitted: HashMap<ContentDigest, AdmittedSource>,
     pending: HashMap<ContentDigest, PendingSource>,
     calls: HashMap<ContentDigest, SourceKind>,
     unavailable: bool,
+    /// `source_envelopes`: project labelled data instead of failing closed.
+    labelled_mode: bool,
+    messages: HashMap<ContentDigest, MessageOrigin>,
+    model_items: std::collections::HashSet<ContentDigest>,
+    pub(super) labelled: LabelledCache,
+    /// Restored history has no recorded origins; reinject host context once.
+    host_context_reinjection: bool,
+    /// Registrations waiting to be persisted next to their rollout items.
+    pending_origins: Vec<SourceOriginEntry>,
+    journal_overflow_reported: bool,
+    /// Authenticates records this home writes and checks restored ones.
+    /// Without it nothing is written and nothing is restored.
+    origin_key: Option<super::origin_key::OriginKey>,
+    missing_key_reported: bool,
+    /// PF-30-S03: recorded batches that carried content without standing.
+    /// Monotone: compaction, a new turn or a summary never lowers it.
+    taint_generation: u64,
+    /// Inputs another agent submitted to this session, keyed by the exact
+    /// `Vec<UserInput>` digest, waiting for the prompt seam to consume them.
+    agent_inputs: HashMap<ContentDigest, Vec<MessageOrigin>>,
+    agent_inputs_pending: usize,
+    /// The ledger overflowed: every later prompt is treated as agent data.
+    agent_inputs_overflowed: bool,
 }
+
+/// Agent inputs submitted but not yet recorded (rejected inputs never are).
+const MAX_PENDING_AGENT_INPUTS: usize = 1_024;
 
 impl std::fmt::Debug for NativeIngress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -57,10 +124,374 @@ impl std::fmt::Debug for NativeIngress {
 }
 
 impl NativeIngress {
+    pub(crate) fn set_labelled_mode(&mut self, enabled: bool) {
+        self.labelled_mode = enabled;
+    }
+
+    pub(crate) fn labelled_mode(&self) -> bool {
+        self.labelled_mode
+    }
+
+    /// Mark an input another agent is about to submit to this session. A full
+    /// ledger fails closed: from then on every prompt counts as agent data.
+    pub(crate) fn mark_agent_input(&mut self, key: ContentDigest, origin: MessageOrigin) {
+        if !self.labelled_mode {
+            return;
+        }
+        if self.agent_inputs_pending >= MAX_PENDING_AGENT_INPUTS {
+            self.agent_inputs_overflowed = true;
+            return;
+        }
+        self.agent_inputs.entry(key).or_default().push(origin);
+        self.agent_inputs_pending += 1;
+    }
+
+    /// The origin of a prompt about to be recorded: the marking agent's, or
+    /// `None` for a human prompt. Each mark is consumed once.
+    pub(crate) fn take_agent_input(&mut self, key: &ContentDigest) -> Option<MessageOrigin> {
+        if !self.labelled_mode {
+            return None;
+        }
+        // Identical inputs: hand out the most restrictive mark first.
+        if let Some(origins) = self.agent_inputs.get_mut(key)
+            && let Some(origin) = origins
+                .iter()
+                .position(|origin| matches!(origin, MessageOrigin::External(_)))
+                .map(|index| origins.remove(index))
+                .or_else(|| origins.pop())
+        {
+            if origins.is_empty() {
+                self.agent_inputs.remove(key);
+            }
+            self.agent_inputs_pending -= 1;
+            return Some(origin);
+        }
+        self.agent_inputs_overflowed
+            .then_some(MessageOrigin::External(SourceKind::ChildAgent))
+    }
+
+    /// Drop one mark for an input that will never be recorded (a blocked
+    /// prompt). It drops the least restrictive mark, so an identical input
+    /// that is recorded keeps the most restrictive one.
+    pub(crate) fn discard_agent_input(&mut self, key: &ContentDigest) {
+        let Some(origins) = self.agent_inputs.get_mut(key) else {
+            return;
+        };
+        let index = origins
+            .iter()
+            .position(|origin| !matches!(origin, MessageOrigin::External(_)))
+            .unwrap_or(origins.len().saturating_sub(1));
+        if index < origins.len() {
+            origins.remove(index);
+            self.agent_inputs_pending -= 1;
+        }
+        if origins.is_empty() {
+            self.agent_inputs.remove(key);
+        }
+    }
+
+    pub(crate) fn has_origin_key(&self) -> bool {
+        self.origin_key.is_some()
+    }
+
+    pub(crate) fn set_origin_key(&mut self, key: super::origin_key::OriginKey) {
+        self.origin_key = Some(key);
+    }
+
+    /// Record the host-chosen origin of exact history messages. Called only
+    /// from Core record seams; a full registry degrades new messages to
+    /// unattributed (labelled) data and never upgrades anything.
+    pub(crate) fn register_messages(&mut self, items: &[ResponseItem], origin: MessageOrigin) {
+        for item in items {
+            match item {
+                // Model standing is only for assistant text from the stream.
+                ResponseItem::Message { role, .. }
+                    if origin != MessageOrigin::Model || role == "assistant" => {}
+                ResponseItem::Reasoning { .. }
+                | ResponseItem::FunctionCall { .. }
+                | ResponseItem::CustomToolCall { .. }
+                | ResponseItem::LocalShellCall { .. }
+                | ResponseItem::ToolSearchCall { .. }
+                | ResponseItem::WebSearchCall { .. }
+                | ResponseItem::ImageGenerationCall { .. }
+                    if origin == MessageOrigin::Model =>
+                {
+                    if let Some(key) = item_key(item)
+                        && self.model_items.len() < MAX_LABELLED_REGISTRATIONS
+                        && self.model_items.insert(key)
+                    {
+                        self.journal(SourceOriginScope::ModelItem, key, MessageOrigin::Model);
+                    }
+                    continue;
+                }
+                _ => continue,
+            }
+            let Some(key) = message_key(item) else {
+                continue;
+            };
+            if self.messages.len() >= MAX_LABELLED_REGISTRATIONS
+                && !self.messages.contains_key(&key)
+            {
+                continue;
+            }
+            // First registration wins: a later external copy of identical
+            // bytes cannot downgrade or upgrade the human/host record.
+            if let std::collections::hash_map::Entry::Vacant(entry) = self.messages.entry(key) {
+                entry.insert(origin);
+                self.journal(SourceOriginScope::Message, key, origin);
+            }
+        }
+    }
+
+    fn journal(&mut self, scope: SourceOriginScope, key: ContentDigest, origin: MessageOrigin) {
+        if !self.labelled_mode {
+            return;
+        }
+        if self.pending_origins.len() >= MAX_PENDING_ORIGIN_ENTRIES {
+            if !std::mem::replace(&mut self.journal_overflow_reported, true) {
+                tracing::warn!(
+                    "source origin journal is full; later content resumes as labelled data"
+                );
+            }
+            return;
+        }
+        self.pending_origins.push(SourceOriginEntry {
+            scope,
+            key: key.to_hex(),
+            origin: recorded(origin),
+        });
+    }
+
+    /// Journal the current origin of every attributed item again, so a resume
+    /// that starts at a history checkpoint (compaction) restores it without
+    /// reading records written before the checkpoint. Never changes an origin.
+    pub(crate) fn journal_current(&mut self, items: &[ResponseItem]) {
+        for item in items {
+            if let Some(origin) = self.message_origin(item)
+                && let Some(key) = message_key(item)
+            {
+                self.journal(SourceOriginScope::Message, key, origin);
+            } else if let Some(key) = item_key(item)
+                && self.model_items.contains(&key)
+            {
+                self.journal(SourceOriginScope::ModelItem, key, MessageOrigin::Model);
+            }
+            if let Some(call_id) = super::structural::call_id_of(item) {
+                let key = ContentDigest::of(call_id.as_bytes());
+                if let Some(kind) = self.calls.get(&key).copied() {
+                    self.journal(SourceOriginScope::Call, key, MessageOrigin::External(kind));
+                }
+            }
+        }
+    }
+
+    /// Drain registrations for the rollout. Only Core record seams call this,
+    /// right after appending the items the registrations describe.
+    /// Without this home's key nothing is written, so the content resumes
+    /// labelled (fail closed) rather than with an unauthenticated record.
+    pub(crate) fn take_origin_record(&mut self) -> Option<SourceOriginRecord> {
+        if self.pending_origins.is_empty() {
+            return None;
+        }
+        let entries = std::mem::take(&mut self.pending_origins);
+        let Some(key) = &self.origin_key else {
+            if !std::mem::replace(&mut self.missing_key_reported, true) {
+                tracing::warn!("source origin key unavailable; content resumes as labelled data");
+            }
+            return None;
+        };
+        let mac = key.tag(&entries_bytes(&entries)?);
+        Some(SourceOriginRecord {
+            version: SOURCE_ORIGIN_RECORD_VERSION,
+            entries,
+            mac,
+        })
+    }
+
+    /// A record restores only when it carries this home's tag over exactly
+    /// its entries: copies from another home and hand edits do not verify.
+    fn verified(&self, record: &SourceOriginRecord) -> bool {
+        record.version == SOURCE_ORIGIN_RECORD_VERSION
+            && self.origin_key.as_ref().is_some_and(|key| {
+                entries_bytes(&record.entries).is_some_and(|bytes| key.verify(&bytes, &record.mac))
+            })
+    }
+
+    /// Reinstate origins recorded by this host in the rollout being resumed or
+    /// forked. A record never upgrades an existing registration; unknown
+    /// versions, malformed keys and impossible scope/origin pairs are skipped,
+    /// so that content stays unattributed. Returns the entries restored.
+    fn restore_origins<'a>(
+        &mut self,
+        records: impl IntoIterator<Item = &'a SourceOriginRecord>,
+    ) -> usize {
+        let mut restored = 0;
+        for record in records {
+            if !self.verified(record) {
+                continue;
+            }
+            for entry in &record.entries {
+                let Some(key) = digest_from_hex(&entry.key) else {
+                    continue;
+                };
+                let origin = message_origin(entry.origin);
+                let accepted = match (entry.scope, origin) {
+                    (SourceOriginScope::Message, origin)
+                        if (self.messages.len() < MAX_LABELLED_REGISTRATIONS
+                            || self.messages.contains_key(&key)) =>
+                    {
+                        self.messages.entry(key).or_insert(origin);
+                        true
+                    }
+                    (SourceOriginScope::ModelItem, MessageOrigin::Model)
+                        if (self.model_items.len() < MAX_LABELLED_REGISTRATIONS
+                            || self.model_items.contains(&key)) =>
+                    {
+                        self.model_items.insert(key);
+                        true
+                    }
+                    (
+                        SourceOriginScope::Call,
+                        MessageOrigin::External(kind @ (SourceKind::Tool | SourceKind::Mcp)),
+                    ) => {
+                        if self.calls.len() >= MAX_LABELLED_REGISTRATIONS
+                            && !self.calls.contains_key(&key)
+                        {
+                            false
+                        } else {
+                            match self.calls.get(&key) {
+                                None | Some(SourceKind::Tool) => {
+                                    self.calls.insert(key, kind);
+                                }
+                                Some(_) => {}
+                            }
+                            true
+                        }
+                    }
+                    _ => false,
+                };
+                restored += usize::from(accepted);
+            }
+        }
+        restored
+    }
+
+    /// Restored or forked history keeps the standing its origin records give
+    /// it; anything without a record stays labelled. Fresh host context is
+    /// requested when restored messages lack records (older rollouts).
+    pub(crate) fn note_restored_history<'a>(
+        &mut self,
+        items: &[ResponseItem],
+        records: impl IntoIterator<Item = &'a SourceOriginRecord>,
+    ) {
+        if !self.labelled_mode {
+            return;
+        }
+        let restored = self.restore_origins(records);
+        // Keep the real route label for restored tool calls (still untrusted).
+        for item in items {
+            match item {
+                ResponseItem::FunctionCall { call_id, .. }
+                | ResponseItem::CustomToolCall { call_id, .. } => {
+                    let key = ContentDigest::of(call_id.as_bytes());
+                    if !self.calls.contains_key(&key)
+                        && self.calls.len() < MAX_LABELLED_REGISTRATIONS
+                    {
+                        self.calls.insert(key, SourceKind::Tool);
+                    }
+                }
+                _ => {}
+            }
+        }
+        // Restored content without standing taints the resumed session too.
+        self.note_recorded(items);
+        let unattributed_message = items.iter().any(|item| {
+            matches!(item, ResponseItem::Message { role, .. } if role != "assistant")
+                && self.message_origin(item).is_none()
+        });
+        self.host_context_reinjection |= restored == 0 || unattributed_message;
+    }
+
+    pub(crate) fn take_host_context_reinjection(&mut self) -> bool {
+        std::mem::take(&mut self.host_context_reinjection)
+    }
+
+    /// PF-30-S03: note a recorded batch. Content without standing (tool, MCP,
+    /// agent, memory or unattributed text) advances the taint generation;
+    /// host request structure does not. Labelled mode only.
+    pub(crate) fn note_recorded(&mut self, items: &[ResponseItem]) {
+        if !self.labelled_mode {
+            return;
+        }
+        let carries_taint = items.iter().any(|item| {
+            !matches!(
+                item,
+                ResponseItem::AdditionalTools { .. } | ResponseItem::CompactionTrigger {}
+            ) && !self.all_have_standing(std::slice::from_ref(item))
+        });
+        if carries_taint {
+            self.taint_generation = self.taint_generation.saturating_add(1);
+        }
+    }
+
+    /// PF-23-S01: content without standing reached the model's code without
+    /// being recorded (a nested tool result inside a code-mode cell).
+    pub(crate) fn note_unrecorded_input(&mut self) {
+        if self.labelled_mode {
+            self.taint_generation = self.taint_generation.saturating_add(1);
+        }
+    }
+
+    pub(crate) fn taint_generation(&self) -> u64 {
+        self.taint_generation
+    }
+
+    /// Whether every item reached history with human, host or model standing.
+    /// Text derived from these items (a compaction summary) may inherit host
+    /// standing only when this holds; one external or unattributed input taints it.
+    pub(crate) fn all_have_standing(&self, items: &[ResponseItem]) -> bool {
+        items.iter().all(|item| match item {
+            ResponseItem::Message { .. } => matches!(
+                self.message_origin(item),
+                Some(MessageOrigin::Human | MessageOrigin::Host | MessageOrigin::Model)
+            ),
+            ResponseItem::Reasoning { .. }
+            | ResponseItem::FunctionCall { .. }
+            | ResponseItem::CustomToolCall { .. }
+            | ResponseItem::LocalShellCall { .. }
+            | ResponseItem::ToolSearchCall { .. }
+            | ResponseItem::WebSearchCall { .. }
+            | ResponseItem::ImageGenerationCall { .. } => self.is_model_item(item),
+            // Tool, MCP and agent output, opaque provider state and unknown
+            // variants are external or unverifiable.
+            _ => false,
+        })
+    }
+
+    /// Whether this exact model-structure item was recorded from the stream.
+    pub(super) fn is_model_item(&self, item: &ResponseItem) -> bool {
+        item_key(item).is_some_and(|key| self.model_items.contains(&key))
+    }
+
+    pub(crate) fn message_origin(&self, item: &ResponseItem) -> Option<MessageOrigin> {
+        self.messages.get(&message_key(item)?).copied()
+    }
+
+    pub(super) fn call_kind(&self, call_id: &str) -> Option<SourceKind> {
+        self.calls
+            .get(&ContentDigest::of(call_id.as_bytes()))
+            .copied()
+    }
+
     /// Invoked by the host tool dispatcher, never by source labels in output.
     pub(crate) fn register_call(&mut self, call_id: &str, kind: SourceKind) {
         let key = ContentDigest::of(call_id.as_bytes());
-        if self.calls.len() >= MAX_ADMITTED_ITEMS && !self.calls.contains_key(&key) {
+        let capacity = if self.labelled_mode {
+            MAX_LABELLED_REGISTRATIONS
+        } else {
+            MAX_ADMITTED_ITEMS
+        };
+        if self.calls.len() >= capacity && !self.calls.contains_key(&key) {
             self.unavailable = true;
             return;
         }
@@ -68,6 +499,7 @@ impl NativeIngress {
             // The MCP adapter refines the generic router's observed tool route.
             Some(SourceKind::Tool) if kind == SourceKind::Mcp => {
                 self.calls.insert(key, kind);
+                self.journal(SourceOriginScope::Call, key, MessageOrigin::External(kind));
             }
             Some(existing) if *existing != kind => {
                 self.unavailable = true;
@@ -75,6 +507,7 @@ impl NativeIngress {
             Some(_) => {}
             None => {
                 self.calls.insert(key, kind);
+                self.journal(SourceOriginScope::Call, key, MessageOrigin::External(kind));
             }
         }
     }
@@ -238,6 +671,53 @@ impl NativeIngress {
     }
 }
 
+fn recorded(origin: MessageOrigin) -> RecordedOrigin {
+    match origin {
+        MessageOrigin::Human => RecordedOrigin::Human,
+        MessageOrigin::Host => RecordedOrigin::Host,
+        MessageOrigin::Model => RecordedOrigin::Model,
+        MessageOrigin::External(kind) => RecordedOrigin::External { kind },
+    }
+}
+
+fn message_origin(origin: RecordedOrigin) -> MessageOrigin {
+    match origin {
+        RecordedOrigin::Human => MessageOrigin::Human,
+        RecordedOrigin::Host => MessageOrigin::Host,
+        RecordedOrigin::Model => MessageOrigin::Model,
+        RecordedOrigin::External { kind } => MessageOrigin::External(kind),
+    }
+}
+
+/// The authenticated form of a record's entries: their canonical JSON.
+fn entries_bytes(entries: &[SourceOriginEntry]) -> Option<Vec<u8>> {
+    serde_json::to_vec(entries).ok()
+}
+
+/// Exactly 64 lowercase hex digits, as written by `ContentDigest::to_hex`.
+fn digest_from_hex(hex: &str) -> Option<ContentDigest> {
+    fn nibble(byte: u8) -> Option<u8> {
+        match byte {
+            b'0'..=b'9' => Some(byte - b'0'),
+            b'a'..=b'f' => Some(byte - b'a' + 10),
+            _ => None,
+        }
+    }
+    let hex = hex.as_bytes();
+    if hex.len() != 64 {
+        return None;
+    }
+    let mut bytes = [0_u8; 32];
+    for (index, pair) in hex.as_chunks::<2>().0.iter().enumerate() {
+        bytes[index] = (nibble(pair[0])? << 4) | nibble(pair[1])?;
+    }
+    Some(ContentDigest::from_bytes(bytes))
+}
+
 #[cfg(test)]
 #[path = "native_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "pf_30_s02_tests.rs"]
+mod pf_30_s02_tests;

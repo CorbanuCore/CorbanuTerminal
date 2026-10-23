@@ -2,7 +2,7 @@
 sprint_id: "PF-18-S01"
 title: "Human mandates and receipts reconciliation"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-18"
 execution_order: 4
 owner: "Jim Ricketts"
@@ -23,7 +23,7 @@ updated: 2026-08-25
 
 ## Plan linkage
 
-- Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
+- Plan: [P0 `/security` levels](../../../plans/completed/main-2026-10-08-p0-security-levels.md)
 - Feature: `PF-18`
 - Acceptance advanced: mutation, replay, duplicate submission, or stale approval fails.
 

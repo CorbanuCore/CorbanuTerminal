@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="nextest-run" tests="6" skipped="0" failures="0" errors="0" uuid="3154b29f-c23e-4a3f-a893-0b1e57bd540d" timestamp="2026-09-15T19:33:08.289-07:00" time="6.356">
+    <testsuite name="codex-state::accounting_store" tests="6" skipped="0" errors="0" failures="0">
+        <testcase name="accounting_inspect_public_reads_do_not_write" classname="codex-state::accounting_store" timestamp="2026-09-15T19:33:08.290-07:00" time="0.127"/>
+        <testcase name="accounting_inspect_public_delete_and_empty" classname="codex-state::accounting_store" timestamp="2026-09-15T19:33:08.290-07:00" time="0.138"/>
+        <testcase name="accounting_inspect_public_identity_retry_scope" classname="codex-state::accounting_store" timestamp="2026-09-15T19:33:08.290-07:00" time="0.156"/>
+        <testcase name="accounting_inspect_public_reopens_twice" classname="codex-state::accounting_store" timestamp="2026-09-15T19:33:08.290-07:00" time="0.157"/>
+        <testcase name="accounting_inspect_public_literal_partial_goldens" classname="codex-state::accounting_store" timestamp="2026-09-15T19:33:08.290-07:00" time="0.315"/>
+        <testcase name="accounting_inspect_public_limits_no_truncation" classname="codex-state::accounting_store" timestamp="2026-09-15T19:33:08.290-07:00" time="6.355"/>
+    </testsuite>
+</testsuites>

@@ -2,7 +2,7 @@
 sprint_id: "PF-78-S01"
 title: "Campaign Tracker capture, persistence and permissioned replay"
 status: completed
-plan_file: "docs/plans/active/p0-security-levels.md"
+plan_file: "docs/plans/completed/main-2026-10-08-p0-security-levels.md"
 plan_feature: "PF-78"
 execution_order: 80
 owner: "Campaign Tracker integration"
@@ -27,7 +27,7 @@ Implement the local Campaign Tracker candidate in the Task Node tab. Public depl
 
 ## Plan linkage
 
-[Active P0 integration plan](../../../plans/active/p0-security-levels.md), PF-78.
+[Active P0 integration plan](../../../plans/completed/main-2026-10-08-p0-security-levels.md), PF-78.
 Product: **Campaign Tracker — LOCAL PILOT CANDIDATE**, “preserve attributable user prompts and compact GLM 5.3 Flash summaries in a bounded database”.
 
 ## Code boundaries

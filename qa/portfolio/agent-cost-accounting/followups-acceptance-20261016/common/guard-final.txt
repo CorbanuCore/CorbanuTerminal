@@ -1,0 +1,4 @@
+checks:    16192
+SECURITYAGENT-SEEN: 0
+2026-10-16T03:24:52Z clear (baseline login-window SecurityAgent only)
+2026-10-16T08:05:34Z clear (baseline login-window SecurityAgent only)

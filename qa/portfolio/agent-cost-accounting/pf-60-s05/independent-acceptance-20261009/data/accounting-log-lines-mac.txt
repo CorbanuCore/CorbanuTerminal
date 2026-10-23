@@ -1,0 +1,44 @@
+c1-amazon-bedrock.err:  accounting: request sent unrecorded step="attach turn" cause=Fatal error: Amazon Bedrock bearer token auth requires `model_providers.amazon-bedrock.aws.region`, `AWS_REGION`, or `AWS_DEFAULT_REGION`
+c6fut-t2.err:  accounting: ledger written in a newer format; collection off for this session
+c6fut-t3.err:  accounting: ledger written in a newer format; collection off for this session
+c7a-compact.err:  accounting write did not complete; closing this sampling
+c7a-compact.err:  accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+c7a-compact.err:  accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected store failure: (code: 1811) qa injected store failure
+c7a-compact.err:  accounting write did not complete; closing this sampling
+c7a-compact.err:  accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+c7a-compact.err:  accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected store failure: (code: 1811) qa injected store failure
+c7b-t2.err:  accounting write did not complete; closing this sampling
+c7b-t2.err:  accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+c7b-t2.err:  accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected store failure: (code: 1811) qa injected store failure
+c7b-t2.err:  accounting write did not complete; closing this sampling
+c7b-t2.err:  accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+c7b-t2.err:  accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected store failure: (code: 1811) qa injected store failure
+c7b-t3.err:  accounting write did not complete; closing this sampling
+c7b-t3.err:  accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+c7b-t3.err:  accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected store failure: (code: 1811) qa injected store failure
+c7b-t3.err:  accounting write did not complete; closing this sampling
+c7b-t3.err:  accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+c7b-t3.err:  accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected store failure: (code: 1811) qa injected store failure
+c7b-t3.err:  accounting write did not complete; closing this sampling
+c7b-t3.err:  accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+c7b-t3.err:  accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected store failure: (code: 1811) qa injected store failure
+c7b-t3.err:  accounting write did not complete; closing this sampling
+c7b-t3.err:  accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting.rs:1014:27
+c7b-t3.err:  accounting: request sent unrecorded step="admit attempt" cause=admit attempt: error returned from database: (code: 1811) qa injected store failure: (code: 1811) qa injected store failure
+c7c-t2.err:  accounting: state DB busy; retrying step="open accounting store" retries=1 waited_ms=5334 cause=error returned from database: (code: 5) database is locked: (code: 5) database is locked
+c7c-t2.err:  accounting: state DB busy; retrying step="open accounting store" retries=2 waited_ms=10738 cause=error returned from database: (code: 5) database is locked: (code: 5) database is locked
+c7c-t2.err:  developer accounting failed step="open sampling" cause=after 2 contended retries over 16172 ms: open accounting store: error returned from database: (code: 5) database is locked: (code: 5) database is locked
+c7c-t2.err:  accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting_chat.rs:87:20
+c7c-t2.err:  sampling did not open error=Fatal error: developer accounting failed
+c7c-t2.err:  accounting: request sent unrecorded step="resolve sampling" cause=Fatal error: developer accounting failed
+c7d-t2.err:  developer accounting failed step="open sampling" cause=open accounting store: error returned from database: (code: 8) attempt to write a readonly database: (code: 8) attempt to write a readonly database
+c7d-t2.err:  accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting_chat.rs:87:20
+c7d-t2.err:  sampling did not open error=Fatal error: developer accounting failed
+c7d-t2.err:  accounting: request sent unrecorded step="resolve sampling" cause=Fatal error: developer accounting failed
+c7e-t2.err:  accounting: state DB busy; retrying step="open accounting store" retries=1 waited_ms=5370 cause=error returned from database: (code: 5) database is locked: (code: 5) database is locked
+c7e-t2.err:  accounting: state DB busy; retrying step="open accounting store" retries=2 waited_ms=10826 cause=error returned from database: (code: 5) database is locked: (code: 5) database is locked
+c7e-t2.err:  developer accounting failed step="open sampling" cause=after 2 contended retries over 16332 ms: open accounting store: error returned from database: (code: 5) database is locked: (code: 5) database is locked
+c7e-t2.err:  accounting sampling closed; later requests in this turn are sent unrecorded at=core/src/accounting_chat.rs:87:20
+c7e-t2.err:  sampling did not open error=Fatal error: developer accounting failed
+c7e-t2.err:  accounting: request sent unrecorded step="resolve sampling" cause=Fatal error: developer accounting failed
+c9-eph.err:  accounting: this session's model requests are not recorded accounting.excluded="ephemeral_session"

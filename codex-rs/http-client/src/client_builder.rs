@@ -187,6 +187,51 @@ impl HttpClientBuilder {
         self.build_with_custom_ca_fallback(ProxyRouting::Direct)
     }
 
+    /// Preserves legacy direct CA fallback without discarding builder policy on failure.
+    pub fn try_build_direct_with_custom_ca_fallback(
+        self,
+    ) -> Result<HttpClient, BuildCustomCaTransportError> {
+        self.try_build_with_custom_ca_fallback_using(
+            ProxyRouting::Direct,
+            build_reqwest_client_with_custom_ca,
+            reqwest::ClientBuilder::build,
+        )
+    }
+
+    /// Preserves legacy transport-default CA fallback without a bare-client escape.
+    pub fn try_build_with_transport_default_proxy_and_custom_ca_fallback(
+        self,
+    ) -> Result<HttpClient, BuildCustomCaTransportError> {
+        self.try_build_with_custom_ca_fallback_using(
+            ProxyRouting::TransportDefault,
+            build_reqwest_client_with_custom_ca,
+            reqwest::ClientBuilder::build,
+        )
+    }
+
+    fn try_build_with_custom_ca_fallback_using(
+        self,
+        proxy_routing: ProxyRouting,
+        build_with_custom_ca: impl FnOnce(
+            reqwest::ClientBuilder,
+        )
+            -> Result<reqwest::Client, BuildCustomCaTransportError>,
+        build_system_roots: impl FnOnce(
+            reqwest::ClientBuilder,
+        ) -> Result<reqwest::Client, reqwest::Error>,
+    ) -> Result<HttpClient, BuildCustomCaTransportError> {
+        let request_logging = self.request_logging;
+        let inner = match build_with_custom_ca(self.clone().reqwest_builder(proxy_routing)) {
+            Ok(inner) => inner,
+            Err(error) => {
+                tracing::warn!(error = %error, "failed to build HTTP client with custom CA");
+                build_system_roots(self.reqwest_builder(proxy_routing))
+                    .map_err(BuildCustomCaTransportError::BuildClientWithSystemRoots)?
+            }
+        };
+        Ok(HttpClient::from_parts(inner, request_logging))
+    }
+
     fn build_with_proxy_routing(
         self,
         proxy_routing: ProxyRouting,

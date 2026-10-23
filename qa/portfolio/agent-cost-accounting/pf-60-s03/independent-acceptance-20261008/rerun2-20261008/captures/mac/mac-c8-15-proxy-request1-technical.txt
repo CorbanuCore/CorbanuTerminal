@@ -1,0 +1,41 @@
+  Attempt, components and original price
+  Requested UTC day: 2026-10-08
+  Provider: zaiproxy
+  Model: Z.AI GLM 5.2
+  Billing: Pay per use
+  Estimated cost: no price available
+  Next step for requests with no price: check the bill from zaiproxy. No published price covers them, so no cost is shown for them here.
+  Tokens: 9,996 tokens
+  —— Details ——
+  Request: 0abb70ec-58ca-410f-a0ea-cdec5b06e1ba
+  ↑↓ scroll · Enter open · Esc back/close
+  Attempt: 83f9feb3-5daa-484c-8bb4-927f256b8e23
+  Thread: 01a11caf-e7b7-7693-8644-82c713c5e05f
+  Turn: 01a11caf-e9c3-7f21-8e2a-b202d9eb0fee
+  Model: glm-5.2
+  Opaque scope: 1749fe68-4b3c-4ccc-b5de-1b673a598b97
+  Arithmetic dialect: Inclusive
+  Admission time: 2026-10-08T18:04:13.347Z
+  Retry predecessor: none
+  Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable
+  Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.
+  Input: 9975
+  Noncached input (derived for inclusive input): unknown — no retained numeric evidence
+  Cache read: 0 (reported)
+  Cache write: unknown — no retained numeric evidence
+  Output: 21
+  Reasoning (subset, not separately billed): 9
+  Total (not separately billed): 9996
+  Noncached input cost: unknown — no retained numeric evidence
+  Cache read cost: unknown — rate unavailable
+  Cache write cost: unknown — no retained numeric evidence
+  Output cost: unknown — rate unavailable
+  Known subtotal exact USD: none — no price for these attempts
+  Price: unavailable — no dispatch-time price snapshot
+  Evidence revision 11; source afcce45a-f42f-4025-b73a-a0b7c81f2afc; sequence 11; presence patch {"input":9975,"read":0,"output":21,"reasoning":9,"total":9996}
+  Estimate versus billed difference: unknown — no settlement evidence
+  Billed cost: unavailable — no settlement evidence
+  Snapshot is not current; newer activity is unverified
+  Back
+  Refresh
+  Close

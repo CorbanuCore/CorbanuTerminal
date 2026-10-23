@@ -7,6 +7,7 @@ use serde_json::Value;
 
 use super::pane::ClaudePaneTurnStatus;
 use super::progress::dedupe_tool_names;
+use super::progress::turn_usage_summary_from_value;
 use super::progress::usage_summary_from_value;
 use super::progress_summarize::string_field;
 use super::progress_summarize::summarize_reasoning_text;
@@ -19,6 +20,15 @@ pub(crate) struct ParsedClaudeOutput {
     pub(crate) status: ClaudePaneTurnStatus,
     pub(crate) session_id: Option<String>,
     pub(crate) usage_summary: Option<String>,
+    /// What the turn as a whole cost, as the `result` event stated it.
+    ///
+    /// `usage_summary` is the FIRST usage this transcript carries, which is
+    /// one model request - the display wants the shape a turn starts with.
+    /// Accounting wants the total, and a turn that made several requests has
+    /// only one true total: the one the pane states at the end. A transcript
+    /// with no `result` event states no total, and that is `None` rather than
+    /// a sum this client would be inventing.
+    pub(crate) turn_usage_summary: Option<String>,
     pub(crate) terminal_reason: Option<String>,
     pub(crate) error_summary: Option<String>,
     pub(crate) tool_names: Vec<String>,
@@ -40,6 +50,7 @@ pub(crate) fn parse_claude_output(stdout: &str) -> Result<ParsedClaudeOutput> {
     let mut final_result = None;
     let mut session_id = None;
     let mut usage_summary = None;
+    let mut turn_usage_summary = None;
     let mut error_value = None;
     let mut saw_result_event = false;
     let mut tool_names = Vec::new();
@@ -68,6 +79,11 @@ pub(crate) fn parse_claude_output(stdout: &str) -> Result<ParsedClaudeOutput> {
         if usage_summary.is_none() {
             usage_summary = usage_summary_from_value(&value);
         }
+        // Last-wins, unlike the display summary: the pane restates the turn's
+        // total when it ends, and that statement is the one to record.
+        if let Some(total) = turn_usage_summary_from_value(&value) {
+            turn_usage_summary = Some(total);
+        }
     }
 
     if let Some(error_value) = error_value {
@@ -78,6 +94,7 @@ pub(crate) fn parse_claude_output(stdout: &str) -> Result<ParsedClaudeOutput> {
             status,
             session_id,
             usage_summary,
+            turn_usage_summary,
             terminal_reason: error_value
                 .get("terminal_reason")
                 .and_then(Value::as_str)
@@ -106,6 +123,7 @@ pub(crate) fn parse_claude_output(stdout: &str) -> Result<ParsedClaudeOutput> {
         status: ClaudePaneTurnStatus::Success,
         session_id,
         usage_summary,
+        turn_usage_summary,
         terminal_reason: None,
         error_summary: None,
         tool_names: dedupe_tool_names(tool_names),
@@ -130,6 +148,7 @@ pub(crate) fn parsed_from_value(value: &Value) -> Result<ParsedClaudeOutput> {
                 .and_then(Value::as_str)
                 .map(ToString::to_string),
             usage_summary: usage_summary_from_value(value),
+            turn_usage_summary: turn_usage_summary_from_value(value),
             terminal_reason: value
                 .get("terminal_reason")
                 .and_then(Value::as_str)
@@ -165,6 +184,7 @@ pub(crate) fn parsed_from_value(value: &Value) -> Result<ParsedClaudeOutput> {
             .and_then(Value::as_str)
             .map(ToString::to_string),
         usage_summary: usage_summary_from_value(value),
+        turn_usage_summary: turn_usage_summary_from_value(value),
         terminal_reason: None,
         error_summary: None,
         tool_names: dedupe_tool_names(tool_names),
@@ -310,4 +330,68 @@ pub(crate) fn collect_tool_events(value: &Value, tool_events: &mut Vec<ClaudePan
             }
         }
     }
+}
+
+/// #891: whether a Bash tool result in Claude Code's stream-json `stdout`
+/// (a `tool_result` block answering a `Bash` `tool_use`, or a Bash result's
+/// `stdout`/`stderr`) reports that creating a user namespace was refused.
+/// Other tools' results (a file read, a web page) are not commands that ran.
+pub(crate) fn tool_results_report_user_namespace_denial(stdout: &str) -> bool {
+    let values: Vec<Value> = stdout
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .collect();
+    let content = |value: &Value| {
+        value
+            .pointer("/message/content")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+    let bash_calls: std::collections::HashSet<String> = values
+        .iter()
+        .flat_map(content)
+        .filter(|item| {
+            item.get("type").and_then(Value::as_str) == Some("tool_use")
+                && item.get("name").and_then(Value::as_str) == Some("Bash")
+        })
+        .filter_map(|item| item.get("id").and_then(Value::as_str).map(str::to_string))
+        .collect();
+    let mut texts = Vec::new();
+    for value in &values {
+        let mut bash_result = false;
+        for item in content(value) {
+            if item.get("type").and_then(Value::as_str) != Some("tool_result")
+                || !item
+                    .get("tool_use_id")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| bash_calls.contains(id))
+            {
+                continue;
+            }
+            bash_result = true;
+            match item.get("content") {
+                Some(Value::String(text)) => texts.push(text.clone()),
+                Some(Value::Array(parts)) => texts.extend(
+                    parts
+                        .iter()
+                        .filter_map(|part| part.get("text").and_then(Value::as_str))
+                        .map(str::to_string),
+                ),
+                _ => {}
+            }
+        }
+        // The Bash result's own fields, on the message that answers a Bash
+        // call.
+        if bash_result && let Some(result) = value.get("tool_use_result") {
+            for field in ["stdout", "stderr"] {
+                if let Some(text) = result.get(field).and_then(Value::as_str) {
+                    texts.push(text.to_string());
+                }
+            }
+        }
+    }
+    texts
+        .iter()
+        .any(|text| codex_sandboxing::user_namespaces::reports_user_namespace_denial(text))
 }

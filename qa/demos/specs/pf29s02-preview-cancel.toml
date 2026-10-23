@@ -1,0 +1,106 @@
+# PF-29-S02.
+id = "pf29s02-preview-cancel"
+feature = "Migration preview, then Esc: nothing changes"
+expected = "The preview lists the source, vault label, owner-only access, restart and rotation, never the value; Esc returns to the review and the profile still holds its line."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"seed.sh" = '''
+printf "alias ll='ls -l'\nexport OPENAI_API_KEY=fake-key-0001-pf29-demo\n" > "$HOME/.zshrc" && echo seeded fake profile export
+'''
+"check.sh" = '''
+printf 'plain-text values left: '; grep -c 'fake-key-0001' "$HOME/.zshrc"; ls -l "$HOME/.zshrc" | cut -c1-10; grep OPENAI "$HOME/.zshrc" | sed -E 's/=fake-[^ ]*/=<the synthetic plain-text value>/' 
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+
+[[steps]]
+type = "!sh seed.sh"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "seeded fake profile export"
+
+[[steps]]
+type = "/security"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Active in this session: Permissive"
+
+[[steps]]
+key = "Up"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "Switch to Aggressive\\?"
+
+[[steps]]
+key = "Down"
+repeat = 20
+
+[[steps]]
+wait = "m move credentials to the vault"
+
+[[steps]]
+key = "m"
+
+[[steps]]
+wait = "Move 1 credential into the vault"
+
+[[steps]]
+wait = "vault label migrated/openai_api_key"
+
+[[steps]]
+pause = 4.0
+
+[[steps]]
+key = "Escape"
+
+[[steps]]
+key = "Down"
+repeat = 20
+
+[[steps]]
+wait = "Migration cancelled. Nothing changed."
+
+[[steps]]
+pause = 1.5
+
+[[steps]]
+key = "Escape"
+
+[[steps]]
+key = "Escape"
+
+[[steps]]
+type = "!sh check.sh"
+
+[[steps]]
+key = "Enter"
+
+[[steps]]
+wait = "plain-text values left: 1"
+
+[[steps]]
+pause = 3.0

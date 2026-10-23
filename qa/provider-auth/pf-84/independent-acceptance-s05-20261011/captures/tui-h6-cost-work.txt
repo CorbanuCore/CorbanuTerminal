@@ -1,0 +1,89 @@
+[0] › Today (UTC) in this conversation:
+[1] › • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 3 requests, 18,912 tokens. Estimated cost: $0.002945 (rounded).
+[2] › Other conversations on this day, not included above: 11 requests in 4 conversations.
+[3] › • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 7 requests, 47,187+ tokens. Estimated cost: at least $0.004304 (rounded) (1 attempt had incomplete
+[4] › usage).
+[5] › • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 2 requests, tokens not reported. Estimated cost: not available — usage incomplete.
+[6] › • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 2 requests, 12,047 tokens. Estimated cost: $0.001673 (rounded).
+[7] › Other conversations' estimated cost: at least $0.005977 (rounded) (3 attempts had incomplete usage).
+[8] › To see those requests, open that conversation with /resume and run /cost there.
+[9] › Next step for requests with incomplete usage: check the bill from Z.AI. Their provider did not report every token count, so the estimate is missing or only a lower
+[10] › bound.
+[11] › Costs are estimates from published prices; Z.AI doesn't report its charges — check Z.AI's bill.
+[12] › Select a provider below to see its requests.
+[13] › —— Details ——
+[14] › Estimated token cost for recorded attempts: $0.002945 (rounded)
+[15] › Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+[16] › Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+[17] › Snapshot is not current; newer activity is unverified
+[18] › Day covered (UTC): [2026-10-11T00:00:00.000Z, 2026-10-12T00:00:00.000Z)
+[19] › Read at: 2026-10-11T14:12:36.556Z; ledger current to: 2026-10-11T14:12:23.485Z (13071 ms behind)
+[20] › Retention: request detail kept since 2026-07-13T14:12:36.556Z; daily totals kept since 2025-10-12; oldest recorded day in this conversation 2026-10-11
+[21] › Known subtotal exact USD: 0.00294531
+[22] › Input: 18,207
+[23] › Noncached input (derived for inclusive input): not reported (3 attempts) — costed as input − cache read for 3 attempts, whose price charges nothing for cache writes
+[24] › Cache read: 1,152
+[25] › Cache write: not reported (3 attempts) — free at the price of 3 attempts, so nothing was charged
+[26] › Output: 705
+[27] › Reasoning (subset, not separately billed): 122
+[28] › Total (not separately billed): 18,912
+[29] › Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+[30] › Unknown parent population: 0 attempts, excluded from root total
+[31] › —— Open ——
+[32] › → Z.AI · account work · Z.AI GLM 5.3 Flash — estimated $0.002945 (rounded) (3 requests)
+[33] › → Request 1 · Z.AI · account work · Z.AI GLM 5.3 Flash · estimated $0.001074 (rounded)
+[34] › → Request 2 · Z.AI · account work · Z.AI GLM 5.3 Flash · estimated $0.000689 (rounded)
+[35] › → Request 3 · Z.AI · account work · Z.AI GLM 5.3 Flash · estimated $0.001182 (rounded)
+[36] › → Root's own attempts (3 attempts)
+[37] › → Descendant attempts (none)
+[38] › → Unknown provider/model attribution (none)
+[39] › → Unknown parent population (none)
+[40] › Refresh
+[41] › Close
+[42] › Today (UTC) in this conversation:
+[43] › • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 3 requests, 18,912 tokens. Estimated cost: $0.002945 (rounded).
+[44] › Other conversations on this day, not included above: 11 requests in 4 conversations.
+[45] › • Z.AI · account default · Z.AI GLM 5.3 Flash — Pay per use. 7 requests, 47,187+ tokens. Estimated cost: at least $0.004304 (rounded) (1 attempt had incomplete
+[46] › usage).
+[47] › • Z.AI · account fake · Z.AI GLM 5.3 Flash — Pay per use. 2 requests, tokens not reported. Estimated cost: not available — usage incomplete.
+[48] › • Z.AI · account work · Z.AI GLM 5.3 Flash — Pay per use. 2 requests, 12,047 tokens. Estimated cost: $0.001673 (rounded).
+[49] › Other conversations' estimated cost: at least $0.005977 (rounded) (3 attempts had incomplete usage).
+[50] › To see those requests, open that conversation with /resume and run /cost there.
+[51] › Next step for requests with incomplete usage: check the bill from Z.AI. Their provider did not report every token count, so the estimate is missing or only a lower
+[52] › bound.
+[53] › Costs are estimates from published prices; Z.AI doesn't report its charges — check Z.AI's bill.
+[54] › Select a provider below to see its requests.
+[55] › —— Details ——
+[56] › Estimated token cost for recorded attempts: $0.002945 (rounded)
+[57] › Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+[58] › Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+[59] › Snapshot is not current; newer activity is unverified
+[60] › Day covered (UTC): [2026-10-11T00:00:00.000Z, 2026-10-12T00:00:00.000Z)
+[61] › Read at: 2026-10-11T14:12:36.556Z; ledger current to: 2026-10-11T14:12:23.485Z (13071 ms behind)
+[62] › Retention: request detail kept since 2026-07-13T14:12:36.556Z; daily totals kept since 2025-10-12; oldest recorded day in this conversation 2026-10-11
+[63] › Known subtotal exact USD: 0.00294531
+[64] › Input: 18,207
+[65] › Noncached input (derived for inclusive input): not reported (3 attempts) — costed as input − cache read for 3 attempts, whose price charges nothing for cache writes
+[66] › Cache read: 1,152
+[67] › Cache write: not reported (3 attempts) — free at the price of 3 attempts, so nothing was charged
+[68] › Output: 705
+[69] › Reasoning (subset, not separately billed): 122
+--- final viewport ---
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                        │
+│                                                      │
+│ model:     glm-5.3-flash   /model to change          │
+│ directory: /Volumes/CorbanuDrive/Corbanu/…/s05acc/ws │
+╰──────────────────────────────────────────────────────╯
+  Cost — this conversation
+  Requested UTC day: 2026-10-11
+  Known subtotal exact USD: 0.00294531
+  Input: 18,207
+  Noncached input (derived for inclusive input): not reported (3 attempts) — costed as input − cache read for 3 attempts, whose price charges nothing for cache writes
+  Cache read: 1,152
+  Cache write: not reported (3 attempts) — free at the price of 3 attempts, so nothing was charged
+  Output: 705
+  Reasoning (subset, not separately billed): 122
+› Total (not separately billed): 18,912
+  Other dates: /cost [YYYY-MM-DD]  or  START END hour|day|week|month  (UTC)
+  ↑↓ scroll · Enter open · Esc back/close

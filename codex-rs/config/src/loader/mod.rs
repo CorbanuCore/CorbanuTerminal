@@ -47,7 +47,6 @@ use dunce::canonicalize as normalize_path;
 use serde::Deserialize;
 use std::io;
 use std::path::Path;
-#[cfg(windows)]
 use std::path::PathBuf;
 use toml::Value as TomlValue;
 
@@ -130,6 +129,7 @@ pub async fn load_config_layers_state(
         cloud_config_bundle,
     } = options.into();
     let active_user_profile = overrides.user_config_profile.clone();
+    let user_home_dir = overrides.user_home_dir.clone();
     let ignore_managed_requirements = overrides.ignore_managed_requirements;
     let ignore_user_config = overrides.ignore_user_config;
     let ignore_user_and_project_exec_policy_rules =
@@ -348,6 +348,7 @@ pub async fn load_config_layers_state(
             &project_trust_context.project_root,
             &project_trust_context,
             codex_home,
+            user_home_dir.as_deref(),
             strict_config,
         )
         .await?;
@@ -974,6 +975,38 @@ fn sanitize_project_config(config: &mut TomlValue) -> Vec<String> {
     ignored_keys
 }
 
+fn remove_unversioned_project_permissive_security(config: &mut TomlValue) -> bool {
+    let Some(table) = config.as_table_mut() else {
+        return false;
+    };
+    let Some(security) = table.get("security").and_then(TomlValue::as_table) else {
+        return false;
+    };
+    // Refuse only the incomplete, lowering-only table reported in #845.
+    // Valid versioned settings can still raise a project security floor;
+    // other malformed settings must retain their existing validation errors.
+    if security.len() != 1
+        || security.get("level").and_then(TomlValue::as_str) != Some("permissive")
+    {
+        return false;
+    }
+    table.remove("security");
+    true
+}
+
+/// Start of the startup warning for a refused unversioned project
+/// `[security] level = "permissive"` table (#850); the inspector matches it (#939).
+pub const IGNORED_INCOMPLETE_PROJECT_SECURITY_PREFIX: &str =
+    "Ignored incomplete project [security] table in ";
+
+fn ignored_incomplete_project_security_warning(config_file: &Path) -> String {
+    format!(
+        "{IGNORED_INCOMPLETE_PROJECT_SECURITY_PREFIX}{}: \
+         level = \"permissive\" without version cannot override trusted security settings.",
+        config_file.display()
+    )
+}
+
 fn project_ignored_config_keys_warning(
     dot_codex_folder: &AbsolutePathBuf,
     ignored_keys: &[String],
@@ -1152,6 +1185,24 @@ fn copy_shape_from_original(original: &TomlValue, resolved: &TomlValue) -> TomlV
     }
 }
 
+/// The user's home directory. Its `.codex` folder is the Codex CLI's own
+/// home, never a project config.
+fn user_home_dirs(explicit: Option<&Path>) -> Vec<PathBuf> {
+    let homes: Vec<PathBuf> = match explicit {
+        Some(home) => vec![home.to_path_buf()],
+        None => ["HOME", "USERPROFILE"]
+            .into_iter()
+            .filter_map(std::env::var_os)
+            .filter(|home| !home.is_empty())
+            .map(PathBuf::from)
+            .collect(),
+    };
+    homes
+        .into_iter()
+        .map(|home| normalize_path(&home).unwrap_or(home))
+        .collect()
+}
+
 async fn find_project_root(
     fs: &dyn ExecutorFileSystem,
     cwd: &AbsolutePathBuf,
@@ -1165,13 +1216,22 @@ async fn find_project_root(
         for marker in project_root_markers {
             let marker_path = ancestor.join(marker);
             let marker_path_uri = PathUri::from_abs_path(&marker_path);
-            if fs
-                .get_metadata(&marker_path_uri, /*sandbox*/ None)
-                .await
-                .is_ok()
+            let Ok(metadata) = fs.get_metadata(&marker_path_uri, /*sandbox*/ None).await else {
+                continue;
+            };
+            if marker == ".git"
+                && metadata.is_directory
+                && fs
+                    .get_metadata(
+                        &PathUri::from_abs_path(&marker_path.join("HEAD")),
+                        /*sandbox*/ None,
+                    )
+                    .await
+                    .is_err()
             {
-                return Ok(ancestor);
+                continue;
             }
+            return Ok(ancestor);
         }
     }
     Ok(cwd.clone())
@@ -1190,13 +1250,21 @@ async fn find_git_checkout_root(
     for dir in base.ancestors() {
         let dot_git = dir.join(".git");
         let dot_git_uri = PathUri::from_abs_path(&dot_git);
-        if fs
-            .get_metadata(&dot_git_uri, /*sandbox*/ None)
-            .await
-            .is_ok()
+        let Ok(metadata) = fs.get_metadata(&dot_git_uri, /*sandbox*/ None).await else {
+            continue;
+        };
+        if metadata.is_directory
+            && fs
+                .get_metadata(
+                    &PathUri::from_abs_path(&dot_git.join("HEAD")),
+                    /*sandbox*/ None,
+                )
+                .await
+                .is_err()
         {
-            return Some(dir);
+            continue;
         }
+        return Some(dir);
     }
     None
 }
@@ -1218,11 +1286,13 @@ async fn load_project_layers(
     project_root: &AbsolutePathBuf,
     trust_context: &ProjectTrustContext,
     codex_home: &Path,
+    user_home_dir: Option<&Path>,
     strict_config: bool,
 ) -> io::Result<LoadedProjectLayers> {
     let codex_home_abs = AbsolutePathBuf::from_absolute_path(codex_home)?;
     let codex_home_normalized =
         normalize_path(codex_home_abs.as_path()).unwrap_or_else(|_| codex_home_abs.to_path_buf());
+    let user_homes = user_home_dirs(user_home_dir);
     let mut dirs = cwd
         .ancestors()
         .scan(false, |done, a| {
@@ -1260,6 +1330,14 @@ async fn load_project_layers(
         if dot_codex_abs == codex_home_abs || dot_codex_normalized == codex_home_normalized {
             continue;
         }
+        // `~/.codex` is the Codex CLI's own user home, not a project config.
+        // When the home directory is itself inside a project (a dotfiles
+        // repository, say), it would otherwise load as a project layer and
+        // override this program's settings with another program's.
+        let dir_normalized = normalize_path(dir.as_path()).unwrap_or_else(|_| dir.to_path_buf());
+        if user_homes.contains(&dir_normalized) {
+            continue;
+        }
         let config_file = dot_codex_abs.join(CONFIG_TOML_FILE);
         let config_file_uri = PathUri::from_abs_path(&config_file);
         match fs.read_file_text(&config_file_uri, /*sandbox*/ None).await {
@@ -1286,6 +1364,13 @@ async fn load_project_layers(
                     }
                 };
                 let mut config = config;
+                if disabled_reason.is_none()
+                    && remove_unversioned_project_permissive_security(&mut config)
+                {
+                    startup_warnings.push(ignored_incomplete_project_security_warning(
+                        config_file.as_path(),
+                    ));
+                }
                 if disabled_reason.is_none() && strict_config {
                     validate_config_toml_strictly(
                         config_file.as_path(),

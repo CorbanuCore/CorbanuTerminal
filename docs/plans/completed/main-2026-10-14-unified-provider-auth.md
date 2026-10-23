@@ -1,0 +1,807 @@
+---
+title: "Unified provider onboarding and management"
+status: completed
+change_class: product-initiative
+priority: P1
+owner: "Codex primary agent"
+parallel_sprint_limit: 2
+parallel_lanes: "home-hygiene, account-registry, account-selection, account-ui, account-usage, account-kinds"
+integration_owner: "Codex PF-84 lane owner"
+activation_authority: "Final product authority — user decision"
+activation_basis: "The user's 2026-09-01 P1 decision to supersede the remaining Claude-auth planning slot with one provider-auth initiative, preserve the merged Claude implementation evidence, unify onboarding and /providers, support multi-provider setup and deferred Corbanu Plan onboarding, and make every configured provider active by default. Reactivated 2026-10-10 for PF-84 by Travis: \"Yes, let's hit multi-account.\""
+target_release: "None: closed without a release; named accounts stay behind the default-off named_accounts flag"
+deadline: "TBD"
+created: 2026-08-30
+updated: 2026-10-14
+product_spec:
+  file: docs/corbanu-product-spec.md
+  heading: "Shipping MVP — LIVE"
+  requirement_excerpt: "Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat."
+implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s06b-chatgpt"
+    branch: "feat/pf-84-s06b-chatgpt-accounts"
+    base_commit: "511ec41249ba7897d1474915a17333360e070edd"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s06-accounts"
+    branch: "feat/pf-84-s06-accounts"
+    base_commit: "8026ce9963f64d411b4dd930d46eabacd859c688"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s05-usage"
+    branch: "feat/pf-84-s05-usage-by-account"
+    base_commit: "c7e6e07cbc629b8fa366de30cfacefae23b06b69"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s04-providers"
+    branch: "feat/pf-84-s04-provider-accounts-ui"
+    base_commit: "0558c52cc320422d1fc187f4a98afff7a1530286"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s03-select"
+    branch: "feat/pf-84-s03-account-selection"
+    base_commit: "0fa45b54f0ca65a6ce3485c27281624cb6f8b2cb"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s01-home"
+    branch: "feat/pf-84-s01-home-override"
+    base_commit: "051f9747225776a5d85ad00c2e5d0a8f5f4036bf"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s02-accounts"
+    branch: "feat/pf-84-s02-account-registry"
+    base_commit: "051f9747225776a5d85ad00c2e5d0a8f5f4036bf"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
+    branch: "feat/provider-reauth-health"
+    base_commit: "1b6921112d73217e1e2a78b5adc43e8ce24764ab"
+  - path: "/home/pfrpc/repos/worktrees/corbanu-release-0.1.38-reconcile"
+    branch: "integration/reconcile-release-0.1.38"
+    base_commit: "43f4f187ba585e231b0bafed2bbcd9d9b4bffa54"
+  - path: "/home/pfrpc/repos/worktrees/corbanu-reconcile-release-fixes"
+    branch: "fix/reconcile-release-0.1.37-review"
+    base_commit: "f03e95f7a65609bb442764d6306682d5fe43f6bb"
+  - path: "/home/pfrpc/repos/worktrees/corbanu-main-f7356a94e0"
+    branch: "feat/unified-provider-auth"
+    base_commit: "f7356a94e032234022a462d65b576a7de2854859"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/integrate-unified-provider-auth-final"
+    branch: "integration/unified-provider-auth-final"
+    base_commit: "06211dbfca61d3f36df3bf069a79ed53ad7a6fa2"
+---
+
+# Unified provider onboarding and management
+
+## Closing note (2026-10-14)
+
+**Closed 2026-10-14 by the Codex coordinator's worker `pf60-s06`** under the coordinator's brief, to free active
+slot 2 for Travis's decision of 2026-10-14 to start the
+[PF-60 accounting follow-ups](main-2026-10-20-portfolio-agent-cost-accounting-followups.md) after the Moderate picker sprint
+(decision 29 of that day's list). Travis decided to start the follow-ups; he did not himself choose which plan to
+close, and his confirmation of this closing is pending. All three slots were full and this was the plan whose sprint
+programme was finished: PF-84-S01–S06 are accepted and archived (S06 on 2026-10-13, limited testing). Reopening it
+needs a free slot.
+
+- **Exception, as for P0 security and PF-60 (both closed by Travis himself):** closed without a release. Named accounts are on main behind the
+  default-off `named_accounts` flag. The `main-2026-10-14` prefix names the tree, not a release.
+- **Carried forward, not waived:** the six flag-removal prerequisites below (live ChatGPT and Bedrock checks with
+  test accounts, the #425/#426/#428 re-check, the partial #555 legs and REG-02, #588/#609/#689, an isolated
+  code-blind run and Travis's sign-off) move to the draft
+  [named-accounts flag removal](../proposed/named-accounts-flag-removal.md) plan. PF-58-S01 stays a draft residual
+  sprint and the unchecked Completion items below stay open there. Bug fixes for #588, #609, #689 and #694 need no
+  active slot.
+
+2026-10-10 activation: Travis approved PF-84 named accounts ("Yes, let's hit
+multi-account"). The plan takes active slot 2, released when the accounting plan
+completed. Only PF-84 is in scope for this activation; PF-58-S01 stays a draft
+residual. September 11 history: the plan was deferred under the PF-13/accounting/
+Task Node selection; all completed archives and evidence are preserved.
+
+Policy: repository-root `AGENTS.md`
+
+Plan lifecycle: `docs/plans/index.md`
+
+## Activation record
+
+| Field | Value |
+| --- | --- |
+| Status | **Completed** 2026-10-14 (slot 2 freed for the PF-60 follow-ups; see Closing note); active 2026-10-10 to 2026-10-14 for PF-84; deferred 2026-09-11 to 2026-10-10 |
+| Active-plan slot | **2 of 3** (accounting slot, released when that plan completed) |
+| Priority | **P1** — current drift is disrupting co-founders and users |
+| Product authority | Final product authority — user decision |
+| Authoritative decision | Unify onboarding and `/providers` behind one provider catalog, status model, authentication controller, and persisted eligibility policy; retain the merged Claude-auth foundation and its evidence. |
+| Accountable owner | Codex primary agent |
+| Implementation owner | GPT-5.6 Sol high implementation agent |
+| Target release | TBD |
+| Deadline | TBD |
+
+This plan continues the active record previously titled **Reliable Claude
+subscription authentication**. PF-42 through PF-47 landed on `origin/main` in
+`f7356a94e032234022a462d65b576a7de2854859`; their completed sprint records
+remain historical evidence. The expanded plan does not reopen those delivered
+contracts, represent their unclosed release gates as passed, or consume a third
+active-plan slot.
+
+## User pain
+
+September 10 picker follow-up (user: “Please fix these and create regression
+coverage”): PF-58 also repairs TUI model-catalog synchronization, exact
+provider/model current markers, and asynchronous health refresh. Do not invent
+model availability or bypass credential eligibility. Preserve Anthropic API
+versus Claude subscription ownership. Add regressions and packaged TMUX proof;
+continue Developer ID signing without changing credential ACLs.
+
+Final follow-up evidence: `qa/provider-auth/pf-58/picker-repair-20260910.md`.
+The signed native Mac and RTX packages pass catalog/setup/restart TMUX; 58 TUI,
+72 provider-auth and 32 Linux integration tests pass. Two unattended Mac
+existing-profile menu launches complete with successful Keychain reads.
+Human acceptance and the separate documented release/live-platform gates remain open.
+
+September 10 Mac Keychain amendment (user: “Can you fix it?”): PF-58 also
+owns `codex-rs/keyring-store/` for bounded native permission prompting. Permit
+at most one interactive operation per credential per process; subsequent native
+operations must remain fresh reads/writes but fail rather than prompt again.
+Do not cache credential values, change Keychain ACLs, erase credentials, or add
+fallback storage. A new process resets the interaction budget. Native Mac
+builds/tests are authorized by the user's September 8 dual-platform request;
+Linux remains the preferred location for portable rebuilds. Verify native
+allow/deny/repeated-read behavior and preserve explicit human sign-off gaps.
+
+September 8 repair amendment: the expanded candidate gate exposed a silent
+Claude manager recovery cancellation when no credential source is selected.
+PF-58 must expose the existing explicit method/replacement choice in this case,
+while retaining known-source recovery restrictions and external ownership.
+The user's request to fix failing tests authorizes this repair; the adjacent
+bounded packaging and native-pane inheritance repairs are recorded separately
+under `qa/provider-auth/pf-58/product-repairs-20260908.md`.
+
+2026-09-05 user amendment: identify the credential rejected by `codex_apps`
+and generalize actionable reauthentication across providers. PF-58 owns this
+follow-up; it does not reopen completed PF-48–PF-57 or activate protected modes.
+An enabled provider is not necessarily authenticated. Show credential-specific
+health separately from activation/current selection, and offer keyboard recovery
+using the existing typed setup adapter. Recoverable expiry should refresh before
+requesting human sign-in; rejected refresh requires explicit recovery. Environment,
+command, AWS and no-auth/local sources need truthful source-specific guidance,
+not an invented browser-login flow. Never silently switch credential, account,
+provider, model or billing context. Transient network/rate/permission failures
+are not credential revocation. Clear a failure only after matching recovery or
+validated success, rejecting stale results from an older credential/turn.
+
+The affected RTX process used its saved ChatGPT account: no connector-token,
+OpenAI API-key or Codex API-key environment override was present. Its open state
+files identify `~/.corbanu`, not the separate `~/.codex` store. Corbanu's logs
+record proactive refresh failures including `refresh_token_reused`; the server
+also reported an expired access token. The exact vault token expiry has not been
+inspected. An earlier expiry observation from `~/.codex` was not this credential.
+No raw token, account identifier or private response is recorded in this plan.
+
+PF-58 owner/integrator is Codex /root in the newly listed worktree. Build/test
+registration also covers the existing provider-journey nextest rule
+and mechanical Cargo/Bazel lock reconciliation after the requested main merge.
+No new dependency or runtime policy is introduced by that registration.
+PF-58 retains RTX-only builds and a separate receiving integration boundary. Review allocation for this
+new feature is an initial Astra High plus Fable5.1 High Corbanu/TMUX pair,
+at most five total, superseding historical PF-56 model choices for PF-58 only.
+The security monitor remains paused; no main merge is authorized by this amendment.
+The user's 2026-09-05 Luna/Kimi K3 delegation attempt was refused because the
+generated authorized-runtime list exposed only Sol and Terra. PF-55-S04 repairs
+the native child-runtime catalog/selection boundary under the existing PF-55
+provider convergence feature. Preserve explicit provider policy, credential
+custody, encrypted-message routing, and exact requested model identity. Prove
+real child launches and results in TUI; prior Astra parent tests are not proof.
+
+The user's live Astra test on 2026-09-05 failed with OpenAI's newer-Codex
+requirement. PF-55-S02 proved only the selector and loopback transport, not live
+account inference. The user now explicitly mandates a working Astra harness,
+including any necessary upstream upgrade, repeatable live acceptance and true
+TUI proof. PF-55-S03 owns this work. It cannot complete on mocks, a renamed
+version header alone, or a substituted model. No publication is authorized.
+
+The user's subsequent 2026-09-05 instruction explicitly adds GPT-6 Astra to the
+OpenAI model selector. PF-55-S02 extends the provider/model convergence feature
+with one bundled manual model option, documented capabilities and selection,
+cancel, restart and request-routing evidence. Existing defaults, automatic
+delegation policy, credentials and other providers remain unchanged. This is
+not a release-publishing instruction.
+
+The user's 2026-09-05 instruction authorizes PF-57-S03 to reconcile those repairs
+with IridiumMaster/Travis's updated `integration/reconcile-release-0.1.37` branch
+at `07791288b6feeccfaee5a57c12452359cc666957`. Preserve the provider-login UX,
+long-lived Claude token workflow and Ambient's GLM-only catalog change, and
+qualify the combined candidate. `origin/main` at `6dd9ad646beb4a7407521439411f436f21ea4af1`
+is already an ancestor of that branch. Publication is a separate release action;
+the user has been asked whether to publish or hand back the reconciled candidate.
+
+The user's 2026-09-04 instruction authorizes repairing Astra's reconciliation
+findings under PF-57: wallet daemon upgrade compatibility, durable Task Node
+profile logout, and Corbanu API environment-alias eligibility. This extends the
+credential-lifecycle regression scope to the existing Task Node session store;
+it does not authorize publication, live payments, or changes to site behavior.
+The site/backend API-key flow is reviewed separately without production writes.
+
+First-run onboarding and `/providers` currently maintain separate provider
+lists, status rules, persistence decisions, event routes, and completion
+behavior. A provider can appear configured in one interface and absent or
+unusable in the other. New providers and custom providers must be wired twice,
+and the repaired Claude subscription path can regress when one host bypasses it.
+
+This creates repeated authentication work, ambiguous provider state, and direct
+productivity loss for co-founders and users.
+
+## Product intent and ideal flow
+
+On a fresh profile, onboarding shows the same provider catalog and metadata-only
+status later shown by `/providers`. The user may configure any number of
+providers, returning to the list after each setup. Every successfully configured
+provider is active by default. **Done** ends the provider phase only when at
+least one usable provider exists or a queued Corbanu Plan flow can produce one.
+
+Choosing Corbanu Plan during the provider phase only queues its onboarding and
+returns immediately to the list. After **Done**, the wallet/Plan flow runs with
+Escape and cancel support. Success makes Corbanu configured and active without
+overriding an already usable current provider. Cancellation continues when
+another provider is usable; if Corbanu was the only path, it returns to the
+provider screen.
+
+On a fresh install, the first successfully configured provider supplies the
+initial default model. An existing usable model/provider selection is preserved.
+Later configuration expands the eligible model set without silently switching
+the current model.
+
+On return visits, `/providers` uses the same catalog, status resolver, and auth
+controller. It additionally allows configured providers to be deactivated or
+reactivated without deleting credentials. Credential removal is a separate,
+clearly labeled action. Deactivating the provider behind the current model
+requires the user to choose a usable replacement first.
+
+## Named accounts per provider (PF-84)
+
+2026-10-08 amendment from Travis; activated 2026-10-10. S01 (home-hygiene lane)
+and S02 (account-registry lane) run in parallel with disjoint write scopes; S03,
+S04, S05 and S06 are allocated when their dependencies are merged behind the flag.
+
+**Requirement.** Support several accounts for any provider. That covers extra API
+keys (two Anthropic, OpenRouter or Z.AI keys) and extra subscription logins (two
+Claude Plan accounts, two ChatGPT logins). The account can be chosen per session,
+per worker or subagent, and from `corbanu exec`. Usage is attributed per account.
+A worker the coordinator spawns can use a different account than the coordinator.
+
+**Feasibility (multiacct1, installed 0.1.48, refs at `63ea3d0cbd`).** One home
+per account works today. It was proven live for Claude Plan: a fake token in
+home2 produced a 401, and the real home was unchanged. It is not a product,
+though, for four reasons:
+
+- The stock `~/.local/bin/corbanu` wrapper resets `CORBANU_HOME`, so workers
+  silently fall back to account A.
+- Each home has its own vault, so other labels (such as the ZAI key) are missing in home2.
+- Sessions and usage are split per home.
+- In-process subagents cannot switch account.
+
+**Design.**
+
+- An account is `(provider id, name)`. Today's credentials are the implicit
+  `default` account, with unchanged labels, so nothing is migrated or reauthenticated.
+- Named accounts live in the existing per-home vault under
+  `provider/<provider-id>/accounts/<name>/<kind>`, with an encrypted registry.
+  The vault key stays the one keychain item `codex`/`secrets|<sha16(home)>`, and
+  named accounts add none.
+- One resolver per auth kind takes the account:
+  - API key: named accounts ignore provider env vars.
+  - Claude Plan token: per-account token and selection.
+  - Claude Code login: the account stores its own `CLAUDE_CONFIG_DIR`.
+  - ChatGPT login: stored in the vault, with no new `Codex Auth` item.
+  - `auth.command`: gets `CORBANU_PROVIDER_ACCOUNT`.
+  - AWS: `aws.profile` per account.
+- Selection precedence: `--account` or the spawn `account` argument, then the
+  session choice, then `[provider_accounts]` in config, then `default`. An
+  unknown or failed account fails closed. There is never a silent fallback,
+  which matches the PF-58 invariant.
+- The thread config carries the account. Children inherit it unless the spawn
+  overrides it. Resume uses the recorded name. Accounting and rate-limit leases
+  are keyed by (provider, account fingerprint).
+
+**Fix items.**
+
+- The wrapper home reset and silent home precedence (PF-84-S01).
+- Duplicate provider rows after Claude Plan setup: "Anthropic Claude Account" and
+  "Claude Account" were both shown as configured (PF-84-S04).
+
+**Migration.**
+
+- Existing single-account homes keep working byte for byte.
+- Per-home workaround homes are not imported automatically, which is consistent
+  with "Out". The user re-enrolls the second credential as a named account in the
+  main home, then retires the extra home.
+
+**Gate per sprint.**
+
+- `just test` on the affected crates.
+- A true-tmux scenario following `docs/tmuxHarness.md`, with disposable homes and
+  `CORBANU_TEST_NO_NATIVE_KEYRING=1`.
+- A GLM 5.3 Flash run (`-m glm-5.3-flash -c model_provider="zai"`; owner policy
+  2026-10-10), with a real `default` ZAI account and a fake-key named account.
+  The expected 401 proves the selection. A second provider (OpenAI API key, Kimi
+  or Claude Plan) proves the feature is provider-generic.
+- Linux clippy `-D warnings` on the RTX host for every slice.
+
+**Delivery rules (2026-10-10).**
+
+- Named-account behaviour ships behind the default-off `named_accounts`
+  feature flag (`[features] named_accounts = true`). With the flag off, every code path is today's. A sprint whose code
+  is merged behind the flag with its gate evidence recorded is set `ready` for
+  independent code-blind acceptance; it is not archived until that acceptance
+  and Travis's sign-off. Its successor may proceed under the sprint checker's
+  `merged_behind_flag` rule.
+- S02 also owns the lowest-precedence selector (`[provider_accounts]` in config,
+  so `-c provider_accounts.<id>=<name>` works) and a metadata-only
+  `corbanu account list|add|remove` CLI that reads secrets from stdin. Both are
+  needed to enroll and exercise accounts before the S04 UI; S03 adds the
+  explicit selectors (`--account`, spawn, session, resume).
+- S02 amendment (2026-10-10): named OpenAI sign-ins (API-key login, ChatGPT) and AWS
+  profiles left S02; selecting such an account fails closed until they ship.
+- Decision D4 (Travis, 2026-10-11, chat with the coordinator): option (a). A new
+  [PF-84-S06](../../sprints/archive/unified-provider-auth/pf-84-s06-aws-and-chatgpt-accounts.md)
+  runs after S05: named AWS profile accounts first (slice A), then named
+  ChatGPT/OpenAI sign-in accounts (slice B). The other options, (b) AWS only and
+  (c) dropping both, were not chosen. This closes the question #423 recorded.
+
+**Decisions (recommended defaults adopted 2026-10-10; Travis may revisit).**
+Travis did not answer D1-D3 explicitly when approving the work, so the plan's
+recommendations apply: D1 one vault per home with account-qualified labels;
+D2 no automatic import from per-home workaround homes; D3 spawned agents may
+only name accounts already configured for the target provider, the account is
+shown at spawn, and choosing one needs approval under `/security` Aggressive.
+
+**PF-76-S01 reconciliation.** PF-76 (provider selection and sign-in persisted per
+named Corbanu config profile) is a different axis from PF-84 (several
+credentials per provider in one home). When PF-76 is allocated, a profile's
+provider sign-in is stored as a PF-84 named account and the profile selects it
+through `[profiles.<name>.provider_accounts]`; PF-76 does not add a second
+credential scope. PF-84 does not change profile semantics.
+
+- Demo videos via `qa/demos/README.md`.
+- One independent Opus 5.5 High review.
+
+**S06 acceptance and flag-removal prerequisites (Travis, 2026-10-13).** S01–S06
+are accepted and archived; the `named_accounts` flag stays off. S06 slice B was
+accepted as limited testing (mock-only, debug builds, isolation by instruction;
+[record](../../../qa/provider-auth/pf-84/independent-acceptance-s06b-20261013/README.md)).
+Decided with it: PR-02, a missing `--account` of any provider refuses the whole
+launch (kept); D3, the person's own *Use for this session* counts as the approval
+(only a model-chosen account prompts under Aggressive); #588, a fork of an
+earlier turn uses the source conversation's current account, as resume does.
+Before the flag is removed:
+
+1. A live ChatGPT check with a disposable test ChatGPT account (sign-in, refresh
+   written back to that account, default login untouched).
+2. A live Bedrock check with a test AWS account and a least-privilege profile.
+3. The S03 limits #425, #426 and #428 (fixed by #431 and #432) re-verified.
+4. The partial #555 legs re-run (ESC-03 draft, REG-01 flag-off picker, GH-02
+   naming `ghost`, PR-01 `/status`, ESC-04 before-build, ESC-01 terminal restore,
+   D3 approvals-off leg); REG-02 (`login status` shows a key fragment) decided.
+5. Open follow-ups closed or documented: #588, #609, #689.
+6. An isolated code-blind run from a frozen design on the packaged candidate,
+   then Travis's sign-off.
+
+## Product linkage
+
+| Field | Value |
+| --- | --- |
+| Exact product-spec heading | **Shipping MVP — LIVE** |
+| Requirement excerpt | “Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat.” |
+| Related shipping capability | “OpenAI, Anthropic/Claude Plan, Kimi, Z.AI, DeepSeek, OpenRouter, Ambient, Meta, Baseten, Vercel, Bedrock, Ollama, LM Studio, Corbanu Plan, and custom providers.” |
+| Product outcome advanced | The live multi-provider product has one dependable setup, status, eligibility, and recovery contract. |
+| North-star criterion advanced | Users can choose inference without exposing credentials or repeatedly repairing provider state. |
+
+## Scope
+
+### In
+
+- One typed provider catalog derived from runtime provider configuration plus
+  product-owned account and Corbanu Plan entries.
+- Automatic inclusion in both hosts of custom providers that declare an API-key
+  environment variable.
+- Metadata-only configured, active/inactive, current, checking, unavailable, and
+  recovery-required status from one resolver.
+- Persisted provider eligibility: configured providers default active; explicit
+  deactivation survives restart and does not delete credentials.
+- One renderer-independent authentication flow/controller contract with typed
+  events, cancellation, stale-result rejection, and renderer adapters.
+- Shared API-key, OpenAI account, and merged Claude subscription backends.
+- Multi-provider onboarding with an explicit **Done** action.
+- Deferred Corbanu Plan onboarding after provider selection, with success,
+  cancel, return, and only-provider recovery behavior.
+- `/providers` activation controls and replacement-before-deactivation for the
+  current provider.
+- Startup gating and current-model selection derived from the shared status and
+  eligibility state rather than host-specific heuristics.
+- Bounded operating-system keyring access for the encrypted provider vault so a
+  locked or unresponsive credential service degrades through the existing
+  fallback policy instead of freezing startup, save, read, or logout.
+- One encrypted-store rewrite per logical vault mutation so provider add,
+  rotation, and bulk removal do not repeatedly pay the age/scrypt cost while a
+  save or logout is visibly pending.
+- Optimized scrypt/Salsa primitives in development and test profiles, retaining
+  the same pinned work factor and on-disk format while avoiding debug-only
+  credential operations that exceed the harness timeout.
+- Focused automated, snapshot, integration, adversarial redaction, substantial
+  typed-TMUX, live-repository, human, documentation, and release evidence.
+- PF-55-S03: reconcile Astra's native Codex model/tool/wire contract with the
+  verified upstream release, repair compatibility negotiation, add regression
+  and explicit opt-in live TUI harnesses, then install the verified candidate
+  in the existing separate `corbanu-test` session using the user-approved normal
+  profile. Test real Astra responses, tool execution, cancellation and resume.
+- PF-55-S04: make authorized child runtime discovery and selection agree with
+  the effective orchestration runtime, including V1 and unset model defaults;
+  preserve operator allowlists and cross-provider plaintext adapters. Qualify
+  Luna and Kimi K3 child results, failure/recovery and resume in disposable
+  TensorCash and Isometric worktrees using the approved normal profile.
+  The first live run exposed a second boundary defect: the exact-runtime
+  plaintext adapter rejects OpenAI, whose reserved native schema cannot express
+  model overrides. Support explicitly plaintext task briefs on that same-provider
+  route without converting native ciphertext or widening provider authorization.
+- PF-84 named accounts per provider: alternate API keys and subscription logins,
+  chosen per session, worker or CLI, with per-account usage attribution.
+
+### Out
+
+- Changing provider wire protocols, pricing, subscriptions, or model catalogs,
+  except preserving the user's explicitly requested incoming Ambient GLM-only
+  change in PF-57-S03 and adding the explicitly requested OpenAI Astra manual
+  selection in PF-55-S02 and the user-authorized Astra runtime upgrade in
+  PF-55-S03. No unrelated default-model, pricing or automatic-allocation changes.
+- Automatically importing, copying, or deleting provider-owned credentials.
+- Interactive enrollment for a custom command-auth provider without a supported
+  typed setup adapter; it remains visible with metadata/status and recovery copy.
+- Making credential removal implicit in provider deactivation.
+- Automatically switching the current model when a later provider is configured
+  or when Corbanu Plan completes.
+- Replacing the wallet, x402, or Corbanu Plan purchase implementation.
+- Weakening vault, keyring, P0 credential-broker, or provider privacy controls.
+- Releasing without a named human test or the repository release gates.
+
+## Invariants
+
+- Authentication state, provider eligibility, and the singular current
+  model/provider selection are distinct typed concepts.
+- Every successfully configured provider is active unless the user explicitly
+  deactivates it; existing configured providers migrate to active by default.
+- A provider is never marked configured merely because its catalog entry exists
+  or its setup was queued.
+- Raw credentials never enter model context, chat, rollout history, telemetry,
+  logs, snapshots, TMUX artifacts, ordinary config, or status descriptions.
+- Onboarding and `/providers` consume the same catalog and status service and
+  dispatch the same typed auth-flow controller actions.
+- Host renderers may differ, but authentication success, failure, cancellation,
+  recovery, timeout, stale-result rejection, and persistence semantics may not.
+- Environment-backed credentials are inspected only as metadata; removal UI
+  cannot claim to delete an environment variable.
+- Corbanu Plan is configured and active only after its deferred flow succeeds.
+- Cancelling any flow is inert with respect to credentials, eligibility, current
+  model, unrelated providers, and wallet/Plan state.
+- Deactivating the current provider cannot silently select a replacement.
+- A current usable provider/model is preserved. A fresh profile chooses the
+  first successfully configured provider's default model.
+- Unsupported or ambiguous auth sources fail visibly with recovery guidance;
+  there is no heuristic account or billing-context fallback.
+- An unresponsive operating-system credential service cannot block a provider
+  operation indefinitely or start an unbounded number of stuck workers; the
+  encrypted-vault fallback contract remains authoritative.
+- No regular expression may inspect, route, transform, approve, repair, score,
+  or gate any LLM prompt, model output, tool call, or provider response.
+
+## Ownership and implementation worktrees
+
+| Owner | Worktree | Branch | Base commit | Scope |
+| --- | --- | --- | --- | --- |
+| Codex PF-84 home-hygiene worker | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s01-home` | `feat/pf-84-s01-home-override` | `051f9747225776a5d85ad00c2e5d0a8f5f4036bf` | PF-84-S01, lane `home-hygiene` (completed, archived 2026-10-11). |
+| Codex PF-84 account-registry worker | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s02-accounts` | `feat/pf-84-s02-account-registry` | `051f9747225776a5d85ad00c2e5d0a8f5f4036bf` | PF-84-S02, lane `account-registry` (completed, archived 2026-10-11). |
+| Codex PF-84 lane owner | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s03-select` | `feat/pf-84-s03-account-selection` | `0fa45b54f0ca65a6ce3485c27281624cb6f8b2cb` | PF-84-S03, lane `account-selection` (serial after S02, merged behind `named_accounts`; completed, archived 2026-10-11). |
+| Codex PF-84 lane owner | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s04-providers` | `feat/pf-84-s04-provider-accounts-ui` | `0558c52cc320422d1fc187f4a98afff7a1530286` | PF-84-S04, lane `account-ui` (serial after S03, merged behind `named_accounts`; completed, archived 2026-10-11). |
+| Codex PF-84 lane owner | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s05-usage` | `feat/pf-84-s05-usage-by-account` | `c7e6e07cbc629b8fa366de30cfacefae23b06b69` | PF-84-S05, lane `account-usage` (serial after S04, merged behind `named_accounts`; completed, archived 2026-10-11). |
+| Codex PF-84-S06 worker | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s06-accounts` | `feat/pf-84-s06-accounts` | `8026ce9963f64d411b4dd930d46eabacd859c688` | PF-84-S06 slice A, lane `account-kinds` (merged behind `named_accounts`, #543; completed, archived 2026-10-13). |
+| Codex PF-84-S06 worker | `/Volumes/CorbanuDrive/Corbanu/worktrees/pf84-s06b-chatgpt` | `feat/pf-84-s06b-chatgpt-accounts` | `511ec41249ba7897d1474915a17333360e070edd` | PF-84-S06 slice B, lane `account-kinds` (merged behind `named_accounts`; completed, archived 2026-10-13). |
+| GPT-5.6 Sol high implementation agent (historical) | `/home/pfrpc/repos/worktrees/corbanu-main-f7356a94e0` | `feat/unified-provider-auth` | `f7356a94e032234022a462d65b576a7de2854859` | Serial implementation of PF-48 through PF-56 only. |
+| Codex primary agent | same receiving worktree | same branch | same base | Feature completeness, integration decisions, scope control, review budget, final-tree verification, and TMUX acceptance. |
+| Codex primary integration agent | `/Volumes/CorbanuDrive/Corbanu/worktrees/integrate-unified-provider-auth-final` | `integration/unified-provider-auth-final` | `06211dbfca61d3f36df3bf069a79ed53ad7a6fa2` | PF-57 latest-main merge, conflict resolution, verified regression repairs, combined-tree qualification, and handoff. |
+| Codex primary agent | `/home/pfrpc/repos/worktrees/corbanu-reconcile-release-fixes` | `fix/reconcile-release-0.1.37-review` | `f03e95f7a65609bb442764d6306682d5fe43f6bb` | PF-57-S02: the three user-authorized release credential-lifecycle regressions; serial implementation. |
+
+`parallel_sprint_limit: 2` (2026-10-10) only lets PF-84-S01 (wrapper and home
+resolution) run beside PF-84-S02 (registry and resolvers); their write scopes are
+disjoint. Every later PF-84 sprint and every shared manifest, config schema,
+provider state, event routing or TUI host change is serial, integrated by the
+Codex PF-84 lane owner. The
+implementation agent is not alone in the repository and must preserve unrelated
+user work and integrate rather than revert concurrent changes.
+
+## Useful code references
+
+| Path or symbol | Why it matters |
+| --- | --- |
+| `codex-rs/model-provider-info/src/lib.rs` | Runtime provider definitions, auth metadata, built-in and custom provider catalog inputs. |
+| `codex-rs/login/src/auth/manager.rs::provider_api_key_from_auth_storage` | Runtime credential resolution, legacy/tombstone behavior, and startup parity boundary. |
+| `codex-rs/tui/src/onboarding/auth.rs` | Onboarding-owned account/API-key/Claude state machine that must become a host adapter. |
+| `codex-rs/tui/src/onboarding/onboarding_screen.rs` | First-run provider sequencing, completion, cancellation, and startup gating. |
+| `codex-rs/tui/src/chatwidget/provider_credentials.rs` | Static `/providers` catalog, direct status reads, API-key entry, and later management host. |
+| `codex-rs/tui/src/config_update.rs` | Current onboarding provider/model persistence seam. |
+| `codex-rs/tui/src/chatwidget/claude_code_login.rs` | Merged Claude auth backend and recovery behavior to preserve. |
+| `codex-rs/tui/src/chatwidget/wallet_menu.rs` | Existing Corbanu wallet/Plan setup, cancellation, and completion flow to invoke after **Done**. |
+| `codex-rs/tui/src/app.rs` | Startup auth gating and onboarding handoff. |
+| `codex-rs/tui/tests/support/tmux.rs` | Required PTY harness and artifact/canary support. |
+
+## Upstream-touch record
+
+| Field | Record |
+| --- | --- |
+| Baseline | Canonical upstream is `https://github.com/openai/codex.git`. Reverified from local `upstream/main` on 2026-09-01: upstream tip `ba6cf9c69277caec51a4c12c5b7401a9920930e0`, merge-base `413492cd6c3a4d4f8dff6f406247ccda5a9d88aa`; fork base for this initiative is `f7356a94e032234022a462d65b576a7de2854859`. Record the final candidate SHA at qualification. |
+| Footprint | Product-owned provider-auth catalog/state/controller code, model-provider/config adapters, onboarding, `/providers`, app events/startup, tests, docs, and QA. Each sprint owns the literal subset in its record. |
+| Boundary | Centralize Corbanu policy in a focused provider-auth module/crate. Keep upstream TUI, app-server login, config, and model-provider edits as thin typed adapters. TUI renderers never own raw storage or provider selection policy. |
+| Compatibility | Preserve provider wire headers, account identity, credential stores, existing Claude source choice, app-server login cancellation, current model, config layering, startup, restart, resume, child-agent use, and native panes. |
+| Verification | Contract and migration tests, affected crate suites, snapshots, config schema checks, redaction/canary checks, typed-TMUX flows, both default live repositories, physical platform evidence where required, and release records. |
+| Upgrade handling | At final qualification, record upstream candidate, classify each adapter as retained/adapted/removed, resolve conflicts in a disposable worktree, and rerun combined-tree tests and TUI qualification. |
+
+PF-57-S02 reverified the same local upstream baseline on 2026-09-04; it does not
+merge an upstream update. Its fork base is `f03e95f7a65609bb442764d6306682d5fe43f6bb`.
+Product-owned wallet IPC, Task Node persistence, and provider metadata adapters
+retain existing authorization, wire formats, wallet assets, and session history.
+Exact files, regression commands, candidate identity and platform limitations
+are recorded in the sprint and `qa/release/0.1.38/astra-fixes.md`.
+
+PF-55-S03 compares baseline `ba6cf9c69277caec51a4c12c5b7401a9920930e0` against
+official `rust-v0.153.4`, commit `3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`.
+The native Astra catalog declares minimum client version `0.153.0`, Code Mode
+tools, Responses Lite, unified execution and model-owned instructions. The
+pre-repair fork advertised `0.144.1` and had an API-doc-derived Astra entry
+that omitted these native harness requirements. The completed selective repair
+shares the native minimum across discovery/inference and installs the native
+model contract without replacing working Corbanu adapters. Account identity,
+credential custody, non-OpenAI routes, permissions and history are preserved.
+Both default repositories passed live Astra TUI file/tool, cancellation,
+recovery and same-thread restart/resume with the installed binary. Exact source,
+upstream disposition and evidence: [runtime qualification](../../../qa/release/0.1.38/astra-runtime.md).
+
+PF-55-S04 retains that upstream baseline and the native V2 interfaces. The
+product-owned adapter must distinguish a model's preferred orchestration version
+from the engine version inherited by a child. No remote model metadata, reserved
+OpenAI schema, provider authorization or credential format is rewritten.
+
+## Sprint execution map
+
+| Feature ID | Plan feature | Sprint record | State |
+| --- | --- | --- | --- |
+| `PF-42` | Claude typed source/selection contract | [PF-42-S01](../../sprints/archive/claude-subscription-auth/pf-42-s01-auth-source-contract.md) | completed; evidence preserved |
+| `PF-43` | Claude managed-token lifecycle | [PF-43-S01](../../sprints/archive/claude-subscription-auth/pf-43-s01-managed-token-lifecycle.md) | completed; evidence preserved |
+| `PF-44` | Claude platform-auth resolution | [PF-44-S01](../../sprints/archive/claude-subscription-auth/pf-44-s01-platform-auth-resolution.md) | completed; evidence preserved |
+| `PF-45` | Claude auth choice and recovery | [PF-45-S01](../../sprints/archive/claude-subscription-auth/pf-45-s01-auth-choice-and-recovery.md) | completed; evidence preserved |
+| `PF-46` | Claude automated qualification | [PF-46-S01](../../sprints/archive/claude-subscription-auth/pf-46-s01-final-qualification.md) | completed; open plan-level gates carried forward |
+| `PF-47` | First-run Anthropic account entry | [PF-47-S01](../../sprints/archive/claude-subscription-auth/pf-47-s01-first-run-anthropic-account.md) | completed; merged in `f7356a94e0` |
+| `PF-48` | Typed provider catalog and capability contract | [PF-48-S01](../../sprints/archive/unified-provider-auth/pf-48-s01-provider-catalog-contract.md) | completed at `7936d83859` |
+| `PF-49` | Shared metadata status and persisted eligibility | [PF-49-S01](../../sprints/archive/unified-provider-auth/pf-49-s01-status-and-eligibility.md) | completed at `5fcde1c1d9` |
+| `PF-50` | Renderer-independent API-key authentication controller | [PF-50-S01](../../sprints/archive/unified-provider-auth/pf-50-s01-api-key-flow-controller.md) | completed at `6f90e89792` |
+| `PF-51` | OpenAI account adapter on the shared controller | [PF-51-S01](../../sprints/archive/unified-provider-auth/pf-51-s01-openai-account-adapter.md) | completed at `13dcc188fb` |
+| `PF-52` | Claude subscription adapter on the shared controller | [PF-52-S01](../../sprints/archive/unified-provider-auth/pf-52-s01-claude-auth-adapter.md) | completed at `a723374834` |
+| `PF-53` | Multi-provider onboarding and deferred Corbanu Plan flow | [PF-53-S01](../../sprints/archive/unified-provider-auth/pf-53-s01-multi-provider-onboarding.md) | completed at `30b595034b` |
+| `PF-54` | Unified `/providers` management and eligibility controls | [PF-54-S01](../../sprints/archive/unified-provider-auth/pf-54-s01-provider-management.md) | completed |
+| `PF-55` | Startup, current-model, and custom-provider convergence | [PF-55-S01](../../sprints/archive/unified-provider-auth/pf-55-s01-startup-provider-convergence.md) | completed at `21cf3199f2` |
+| `PF-55` | Explicit OpenAI Astra model selection | [PF-55-S02](../../sprints/archive/unified-provider-auth/pf-55-s02-openai-astra-selector.md) | completed; [selector evidence](../../../qa/release/0.1.38/astra-selector.md) |
+| `PF-55` | Verified live Astra runtime and TUI harness | [PF-55-S03](../../sprints/archive/unified-provider-auth/pf-55-s03-astra-runtime-compatibility.md) | completed; [real TUI qualification](../../../qa/release/0.1.38/astra-runtime.md) |
+| `PF-55` | Mixed-model native subagent runtime convergence | [PF-55-S04](../../sprints/archive/unified-provider-auth/pf-55-s04-subagent-runtime-convergence.md) | completed; [exact child/runtime TUI evidence](../../../qa/release/0.1.38/subagent-runtime.md) |
+| `PF-56` | Integrated qualification, review, docs, and release evidence | [PF-56-S01](../../sprints/archive/unified-provider-auth/pf-56-s01-final-qualification.md) | completed at `fd8a9c900e` |
+| `PF-57` | Latest-main integration, regression preservation, and credential-store liveness | [PF-57-S01](../../sprints/archive/unified-provider-auth/pf-57-s01-latest-main-integration.md) | completed at `a935e507b` |
+| `PF-58` | Credential-scoped runtime health and keyboard reauthentication | [PF-58-S01](../../sprints/current/unified-provider-auth/pf-58-s01-credential-health-and-reauth.md) | Draft residual qualification; implementation human-accepted for main integration September 11; historical blocked cases retained |
+| `PF-57` | Reconciled release credential-lifecycle regressions | [PF-57-S02](../../sprints/archive/unified-provider-auth/pf-57-s02-reconciliation-auth-repairs.md) | completed; [Astra repair evidence](../../../qa/release/0.1.38/astra-fixes.md) |
+| `PF-57` | Reconcile Travis's provider UX/catalog changes with repaired release | [PF-57-S03](../../sprints/archive/unified-provider-auth/pf-57-s03-travis-release-reconciliation.md) | completed; [combined-tree evidence](../../../qa/release/0.1.38/travis-reconciliation.md) at `c37eb277d9` |
+| `PF-84` | Home override hygiene (wrapper pitfall) | [PF-84-S01](../../sprints/archive/unified-provider-auth/pf-84-s01-home-override-hygiene.md) | completed; accepted by Travis 2026-10-11 ([gate](../../../qa/provider-auth/pf-84/s01-gate.md), [acceptance](../../../qa/provider-auth/pf-84/independent-acceptance-20261010/README.md)) |
+| `PF-84` | Named account registry, storage and resolution | [PF-84-S02](../../sprints/archive/unified-provider-auth/pf-84-s02-account-registry-and-resolution.md) | completed; accepted 2026-10-11 behind `named_accounts` (flag off); S02-15 open ([gate](../../../qa/provider-auth/pf-84/s02-gate.md)) |
+| `PF-84` | Account selection per session, CLI and worker | [PF-84-S03](../../sprints/archive/unified-provider-auth/pf-84-s03-account-selection-and-propagation.md) | completed; accepted 2026-10-11 behind `named_accounts` with limits #425, #426 and #428 (fixed by #431 and #432; re-check in the flag-removal run) ([gate](../../../qa/provider-auth/pf-84/s03-gate.md), [acceptance](../../../qa/provider-auth/pf-84/independent-acceptance-s03-20261010/README.md)) |
+| `PF-84` | `/providers` account management; duplicate-row fix | [PF-84-S04](../../sprints/archive/unified-provider-auth/pf-84-s04-provider-account-management-ui.md) | completed; accepted 2026-10-11 behind `named_accounts` ([gate](../../../qa/provider-auth/pf-84/s04-gate.md), [acceptance](../../../qa/provider-auth/pf-84/independent-acceptance-s04-20261011/README.md); #461/#462 fixed by #472) |
+| `PF-84` | Per-account usage and rate-limit attribution | [PF-84-S05](../../sprints/archive/unified-provider-auth/pf-84-s05-per-account-usage-attribution.md) | completed; accepted 2026-10-11 behind `named_accounts` ([gate](../../../qa/provider-auth/pf-84/s05-gate.md), [acceptance](../../../qa/provider-auth/pf-84/independent-acceptance-s05-20261011/README.md); fixes #485 #486 #489 #490; follow-up #528) |
+| `PF-84` | Named AWS profile and ChatGPT/OpenAI sign-in accounts | [PF-84-S06](../../sprints/archive/unified-provider-auth/pf-84-s06-aws-and-chatgpt-accounts.md) | completed; slice A accepted 2026-10-12, slice B 2026-10-13, both behind `named_accounts` as limited testing (mock-only; live Bedrock and live ChatGPT NOT VERIFIABLE) ([A gate](../../../qa/provider-auth/pf-84/s06a-gate.md), [B gate](../../../qa/provider-auth/pf-84/s06b-gate.md), [acceptance](../../../qa/provider-auth/pf-84/independent-acceptance-s06b-20261013/README.md)); see flag-removal prerequisites |
+
+## Hard dependency graph
+
+```text
+PF-42..PF-47 merged Claude foundation
+  -> PF-48 catalog contract
+    -> PF-49 status and eligibility
+      -> PF-50 API-key flow controller
+        -> PF-51 OpenAI account adapter
+          -> PF-52 Claude adapter
+            -> PF-53 multi-provider onboarding + deferred Corbanu
+              -> PF-54 /providers management
+                -> PF-55 startup/current/custom convergence
+                  -> PF-56 integrated qualification
+                    -> PF-57 latest-main integration, regression preservation,
+                       and credential-store liveness
+```
+
+PF-84 (named accounts, active 2026-10-10): S01 has no dependency;
+S02 -> S03 -> S04, S03 + PF-60-S04 (accounting schema) -> S05, and S05 -> S06.
+S01 and S02 run in parallel; the rest is serial.
+
+Outside PF-84 one sprint is executable at a time. A dependent sprint remains draft until its
+predecessor is completed and archived.
+
+## Acceptance flows
+
+| Flow | Starting state | User action | Expected visible result | Pass criterion |
+| --- | --- | --- | --- | --- |
+| Multi-provider success | Fresh profile | Configure two or more providers, return after each, then choose **Done** | All successful providers show configured and active; first successful provider supplies the initial model | Restart preserves eligibility and current model; each provider can make a real request |
+| Deferred Corbanu success | At least one configured provider; Corbanu unconfigured | Queue Corbanu, configure another provider, choose **Done**, complete wallet/Plan flow | Provider screen returns immediately after queueing; Corbanu flow starts only after **Done** | Corbanu becomes configured/active and the existing current provider remains selected |
+| Deferred Corbanu cancel | Corbanu queued | Escape or cancel deferred flow | No wallet, credential, eligibility, or current-model partial state | Continue with another usable provider; return to provider screen if none exists |
+| Shared recovery | Missing, rejected, stale, or conflicting credential | Enter from either host, cancel/retry/replace through the same flow | Same status labels, actions, failure, and recovery semantics | No host-specific fallback or stale completion changes state |
+| Deactivate non-current | Configured active provider not serving current model | Deactivate in `/providers` | Provider becomes inactive and credentials remain | Restart preserves inactive state; reactivation requires no reauthentication |
+| Deactivate current | Current provider is active | Request deactivation | Replacement picker appears before mutation | Cancel is inert; choosing a usable replacement switches explicitly then deactivates |
+| Custom API provider | Runtime custom provider declares `env_key` | Open either host and configure/use it | Provider appears automatically with shared status and masked setup | Both hosts and startup agree; raw key never appears |
+| Existing install migration | Existing configured providers and usable selection | Upgrade and launch | Configured providers default active; current selection remains | No forced reauthentication or model switch |
+| Existing single-account migration (PF-84) | Home with today's credentials | Upgrade and launch | Each provider shows one `default` account row | Same credentials resolve; vault unchanged until a named account is added |
+| Add second account (PF-84) | One Claude Plan or API key configured | `/providers` → add account `work`, paste token or key | Two rows for that provider, one per account, no duplicates | Masked entry; restart preserves both |
+| Session account switch (PF-84) | Two accounts | Choose "use for this session" on `work` | Status shows provider/`work` | Requests use `work`; default unchanged after restart |
+| Worker on another account (PF-84) | Coordinator on `default` | Spawn subagent or tmux `corbanu exec --account work` | Spawn event shows `work` | Worker uses `work`, coordinator stays on `default`; failure never falls back |
+| Account isolation (PF-84) | Fake-key account `bad` | Select `bad`, send a prompt | Visible 401 with recovery | No retry on another account; no value in any artifact |
+| Per-account usage (PF-84) | Two accounts used | Open usage view | Rows grouped by provider and account | Counts match requests per account |
+| Named AWS and ChatGPT accounts (PF-84-S06) | Bedrock or OpenAI sign-in configured | Add `aws-profile` account or sign in a second ChatGPT account | One row per account; fake or missing account visibly refused | Requests use that account's profile or tokens; refresh saves to that account; never falls back |
+| Wrapper/home override (PF-84) | Inherited `CORBANU_HOME` | Launch through `~/.local/bin/corbanu` with another home | Warning or correct home | Never silently runs on the coordinator's home |
+
+## Implementation sequence
+
+1. Freeze provider identity, setup capability, catalog ordering, custom-provider,
+   and host-presentation contracts in PF-48.
+2. Centralize metadata-only status plus configured/eligibility persistence and
+   migration in PF-49.
+3. Build the renderer-independent typed controller and API-key adapter in PF-50.
+4. Adapt OpenAI account login in PF-51 and the merged Claude flow in PF-52.
+5. Replace onboarding's single-provider completion with the multi-provider and
+   deferred Corbanu workflow in PF-53. Its shared host effect executor also maps
+   OpenAI `ApiKeyStorage::OpenAiAuth` into the existing app-server API-key
+   persistence request; PF-54 reuses that executor.
+6. Rebuild `/providers` as a manager host with eligibility and safe replacement
+   controls in PF-54.
+7. Remove startup/catalog/status heuristics and converge custom-provider/current
+   model behavior in PF-55.
+8. Format, test, perform substantial true-TMUX qualification, run the bounded
+   review program, document, and collect release evidence in PF-56.
+9. Merge the latest `origin/main` without rewriting archived sprint commits,
+   resolve shared-provider conflicts semantically, preserve post-fork fixes, and
+   repair the combined suite's reproduced unbounded keyring wait before rerunning
+   combined-tree qualification and independent review in PF-57.
+
+## Review and TMUX policy
+
+At most four formal review passes are planned across the initiative:
+
+1. implementation-owner boundary/self-check after the shared contracts;
+2. primary-agent integration review after both hosts are migrated;
+3. primary-agent final-tree completeness/security review;
+4. one external **Kimi 3.0 high through Vercel** review spawned and controlled
+   through the TMUX harness against the final candidate. This is the user's
+   explicit replacement for the attempted Claude Fable 5 review, which exited
+   before model inference because its OAuth session could not be refreshed.
+
+No additional autoreview or external review is scheduled. The accountable owner
+may exceed four only when a review uncovers a major issue; the finding, reason,
+remediation, and additional review must be recorded.
+
+PF-57 is the recorded exception: integrating fourteen post-fork `main` commits
+created two semantic Rust conflicts and review exposed provider-recovery edge
+cases. The combined candidate was validated against `81dcbef5d`, reviewed with
+Fable 5.1 Plan max through Corbanu and TMUX, and ended
+`FINAL_REREVIEW: CLEAN`; see the [PF-57 record](../../qa/provider-auth/pf-57/fable-review.md).
+
+TMUX proof is continuous, not deferred to a token final smoke. PF-53, PF-54, and
+PF-55 add focused typed-TMUX scenarios; PF-56 reruns the full matrix on the
+formatted integrated tree with real keys, visible checkpoints, cancellation,
+recovery, restart/resume, and secret canaries.
+
+## Automated evidence
+
+Run fix and formatting tools before the final affected tests.
+
+| Check | Final-tree command | Result | Artifact |
+| --- | --- | --- | --- |
+| Governance | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | PASS | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Provider contracts | `CARGO_INCREMENTAL=0 cargo test -p codex-provider-auth` | PASS: 62/62 | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Login/provider resolution | `CARGO_INCREMENTAL=0 cargo test -p codex-login`; affected model-provider tests | PASS: 152 unit + 37 integration; focused policy/status/catalog green | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| TUI focused | startup, status, catalog, provider-management, and final typed-TMUX suites | PASS: focused suites plus 26/26 final TMUX | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Config/schema | affected config edit, parse, migration, and schema checks | PASS through login/provider and TensorCash/Isometric native suites | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Adversarial/redaction | cancel races, stale results, timeout, malformed sources, canary scan, and no-regex LLM-path guard | PASS for accepted candidate/bundles; failed diagnostics excluded explicitly | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Combined tree | formatting/fixes, `git diff --check`, affected integration suites, and final build | PASS; binary `c1a444f2…807a0` | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| PF-57 latest-main integration | final build; 390 core/provider tests; focused startup/onboarding/provider TUI suites | PASS; candidate `a935e507b`, binary `23f37955…33d2` | [PF-57 ledger](../../qa/provider-auth/pf-57/qualification.md) |
+
+## True-TUI evidence
+
+| Flow | Candidate binary | Test repo/worktree | Keys/actions | Visible checkpoints | Result | Artifact |
+| --- | --- | --- | --- | --- | --- | --- |
+| Fresh multi-provider | `c1a444f2…807a0` | isolated profile plus TensorCash | Configure multiple providers; return after each; **Done**; send prompt and Enter separately | shared status, active defaults, initial model, real response | PASS | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Deferred Corbanu | `c1a444f2…807a0` | isolated profile plus Isometric Game | Queue Plan; configure another provider; **Done**; success and separate Escape/cancel runs | deferral order, no override, safe cancel/return | PASS | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Account/API recovery | `c1a444f2…807a0` | isolated fixtures | OpenAI, Claude token/login, API-key failure, retry, replace, cancel | identical host semantics, no stale mutation | PASS | stable PF-54 bundles and [ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Eligibility/current model | `c1a444f2…807a0` | isolated restart fixtures | deactivate/reactivate; current-provider replacement; cancel; restart/resume | credentials preserved, explicit replacement, state durable | PASS | stable PF-54/PF-55 bundles and [ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Custom provider | `c1a444f2…807a0` | custom `env_key` and command-auth fixtures | inspect both hosts, configure supported custom provider, start request | automatic catalog inclusion and status parity | PASS | stable PF-55 bundles and [ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| External review | reviewed predecessor plus qualified final remediation | final candidate lineage | Exactly one Kimi 3.0 high through Vercel in TMUX; no fallback; superseded Fable failure retained | exact provider/model/runtime, bounded report, disposition | PASS | [review evidence](../../qa/provider-auth/pf-56/review/kimi-runtime.md) and [disposition](../../qa/provider-auth/pf-56/review/kimi-disposition.md) |
+| PF-57 combined recovery matrix | `23f37955…33d2` | isolated startup/provider fixtures on remote Linux | Run all 12 PF-55 journeys plus PF-53 configure-many and cancel | fresh versus established recovery, current-provider blocking, restart, lazy command auth | PASS: 14 flows in 147.84s | [PF-57 ledger](../../qa/provider-auth/pf-57/qualification.md) |
+
+## Live-repository applicability
+
+PF-58 changes home-level authentication health and recovery, not project contents,
+coding tasks or repository execution. Like PF-57-S02, neither default live
+repository adds a distinct feature boundary here. Its final proof uses isolated
+homes and loopback auth/model endpoints with real TMUX keys. This is a human-test
+candidate, not release qualification; prior live-repository or benchmark results
+are not claimed as rerun. The 2026-09-08 candidate incorporates main `3cec54d99`
+through integration commit `472b8fed5`, preserving the security branch history.
+
+| Repository | Applicable to this initiative? | Resolved checkout/test worktree | Base commit | Reason or result |
+| --- | --- | --- | --- | --- |
+| TensorCash | yes | `/home/pfrpc/repos/worktrees/pf56-tensorcash-dd6e9202` | `dd6e92024254090de0f596b090bd5c74c4d97b90` | PASS: clean worktree; 586 native tests; two exact authorized Corbanu requests across process restart. |
+| Isometric Game | yes | `/home/pfrpc/repos/worktrees/pf56-isometricgame-59821b7a` | `59821b7a85524f186f946c4670480c7ee96483cb` | PASS: clean worktree; both world checks and math; exact authorized Corbanu request plus same-thread resume. |
+
+Disposable worktrees and exact base commits must be recorded before PF-56 runs.
+Historical Claude artifacts do not substitute for final integrated-tree runs.
+
+PF-57-S02 is a home-level credential-lifecycle repair, not a coding workflow or
+release qualification. Neither TensorCash nor Isometric Game is applicable to
+this bounded repair: the changed boundaries do not inspect project contents,
+edit project files, or execute project tasks. Its proof uses isolated homes,
+private daemon sockets and a loopback API with actual TUI input and restart.
+The older PF-56 live-repository results above are historical, not reruns on the
+2026-09-04 repair tree. Both live repositories, named-human acceptance and due
+benchmarks remain release-level gates, not claims made by PF-57-S02.
+
+PF-57-S03 follows the same bounded applicability: it preserves the incoming
+home-level auth and catalog behavior without changing project-editing or coding
+task execution. Its final Linux candidate passed 625 selected automated tests,
+16 true-TMUX tests and manual `just codex` token-entry/cancel checks. The user's
+Astra request received a bounded final combined-source review with no new
+P0/P1 findings. None of these results replaces the release-level gates above;
+see the [reconciliation evidence](../../../qa/release/0.1.38/travis-reconciliation.md).
+
+## Human acceptance
+
+| Tester | Date | Candidate version/commit | Flow | Result | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| Named tester pending | pending | pending | Multi-provider onboarding, deferred Corbanu success/cancel, `/providers` activation, OpenAI/Claude/API-key recovery, restart | pending | pending |
+
+## Documentation
+
+| Finished-feature doc | Product-spec citation present | Verified candidate |
+| --- | --- | --- |
+| `docs/features/model-providers.md` | required — **Shipping MVP — LIVE** multi-provider and vault requirements | verified and updated for the final candidate |
+| `docs/authentication.md` | required — **Shipping MVP — LIVE** vault requirement | verified and updated for the final candidate |
+| `docs/features/claude-plan-authentication.md` | retained citation; final behavior preserves the shipped flow | verified; no change required |
+| Corbanu Plan onboarding guide at its existing canonical page | retained citation; final behavior preserves the Plan contract | verified; no change required |
+
+## Dependencies, decisions, and blockers
+
+| Item | Type | Owner | Needed by | State / decision |
+| --- | --- | --- | --- | --- |
+| Claude auth foundation | dependency | implementation owner | PF-48 | merged at `f7356a94e0`; preserve PF-42–PF-47 behavior and evidence |
+| Active-plan slot | product | final product authority | activation | Claude slot explicitly superseded on 2026-09-01; P0 plan remains untouched |
+| Provider terminology | product | final product authority | PF-49 | configured providers are active by default; current provider is separate |
+| Multi-provider onboarding | product | final product authority | PF-53 | configure any number, explicit **Done**, first success supplies fresh-install default |
+| Deferred Corbanu | product | final product authority | PF-53 | queue then return; run after **Done**; cancel/escape; no current-provider override |
+| Deactivation | product | final product authority | PF-54 | `/providers`; preserve credential; require replacement before deactivating current |
+| Review budget | delivery | Codex primary agent | PF-56 | four formal passes maximum unless a major finding is documented |
+| External reviewer | delivery | Codex primary agent | PF-56 | User override on 2026-09-02: exactly one Kimi 3.0 high through Vercel, spawned and controlled via TMUX with no fallback; the earlier Fable OAuth failure remains superseded evidence |
+| Upstream baseline/candidate | integration | Codex primary agent | PF-48/PF-56 | local `upstream/main` reverified at `ba6cf9c69277caec51a4c12c5b7401a9920930e0`; reverify final candidate at qualification |
+| Live accounts and named human | release | release owner | PF-56/release | pending; cannot be fabricated |
+| Physical Linux/Windows evidence | release | release owner | release | prior Claude plan left this unclosed; final applicability must be recorded |
+| Target version and benchmark state | release | release owner | release | pending |
+| Latest-main integration | integration | Codex primary integration agent | PF-57 | Completed: preserved PF-48–PF-56 identities, merged latest-main baseline `81dcbef5d`, and qualified candidate `a935e507b`. |
+| Credential-store liveness | regression | Codex primary integration agent | PF-57 | Completed: bounded serialized keyring operations, late-success circuit recovery, batched logical vault mutations including managed Claude token enrollment, and development/test-only crypto optimization preserve encrypted-vault fallback, work factor, format, and production implementation. |
+| Review remediation | regression | Codex primary integration agent | PF-57 | Completed: fresh onboarding occurs only when the current provider is unconfigured and no ready configured interactive alternative exists; established inactive, unavailable, recovery-required, removed, or missing-current profiles enter chat blocked until explicit recovery. Onboarding caches status, compatible-model persistence precedes selection completion, local/status-only providers remain usable, and command auth stays lazy. Dead legacy UI cleanup remains nonblocking follow-up work. |
+| D1 PF-84 storage | product | Travis | PF-84-S02 | **Recommended default adopted 2026-10-10; Travis may revisit.** one vault per home with account-qualified labels (no new keychain items). Alternative: a home per account (proven, but splits vault, sessions and usage). |
+| D2 PF-84 import | product | Travis | PF-84-S04 | **Recommended default adopted 2026-10-10; Travis may revisit.** no automatic import from per-home workaround homes; re-enroll. |
+| D3 PF-84 model-chosen account | security | Travis | PF-84-S03 | **Recommended default adopted 2026-10-10.** spawn `account` limited to configured names, shown in the spawn event; requires approval under `/security` Aggressive, refused with approvals off. **#428 decided 2026-10-11 by Travis (option 1):** "Aggressive" also covers every state the TUI shows as Aggressive while Core's level stays lower ("Aggressive enforced, boundary unverified", "Active in this session: Aggressive"). Implemented by #432 (refused with approvals off). **Scope decided 2026-10-13 by Travis:** the person's own *Use for this session* choice counts as the approval; only a model-chosen account prompts. |
+| D4 PF-84 ChatGPT and AWS accounts | product | Travis | PF-84-S06 | **Decided 2026-10-11 by Travis (option (a))**: new S06 after S05, AWS profile accounts first, then ChatGPT/OpenAI sign-in accounts. S06 open points decided 2026-10-11 with the recommended defaults: the default ChatGPT login stays in place; warn on the same ChatGPT user in two accounts; AWS SSO profiles allowed; no test AWS profile, so live Bedrock is pending. |
+| PF-76-S01 overlap | integration | plan owner | PF-84-S02 | Reconciled 2026-10-10: PF-76 stores a profile's sign-in as a PF-84 named account selected by `[profiles.<name>.provider_accounts]`; see the PF-84 section. |
+
+## Release linkage
+
+- Release record: `qa/release/<version>/` — target version pending.
+- Benchmark tracker row: `benchmarks/README.md` when due.
+- Remaining gates from the earlier Claude plan: live eligible production-account
+  evidence, named human acceptance, physical Linux/Windows confirmation where
+  applicable, target release/tag and release-ledger decisions, upstream
+  disposition, and due benchmark evidence.
+- PF-48–PF-57 implementation, combined-tree TMUX qualification, and independent
+  review are complete; they are no longer release blockers.
+
+## Completion
+
+- [x] Product linkage, P1 priority, scope, invariants, ownership, and worktree are current.
+- [x] Merged PF-42–PF-47 Claude evidence is preserved without claiming open gates.
+- [x] Every new implementation unit has one stable feature ID and one sprint record.
+- [x] PF-48 through PF-57 are completed and archived; final code candidate is `a935e507b`.
+- [x] Required final-tree automated and adversarial evidence passes.
+- [x] Required true-TUI and both live-repository workflows pass.
+- [ ] Named human acceptance passes.
+- [x] Finished documentation matches the accepted candidate.
+- [ ] Upstream disposition, release record, and due benchmark state are linked.
+- [ ] No hard release gate remains pending.

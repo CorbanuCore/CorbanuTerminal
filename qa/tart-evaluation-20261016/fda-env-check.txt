@@ -1,0 +1,5 @@
+# Check (2026-10-16T12:28:52Z) that the committed prepare-base.sh form `gssh "$ip" "TART_QA_SSH_FDA=$FDA bash -s" << 'GUEST'`
+# hands the variable to the guest script. Throwaway clone qa-envtest of corbanu-qa-base, deleted afterwards.
+2026-10-16T12:28:52Z slot ok (guests running: 1; UTM: 1; Tart here: 0)
+guest sees TART_QA_SSH_FDA=off
+would reset FDA

@@ -9,9 +9,14 @@ use crate::hook_runtime::PostCompactHookOutcome;
 use crate::hook_runtime::PreCompactHookOutcome;
 use crate::hook_runtime::run_post_compact_hooks;
 use crate::hook_runtime::run_pre_compact_hooks;
+use crate::provider_throttle::AdmittedProviderRequest;
+use crate::provider_throttle::AuxiliaryRequest;
+use crate::provider_throttle::is_provider_request_block;
+use crate::provider_throttle::record_auxiliary_outcome;
 use crate::responses_metadata::CodexResponsesMetadata;
 use crate::responses_metadata::CodexResponsesRequestKind;
 use crate::responses_metadata::CompactionTurnMetadata;
+use crate::security::ingress::MessageOrigin;
 #[cfg(test)]
 use crate::session::PreviousTurnSettings;
 use crate::session::session::Session;
@@ -99,6 +104,10 @@ pub(crate) async fn build_compaction_initial_context(
                     world_state.as_ref(),
                 )
                 .await;
+            // Host-built context; stored-data messages were registered first.
+            sess.services
+                .model_client()
+                .register_message_origin(&items, MessageOrigin::Host);
             (items, Some(Arc::clone(world_state)))
         }
         InitialContextInjection::DoNotInject => (Vec::new(), None),
@@ -249,16 +258,46 @@ async fn run_compact_task_inner_impl(
     sess.emit_turn_item_started(&turn_context, &compaction_item)
         .await;
     let initial_input_for_turn: ResponseInputItem = ResponseInputItem::from(input);
+    let compaction_prompt: ResponseItem = initial_input_for_turn.into();
+    // The summarization prompt is host configuration, not external data.
+    sess.services.model_client().register_message_origin(
+        std::slice::from_ref(&compaction_prompt),
+        MessageOrigin::Host,
+    );
 
     let mut history = sess.clone_history().await;
     history.record_items(
-        &[initial_input_for_turn.into()],
+        &[compaction_prompt],
         turn_context.model_info.truncation_policy.into(),
     );
 
     let max_retries = turn_context.provider.info().stream_max_retries();
     let mut retries = 0;
+    let mut unresolvable_item_retries = 0;
+    let mut home_wait = crate::home_access::HomeWait::default();
     let mut client_session = sess.services.new_model_client_session();
+    // A compaction is inference the operator paid for - and `/compact` is one they
+    // asked for directly - so it is collected like any other turn rather than
+    // silently escaping accounting.
+    // Best effort on purpose: a compaction that cannot be recorded must still
+    // run. Accounting is an observer here, not a gate on the user's session.
+    let accounting = match crate::accounting::attach_turn(
+        &sess,
+        &turn_context,
+        &client_session,
+        crate::accounting::compaction_turn_label(&turn_context.sub_id),
+    )
+    .await
+    {
+        Ok(scopes) => Some(scopes),
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                "accounting: compaction proceeding unrecorded"
+            );
+            None
+        }
+    };
     // Reuse one client session so turn-scoped state (sticky routing, websocket incremental
     // request tracking)
     // survives retries within this compact turn.
@@ -271,13 +310,12 @@ async fn run_compact_task_inner_impl(
 
     loop {
         // Clone is required because of the loop
-        let turn_input = history
-            .clone()
-            .for_prompt(&turn_context.model_info.input_modalities);
+        let turn_input = history.clone().for_turn_prompt(&turn_context);
         let turn_input_len = turn_input.len();
         let prompt = Prompt {
             input: turn_input,
             base_instructions: sess.get_base_instructions().await,
+            producer: Some(turn_context.output_producer()),
             ..Default::default()
         };
         let attempt_result = drain_to_completed(
@@ -301,7 +339,10 @@ async fn run_compact_task_inner_impl(
             {
                 return Err(err);
             }
-            Err(e) if matches!(e.details(), CodexErrorDetails::SessionBudgetExceeded) => {
+            Err(e)
+                if matches!(e.details(), CodexErrorDetails::SessionBudgetExceeded)
+                    || is_provider_request_block(&e) =>
+            {
                 sess.track_turn_codex_error(turn_context.as_ref(), &e);
                 let event = EventMsg::Error(e.to_error_event(/*message_prefix*/ None));
                 sess.send_event(&turn_context, event).await;
@@ -323,7 +364,29 @@ async fn run_compact_task_inner_impl(
                 sess.send_event(&turn_context, event).await;
                 return Err(e);
             }
+            // #578: the provider could not find an item this request referenced.
+            Err(e)
+                if crate::session::turn::retry_without_unresolvable_item(
+                    &client_session,
+                    &e,
+                    &mut unresolvable_item_retries,
+                ) =>
+            {
+                continue;
+            }
             Err(e) => {
+                // #616: wait out an unreadable home without using retries.
+                let e = match crate::home_access::wait_if_home_unreadable(
+                    &mut home_wait,
+                    &sess,
+                    turn_context.as_ref(),
+                    e,
+                )
+                .await
+                {
+                    Ok(()) => continue,
+                    Err(e) => e,
+                };
                 if retries < max_retries {
                     retries += 1;
                     let delay = backoff(retries);
@@ -345,6 +408,8 @@ async fn run_compact_task_inner_impl(
         }
     }
 
+    // `/compact` is a request the user asked for: say so when it went unrecorded.
+    crate::accounting::warn_if_unrecorded(&sess, &turn_context, accounting.as_ref()).await;
     let history_snapshot = sess.clone_history().await;
     let history_items = history_snapshot.raw_items();
     let summary_suffix = get_last_assistant_message_from_turn(history_items).unwrap_or_default();
@@ -352,6 +417,7 @@ async fn run_compact_task_inner_impl(
     let user_messages = collect_user_messages(history_items);
 
     let mut new_history = build_compacted_history(Vec::new(), &user_messages, &summary_text);
+    register_compacted_history_origins(sess.as_ref(), history_items, &new_history);
     if let Some(summary_item) = new_history.last_mut() {
         // This replacement history skips `record_conversation_items`; only the appended summary
         // belongs to this compaction turn.
@@ -391,6 +457,44 @@ async fn run_compact_task_inner_impl(
     });
     sess.send_event(&turn_context, warning).await;
     Ok(summary_suffix)
+}
+
+/// `source_envelopes`: carry standing into a rebuilt history conservatively.
+/// A retained message keeps human standing only when a human-recorded message
+/// had exactly its text; the summary gets host standing only when every
+/// compacted input had standing. Everything else stays unattributed (labelled).
+fn register_compacted_history_origins(
+    sess: &Session,
+    compacted: &[ResponseItem],
+    new_history: &[ResponseItem],
+) {
+    let client = sess.services.model_client();
+    if !client.source_envelopes_enabled() {
+        return;
+    }
+    let human_texts: std::collections::HashSet<String> = compacted
+        .iter()
+        .filter(|item| client.message_origin(item) == Some(MessageOrigin::Human))
+        .filter_map(|item| match crate::event_mapping::parse_turn_item(item) {
+            Some(TurnItem::UserMessage(user)) => Some(user.message()),
+            _ => None,
+        })
+        .collect();
+    let Some((summary, retained)) = new_history.split_last() else {
+        return;
+    };
+    for item in retained {
+        if let ResponseItem::Message { role, content, .. } = item
+            && role == "user"
+            && let [ContentItem::InputText { text }] = content.as_slice()
+            && human_texts.contains(text)
+        {
+            client.register_message_origin(std::slice::from_ref(item), MessageOrigin::Human);
+        }
+    }
+    if client.all_have_standing(compacted) {
+        client.register_message_origin(std::slice::from_ref(summary), MessageOrigin::Host);
+    }
 }
 
 pub(crate) struct CompactionAnalyticsAttempt {
@@ -702,6 +806,33 @@ async fn drain_to_completed(
     responses_metadata: &CodexResponsesMetadata,
     prompt: &Prompt,
 ) -> CodexResult<()> {
+    // #509: compaction is a model request on the turn's key like any other.
+    let admitted = AdmittedProviderRequest::admit_for_turn(
+        AuxiliaryRequest::Compaction,
+        sess,
+        turn_context,
+        prompt,
+    )
+    .await?;
+    let outcome = stream_compaction(
+        sess,
+        turn_context,
+        client_session,
+        responses_metadata,
+        prompt,
+    )
+    .await;
+    record_auxiliary_outcome(admitted.as_ref(), &outcome).await;
+    outcome
+}
+
+async fn stream_compaction(
+    sess: &Session,
+    turn_context: &TurnContext,
+    client_session: &mut ModelClientSession,
+    responses_metadata: &CodexResponsesMetadata,
+    prompt: &Prompt,
+) -> CodexResult<()> {
     let mut stream = client_session
         .stream(
             prompt,
@@ -725,8 +856,12 @@ async fn drain_to_completed(
         };
         match event {
             Ok(ResponseEvent::OutputItemDone(item)) => {
-                sess.record_conversation_items(turn_context, std::slice::from_ref(&item))
-                    .await;
+                sess.record_conversation_items_from(
+                    turn_context,
+                    std::slice::from_ref(&item),
+                    Some(MessageOrigin::Model),
+                )
+                .await;
             }
             Ok(ResponseEvent::ServerReasoningIncluded(included)) => {
                 sess.set_server_reasoning_included(included).await;

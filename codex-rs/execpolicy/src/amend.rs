@@ -66,6 +66,24 @@ pub fn blocking_append_allow_prefix_rule(
     policy_path: &Path,
     prefix: &[String],
 ) -> Result<(), AmendError> {
+    append_allow_prefix_rule(policy_path, prefix, /*justification*/ None)
+}
+
+/// [`blocking_append_allow_prefix_rule`] with a `justification` recorded on
+/// the rule (such as the security level it was approved under).
+pub fn blocking_append_allow_prefix_rule_with_justification(
+    policy_path: &Path,
+    prefix: &[String],
+    justification: &str,
+) -> Result<(), AmendError> {
+    append_allow_prefix_rule(policy_path, prefix, Some(justification))
+}
+
+fn append_allow_prefix_rule(
+    policy_path: &Path,
+    prefix: &[String],
+    justification: Option<&str>,
+) -> Result<(), AmendError> {
     if prefix.is_empty() {
         return Err(AmendError::EmptyPrefix);
     }
@@ -76,7 +94,16 @@ pub fn blocking_append_allow_prefix_rule(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|source| AmendError::SerializePrefix { source })?;
     let pattern = format!("[{}]", tokens.join(", "));
-    let rule = format!(r#"prefix_rule(pattern={pattern}, decision="allow")"#);
+    let rule = match justification {
+        None => format!(r#"prefix_rule(pattern={pattern}, decision="allow")"#),
+        Some(justification) => {
+            let justification = serde_json::to_string(justification)
+                .map_err(|source| AmendError::SerializePrefix { source })?;
+            format!(
+                r#"prefix_rule(pattern={pattern}, decision="allow", justification={justification})"#
+            )
+        }
+    };
     append_rule_line(policy_path, &rule)
 }
 
@@ -215,6 +242,37 @@ mod tests {
             r#"prefix_rule(pattern=["echo", "Hello, world!"], decision="allow")
 "#
         );
+    }
+
+    #[test]
+    fn appends_rule_with_justification_that_parses_back() {
+        let tmp = tempdir().expect("create temp dir");
+        let policy_path = tmp.path().join("rules").join("default.rules");
+
+        blocking_append_allow_prefix_rule_with_justification(
+            &policy_path,
+            &[String::from("echo"), String::from("hi")],
+            "approved \"here\"",
+        )
+        .expect("append rule");
+
+        let contents = std::fs::read_to_string(&policy_path).expect("default.rules should exist");
+        assert_eq!(
+            contents,
+            r#"prefix_rule(pattern=["echo", "hi"], decision="allow", justification="approved \"here\"")
+"#
+        );
+        let mut parser = crate::PolicyParser::new();
+        parser.parse("default.rules", &contents).expect("parses");
+        let policy = parser.build();
+        let rule = policy
+            .rules()
+            .get_vec("echo")
+            .and_then(|rules| rules.first())
+            .and_then(|rule| rule.as_any().downcast_ref::<crate::PrefixRule>())
+            .cloned()
+            .expect("one prefix rule");
+        assert_eq!(rule.justification.as_deref(), Some("approved \"here\""));
     }
 
     #[test]

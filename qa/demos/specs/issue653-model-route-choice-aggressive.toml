@@ -1,0 +1,133 @@
+# #653: /model chooses the connection (route) of a model served by several; Aggressive (credential broker).
+id = "issue653-model-route-choice-aggressive"
+feature = "#653: /model switches GLM 5.3 Flash between Z.AI connections under Aggressive"
+expected = "Under Aggressive (the credential broker holds ZAI_API_KEY), /model switches to GLM 5.3 Flash · Z.AI (Claude-style) and a turn completes, then back to OpenAI-style and a turn completes again."
+model = "glm-5.3-flash"
+provider = "zai"
+cols = 140
+rows = 50
+config = """
+suppress_unstable_features_warning = true
+
+[features]
+security_levels = true
+protected_mode_preflight = true
+secretless_agent_launch = true
+isolated_credential_broker = true
+secret_output_gate = true
+source_envelopes = true
+url_destination_policy = true
+contained_external_agents = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Preflight passed"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Saved: Aggressive"
+[[steps]]
+key = "r"
+[[steps]]
+wait = "Z.AI GLM 5.3 Flash via zai"
+timeout = 60
+compress = 2
+
+[[steps]]
+type = "Reply with exactly: openai-route-one"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^• openai-route-one"
+timeout = 120
+compress = 2
+[[steps]]
+type = "/model"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "GLM 5\\.3 Flash · Z\\.AI \\(OpenAI-style\\) \\(current\\)"
+[[steps]]
+key = "Down"
+[[steps]]
+wait = "› 2\\. GLM 5\\.3 Flash · Z\\.AI \\(Claude-style\\)"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Reasoning Level for GLM 5\\.3 Flash · Z\\.AI \\(Claude-style\\)"
+[[steps]]
+wait = "› \\d\\. More reasoning"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Advanced Reasoning"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Model changed to GLM 5\\.3 Flash · Z\\.AI \\(Claude-style\\)"
+[[steps]]
+pause = 1.5
+[[steps]]
+type = "Reply with exactly: claude-route-ok"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^• claude-route-ok"
+timeout = 120
+compress = 2
+[[steps]]
+type = "/model"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "GLM 5\\.3 Flash · Z\\.AI \\(Claude-style\\) \\(current\\)"
+[[steps]]
+key = "Up"
+[[steps]]
+wait = "› 1\\. GLM 5\\.3 Flash · Z\\.AI \\(OpenAI-style\\)"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Select Reasoning Level for GLM 5\\.3 Flash · Z\\.AI \\(OpenAI-style\\)"
+[[steps]]
+wait = "› \\d\\. More reasoning"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Advanced Reasoning"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Model changed to GLM 5\\.3 Flash · Z\\.AI \\(OpenAI-style\\)"
+[[steps]]
+type = "Reply with exactly: openai-route-ok"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^• openai-route-ok"
+timeout = 120
+compress = 2
+[[steps]]
+pause = 3.0

@@ -227,6 +227,10 @@ pub async fn complete_device_code_login(
         tokens.refresh_token,
         opts.cli_auth_credentials_store_mode,
         opts.auth_keyring_backend_kind,
+        opts.named_account
+            .clone()
+            .map(|account| (account, opts.named_account_must_be_new)),
+        &opts.auth_route_config,
     )
     .await
 }

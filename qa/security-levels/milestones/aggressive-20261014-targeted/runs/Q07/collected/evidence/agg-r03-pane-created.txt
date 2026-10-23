@@ -1,0 +1,15 @@
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     glm-5.3-flash low   /model to change │
+│ directory: ~/runs/…/fixture/workspace           │
+╰─────────────────────────────────────────────────╯
+
+• Created and switched to Corbanu Terminal pane B. glm-5.3-flash; no task was started.
+
+• Session renamed to B. To resume this session run corbanu resume, then select B (01a139c1-257c-7bb1-acb5-2bb9b30bc1bc)
+
+
+› Summarize recent commits
+
+  Z.AI GLM 5.3 Flash via zai low · ~/runs/agms-Q07-agmx1-20261014T092608Z/fixture/workspace · Corbanu Terminal · TPS: -- tok/s · B

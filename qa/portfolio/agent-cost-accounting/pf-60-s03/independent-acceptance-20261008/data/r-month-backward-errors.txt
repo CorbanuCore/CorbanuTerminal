@@ -1,0 +1,2 @@
+2026-09-30T23:59:50.153047Z ERROR codex_core::accounting: Native Anthropic accounting failed; request stopped without a repair send step="open sampling" cause=open accounting store: negative or backward checkpoint
+2026-09-30T23:59:50.153094Z  WARN codex_core::accounting: accounting sampling closed; later requests in this turn stop at=core/src/accounting_chat.rs:67:20

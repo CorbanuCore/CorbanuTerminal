@@ -13,7 +13,7 @@ linkage; this document does not allocate another lane or authorize edits.
 Product specification, **Non-negotiable controls**: “Classify instruction intent
 and provenance before external content can influence tools or financial actions.”
 Plan: `docs/plans/active/p0-security-levels.md`, PF-30. Follow-up record:
-`docs/sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md`.
+`docs/sprints/archive/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md`.
 PF-35 detector qualification remains separate; never manufacture an Allow verdict
 to make this path appear functional.
 

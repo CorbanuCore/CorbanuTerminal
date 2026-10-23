@@ -1,0 +1,12 @@
+zai_api_key: absent
+openai_api_key: absent
+kimi_api_key: absent
+total 8
+drwx------   3 agent  staff   96 Oct 20 01:54 .
+drwx------  10 agent  staff  320 Oct 20 01:51 ..
+-rw-------   1 agent  staff   47 Oct 20 01:51 auth.json
+2026-10-20T01:54:48Z
+deleted acc-tart1-run
+Source Name            Disk  Size  Accessed      State  
+local  corbanu-qa-base 50 GB 28 GB 3 minutes ago stopped
+2026-10-20T01:54:49Z

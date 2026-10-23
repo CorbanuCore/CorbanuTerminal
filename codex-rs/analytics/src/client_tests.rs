@@ -226,6 +226,7 @@ fn client_with_receiver() -> (
     let (sender, receiver) = mpsc::channel(8);
     let queue = AnalyticsEventsQueue {
         sender,
+        auth_manager: None,
         app_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
         plugin_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
     };
@@ -557,6 +558,7 @@ fn sample_thread_resume_response() -> ClientResponsePayload {
         initial_turns_page: None,
         turns_backwards_cursor: None,
         items_backwards_cursor: None,
+        provider_account: None,
     })
 }
 
@@ -575,6 +577,7 @@ fn sample_thread_fork_response() -> ClientResponsePayload {
         active_permission_profile: None,
         reasoning_effort: None,
         multi_agent_mode: Default::default(),
+        provider_account: None,
     })
 }
 
@@ -610,7 +613,7 @@ fn track_request_only_enqueues_analytics_relevant_requests() {
         client.track_request(/*connection_id*/ 7, request_id, &request);
         assert!(matches!(
             receiver.try_recv(),
-            Ok(AnalyticsEventsQueueMessage::Fact(input))
+            Ok(AnalyticsEventsQueueMessage::Fact(input, _))
                 if matches!(*input, AnalyticsFact::ClientRequest { .. })
         ));
     }
@@ -622,7 +625,7 @@ fn track_request_only_enqueues_analytics_relevant_requests() {
     );
     assert!(matches!(
         receiver.try_recv(),
-        Ok(AnalyticsEventsQueueMessage::Fact(input))
+        Ok(AnalyticsEventsQueueMessage::Fact(input, _))
             if matches!(
                 *input,
                 AnalyticsFact::ExplicitClientInterruptRequest {
@@ -664,7 +667,7 @@ fn track_response_only_enqueues_analytics_relevant_responses() {
         client.track_response(/*connection_id*/ 7, request_id, &response);
         assert!(matches!(
             receiver.try_recv(),
-            Ok(AnalyticsEventsQueueMessage::Fact(input))
+            Ok(AnalyticsEventsQueueMessage::Fact(input, _))
                 if matches!(*input, AnalyticsFact::ClientResponse { .. })
         ));
     }
@@ -710,7 +713,7 @@ async fn flush_waits_for_preceding_fact_delivery() {
     let flush = tokio::spawn(async move { client.flush().await });
     assert!(matches!(
         receiver.recv().await,
-        Some(AnalyticsEventsQueueMessage::Fact(input))
+        Some(AnalyticsEventsQueueMessage::Fact(input, _))
             if matches!(*input, AnalyticsFact::ClientRequest { .. })
     ));
     let done_tx = match receiver.recv().await {
@@ -740,7 +743,7 @@ fn track_notification_only_enqueues_analytics_relevant_notifications() {
 
     client.track_notification(&tracked_notification);
 
-    let Ok(AnalyticsEventsQueueMessage::Fact(input)) = receiver.try_recv() else {
+    let Ok(AnalyticsEventsQueueMessage::Fact(input, _)) = receiver.try_recv() else {
         panic!("expected analytics notification");
     };
     let AnalyticsFact::Notification(notification) = *input else {
@@ -781,4 +784,50 @@ fn track_event_request_batches_only_isolates_accepted_line_fingerprint_events() 
     assert_eq!(batches[3].len(), 2);
     assert!(batches[1][0].should_send_in_isolated_request());
     assert!(batches[2][0].should_send_in_isolated_request());
+}
+
+/// #658: a fact carries the sign-in the process's sessions used when it was
+/// recorded; none while they run on different accounts.
+#[test]
+fn issue_658_facts_carry_the_sign_in_they_were_recorded_under() {
+    let home = std::env::temp_dir().join(format!("analytics-658-{}", std::process::id()));
+    let base = codex_login::AuthManager::from_auth_for_testing_with_home(
+        codex_login::CodexAuth::from_api_key("sk-test"),
+        home,
+    );
+    let account = |name: &str| codex_login::NamedChatgptAccount {
+        provider_id: "openai".to_string(),
+        name: name.to_string(),
+    };
+    let (sender, mut receiver) = mpsc::channel(8);
+    let client = AnalyticsEventsClient {
+        queue: Some(AnalyticsEventsQueue {
+            sender,
+            auth_manager: Some(Arc::clone(&base)),
+            app_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
+            plugin_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
+        }),
+    };
+    let mut record = |request_id: i64| {
+        client.track_request(
+            /*connection_id*/ 7,
+            RequestId::Integer(request_id),
+            &sample_turn_start_request(),
+        );
+        match receiver.try_recv() {
+            Ok(AnalyticsEventsQueueMessage::Fact(_, sign_in)) => {
+                sign_in.map(|manager| manager.named_account().cloned())
+            }
+            _ => panic!("expected a fact"),
+        }
+    };
+
+    let work = base.register_session_sign_in(codex_login::SessionSignIn::Named(account("work")));
+    assert_eq!(record(1), Some(Some(account("work"))));
+    let default = base.register_session_sign_in(codex_login::SessionSignIn::Default);
+    assert_eq!(record(2), None);
+    drop(work);
+    assert_eq!(record(3), Some(None));
+    drop(default);
+    let _ = std::fs::remove_dir_all(base.codex_home());
 }

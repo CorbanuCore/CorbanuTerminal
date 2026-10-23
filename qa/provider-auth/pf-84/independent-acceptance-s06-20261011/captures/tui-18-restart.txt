@@ -1,0 +1,12 @@
+• New session: requests to openai use account `devcode`.
+• mock: chatgpt devcode gen1
+• New sessions use amazon-bedrock account `tuialt`. This session is unchanged.
+config.toml [provider_accounts] after Make default:
+[provider_accounts]
+amazon-bedrock = "tuialt"
+› Reply with exactly: pong
+• mock: sigv4 AKIDOTHERPROFILE us-west-2
+│  Model provider:       Amazon Bedrock - http://127.0.0.1:34631/openai/v1 · account tuialt │
+│  Account:              Amazon Bedrock AWS credentials                                     │
+│  Account usage:        tuialt · 120 input · 9 output                                      │
+{"t": 1791782393.452, "ev": "responses", "path": "/openai/v1/responses", "who": {"scheme": "sigv4", "akid": "AKIDOTHERPROFILE", "region": "us-west-2", "service": "bedrock-mantle", "session_token": false}, "model": "openai.gpt-5.4"}

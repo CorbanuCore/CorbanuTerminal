@@ -9,6 +9,8 @@ use std::cell::RefCell;
 use std::path::Display;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::Mutex;
+use std::sync::PoisonError;
 use ts_rs::TS;
 
 mod absolutize;
@@ -79,6 +81,55 @@ impl AbsolutePathBuf {
 
     pub fn current_dir() -> std::io::Result<Self> {
         Self::from_absolute_path(std::env::current_dir()?)
+    }
+
+    /// The process working directory, without ever failing.
+    ///
+    /// When the working directory cannot be resolved (it was removed, or the
+    /// OS revoked access to the volume holding it, #616), this returns the
+    /// working directory most recently resolved through this function, and
+    /// before any such resolution the filesystem root (the system drive's
+    /// root on Windows). Use it only where a usable directory is required and a panic
+    /// or an error would be worse than a stable fallback.
+    pub fn current_dir_or_last_known() -> Self {
+        static LAST_KNOWN: Mutex<Option<AbsolutePathBuf>> = Mutex::new(None);
+        Self::current_dir_or_last_known_with(Self::current_dir, &LAST_KNOWN)
+    }
+
+    fn current_dir_or_last_known_with(
+        resolve: impl FnOnce() -> std::io::Result<Self>,
+        last_known: &Mutex<Option<Self>>,
+    ) -> Self {
+        let mut last_known = last_known.lock().unwrap_or_else(PoisonError::into_inner);
+        match resolve() {
+            Ok(cwd) => {
+                *last_known = Some(cwd.clone());
+                cwd
+            }
+            Err(_) => last_known
+                .clone()
+                .unwrap_or_else(Self::unresolvable_cwd_fallback),
+        }
+    }
+
+    /// The filesystem root; on Windows the system drive's root (`C:\` when
+    /// `SystemDrive` is unset or not a drive).
+    fn unresolvable_cwd_fallback() -> Self {
+        let root = if cfg!(windows) {
+            std::env::var("SystemDrive")
+                .ok()
+                .filter(|drive| {
+                    let drive = drive.as_bytes();
+                    drive.len() == 2 && drive[0].is_ascii_alphabetic() && drive[1] == b':'
+                })
+                .map_or_else(
+                    || PathBuf::from(r"C:\"),
+                    |drive| PathBuf::from(format!(r"{drive}\")),
+                )
+        } else {
+            PathBuf::from("/")
+        };
+        Self::resolve_path_against_base(&root, &root)
     }
 
     /// Construct an absolute path from `path`, resolving relative paths against
@@ -427,6 +478,38 @@ mod tests {
         assert_eq!(
             path.as_path(),
             test_path_buf("/tmp/codex-home/plugins/cache")
+        );
+    }
+
+    #[test]
+    fn current_dir_or_last_known_falls_back_instead_of_failing() {
+        let last_known = Mutex::new(None);
+        let unresolvable = || {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "Operation not permitted",
+            ))
+        };
+
+        // Nothing resolved yet: the fixed fallback directory.
+        let fallback = AbsolutePathBuf::current_dir_or_last_known_with(unresolvable, &last_known);
+        assert_eq!(fallback, AbsolutePathBuf::unresolvable_cwd_fallback());
+        assert!(fallback.as_path().is_absolute());
+
+        // Once resolved, a later failure keeps the last resolved directory.
+        let workspace = tempdir().expect("workspace");
+        let resolved = AbsolutePathBuf::from_absolute_path(workspace.path()).expect("absolute");
+        let resolved_clone = resolved.clone();
+        assert_eq!(
+            AbsolutePathBuf::current_dir_or_last_known_with(
+                move || Ok(resolved_clone),
+                &last_known
+            ),
+            resolved
+        );
+        assert_eq!(
+            AbsolutePathBuf::current_dir_or_last_known_with(unresolvable, &last_known),
+            resolved
         );
     }
 

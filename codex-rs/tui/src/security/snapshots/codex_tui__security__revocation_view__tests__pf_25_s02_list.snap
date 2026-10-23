@@ -1,0 +1,12 @@
+---
+source: tui/src/security/revocation_view_tests.rs
+expression: text(&view)
+---
+Grants and kill switch
+Core's level: Permissive · Kill switch: off
+
+No grants are held now.
+> Revoke all active authority
+  Turn the kill switch on
+
+↑/↓ choose · enter review · esc back to the levels

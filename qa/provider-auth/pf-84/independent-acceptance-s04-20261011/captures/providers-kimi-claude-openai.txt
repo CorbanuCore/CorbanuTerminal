@@ -1,0 +1,107 @@
+===== k2-rows
+  6. Kimi Code · default  Enabled · configured · current · this session · default for new sessions
+  7. Kimi Code · fake     Named account · API key · fp 88da7bc7c674
+
+===== k2-fake-401
+⚠ Kimi Code (kimi-code) account `fake` was rejected. Replace its key with `corbanu account add kimi-code fake` (reads stdin), or choose another account. The
+  default Kimi Code credential is unchanged.
+■ unexpected status 401 Unauthorized: The API Key appears to be invalid or may have expired. Please verify your credentials and try again., url:
+https://api.kimi.com/coding/v1/chat/completions, cf-ray: a48d3fcb9b712499-PHX
+› Improve documentation in @filename
+  Kimi Code K3 via kimi-code default · $S/work · Corbanu Terminal · TPS: -- tok/s
+
+===== c3-providers-rows
+ 1. OpenAI                    Not configured · unavailable
+  2. Claude Account · default  Enabled · configured · current · this session · default for new sessions
+  3. Claude Account · fake     Named account · subscription token · fp cece2dac3657
+  4. Claude Account · work     Named account · subscription token · fp b60a5d2de764
+  5. Corbanu API               Not configured · unavailable
+  6. Anthropic                 Not configured · unavailable
+  7. Ambient                   Not configured · unavailable
+  8. Kimi Code                 Not configured · unavailable
+ 9. Z.AI                      Not configured · unavailable
+ 10. DeepSeek              Not configured · unavailable
+ 11. OpenRouter            Not configured · unavailable
+ 12. Meta        Not configured · unavailable
+ 13. Baseten     Not configured · unavailable
+ 14. Vercel      Not configured · unavailable
+ 15. Amazon Bedrock  Not configured · unavailable
+ 16. Ollama          Enabled · configured
+ 17. LM Studio       Enabled · configured
+
+===== c3-fake-401
+› Reply with exactly the word pong and nothing else.
+⚠ Claude Account (claude-plan) account `fake` was rejected. Replace its token with `corbanu account add claude-plan fake --kind claude-token` (reads stdin) or
+  sign in again in its Claude Code config directory, or choose another account. The default Claude Account credential is unchanged.
+■ unexpected status 401 Unauthorized: OAuth access token is invalid., url: https://api.anthropic.com/v1/messages, cf-ray: a48d53877ffa0ab5-DFW
+› Explain this codebase
+  Claude Opus 5 Plan via claude-plan default · $S/work · Corbanu Terminal · TPS: -- tok/s
+
+===== c3-rows-cfg
+  2. Claude Account · default  Enabled · configured · current · default for new sessions
+  3. Claude Account · cfg      Named account · Claude Code login · fp 61539973a31e
+  4. Claude Account · fake     Named account · subscription token · fp cece2dac3657 · this session
+  5. Claude Account · work     Named account · subscription token · fp b60a5d2de764
+
+===== c3-openai-actions
+  OpenAI
+  Enabled · configured
+  Credentials are present; a successful request is needed to verify access.
+  Deactivation keeps the managed credential; this screen never deletes it.
+› 1. Deactivate                   Exclude this provider from use; credentials are kept.
+  2. Replace with OpenAI account  OpenAI account
+  3. Replace with API key         API key
+  Press enter to confirm or esc to go back
+
+===== k1-onboarding-loop
+                                      
+             _+=*;++++_               
+           ,!*,*`_;\|*||,             
+          /|//,,".|+\=\|||_           
+         |+*| /! =| "\|,*\/           
+        ,__\,/'^;/_|" |//\/*          
+        \,~|~_*+.^|: /|,|//|,         
+        |/|*| |__/\_/|\/_"|=|         
+        |||/|."!~_=\/|\_~=||\         
+       ^+\|"|__====+~|\\|+*|\         
+        /-"|/|,|_||;*_|\*=/\|         
+        \~*/\|`"""""'+/|\|/|`         
+         |_"|;+;\-,*:_/,//|/          
+          ^`^|_\_*;/,^/_||/           
+           \.;\\_*=|**!*|*            
+             ~,"*\+,_+|*              
+                                      
+
+  Welcome to Corbanu Terminal, your crypto-native AI terminal
+
+  Connect a Kimi Code API key to use Corbanu Terminal
+
+> 1. Provide your Kimi Code API key
+     Pay for what you use
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  Use ↑/↓ to choose · Press enter to continue
+

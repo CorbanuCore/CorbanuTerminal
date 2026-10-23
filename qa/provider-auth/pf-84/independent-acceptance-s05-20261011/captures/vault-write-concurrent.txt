@@ -1,0 +1,12 @@
+# hb3: vault created by BASE with zai/work; two CAND workers start their first --account work request at the same time
+Saved zai account `work` (api_key).
+  [after BASE account add] local.age 621 bytes sha a40c3565870f7698
+  worker 1 exit=0 reply=pong
+  worker 2 exit=0 reply=pong
+  [after both workers] local.age 737 bytes sha 0de0469b67d35ca7
+  ledger accounts:    2 {"name":"work","fingerprint":"c55d6e0bb7fa"} 
+  third CAND worker exit=0 ; ledger accounts now:    3 {"name":"work","fingerprint":"c55d6e0bb7fa"} 
+  [after third worker] local.age 737 bytes sha 0de0469b67d35ca7
+  BASE exec --account work on the rewritten vault: exit=0 reply=pong warning: Developer accounting is off for this session: this home's cost ledger was written by a newer Corbanu build. Requests are sent as usual; /cost does not include them.
+  BASE account list: zai	work	api_key 
+  [after BASE] local.age 737 bytes sha 0de0469b67d35ca7

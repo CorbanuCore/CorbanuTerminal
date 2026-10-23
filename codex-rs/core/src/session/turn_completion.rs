@@ -3,6 +3,9 @@ use std::time::Duration;
 use crate::client::ModelClientSession;
 use crate::client_common::Prompt;
 use crate::client_common::ResponseEvent;
+use crate::provider_throttle::AdmittedProviderRequest;
+use crate::provider_throttle::AuxiliaryRequest;
+use crate::provider_throttle::record_auxiliary_outcome;
 use crate::responses_metadata::CodexResponsesMetadata;
 use crate::session::TurnInput;
 use crate::session::session::Session;
@@ -18,6 +21,7 @@ use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::user_input::UserInput;
 use codex_rollout_trace::InferenceTraceContext;
+use futures::FutureExt;
 use futures::StreamExt;
 use serde::Deserialize;
 use serde_json::json;
@@ -251,9 +255,43 @@ async fn assess_turn_completion_inner(
     cancellation_token: &CancellationToken,
 ) -> CodexResult<CompletionAssessment> {
     let prompt = assessment_prompt(objective, assistant_response);
+    // #509: the check is a model request on the turn's key like any other.
+    let admitted = AdmittedProviderRequest::admit_for_turn(
+        AuxiliaryRequest::CompletionCheck,
+        sess,
+        turn_context,
+        &prompt,
+    )
+    .boxed()
+    .or_cancel(cancellation_token)
+    .await
+    .map_err(|_| CodexErr::TurnAborted)??;
+    let outcome = stream_turn_completion_assessment(
+        sess,
+        turn_context,
+        client_session,
+        responses_metadata,
+        &prompt,
+        cancellation_token,
+    )
+    .await;
+    record_auxiliary_outcome(admitted.as_ref(), &outcome)
+        .boxed()
+        .await;
+    outcome
+}
+
+async fn stream_turn_completion_assessment(
+    sess: &Session,
+    turn_context: &TurnContext,
+    client_session: &mut ModelClientSession,
+    responses_metadata: &CodexResponsesMetadata,
+    prompt: &Prompt,
+    cancellation_token: &CancellationToken,
+) -> CodexResult<CompletionAssessment> {
     let stream_result = client_session
         .stream(
-            &prompt,
+            prompt,
             &turn_context.model_info,
             &turn_context.session_telemetry,
             Some(ReasoningEffortConfig::Low),

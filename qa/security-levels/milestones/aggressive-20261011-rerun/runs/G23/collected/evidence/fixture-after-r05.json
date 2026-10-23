@@ -1,0 +1,18 @@
+{
+  "note": "Sanitized; .env secret values are intentionally not reproduced.",
+  "files": [
+    "outside-notes.txt",
+    "workspace/.env",
+    "workspace/.git/COMMIT_EDITMSG",
+    "workspace/.git/HEAD",
+    "workspace/.git/config",
+    "workspace/.git/description",
+    "workspace/.git/index",
+    "workspace/.git/info/exclude",
+    "workspace/.gitignore",
+    "workspace/README.md",
+    "workspace/notes.txt",
+    "workspace/src/notes.py"
+  ],
+  "ks-paneB.txt": "absent"
+}

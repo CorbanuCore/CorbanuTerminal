@@ -1,0 +1,83 @@
+
+╭───────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)         │
+│                                       │
+│ model:     loading   /model to change │
+│ directory: /tmp/f555proj              │
+╰───────────────────────────────────────╯
+
+› Explain this codebase
+
+  Z.AI GLM 5.3 Flash via zai default · /tmp/f555proj · Corbanu Terminal · TPS: -- tok/s
+
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: /tmp/f555proj                    │
+╰─────────────────────────────────────────────╯
+ Resume a previous session
+
+ Type to search                                                                                         Filter: [Cwd] All    Sort: [Updated] Created
+
+  ❯ 13s ago     reply with the single word ping
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 1 / 1 · 100% ─
+ enter resume   esc exit   ctrl+c exit   tab focus sort/filter   ←/→ change option
+ ctrl+o comfortable view   ctrl+t transcript   ctrl+e expand   ↑/↓ browse
+
+› /resume
+
+  /resume  resume a saved chat
+ Resume a previous session
+
+ Type to search                                                                                         Filter: [Cwd] All    Sort: [Updated] Created
+
+  ❯ 19s ago     reply with the single word ping
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 1 / 1 · 100% ─
+ enter resume   esc exit   ctrl+c exit   tab focus sort/filter   ←/→ change option
+ ctrl+o comfortable view   ctrl+t transcript   ctrl+e expand   ↑/↓ browse
+
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)               │
+│                                             │
+│ model:     glm-5.3-flash   /model to change │
+│ directory: /tmp/f555proj                    │
+╰─────────────────────────────────────────────╯
+
+› reply with the single word ping
+
+• ping
+
+To continue this session, run corbanu resume 01a12e94-4d9a-7703-828e-42b405c7e7b8
+
+› reply with the single word pong
+
+• pong
+
+/status
+
+╭────────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.48)                                                             │
+│                                                                                            │
+│  Model:                Z.AI GLM 5.3 Flash                                                  │
+│  Model provider:       Z.AI - https://api.z.ai/api/paas/v4 · account work                  │
+│  Directory:            /tmp/f555proj                                                       │
+│  Permissions:          Next turn: Workspace (Ask for approval)                             │
+│  Security:             Requested Permissive; effective protection unverified (/security)   │
+│  Agents.md:            <none>                                                              │
+│  Account:              Z.AI API key configured                                             │
+│  Collaboration mode:   Default                                                             │
+│  Session:              01a12e93-fa0a-76a1-a9f8-eaf1c575e82a                                │
+│                                                                                            │
+│  Token usage:          8.41K total  (8.37K input + 37 output)                              │
+│  Context window:       100% left (14.3K used / 950K)                                       │
+│  Account usage:        work · 8,370 input · 20,224 cached input · 37 output (31 reasoning) │
+│  Limits:               data not available yet                                              │
+╰────────────────────────────────────────────────────────────────────────────────────────────╯
+
+› Improve documentation in @filename
+
+  Z.AI GLM 5.3 Flash via zai default · /tmp/f555proj · Corbanu Terminal · TPS: 0.4 tok/s
+

@@ -1,0 +1,48 @@
+# PF-60-S03 (13b): a default build (no developer-accounting feature). After a real GLM 5.2 turn,
+# /usage requests answers with one line and /cost is not a command. Record with the default build:
+# cargo build -p codex-cli --bin corbanu
+id = "pf60s03-default-build-no-cost"
+feature = "Default build: /usage requests has no per-request cost history and /cost does not exist (developer-only)"
+expected = "/usage requests answers: Per-request cost history is not part of this build. The command list for /co has no /cost, and /cost is an unrecognized command."
+model = "glm-5.2"
+provider = "zai"
+rows = 30
+config = """
+suppress_unstable_features_warning = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with the single word OK."
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "•\\s+OK"
+timeout = 120
+compress = 2
+[[steps]]
+type = "/usage requests"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Per-request cost history is not part of this build\\."
+[[steps]]
+pause = 3
+[[steps]]
+type = "/co"
+[[steps]]
+wait = "/compact"
+[[steps]]
+pause = 3
+[[steps]]
+type = "st"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Unrecognized command '/cost'"
+[[steps]]
+pause = 4

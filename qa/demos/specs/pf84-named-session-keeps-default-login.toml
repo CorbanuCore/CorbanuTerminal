@@ -1,0 +1,68 @@
+# PF-84 #570: forced_login_method = "chatgpt" rules out the default login (an OpenAI API key). A
+# session on named ChatGPT account `chat` answers as chat and leaves the default login alone; using
+# the default account for a new session is refused with the reason, and auth.json is unchanged
+# (checked off screen against its hash from before launch). Before #570 the session deleted
+# auth.json at startup. Local mock issuer + Responses, fake tokens only. Record with
+#   python3 scripts/demo_video.py record qa/demos/specs/pf84-named-session-keeps-default-login.toml \
+#     --bin <candidate> --sprint PF-84-S06 --publish
+id = "pf84-named-session-keeps-default-login"
+feature = "PF-84 #570: a named-account session never logs out the default login (TUI with its own app server; see #595)"
+expected = "Under forced_login_method=chatgpt the session on account chat is authorized as chat; switching to the default (API-key) login is refused with the reason, and auth.json is unchanged."
+model = "gpt-5.4"
+provider = "openai"
+args = ["--account", "chat", "-c", "forced_login_method=\"chatgpt\""]
+setup = """(nohup python3 {run}/../../../../provider-auth/pf-84/s06/scripts/mock_openai.py --port 38465 --log {logs}/mock-openai.jsonl > /dev/null 2>&1 &)
+sleep 1
+printf 'sk-fake-default' | {bin} login --with-api-key > /dev/null 2>&1
+curl -s -X POST -H 'content-type: application/json' -d '{"user":"chat","ttl":3600}' http://127.0.0.1:38465/_next_user > /dev/null
+{bin} login --account chat --device-auth --experimental_issuer http://127.0.0.1:38465 2>&1 | tail -1
+shasum -a 256 "$CODEX_HOME/auth.json" > {logs}/auth-before.sha256"""
+config = """
+suppress_unstable_features_warning = true
+approval_policy = "never"
+sandbox_mode = "read-only"
+openai_base_url = "http://127.0.0.1:38465/v1"
+chatgpt_base_url = "http://127.0.0.1:38465/backend-api/"
+cli_auth_credentials_store = "file"
+[features]
+named_accounts = true
+"""
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "Reply with exactly: pong"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "authorized as chat"
+compress = 2
+[[steps]]
+pause = 1.5
+[[steps]]
+type = "/providers"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "› +1\\. OpenAI · default"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Start a new session on the default account"
+[[steps]]
+key = "Down"
+repeat = 4
+[[steps]]
+wait = "› +5\\. Start a new session on the default account"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Press enter to confirm or esc to go back"
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "The default OpenAI login cannot be used"
+[[steps]]
+run = "shasum -a 256 -c {logs}/auth-before.sha256"
+[[steps]]
+pause = 4.0

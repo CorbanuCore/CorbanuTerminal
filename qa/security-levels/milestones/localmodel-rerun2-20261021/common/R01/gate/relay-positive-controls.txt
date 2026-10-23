@@ -1,0 +1,5 @@
+https://api.z.ai/api/paas/v4/models 200
+https://qwen.agms.test/v1/models 200
+{"conn": "1792550122368283000-49208", "event": "denied_proxy_request", "request_line": "CONNECT api.github.com:443 HTTP/1.1", "time_ns": 1792550122368327000, "ts": "2026-10-21T02:35:22+0000"}
+{"conn": "1792550122494032000-49209", "event": "denied_proxy_request", "request_line": "CONNECT chatgpt.com:443 HTTP/1.1", "time_ns": 1792550122494097000, "ts": "2026-10-21T02:35:22+0000"}
+{"conn": "1792550122308412000-49206", "event": "forwarded", "method": "POST", "model": "glm-5.3-flash", "path": "/api/paas/v4/chat/completions", "request_bytes": 26874, "response_bytes": 3465, "role": "product", "seconds": 6.046, "status": "200", "stream": true, "target": "zai", "time_ns": 179255012

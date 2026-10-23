@@ -312,7 +312,7 @@ impl ProtectedRuntime {
         drop(revocations);
         let (permit, _) = journal.reserve_dispatch(
             self.event_context()?,
-            None,
+            /*causal_parent*/ None,
             request,
             identity,
             deduplication_key,
@@ -378,7 +378,7 @@ impl ProtectedRuntime {
 
     fn observe_time(&self, now_unix_seconds: i64) -> Result<(), ProtectedRuntimeError> {
         self.last_observed_unix_seconds
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |previous| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |previous| {
                 (now_unix_seconds >= previous).then_some(now_unix_seconds)
             })
             .map(|_| ())

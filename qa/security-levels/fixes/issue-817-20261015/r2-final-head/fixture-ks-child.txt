@@ -1,0 +1,4 @@
+2026-10-15T06:45:29Z S0: test project at first start (ks-child.txt): ks-child.txt absent
+2026-10-15T06:46:52Z A2: test project right after the kill switch: ks-child.txt absent
+2026-10-15T06:48:31Z A2: test project 90 s after the kill switch (ks-child.txt): ks-child.txt absent
+2026-10-15T06:48:36Z end: test project (ks-child.txt): ks-child.txt absent

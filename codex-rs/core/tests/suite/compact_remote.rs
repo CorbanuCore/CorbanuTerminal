@@ -2284,6 +2284,11 @@ async fn remote_compact_trim_estimate_uses_session_base_instructions() -> Result
             .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
             .with_config(|config| {
                 config.model_context_window = Some(200_000);
+                // #866: the skills block is sized to the context window, so
+                // with the developer's own skills installed it was far smaller
+                // in the override session, and its estimate never reached the
+                // window calibrated here. It has no part in this test.
+                config.include_skill_instructions = false;
             }),
     )
     .await?;
@@ -2391,6 +2396,7 @@ async fn remote_compact_trim_estimate_uses_session_base_instructions() -> Result
                 move |config| {
                     config.model_context_window = Some(override_context_window);
                     config.base_instructions = Some(override_base_instructions);
+                    config.include_skill_instructions = false;
                 }
             }),
     )

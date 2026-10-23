@@ -1,0 +1,16 @@
+== m1
+grain=day (bucketed by request start)
+  2026-10-09: 5 requests, 58919 tokens, exact USD 0.05377672
+  ALL: 5 requests, 58919 tokens, exact USD 0.05377672
+== m2
+grain=day (bucketed by request start)
+  2026-10-10: 6 requests, 72072 tokens, exact USD 0.03420384
+  ALL: 6 requests, 72072 tokens, exact USD 0.03420384
+== m3
+grain=day (bucketed by request start)
+  2026-10-10: 2 requests, 26234 tokens, exact USD 0.00835228
+  ALL: 2 requests, 26234 tokens, exact USD 0.00835228
+== mk
+grain=day (bucketed by request start)
+  2026-10-10: 2 requests, 25988 tokens, exact USD 0.00807088
+  ALL: 2 requests, 25988 tokens, exact USD 0.00807088

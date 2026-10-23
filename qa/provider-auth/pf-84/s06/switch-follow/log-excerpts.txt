@@ -1,0 +1,7 @@
+# core: account switches (codex-tui.log, RUST_LOG=info)
+2026-10-12T05:42:12.704713 account=default
+2026-10-12T05:43:00.495160 account=openai:work
+# model/list requests after each switch (first line per request)
+2026-10-12T05:41:40.171987 rpc.request_id=4
+2026-10-12T05:42:12.742449 rpc.request_id=11
+2026-10-12T05:43:00.539171 rpc.request_id=17

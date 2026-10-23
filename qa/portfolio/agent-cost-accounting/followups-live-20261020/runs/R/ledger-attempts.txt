@@ -1,0 +1,4 @@
+# thread | turn | provider | model | dispatched (UTC) | request_id | attempt_id (integrator's read of draft_accounting_attempts after the run)
+01a1578d-d2d0-75d2-9eba-03a3b89ed294 | prewarm:0590bdc5-02c0-43c4-879e-a6447fa341e8 | openai | gpt-6-sol | 2026-10-20T04:24:36Z | a8e0dd9a-ebd3-4c30-b951-18dd32f2da18 | d1c2199a-a345-48f0-8555-9e8e2e391dde
+01a1578d-d2d0-75d2-9eba-03a3b89ed294 | realtime:ws:01a1578d-d396-7883-8a4a-61d8fe7bd01a | openai | gpt-realtime-1.5 | 2026-10-20T04:24:37Z | 2dbec071-81c5-4428-b384-e8d1ef9d917c | 2c0fe751-d3e8-48af-a5b9-eb9da677f176
+01a15792-f898-7052-9c65-b427d6c2b70c | 01a15793-2d30-79b3-a928-83ae534484b6 | zai | glm-5.3-flash | 2026-10-20T04:30:26Z | c030a214-6388-4bb6-b020-e9486be7af55 | aab0cf45-2a5d-413b-9bd0-56f6e5abe1f8

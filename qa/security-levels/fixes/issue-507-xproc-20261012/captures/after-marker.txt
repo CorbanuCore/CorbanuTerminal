@@ -1,0 +1,1 @@
+MARKER: absent (B's command was stopped)

@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "errors": [],
+  "release_authorized": false
+}
+
+PF-80-S01 bounded follow-up on f7159c16723f59d021f46c7b66fdb8401ac777e4
+Earlier output above is historical candidate evidence.
+Command: PYTHONDONTWRITEBYTECODE=1 qa/initiative-control/pf-80-s01/.venv-v0D0As/bin/python scripts/initiative_control/delivery.py --repo . --contract qa/initiative-control/pf-80-s01/delivery-merge-contract.json --phase merge
+Candidate tooling digest: 7e8efa2a2407101bdb4e1741771b5db4105f399e8da5dcca659e7673835b00f0
+{
+  "ok": true,
+  "errors": [],
+  "release_authorized": false
+}
+Command exit: 0
+Post-fix structured review remains parent-owned and pending.

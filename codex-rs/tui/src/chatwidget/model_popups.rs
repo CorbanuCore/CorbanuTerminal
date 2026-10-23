@@ -62,6 +62,7 @@ use codex_model_provider_info::VERCEL_GLM_5_3_FLASH_MODEL;
 use codex_model_provider_info::VERCEL_GLM_5_3_MODEL;
 use codex_model_provider_info::VERCEL_KIMI_K3_MODEL;
 use codex_model_provider_info::VERCEL_PROVIDER_ID;
+use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
 #[cfg(test)]
@@ -240,7 +241,7 @@ const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 14] = [
     ModelPickerProviderGroup {
         id: "zai",
         label: "Z.AI",
-        subtitle: "Z.AI coding plan",
+        subtitle: "Z.AI API key",
     },
     ModelPickerProviderGroup {
         id: "deepseek",
@@ -352,7 +353,8 @@ impl ChatWidget {
     }
 
     fn model_menu_warning_line(&self) -> Option<Line<'static>> {
-        let base_url = self.custom_openai_base_url()?;
+        // The configured URL can carry a key in its query or userinfo.
+        let base_url = codex_http_client::redact_url(&self.custom_openai_base_url()?);
         let warning = format!(
             "Warning: OpenAI base URL is overridden to {base_url}. Selecting models may not be supported or work properly."
         );
@@ -383,7 +385,8 @@ impl ChatWidget {
             .into_iter()
             .filter(|preset| {
                 Self::show_in_pfterminal_model_picker(preset)
-                    && self.model_catalog.preset_is_selectable(preset)
+                    && (self.model_catalog.preset_is_selectable(preset)
+                        || self.another_route_is_selectable(preset))
             })
             .collect();
 
@@ -561,6 +564,7 @@ impl ChatWidget {
             corbanu_presets.extend(fable_presets);
             presets.extend(corbanu_presets);
         }
+        let mut presets = self.with_model_route_rows(presets);
         presets.retain(|preset| self.model_catalog.preset_is_selectable(preset));
 
         // Runtime and public API catalog entries may describe the same route.
@@ -582,10 +586,19 @@ impl ChatWidget {
             return;
         }
 
+        // #653: a default model's other connections stay next to it.
+        let default_route_models = presets
+            .iter()
+            .filter(|preset| {
+                preset.is_default
+                    && !codex_model_provider_info::model_routes(&preset.model).is_empty()
+            })
+            .map(|preset| preset.model.clone())
+            .collect::<HashSet<_>>();
         let mut provider_items = MODEL_PICKER_PROVIDER_GROUPS
             .into_iter()
             .map(|group| (group, Vec::new()))
-            .collect::<Vec<(ModelPickerProviderGroup, Vec<SelectionItem>)>>();
+            .collect::<Vec<(ModelPickerProviderGroup, Vec<(bool, SelectionItem)>)>>();
         for preset in presets.into_iter() {
             let provider = preset
                 .provider_id
@@ -600,11 +613,16 @@ impl ChatWidget {
             else {
                 continue;
             };
-            items.push(self.model_picker_item(preset, purpose.clone()));
+            let leads = preset.is_default || default_route_models.contains(&preset.model);
+            items.push((leads, self.model_picker_item(preset, purpose.clone())));
         }
-        for (_, items) in &mut provider_items {
-            items.sort_by_key(|item| !item.is_default);
-        }
+        let mut provider_items = provider_items
+            .into_iter()
+            .map(|(group, mut items)| {
+                items.sort_by_key(|(leads, _)| !leads);
+                (group, items.into_iter().map(|(_, item)| item).collect())
+            })
+            .collect::<Vec<(ModelPickerProviderGroup, Vec<SelectionItem>)>>();
         provider_items.retain(|(_, items)| !items.is_empty());
 
         let (items, tabs, initial_tab_id, footer_hint) = if provider_items.len() > 1 {
@@ -713,7 +731,7 @@ impl ChatWidget {
         }
     }
 
-    fn model_display_label_for_preset(preset: &ModelPreset) -> String {
+    pub(super) fn model_display_label_for_preset(preset: &ModelPreset) -> String {
         let display_name = preset.display_name.trim();
         if display_name.is_empty() {
             preset.model.clone()
@@ -751,7 +769,7 @@ impl ChatWidget {
                 "pfterminal-plan"
             }
             Some(KIMI_CODE_PROVIDER_ID) => "kimi-code",
-            Some(ZAI_PROVIDER_ID) => "zai",
+            Some(ZAI_PROVIDER_ID | ZAI_ANTHROPIC_PROVIDER_ID) => "zai",
             Some(DEEPSEEK_PROVIDER_ID) => "deepseek",
             Some(CLAUDE_PLAN_PROVIDER_ID) => "claude-plan",
             Some(ANTHROPIC_PROVIDER_ID) => "anthropic",
@@ -817,6 +835,40 @@ impl ChatWidget {
                 )));
             }
         })]
+    }
+
+    /// A model and effort chosen for a new pane or spawned agent go to that
+    /// pane; they never change or persist the session model.
+    fn send_pane_selection(
+        tx: &AppEventSender,
+        purpose: &ModelSelectionPurpose,
+        provider: Option<String>,
+        model: String,
+        effort: Option<ReasoningEffortConfig>,
+    ) {
+        match purpose {
+            // The session's own choice goes through `model_selection_actions`.
+            ModelSelectionPurpose::Session => {}
+            ModelSelectionPurpose::CodexPane { .. } => {
+                tx.send(AppEvent::OpenCodexPaneNamePrompt {
+                    provider,
+                    model,
+                    effort,
+                });
+            }
+            ModelSelectionPurpose::SpawnAgent {
+                role,
+                parent_node_id,
+                ..
+            } => tx.send(AppEvent::CreateSpawnAgent {
+                role: *role,
+                parent_node_id: parent_node_id.clone(),
+                agent_nickname: None,
+                provider,
+                model,
+                effort,
+            }),
+        }
     }
 
     fn should_persist_model_provider(provider: Option<&str>) -> bool {
@@ -1067,11 +1119,16 @@ impl ChatWidget {
             .then(|| default_effort.clone());
 
         let model_slug = preset.model.to_string();
-        let is_current_model = self.current_model() == preset.model.as_str();
+        let is_session_model = self.current_model() == preset.model.as_str();
+        // #653: another connection of the session's model keeps its effort
+        // highlighted but is not the current choice.
+        let is_current_model = is_session_model
+            && (codex_model_provider_info::model_routes(&preset.model).is_empty()
+                || provider.as_deref() == Some(self.config.model_provider_id.as_str()));
         let highlight_choice = match &purpose {
             ModelSelectionPurpose::SpawnAgent { .. } => spawn_default_effort,
             ModelSelectionPurpose::CodexPane { .. } => default_choice.clone(),
-            ModelSelectionPurpose::Session if is_current_model => {
+            ModelSelectionPurpose::Session if is_session_model => {
                 if in_plan_mode {
                     self.config
                         .plan_mode_reasoning_effort
@@ -1088,7 +1145,20 @@ impl ChatWidget {
         let selection_choice = highlight_choice.clone().or_else(|| default_choice.clone());
         let initial_selected_idx = choices
             .iter()
-            .position(|choice| Some(choice) == selection_choice.as_ref());
+            .position(|choice| Some(choice) == selection_choice.as_ref())
+            .or_else(|| {
+                // #653: another connection of the session's model keeps an
+                // advanced effort (the session's, or the model default it runs
+                // on) preselected under "More reasoning…", which follows the
+                // standard choices.
+                (is_session_model
+                    && !is_current_model
+                    && !advanced_choices.is_empty()
+                    && Self::is_advanced_reasoning_effort(
+                        highlight_choice.as_ref().unwrap_or(&default_effort),
+                    ))
+                .then_some(choices.len())
+            });
         let mut items: Vec<SelectionItem> = Vec::new();
         for choice in choices.iter() {
             let effort = choice.clone();
@@ -1148,25 +1218,14 @@ impl ChatWidget {
                             }
                         }
                     }
-                    ModelSelectionPurpose::CodexPane { .. } => {
-                        tx.send(AppEvent::OpenCodexPaneNamePrompt {
-                            provider: provider_for_action.clone(),
-                            model: model_for_action.clone(),
-                            effort: choice_effort.clone(),
-                        });
-                    }
-                    ModelSelectionPurpose::SpawnAgent {
-                        role,
-                        parent_node_id,
-                        ..
-                    } => tx.send(AppEvent::CreateSpawnAgent {
-                        role: *role,
-                        parent_node_id: parent_node_id.clone(),
-                        agent_nickname: None,
-                        provider: provider_for_action.clone(),
-                        model: model_for_action.clone(),
-                        effort: choice_effort.clone(),
-                    }),
+                    purpose @ (ModelSelectionPurpose::CodexPane { .. }
+                    | ModelSelectionPurpose::SpawnAgent { .. }) => Self::send_pane_selection(
+                        tx,
+                        purpose,
+                        provider_for_action.clone(),
+                        model_for_action.clone(),
+                        choice_effort.clone(),
+                    ),
                 })];
 
             items.push(SelectionItem {
@@ -1192,9 +1251,11 @@ impl ChatWidget {
                 "consume"
             };
             let preset_for_action = preset;
+            let purpose_for_action = purpose.clone();
             let actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
                 tx.send(AppEvent::OpenAdvancedReasoningPopup {
                     model: preset_for_action.clone(),
+                    purpose: purpose_for_action.clone(),
                 });
             })];
             items.push(SelectionItem {
@@ -1260,7 +1321,19 @@ impl ChatWidget {
     }
 
     /// Open the explicit Max/Ultra effort picker for the given model.
+    #[cfg(test)]
     pub(crate) fn open_advanced_reasoning_popup(&mut self, preset: ModelPreset) {
+        self.open_advanced_reasoning_popup_for_purpose(preset, ModelSelectionPurpose::Session);
+    }
+
+    /// The Max/Ultra step keeps the purpose of the popup it came from: a
+    /// pane or spawned agent gets the effort, the session model is untouched
+    /// (#468).
+    pub(crate) fn open_advanced_reasoning_popup_for_purpose(
+        &mut self,
+        preset: ModelPreset,
+        purpose: ModelSelectionPurpose,
+    ) {
         let provider = preset
             .provider_id
             .clone()
@@ -1282,10 +1355,14 @@ impl ChatWidget {
         }
 
         let model_slug = preset.model.to_string();
-        let is_current_model = self.current_model() == preset.model.as_str();
+        let is_current_model = matches!(purpose, ModelSelectionPurpose::Session)
+            && self.current_model() == preset.model.as_str();
         let highlight_choice = is_current_model
             .then(|| self.effective_reasoning_effort())
             .flatten();
+        // #653: another connection of the session's model is not the current choice.
+        let is_current_route = codex_model_provider_info::model_routes(&model_slug).is_empty()
+            || provider.as_deref() == Some(self.config.model_provider_id.as_str());
         let mut items = Vec::new();
         for effort in choices {
             let description = match &effort {
@@ -1297,19 +1374,52 @@ impl ChatWidget {
                 }
                 _ => unreachable!("advanced choices are limited to Max and Ultra"),
             };
-            let should_prompt_plan_mode_scope = self
-                .should_prompt_plan_mode_reasoning_scope(model_slug.as_str(), Some(effort.clone()));
-            let actions = self.model_selection_actions(
-                model_slug.clone(),
-                provider.clone(),
-                Some(effort.clone()),
-                should_prompt_plan_mode_scope,
-            );
+            let actions = match &purpose {
+                ModelSelectionPurpose::Session => {
+                    let should_prompt_plan_mode_scope = self
+                        .should_prompt_plan_mode_reasoning_scope(
+                            model_slug.as_str(),
+                            Some(effort.clone()),
+                        );
+                    self.model_selection_actions(
+                        model_slug.clone(),
+                        provider.clone(),
+                        Some(effort.clone()),
+                        should_prompt_plan_mode_scope,
+                    )
+                }
+                ModelSelectionPurpose::CodexPane { .. }
+                | ModelSelectionPurpose::SpawnAgent { .. } => {
+                    let purpose = purpose.clone();
+                    let provider = provider.clone();
+                    let model = model_slug.clone();
+                    // Ultra may use more agents in the new pane too.
+                    let warning = self.ultra_reasoning_concurrency_warning(&effort);
+                    let effort = Some(effort.clone());
+                    let action: SelectionAction = Box::new(move |tx| {
+                        Self::send_pane_selection(
+                            tx,
+                            &purpose,
+                            provider.clone(),
+                            model.clone(),
+                            effort.clone(),
+                        );
+                        if let Some(warning) = warning.clone() {
+                            tx.send(AppEvent::InsertHistoryCell(Box::new(
+                                history_cell::new_warning_event(warning),
+                            )));
+                        }
+                    });
+                    vec![action]
+                }
+            };
 
             items.push(SelectionItem {
                 name: Self::reasoning_effort_label(&effort),
                 description: Some(description.to_string()),
-                is_current: is_current_model && Some(&effort) == highlight_choice.as_ref(),
+                is_current: is_current_model
+                    && is_current_route
+                    && Some(&effort) == highlight_choice.as_ref(),
                 actions,
                 dismiss_on_select: true,
                 ..Default::default()
@@ -1450,6 +1560,13 @@ mod tests {
         );
         assert_eq!(
             ChatWidget::model_provider_for_selection(DEEPSEEK_PRO_MODEL).as_deref(),
+            Some(DEEPSEEK_PROVIDER_ID)
+        );
+        assert_eq!(
+            ChatWidget::model_provider_for_selection(
+                codex_model_provider_info::DEEPSEEK_LEGACY_FLASH_MODEL
+            )
+            .as_deref(),
             Some(DEEPSEEK_PROVIDER_ID)
         );
         assert_eq!(

@@ -19,6 +19,33 @@ mod macos_interaction;
 #[cfg(any(target_os = "macos", test))]
 mod prompt_budget;
 
+/// Whether the user's default macOS keychain is known to be locked.
+///
+/// The login keychain unlocks with the GUI session, but a process started from
+/// an SSH login gets its own security session, where it usually stays locked.
+/// Credential reads then fail without any visible prompt. This query never
+/// prompts and never reads a credential. It is `false` on other platforms and
+/// whenever the state cannot be determined.
+pub fn default_keychain_locked() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        #[link(name = "Security", kind = "framework")]
+        unsafe extern "C" {
+            fn SecKeychainGetStatus(keychain: *const std::ffi::c_void, status: *mut u32) -> i32;
+        }
+        const UNLOCKED: u32 = 1; // kSecUnlockStateStatus
+        let mut status = 0;
+        // SAFETY: A null keychain selects the default keychain; Security.framework
+        // writes one status word into this valid pointer.
+        let result = unsafe { SecKeychainGetStatus(std::ptr::null(), &mut status) };
+        result == 0 && status & UNLOCKED == 0
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
+}
+
 fn with_native_interaction<T>(
     service: &str,
     account: &str,
@@ -175,7 +202,8 @@ impl KeyringOperationPermit {
 impl Drop for KeyringOperationPermit {
     fn drop(&mut self) {
         if !self.finished {
-            self.gate.finish(self.generation, false);
+            self.gate
+                .finish(self.generation, /*completed_successfully*/ false);
         }
     }
 }
@@ -212,7 +240,7 @@ where
             let _ = sender.send(result);
         });
     if let Err(error) = spawn_result {
-        gate.finish(generation, false);
+        gate.finish(generation, /*completed_successfully*/ false);
         return Err(CredentialStoreError::from_message(format!(
             "failed to start OS keyring {operation}: {error}"
         )));
@@ -462,9 +490,13 @@ mod bounded_operation_tests {
     fn serialized_operation_receives_its_own_execution_timeout() {
         let gate = Arc::new(KeyringOperationGate::default());
         let first_gate = Arc::clone(&gate);
+        // The queued save waits ~3s (inside its 5s acquire budget) and then
+        // runs ~3s (inside a fresh 5s execution budget); charging the wait to
+        // execution would time it out. Each side keeps ~2s of slack: 400ms was
+        // not enough for a loaded Windows nightly runner.
         let first = thread::spawn(move || {
-            run_bounded_keyring_operation(first_gate, "load", Duration::from_millis(200), || {
-                thread::sleep(Duration::from_millis(80));
+            run_bounded_keyring_operation(first_gate, "load", Duration::from_secs(10), || {
+                thread::sleep(Duration::from_secs(3));
                 Ok(())
             })
         });
@@ -483,8 +515,8 @@ mod bounded_operation_tests {
             thread::sleep(Duration::from_millis(5));
         }
 
-        run_bounded_keyring_operation(gate, "save", Duration::from_millis(100), || {
-            thread::sleep(Duration::from_millis(80));
+        run_bounded_keyring_operation(gate, "save", Duration::from_secs(5), || {
+            thread::sleep(Duration::from_secs(3));
             Ok(())
         })
         .expect("queue wait must not consume the operation execution timeout");

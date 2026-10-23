@@ -1,0 +1,4 @@
+  376 _securityagent Thu Oct 15 15:49:53 2026     /System/Library/Frameworks/Security.framework/Versions/A/MachServices/SecurityAgent.bundle/Contents/MacOS/SecurityAgent
+2026-10-15T22:54:38Z clear (baseline login-window SecurityAgent only)
+0
+     228

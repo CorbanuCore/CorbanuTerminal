@@ -1,0 +1,79 @@
+# /permissions: switch to Full Access, prove it applies, switch back.
+id = "permissions-full-access"
+feature = "/permissions: switch to Full Access and back"
+expected = "After confirming Full Access, GLM writes a file outside the workspace with no approval prompt. Switching back makes /status report Workspace (Ask for approval)."
+model = "glm-5.2"
+provider = "zai"
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "/permissions"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "1\\. Ask for approval \\(current\\)"
+[[steps]]
+pause = 1.5
+[[steps]]
+key = "Down"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Enable full access\\?"
+[[steps]]
+pause = 2.0
+[[steps]]
+key = "Up"
+[[steps]]
+pause = 0.5
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Permissions confirmed for new turns: Full Access"
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "Use one shell command to write full-access to ../outside/full.txt, then reply with exactly: done"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)^• [Dd]one\\.?\\s*$"
+timeout = 180
+compress = 4
+[[steps]]
+pause = 2.5
+
+[[steps]]
+type = "/permissions"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "3\\. Full Access \\(current\\)"
+[[steps]]
+pause = 1.0
+[[steps]]
+key = "Up"
+repeat = 2
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Permissions confirmed for new turns: Ask for approval"
+[[steps]]
+pause = 1.0
+[[steps]]
+type = "/status"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Permissions:\\s+Next turn: Workspace \\(Ask for approval\\)"
+[[steps]]
+pause = 3.0

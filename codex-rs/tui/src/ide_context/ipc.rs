@@ -959,6 +959,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::expect_used)]
     fn private_tempdir() -> tempfile::TempDir {
         let tempdir = tempfile::tempdir().expect("tempdir");
         std::fs::set_permissions(tempdir.path(), std::fs::Permissions::from_mode(0o700))

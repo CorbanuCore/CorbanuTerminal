@@ -6,14 +6,15 @@ slot and do not authorize implementation.
 | Proposal | Priority | Owner | Purpose |
 | --- | --- | --- | --- |
 | [Arbitrary-model Autoreview](arbitrary-model-autoreview.md) | P1 | Alex Good | Turns explicit second-model review into one secret-scanned, isolated, exact-runtime workflow across configured Corbanu providers |
+| [Named accounts (PF-84): flag removal](named-accounts-flag-removal.md) | P1 | Codex PF-84 lane owner (proposed); Travis accepts | The six flag-removal prerequisites carried from the provider-onboarding plan closed 2026-10-14; live checks need test accounts |
 | [Prompt-injection firewall and brokered authority](prompt-injection-firewall.md) | P0 | Jim Ricketts | Historical input reconciled into the active P0 security plan on 2026-08-28; no separate implementation authority |
 
 ## September 9 transcript portfolio
 
-September 11: accounting is now [active workstream 2](../active/portfolio-agent-cost-accounting.md),
-with S01 selected for kickoff. The other 15 portfolio initiatives remain draft;
-[provider onboarding](unified-provider-auth.md) is deferred without changing its
-completed evidence. [Current three-stream allocation](../main-workstreams-2026-09-11.md).
+September 11: accounting became active workstream 2 ([completed 2026-10-10](../completed/main-2026-10-10-portfolio-agent-cost-accounting.md)),
+with S01 selected for kickoff. The other 15 portfolio initiatives remain draft.
+On 2026-10-10 [provider onboarding](../completed/main-2026-10-14-unified-provider-auth.md) was
+activated in the freed slot for PF-84 named accounts. [Current three-stream allocation](../main-workstreams-2026-09-11.md).
 
 The [portfolio map](../portfolio-2026-09-09.md) covers Alex's product discussion
 and adjacent/enabling ideas. After the [September 10 follow-up](../call-followup-2026-09-10.md),
@@ -25,7 +26,7 @@ allocation is implied.
 
 | Proposal | Suggested priority | Proposed accountable role | Bounded scope |
 | --- | --- | --- | --- |
-| [Unified agent cost and usage accounting](../active/portfolio-agent-cost-accounting.md) | P1 active | Codex accounting lane / Travis acceptance | PF-60; 4 sequential sprints; S01 kickoff selected |
+| [Unified agent cost and usage accounting](../completed/main-2026-10-10-portfolio-agent-cost-accounting.md) | P1 completed 2026-10-10 | Codex accounting lane / Travis acceptance | PF-60; 4 sequential sprints; S01 kickoff selected |
 | [Plan and model-serving backend reconciliation](portfolio-plan-backend-reconciliation.md) | P1 proposed | Jim Ricketts (proposed) | PF-61; 3 draft sprints; decision |
 | [Compute referrals and provider onboarding discovery](portfolio-compute-referrals.md) | P1 proposed | Alex Good (commercial lead, proposed) | PF-62; 3 draft sprints; decision |
 | [Repeatable cross-harness quality, runtime and cost benchmarks](portfolio-recurring-benchmarks.md) | P1 proposed | Jim Ricketts (proposed) | PF-63; 3 draft sprints; delivery |

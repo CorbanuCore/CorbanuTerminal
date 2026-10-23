@@ -1,0 +1,88 @@
+scanned 17831 files under $S/homes, $S/fh-a1, $S/fh-a2, $S/fh-b1, $S/fh-b3, $S/fh-b4, $S/fh-t1, $S/fh-hm, $S/fakehome, $S/logs, $S/ws, $EV
+
+[REAL key REAL_1_zai] 0 files
+
+[REAL key REAL_2_kimi] 0 files
+
+[REAL key REAL_3_openai] 0 files
+
+[REAL key REAL_4_claudeplan] 0 files
+
+[aws secret keys (fakesecret-*-S06CANARY)] 16 files
+    $EV/scripts/aws_cli.sh
+    $EV/scripts/aws_cli2.sh
+    $EV/scripts/aws_setup.sh
+    $EV/scripts/leakscan.py
+    $EV/scripts/tui_setup.sh
+    $S/fh-a1/.aws/credentials
+    $S/fh-a1/proc.sh
+    $S/fh-a2/.aws/credentials
+    $S/fh-a2/alt-aws/credentials
+    $S/fh-a2/proc.sh
+    $S/fh-hm/.aws/credentials
+    $S/fh-hm/proc.sh
+    $S/fh-t1/.aws/credentials
+    $S/fh-t1/proc.sh
+    $S/logs/leakscan.txt
+    $S/logs/tui-invocations.txt
+
+[credential_process helper stderr (PROCSTDERR-S06CANARY)] 7 files
+    $EV/scripts/aws_setup.sh
+    $EV/scripts/leakscan.py
+    $S/fh-a1/procfail.sh
+    $S/fh-a2/procfail.sh
+    $S/fh-hm/procfail.sh
+    $S/fh-t1/procfail.sh
+    $S/logs/leakscan.txt
+
+[cached SSO access token (fake-sso-access-S06CANARY)] 7 files
+    $EV/scripts/aws_setup.sh
+    $EV/scripts/leakscan.py
+    $S/fh-a1/.aws/sso/cache/ee0bfd2552fbd840c02cc48b6e823320543c450f.json
+    $S/fh-a2/.aws/sso/cache/ee0bfd2552fbd840c02cc48b6e823320543c450f.json
+    $S/fh-hm/.aws/sso/cache/ee0bfd2552fbd840c02cc48b6e823320543c450f.json
+    $S/fh-t1/.aws/sso/cache/ee0bfd2552fbd840c02cc48b6e823320543c450f.json
+    $S/logs/leakscan.txt
+
+[Bedrock bearer env canary (fakebearer-env-S06CANARY)] 7 files
+    $EV/scripts/aws_cli.sh
+    $EV/scripts/aws_cli2.sh
+    $EV/scripts/aws_setup.sh
+    $EV/scripts/leakscan.py
+    $EV/scripts/tui_setup.sh
+    $S/logs/leakscan.txt
+    $S/logs/tui-invocations.txt
+
+[named OpenAI API-key canaries (sk-canary-*/sk-fake-*/sk-tuiadd-*)] 10 files
+    $EV/scripts/leakscan.py
+    $EV/scripts/oa_cli.sh
+    $EV/scripts/oa_cli2.sh
+    $EV/scripts/oa_forced.sh
+    $EV/scripts/real.sh
+    $EV/scripts/tui_setup.sh
+    $S/homes/b3-base/auth.json
+    $S/homes/b3/auth.json
+    $S/homes/r1/auth.json
+    $S/logs/leakscan.txt
+
+[ChatGPT refresh tokens from the mock (rt.<user>.<gen>)] 3 files
+    $EV/scripts/leakscan.py
+    $EV/scripts/oa_cli.sh
+    $S/homes/hm/auth.json
+
+[mock JWT header (eyJhbGciOiAibm9uZSIs)] 5 files
+    $EV/scripts/leakscan.py
+    $S/homes/b1/auth.json
+    $S/homes/hm/auth.json
+    $S/homes/t1/auth.json
+    $S/logs/leakscan.txt
+
+[env decoys (sk-envdecoy-, sk-codexenv-, fake-env-session, fake-webid-token, CODEX_ACCESS_TOKEN JWT eyJhbGciOiAibm9uZSJ9)] 8 files
+    $EV/scripts/aws_setup.sh
+    $EV/scripts/leakscan.py
+    $EV/scripts/oa_cli.sh
+    $EV/scripts/oa_cli2.sh
+    $EV/scripts/tui_setup.sh
+    $S/fh-a1/webid.token
+    $S/fh-a2/webid.token
+    $S/logs/tui-invocations.txt

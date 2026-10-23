@@ -1,0 +1,3 @@
+#!/bin/sh
+export CORBANU_TEST_NO_NATIVE_KEYRING=1
+cd /Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/launcher/ws && CORBANU_HOME=/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/s01/hB CORBANU_LAUNCHER_WORK_DIR=/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/launcher/work CORBANU_LAUNCHER_WORKSPACE_DIR=/Volumes/CorbanuDrive/Corbanu/tmp/pf84acc-scratch/launcher/ws sh /Volumes/CorbanuDrive/Corbanu/worktrees/pf84-indep-accept-20261010/scripts/dev/corbanu-launcher.sh exec --skip-git-repo-check "Reply with exactly the word pong and nothing else." 2>&1 | grep -E '^pong|^ERROR|^warning: CORBANU' | sort -u

@@ -41,6 +41,8 @@ Privacy ideas need a threat model and measurable tradeoffs before they become ar
 Compare feasible privacy approaches and run one public/synthetic-data experiment that supports an explicit go/no-go decision.
 Entry is the first sprint's approved contract; success, failure and return-use are defined below.
 
+Draft user flow (input to this research, not an executable sprint): [Private inference user flow spec](../../specs/private-inference-user-flow.md). OD1 decided 2026-10-06: settle PFT on the Task Node ledger; OD2–OD4 are with Alex.
+
 ## Product linkage
 
 - Exact heading: **Product principles** in [the product spec](../../corbanu-product-spec.md).

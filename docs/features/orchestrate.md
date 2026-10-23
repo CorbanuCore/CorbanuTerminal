@@ -88,6 +88,10 @@ Advanced inline attachment is also available:
 
 Prefer the guided flow unless repeatable automation requires inline syntax.
 
+While the security kill switch is on, every armed assignment and whip is
+paused. Turning the switch off does not resume them; run
+`/orchestrate resume <id>` for each one you want running again.
+
 ## Persistence and recovery
 
 Assignments are retained with the pane layout. After switching panes or

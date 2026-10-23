@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"01a120bd-fe59-7be1-983d-bac5cc7b7889"}
+{"type":"turn.started"}
+{"type":"error","message":"unexpected status 401 Unauthorized: Authentication Fails, Your api key: ****-key is invalid (request_id: 33095586-52b9-472f-a414-33832cb76d51), url: https://api.deepseek.com/responses"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: Authentication Fails, Your api key: ****-key is invalid (request_id: 33095586-52b9-472f-a414-33832cb76d51), url: https://api.deepseek.com/responses"}}

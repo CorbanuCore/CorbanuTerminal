@@ -1,0 +1,25 @@
+..........F.E/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/typing.py:1974: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10ae6e4d0>
+  class _ProtocolMeta(ABCMeta):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+....................................
+======================================================================
+ERROR: OwnershipTests (unittest.loader._FailedTest.OwnershipTests)
+----------------------------------------------------------------------
+AttributeError: module 'test_owner_daemon' has no attribute 'OwnershipTests'
+
+======================================================================
+FAIL: test_status_lists_in_flight_and_overdue_with_exact_watchdog_effects (test_owner_daemon.ActivationVisibilityTests.test_status_lists_in_flight_and_overdue_with_exact_watchdog_effects)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 508, in test_status_lists_in_flight_and_overdue_with_exact_watchdog_effects
+    self.assertIn("fixture-only", impact["warning"])
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'fixture-only' not found in 'Owner watchdog on admitted ticks: covered=11, excluded=0; new default actions=covered; hand stall detection=covered by this watchdog. Armed operation is not read-only. For covered actions only, watchdog_will_report predicts unreported overdue dispatching/dispatched/running stalls if an admitted tick reaches the watchdog; dispatching becomes dispatch_uncertain. Manager stalls are covered in either lane. Fixture-only processing can append events even while dispatch is paused. This snapshot is advisory, not an ownership gate or reservation; claims and deadlines can change before a tick.'
+
+----------------------------------------------------------------------
+Ran 49 tests in 2.970s
+
+FAILED (failures=1, errors=1)
+{"reason":"TimeoutExpired","state":"ERROR"}
+{"reason":"TimeoutExpired","state":"ERROR"}
+{"fixture_only":true,"manager":"empty","routing":"deferred","state":"ACTIVE","states":["RECOVERING","READY","ACTIVE"]}

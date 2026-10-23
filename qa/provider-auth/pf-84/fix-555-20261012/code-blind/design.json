@@ -1,0 +1,533 @@
+{
+  "feature": "PF-84 #555: named accounts for forks, cross-provider resume, [provider_accounts] and recovery (PRs #561, #566)",
+  "designer": "corbanu exec claude-opus-5-5-plan high, fresh session 2026-10-12 (see designer-session.md)",
+  "fresh_context": true,
+  "code_blind": true,
+  "results_blind": false,
+  "isolation": "instruction-only",
+  "brief": {
+    "path": "packet/intent.md",
+    "sha256": "fbfe470e3aa4580c6aa38050c4cb18cf50682c5cfcaf5a816b7b2a3f538d3433"
+  },
+  "screenshots": [
+    {
+      "path": "packet/screens/01-CANDIDATE.txt",
+      "sha256": "076076996497f97a35e524e3e8509d5ab0aa93982144906ab4c34c354b4fe89f"
+    },
+    {
+      "path": "packet/screens/02-CANDIDATE.txt",
+      "sha256": "df284ef19382bd55176ed74f622468af221e190bebafab15e86dd62f8e54eb7a"
+    },
+    {
+      "path": "packet/screens/03-CANDIDATE.txt",
+      "sha256": "8b1fd0293d1a773e5e2d2fe5d8ade97dc1723e4e3b29df9d8247400ed36fb9e1"
+    },
+    {
+      "path": "packet/screens/04-CANDIDATE.txt",
+      "sha256": "de3d01b93d193731cad1872bfc0d2a60db044e80da194dece6e7eb121378118f"
+    },
+    {
+      "path": "packet/screens/05-CANDIDATE.txt",
+      "sha256": "cd4d1404d42b612e84fdc1a6c7146dff5d0a11b76079a1d270b5431e546211d6"
+    },
+    {
+      "path": "packet/screens/06-CANDIDATE.txt",
+      "sha256": "22947074eb067e891a11fb4d7e3d569ba37cb3c587266ed2360078a1a077f1b9"
+    },
+    {
+      "path": "packet/screens/07-CANDIDATE.txt",
+      "sha256": "1db152417fb28bb73ae5030e24344c59d974e298def9f732e6e988c3840e91a8"
+    },
+    {
+      "path": "packet/screens/08-CANDIDATE.txt",
+      "sha256": "023af498c2c9fca9df202bf0441509b43b499d526c2da1c453d9a47a8a4a9910"
+    },
+    {
+      "path": "packet/screens/09-CANDIDATE.txt",
+      "sha256": "573f0d092c368eed18119e5cddd94c5f6b9d7e9dbb02958073f023d151f41dc9"
+    },
+    {
+      "path": "packet/screens/10-CANDIDATE.txt",
+      "sha256": "d3abfbf89386e12b576962cd4bd6783497f099932b298f4df20b0d187be45162"
+    },
+    {
+      "path": "packet/screens/11-EARLIER-BUILD.txt",
+      "sha256": "ef8e63daf30b8f829f457c96098d53a235ff0be467bb33e4d6b7f3c40520acc4"
+    },
+    {
+      "path": "packet/screens/12-EARLIER-BUILD.txt",
+      "sha256": "585baaebb7ee6916ce2f60dd898cb06fb289bcd924077f2a8040dc7c90494e8e"
+    },
+    {
+      "path": "packet/screens/13-EARLIER-BUILD.txt",
+      "sha256": "b3074eaa0a93273e201b7ab7ac673f4ddee44a00fe9509c2e29e87f4cc699c19"
+    },
+    {
+      "path": "packet/screens/14-EARLIER-BUILD.txt",
+      "sha256": "b5871f3a6bedf7699da219533a55e239868bc513ce669abf5fae783a684940b4"
+    },
+    {
+      "path": "packet/screens/15-EARLIER-BUILD.txt",
+      "sha256": "b6b029e6c74368db90cce1bcff9ead5f62256a2276957bad8db3f012946b12b9"
+    }
+  ],
+  "proposal": {
+    "path": "original-proposal.md",
+    "sha256": "ea779244f1f6163bbe4f09578badbb7532ac12b816640ac4a7238845476cf09f"
+  },
+  "access_record": {
+    "path": "designer-session.md",
+    "sha256": "1bdb8bfd4a7419006d7368ddf056a54d23c03716d91bc39f3dcecaed1eb028d8"
+  },
+  "cases": [
+    {
+      "id": "FK-01",
+      "title": "`/fork` stays on the source account",
+      "priority": "blocker",
+      "starting_conditions": "H-ZAI. Start with `corbanu --account work`, so the config points to `personal` and the session runs on `work`. Send 1 prompt.",
+      "actions": [
+        "`/fork`, then send a prompt in the fork, then `/status`."
+      ],
+      "expected": [
+        "The screen shows \"Thread forked from <source id>\".",
+        "In `/status`, \"Model provider\" ends in `· account work` and \"Forked from\" shows the source id.",
+        "\"Account usage\" grows for `work` only. `personal` and `default` show no new tokens.",
+        "Screen 01 is consistent with this. On the earlier build (screen 11), the tokens went to `personal` while `/status` said `work`."
+      ]
+    },
+    {
+      "id": "FK-02",
+      "title": "Fork of a resumed conversation (account comes from the recording, not a flag)",
+      "priority": "blocker",
+      "starting_conditions": "H-ZAI. Resume a conversation recorded on `work` without using `--account`.",
+      "actions": [
+        "`/fork`, send a prompt, then `/status`."
+      ],
+      "expected": [
+        "`/status` says `account work`.",
+        "Only `work` is charged, not `personal` from the config."
+      ]
+    },
+    {
+      "id": "FK-03",
+      "title": "Editing an earlier prompt (which forks)",
+      "priority": "blocker",
+      "starting_conditions": "As in FK-01, with at least 2 turns.",
+      "actions": [
+        "Go back and edit the first prompt.",
+        "Submit the edit.",
+        "Run `/status`."
+      ],
+      "expected": [
+        "A new forked thread is created.",
+        "`/status` says `account work`.",
+        "Only `work` is charged.",
+        "No screen covers this case."
+      ]
+    },
+    {
+      "id": "FK-04",
+      "title": "Side conversation (`/side`)",
+      "priority": "blocker",
+      "starting_conditions": "As in FK-01.",
+      "actions": [
+        "`/side`, send a prompt, then `/status`.",
+        "Switch back to the main thread (Ctrl+/), send a prompt, then `/status`."
+      ],
+      "expected": [
+        "Both the side and main conversations show `account work`.",
+        "Only `work` is charged in both.",
+        "Screen 02 shows `work` for the side conversation.",
+        "Editing previous prompts is blocked in the side conversation with the notice shown in screen 02."
+      ]
+    },
+    {
+      "id": "FK-05",
+      "title": "`corbanu fork <id>` from the command line",
+      "priority": "blocker",
+      "starting_conditions": "H-ZAI, with a conversation recorded on `work`.",
+      "actions": [
+        "Run `corbanu fork <id>`, send a prompt, then `/status`."
+      ],
+      "expected": [
+        "The fork opens on `work`.",
+        "`/status` shows `account work` and the \"Forked from\" id.",
+        "Only `work` is charged.",
+        "No screen covers this case."
+      ]
+    },
+    {
+      "id": "FK-06",
+      "title": "An explicit `--account` beats the source account",
+      "priority": "blocker",
+      "starting_conditions": "As in FK-05.",
+      "actions": [
+        "Run `corbanu fork <id> --account personal`, then run it again with `--account zai:personal`."
+      ],
+      "expected": [
+        "Both forks run on `personal`, and `/status` says `personal`.",
+        "`work` is not charged."
+      ]
+    },
+    {
+      "id": "FK-07",
+      "title": "Fork when the source account has since been removed",
+      "priority": "blocker",
+      "starting_conditions": "A conversation recorded on `work`, after which `work` is removed from the vault.",
+      "actions": [
+        "Run `corbanu fork <id>`. Separately, run `/fork` inside a session resumed on that conversation, if that can be reached."
+      ],
+      "expected": [
+        "An error names `zai` / `work` and how to recover.",
+        "Nothing falls back silently to `default` or `personal`, and no tokens are charged."
+      ]
+    },
+    {
+      "id": "FK-08",
+      "title": "Fork of a fork",
+      "priority": "advisory",
+      "starting_conditions": "As in FK-01.",
+      "actions": [
+        "`/fork`, then `/fork` again, send a prompt, then `/status`."
+      ],
+      "expected": [
+        "The account is still `work`.",
+        "\"Forked from\" shows the immediate parent."
+      ]
+    },
+    {
+      "id": "FK-09",
+      "title": "Worker or child agent inherits the parent's account",
+      "priority": "advisory",
+      "starting_conditions": "A session on `work` that spawns a worker agent.",
+      "actions": [
+        "Let the worker run a turn, then check usage."
+      ],
+      "expected": [
+        "The worker's tokens are charged to `work`, as the precedence constraint requires.",
+        "--"
+      ]
+    },
+    {
+      "id": "RS-01",
+      "title": "Credentials present",
+      "priority": "blocker",
+      "starting_conditions": "H-OAI.",
+      "actions": [
+        "Run `corbanu resume <zai-work-id>`, send a prompt, then `/status`."
+      ],
+      "expected": [
+        "The transcript loads with no OpenAI sign-in or onboarding screen.",
+        "The model is Z.AI.",
+        "\"Model provider\" is Z.AI `· account work`, and only `work` is charged.",
+        "Screens 03 and 04 are consistent with this. On the earlier build, screen 14 showed the Z.AI key prompt instead."
+      ]
+    },
+    {
+      "id": "RS-02",
+      "title": "Credentials missing",
+      "priority": "blocker",
+      "starting_conditions": "H-OAI-bare.",
+      "actions": [
+        "Run `corbanu resume <zai-work-id>`."
+      ],
+      "expected": [
+        "A message names provider `zai` and account `work`, and gives the recovery: `corbanu account add zai work` and/or `--account`.",
+        "No onboarding, sign-in or key-entry screen appears.",
+        "The command exits with a non-zero code, and no model call is made.",
+        "No candidate screen covers this case."
+      ]
+    },
+    {
+      "id": "RS-03",
+      "title": "Only `default` is enrolled for the recorded provider",
+      "priority": "blocker",
+      "starting_conditions": "H-OAI with only Z.AI `default` enrolled.",
+      "actions": [
+        "Resume the conversation recorded on `work`."
+      ],
+      "expected": [
+        "An error names `work`. The session does not fall back silently to `default`."
+      ]
+    },
+    {
+      "id": "RS-04",
+      "title": "Resume through the picker matches resume by id",
+      "priority": "blocker",
+      "starting_conditions": "H-OAI, and H-OAI-bare.",
+      "actions": [
+        "Run `corbanu resume`, select the Z.AI conversation, and press Enter."
+      ],
+      "expected": [
+        "The outcome is the same as RS-01 (H-OAI) or RS-02 (H-OAI-bare)."
+      ]
+    },
+    {
+      "id": "RS-05",
+      "title": "Resuming twice keeps the recorded account",
+      "priority": "advisory",
+      "starting_conditions": "RS-01 has been completed.",
+      "actions": [
+        "Exit, then run `corbanu resume <same id>` again."
+      ],
+      "expected": [
+        "The session is still on `work`. Resuming did not rewrite the recorded account to the home's defaults.",
+        "--"
+      ]
+    },
+    {
+      "id": "GH-01",
+      "title": "Recorded account exists",
+      "priority": "blocker",
+      "starting_conditions": "H-ZAI with `zai = \"ghost\"` in the config. The conversation is recorded on `work`.",
+      "actions": [
+        "Run `corbanu resume <id>`, send a prompt, then `/status`."
+      ],
+      "expected": [
+        "The session resumes on `work`, and `/status` says `account work`.",
+        "Only `work` is charged.",
+        "Screen 05 is consistent with this. On the earlier build, screen 13 exited with code 1."
+      ]
+    },
+    {
+      "id": "GH-02",
+      "title": "Recorded account is missing too",
+      "priority": "blocker",
+      "starting_conditions": "Same config as GH-01, but `work` has been removed.",
+      "actions": [
+        "Run `corbanu resume <id>`."
+      ],
+      "expected": [
+        "The error names the recorded account, `work`, and gives `corbanu account add zai work` as the recovery.",
+        "It ideally also mentions `ghost`.",
+        "Nothing falls back to `default`, and the exit code is non-zero.",
+        "No screen covers this case."
+      ]
+    },
+    {
+      "id": "GH-03",
+      "title": "New session with `ghost` in the config",
+      "priority": "blocker",
+      "starting_conditions": "The same `ghost` config.",
+      "actions": [
+        "Run `corbanu` to start a new session, not a resume."
+      ],
+      "expected": [
+        "An error names `ghost` with the recovery. The session does not start silently on `default`.",
+        "--"
+      ]
+    },
+    {
+      "id": "MSG-01",
+      "title": "Inside the TUI",
+      "priority": "blocker",
+      "starting_conditions": "A running session on any account, with a stored conversation recorded on `work`, which has since been removed.",
+      "actions": [
+        "`/resume`, then select that conversation."
+      ],
+      "expected": [
+        "The message names `zai` / `work` and points to `/providers`. It does not mention `corbanu account add` or `--account`.",
+        "The current session stays open and usable.",
+        "Screen 10 is consistent with this. On the earlier build, screen 15 pointed to the command line."
+      ]
+    },
+    {
+      "id": "MSG-02",
+      "title": "Recovery through `/providers` without restarting",
+      "priority": "advisory",
+      "starting_conditions": "Right after MSG-01.",
+      "actions": [
+        "Open `/providers` and add account `work`.",
+        "`/resume` the same conversation again.",
+        "Send a prompt, then `/status`."
+      ],
+      "expected": [
+        "The conversation resumes on `work`, and only `work` is charged."
+      ]
+    },
+    {
+      "id": "MSG-03",
+      "title": "On the command line",
+      "priority": "blocker",
+      "starting_conditions": "The same situation as RS-02 or GH-02.",
+      "actions": [
+        "Run `corbanu resume <id>`."
+      ],
+      "expected": [
+        "The message points to `corbanu account add …` and `--account`. It does not mention `/providers`."
+      ]
+    },
+    {
+      "id": "MSG-04",
+      "title": "Session after a failed in-app resume",
+      "priority": "advisory",
+      "starting_conditions": "Right after MSG-01.",
+      "actions": [
+        "Send a prompt, then `/status`."
+      ],
+      "expected": [
+        "The original session id and account are unchanged. The tokens are charged to that original account.",
+        "--"
+      ]
+    },
+    {
+      "id": "ESC-01",
+      "title": "Esc in the `corbanu resume` picker when there are no credentials",
+      "priority": "blocker",
+      "starting_conditions": "H-NOKEY.",
+      "actions": [
+        "Run `corbanu resume`, then press Esc."
+      ],
+      "expected": [
+        "The process exits cleanly with code 0 and the terminal is restored.",
+        "No sign-in or onboarding screen appears.",
+        "Screens 06 and 07 are consistent with this. On the earlier build, screen 12 showed the onboarding screen."
+      ]
+    },
+    {
+      "id": "ESC-02",
+      "title": "Ctrl+C in the same picker",
+      "priority": "advisory",
+      "starting_conditions": "H-NOKEY.",
+      "actions": [
+        "Run `corbanu resume`, then press Ctrl+C."
+      ],
+      "expected": [
+        "Same as ESC-01."
+      ]
+    },
+    {
+      "id": "ESC-03",
+      "title": "Esc in the in-session `/resume` picker",
+      "priority": "blocker",
+      "starting_conditions": "A running session with a draft in the composer and at least one turn.",
+      "actions": [
+        "`/resume`, press Esc, then `/status`."
+      ],
+      "expected": [
+        "You are back in the same session.",
+        "The session id, account and transcript are unchanged, and the draft is still there.",
+        "Screen 08 is consistent with this."
+      ]
+    },
+    {
+      "id": "ESC-04",
+      "title": "Normal onboarding is not broken",
+      "priority": "blocker",
+      "starting_conditions": "A fresh home with no credentials.",
+      "actions": [
+        "Run `corbanu`, which is not a resume."
+      ],
+      "expected": [
+        "Onboarding still appears as it did before the change.",
+        "--"
+      ]
+    },
+    {
+      "id": "PR-01",
+      "title": "Full precedence order",
+      "priority": "blocker",
+      "starting_conditions": "H-ZAI, plus a conversation recorded on `work`.",
+      "actions": [
+        "Run each of the following, then `/status`:",
+        "Resume with `--account personal`.",
+        "Resume with no flag.",
+        "Start a new session with no flag.",
+        "Start a new session with no flag after removing `[provider_accounts]`."
+      ],
+      "expected": [
+        "The accounts used are `personal`, `work`, `personal` and `default`, in that order."
+      ]
+    },
+    {
+      "id": "PR-02",
+      "title": "`--account` for another provider does not affect Z.AI",
+      "priority": "advisory",
+      "starting_conditions": "A conversation recorded on Z.AI `work`.",
+      "actions": [
+        "Resume it with `--account openai:x`."
+      ],
+      "expected": [
+        "The Z.AI session still uses `work`. Whatever happens with `openai:x` is clearly reported."
+      ]
+    },
+    {
+      "id": "REG-01",
+      "title": "`named_accounts` turned off",
+      "priority": "blocker",
+      "starting_conditions": "The same homes, with the feature off.",
+      "actions": [
+        "Repeat FK-01, RS-01, ESC-01 and ESC-03."
+      ],
+      "expected": [
+        "Behaviour and text match the build from before this change.",
+        "`/status` shows no account suffix or per-account usage, as was the case before."
+      ]
+    },
+    {
+      "id": "REG-02",
+      "title": "No secrets shown",
+      "priority": "blocker",
+      "starting_conditions": "All the error and status paths above.",
+      "actions": [
+        "Check the screens, exit output, transcripts and logs."
+      ],
+      "expected": [
+        "No API key or any part of one appears anywhere."
+      ]
+    },
+    {
+      "id": "REG-03",
+      "title": "Footer and `/status` agree",
+      "priority": "advisory",
+      "starting_conditions": "A session on `work`.",
+      "actions": [
+        "Compare the bottom status line with `/status`."
+      ],
+      "expected": [
+        "Both name the same account.",
+        "Every candidate screen shows \"via zai default\" in the footer, even when `/status` says `account work`. Find out whether that \"default\" means the account; if it does, it is wrong."
+      ]
+    },
+    {
+      "id": "REG-04",
+      "title": "Usage totals add up",
+      "priority": "advisory",
+      "starting_conditions": "Any session after a few turns.",
+      "actions": [
+        "Compare the per-turn \"Token usage\" line, \"Token usage\" in `/status`, and \"Account usage\"."
+      ],
+      "expected": [
+        "The numbers agree, given how the inherited fork history is counted.",
+        "Other accounts are listed with 0, or the reason they are left out is clear.",
+        "In screen 01, \"Token usage\" is 27.3K but `work` shows 13,023 input. In screen 09, there are 20,160 cached tokens against 8.4K total."
+      ]
+    },
+    {
+      "id": "REG-05",
+      "title": "\"Account:\" line in `/status`",
+      "priority": "advisory",
+      "starting_conditions": "RS-01 and GH-01.",
+      "actions": [
+        "Run `/status`."
+      ],
+      "expected": [
+        "The \"Account:\" credential line shows the active credential, or there is an explanation for why it is missing.",
+        "It is missing in screens 04 and 05, but present in screens 01, 02 and 09."
+      ]
+    },
+    {
+      "id": "REG-06",
+      "title": "Both platforms",
+      "priority": "advisory",
+      "starting_conditions": "",
+      "actions": [
+        "Run the blocker cases on macOS and Linux."
+      ],
+      "expected": [
+        "The results are the same on both.",
+        "--"
+      ]
+    }
+  ]
+}

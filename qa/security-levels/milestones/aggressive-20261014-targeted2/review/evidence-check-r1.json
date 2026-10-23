@@ -1,0 +1,15 @@
+{
+ "agent": "01a13d1e-2729-71a3-9b1c-1de68951e7c1",
+ "verdict": "fail",
+ "round": 1,
+ "start": "2026-10-15T01:12:28Z",
+ "end": "2026-10-15T01:21:58Z",
+ "record_commit": "be416ffd92",
+ "usage": {
+  "input_tokens": 13591051,
+  "cached_input_tokens": 13366463,
+  "cache_write_input_tokens": 224450,
+  "output_tokens": 45087,
+  "reasoning_output_tokens": 0
+ }
+}
