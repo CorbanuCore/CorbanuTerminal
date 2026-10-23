@@ -1235,6 +1235,42 @@ fn cancellation_termination_grace_period_stays_50_ms_outside_test_overrides() {
     );
 }
 
+#[tokio::test]
+async fn cancellation_termination_grace_period_override_is_task_scoped() {
+    let default_period = cancellation_termination_grace_period();
+    let outer_period = Duration::from_secs(2);
+    let inner_period = Duration::from_secs(3);
+    let observed = CANCELLATION_TERMINATION_GRACE_PERIOD_OVERRIDE
+        .scope(outer_period, async {
+            let outer_before = cancellation_termination_grace_period();
+            let child_period = tokio::spawn(async { cancellation_termination_grace_period() })
+                .await
+                .expect("child task should read its own grace period");
+            let nested_period = CANCELLATION_TERMINATION_GRACE_PERIOD_OVERRIDE
+                .scope(inner_period, async {
+                    tokio::task::yield_now().await;
+                    cancellation_termination_grace_period()
+                })
+                .await;
+            tokio::task::yield_now().await;
+            (
+                outer_before,
+                child_period,
+                nested_period,
+                cancellation_termination_grace_period(),
+            )
+        })
+        .await;
+
+    assert_eq!(
+        (observed, cancellation_termination_grace_period()),
+        (
+            (outer_period, default_period, inner_period, outer_period),
+            default_period,
+        )
+    );
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn process_exec_tool_call_cancellation_allows_sigterm_cleanup() -> Result<()> {
