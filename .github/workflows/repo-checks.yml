@@ -6,7 +6,9 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Cold npm staging downloads six native artifacts (~4 GiB); allow
+    # transfer headroom without skipping packaging or the checks that follow.
+    timeout-minutes: 20
     env:
       NODE_OPTIONS: --max-old-space-size=4096
     steps:
