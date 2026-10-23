@@ -28,7 +28,7 @@ TARGET = re.compile(
 )
 CONFIG = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
 METHOD = re.compile(
-    r"test ([A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*) \.\.\. (ok|FAILED|ignored)(?:, .*)?\Z"
+    r"test ([A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*)(?: - should panic)? \.\.\. (ok|FAILED|ignored)(?:, .*)?\Z"
 )
 RUNNING = re.compile(r"running ([0-9]{1,9}) tests?\Z")
 SUMMARY = re.compile(

@@ -231,6 +231,80 @@ class CollectBazelTestResultsTest(unittest.TestCase):
         )
         self.assertNotIn("suite::stale", json.dumps(report))
 
+    def test_should_panic_row_keeps_canonical_name_and_status(self) -> None:
+        # Observed in the first Windows native capture on PR1394.
+        name = (
+            "context_manager::history::tests::"
+            "normalize_adds_missing_output_for_custom_tool_call_panics_in_debug"
+        )
+        for status in ("ok", "FAILED", "ignored"):
+            with self.subTest(status=status):
+                log = self.log(f"test {name} - should panic ... {status}\n")
+                self.write_bep([self.result(log)])
+
+                report = self.collect()
+
+                self.assertEqual(report["captureStatus"], "complete")
+                self.assertEqual(report["issues"], [])
+                self.assertEqual(
+                    report["attempts"][0]["methods"],
+                    [{"name": name, "status": status}],
+                )
+
+    def test_unsupported_libtest_annotation_is_not_a_named_pass(self) -> None:
+        for annotation in (
+            " - should abort",
+            " - should panic: private-panic-text",
+            " - should panic - should panic",
+        ):
+            with self.subTest(annotation=annotation):
+                log = self.log(f"test suite::panics{annotation} ... ok\n")
+                self.write_bep([self.result(log)])
+
+                report = self.collect()
+
+                self.assert_incomplete(report)
+                self.assert_no_methods(report)
+                self.assertIn("unrecognized_named_row", report["attempts"][0]["issues"])
+                self.assert_private_text_absent(report, "private-panic-text")
+
+    def test_should_panic_annotation_does_not_hide_duplicate_name(self) -> None:
+        log = self.log(
+            "test suite::panics ... FAILED\ntest suite::panics - should panic ... ok\n"
+        )
+        self.write_bep([self.result(log)])
+
+        report = self.collect()
+
+        self.assert_incomplete(report)
+        self.assertIn("duplicate_named_row", report["attempts"][0]["issues"])
+        self.assertEqual(
+            report["attempts"][0]["methods"],
+            [
+                {"name": "suite::panics", "status": "FAILED"},
+                {"name": "suite::panics", "status": "ok"},
+            ],
+        )
+
+    def test_should_panic_row_still_requires_complete_framing(self) -> None:
+        for opening, issue in (
+            ("", "unframed_named_row"),
+            ("running 2 tests\n", "incomplete_libtest_batch"),
+        ):
+            with self.subTest(opening=opening):
+                log = self.log(
+                    opening + "test suite::panics - should panic ... ok\n"
+                    "test result: ok. 1 passed; 0 failed; 0 ignored; "
+                    "0 measured; 0 filtered out; finished in 0.01s\n",
+                    framed=False,
+                )
+                self.write_bep([self.result(log)])
+
+                report = self.collect()
+
+                self.assert_incomplete(report)
+                self.assertIn(issue, report["attempts"][0]["issues"])
+
     def test_missing_reference_does_not_fall_back_to_existing_test_log(self) -> None:
         self.log("test suite::stale ... ok\n")
         self.write_bep([self.result(None)])
