@@ -392,8 +392,7 @@ fn accounting_responses_billed_charge_is_recorded_only_from_vercel() -> anyhow::
     Ok(())
 }
 
-// Source-informed candidate baseline oracle for issue814 option(b).
-// Pure synthetic usage-to-ledger-Patch translation only; no DB, provider or money action.
+// An invalid reasoning count must not discard valid usage or the Vercel charge.
 #[test]
 fn issue814_responses_excess_reasoning_retains_valid_usage_and_vercel_charge() -> anyhow::Result<()>
 {
@@ -544,7 +543,7 @@ async fn issue814_replay_rejection_is_atomic_and_normalized_report_retains_charg
     use codex_state::accounting::Decimal;
     use codex_state::accounting::Dialect;
     use codex_state::accounting::Presence;
-    // This is a disposable synthetic ledger, with no transport, credential or charge action.
+    // Reject the raw report atomically, then persist its normalized usage and charge.
     let fixture = Fixture::new().await?;
     let owner = fixture.deferred.session.thread_id;
     let store = AccountingStore::open(&fixture.db, /*as_of*/ 0).await?;
