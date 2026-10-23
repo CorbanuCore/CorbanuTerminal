@@ -15,6 +15,15 @@ th{background:#f5f5f7}.warn{background:#fff4e5;border-left:4px solid #f0a020;pad
 </head>
 <body>
 <h1>Corbanu Terminal — management handoff</h1>
+<p><small>Closeout update, 2026-10-22. Owner: <b>Travis</b>. Repository: <code>CorbanuCore/CorbanuTerminal</code>. This update supersedes earlier operational snapshots below.</small></p>
+<div class="warn"><b>Paused at the owner's request, 2026-10-22.</b> Travis accepted all recommendations (D182–D195), confirmed the Windows machine is up, and asked to finish in-flight work and pause.
+The three remaining Opus workers exited on a provider 429. A fresh Opus 5.5 High check at about 20:10Z was blocked by the same local cooldown (about 38 hours remaining).
+No alternate worker model was substituted. The recovery watchdog has been stopped so it cannot restart workers during the pause.
+See sections 10–12 for the current state; earlier “running” statements are historical.</div>
+<p><b>Approved decisions:</b> D182–D195 are accepted. Security evidence dispositions are recorded in the
+<a href="../../qa/security-levels/milestones/localmodel-run3-20261022/owner-decisions-20261022.md">owner decision addendum</a>.
+Raw failed/blocked results are retained separately from owner acceptance. The Windows gate and the #1337 account-key input defect still block #1080's default-on rollout.</p>
+<details><summary>Previous update at 12:45Z (historical; superseded by this closeout)</summary>
 <p><small>Kept by the coordinating agent (Claude, running in Corbanu Terminal as “coordinator”) for its successor; this update written by the coordinator's handoff-doc11 worker.
 State as of <b>2026-10-22 12:45 UTC (05:45 America/Phoenix)</b>, with <code>todo.md</code> read through its 12:59Z lines (including the install of <code>d88d018ab2</code>) and GitHub re-checked at about 13:03Z. Owner: <b>Travis</b>. Repository: <code>CorbanuCore/CorbanuTerminal</code> (base branch <code>main</code>, head
 <code>2cee3b5984</code>, the merge of #1333 at 12:29Z; main moved to <code>e2ddef8698</code> with tui-qa2's record #1341 at 12:51Z).
@@ -67,6 +76,8 @@ plain-language report that always ends with the open decisions and a recommendat
 waiting on him until he answers</b>. He usually answers “all as recommended” or “accept all recommendations”.
 <b>Overnight rule:</b> 01:30–09:30 Pacific Travis is unavailable. Only launch work that needs no decision from him, and queue the decisions, with recommendations, for
 the morning. In October that is 08:30Z–16:30Z. This update falls inside the window; Travis answered at 05:15Z and 08:20Z before it began, and is expected back at about 16:30Z.</div>
+
+</details>
 
 <div class="warn"><b>Three-day stop: <code>claude-plan</code> 429 (2026-10-16 13:55Z → 2026-10-19 18:30Z).</b>
 <ul>
@@ -2136,6 +2147,48 @@ key is Travis's own <code>/vault</code> action (D178b, section 11).</td><td><cod
 </table>
 
 <h2>10. Current state</h2>
+<p><b>Paused at the owner's request.</b> No program worker is running. The remaining work is preserved in pushed PRs and clean worktrees.
+The old <code>watchdog</code> tmux session was explicitly stopped; do not restart it during the pause. The old <code>f905</code> shell was confirmed idle in <code>worktrees/flake-905/codex-rs</code> with no child processes and closed. The program's worker tmux server has no sessions.</p>
+<table><tr><th>Work</th><th>State / evidence</th><th>Resume action</th></tr>
+<tr><td>sec-1302r / #1354</td><td>Head <code>9d6f0bad1a4e440d00c7054edd9c2b9519062ea3</code>; independent review APPROVE, checks green, conflicts with main. Earlier #1302 merged.</td><td>Recover the existing worktree, resolve conflicts, verify the resulting diff and review coverage, then require green checks.</td></tr>
+<tr><td>sec-1064b / #1356</td><td>Head <code>4ec31e993fa16aeb4276a5b85541dcc47ce3256e</code>; round 4 ended on 429 without a verdict; conflicts with main.</td><td>Recover the fourth review and conflict resolution. No approval is inferred from the interrupted run.</td></tr>
+<tr><td>tui-fix2 / #1357</td><td>Merged during closeout at reviewed head <code>35ff363283f392d9e7263c4abce961166c71480e</code>, all 38 checks passed or skipped. Coordinator rebuilt it and verified /providers, both local-provider actions, deactivate/reactivate, and onboarding wording in real tmux with disposable homes; no model calls.</td><td>Done. Evidence and limits posted on #1357; captures in <code>.codex-work/closeout-1357/</code>.</td></tr>
+<tr><td>tui-fix2 / #1358</td><td>Merged at <code>0670510bc74584ee28db078c0e023f7b9936d6df</code> after the single Windows setup-failure rerun passed. Reviewed head <code>4074cd0468a5cdea36bc502ab0952719d2619563</code> unchanged; all 38 checks passed or skipped; final-build real tmux evidence in the worker record.</td><td>Done. No review or CI gate was waived.</td></tr>
+<tr><td>Contributor #1353</td><td>Merged during closeout under D192, reviewed head <code>9fbc89f0c90bf4e91bb653ab147721fc2a511536</code>, all checks green. Author thanked.</td><td>Done.</td></tr>
+<tr><td>Contributor #1305 / #1318</td><td>D187/D188 approved. Heads advanced after review to <code>7f613ee3167a74b61ea8cee2f6c283f8bf67a5f0</code> / <code>684a77003ca8702ae7817edef09fdf80bf79bca2</code>. Follow-up commits implement review suggestions.</td><td>Short Opus follow-up reviews, then green checks and guarded merges. Contributors have been told no further changes are requested currently.</td></tr>
+<tr><td>Windows PF-84 gate</td><td>Coordinator built main <code>36ca28ce2e</code> on <code>DESKTOP-UJS3HC4</code> (Windows 11 Pro, Rust 1.99.1) and passed <b>24 CLI account assertions</b> with synthetic credentials, a loopback provider and disposable homes. <a href="../../qa/provider-auth/pf-84/windows-closeout-20261022/README.md">Supporting evidence</a>. The full independent gate has not run; required Opus worker unavailable.</td><td>Use <code>$W/win-gate-pf84.md</code> after provider recovery and owner resume. Finish Windows TUI, device-code, held-lock and active-request removal checks on the actual default-on candidate; check Z.AI balance. The verified CLI binary is retained under <code>C:\CorbanuQA\closeout-20261022\bin</code>.</td></tr>
+<tr><td>Accounting rerun</td><td>Paused previously on Z.AI 429 code 1113. D190 recharge approved, completion unconfirmed. No case was judged in this rerun.</td><td><code>.codex-work/acct-rerun-20261022/RESUME.md</code>; resume only when funded.</td></tr>
+</table>
+<p><b>Completed since #1345's snapshot:</b> #1302, #1332, #1339, #1347, #1351 and #1352; contributor #1330, #1329, #1338, #1346, #1344 and #1336. #1350 closed with a detailed duplicate explanation and credit. #814 closed under D193, preserving the accepted rare split/cumulative accounting limitations.</p>
+<p><b>PF-84:</b> #1080 stays draft. The earlier claim that only Windows and sign-off remain is superseded: #1337's Ctrl+J/immediate-key routing defect is also a blocker before default-on. #1342 needs the one-way legacy-label retry fix. Give the contributors time to respond as already agreed. Newly queued: ready comment-only #1359 (acknowledged, not independently reviewed), and contributor drafts #1360–#1364 and #1366. Do not duplicate those implementations on resumption.</p>
+<p><b>Main/build:</b> latest completed main postmerge CI verified during closeout passed at <code>1e90ae8defbad68dd3f8787f72d92148f1a8dbcf</code> (run 39814812253). At the final 20:53Z check, postmerge runs for this closeout's three merges (#1353, #1357 and #1358) were still running; no green postmerge claim is made for them.
+Installed signed binary on the Mac remains <code>d88d018ab2</code>; later merged changes are not yet installed there. The separately built Windows candidate is recorded above. No new release sign-off is claimed. Draft #1365's first macOS security integration run crashed with SIGSEGV (<b>#1367</b>, job 120066112486); cause unknown, one occurrence, no Rust changes in that draft.</p>
+<p><b>Evidence:</b> original worker logs and reviewer outputs are retained in <code>$HOME/.corbanu-workers/</code> and <code>.codex-work/tui-fix2/</code>.
+The decision ledger is <code>$W/pause-20261022.md</code>, linked at the top of <code>$W/todo.md</code>; <code>$W/closeout-recovery-20261022.md</code> records exact recovery steps. This handoff and the Windows record are preserved in <b>draft #1365</b>, pending the required independent Opus review. Do not delete unmerged worktrees or their review evidence. The merged TUI worktrees/cache are retained for now; check live owner references before later cleanup.</p>
+
+<h2>11. Decisions and remaining external actions</h2>
+<p><b>No unanswered numbered decision through D195.</b> Travis accepted all recommendations. D189 keeps CI-policy decisions with him; it does not expand D152.
+D191 (bounded plain-mktemp recognition), D194 (definite-cd handling) and D195 (unknown-folder git checks, after D194) are approved and queued for the next session, not implemented here.
+D186 keeps the existing zbus advisory exceptions until a viable maintained replacement exists; #992 remains open.
+D185's setup checklist is added to future tester packets; frozen packets stay unchanged.</p>
+<p><b>External actions whose execution is not confirmed:</b> D190 Z.AI recharge; D178b updating <code>provider/zai_api_key</code> to the new value; D18 deleting the malformed <code>kimi_api</code> vault entry.
+The old exposed Z.AI key was revoked by Travis; that is separate from updating the provider label. Workers must use <code>zai_key_3</code> at use time.
+Windows availability is now confirmed. PF-84's final sign-off is a future gate, not implied by “all recommendations accepted”.</p>
+<p><b>Deferred questions:</b> Zstandard/LZMA ZIP support remains open for a later owner decision. The older low-priority items are retained in the historical snapshot below; recheck their context before resurfacing them.</p>
+
+<h2>12. Resume sequence</h2>
+<ol>
+<li>Wait for Travis to resume. Do not automatically restart after cooldown expiry. Recheck Opus 5.5 High availability with one short smoke test; preserve the model requirement.</li>
+<li>Re-read current GitHub heads, checks and comments before recovering #1354/#1356 or reviewing #1305/#1318. Use the existing work, reviews and contributor replies; avoid duplicate implementation.</li>
+<li>Complete the Windows PF-84 gate and fix/review #1337 before seeking final sign-off for #1080. Relay any required test-account device code promptly. #1080 stays draft until all gates are satisfied.</li>
+<li>Confirm Z.AI funding and resume the preserved accounting run. Keep raw run results and owner-accepted dispositions distinct.</li>
+<li>Resume approved follow-ups D191, D194/D195 and the contributor queue only after the pause ends. #1277's agreed waiting deadline is 2026-10-23 02:03Z; check for replies first. Quiet-contributor follow-ups around 10-28 remain as previously agreed.</li>
+<li>Rebuild/install only from a validated green main with signed-binary smoke evidence. Maintain demo reels and warm, factual contributor/Task Node acknowledgments.</li>
+<li>Resume periodic progress reports and repeat unresolved owner questions until answered; keep the overnight rule from section 3.</li>
+</ol>
+
+<details><summary>Previous sections 10–12, recorded at 12:45Z (historical; instructions superseded)</summary>
+<h2>10. Current state</h2>
 <h3>Workers</h3>
 <p>Running at 2026-10-22 12:45 UTC (05:45 America/Phoenix), as tmux sessions on <code>$HOME/.corbanu-workers/tmux.sock</code>. Check with
 <code>$HOME/.corbanu-workers/mon.sh sec-1261 sec-1064 sec-1309c fu-1323</code> (tui-qa2 finished at 12:59Z, just after the snapshot). Session <code>watchdog</code> runs <code>watchdog.sh</code> (its last relaunch was sec-891 at 10-16
@@ -2339,6 +2392,9 @@ bump by D101.</li>
 <li><b>PF-13-S07:</b> re-run the Linux canary harness on the current candidate (glitch), then archive the sprint (its Aggressive-sign-off condition is met).</li>
 <li>Carried items (section 11).</li>
 </ol>
+
+
+</details>
 
 <h2>13. Files</h2>
 <ul>
