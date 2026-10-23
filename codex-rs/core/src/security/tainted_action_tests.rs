@@ -3008,16 +3008,12 @@ fn issue_1084_glob_substitution_is_unseen_code() {
 /// commands of programs that never run their words when the bash grammar
 /// proves every word is data (quoted or plain characters, no expansion).
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_932_zsh_lines_of_proven_data_skip_the_zsh_only_checks() {
     let named = |command: &[&str]| {
         classify_as_named_with(
             &shell_in("/work", command),
-            Path::new(HOME),
-            Some(Path::new(USER_HOME)),
+            &fixture(HOME),
+            Some(&fixture(USER_HOME)),
         )
     };
     let mut wrong = Vec::new();
