@@ -6509,6 +6509,49 @@ async fn assignment_unreachable_watchdog_pauses_after_four_cadences() {
 }
 
 #[tokio::test]
+async fn assignment_for_one_hour_keeps_the_whole_hour() {
+    let (mut app, _app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(&app, "watchdog", "Keep managing.");
+    let manager_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            /*spawn_role*/ None,
+            Some("Manager".to_string()),
+        )
+        .expect("create manager");
+    let worker_pane_id = app
+        .claude_panes
+        .create_pane_with_role(
+            crate::claude_panes::ClaudeProviderProfileKind::ClaudePlan,
+            app.config.cwd.to_path_buf(),
+            app.config.codex_home.as_ref(),
+            /*spawn_role*/ None,
+            Some("Worker".to_string()),
+        )
+        .expect("create worker");
+    // No clock override: the real clock moves between reads, as in the product.
+    assert_eq!(app.orchestrate_now_override, None);
+    app.handle_orchestrate_command(format!(
+        "attach {worker_pane_id} watchdog --mode review --holder {manager_pane_id} --for 1h"
+    ));
+
+    let execution_duration_s =
+        app.orchestrate_whips
+            .get("assignment-1")
+            .and_then(|whip| match &whip.kind {
+                crate::orchestrate::WhipKind::Assignment {
+                    execution_duration_s,
+                    ..
+                } => *execution_duration_s,
+                crate::orchestrate::WhipKind::LegacyNudge => None,
+            });
+    assert_eq!(execution_duration_s, Some(3600));
+}
+
+#[tokio::test]
 async fn assignment_restart_lifecycle_waits_one_cadence_then_continues() {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
     write_test_whip(&app, "restart-loop", "Continue the recovery work.");
