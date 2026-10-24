@@ -20,8 +20,8 @@ name: rust-ci core security tests
 # whole suite did, so a Linux-only break showed up on main. macOS runs them
 # in both TMPDIR steps (`/var` and `/tmp` are links there). Linux runs them
 # once: this job leaves TMPDIR unset, so `/tmp` is already the default.
-# `issue_506` (and the keychain cases) are macOS-only, so Linux runs 13
-# tests, macOS 18. About 15-30 s per step.
+# `issue_506` (and the keychain cases) are macOS-only, so Linux runs 15
+# tests, macOS 20 (with #1367's `issue_1367`). About 15-30 s per step.
 on:
   workflow_call:
     inputs:
@@ -157,7 +157,7 @@ jobs:
       - name: "cargo test codex-core Aggressive/Moderate suites (#902)"
         run: |
           cargo test --locked --target ${{ inputs.target }} -p codex-core --test all -- \
-            suite::issue_506:: suite::issue_584:: suite::issue_620_622:: suite::issue_736_740:: suite::issue_747:: suite::issue_748::
+            suite::issue_506:: suite::issue_584:: suite::issue_620_622:: suite::issue_736_740:: suite::issue_747:: suite::issue_748:: suite::issue_1367::
 
       - name: "cargo test codex-core Aggressive/Moderate suites (macOS, #902, TMPDIR=/tmp)"
         if: ${{ runner.os == 'macOS' }}
@@ -165,7 +165,7 @@ jobs:
           TMPDIR: /tmp
         run: |
           cargo test --locked --target ${{ inputs.target }} -p codex-core --test all -- \
-            suite::issue_506:: suite::issue_584:: suite::issue_620_622:: suite::issue_736_740:: suite::issue_747:: suite::issue_748::
+            suite::issue_506:: suite::issue_584:: suite::issue_620_622:: suite::issue_736_740:: suite::issue_747:: suite::issue_748:: suite::issue_1367::
 
       # Only main saves caches; PRs and branch runs restore main's (#636).
       - name: Save sccache cache
