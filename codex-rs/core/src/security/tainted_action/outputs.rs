@@ -369,7 +369,7 @@ fn prefix_folder(prefix: &str) -> String {
 
 /// git config options that take the next word as their value (`-zf FILE`
 /// too).
-const GIT_CONFIG_VALUES: &[&str] = &[
+pub(super) const GIT_CONFIG_VALUES: &[&str] = &[
     "-f",
     "--file",
     "--blob",
@@ -380,7 +380,7 @@ const GIT_CONFIG_VALUES: &[&str] = &[
     "--url",
 ];
 /// git config options that take no value (others may take the next word).
-const GIT_CONFIG_FLAGS: &[&str] = &[
+pub(super) const GIT_CONFIG_FLAGS: &[&str] = &[
     "--global",
     "--system",
     "--local",
@@ -401,7 +401,7 @@ const GIT_CONFIG_FLAGS: &[&str] = &[
     "--no-type",
 ];
 /// git config options that make it read, not write.
-const GIT_CONFIG_READS: &[&str] = &[
+pub(super) const GIT_CONFIG_READS: &[&str] = &[
     "--get",
     "--get-all",
     "--get-regexp",
@@ -635,6 +635,27 @@ mod tests {
                 .map(|at| git_config_reads(&words[at..]))
                 .collect();
             assert_eq!(each, alone, "{line}");
+        }
+    }
+
+    #[test]
+    fn config_null_flag_keeps_read_options_distinct_from_values() {
+        // Keep the shared parser at main's unknown-option handling for `-z`.
+        // Only the local write detector recognizes it as a no-value flag.
+        for (line, expected) in [
+            ("-z --get pager.log", false),
+            ("--null --get pager.log", true),
+            ("-z --list", false),
+            ("-z --comment note --get pager.log", false),
+            ("-z --comment --get pager.log x", true),
+            ("-z --comm --get pager.log x", true),
+            ("-z --file --get pager.log x", true),
+            ("-z -- --get pager.log", true),
+            ("-z pager.log --get", false),
+        ] {
+            let words: Vec<String> = line.split(' ').map(str::to_string).collect();
+            assert_eq!(git_config_reads(&words), expected, "{line}");
+            assert_eq!(git_config_reads_each(&words)[0], expected, "{line}");
         }
     }
 

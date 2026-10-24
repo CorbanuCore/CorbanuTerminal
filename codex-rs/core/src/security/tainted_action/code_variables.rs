@@ -146,7 +146,7 @@ const SAFE_GIT_KEYS: &[&str] = &[
 ];
 const SAFE_GIT_KEY_PREFIXES: &[&str] = &["color.", "advice."];
 /// git options before the subcommand that take the next word as their value.
-const GIT_VALUE_OPTIONS: &[&str] = &[
+pub(super) const GIT_VALUE_OPTIONS: &[&str] = &[
     "-C",
     "--git-dir",
     "--work-tree",
@@ -448,6 +448,15 @@ fn names_in_any_case(operand: &str) -> bool {
     })
 }
 
+/// Whether a lowercase Git key is known never to name a command.
+/// Shared by command-line overrides and persistent local configuration.
+pub(super) fn safe_git_key(key: &str) -> bool {
+    SAFE_GIT_KEYS.contains(&key)
+        || SAFE_GIT_KEY_PREFIXES
+            .iter()
+            .any(|prefix| key.starts_with(prefix))
+}
+
 /// Whether git's options before its subcommand (`args`, as written) set a
 /// config key that may name a command (`-c core.pager=x`, `--config-env`)
 /// or point git at other programs (`--exec-path=dir`), or may do so through
@@ -489,10 +498,7 @@ fn git_runs_code_until(args: &[String], raw: &[String], other_git_names_stop: bo
             .split_once('=')
             .map_or(setting, |(key, _)| key)
             .to_ascii_lowercase();
-        !(SAFE_GIT_KEYS.contains(&key.as_str())
-            || SAFE_GIT_KEY_PREFIXES
-                .iter()
-                .any(|prefix| key.starts_with(prefix)))
+        !safe_git_key(&key)
     };
     let unseen_text = |word: &str| word.contains('$') || word.contains(shell::UNSEEN_OUTPUT);
     // An expansion, as written too (a known value may be cut short: `a=(…)`,

@@ -30,6 +30,7 @@ use std::path::Path;
 
 mod arithmetic;
 mod code_variables;
+mod git_config;
 mod git_helpers;
 mod grammar;
 mod indirect;
@@ -1452,6 +1453,7 @@ impl Classifier {
             self.follow_change(name, args, folders, variables, unknown);
         }
         let mut git_config = GitConfigWrites::new(&lower, &hidden, &unchecked);
+        let mut local_git_config = git_config::Writes::new(words);
         let mut launched_git = launched_git::LaunchedGit::new(
             words,
             &lower,
@@ -1487,8 +1489,22 @@ impl Classifier {
             {
                 self.note(ProtectedActionKind::Persistence);
             }
+            // Also inspect local command-bearing keys in Git invocations
+            // found through wrappers or dashed helpers, using the shared name.
+            let inspecting = command.as_ref().is_some_and(|(at, _)| {
+                *at == index && git_config::inspection_only_prefix(&words[..index])
+            });
+            let launched_kind = launched_git.judge(index, helper.as_ref());
+            if (name == "git" || helper.is_some())
+                && !inspecting
+                // Unknown launcher input is already classified by the shared check.
+                && launched_kind != Some(ProtectedActionKind::UnseenCode)
+                && local_git_config.writes_code_setting(index + 1, subcommand)
+            {
+                self.note(ProtectedActionKind::Persistence);
+            }
             // #1268: git given words from a launcher's input (`xargs git`).
-            if let Some(kind) = launched_git.judge(index, helper.as_ref()) {
+            if let Some(kind) = launched_kind {
                 self.note(kind);
             }
             launched_git.step(index);

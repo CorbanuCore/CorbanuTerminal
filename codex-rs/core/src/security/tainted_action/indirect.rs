@@ -164,69 +164,70 @@ fn hex_bytes(word: &str) -> Option<Vec<u8>> {
         .collect()
 }
 
+/// Wrappers: options that take a value, and operands before the command.
+pub(super) const WRAPPERS: &[(&str, &[&str], usize)] = &[
+    (
+        "sudo",
+        &["-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T"],
+        0,
+    ),
+    ("doas", &["-u", "-C"], 0),
+    ("env", &["-u", "-C", "--unset", "--chdir"], 0),
+    ("nice", &["-n", "--adjustment"], 0),
+    ("nohup", &[], 0),
+    ("time", &["-f", "-o", "--format", "--output"], 0),
+    ("timeout", &["-s", "--signal", "-k", "--kill-after"], 1),
+    ("exec", &["-a"], 0),
+    ("command", &[], 0),
+    ("builtin", &[], 0),
+    (
+        "xargs",
+        &[
+            "-I",
+            "-L",
+            "-n",
+            "-P",
+            "-s",
+            "-d",
+            "-E",
+            "-a",
+            "--max-args",
+            "--max-procs",
+            "--delimiter",
+            "--arg-file",
+            "--replace",
+        ],
+        0,
+    ),
+    ("stdbuf", &["-i", "-o", "-e"], 0),
+    ("setsid", &[], 0),
+    ("caffeinate", &["-t", "-w"], 0),
+    ("arch", &[], 0),
+    ("unbuffer", &[], 0),
+    ("ionice", &["-c", "-n", "-p", "-P", "-u"], 0),
+    ("chrt", &[], 1),
+    ("taskset", &["-c", "--cpu-list"], 1),
+    (
+        "flock",
+        &["-w", "-E", "--timeout", "--conflict-exit-code"],
+        1,
+    ),
+    ("runuser", &["-u", "-g", "-G"], 0),
+    ("sg", &[], 1),
+    ("nsenter", &["-t", "--target"], 0),
+    ("unshare", &[], 0),
+    ("firejail", &[], 0),
+    ("systemd-run", &["-p", "--property", "-u", "--unit"], 0),
+    ("busybox", &[], 0),
+    ("toybox", &[], 0),
+    ("watch", &["-n", "--interval"], 0),
+];
+
 /// Lowercase basename of the command a simple command runs, skipping
 /// assignments, shell keywords and wrappers (with their options and
 /// arguments), with the index of that word.
 pub(super) fn command_word(words: &[String]) -> Option<(usize, String)> {
     const KEYWORDS: &[&str] = &["!", "if", "then", "elif", "else", "do", "while", "until"];
-    /// Wrappers: options that take a value, and operands before the command.
-    const WRAPPERS: &[(&str, &[&str], usize)] = &[
-        (
-            "sudo",
-            &["-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T"],
-            0,
-        ),
-        ("doas", &["-u", "-C"], 0),
-        ("env", &["-u", "-C", "--unset", "--chdir"], 0),
-        ("nice", &["-n", "--adjustment"], 0),
-        ("nohup", &[], 0),
-        ("time", &["-f", "-o", "--format", "--output"], 0),
-        ("timeout", &["-s", "--signal", "-k", "--kill-after"], 1),
-        ("exec", &["-a"], 0),
-        ("command", &[], 0),
-        ("builtin", &[], 0),
-        (
-            "xargs",
-            &[
-                "-I",
-                "-L",
-                "-n",
-                "-P",
-                "-s",
-                "-d",
-                "-E",
-                "-a",
-                "--max-args",
-                "--max-procs",
-                "--delimiter",
-                "--arg-file",
-                "--replace",
-            ],
-            0,
-        ),
-        ("stdbuf", &["-i", "-o", "-e"], 0),
-        ("setsid", &[], 0),
-        ("caffeinate", &["-t", "-w"], 0),
-        ("arch", &[], 0),
-        ("unbuffer", &[], 0),
-        ("ionice", &["-c", "-n", "-p", "-P", "-u"], 0),
-        ("chrt", &[], 1),
-        ("taskset", &["-c", "--cpu-list"], 1),
-        (
-            "flock",
-            &["-w", "-E", "--timeout", "--conflict-exit-code"],
-            1,
-        ),
-        ("runuser", &["-u", "-g", "-G"], 0),
-        ("sg", &[], 1),
-        ("nsenter", &["-t", "--target"], 0),
-        ("unshare", &[], 0),
-        ("firejail", &[], 0),
-        ("systemd-run", &["-p", "--property", "-u", "--unit"], 0),
-        ("busybox", &[], 0),
-        ("toybox", &[], 0),
-        ("watch", &["-n", "--interval"], 0),
-    ];
     let mut index = 0;
     while let Some(word) = words.get(index) {
         work::step();

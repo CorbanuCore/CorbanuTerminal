@@ -4,6 +4,9 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 
+#[path = "git_config_round6_tests.rs"]
+mod issue_1161_round6;
+
 const HOME: &str = "/home/fixture/.corbanu";
 const USER_HOME: &str = "/home/fixture";
 
@@ -5773,6 +5776,9 @@ fn issue_1283_quoted_git_config_values_stay_whole() {
         "D=~; env -C \"$D\" sh -c 'git config -f .zshenv --comment x,--get a.b v'",
         "env -C ~ sh -c 'git config -f .zshenv --comment x,--get a.b v'",
         "D=~; cd \"$D\"; sh -c 'echo x >> .zshenv'",
+        // #1161's owner-approved safe list also covers explicit files:
+        // an unlisted key still asks because the file may alias .git/config.
+        "cd /tmp; sh -c 'git config -f x a.b v'",
     ] {
         assert_eq!(
             script(command),
@@ -5817,7 +5823,6 @@ fn issue_1283_quoted_git_config_values_stay_whole() {
         "eval git config --get core.pager",
         "D=/tmp; cd \"$D\"; git config -f x --get core.pager",
         "D=/tmp; cd \"$D\"; sh -c 'git config --get core.pager'",
-        "cd /tmp; sh -c 'git config -f x a.b v'",
         "env -C /tmp sh -c 'git config --get core.pager'",
         "eval \"echo hi\"",
         "v=me; git config --get user.name; echo \"$v\"",
@@ -6792,4 +6797,644 @@ fn issue_1309_own_writes_in_possible_folders_are_linear() {
             let _ = script(&unit.repeat(100 * scale));
         });
     }
+}
+
+/// #1159: setting local command-bearing Git configuration is persistence.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1159_local_git_code_keys_are_persistence() {
+    for key in [
+        "diff.external",
+        "sequence.editor",
+        "gpg.program",
+        "gpg.ssh.defaultKeyCommand",
+        "core.gitProxy",
+        "include.path",
+        "interactive.diffFilter",
+    ] {
+        let command = format!("git config {key} marker");
+        assert_eq!(
+            script(&command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1159_local_git_code_key_families_are_persistence() {
+    for key in [
+        "pager.log",
+        "diff.preview.command",
+        "diff.preview.textconv",
+        "filter.preview.clean",
+        "filter.preview.smudge",
+        "filter.preview.process",
+        "gpg.ssh.program",
+        "gpg.x509.program",
+        "includeIf.onbranch:topic.path",
+        "remote.origin.uploadpack",
+        "remote.origin.receivepack",
+        "submodule.preview.update",
+        "hook.preview.command",
+        "diff.preview.with.dots.textconv",
+        "remote.origin.with.dots.uploadpack",
+        "includeIf.gitdir:repo.with.dots/.path",
+        "PaGeR.LoG",
+    ] {
+        let command = format!("git config '{key}' marker");
+        assert_eq!(
+            script(&command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1159_local_git_code_writes_find_the_key_after_options() {
+    for command in [
+        "git config --local pager.log marker",
+        "git config --worktree --add pager.log marker",
+        "git config --replace-all diff.external marker previous",
+        "git config --file settings pager.log marker",
+        "git config -fsettings pager.log marker",
+        "git config --type=path include.path marker",
+        "git config -t path include.path marker",
+        "git config set --comment note pager.log marker",
+        "git config set --comment=note --all pager.log marker",
+        "git config set --value previous pager.log marker",
+        "git config set --file settings --type=path include.path marker",
+        "git config -- pager.log marker",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1159_local_git_code_key_queries_stay_quiet() {
+    for command in [
+        "git config pager.log",
+        "git config --local diff.external",
+        "git config --get pager.log",
+        "git config --get-all filter.preview.clean",
+        "git config --get-regexp pager.log",
+        "git config --list",
+        "git config -l",
+        "git config get pager.log",
+        "git config get --default marker pager.log",
+        "git config list",
+        "git config --get-urlmatch include.path example.invalid",
+        "git config --unset pager.log",
+        "git config unset pager.log",
+        "git config set pager.log",
+        "git config --file pager.log",
+        "command -v git config pager.log marker",
+        "command -V git config pager.log marker",
+        "command -pv git config pager.log marker",
+        "command -pV git config pager.log marker",
+        "builtin command -v git config pager.log marker",
+        "env LANG=C command -V git config pager.log marker",
+        "nice -n 5 command -v git config pager.log marker",
+        "env --help git config pager.log marker",
+        "env --version git config pager.log marker",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1159_local_git_code_key_spellings_in_data_stay_quiet() {
+    for command in [
+        "git config user.name pager.log",
+        "git config user.name diff.external",
+        "git config user.name include.path",
+        "git config --comment pager.log user.name marker",
+        "git config set --comment=diff.external user.name marker",
+        "git config --file diff.external user.name marker",
+        "git config set --value pager.log user.name marker",
+        "git config user.name marker pager.log",
+        "git log --format=config pager.log marker",
+        "git --git-dir=config status pager.log marker",
+        "git -c user.name=config status pager.log marker",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1159_unlisted_git_keys_ask_even_for_non_command_values() {
+    for command in [
+        "git config diff.preview.binary true",
+        "git config diff.preview.cachetextconv true",
+        "git config filter.preview.required true",
+        "git config remote.origin.fetch marker",
+        "git config remote.origin.uploadpack.extra marker",
+        "git config submodule.preview.branch main",
+        "git config hook.preview.event pre-commit",
+        "git config hook.preview.enabled false",
+        "git config gpg.format ssh",
+        "git config gpg.minTrustLevel fully",
+        "git config includeIf.onbranch:topic.other marker",
+        // Intentional conservative behavior after untrusted content:
+        // these values run no command, but their keys are not allowlisted.
+        "git config pager.branch false",
+        "git config submodule.preview.update rebase",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1159_git_code_write_values_are_not_read_selectors() {
+    for command in [
+        "git config pager.log get",
+        "git config pager.log list",
+        "git config pager.log --get",
+        "git config pager.log --list",
+        "git config set --comment get diff.external list",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1159_git_code_writes_follow_resolved_commands() {
+    for command in [
+        "command git config pager.log marker",
+        "command -p git config pager.log marker",
+        "command -- git config pager.log marker",
+        "builtin command -p git config pager.log marker",
+        "env -u command git config pager.log marker",
+        "env -C command git config pager.log marker",
+        "env -C command -v git config pager.log marker",
+        "exec -a command git config pager.log marker",
+        "env -v git config pager.log marker",
+        "env LANG=C git config pager.log marker",
+        "git -C repo config pager.log marker",
+        "git -Crepo config pager.log marker",
+        "git --git-dir=repo config pager.log marker",
+        "git --work-tree repo --no-pager config pager.log marker",
+        "git -c user.name=marker config pager.log marker",
+        "bash -lc 'git config pager.log marker'",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1161_git_config_unknown_options_do_not_hide_writes() {
+    for command in [
+        "git config -z pager.log 'sh -c x'",
+        "git config --null pager.log 'sh -c x'",
+        "git config --no-type include.path /tmp/evil.cfg",
+        "git config --loc filter.x.clean 'sh -c x'",
+        "git config --rep filter.x.clean 'sh -c x'",
+        "git config -zf .git/config pager.log x",
+        "git config -zf.git/config pager.log x",
+        // A safe key does not exempt an explicit protected config file.
+        "git config -zf .git/config user.name pager.log",
+        "git --shallow-file x config sequence.editor 'sh -c x'",
+        "git --list-cmds x config sequence.editor 'sh -c x'",
+        "git --unknown-flag config pager.log x",
+        "git config --unknown-option user.name pager.log x",
+        // The conservative read check cannot prove a read after an unknown
+        // option: its next word may be that option's value.
+        "git config --loc --get pager.log",
+        "git config --comm --unset pager.log 'sh -c x'",
+        "git config --comm unset pager.log 'sh -c x'",
+        "git config --comm -f pager.log 'sh -c x'",
+        "git config --comm -h pager.log 'sh -c x'",
+        "git config --comm remove-section pager.log 'sh -c x'",
+        "git config --c --unset pager.log 'sh -c x'",
+        "git config --comm=note pager.log 'sh -c x'",
+        "git config --comm=./git pager.log 'sh -c x'",
+        "git config --unknown=note user.name marker",
+        "git config --comment --unset pager.log 'sh -c x'",
+        "git config --comment unset pager.log 'sh -c x'",
+        "git config --comment -f pager.log 'sh -c x'",
+        "git config --comment git pager.log x",
+        "git config --comment=./git pager.log x",
+        "git config --local unset pager.log marker",
+        "git config --local remove-section pager.log marker",
+        "find . -maxdepth 0 -exec git config pager.log 'sh -c x' \\;",
+        "custom-wrapper git config pager.log x",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1161_git_config_unlisted_keys_and_renames_are_persistence() {
+    for command in [
+        "git config credential.https://example.invalid.helper marker",
+        "git config merge.preview.driver marker",
+        "git config mergetool.preview.cmd marker",
+        "git config mergetool.preview.path marker",
+        "git config difftool.preview.cmd marker",
+        "git config difftool.preview.path marker",
+        "git config trailer.preview.cmd marker",
+        "git config core.alternateRefsCommand marker",
+        "git config sendemail.smtpServerCmd marker",
+        "git config imap.tunnel marker",
+        "git config browser.preview.cmd marker",
+        "git config man.preview.cmd marker",
+        "git config guitool.preview.cmd marker",
+        "git config ab.cd.clean marker && git config --rename-section ab.cd filter.cd",
+        "git config --rename-section ab.cd filter.cd",
+        "git config rename-section ab.cd filter.cd",
+        "git config color.x.clean 'sh -c evil' && git config --ren color.x filter.x",
+        "git config --ren color.x filter.x",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1161_git_config_safe_writes_reads_and_deletions_stay_quiet() {
+    for command in [
+        "git config user.name marker",
+        "git config set user.email fixture@example.invalid",
+        "git config core.autocrlf false",
+        "git config color.ui auto",
+        "git config advice.statusHints false",
+        "git config -z user.name marker",
+        "git config --no-type user.name marker",
+        "git config -zf fixture.cfg user.name pager.log",
+        "git config --comment pager.log user.name marker",
+        "git config -z --get pager.log",
+        "git config --unset-all pager.log",
+        "git config --remove-section filter.preview",
+        "git config remove-section filter.preview",
+        "git config --rename-section ab.cd",
+        "git config rename-section ab.cd",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1161_git_config_null_flag_preserves_read_and_value_boundaries() {
+    for command in [
+        "git config --null --get pager.log",
+        "git-config -z --get pager.log",
+        "git config -z --comment note --get pager.log",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+    for command in [
+        "git config -z --comment --get pager.log x",
+        "git config -z --comm --get pager.log x",
+        "git-config -z --comment --get pager.log x",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}",
+        );
+    }
+}
+
+/// #1161: local key families and section renames also apply to Git helpers.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1161_git_helpers_keep_local_key_and_rename_checks() {
+    for helper in [
+        "git-config",
+        "/usr/lib/git-core/git-config",
+        "GIT-CONFIG",
+        "git-config.exe",
+        "git.exe config",
+    ] {
+        for args in [
+            "pager.log marker",
+            "filter.demo.clean marker",
+            "diff.demo.command marker",
+            "--file git pager.log marker",
+            "--rename-section harmless pager",
+            "rename-section harmless pager",
+            "--unknown-option user.name pager.log marker",
+            "--ren color.x filter.x",
+            "--comm --unset pager.log marker",
+            "--comm unset pager.log marker",
+            "--comm -f pager.log marker",
+        ] {
+            let command = format!("{helper} {args}");
+            assert_eq!(
+                script(&command),
+                Some(ProtectedActionKind::Persistence),
+                "{command}"
+            );
+        }
+    }
+    for command in [
+        "env LANG=C git-config pager.log marker",
+        "find . -exec git-config pager.log marker \\;",
+        "bash -lc 'git-config pager.log marker'",
+        "git.exe -C repo config pager.log marker",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1161_git_helper_reads_safe_keys_and_data_stay_quiet() {
+    for command in [
+        "git-config user.name pager.log",
+        "git-config --file fixture.cfg user.name pager.log",
+        "git-config --file git user.name pager.log",
+        "git-config --file git --get pager.log",
+        "git-config --get pager.log",
+        "git-config get pager.log",
+        "git-config --unset pager.log",
+        "git-config unset pager.log",
+        "git-config --remove-section pager",
+        "git.exe config user.name pager.log",
+        "git-config.exe --get pager.log",
+        "command -v git-config pager.log marker",
+        "env --help git-config pager.log marker",
+        "git-log config pager.log marker",
+        "echo docs/git-config.txt pager.log marker",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1161_local_key_checks_keep_git_helper_scans_linear() {
+    for (prefix, unit) in [
+        ("", "git-config "),
+        ("", "git-config.exe "),
+        ("", "git.exe config "),
+        ("git-config ", "-f config -f git "),
+        ("git-config.exe ", "-f config -f git-config.exe "),
+        ("git.exe config ", "-f config -f git.exe config "),
+    ] {
+        work::assert_linear(unit, |scale| {
+            let line = format!("{prefix}{}user.name marker", unit.repeat(400 * scale));
+            let _ = script(&line);
+        });
+    }
+}
+
+#[test]
+fn issue_1161_local_key_cache_keeps_parser_states_separate() {
+    for line in ["-- set user.name marker", "set set user.name marker"] {
+        let words = line
+            .split_whitespace()
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        let mut writes = git_config::Writes::new(&words);
+        assert_eq!(
+            [
+                writes.writes_code_setting(/*from*/ 0, Some("config")),
+                writes.writes_code_setting(/*from*/ 1, Some("config")),
+            ],
+            [true, false],
+            "{line}"
+        );
+    }
+}
+
+#[test]
+fn issue_1161_local_key_cache_keeps_split_value_state_separate() {
+    let words = "--comment note user.name filter.a.clean marker"
+        .split_whitespace()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    for (from, want) in [([2, 0], [false, true]), ([0, 2], [true, false])] {
+        let mut writes = git_config::Writes::new(&words);
+        assert_eq!(
+            [
+                writes.writes_code_setting(from[0], Some("config")),
+                writes.writes_code_setting(from[1], Some("config")),
+            ],
+            want,
+            "{from:?}"
+        );
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1161_git_looking_keys_and_option_values_do_not_hide_writes() {
+    for command in [
+        "git config filter.a/git-x.clean 'sh -c evil'",
+        "git config diff.a/git-x.textconv 'sh -c evil'",
+        "git config remote.a/git-x.uploadpack 'sh -c evil'",
+        "git-config filter.a/git-x.clean 'sh -c evil'",
+        "git -C /tmp/git-x config filter.a.clean 'sh -c evil'",
+        "git --work-tree /src/git-tools config filter.a.clean 'sh -c evil'",
+        "git -c color.ui=/a/git-y config filter.a.clean 'sh -c evil'",
+        "git --work-tree=../git-x config sequence.editor 'sh -c evil'",
+        "git config includeIf.gitdir:/tmp/git-x.path /tmp/evil.cfg",
+        "git config 'credential.https://github.com/git-lfs.helper' /tmp/payload",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1161_git_looking_global_values_keep_scans_linear() {
+    for unit in [
+        "-C git ",
+        "-C /tmp/git-x ",
+        "--work-tree=../git-wt ",
+        "-c color.ui=/a/git-y ",
+        "-C 'a b' ",
+        "--namespace 'a git b' ",
+    ] {
+        work::assert_linear(unit, |scale| {
+            let line = format!(
+                "git {}config filter.a.clean marker",
+                unit.repeat(400 * scale)
+            );
+            assert_eq!(script(&line), Some(ProtectedActionKind::Persistence));
+        });
+    }
+}
+
+/// #1161 review round 4: global option values can become several shell words.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1161_split_global_option_values_do_not_hide_config_writes() {
+    for command in [
+        "git -C 'My Project' config filter.a.clean /tmp/x",
+        "git -c 'user.name=A B' config filter.a.clean /tmp/x",
+        "git -c user.name=a,b config filter.a.clean /tmp/x",
+        "git --namespace 'a b' config diff.x.textconv /tmp/x",
+        "git --namespace 'a git b' config filter.a.clean /tmp/x",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}"
+        );
+    }
+}
+
+/// A safe-key-looking fragment of a config option value is not the actual key.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1161_split_config_option_values_do_not_hide_config_writes() {
+    for command in [
+        "git config --comment 'note user.name' filter.a.clean /tmp/x",
+        "git config --comment='note user.name' filter.a.clean /tmp/x",
+        "git config set --comment 'x user.name' filter.a.clean /tmp/x",
+        // The named file may be a symlink to .git/config.
+        "git config -f 'l user.name' filter.a.clean /tmp/x",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1161_safe_option_values_and_commands_without_config_stay_quiet() {
+    for command in [
+        "git config --type bool pull.rebase true",
+        "git config --comment note user.email a@b",
+        "git -C ~/src/git-tools status",
+        "git -C /tmp/git-x status",
+        "git --work-tree /src/git-tools status",
+        "git -C 'My Project' status",
+        "git --namespace 'a git b' status",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1161_git_name_in_setting_keeps_inherited_unseen_code_prompt() {
+    // D153's quoted pass treats a git name inside a -c setting as unreadable,
+    // even for a safe key. Without config, keep that inherited classification.
+    assert_eq!(
+        script("git -c color.ui=/a/git-y status"),
+        Some(ProtectedActionKind::UnseenCode)
+    );
+}
+
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1161_attached_file_value_preserves_main_editor_boundary() {
+    // #1269 fixed the inherited #1262 over-prompt: the `e` after `-f` belongs
+    // to the filename. Keep main's attached-value boundary for this safe key.
+    assert_eq!(script("git config -fpager.log user.name marker"), None);
 }
