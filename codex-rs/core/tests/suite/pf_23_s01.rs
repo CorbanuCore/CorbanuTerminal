@@ -1248,25 +1248,30 @@ async fn issue_442_env_file_matched_by_name_is_denied_and_explained() -> anyhow:
         },
     )
     .await?;
-    let warning = match wait_for_event(&test.codex, |event| {
+    // #1312: the denied creation is explained too, although its command
+    // exited 0 (`echo made=$?` ran last).
+    let mut warnings = Vec::new();
+    while let EventMsg::Warning(warning) = wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnComplete(_))
             || matches!(event, EventMsg::Warning(warning)
                 if warning.message.starts_with("Security level Aggressive"))
     })
     .await
     {
-        EventMsg::Warning(warning) => warning.message,
-        other => panic!("no warning before the turn ended: {other:?}"),
+        warnings.push(warning.message);
+    }
+    let [made_warning, warning] = warnings.as_slice() else {
+        panic!("expected two warnings before the turn ended: {warnings:?}");
     };
+    assert!(
+        made_warning.starts_with("Security level Aggressive blocked access to `.env.new`"),
+        "{made_warning}"
+    );
     assert!(
         warning.starts_with("Security level Aggressive blocked access to `.env.local`"),
         "{warning}"
     );
     assert!(warning.contains("also ones created"), "{warning}");
-    wait_for_event(&test.codex, |event| {
-        matches!(event, EventMsg::TurnComplete(_))
-    })
-    .await;
     let requests = captured.requests();
     let made = output_text(&requests[requests.len() - 2], "call-make");
     assert!(made.contains("made=1"), "{made}");

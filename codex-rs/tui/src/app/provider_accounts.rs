@@ -220,7 +220,7 @@ impl App {
     /// PF-84-S06: signs a named account in by device code. The code and URL
     /// are shown here; the sign-in is saved to that account's vault store
     /// only, and the same ChatGPT user under another account gets a warning.
-    fn start_named_chatgpt_sign_in(&self, provider_id: String, name: ProviderAccountName) {
+    fn start_named_chatgpt_sign_in(&mut self, provider_id: String, name: ProviderAccountName) {
         let account = codex_login::NamedChatgptAccount {
             provider_id: provider_id.clone(),
             name: name.as_str().to_string(),
@@ -246,48 +246,55 @@ impl App {
         let codex_home = self.config.codex_home.to_path_buf();
         let store_mode = self.config.cli_auth_credentials_store_mode;
         let keyring_kind = self.config.auth_keyring_backend_kind();
+        let account_label = format!("{provider_id} account `{name}`");
+        let (code_tx, codes) = tokio::sync::mpsc::unbounded_channel();
+        let state = crate::chatwidget::named_account_login::NamedAccountLoginState::default();
+        let task_state = state.clone();
         let tx = self.app_event_tx.clone();
-        let finish = move |result| {
-            tx.send(AppEvent::ProviderAccount(ProviderAccountEvent::Finished {
-                result,
-            }));
-        };
-        tokio::spawn(async move {
-            let code = match codex_login::request_device_code(&opts).await {
-                Ok(code) => code,
-                Err(error) => {
-                    finish(Err(format!(
-                        "Could not start the sign-in of {provider_id} account `{name}`: {error}"
-                    )));
-                    return;
-                }
-            };
-            finish(Ok(format!(
-                "To sign in {provider_id} account `{name}`, open {} and enter code {}. \
-                 Waiting for the sign-in…",
-                code.verification_url, code.user_code
-            )));
-            if let Err(error) = codex_login::complete_device_code_login(opts, code).await {
-                finish(Err(format!(
-                    "Sign-in of {provider_id} account `{name}` failed: {error}"
-                )));
-                return;
+        let task = tokio::spawn(async move {
+            let result = async {
+                let code = codex_login::request_device_code(&opts)
+                    .await
+                    .map_err(|error| {
+                        format!(
+                            "Could not start the sign-in of {provider_id} account `{name}`: {error}"
+                        )
+                    })?;
+                code_tx
+                    .send(
+                        crate::chatwidget::named_account_login::NamedAccountLoginCode {
+                            verification_url: code.verification_url.clone(),
+                            user_code: code.user_code.clone(),
+                        },
+                    )
+                    .map_err(|_| "The sign-in screen was closed.".to_string())?;
+                codex_login::complete_device_code_login_with_persistence_guard(opts, code, || {
+                    task_state.begin_persistence()
+                })
+                .await
+                .map_err(|error| {
+                    format!("Sign-in of {provider_id} account `{name}` failed: {error}")
+                })?;
+                // Vault and default-login reads block; keep them off the runtime.
+                let message = tokio::task::spawn_blocking(move || {
+                    signed_in_message(
+                        &codex_home,
+                        &provider_id,
+                        &name,
+                        &account,
+                        store_mode,
+                        keyring_kind,
+                    )
+                })
+                .await
+                .unwrap_or_else(|_| "Signed in.".to_string());
+                Ok(message)
             }
-            // Vault and default-login reads block; keep them off the runtime.
-            let message = tokio::task::spawn_blocking(move || {
-                signed_in_message(
-                    &codex_home,
-                    &provider_id,
-                    &name,
-                    &account,
-                    store_mode,
-                    keyring_kind,
-                )
-            })
-            .await
-            .unwrap_or_else(|_| "Signed in.".to_string());
-            finish(Ok(message));
+            .await;
+            task_state.finish(&tx, result);
         });
+        self.chat_widget
+            .open_named_account_login(account_label, codes, task, state);
     }
 
     fn run_provider_account_job(

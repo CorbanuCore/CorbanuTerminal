@@ -517,6 +517,7 @@ pub async fn run_main_enforced(
         additional_writable_roots: add_dir,
         provider_account: account.clone(),
         inherited_provider_account: None,
+        reopened_by_prompt_edit: false,
     };
     if let Some(enforced) = enforced {
         // `Never` above is the headless default, not a flag to report.

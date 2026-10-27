@@ -4782,3 +4782,29 @@ fn realtime_start_deserializes_client_handoff_channel_prefixes() {
         ]))
     );
 }
+
+/// #1038: the first-message-edit mark is an experimental camelCase flag,
+/// omitted when false, so an ordinary thread/start is unchanged on the wire.
+#[test]
+fn thread_start_reopened_by_prompt_edit_wire_shape() {
+    let plain = serde_json::to_value(ThreadStartParams::default()).expect("serialize");
+    assert_eq!(plain.get("reopenedByPromptEdit"), None);
+    let marked = ThreadStartParams {
+        reopened_by_prompt_edit: true,
+        ..Default::default()
+    };
+    assert_eq!(
+        serde_json::to_value(&marked).expect("serialize")["reopenedByPromptEdit"],
+        json!(true)
+    );
+    let parsed: ThreadStartParams =
+        serde_json::from_value(json!({ "reopenedByPromptEdit": true })).expect("deserialize");
+    assert!(parsed.reopened_by_prompt_edit);
+    let reason = crate::experimental_api::ExperimentalApi::experimental_reason(
+        &crate::ClientRequest::ThreadStart {
+            request_id: crate::RequestId::Integer(1),
+            params: marked,
+        },
+    );
+    assert_eq!(reason, Some("thread/start.reopenedByPromptEdit"));
+}

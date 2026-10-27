@@ -3692,13 +3692,16 @@ fn accounting_realtime_session_without_an_end_says_so() {
         "{kind}"
     );
     // An owner prefix keeps it a realtime session; an ordinary turn and a
-    // WebRTC call (recorded at its creation, with no session end) are not.
+    // WebRTC call are not. A WebRTC call is recorded at its creation; the end
+    // it may carry (#955) is its client control channel's, not the media
+    // call's, so it is not shown as a session end (#1000).
     let mut side = session.clone();
     side.attempt.turn = format!("side:realtime:ws:{}", Uuid::from_u128(24));
     assert!(realtime_session(&[&side]));
     assert!(!realtime_session(&[&quote()]));
     let mut call = session;
     call.attempt.turn = format!("realtime:{}", Uuid::from_u128(25));
+    call.usage.session_ended_at_ms = Some(61_000);
     assert!(!realtime_session(&[&call]));
     assert!(
         !attempt_text(&call)

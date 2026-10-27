@@ -6253,6 +6253,14 @@ pub(crate) async fn build_world_state_from_turn_context(
         .expect("world state should build")
 }
 
+/// Gives `session` a new event channel and returns its receiver, for tests
+/// that read what a session emits.
+pub(crate) fn capture_events(session: &mut Session) -> async_channel::Receiver<Event> {
+    let (tx_event, rx_event) = async_channel::unbounded();
+    session.tx_event = tx_event;
+    rx_event
+}
+
 // todo: use online model info
 pub(crate) async fn make_session_and_context_for_config(config: Config) -> (Session, TurnContext) {
     let (tx_sub, _rx_sub) = async_channel::bounded(16);

@@ -93,6 +93,8 @@ env:
     legacy_read_only_after_workspace_write_cannot_delete
     legacy_crashed_session_labels_are_repaired
     legacy_label_registry_is_closed_to_low_integrity
+    legacy_unlabelled_root_is_reported_until_labelled
+    legacy_writable_roots_are_the_labelled_roots
 
 jobs:
   probes:

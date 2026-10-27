@@ -30,6 +30,7 @@ use crate::tools::sandboxing::default_exec_approval_requirement;
 use crate::tools::sandboxing::sandbox_override_for_first_attempt;
 use crate::tools::sandboxing::unsandboxed_execution_allowed;
 use codex_otel::ToolDecisionSource;
+use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::error::SandboxErr;
 use codex_protocol::exec_output::ExecToolCallOutput;
@@ -131,9 +132,11 @@ impl ToolOrchestrator {
                 .as_ref()
                 .map(ActiveNetworkApproval::execution_proxy),
         };
+        let unlabelled_mark = codex_windows_sandbox::unlabelled_roots_mark();
         let run_result = tool
             .run(req, &attempt_with_network_approval, &attempt_tool_ctx)
             .await;
+        warn_unlabelled_writable_roots(tool, req, tool_ctx, attempt, unlabelled_mark).await;
 
         let Some(network_approval) = network_approval else {
             return (run_result, None);
@@ -1879,6 +1882,57 @@ where
         "post-taint protected action needs fresh human approval"
     );
     Some(crate::security::tainted_action::PostTaintAction { kind, state })
+}
+
+/// #734: after a run in the non-admin Windows sandbox, tells the person
+/// (once per thread) about each writable root of the run that it couldn't
+/// label Low during the run (since `mark`), so left read-only to its
+/// commands. Display only.
+async fn warn_unlabelled_writable_roots<Rq, Out, T>(
+    tool: &T,
+    req: &Rq,
+    tool_ctx: &ToolCtx,
+    attempt: &SandboxAttempt<'_>,
+    mark: u64,
+) where
+    T: ToolRuntime<Rq, Out>,
+{
+    // The elevated backend labels nothing; a run it took (by level, or for
+    // the network proxy) records no failure after `mark` but another
+    // thread's concurrent run might, so it is left out where known.
+    if attempt.sandbox != SandboxType::WindowsRestrictedToken
+        || attempt.windows_sandbox_level != WindowsSandboxLevel::RestrictedToken
+    {
+        return;
+    }
+    let failed = codex_windows_sandbox::unlabelled_roots_since(mark);
+    if failed.is_empty() {
+        return;
+    }
+    let Ok(cwd) = attempt.sandbox_cwd.to_abs_path() else {
+        return;
+    };
+    let Ok(workspace_roots) = attempt
+        .workspace_roots
+        .iter()
+        .map(PathUri::to_abs_path)
+        .collect::<std::io::Result<Vec<_>>>()
+    else {
+        return;
+    };
+    let effective = codex_sandboxing::policy_transforms::effective_file_system_sandbox_policy(
+        &attempt.permissions.file_system_sandbox_policy(),
+        tool.additional_permissions(req),
+    );
+    let writable =
+        codex_windows_sandbox::legacy_writable_roots(&effective, &workspace_roots, cwd.as_path());
+    for message in crate::tools::writable_root_notices::unlabelled_writable_root_warnings(
+        tool_ctx.session.thread_id(),
+        &failed,
+        &writable,
+    ) {
+        warn(tool_ctx, &message).await;
+    }
 }
 
 /// #739: tells the person `message` (a warning in the transcript).

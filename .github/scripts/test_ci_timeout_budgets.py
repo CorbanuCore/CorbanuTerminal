@@ -419,10 +419,24 @@ class PrAppServerSchemaFixturesTest(unittest.TestCase):
             ["codex-rs/core/src/lib.rs", "README.md", "docs/ci.md"],
             ["codex-rs/protocol-extra/src/lib.rs", "codex-rs/app-server/src/lib.rs"],
             ["codex-rs/utils/path-utils/src/lib.rs", "codex-rs/ext/web-search/src/lib.rs"],
-            [".github/workflows/rust-ci-full.yml", "codex-rs/Cargo.lock"],
+            [".github/workflows/rust-ci-full.yml", "codex-rs/Cargo.lock.bak"],
+            ["codex-rs/Cargo.toml.bak"],
+            ["codex-rs/codex-experimental-api-macros-extra/src/lib.rs"],
         ):
             with self.subTest(files=files):
                 self.assertFalse(self.detect(files))
+
+    def test_runs_for_schema_generation_inputs(self) -> None:
+        # #1298: the macro controls experimental-field filtering, and a
+        # schemars/ts-rs feature or lockfile update can change the output.
+        for path in (
+            "codex-rs/codex-experimental-api-macros/src/lib.rs",
+            "codex-rs/codex-experimental-api-macros/Cargo.toml",
+            "codex-rs/Cargo.toml",
+            "codex-rs/Cargo.lock",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(self.detect([path]))
 
     def test_watches_every_schema_deriving_dependency(self) -> None:
         # Workspace crates that codex-app-server-protocol depends on

@@ -12,6 +12,7 @@
 use super::indirect;
 use super::shell;
 use super::work;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ops::Range;
@@ -453,22 +454,24 @@ impl Arithmetic {
         let mut eval_scanned = false;
         // `eval let v`, zsh `noglob let v`: the rest is a command too. Each
         // level notes only what precedes its command, so this is linear.
+        // #988: so is a `trap` action, which the shell reads again later.
         while start < raw.len().min(words.len()) {
             work::step();
             let raw = &raw[start..];
             let command = indirect::command_word(&words[start..]);
             match command {
                 Some((index, name))
-                    if matches!(name.as_str(), "eval" | "noglob" | "nocorrect")
+                    if matches!(name.as_str(), "eval" | "trap" | "noglob" | "nocorrect")
                         && !self.functions.contains(&name)
                         && !self.aliases.contains_key(&name) =>
                 {
                     // Escapes (`eval \(\(v\)\)`) or `$'...'` decoding hide
                     // the evaluated text from the lexer.
-                    if name == "eval" && (simple.escaped || self.ansi_c) {
+                    let evaluates = matches!(name.as_str(), "eval" | "trap");
+                    if evaluates && (simple.escaped || self.ansi_c) {
                         self.opaque = true;
                     }
-                    if name == "eval" {
+                    if evaluates {
                         self.evaluates_text = true;
                         // `eval 'print ${'$t'x}'`: an expansion in the text
                         // may spell `${~x}` (#1084). Scanned at the first
@@ -483,6 +486,18 @@ impl Arithmetic {
                     }
                     self.note_one(&raw[..index], &redirect[start..], /*command*/ None);
                     start += index + 1;
+                    // `trap -- 'let v' EXIT`: the action follows its options.
+                    while name == "trap"
+                        && let Some(option) = words.get(start)
+                        && option.len() > 1
+                        && option.starts_with('-')
+                    {
+                        work::step();
+                        start += 1;
+                        if option == "--" {
+                            break;
+                        }
+                    }
                 }
                 command => {
                     self.note_one(raw, &redirect[start..], command.as_ref());
@@ -1472,7 +1487,10 @@ fn pure_arithmetic(region: &str) -> bool {
 
 /// Text with its command substitutions (`$(...)`, `` `...` ``) blanked.
 /// Arithmetic (`$((`) is kept. Linear: each byte is visited once.
-fn without_substitutions(text: &str) -> String {
+fn without_substitutions(text: &str) -> Cow<'_, str> {
+    if !text.contains('`') && !text.contains("$(") {
+        return Cow::Borrowed(text);
+    }
     let bytes = text.as_bytes();
     let mut kept = String::with_capacity(text.len());
     let mut at = 0;
@@ -1515,7 +1533,7 @@ fn without_substitutions(text: &str) -> String {
         from = at;
     }
     kept.push_str(&text[from.min(text.len())..]);
-    kept
+    Cow::Owned(kept)
 }
 
 /// Whether every command substitution in text prints a neutral fact
@@ -1924,6 +1942,16 @@ fn flags_unsafe(region: &str, unsafe_in: &impl Fn(&str) -> bool) -> bool {
     if references(flags).any(unsafe_in) {
         return true;
     }
+    // Keep checking flags inside malformed arguments: a safe outer suffix
+    // can contain an unsafe inner argument. Remove quotes once, then map each
+    // original argument's boundaries into that shared text instead of copying
+    // every overlapping suffix. Delimiter searches and callbacks are unchanged.
+    let unquoted_flags = unquoted(flags);
+    let quotes: Vec<usize> = flags
+        .match_indices(['"', '\'', '\\'])
+        .map(|(at, _)| at)
+        .collect();
+    let unquoted_at = |at| at - quotes.partition_point(|&quote| quote < at);
     flags.char_indices().any(|(at, flag)| {
         work::step();
         if !matches!(flag, 'l' | 'r' | 'I') {
@@ -1933,11 +1961,11 @@ fn flags_unsafe(region: &str, unsafe_in: &impl Fn(&str) -> bool) -> bool {
         let Some(delimiter) = rest.chars().next().filter(|ch| !ch.is_ascii_alphanumeric()) else {
             return false;
         };
-        let argument = &rest[delimiter.len_utf8()..];
-        let argument = argument
+        let start = at + flag.len_utf8() + delimiter.len_utf8();
+        let end = flags[start..]
             .find(delimiter)
-            .map_or(argument, |end| &argument[..end]);
-        unsafe_in(&unquoted(argument))
+            .map_or(flags.len(), |end| start + end);
+        unsafe_in(&unquoted_flags[unquoted_at(start)..unquoted_at(end)])
     })
 }
 
@@ -2557,7 +2585,7 @@ fn unseen_substitution(region: &str) -> bool {
 }
 
 /// `NAME=value`, `NAME+=value` or `NAME[sub]=value`: the name and value.
-fn assignment(word: &str) -> Option<(&str, &str)> {
+pub(super) fn assignment(word: &str) -> Option<(&str, &str)> {
     let (left, value) = word.split_once('=')?;
     let left = left.strip_suffix('+').unwrap_or(left);
     let name = left.split_once('[').map_or(left, |(name, _)| name);

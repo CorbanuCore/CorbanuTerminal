@@ -1212,13 +1212,8 @@ impl App {
                                 )
                                 .await
                         }
-                        Ok(None) => {
-                            app_server
-                                .start_thread_with_session_start_source(
-                                    &config, /*session_start_source*/ None,
-                                )
-                                .await
-                        }
+                        // #1038: the first message: a new thread, still a reopen.
+                        Ok(None) => app_server.start_thread_for_first_prompt_edit(&config).await,
                         Err(err) => Err(err),
                     },
                     Err(err) => Err(err),

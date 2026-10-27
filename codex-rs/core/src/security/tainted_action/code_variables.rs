@@ -54,6 +54,32 @@ const CODE_VARIABLES: &[&str] = &[
     "LESSEDIT",
     "MANOPT",
     "BROWSER",
+    // #1064/#1159: the shell runs a prompt variable's value (`PS4` under
+    // `set -x`, `PROMPT_COMMAND`, zsh prompts under `promptsubst`), sources
+    // the file `BASH_ENV` names or reads start-up files from `ZDOTDIR`.
+    // (Names also set for other reasons, `PATH`, `ENV`, library paths and
+    // interpreter options, are an owner decision.)
+    "PS0",
+    "PS1",
+    "PS2",
+    "PS3",
+    "PS4",
+    "PROMPT_COMMAND",
+    "PROMPT2",
+    "PROMPT3",
+    "PROMPT4",
+    "RPROMPT",
+    "RPROMPT2",
+    "RPS1",
+    "RPS2",
+    "SPROMPT",
+    "PROMPT_EOL_MARK",
+    "BASH_ENV",
+    "ZDOTDIR",
+    // Libraries the loader runs in every program it starts.
+    "LD_PRELOAD",
+    "LD_AUDIT",
+    "DYLD_INSERT_LIBRARIES",
 ];
 /// `GIT_CONFIG_KEY_<n>`/`GIT_CONFIG_VALUE_<n>` set config keys,
 /// `GIT_TRACE*` names a file git writes, `GIT_TEST_*` are test hooks (some
@@ -66,6 +92,18 @@ const CODE_VARIABLE_PREFIXES: &[&str] = &[
     "GIT_TEST_",
     "LESSKEY",
 ];
+/// #1159: code variables whose names are common words (`grep PROMPT`,
+/// `GetEnvironmentVariable('PROMPT')`, `docker run -e PROMPT=x`), counted
+/// only where they are set: assigned before a command or by `env`
+/// (`PROMPT=x zsh -i`, `FPATH=x:$FPATH`), by PowerShell (`$env:PROMPT = 'x'`)
+/// or an expansion (`${PROMPT:=x}`), or named to a builtin that sets them
+/// (`export PROMPT`, `read PROMPT`, `set prompt=x`). zsh's `FPATH` is where
+/// `autoload` finds the functions it runs.
+const SET_ONLY_VARIABLES: &[&str] = &["PROMPT", "FPATH"];
+
+fn is_set_only(name: &str) -> bool {
+    SET_ONLY_VARIABLES.contains(&name)
+}
 /// Builtins whose operands name the variables they set.
 const NAMING_BUILTINS: &[&str] = &[
     "declare",
@@ -132,6 +170,18 @@ fn is_name_char(ch: char) -> bool {
 
 /// Whether `word` names a code variable other than by reading it.
 fn names_code_variable(word: &str) -> bool {
+    // `${ENV=x}`, `${ENV:=x}` (the word lexer drops the braces).
+    if word.match_indices('$').any(|(at, _)| {
+        work::step();
+        let rest = &word[at + 1..];
+        let rest = rest.strip_prefix('{').unwrap_or(rest);
+        let end = rest
+            .find(|ch: char| !is_name_char(ch))
+            .unwrap_or(rest.len());
+        is_set_only(&rest[..end]) && rest[end..].trim_start_matches(':').starts_with('=')
+    }) {
+        return true;
+    }
     // PowerShell's environment, in any case (`$env:pager = 'x'`).
     let powershell = ["$env:", "env:"].iter().find_map(|prefix| {
         word.get(..prefix.len())
@@ -236,9 +286,36 @@ pub(super) fn sets_code_variable(
             if word.starts_with('-') || !word.contains('=') {
                 continue;
             }
-            if expands(&name_of(word)) || (!leading && globs(word)) {
+            let name = name_of(word);
+            if expands(&name)
+                || (!leading && globs(word))
+                || is_set_only(name.split(['+', '[']).next().unwrap_or(&name))
+            {
                 return true;
             }
+        }
+    }
+    // PowerShell sets a set-only variable (`$env:PROMPT = 'x'`, `$env:Fpath+=x`).
+    for (at, word) in raw.iter().enumerate() {
+        work::step();
+        let lower = word.to_ascii_lowercase();
+        let Some(rest) = ["$env:", "${env:"]
+            .iter()
+            .find_map(|prefix| lower.strip_prefix(prefix))
+        else {
+            continue;
+        };
+        let end = rest
+            .find(|ch: char| !is_name_char(ch))
+            .unwrap_or(rest.len());
+        let assigned = |text: &str| {
+            let text = text.trim_start_matches('}').trim_start();
+            text.starts_with('=') || text.starts_with("+=") || text.starts_with("-=")
+        };
+        if is_set_only(&rest[..end].to_ascii_uppercase())
+            && (assigned(&rest[end..]) || raw.get(at + 1).is_some_and(|next| assigned(next)))
+        {
+            return true;
         }
     }
     let Some((index, name)) = command else {
@@ -306,7 +383,7 @@ pub(super) fn sets_code_variable(
             continue;
         }
         if std::mem::take(&mut name_next) {
-            if judged(at, word) {
+            if judged(at, word) || is_set_only(word) {
                 return true;
             }
             continue;
@@ -339,7 +416,7 @@ pub(super) fn sets_code_variable(
         } else {
             word.split_once('=').map_or(word.as_str(), |(name, _)| name)
         };
-        if judged(at, name_part) {
+        if judged(at, name_part) || name_part.split('=').any(is_set_only) {
             return true;
         }
     }
@@ -365,9 +442,10 @@ fn assignment_form(name: &str) -> bool {
 /// Whether a name operand, or a piece of it between `=` (a nameref's
 /// target), is a code variable in any case.
 fn names_in_any_case(operand: &str) -> bool {
-    operand
-        .split('=')
-        .any(|piece| is_code_variable(&piece.to_ascii_uppercase()))
+    operand.split('=').any(|piece| {
+        let upper = piece.to_ascii_uppercase();
+        is_code_variable(&upper) || is_set_only(&upper)
+    })
 }
 
 /// Whether git's options before its subcommand (`args`, as written) set a

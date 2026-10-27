@@ -579,6 +579,13 @@ impl Session {
         }
 
         let turn_context = self.new_default_turn_with_sub_id(sub_id.clone()).await;
+        // #1331 (D171): nor while its named account is removed or signed out.
+        if crate::session::turn::turn_refusal(self, &turn_context)
+            .await
+            .is_some()
+        {
+            return;
+        }
         let agent_execution_guard = match self.services.agent_control.try_execution_guard(
             turn_context.multi_agent_version,
             &turn_context.session_source,

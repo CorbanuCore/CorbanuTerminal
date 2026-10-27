@@ -34,7 +34,7 @@ use crate::amazon_bedrock::AmazonBedrockModelProvider;
 use crate::auth::ProviderAuthScope;
 use crate::auth::ResolvedProviderAuth;
 use crate::auth::auth_manager_for_provider;
-use crate::auth::named_sign_in_account;
+use crate::auth::named_sign_in_refusal;
 use crate::auth::resolve_provider_auth;
 use crate::auth::resolve_provider_auth_for_scope;
 use crate::models_endpoint::OpenAiModelsEndpoint;
@@ -425,19 +425,8 @@ impl ConfiguredModelProvider {
         // sign-in (D171, #1286: also one removed or signed out while the
         // session ran) is refused with the reason, never sent
         // unauthenticated while the session claims the account.
-        if let Some(account) = named_sign_in_account(&self.info) {
-            let reason = self
-                .auth_manager
-                .as_ref()
-                .and_then(|auth_manager| auth_manager.named_sign_in_unavailable())
-                .unwrap_or_else(|| {
-                    format!(
-                        "account `{name}` has no usable sign-in; sign in again with \
-                         `corbanu login --account {name}`",
-                        name = account.name
-                    )
-                });
-            return Some(CodexErr::Fatal(format!("{}: {reason}", self.info.name)));
+        if let Some(refusal) = named_sign_in_refusal(&self.info, self.auth_manager.as_deref()) {
+            return Some(refusal);
         }
         // PF-84-S06 (#570): the default login this process hides (the
         // restrictions rule it out) is refused with the reason, not replaced

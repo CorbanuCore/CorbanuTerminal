@@ -936,12 +936,47 @@ fn persist_agent_identity_record(
     let mut guard = auth_dot_json
         .lock()
         .map_err(|_| std::io::Error::other("failed to lock auth state"))?;
-    let mut auth = storage
-        .load()?
-        .or_else(|| guard.clone())
-        .ok_or_else(|| std::io::Error::other("auth data is not available"))?;
-    auth.agent_identity = Some(AgentIdentityStorage::Record(record));
-    storage.save(&auth)?;
+    // D171 (#1311): a named account's record (and its private key) is written
+    // only onto the stored sign-in of the ChatGPT account and user it was made
+    // for, in one vault step, and never brings back an account another process
+    // removed.
+    let named = storage.is_named_account();
+    let updated = storage.update(&mut |auth| {
+        let stored_binding = auth.tokens.as_ref().map(|tokens| {
+            (
+                tokens.account_id.as_deref(),
+                tokens.id_token.chatgpt_user_id.as_deref(),
+            )
+        });
+        let record_binding = (
+            Some(record.account_id.as_str()),
+            Some(record.chatgpt_user_id.as_str()),
+        );
+        if named && stored_binding != Some(record_binding) {
+            return Err(std::io::Error::other(
+                "the named account's sign-in changed; its agent identity was not saved",
+            ));
+        }
+        auth.agent_identity = Some(AgentIdentityStorage::Record(record.clone()));
+        Ok(())
+    })?;
+    let auth = match updated {
+        Some(auth) => auth,
+        None if named => {
+            return Err(std::io::Error::other(
+                "the named account has no sign-in (it may have been removed or signed out); \
+                 its agent identity was not saved",
+            ));
+        }
+        None => {
+            let mut auth = guard
+                .clone()
+                .ok_or_else(|| std::io::Error::other("auth data is not available"))?;
+            auth.agent_identity = Some(AgentIdentityStorage::Record(record));
+            storage.save(&auth)?;
+            auth
+        }
+    };
     *guard = Some(auth);
     Ok(())
 }
@@ -2066,29 +2101,47 @@ pub fn legacy_codex_home_for_product_home(codex_home: &Path) -> Option<PathBuf> 
 }
 
 // Persist refreshed tokens into auth storage and update last_refresh.
+// D171 (#1311): read and saved in one step, and for a named account only onto
+// the stored sign-in that was refreshed (`refreshed_from` is its refresh
+// token), so a removal or a new sign-in by another process meanwhile is kept.
 fn persist_tokens(
     storage: &Arc<dyn AuthStorageBackend>,
+    refreshed_from: &str,
     id_token: Option<String>,
     access_token: Option<String>,
     refresh_token: Option<String>,
 ) -> std::io::Result<AuthDotJson> {
-    let mut auth_dot_json = storage
-        .load()?
-        .ok_or(std::io::Error::other("Token data is not available."))?;
-
-    let tokens = auth_dot_json.tokens.get_or_insert_with(TokenData::default);
-    if let Some(id_token) = id_token {
-        tokens.id_token = parse_chatgpt_jwt_claims(&id_token).map_err(std::io::Error::other)?;
-    }
-    if let Some(access_token) = access_token {
-        tokens.access_token = access_token;
-    }
-    if let Some(refresh_token) = refresh_token {
-        tokens.refresh_token = refresh_token;
-    }
-    auth_dot_json.last_refresh = Some(Utc::now());
-    storage.save(&auth_dot_json)?;
-    Ok(auth_dot_json)
+    let id_token = id_token
+        .map(|id_token| parse_chatgpt_jwt_claims(&id_token).map_err(std::io::Error::other))
+        .transpose()?;
+    let named = storage.is_named_account();
+    storage
+        .update(&mut |auth_dot_json| {
+            if named
+                && auth_dot_json
+                    .tokens
+                    .as_ref()
+                    .is_none_or(|tokens| tokens.refresh_token != refreshed_from)
+            {
+                return Err(std::io::Error::other(
+                    "the named account's sign-in changed while it was refreshed; \
+                     the refreshed tokens were not saved",
+                ));
+            }
+            let tokens = auth_dot_json.tokens.get_or_insert_with(TokenData::default);
+            if let Some(id_token) = id_token.clone() {
+                tokens.id_token = id_token;
+            }
+            if let Some(access_token) = access_token.clone() {
+                tokens.access_token = access_token;
+            }
+            if let Some(refresh_token) = refresh_token.clone() {
+                tokens.refresh_token = refresh_token;
+            }
+            auth_dot_json.last_refresh = Some(Utc::now());
+            Ok(())
+        })?
+        .ok_or(std::io::Error::other("Token data is not available."))
 }
 
 // Requests refreshed ChatGPT OAuth tokens from the auth service using a refresh token.
@@ -2932,15 +2985,20 @@ impl AuthManager {
     /// was removed or signed out (by any process); [`AuthManager::auth`]
     /// picks up a later sign-in.
     pub fn auth_cached(&self) -> Option<CodexAuth> {
-        match self.held_named_sign_in() {
-            named_account::HeldSignIn::Current => {}
-            named_account::HeldSignIn::Changed => self.reload_named_sign_in_sync(),
-            named_account::HeldSignIn::Gone => {
-                self.set_cached_auth(/*new_auth*/ None);
-                return None;
+        loop {
+            match self.held_named_sign_in() {
+                named_account::HeldSignIn::Current => {}
+                named_account::HeldSignIn::Changed => self.reload_named_sign_in_sync(),
+                named_account::HeldSignIn::Gone { epoch } => {
+                    if !self.clear_named_sign_in_if_unchanged(epoch) {
+                        // The replacement may itself have been removed since
+                        // it was installed. Check it before returning it.
+                        continue;
+                    }
+                }
             }
+            return self.auth_cached_unchecked();
         }
-        self.auth_cached_unchecked()
     }
 
     /// The cached auth as it is, for the guarded reloads that compare it with
@@ -3227,28 +3285,34 @@ impl AuthManager {
 
     fn set_cached_auth(&self, new_auth: Option<CodexAuth>) -> bool {
         if let Ok(mut guard) = self.inner.write() {
-            let previous = guard.auth.as_ref();
-            let changed = !AuthManager::auths_equal(previous, new_auth.as_ref());
-            let auth_changed_for_refresh =
-                !Self::auths_equal_for_refresh(previous, new_auth.as_ref());
-            self.clear_provider_api_key_cache();
-            if auth_changed_for_refresh {
-                guard.permanent_refresh_failure = None;
-            }
-            tracing::info!("Reloaded auth, changed: {changed}");
-            guard.auth = new_auth;
-            // D171: what the store was last seen holding was about the
-            // sign-in held before.
-            if changed && let Some(store) = self.named_store.as_ref() {
-                store.forget();
-            }
-            if auth_changed_for_refresh {
-                self.auth_change_tx.send_modify(|revision| *revision += 1);
-            }
-            changed
+            self.replace_cached_auth(&mut guard, new_auth)
         } else {
             false
         }
+    }
+
+    /// Replaces auth while the caller holds the cache write lock, including
+    /// invalidation and notification for every guarded cache update.
+    fn replace_cached_auth(&self, cached: &mut CachedAuth, new_auth: Option<CodexAuth>) -> bool {
+        let previous = cached.auth.as_ref();
+        let changed = !AuthManager::auths_equal(previous, new_auth.as_ref());
+        let auth_changed_for_refresh = !Self::auths_equal_for_refresh(previous, new_auth.as_ref());
+        self.clear_provider_api_key_cache();
+        if auth_changed_for_refresh {
+            cached.permanent_refresh_failure = None;
+        }
+        tracing::info!("Reloaded auth, changed: {changed}");
+        cached.auth = new_auth;
+        // #1326: every cache installation invalidates earlier observations,
+        // including a reinstall of the same credentials after removal.
+        // Equality still controls the return value and refresh notifications.
+        if let Some(store) = self.named_store.as_ref() {
+            store.forget();
+        }
+        if auth_changed_for_refresh {
+            self.auth_change_tx.send_modify(|revision| *revision += 1);
+        }
+        changed
     }
 
     pub async fn set_external_auth(
@@ -3742,10 +3806,12 @@ impl AuthManager {
         auth: &ChatgptAuth,
         refresh_token: String,
     ) -> Result<(), RefreshTokenError> {
-        let refresh_response = request_chatgpt_token_refresh(refresh_token, auth.client()).await?;
+        let refresh_response =
+            request_chatgpt_token_refresh(refresh_token.clone(), auth.client()).await?;
 
         persist_tokens(
             auth.storage(),
+            &refresh_token,
             refresh_response.id_token,
             refresh_response.access_token,
             refresh_response.refresh_token,

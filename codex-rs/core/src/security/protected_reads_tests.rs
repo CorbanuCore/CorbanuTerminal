@@ -45,6 +45,7 @@ fn issue_442_finds_the_denied_path_the_command_names() {
             codex_home,
             denied,
             /*denial_lines*/ None,
+            /*skip_patterns*/ false,
         )
     };
     assert_eq!(word("cat .env"), Some(".env".to_string()));
@@ -73,6 +74,7 @@ fn issue_442_finds_the_denied_path_the_command_names() {
             codex_home,
             denied,
             Some(&lines),
+            /*skip_patterns*/ false,
         ),
         None
     );
@@ -84,7 +86,8 @@ fn issue_442_finds_the_denied_path_the_command_names() {
             Some(user_home),
             codex_home,
             denied,
-            Some(&lines)
+            Some(&lines),
+            /*skip_patterns*/ false,
         ),
         Some(".env".to_string())
     );
@@ -178,6 +181,7 @@ fn issue_506_listing_denial_is_attributed_through_variables_and_dot_dot() {
                 codex_home,
                 denied,
                 Some(&[line.to_string()]),
+                /*skip_patterns*/ false,
             ),
             Some(expected.to_string()),
             "{command:?}"
@@ -191,6 +195,7 @@ fn issue_506_listing_denial_is_attributed_through_variables_and_dot_dot() {
             codex_home,
             denied,
             Some(&[other_line.to_string()]),
+            /*skip_patterns*/ false,
         ),
         None
     );
@@ -366,8 +371,7 @@ fn issue_554_recursive_listing_of_a_parent_is_attributed_to_the_home() {
 
 /// #442 (milestone AGG-09): under Aggressive a denied read of a protected
 /// file is explained where it failed, naming the level and /security; it is
-/// not explained under Permissive, for a command that succeeded, or for a
-/// failure that is not a denial.
+/// not explained under Permissive or for a failure that is not a denial.
 #[tokio::test]
 async fn issue_442_denied_protected_read_is_explained_under_aggressive() {
     let (session, turn) = crate::session::tests::make_session_and_context().await;
@@ -411,7 +415,9 @@ async fn issue_442_denied_protected_read_is_explained_under_aggressive() {
         explanation.contains("switch to Permissive in /security"),
         "{explanation}"
     );
-    assert_eq!(explain(0, denial).await, None);
+    // #1312: a denial is explained also when the command as a whole
+    // exited 0 (a later command on the line hid the failure).
+    assert_eq!(explain(0, denial).await, Some(explanation));
     assert_eq!(
         explain(1, "cat: auth.json: No such file or directory\n").await,
         None
@@ -538,6 +544,7 @@ fn issue_621_finds_the_denied_path_inside_interpreter_code() {
             codex_home,
             denied,
             /*denial_lines*/ None,
+            /*skip_patterns*/ false,
         )
     };
     let (found, not_found) = if cfg!(windows) {
@@ -742,6 +749,7 @@ fn issue_1296_windows_spellings_of_a_protected_path_are_found() {
             codex_home,
             denied,
             /*denial_lines*/ None,
+            /*skip_patterns*/ false,
         )
     };
     for (command, expected) in [
@@ -813,8 +821,8 @@ fn issue_1296_windows_spellings_of_a_protected_path_are_found() {
 /// #1296: under Aggressive on Windows, a protected read PowerShell or cmd
 /// was denied is explained where it failed (Windows PowerShell's, PowerShell
 /// 7's and cmd's denial texts), and a recursive listing of the folder above
-/// the Corbanu home like a listing of the home (#554); not under Permissive,
-/// for a command that succeeded, or for a failure that is not a denial.
+/// the Corbanu home like a listing of the home (#554); not under Permissive
+/// or for a failure that is not a denial.
 #[cfg(windows)]
 #[tokio::test]
 async fn issue_1296_powershell_and_cmd_denials_are_explained_under_aggressive() {
@@ -884,7 +892,13 @@ async fn issue_1296_powershell_and_cmd_denials_are_explained_under_aggressive() 
             Some(explanation(&shown)),
             "{command:?}: {output}"
         );
-        assert_eq!(explain(&command, 0, &output).await, None, "{command:?}");
+        // #1312: the command names the path, so also when a later command
+        // on the line made it exit 0.
+        assert_eq!(
+            explain(&command, 0, &output).await,
+            Some(explanation(&shown)),
+            "{command:?}"
+        );
     }
     let listing = powershell(&format!("Get-ChildItem -Recurse '{parent}'"));
     assert_eq!(
@@ -1374,4 +1388,164 @@ async fn issue_997_unit_test_lookups_outlast_the_production_bound() {
         Some("found")
     });
     assert_eq!(slow.await, Some("found"));
+}
+
+/// #1312 (local-model run 3, AGG-20P-A): under Aggressive, a denied write
+/// outside the current folder is explained where it failed even when a
+/// later command on the same line makes the whole command exit 0, as it is
+/// when the denied write is the last command; and so is a start-up file. A
+/// command with no denial line, or no known exit, is left alone, and so is
+/// one that exited 0 whose output alone reports a denial.
+#[cfg(unix)]
+#[tokio::test]
+async fn issue_1312_denial_hidden_by_a_later_command_is_explained() {
+    let (session, turn) = crate::session::tests::make_session_and_context().await;
+    #[allow(deprecated)]
+    let cwd = turn.cwd.clone();
+    let user_home = dirs::home_dir().expect("a home folder");
+    let explain = async |script: &str, exit_code: Option<i32>, output: &str| {
+        denial_explanation(
+            &session,
+            &turn,
+            &shell(script),
+            cwd.as_path(),
+            exit_code,
+            output,
+        )
+        .await
+    };
+    let outside = "echo x >> ../outside-notes.txt; echo \"exit=$?\"";
+    let outside_denied = "/bin/bash: ../outside-notes.txt: Operation not permitted\nexit=1\n";
+    let startup = "echo '# x' >> ~/.zshrc; echo \"exit=$?\"";
+    let startup_denied = format!(
+        "zsh:1: operation not permitted: {}\nexit=1\n",
+        user_home.join(".zshrc").display()
+    );
+    assert_eq!(
+        explain(outside, Some(0), outside_denied).await,
+        None,
+        "Permissive"
+    );
+
+    aggressive(&session);
+    for exit_code in [Some(1), Some(0)] {
+        assert_eq!(
+            explain(outside, exit_code, outside_denied).await,
+            Some(outside_folder_explanation("../outside-notes.txt")),
+            "{exit_code:?}"
+        );
+        assert_eq!(
+            explain(startup, exit_code, &startup_denied).await,
+            Some(startup_explanation("~/.zshrc")),
+            "{exit_code:?}"
+        );
+    }
+    assert_eq!(
+        explain(outside, Some(0), "exit=0\n").await,
+        None,
+        "no denial"
+    );
+    assert_eq!(
+        explain(outside, None, outside_denied).await,
+        None,
+        "no exit"
+    );
+    // A denial line in the output alone, which the command does not name (a
+    // search printing old denial lines), explains nothing when it exited 0;
+    // a failed command is still explained by it (#621).
+    let auth = turn.config.codex_home.join("auth.json");
+    std::fs::create_dir_all(turn.config.codex_home.as_path()).unwrap();
+    std::fs::write(&auth, "x").unwrap();
+    let search = "rg -n 'not permitted' notes.md";
+    let printed = format!(
+        "notes.md:3:cat: {}: Operation not permitted\n",
+        auth.display()
+    );
+    let before = recent_denials(&session, &turn).len();
+    assert_eq!(
+        explain(search, Some(0), &printed).await,
+        None,
+        "output alone"
+    );
+    assert_eq!(
+        recent_denials(&session, &turn).len(),
+        before,
+        "nothing listed"
+    );
+    assert_eq!(
+        explain(search, Some(1), &printed).await,
+        Some(explanation(&auth.display().to_string()))
+    );
+    let denials = recent_denials(&session, &turn);
+    for reason in [
+        "writing outside the current folder",
+        "writing a start-up file outside the current folder",
+    ] {
+        assert!(
+            denials.contains(&(
+                reason,
+                "denied by the sandbox; never granted under Aggressive"
+            )),
+            "{denials:?}"
+        );
+    }
+}
+
+/// #1323: under Aggressive, a search that exited 0 is not explained by its
+/// pattern (`rg ".env" logs/` printing an old denial line naming `.env`),
+/// and lists no recent denial; a protected path it reads, or one a command
+/// before a later one that hid its failure reads, still is (#1312), and a
+/// failed search is explained as before.
+#[cfg(unix)]
+#[tokio::test]
+async fn issue_1323_a_search_pattern_is_not_a_denied_path() {
+    let (session, turn) = crate::session::tests::make_session_and_context().await;
+    #[allow(deprecated)]
+    let cwd = turn.cwd.clone();
+    let explain = async |script: &str, exit_code: i32, output: &str| {
+        denial_explanation(
+            &session,
+            &turn,
+            &shell(script),
+            cwd.as_path(),
+            Some(exit_code),
+            output,
+        )
+        .await
+    };
+    aggressive(&session);
+    let auth = turn.config.codex_home.join("auth.json");
+    std::fs::create_dir_all(turn.config.codex_home.as_path()).unwrap();
+    std::fs::write(&auth, "x").unwrap();
+    let auth = auth.display().to_string();
+    let old_line = format!("logs/x.log:5:cat: {auth}: Permission denied\n");
+    let before = recent_denials(&session, &turn).len();
+    for search in [
+        format!("rg '{auth}' logs/"),
+        format!("grep -rn -e '{auth}' logs/"),
+        format!("cat logs/x.log | grep -F '{auth}'"),
+    ] {
+        assert_eq!(explain(&search, 0, &old_line).await, None, "{search}");
+    }
+    assert_eq!(
+        recent_denials(&session, &turn).len(),
+        before,
+        "nothing listed"
+    );
+    let read = Some(explanation(&auth));
+    let denied = format!("cat: {auth}: Permission denied\nexit=1\n");
+    let cat = format!("cat '{auth}'; echo \"exit=$?\"");
+    assert_eq!(explain(&cat, 0, &denied).await, read);
+    let grep_denied = format!("grep: {auth}: Permission denied\nexit=2\n");
+    let grep = format!("grep token '{auth}'; echo \"exit=$?\"");
+    assert_eq!(explain(&grep, 0, &grep_denied).await, read);
+    // A pattern that runs a command: what that command opens is explained.
+    let substituted = format!("grep \"$(cat '{auth}')\" notes.md; echo \"exit=$?\"");
+    assert_eq!(explain(&substituted, 0, &denied).await, read);
+    // A later line's read is not the search's pattern.
+    let lines = format!("rg token logs/\ncat -e '{auth}'\necho done");
+    assert_eq!(explain(&lines, 0, &denied).await, read);
+    // A failed search: unchanged.
+    let search = format!("rg '{auth}' logs/");
+    assert_eq!(explain(&search, 1, &old_line).await, read);
 }

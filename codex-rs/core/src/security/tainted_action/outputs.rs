@@ -14,6 +14,30 @@ use super::work;
 const OUTPUT_OPTIONS: &[(&str, &str, char)] = &[
     ("git", "--output-directory", 'o'),
     ("sort", "--output", 'o'),
+    // #1159: more programs' output files.
+    ("iconv", "--output", 'o'),
+    ("pandoc", "--output", 'o'),
+];
+/// #1159: programs whose output-file options do not group with other
+/// letters: each option word takes the next word (`-o FILE`, `-out FILE`),
+/// a long one its value attached too (`--output=FILE`), and a two-letter
+/// one an attached value (`-oFILE`).
+const SINGLE_OUTPUT_OPTIONS: &[(&str, &[&str])] = &[
+    ("cc", &["-o", "--output"]),
+    ("gcc", &["-o", "--output"]),
+    ("g++", &["-o", "--output"]),
+    ("c++", &["-o", "--output"]),
+    ("clang", &["-o", "--output"]),
+    ("clang++", &["-o", "--output"]),
+    ("tcc", &["-o"]),
+    ("ld", &["-o", "--output"]),
+    ("ld.lld", &["-o", "--output"]),
+    ("ld64.lld", &["-o", "--output"]),
+    ("lld", &["-o", "--output"]),
+    ("as", &["-o"]),
+    ("rustc", &["-o"]),
+    ("openssl", &["-out", "-keyout"]),
+    ("csplit", &["-f", "--prefix"]),
 ];
 
 /// git options that name a file `fast-export`/`fast-import` writes.
@@ -35,6 +59,9 @@ pub(super) fn output_files(name: &str, args: &[String], unchecked: bool) -> Opti
     let helper = git_helpers::git_name(name);
     let subcommand = helper.as_ref().and_then(Option::as_deref);
     let name = if helper.is_some() { "git" } else { name };
+    if let Some(files) = other_output_files(name, args) {
+        return Some(files);
+    }
     let (_, long, short) = OUTPUT_OPTIONS
         .iter()
         .find(|(command, _, _)| *command == name)?;
@@ -70,6 +97,18 @@ pub(super) fn output_files(name: &str, args: &[String], unchecked: bool) -> Opti
         let mut trees = Vec::new();
         found |= option_values(args, "--work-tree", NO_SHORT, &mut trees);
         files.extend(trees.iter().map(|tree| format!("{tree}/")));
+        // `git clone URL DIR` and `git worktree add DIR` write in DIR.
+        if let Some(at) = position_or_helper(args, subcommand, "clone") {
+            found = true;
+            files.extend(clone_folder(&args[at..]));
+        }
+        if let Some(at) = position_or_helper(args, subcommand, "worktree")
+            && let Some(add) = args[at..].iter().position(|arg| arg == "add")
+            && let Some(folder) = operands(&args[at + add + 1..], "bB", &["--reason"]).first()
+        {
+            found = true;
+            files.push(format!("{folder}/"));
+        }
         // `git read-tree --index-output=FILE` writes FILE.
         if has("read-tree") {
             found |= option_values(args, "--index-output", NO_SHORT, &mut files);
@@ -83,6 +122,221 @@ pub(super) fn output_files(name: &str, args: &[String], unchecked: bool) -> Opti
         }
     }
     found.then_some(files)
+}
+
+/// #1159: the files [`SINGLE_OUTPUT_OPTIONS`] name, `uniq IN OUT`'s output
+/// and `split IN PREFIX`'s prefix, as for [`output_files`]. A prefix (`split`,
+/// `csplit -f`) writes the folder it is in, and makes names (`split -a1
+/// notes .git/hooks/pre-commi` writes `pre-commit`).
+fn other_output_files(name: &str, args: &[String]) -> Option<Vec<String>> {
+    match name {
+        // A second operand is the output. Which words are option values
+        // is not known, so every operand after the first counts.
+        "uniq" => {
+            let operands = operands(args, "", &[]);
+            return (operands.len() > 1).then(|| operands[1..].to_vec());
+        }
+        // `split [IN [PREFIX]]`: the last of two or more operands.
+        "split" => {
+            let operands = operands(args, "abClnt", SPLIT_VALUE_OPTIONS);
+            return (operands.len() > 1).then(|| {
+                let prefix = &operands[operands.len() - 1];
+                vec![prefix.clone(), prefix_folder(prefix)]
+            });
+        }
+        _ => {}
+    }
+    let (_, options) = SINGLE_OUTPUT_OPTIONS
+        .iter()
+        .find(|(command, _)| *command == name)?;
+    let mut found = false;
+    let mut files = Vec::new();
+    for (index, word) in args.iter().enumerate() {
+        work::step();
+        let value = if options.contains(&word.as_str()) {
+            args.get(index + 1).cloned()
+        } else if let Some((option, value)) = word.split_once('=')
+            && option.starts_with("--")
+            && options.contains(&option)
+        {
+            Some(value.to_string())
+        } else if let Some(option) = options
+            .iter()
+            .find(|option| option.len() == 2 && word.len() > 2 && word.starts_with(**option))
+        {
+            Some(word[option.len()..].to_string())
+        } else {
+            continue;
+        };
+        found = true;
+        files.extend(value);
+    }
+    if name == "csplit" {
+        let folders: Vec<String> = files.iter().map(|file| prefix_folder(file)).collect();
+        files.extend(folders);
+    }
+    found.then_some(files)
+}
+
+/// `split`'s long options that take the next word as their value.
+const SPLIT_VALUE_OPTIONS: &[&str] = &[
+    "--suffix-length",
+    "--bytes",
+    "--line-bytes",
+    "--lines",
+    "--number",
+    "--separator",
+    "--additional-suffix",
+    "--filter",
+];
+
+/// The operands in `args` (`-` names standard input), past the values of
+/// options: a group of short options whose first letter in `short` takes
+/// the rest of the group or, ending it, the next word; a long option in
+/// `long` (or a prefix of one) without `=` takes the next word.
+fn operands(args: &[String], short: &str, long: &[&str]) -> Vec<String> {
+    let mut operands = Vec::new();
+    let mut value_next = false;
+    let mut options = true;
+    for arg in args {
+        work::step();
+        if std::mem::take(&mut value_next) {
+            continue;
+        }
+        if options && arg == "--" {
+            options = false;
+            continue;
+        }
+        if !options || arg == "-" || !arg.starts_with('-') {
+            operands.push(arg.clone());
+        } else if arg.starts_with("--") {
+            value_next = !arg.contains('=')
+                && arg.len() > 2
+                && long.iter().any(|option| option.starts_with(arg.as_str()));
+        } else if let Some(at) = arg.find(|ch: char| short.contains(ch)) {
+            value_next = at + 1 == arg.len();
+        }
+    }
+    operands
+}
+
+/// #1159: the files GNU `time -o FILE` writes, for the wrapper words before
+/// a command (`words`, as written). Each `time` reads up to the next.
+pub(super) fn wrapper_output_files(words: &[String]) -> Vec<String> {
+    let mut files = Vec::new();
+    let starts: Vec<usize> = words
+        .iter()
+        .enumerate()
+        .filter(|(_, word)| super::shell::basename(word) == "time")
+        .map(|(at, _)| at)
+        .collect();
+    for (nth, start) in starts.iter().enumerate() {
+        work::step();
+        let end = starts.get(nth + 1).copied().unwrap_or(words.len());
+        option_values(&words[start + 1..end], "--output", 'o', &mut files);
+    }
+    files
+}
+
+/// #1159: writers whose operands are all paths (not a program, a mode or a
+/// URL): one named by output the classifier cannot see may be any file.
+pub(super) const PATH_WRITERS: &[&str] = &[
+    "tee", "cp", "mv", "install", "ln", "rsync", "dd", "truncate", "touch", "ditto", "mkdir",
+];
+
+/// #1159: whether a word holds output the classifier cannot see, other
+/// than an arithmetic expansion's number: as a file written, it may be any
+/// file (`tee "$(cat f)"`).
+pub(super) fn unseen_place(word: &str) -> bool {
+    word.contains(super::shell::UNSEEN_OUTPUT)
+        && word
+            .replace(super::shell::ARITHMETIC_OUTPUT, "0")
+            .contains(super::shell::UNSEEN_OUTPUT)
+}
+
+/// #1159: whether git (`name`, with the words after it, `args`) runs a
+/// subcommand that writes files of the working tree (`git checkout`, `git
+/// pull`): in a folder that is or holds a home, it may write the home's own
+/// files (`cd ~ && git checkout -- .zshrc`).
+pub(super) fn writes_working_tree(name: &str, args: &[String]) -> bool {
+    let helper = git_helpers::git_name(name);
+    let subcommand = helper.as_ref().and_then(Option::as_deref);
+    (name == "git" || helper.is_some())
+        && WORKING_TREE_WRITERS.iter().any(|word| {
+            work::step();
+            subcommand == Some(*word) || args.iter().any(|arg| arg == word)
+        })
+}
+
+/// #1159: git subcommands that write files of the working tree.
+const WORKING_TREE_WRITERS: &[&str] = &[
+    "checkout",
+    "switch",
+    "restore",
+    "reset",
+    "stash",
+    "merge",
+    "pull",
+    "rebase",
+    "cherry-pick",
+    "revert",
+    "am",
+    "apply",
+    "rm",
+    "mv",
+    "sparse-checkout",
+    "bisect",
+    "submodule",
+    "read-tree",
+];
+/// `git clone`'s options that take the next word as their value.
+const CLONE_VALUE_OPTIONS: &[&str] = &[
+    "--origin",
+    "--branch",
+    "--upload-pack",
+    "--reference",
+    "--reference-if-able",
+    "--separate-git-dir",
+    "--depth",
+    "--shallow-since",
+    "--shallow-exclude",
+    "--jobs",
+    "--template",
+    "--config",
+    "--filter",
+    "--server-option",
+    "--bundle-uri",
+    "--ref-format",
+    "--revision",
+];
+
+/// The index of `word` in `args`, or 0 when it is the dashed helper's
+/// subcommand (`git-clone`).
+fn position_or_helper(args: &[String], subcommand: Option<&str>, word: &str) -> Option<usize> {
+    if subcommand == Some(word) {
+        return Some(0);
+    }
+    args.iter().position(|arg| arg == word).map(|at| at + 1)
+}
+
+/// The folder `git clone` (its words after `clone`) writes in, ending with
+/// `/`: its second operand, else one named after the repository
+/// (`https://x/r.git` clones into `r/`, `r.git/` with `--bare`).
+fn clone_folder(args: &[String]) -> Option<String> {
+    let operands = operands(args, "objuc", CLONE_VALUE_OPTIONS);
+    if let Some(folder) = operands.get(1) {
+        return Some(format!("{folder}/"));
+    }
+    let url = operands.first()?.trim_end_matches('/');
+    let url = url.strip_suffix("/.git").unwrap_or(url);
+    let name = url.rsplit(['/', ':']).next().unwrap_or(url);
+    let name = name.strip_suffix(".git").unwrap_or(name);
+    let bare = args.iter().any(|arg| arg == "--bare" || arg == "--mirror");
+    Some(if bare {
+        format!("{name}.git/")
+    } else {
+        format!("{name}/")
+    })
 }
 
 /// #1159: `git checkout-index --prefix=P` writes P followed by each path it

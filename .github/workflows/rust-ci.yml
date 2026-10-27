@@ -46,7 +46,7 @@ jobs:
             HEAD_SHA='${{ github.event.pull_request.head.sha }}'
             echo "Base SHA: $BASE_SHA"
             echo "Head SHA: $HEAD_SHA"
-            mapfile -t files < <(git diff --name-only --no-renames "$BASE_SHA" "$HEAD_SHA")
+            mapfile -d '' -t files < <(git diff --name-only -z --no-renames "$BASE_SHA" "$HEAD_SHA")
           else
             # On manual runs, default to the full fast-PR bundle.
             files=("codex-rs/force" "tools/argument-comment-lint/force" ".github/force")
@@ -63,7 +63,8 @@ jobs:
           windows_native_tests=false
           # Schema fixture tests run on PRs that change the protocol crates,
           # a crate whose types they export (security-policy, absolute-path,
-          # path-uri, ext/items), or this workflow; postmerge rust-ci-full
+          # path-uri, ext/items), the experimental API macros, the workspace
+          # manifest or lockfile, or this workflow; postmerge rust-ci-full
           # runs them on main.
           app_server_schema=false
           for f in "${files[@]}"; do
@@ -76,6 +77,7 @@ jobs:
             [[ $f == .github/workflows/rust-ci-windows-native-tests.yml ]] && windows_native_tests=true
             [[ $f == codex-rs/protocol/* || $f == codex-rs/app-server-protocol/* || $f == .github/workflows/rust-ci.yml ]] && app_server_schema=true
             [[ $f == codex-rs/security-policy/* || $f == codex-rs/utils/absolute-path/* || $f == codex-rs/utils/path-uri/* || $f == codex-rs/ext/items/* ]] && app_server_schema=true
+            [[ $f == codex-rs/codex-experimental-api-macros/* || $f == codex-rs/Cargo.toml || $f == codex-rs/Cargo.lock ]] && app_server_schema=true
           done
 
           echo "argument_comment_lint=$argument_comment_lint" >> "$GITHUB_OUTPUT"
@@ -219,7 +221,7 @@ jobs:
 
   # codex-app-server-protocol schema fixture tests on PRs that change
   # codex-protocol, codex-app-server-protocol or a crate whose types they
-  # export (#1165). Only postmerge
+  # export (#1165), or schema-generation inputs (#1298). Only postmerge
   # rust-ci-full ran them, so a changed protocol type or doc comment without
   # `just write-app-server-schema` turned main red (#1140, fixed by #1164).
   app_server_schema_fixtures:
@@ -528,7 +530,7 @@ jobs:
             [[ '${{ needs.windows_native_tests.result }}' == 'success' ]] || { echo 'windows_native_tests failed'; exit 1; }
           fi
 
-          # Required whenever it runs (PRs touching the schema crates).
+          # Required whenever it runs (PRs touching schema crates or generator inputs).
           if [[ "${NEEDS_CHANGED_OUTPUTS_APP_SERVER_SCHEMA}" == 'true' ]]; then
             [[ '${{ needs.app_server_schema_fixtures.result }}' == 'success' ]] || { echo 'app_server_schema_fixtures failed'; exit 1; }
           fi

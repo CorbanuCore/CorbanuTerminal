@@ -45,6 +45,11 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   from the automatic approval reviewer still show `no price available` (no
   estimate, never $0), and the next step now adds "OpenAI doesn't publish a
   price for Codex Auto Review." (#913).
+- **Editing the first message counts as a reopen.** Editing the first message
+  of a saved conversation (Esc Esc) now sends its warm-up as a reopen warm-up,
+  as editing a later message already did: `/cost` lists it as "Reopen
+  warm-up", Corbanu says once it has been sent, and `skip_reopen_warmup = true`
+  skips it (#1038).
 
 ## `/security` wording
 

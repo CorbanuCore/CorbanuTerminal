@@ -197,7 +197,12 @@ impl App {
                 let mut item = SelectionItem {
                     name: name.clone(),
                     name_prefix_spans: agent_picker_status_dot_spans(entry.is_closed),
-                    description: Some(uuid.clone()),
+                    // #867: a sub-agent the security kill switch stopped says so.
+                    description: Some(if self.agent_navigation.is_kill_switch_stopped(thread_id) {
+                        format!("{uuid} · stopped by the security kill switch")
+                    } else {
+                        uuid.clone()
+                    }),
                     is_current: self.active_thread_id == Some(thread_id),
                     actions: vec![Box::new(move |tx| {
                         tx.send(AppEvent::SelectAgentThread(id));

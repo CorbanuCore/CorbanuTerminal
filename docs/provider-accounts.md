@@ -163,6 +163,14 @@ say which was used on their `Price basis` line. Codex Auto Review, the
 automatic approval reviewer, is one of these on an OpenAI API key: OpenAI
 doesn't publish a price for it, and `/cost` says so.
 
+A realtime voice session over a WebSocket shows in `/cost` as one request with
+its start and end times; its token counts and cost are unknown, not zero, since
+its usage is not reported to this client. A WebRTC realtime call shows as one
+request, the call's creation. The end time recorded with it is when the client's
+control channel to the call closed, which can be before the media call itself
+ends (for example if that channel fails to connect), so `/cost` does not show it
+as the session's end.
+
 A day with nothing recorded for the conversation says "no requests recorded"
 only when the whole UTC day ends before the conversation started (as dated by
 the clock that also dates its requests). Otherwise it

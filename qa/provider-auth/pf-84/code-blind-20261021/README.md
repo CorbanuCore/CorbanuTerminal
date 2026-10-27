@@ -15,6 +15,13 @@ recovery text; it also kept answering on the removed sign-in, recorded as `[obse
 conversation whose account is gone when the TUI was started with `--account`; the docs are ambiguous, owner
 decision). Per case: [Results](#results). Open owner questions: [below](#open-owner-decisions).
 
+> **Re-run, 2026-10-22 ([code-blind-rerun-20261022/](../code-blind-rerun-20261022/README.md)):** after the fixes for
+> D171–D175 (#1299, #1300, #1301), D136, NA-05 and NA-06 (including its rename step) were re-run on a signed build of
+> `main` `f61397ca41`, from a frozen amendment v3. **All three passed**, with the integrator's relay and file checks.
+> With them, the 28 cases stand at 26 passed and 2 passed in part (NA-10, ST-02, unchanged); the other 25 cases count as
+> run on this run's build `31b9f3cad8`. The tables below keep the
+> first run's results as they were.
+
 ## Build
 
 - `/Volumes/CorbanuDrive/Corbanu/.codex-work/integration-build-20260922a/integration-package-dev/bin/corbanu.31b9f3ca`,

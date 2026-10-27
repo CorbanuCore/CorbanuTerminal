@@ -1712,7 +1712,8 @@ const REOPEN_WARMUP_KIND: &str = "Kind: Reopen warm-up — sent when this conver
 /// `accounting::REALTIME_SESSION_LABEL`, pinned by core's
 /// `realtime_session_label_is_stable`); a label can carry an owner prefix
 /// before it, such as `side:`. A WebRTC call (`realtime:` alone) is recorded
-/// at its creation and is not named a session here.
+/// at its creation and is not named a session here: the end it may carry
+/// (#955) is its client control channel's, not the media call's.
 const REALTIME_SESSION_LABEL: &str = "realtime:ws:";
 
 /// Whether this attempt is a realtime WebSocket session.
@@ -1778,26 +1779,30 @@ fn realtime_session_line<'a>(
 fn reopen_warmup_line<'a>(
     quotes: impl IntoIterator<Item = &'a ObservationQuote>,
 ) -> Option<String> {
+    let (warmups, requests) = reopen_warmups(quotes);
+    if requests == 0 {
+        return None;
+    }
+    let noun = if requests == 1 { "request" } else { "requests" };
+    Some(format!(
+        "Reopen warm-up: {requests} {noun}, {}. Sent when this conversation was reopened or forked, to prime the model's cache.",
+        short_cost(&warmups)
+    ))
+}
+
+/// The reopen warm-up attempts among `quotes`, and how many requests they are.
+fn reopen_warmups<'a>(
+    quotes: impl IntoIterator<Item = &'a ObservationQuote>,
+) -> (Vec<&'a ObservationQuote>, usize) {
     let warmups: Vec<&ObservationQuote> = quotes
         .into_iter()
         .filter(|quote| quote.attempt.turn.contains(REOPEN_PREWARM_LABEL))
         .collect();
-    if warmups.is_empty() {
-        return None;
-    }
     let mut requests: Vec<Uuid> = warmups.iter().map(|q| q.attempt.request_id).collect();
     requests.sort_unstable();
     requests.dedup();
-    let noun = if requests.len() == 1 {
-        "request"
-    } else {
-        "requests"
-    };
-    Some(format!(
-        "Reopen warm-up: {} {noun}, {}. Sent when this conversation was reopened or forked, to prime the model's cache.",
-        requests.len(),
-        short_cost(&warmups)
-    ))
+    let count = requests.len();
+    (warmups, count)
 }
 
 const NO_PRICE: &str = "Estimated cost: no price available";

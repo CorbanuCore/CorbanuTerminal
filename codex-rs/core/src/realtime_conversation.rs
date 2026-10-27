@@ -29,6 +29,7 @@ use codex_api::build_session_headers;
 use codex_api::map_api_error;
 use codex_config::config_toml::RealtimeWsMode;
 use codex_config::config_toml::RealtimeWsVersion;
+use codex_login::AuthManager;
 use codex_login::CodexAuth;
 use codex_login::default_client::add_originator_header;
 use codex_login::default_client::default_headers;
@@ -1269,6 +1270,13 @@ async fn prepare_realtime_start(
     let mut websocket_credential = RealtimeRecordKey::None;
     let mut extra_headers = match transport {
         ConversationStartTransport::Websocket => {
+            // D171 (#1286, #1311 item 5): a named OpenAI sign-in account with
+            // no sign-in (removed or signed out) is refused with its
+            // recovery, as its other requests are, never sent the ambient
+            // OPENAI_API_KEY instead.
+            if auth.is_none() {
+                refuse_named_account_without_sign_in(&provider, &auth_manager).await?;
+            }
             let realtime_api_key = realtime_api_key(auth.as_ref(), &provider)?;
             websocket_credential = RealtimeRecordKey::for_websocket(&realtime_api_key, &provider);
             realtime_request_headers(
@@ -1688,6 +1696,28 @@ fn wrap_realtime_delegation_input(
     source: RealtimeDelegationSource,
 ) -> String {
     RealtimeDelegation::new(input, transcript_delta, source).render()
+}
+
+/// D171: `Err` with the account's recovery when `provider` selects a named
+/// OpenAI sign-in account; the caller found no sign-in for it. The vault is
+/// read off the async workers.
+async fn refuse_named_account_without_sign_in(
+    provider: &ModelProviderInfo,
+    auth_manager: &Arc<AuthManager>,
+) -> CodexResult<()> {
+    if codex_model_provider::named_sign_in_account(provider).is_none() {
+        return Ok(());
+    }
+    let info = provider.clone();
+    let auth_manager = Arc::clone(auth_manager);
+    let refusal = tokio::task::spawn_blocking(move || {
+        codex_model_provider::named_sign_in_refusal(&info, Some(&auth_manager))
+    })
+    .await
+    .unwrap_or_else(|_| {
+        codex_model_provider::named_sign_in_refusal(provider, /*auth_manager*/ None)
+    });
+    refusal.map_or(Ok(()), Err)
 }
 
 fn realtime_api_key(

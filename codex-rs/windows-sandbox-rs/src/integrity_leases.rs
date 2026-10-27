@@ -142,7 +142,10 @@ fn acquire_locked(lease: &mut IntegrityLease, wanted: &BTreeSet<PathBuf>) -> Res
     for root in wanted {
         // A root that can't be labelled stays as it is: commands can't write
         // there, which is safe, and the others still work.
-        if let Err(err) = lease_root(&lease.registry, &mut labels, root) {
+        let leased = lease_root(&lease.registry, &mut labels, root);
+        // #734: core tells the person about a root left read-only.
+        crate::unlabelled_roots::record(root, leased.is_ok());
+        if let Err(err) = leased {
             log_note(
                 &format!(
                     "integrity labels: writable root {} can't be labelled Low, so sandboxed commands can't write there (labelling needs permission to change the folder's owner settings, WRITE_OWNER, and a file system that holds integrity labels): {err:#}",

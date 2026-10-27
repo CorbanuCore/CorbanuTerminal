@@ -182,6 +182,21 @@ fn trace_turn_timing(label: &str, start: Instant) {
     }
 }
 
+/// Why a turn is refused before anything of it is recorded: the kill switch
+/// (#445), or (#1331, D171) a named sign-in account removed or signed out
+/// while the session ran on it, whose model request would be refused with
+/// the same error.
+pub(crate) async fn turn_refusal(sess: &Session, turn_context: &TurnContext) -> Option<CodexErr> {
+    if let Err(err) = sess.services.model_client().refuse_under_kill_switch() {
+        return Some(err);
+    }
+    codex_model_provider::named_sign_in_account(turn_context.provider.info())?;
+    if turn_context.provider.auth().await.is_some() {
+        return None;
+    }
+    turn_context.provider.api_auth().await.err()
+}
+
 /// Takes initial turn input and runs a loop where, at each sampling request,
 /// the model replies with either:
 ///
@@ -208,7 +223,9 @@ pub(crate) async fn run_turn(
     trace_turn_timing("run_turn_start", turn_started_at);
     // Issue #445: with the kill switch on, the turn is refused before its
     // input is recorded, so nothing of it reaches the model later either.
-    if let Err(err) = sess.services.model_client().refuse_under_kill_switch() {
+    // #1331 (D171): so is a turn on a named account that was removed or
+    // signed out meanwhile, so it is not recorded as a turn on that account.
+    if let Some(err) = turn_refusal(sess.as_ref(), turn_context.as_ref()).await {
         sess.track_turn_codex_error(turn_context.as_ref(), &err);
         sess.emit_turn_error_lifecycle(turn_context.as_ref(), err.to_codex_protocol_error())
             .await;
