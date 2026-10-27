@@ -14188,12 +14188,7 @@ async fn token_usage_is_attributed_per_account_only_with_named_accounts() {
             CodexAuth::from_api_key("Test API Key"),
             Vec::new(),
             |config| {
-                if named_accounts {
-                    config
-                        .features
-                        .enable(Feature::NamedAccounts)
-                        .expect("enable named accounts");
-                }
+                set_named_accounts(config, named_accounts);
             },
         )
         .await;
@@ -14225,17 +14220,27 @@ async fn token_usage_is_attributed_per_account_only_with_named_accounts() {
     }
 }
 
+/// Named accounts on or off, whatever the default.
+pub(crate) fn set_named_accounts(config: &mut crate::config::Config, named_accounts: bool) {
+    if named_accounts {
+        config
+            .features
+            .enable(Feature::NamedAccounts)
+            .expect("enable named accounts");
+    } else {
+        config
+            .features
+            .disable(Feature::NamedAccounts)
+            .expect("disable named accounts");
+    }
+}
+
 pub(crate) async fn pf84_session(named_accounts: bool) -> (Arc<Session>, Arc<TurnContext>) {
     let (session, turn_context, _rx) = make_session_and_context_with_auth_and_config_and_rx(
         CodexAuth::from_api_key("Test API Key"),
         Vec::new(),
         |config| {
-            if named_accounts {
-                config
-                    .features
-                    .enable(Feature::NamedAccounts)
-                    .expect("enable named accounts");
-            }
+            set_named_accounts(config, named_accounts);
         },
     )
     .await;

@@ -2493,6 +2493,11 @@ async fn named_account_status_in(
             .features
             .enable(codex_features::Feature::NamedAccounts)
             .expect("enable named accounts");
+    } else {
+        config
+            .features
+            .disable(codex_features::Feature::NamedAccounts)
+            .expect("disable named accounts");
     }
     set_workspace_cwd(&mut config, test_path_buf("/workspace/tests").abs());
     // #1193: what the background check found in this home's vault, unless

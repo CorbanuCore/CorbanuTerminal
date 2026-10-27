@@ -46,13 +46,19 @@ fn home_with_claude_account() -> Result<TempDir> {
 fn claude_token_helper_refuses_named_accounts_when_the_feature_is_off() -> Result<()> {
     let home = home_with_claude_account()?;
     corbanu(home.path())?
-        .args(["internal-claude-oauth-token", "--account", "faketok"])
+        .args([
+            "internal-claude-oauth-token",
+            "--account",
+            "faketok",
+            "--disable",
+            "named_accounts",
+        ])
         .assert()
         .failure()
         .stdout("")
         .stderr(contains("named accounts are off").and(contains(TOKEN_CANARY).not()));
     corbanu(home.path())?
-        .args(["internal-claude-oauth-token"])
+        .args(["internal-claude-oauth-token", "--disable", "named_accounts"])
         .env("CORBANU_PROVIDER_ACCOUNT", "faketok")
         .assert()
         .failure()
@@ -186,7 +192,14 @@ fn named_openai_account_login_list_status_logout() -> Result<()> {
     let home = TempDir::new()?;
     let canary = "sk-pf84-s06-cli-canary-0001";
     corbanu(home.path())?
-        .args(["login", "--account", "work", "--with-api-key"])
+        .args([
+            "login",
+            "--account",
+            "work",
+            "--with-api-key",
+            "--disable",
+            "named_accounts",
+        ])
         .write_stdin(canary)
         .assert()
         .failure()

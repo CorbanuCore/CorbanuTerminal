@@ -288,7 +288,8 @@ pub enum Feature {
     /// Let a human choose a `/security` level (Permissive or Aggressive).
     SecurityLevels,
     /// PF-84: named accounts per provider (`[provider_accounts]`,
-    /// `corbanu account`).
+    /// `corbanu account`). On by default; `--disable named_accounts` turns
+    /// them off.
     NamedAccounts,
 
     // Removed
@@ -1554,8 +1555,8 @@ pub const FEATURES: &[FeatureSpec] = &[
     FeatureSpec {
         id: Feature::NamedAccounts,
         key: "named_accounts",
-        stage: Stage::UnderDevelopment,
-        default_enabled: false,
+        stage: Stage::Stable,
+        default_enabled: true,
     },
 ];
 
