@@ -4493,10 +4493,6 @@ fn issue_1240_review_6_routes() {
 /// name asks, and the scan from `git` reads on past other git names, as
 /// before #1159.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn d153_git_names_in_quoted_text_do_not_end_the_git_checks() {
     for command in [
         // The line from #1230's review, and the same text written other ways.
@@ -4573,10 +4569,6 @@ fn d153_git_names_in_quoted_text_do_not_end_the_git_checks() {
 /// D153: the git checks stay linear when git names repeat in options and
 /// quoted settings.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn d153_checks_are_linear() {
     for (label, unit) in [
         ("git.exe values", "-C a git.exe "),
@@ -4602,10 +4594,6 @@ fn d153_checks_are_linear() {
 /// `launchctl`, `systemctl`, the Corbanu CLI) look at the words after it
 /// once per line, not once per copy of the word.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1275_command_word_checks_are_linear() {
     for (label, unit) in [
         ("gh", "gh "),
@@ -4666,10 +4654,6 @@ fn issue_1275_glob_stops_at_first_difference() {
 /// writes is config the classifier never sees, so after untrusted content
 /// the line asks like a config write that may set a key that runs a program.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1255_git_config_editor_is_persistence() {
     for command in [
         "git config -e",
@@ -4731,10 +4715,6 @@ fn issue_1255_git_config_editor_is_persistence() {
 /// the scan from `git` reads past dashed-helper names, and one that stops
 /// at a `git` word is taken up again by the scan from that word.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1255_git_lookalike_words_do_not_end_the_git_checks() {
     use ProtectedActionKind::*;
     for (command, want) in [
@@ -4801,10 +4781,6 @@ fn issue_1255_git_lookalike_words_do_not_end_the_git_checks() {
 /// #1255: the editor check stays linear when `config` and editor options
 /// repeat.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1255_checks_are_linear() {
     for (label, unit) in [
         ("config words", "config "),
@@ -4830,10 +4806,6 @@ fn issue_1255_checks_are_linear() {
 /// never sees: it asks unless git has read its subcommand first and that
 /// is not a `git config` write.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1268_git_given_input_words_asks() {
     use ProtectedActionKind::*;
     for (command, want) in [
@@ -5024,10 +4996,6 @@ fn issue_1268_git_given_input_words_asks() {
 /// #1268: the launcher checks stay linear when launchers, replacement
 /// strings, git words and positional parameters repeat.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1268_checks_are_linear() {
     for (label, unit) in [
         ("launchers", "xargs "),
@@ -5058,10 +5026,6 @@ fn issue_1268_checks_are_linear() {
 /// (`--file`) or `t` (`--type`) are that option's value, so an `e` among
 /// them opens no editor; one before them still does.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1269_git_config_attached_values_are_not_editor_options() {
     for command in [
         "git config -fpager.log user.name marker",
@@ -5707,10 +5671,6 @@ fn issue_1261_windows_persistence_reads_are_not_protected() {
 /// also judged on the words as the shell passes them on, and git spelled by
 /// text that reading cannot see fails closed.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1283_quoted_git_config_values_stay_whole() {
     for command in [
         "git config --comment 'x --get' core.pager sh",
@@ -5839,10 +5799,6 @@ fn issue_1283_quoted_git_config_values_stay_whole() {
 /// did not know: `fd --exec=CMD`, `for k;`, `$_`, more shells, and
 /// `env_parallel`, `xjobs`, `rush`, `bfs`.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1276_more_launchers_ask() {
     use ProtectedActionKind::*;
     for (command, want) in [
@@ -5895,10 +5851,6 @@ fn issue_1276_more_launchers_ask() {
 
 /// #1283/#1276: the new checks stay linear when the words they read repeat.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1283_1276_checks_are_linear() {
     for (label, unit) in [
         ("quoted values", "--comment 'x --get' "),
@@ -5963,10 +5915,6 @@ fn issue_1261_windows_login_shells_and_cygwin_links_are_not_read() {
 /// `eval` or sourced file, and code that runs later than it is read. A
 /// relative write in such a script asks.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1309_unknown_folders_ask() {
     for command in [
         // A wrapper's folder, attached, clustered, abbreviated or under
@@ -6080,10 +6028,6 @@ fn issue_1309_unknown_folders_ask() {
 
 /// #1309: the new checks stay linear when the words they read repeat.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1309_checks_are_linear() {
     for (label, unit) in [
         // Absolute folders: a chain of relative ones (`cd b; cd b`) grows
@@ -6144,10 +6088,6 @@ fn issue_1261_windows_shortcut_links_are_not_read() {
 /// #988: `trap` keeps a string of shell code and runs it later, like `eval`
 /// runs it now. bash 3.2, zsh 5.9 and ksh93 run `notes` at exit.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_988_trap_runs_its_action_like_eval() {
     use ProtectedActionKind::UnseenCode;
     let mut wrong = Vec::new();
@@ -6210,10 +6150,6 @@ fn issue_988_trap_runs_its_action_like_eval() {
 /// is not the name the word lexer spells (`eval:-eval`), so it is code
 /// the classifier cannot name and fails closed.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_989_parameter_operators_in_the_command_word_are_unseen_code() {
     use ProtectedActionKind::UnseenCode;
     let mut wrong = Vec::new();
@@ -6284,10 +6220,6 @@ fn issue_989_parameter_operators_in_the_command_word_are_unseen_code() {
 
 /// #988/#989: the new checks stay linear.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_988_989_checks_are_linear() {
     for (label, unit) in [
         ("traps", "trap -- "),
@@ -6308,10 +6240,6 @@ fn issue_988_989_checks_are_linear() {
 /// later nested script is judged in every folder the line may be in; past
 /// `MAX_POSSIBLE_FOLDERS` the folder is unknown.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1309_changes_that_may_not_happen_ask() {
     for command in [
         "cd ~; cd /nonexistent; sh -c 'echo x >> .zshenv'",
@@ -6362,10 +6290,6 @@ fn issue_1309_changes_that_may_not_happen_ask() {
 
 /// #1309: following every folder the line may be in stays linear.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1309_possible_folders_are_linear() {
     for (label, unit) in [
         ("absolute changes", "cd /b; sh -c 'echo x > a'; "),
@@ -6534,10 +6458,6 @@ fn programs_named_by_a_path_are_linear() {
 /// variables, zsh `print -P`, namerefs, computed `${v@op}` transformations,
 /// and commands or options that run an operand as a command.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1064_other_ways_a_value_runs_are_unseen_code() {
     use ProtectedActionKind::UnseenCode;
     let mut wrong = Vec::new();
@@ -6650,10 +6570,6 @@ fn issue_1064_other_ways_a_value_runs_are_unseen_code() {
 /// programs from, and git options that run a program, copy hooks or set
 /// config on a new repository.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1159_code_variables_and_git_programs_are_unseen_code() {
     use ProtectedActionKind::UnseenCode;
     let mut wrong = Vec::new();
@@ -6708,10 +6624,6 @@ fn issue_1159_code_variables_and_git_programs_are_unseen_code() {
 /// #1159: more programs' output files, git writes into folders by operand
 /// or working tree, files named by unseen output, and zsh `=git`.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1159_more_output_files_are_written() {
     use ProtectedActionKind::Persistence;
     let mut wrong = Vec::new();
@@ -6792,10 +6704,6 @@ fn issue_1159_more_output_files_are_written() {
 
 /// #1064/#1159: the new checks stay linear.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1064_1159_checks_are_linear() {
     for (label, unit) in [
         ("print", "print -P "),
@@ -6824,10 +6732,6 @@ fn issue_1064_1159_checks_are_linear() {
 /// `PERL5OPT`, and `ENV` for a shell that may be interactive. Ordinary
 /// values stay quiet.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1064_loading_variables_with_risky_values_are_unseen_code() {
     use ProtectedActionKind::UnseenCode;
     let mut wrong = Vec::new();
@@ -7018,10 +6922,6 @@ fn issue_1064_search_paths_under_windows_rules() {
 /// only when a subscript's end is followed by a transformation operator,
 /// not on every line that also holds an `@`.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1064_uncertain_subscripts_ask_only_before_an_operator() {
     use ProtectedActionKind::UnseenCode;
     let mut wrong = Vec::new();
@@ -7112,10 +7012,6 @@ fn issue_1064_uncertain_subscripts_ask_only_before_an_operator() {
 
 /// #1064: the new checks stay linear.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1064_loader_checks_are_linear() {
     for (label, unit) in [
         ("entries", "PATH=./a:/b:"),
@@ -7143,10 +7039,6 @@ fn issue_1064_loader_checks_are_linear() {
 /// not happen are judged in every folder the line may be in; past
 /// `MAX_POSSIBLE_FOLDERS` the folder is unknown.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1309_own_writes_after_changes_that_may_not_happen_ask() {
     let quiet = [
         "cd ~; cd /nonexistent; echo x >> .zshenv",
@@ -7219,7 +7111,7 @@ fn issue_1309_own_writes_after_changes_that_may_not_happen_ask() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "#1261: on Windows the first judgment cannot open script or sed files (each run fails closed)"
+    ignore = "#1462: stricter on Windows (an extra or different prompt), pending an owner decision"
 )]
 fn issue_1309_sed_program_files_in_each_folder() {
     let (_dir, cwd) = issue_885_fixture();
@@ -7243,10 +7135,6 @@ fn issue_1309_sed_program_files_in_each_folder() {
 /// #1309 (2A): judging the line's own writes in every folder it may be in
 /// stays linear.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1309_own_writes_in_possible_folders_are_linear() {
     for (label, unit) in [
         ("redirections", "cd /a || cd /b; echo x > a; "),
@@ -7270,7 +7158,7 @@ fn issue_1309_own_writes_in_possible_folders_are_linear() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1462: stricter on Windows (an extra or different prompt), pending an owner decision"
 )]
 fn d194_commands_after_a_certain_cd_run_where_it_went() {
     // These asked before D194.
@@ -7314,10 +7202,6 @@ fn d194_commands_after_a_certain_cd_run_where_it_went() {
 /// still run the next command asks as before; so does any line the rule
 /// does not read as plain.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn d194_uncertain_changes_still_ask() {
     let quiet = [
         "cd /home/fixture; cd /tmp; echo x >> .zshenv",
@@ -7469,7 +7353,7 @@ fn d194_uncertain_changes_still_ask() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1462: stricter on Windows (an extra or different prompt), pending an owner decision"
 )]
 fn d194_zsh_append_redirections_keep_a_change_certain() {
     for shell in ["zsh", "bash"] {
@@ -7520,10 +7404,6 @@ fn d194_zsh_append_redirections_keep_a_change_certain() {
 
 /// D194: following certain changes stays linear.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn d194_certain_changes_are_linear() {
     for (label, unit) in [
         ("and lists", "cd /a && cd /b && echo x > a; "),
@@ -7542,7 +7422,7 @@ fn d194_certain_changes_are_linear() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1462: stricter on Windows (an extra or different prompt), pending an owner decision"
 )]
 fn d191_plain_mktemp_paths_are_known_temp_paths() {
     let mut wrong = Vec::new();
@@ -7587,7 +7467,7 @@ fn d191_plain_mktemp_paths_are_known_temp_paths() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1462: stricter on Windows (an extra or different prompt), pending an owner decision"
 )]
 fn d191_other_mktemp_spellings_still_ask() {
     use ProtectedActionKind::*;
@@ -7888,10 +7768,6 @@ fn d191_other_mktemp_spellings_still_ask() {
 
 /// D191: reading the line for qualifying variables stays linear.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn d191_mktemp_checks_are_linear() {
     for (label, head, unit) in [
         ("definitions", "", "t=$(mktemp); "),
@@ -7924,10 +7800,6 @@ fn d191_mktemp_checks_are_linear() {
 /// fixed eight stages at both sizes, below the existing stage/collection
 /// limits. Count the existing allocator and loop counters, not elapsed time.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1132_shared_targets_are_not_copied_per_sed() {
     work::assert_linear("shared sed targets", |scale| {
         let target = "y".repeat(1024 * scale);
@@ -7944,7 +7816,7 @@ fn issue_1132_shared_targets_are_not_copied_per_sed() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1462: stricter on Windows (an extra or different prompt), pending an owner decision"
 )]
 fn issue_1132_shared_target_judgement_preserves_classification() {
     use ProtectedActionKind::*;
@@ -7965,10 +7837,6 @@ fn issue_1132_shared_target_judgement_preserves_classification() {
 /// D195 (#1309): git writing the working tree in a folder the classifier
 /// cannot know asks, unless a folder flag names one; reading it stays quiet.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn d195_git_working_tree_writes_in_an_unknown_folder_ask() {
     // These were quiet before D195.
     let quiet = [
@@ -8014,7 +7882,7 @@ fn d195_git_working_tree_writes_in_an_unknown_folder_ask() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1461: on Windows a `cd` to a variable's folder does not make the folder unknown"
 )]
 fn issue_1410_a_cd_to_an_unseen_folder_is_unknown() {
     // These were quiet before #1410.
@@ -8091,10 +7959,6 @@ fn issue_1410_a_cd_to_an_unseen_folder_is_unknown() {
 
 /// D195: the check stays linear in the number of folder flags.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn d195_checks_are_linear() {
     work::assert_linear("folder flags", |scale| {
         let flags = " -C x".repeat(100 * scale);
@@ -8104,10 +7968,6 @@ fn d195_checks_are_linear() {
 
 /// #1159: setting local command-bearing Git configuration is persistence.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1159_local_git_code_keys_are_persistence() {
     for key in [
         "diff.external",
@@ -8128,10 +7988,6 @@ fn issue_1159_local_git_code_keys_are_persistence() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1159_local_git_code_key_families_are_persistence() {
     for key in [
         "pager.log",
@@ -8162,10 +8018,6 @@ fn issue_1159_local_git_code_key_families_are_persistence() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1159_local_git_code_writes_find_the_key_after_options() {
     for command in [
         "git config --local pager.log marker",
@@ -8190,10 +8042,6 @@ fn issue_1159_local_git_code_writes_find_the_key_after_options() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1159_local_git_code_key_queries_stay_quiet() {
     for command in [
         "git config pager.log",
@@ -8226,10 +8074,6 @@ fn issue_1159_local_git_code_key_queries_stay_quiet() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1159_local_git_code_key_spellings_in_data_stay_quiet() {
     for command in [
         "git config user.name pager.log",
@@ -8249,10 +8093,6 @@ fn issue_1159_local_git_code_key_spellings_in_data_stay_quiet() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1159_unlisted_git_keys_ask_even_for_non_command_values() {
     for command in [
         "git config diff.preview.binary true",
@@ -8280,10 +8120,6 @@ fn issue_1159_unlisted_git_keys_ask_even_for_non_command_values() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1159_git_code_write_values_are_not_read_selectors() {
     for command in [
         "git config pager.log get",
@@ -8301,10 +8137,6 @@ fn issue_1159_git_code_write_values_are_not_read_selectors() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1159_git_code_writes_follow_resolved_commands() {
     for command in [
         "command git config pager.log marker",
@@ -8333,10 +8165,6 @@ fn issue_1159_git_code_writes_follow_resolved_commands() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1161_git_config_unknown_options_do_not_hide_writes() {
     for command in [
         "git config -z pager.log 'sh -c x'",
@@ -8383,10 +8211,6 @@ fn issue_1161_git_config_unknown_options_do_not_hide_writes() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1161_git_config_unlisted_keys_and_renames_are_persistence() {
     for command in [
         "git config credential.https://example.invalid.helper marker",
@@ -8417,10 +8241,6 @@ fn issue_1161_git_config_unlisted_keys_and_renames_are_persistence() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1161_git_config_safe_writes_reads_and_deletions_stay_quiet() {
     for command in [
         "git config user.name marker",
@@ -8444,10 +8264,6 @@ fn issue_1161_git_config_safe_writes_reads_and_deletions_stay_quiet() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1161_git_config_null_flag_preserves_read_and_value_boundaries() {
     for command in [
         "git config --null --get pager.log",
@@ -8471,10 +8287,6 @@ fn issue_1161_git_config_null_flag_preserves_read_and_value_boundaries() {
 
 /// #1161: local key families and section renames also apply to Git helpers.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1161_git_helpers_keep_local_key_and_rename_checks() {
     for helper in [
         "git-config",
@@ -8519,10 +8331,6 @@ fn issue_1161_git_helpers_keep_local_key_and_rename_checks() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1161_git_helper_reads_safe_keys_and_data_stay_quiet() {
     for command in [
         "git-config user.name pager.log",
@@ -8546,10 +8354,6 @@ fn issue_1161_git_helper_reads_safe_keys_and_data_stay_quiet() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1161_local_key_checks_keep_git_helper_scans_linear() {
     for (prefix, unit) in [
         ("", "git-config "),
@@ -8605,10 +8409,6 @@ fn issue_1161_local_key_cache_keeps_split_value_state_separate() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1161_git_looking_keys_and_option_values_do_not_hide_writes() {
     for command in [
         "git config filter.a/git-x.clean 'sh -c evil'",
@@ -8631,10 +8431,6 @@ fn issue_1161_git_looking_keys_and_option_values_do_not_hide_writes() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1161_git_looking_global_values_keep_scans_linear() {
     for unit in [
         "-C git ",
@@ -8656,10 +8452,6 @@ fn issue_1161_git_looking_global_values_keep_scans_linear() {
 
 /// #1161 review round 4: global option values can become several shell words.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1161_split_global_option_values_do_not_hide_config_writes() {
     for command in [
         "git -C 'My Project' config filter.a.clean /tmp/x",
@@ -8678,10 +8470,6 @@ fn issue_1161_split_global_option_values_do_not_hide_config_writes() {
 
 /// A safe-key-looking fragment of a config option value is not the actual key.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1161_split_config_option_values_do_not_hide_config_writes() {
     for command in [
         "git config --comment 'note user.name' filter.a.clean /tmp/x",
@@ -8699,10 +8487,6 @@ fn issue_1161_split_config_option_values_do_not_hide_config_writes() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1161_safe_option_values_and_commands_without_config_stay_quiet() {
     for command in [
         "git config --type bool pull.rebase true",
@@ -8718,10 +8502,6 @@ fn issue_1161_safe_option_values_and_commands_without_config_stay_quiet() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1161_git_name_in_setting_keeps_inherited_unseen_code_prompt() {
     // D153's quoted pass treats a git name inside a -c setting as unreadable,
     // even for a safe key. Without config, keep that inherited classification.
@@ -8732,10 +8512,6 @@ fn issue_1161_git_name_in_setting_keeps_inherited_unseen_code_prompt() {
 }
 
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1161_attached_file_value_preserves_main_editor_boundary() {
     // #1269 fixed the inherited #1262 over-prompt: the `e` after `-f` belongs
     // to the filename. Keep main's attached-value boundary for this safe key.
@@ -8806,7 +8582,7 @@ fn issue_1403_checks_are_linear() {
 #[test]
 #[cfg_attr(
     windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+    ignore = "#1462: stricter on Windows (an extra or different prompt), pending an owner decision"
 )]
 fn issue_1405_mapfile_callbacks_and_shell_start_up_files_are_judged() {
     use ProtectedActionKind::UnseenCode;
@@ -8975,10 +8751,6 @@ fn issue_1405_mapfile_callbacks_and_shell_start_up_files_are_judged() {
 
 /// #1405: the new checks stay linear.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1405_checks_are_linear() {
     for (label, unit) in [
         ("mapfile options", "mapfile -t -n 1 "),
@@ -9114,10 +8886,6 @@ fn issue_1436_unseen_folders_ask() {
 
 /// #1436: the checks stay linear.
 #[test]
-#[cfg_attr(
-    windows,
-    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
-)]
 fn issue_1436_checks_are_linear() {
     for (label, unit) in [
         ("loops", "for i in 1 2; do echo x >> f; cd ~; done; "),
