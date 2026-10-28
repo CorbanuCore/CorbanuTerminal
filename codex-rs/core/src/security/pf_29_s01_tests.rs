@@ -768,6 +768,84 @@ fn pf_29_s01_irregular_database_files_are_drift() {
     assert_eq!(drift.changed.len(), 1, "{drift:?}");
 }
 
+/// #1441: a hard-linked database file is drift on every platform (Windows
+/// reads the link count through the file's handle); a plain one written by
+/// Corbanu is not.
+#[test]
+fn pf_29_s01_hard_linked_database_files_are_drift_everywhere() {
+    let fixture = Fixture::new();
+    let corbanu = fixture.corbanu();
+    let secret = fixture.home().join("secret.txt");
+    fixture.write(&secret, b"TOKEN=1");
+    fixture.write(&corbanu.join("state_5.sqlite"), b"pages");
+    let sources = fixture.sources();
+    let first = fixture.run(&sources);
+
+    fixture.write(&corbanu.join("state_5.sqlite-wal"), b"frames");
+    let (second, drift) = first.recheck(&sources, ALL_ON);
+    assert!(drift.is_empty(), "{drift:?}");
+
+    let shm = corbanu.join("state_5.sqlite-shm");
+    std::fs::hard_link(&secret, &shm).expect("hard link");
+    let (third, drift) = second.recheck(&sources, ALL_ON);
+    assert_eq!(drift.changed.len(), 1, "{drift:?}");
+    let links = |path: &Path| {
+        third
+            .inventory
+            .manifest
+            .entries
+            .iter()
+            .find(|entry| entry.path == path)
+            .unwrap_or_else(|| panic!("{} missing from manifest", path.display()))
+            .links
+    };
+    assert_eq!(links(&shm), Some(2));
+    assert_eq!(links(&corbanu.join("state_5.sqlite")), Some(1));
+}
+
+/// #1441: where a file created through a dangling symlink would land is
+/// isolated (at the end of a chain, relative targets resolved against the
+/// link's folder), and pointing the link elsewhere is drift.
+#[cfg(unix)]
+#[test]
+fn pf_29_s01_dangling_symlink_targets_are_isolated() {
+    let fixture = Fixture::new();
+    let home = fixture.home();
+    let corbanu = fixture.corbanu();
+    let elsewhere = fixture.root.path().join("elsewhere");
+    std::fs::create_dir_all(&elsewhere).expect("mkdir");
+    let real = |path: &Path| std::fs::canonicalize(path).expect("canonical");
+    std::os::unix::fs::symlink(home.join("missing"), home.join(".git-credentials"))
+        .expect("absolute");
+    std::os::unix::fs::symlink("../elsewhere/netrc", home.join(".netrc")).expect("relative");
+    std::os::unix::fs::symlink(home.join("hop"), home.join(".pgpass")).expect("chain");
+    std::os::unix::fs::symlink(elsewhere.join("pgpass"), home.join("hop")).expect("hop");
+    fixture.write(&corbanu.join("state_5.sqlite"), b"pages");
+    let wal = corbanu.join("state_5.sqlite-wal");
+    std::os::unix::fs::symlink(elsewhere.join("wal"), &wal).expect("side file");
+    let sources = fixture.sources();
+    let first = fixture.run(&sources);
+
+    let isolated = first.inventory.isolation_paths();
+    for target in [
+        real(&home).join("missing"),
+        real(&elsewhere).join("netrc"),
+        real(&elsewhere).join("pgpass"),
+        real(&elsewhere).join("wal"),
+    ] {
+        assert!(
+            isolated.contains(&target),
+            "{} missing from {isolated:?}",
+            target.display()
+        );
+    }
+
+    std::fs::remove_file(&wal).expect("remove");
+    std::os::unix::fs::symlink(elsewhere.join("other"), &wal).expect("retarget");
+    let (_, drift) = first.recheck(&sources, ALL_ON);
+    assert_eq!(drift.changed.len(), 1, "{drift:?}");
+}
+
 #[test]
 fn pf_29_s01_ids_are_stable_and_digests_are_keyed() {
     let fixture = Fixture::new();

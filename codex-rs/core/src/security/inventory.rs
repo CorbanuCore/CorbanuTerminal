@@ -202,8 +202,10 @@ pub struct ManifestEntry {
     /// The path itself is a regular file (not a folder, link, pipe, socket
     /// or device).
     pub regular: bool,
-    /// Hard links to a file that is not a folder, on Unix.
+    /// Hard links to a file that is not a folder, on Unix and Windows.
     pub links: Option<u64>,
+    /// Where the symlink at the path leads; for a dangling one, where a file
+    /// created through it would land (#1441).
     pub symlink_target: Option<PathBuf>,
     /// `(device, inode)` on Unix.
     pub identity: Option<(u64, u64)>,
@@ -228,15 +230,18 @@ impl std::fmt::Debug for Manifest {
 }
 
 impl Manifest {
-    /// Digest of every entry; any change in identity, size, mode or content
-    /// changes it.
+    /// Digest of every entry; any change in file type, link count, symlink
+    /// target, identity, size, mode, content or status changes it.
     pub fn digest(&self) -> String {
         let mut hasher = Sha256::new();
         for entry in &self.entries {
             hasher.update(entry.finding_id.as_bytes());
             hasher.update(entry.path.to_string_lossy().as_bytes());
             hasher.update(format!(
-                "|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}\n",
+                "|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}\n",
+                entry.symlink,
+                entry.regular,
+                entry.links,
                 entry.symlink_target,
                 entry.identity,
                 entry.len,
@@ -448,7 +453,7 @@ fn probe(path: &Path) -> Option<Probe> {
     let (symlink_target, metadata) = if is_symlink {
         match (std::fs::canonicalize(path), std::fs::metadata(path)) {
             (Ok(target), Ok(metadata)) => (Some(target), Ok(metadata)),
-            (_, Err(err)) | (Err(err), _) => (None, Err(err)),
+            (_, Err(err)) | (Err(err), _) => (would_be_target(path), Err(err)),
         }
     } else {
         (None, Ok(link))
@@ -475,10 +480,75 @@ fn probe(path: &Path) -> Option<Probe> {
                 probe.mode = Some(metadata.mode() & 0o7777);
                 probe.links = (!probe.is_dir).then_some(metadata.nlink());
             }
+            #[cfg(windows)]
+            if !probe.is_dir {
+                probe.links = windows_link_count(path);
+            }
         }
         Err(err) => probe.error = Some(format!("dangling or looping symlink ({})", err.kind())),
     }
     Some(probe)
+}
+
+/// Most symlinks followed in one chain (Linux's `MAXSYMLINKS`).
+const MAX_SYMLINK_HOPS: usize = 40;
+
+/// #1441: where a file created through the dangling symlink at `path` would
+/// land (SQLite creates `-wal` and `-journal` files through one): the end of
+/// its chain, with the part that exists canonical. `None` for a loop.
+///
+/// Always `None` on Windows: its sandbox creates a folder at every missing
+/// path it denies, so a planted link would choose where Corbanu creates one.
+fn would_be_target(path: &Path) -> Option<PathBuf> {
+    if cfg!(windows) {
+        return None;
+    }
+    let mut link = path.to_path_buf();
+    for _ in 0..MAX_SYMLINK_HOPS {
+        let target = std::fs::read_link(&link).ok()?;
+        let next = match link.parent() {
+            Some(parent) => parent.join(target),
+            None => target,
+        };
+        if !std::fs::symlink_metadata(&next).is_ok_and(|meta| meta.file_type().is_symlink()) {
+            return Some(canonical_prefix(&next));
+        }
+        link = next;
+    }
+    None
+}
+
+/// `path` with its longest existing ancestor canonical.
+fn canonical_prefix(path: &Path) -> PathBuf {
+    path.ancestors()
+        .find_map(|ancestor| {
+            let rest = path.strip_prefix(ancestor).ok()?;
+            let canonical = std::fs::canonicalize(ancestor).ok()?;
+            // `join("")` would add a trailing separator.
+            Some(if rest.as_os_str().is_empty() {
+                canonical
+            } else {
+                canonical.join(rest)
+            })
+        })
+        .unwrap_or_else(|| path.to_path_buf())
+}
+
+/// #1441: hard links to the file at `path` (followed), read through a handle
+/// opened for its attributes only.
+#[cfg(windows)]
+fn windows_link_count(path: &Path) -> Option<u64> {
+    use std::os::windows::fs::OpenOptionsExt as _;
+    const FILE_READ_ATTRIBUTES: u32 = 0x80;
+    const SHARE_ALL: u32 = 0x7;
+    let file = std::fs::OpenOptions::new()
+        .access_mode(FILE_READ_ATTRIBUTES)
+        .share_mode(SHARE_ALL)
+        .open(path)
+        .ok()?;
+    codex_windows_sandbox::file_link_count(&file)
+        .ok()
+        .map(u64::from)
 }
 
 /// Opens regular files only, without blocking: a device (`/dev/zero`) would
