@@ -1159,10 +1159,12 @@ fn possible_folders(folders: &Folders) -> Vec<String> {
 
 /// #1449: whether a loop's body (`commands`, between its first command
 /// and its `done`) is plain: no group, subshell, function, background job,
-/// compound command or `do` but its own, so a command in it that follows
-/// `;` or a line break runs in the loop's shell on each pass.
-/// Substitutions are their own shells.
-fn plain_body(commands: &[SimpleCommand]) -> bool {
+/// compound command or `do` but its own, no `continue`, `break`, `return`,
+/// `eval`, `source` or `exec`, and no call of a function the line may
+/// define (`functions`), so a command in it that follows `;` or a line
+/// break runs in the loop's shell on each pass. Substitutions are their
+/// own shells.
+fn plain_body(commands: &[SimpleCommand], functions: &HashSet<String>) -> bool {
     let mut body = false;
     commands
         .iter()
@@ -1171,7 +1173,18 @@ fn plain_body(commands: &[SimpleCommand]) -> bool {
             work::step();
             let first = command.words.first().map(String::as_str);
             let starts_body = first == Some("do") && !std::mem::replace(&mut body, true);
+            let named = command
+                .words
+                .get(usize::from(starts_body))
+                .map(String::as_str);
             command.after != certain_cd::Joint::Other
+                && !named.is_some_and(|word| {
+                    functions.contains(word)
+                        || matches!(
+                            word,
+                            "continue" | "break" | "return" | "eval" | "source" | "." | "exec"
+                        )
+                })
                 && (starts_body
                     || !first.is_some_and(|word| {
                         matches!(
@@ -1196,6 +1209,22 @@ fn plain_body(commands: &[SimpleCommand]) -> bool {
                         )
                     }))
         })
+}
+
+/// #1449: the names `commands` may define as functions: the last word of
+/// a command of at most two words (`f`, `function f`, `do f`) that the
+/// next command follows as a group or body (its joint is `Other`).
+fn function_names(commands: &[SimpleCommand]) -> HashSet<String> {
+    commands
+        .windows(2)
+        .filter(|pair| {
+            work::step();
+            !pair[0].substituted
+                && pair[0].words.len() <= 2
+                && pair[1].after == certain_cd::Joint::Other
+        })
+        .filter_map(|pair| pair[0].words.last().cloned())
+        .collect()
 }
 
 /// #1449: how many of `commands`' words have each basename; `None` when a
@@ -1823,6 +1852,8 @@ impl Classifier {
         // `MAX_REPLAYED_LOOPS` such a loop starts in a folder not known.
         let mut changing = unknown_folder::changing_loops(&lexed.commands).into_iter();
         let mut next_loop = changing.next();
+        // #1449: names the line may define as functions.
+        let functions = function_names(&lexed.commands);
         let mut replayed = 0;
         let mut pass: Option<LoopPass> = None;
         let mut cursor = 0;
@@ -1859,6 +1890,7 @@ impl Classifier {
                                 .commands
                                 .get(changing_loop.start + 1..changing_loop.end)
                                 .unwrap_or_default(),
+                            &functions,
                         ),
                         folders: start,
                         branches: Vec::new(),
@@ -1950,6 +1982,9 @@ impl Classifier {
             }
             folders.plain = pass.as_ref().is_some_and(|current| current.plain)
                 && !simple.substituted
+                && simple.stdin_from.is_none()
+                && simple.here_string.is_none()
+                && simple.writes_to.is_empty()
                 && matches!(
                     simple.after,
                     certain_cd::Joint::Start | certain_cd::Joint::Seq
@@ -2076,13 +2111,20 @@ impl Classifier {
                                 // #1449: and in any folder a pass started
                                 // from or left (`cd nope; cd ..` climbs),
                                 // up to the limit, past `too_many`.
-                                for folder in std::mem::take(&mut current.seen) {
-                                    work::step();
-                                    if folder != folders.cwd && !folders.others.contains(&folder) {
-                                        folders.others.push(folder);
+                                if !folders.lost {
+                                    for folder in std::mem::take(&mut current.seen) {
+                                        work::step();
+                                        if folder != folders.cwd
+                                            && !folders.others.contains(&folder)
+                                        {
+                                            folders.others.push(folder);
+                                        }
                                     }
+                                    folders.replayed = folders
+                                        .replayed
+                                        .max(folders.others.len())
+                                        .min(MAX_BRANCH_FOLDERS_CAP);
                                 }
-                                folders.replayed = folders.replayed.max(folders.others.len());
                             }
                             pass = None;
                         }
@@ -2091,7 +2133,6 @@ impl Classifier {
             }
         }
         self.extra_pass = outer_extra_pass;
-        self.line_names.pop();
         if !splits.is_empty() {
             let here: Vec<&str> = self.visited.iter().map(String::as_str).collect();
             let roots = std::cell::OnceCell::new();
@@ -2166,6 +2207,7 @@ impl Classifier {
         self.rebuilt_foreign = outer_foreign;
         // #885: nested shells' scripts and sed programs, read with quotes.
         self.quoted_pass(command, cwd, depth, (lexed_seds, lexed_shells));
+        self.line_names.pop();
         self.sed_scope = outer_scope;
         self.visited = outer_visited;
         self.visited_all = outer_visited_all;
@@ -3159,14 +3201,7 @@ impl Classifier {
             return self.read_windows_file(word, cwd);
         }
         if !self.homes.lookups_allowed(file) {
-            // #1449: in a loop's branch pass, which may start from a folder
-            // the line never reaches (above the workspace), a name relative
-            // to it as missing.
-            return if self.relative_place(word) && self.missing_does_not_run(word) {
-                FileText::Missing
-            } else {
-                FileText::Unreadable
-            };
+            return FileText::Unreadable;
         }
         // Check before opening: opening a FIFO or device would block.
         let Ok(metadata) = std::fs::metadata(file) else {

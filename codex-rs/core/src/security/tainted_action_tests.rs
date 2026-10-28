@@ -9148,6 +9148,22 @@ fn issue_1449_loop_passes_add_no_needless_prompts() {
         ("sub/tool.py", "print(1)\n"),
         ("post.sh", "true\n"),
     ];
+    // In `/tmp`, whose parents the reading may look in (`/Volumes`, macOS
+    // `/home` and privacy folders it may not: there a script it cannot
+    // look up still asks).
+    let in_tmp = |line: &str| {
+        let root = tempfile::tempdir_in("/tmp").expect("tempdir");
+        let work = root.path();
+        std::fs::create_dir_all(work.join("sub")).expect("sub");
+        for (name, text) in files {
+            std::fs::write(work.join(name), text).expect("file");
+        }
+        classify_with(
+            &shell_in(&work.to_string_lossy(), &["bash", "-lc", line]),
+            &fixture(HOME),
+            Some(work),
+        )
+    };
     let mut wrong = Vec::new();
     for line in [
         "for i in 1 2; do cd sub; ./build.sh; cd ..; done",
@@ -9157,7 +9173,7 @@ fn issue_1449_loop_passes_add_no_needless_prompts() {
         "for x in a b; do cd sub; make; cd ..; done; make > out",
         "for x in a b; do cd sub; make; cd ..; done && ./post.sh",
     ] {
-        if in_workspace(&files, line).is_some() {
+        if in_tmp(line).is_some() {
             wrong.push(line.to_string());
         }
     }
@@ -9218,6 +9234,12 @@ fn issue_1449_loop_passes_keep_their_checks() {
             wrong.push(format!("{line}: {found:?}"));
         }
     }
+    // Review 2: a file a nested line names elsewhere.
+    let nested =
+        "for i in 1 2; do cd nope; cd ..; bash -c 'cp ../x p.sed; sed -n -f p.sed run.sh'; done";
+    if in_w(nested).is_none() {
+        wrong.push(nested.to_string());
+    }
     // A loop that climbs ends where its passes went.
     for (cwd, line) in [
         (
@@ -9247,11 +9269,23 @@ fn issue_1449_loop_passes_keep_their_checks() {
         "f() { make; cd ..; make; }",
         "case $x in a) make; cd ..; make;; esac",
         "for j in $J; do cd ..; done",
+        // Review 2: a pass that ends before its `cd ..`, a redirection
+        // that fails.
+        "continue; cd ..",
+        "make || continue; cd ..",
+        "[ -d x ] && break; cd ..",
+        "cd .. < /nonexistent",
+        "cd .. 2> /dev/null",
     ] {
         let line = format!("for i in 1 2; do echo x >> ../.zshrc; cd sub; {climb}; done");
         if classify_fixture(&shell_in("/home/fixture", &["bash", "-lc", &line])).is_none() {
             wrong.push(line);
         }
+    }
+    // A function the line defines may end the pass.
+    let line = "f() { continue; }; for i in 1 2; do echo x >> ../.zshrc; cd sub; f; cd ..; done";
+    if classify_fixture(&shell_in("/home/fixture", &["bash", "-lc", line])).is_none() {
+        wrong.push(line.to_string());
     }
     // Each pass from `x` leaves `x/a`, never reached by `cd ..`: past
     // the limit.
@@ -9287,6 +9321,12 @@ fn issue_1449_checks_are_linear() {
             let _ = script(&unit.repeat(40 * scale));
         });
     }
+    // Review 2: the folders a deep climbing loop leaves, then many
+    // changes.
+    let climbed = format!("{deep}for x in a b; do cd sub; make; cd ..; done; ");
+    work::assert_linear("after a climb", |scale| {
+        let _ = script(&format!("{climbed}{}", "cd /x; cd /y; ".repeat(40 * scale)));
+    });
 }
 
 /// #1422: more spellings that run `mapfile -C`, aliases, `compgen -C`,
