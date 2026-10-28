@@ -1,4 +1,3 @@
-use assert_matches::assert_matches;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -154,19 +153,10 @@ async fn interrupt_tool_records_history_entries() {
         .expect("missing function_call_output text");
     let re = Regex::new(r"^Wall time: ([0-9]+(?:\.[0-9])?) seconds\naborted by user$")
         .expect("compile regex");
-    let captures = re.captures(&output);
-    assert_matches!(
-        captures.as_ref(),
-        Some(caps) if caps.get(1).is_some(),
-        "aborted message with elapsed seconds"
-    );
-    let secs: f32 = captures
-        .expect("aborted message with elapsed seconds")
-        .get(1)
-        .unwrap()
-        .as_str()
-        .parse()
-        .unwrap();
+    let Some(secs) = re.captures(&output).and_then(|caps| caps.get(1)) else {
+        panic!("expected an aborted message with elapsed seconds, got {output:?}");
+    };
+    let secs: f32 = secs.as_str().parse().unwrap();
     assert!(
         secs >= 0.1,
         "expected at least one tenth of a second of elapsed time, got {secs}"
