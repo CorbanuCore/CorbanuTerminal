@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # #1430 CI probe: throwaway packaging-input change, not for merge.
+raise SystemExit("#1430 CI probe: deliberately broken staging script")
 """Stage one or more Codex npm packages for release."""
 
 import argparse
