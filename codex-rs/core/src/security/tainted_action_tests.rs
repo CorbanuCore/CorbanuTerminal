@@ -9287,6 +9287,12 @@ fn issue_1449_loop_passes_keep_their_checks() {
         "enable -n cd; cd ..",
         "chmod 0 ..; cd ..; chmod 755 ..",
         "mv ../x ../y; cd ..",
+        // Review 4: brace sequences the lexer leaves unexpanded, a
+        // program that changes permissions.
+        "co{n..n}tinue; cd ..",
+        "br{e..e}ak; cd ..",
+        "c{h..h}mod 0 ..; cd ..; c{h..h}mod 755 ..",
+        "python3 -c 'import os; os.chmod(\"..\", 0)'; cd ..",
     ] {
         let line = format!("for i in 1 2; do echo x >> ../.zshrc; cd sub; {climb}; done");
         if classify_fixture(&shell_in("/home/fixture", &["bash", "-lc", &line])).is_none() {
@@ -9299,6 +9305,10 @@ fn issue_1449_loop_passes_keep_their_checks() {
         "f() { continue; }; for i in 1 2; do echo x >> ../.zshrc; cd sub; f; cd ..; done",
         "c=continue; for i in 1 2; do echo x >> ../.zshrc; cd sub; $c; cd ..; done",
         "shopt -s extdebug; trap false DEBUG; for i in 1 2; do echo x >> ../.zshrc; cd sub; cd ..; done",
+        // Review 4: zsh runs `chpwd` after each change; a function the
+        // line defines, spelled by a sequence.
+        "chpwd() { [ -e .m ] && builtin cd -; }; for i in 1 2; do echo x >> ../.zshrc; cd sub; cd ..; done",
+        "abc() { continue; }; for i in 1 2; do echo x >> ../.zshrc; cd sub; a{b..b}c; cd ..; done",
     ] {
         if classify_fixture(&shell_in("/home/fixture", &["bash", "-lc", line])).is_none() {
             wrong.push(line.to_string());

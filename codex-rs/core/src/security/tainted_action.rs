@@ -1181,6 +1181,7 @@ fn plain_body(commands: &[SimpleCommand], functions: &HashSet<String>) -> bool {
                     !(word.contains(['$', '`', '*', '?', '['])
                         || word.contains(shell::UNSEEN_OUTPUT)
                         || word == "."
+                        || brace_sequence(word)
                         || word
                             .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
                             .any(|token| {
@@ -1224,46 +1225,60 @@ fn plain_body(commands: &[SimpleCommand], functions: &HashSet<String>) -> bool {
 }
 
 /// #1449: whether a `cd ..` on the line (`commands`) may fail or not be
-/// the builtin, other than by the folder: the line redefines or disables
-/// commands, sets traps or shell options (`enable -n cd`, `trap … DEBUG`,
-/// D194's `certain_cd::REDEFINERS`, a function or alias), changes where
-/// `cd` goes (`HOME`, `PWD`, `CDPATH`, …), or changes a folder's
-/// permissions or the folder itself (`chmod 0 ..`, `mv`, `rm`).
+/// the builtin, other than by the folder: the line defines a function
+/// (zsh runs `chpwd` after each `cd`), redefines or disables commands,
+/// sets traps or shell options (`enable -n cd`, `trap … DEBUG`, D194's
+/// `certain_cd::REDEFINERS`, an alias), changes where `cd` goes (`HOME`,
+/// `PWD`, `CDPATH`, …), changes a folder's permissions (any token holding
+/// `chmod` and the like: `os.lchmod`) or the folder itself (`mv`, `rm`),
+/// or has a word the lexer leaves unexpanded (`c{h..h}mod`).
 fn climbs_may_fail(commands: &[SimpleCommand]) -> bool {
-    commands
-        .iter()
-        .flat_map(|command| &command.words)
-        .any(|word| {
-            work::step();
-            unknown_folder::searches(word)
-                || word
-                    .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
-                    .any(|token| {
-                        work::step();
-                        let lower = token.to_ascii_lowercase();
-                        matches!(token, "HOME" | "PWD")
-                            || lower.contains("function")
-                            || lower.contains("alias")
-                            || certain_cd::REDEFINERS.contains(&lower.as_str())
-                            || matches!(
-                                lower.as_str(),
-                                "shopt"
-                                    | "chmod"
-                                    | "chown"
-                                    | "chgrp"
-                                    | "chflags"
-                                    | "chattr"
-                                    | "setfacl"
-                                    | "umask"
-                                    | "mv"
-                                    | "rm"
-                                    | "rmdir"
-                                    | "unlink"
-                                    | "mount"
-                                    | "umount"
-                            )
-                    })
-        })
+    !function_names(commands).is_empty()
+        || commands
+            .iter()
+            .flat_map(|command| &command.words)
+            .any(|word| {
+                work::step();
+                unknown_folder::searches(word)
+                    || brace_sequence(word)
+                    || word
+                        .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
+                        .any(|token| {
+                            work::step();
+                            let lower = token.to_ascii_lowercase();
+                            matches!(token, "HOME" | "PWD")
+                                || lower.contains("function")
+                                || lower.contains("alias")
+                                || certain_cd::REDEFINERS.contains(&lower.as_str())
+                                || ["chmod", "chown", "chgrp", "chflags", "chattr", "setfacl"]
+                                    .iter()
+                                    .any(|name| lower.contains(name))
+                                || matches!(
+                                    lower.as_str(),
+                                    "shopt"
+                                        | "umask"
+                                        | "mv"
+                                        | "rm"
+                                        | "rmdir"
+                                        | "unlink"
+                                        | "mount"
+                                        | "umount"
+                                )
+                        })
+            })
+}
+
+/// #1449: whether `word` (as lexed, braces dropped) may come from a brace
+/// sequence (`co{n..n}tinue` is `con..ntinue`; the shell runs `continue`):
+/// a `..` between two letters or digits.
+fn brace_sequence(word: &str) -> bool {
+    word.as_bytes().windows(4).any(|window| {
+        work::step();
+        window[0].is_ascii_alphanumeric()
+            && window[1] == b'.'
+            && window[2] == b'.'
+            && window[3].is_ascii_alphanumeric()
+    })
 }
 
 /// #1449: the names `commands` may define as functions: the last word of
@@ -1311,6 +1326,17 @@ fn line_names(commands: &[SimpleCommand]) -> Option<HashMap<String, usize>> {
                     | "install"
                     | "curl"
                     | "wget"
+                    | "mv"
+                    | "gunzip"
+                    | "gzip"
+                    | "bunzip2"
+                    | "bzip2"
+                    | "xz"
+                    | "unxz"
+                    | "zstd"
+                    | "unzstd"
+                    | "ar"
+                    | "jar"
             )
         {
             return None;
