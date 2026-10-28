@@ -383,7 +383,11 @@ const MAX_SMALL_VALUE: usize = 64;
 /// folder change starts in a folder not known.
 const MAX_REPLAYED_LOOPS: usize = 8;
 /// #1436: folders a replayed loop's passes may start from (`LoopPass`).
+/// #1449: plus one per folder above the loop's start, so a loop that
+/// climbs (`cd sub; …; cd ..`) reaches `/` within it, up to
+/// `MAX_BRANCH_FOLDERS_CAP`.
 const MAX_BRANCH_FOLDERS: usize = 8;
+const MAX_BRANCH_FOLDERS_CAP: usize = 32;
 /// Bytes of command text, and command lines, one classification lexes in
 /// all, nested scripts, decoded payloads and script files included (#1065);
 /// more fail closed.
@@ -572,6 +576,7 @@ impl Classifier {
             nested_scripts: 0,
             unknown_folder: 0,
             unseen_folder: false,
+            extra_pass: false,
             launched: launched_git::Launch::default(),
             substitution_budget: Budget {
                 left: MAX_SUBSTITUTED_BYTES,
@@ -1125,16 +1130,42 @@ struct LoopPass {
     branches: Vec<String>,
     /// The folders passes started from or were queued from.
     seen: Vec<String>,
-    /// Past `MAX_BRANCH_FOLDERS`: after the loop the folder is not known.
+    /// Past `limit`: after the loop the folder is not known.
     overflow: bool,
+    /// #1449: `MAX_BRANCH_FOLDERS` plus the depth of the folders the loop
+    /// starts in, up to `MAX_BRANCH_FOLDERS_CAP`.
+    limit: usize,
 }
 
-/// #1436: the folders a reading may be in.
+/// #1436: the folders a reading may be in. #1449: less those it is in
+/// only if a `cd ..` failed (`Folders::failed_climbs`), which a later pass
+/// does not start from.
 fn possible_folders(folders: &Folders) -> Vec<String> {
     std::iter::once(&folders.cwd)
-        .chain(&folders.others)
+        .chain(
+            folders
+                .others
+                .iter()
+                .filter(|folder| !folders.failed_climbs.contains(folder)),
+        )
         .cloned()
         .collect()
+}
+
+/// #1449: the branch-folder limit of a loop that starts in `folders`.
+fn branch_limit(folders: &[String]) -> usize {
+    let depth = folders
+        .iter()
+        .map(|folder| {
+            work::step();
+            folder
+                .split(['/', '\\'])
+                .filter(|part| !part.is_empty())
+                .count()
+        })
+        .max()
+        .unwrap_or(0);
+    (MAX_BRANCH_FOLDERS + depth).min(MAX_BRANCH_FOLDERS_CAP)
 }
 
 /// #1436: where a reading is: the folder it follows, where `cd -` and
@@ -1224,6 +1255,12 @@ struct Folders {
     /// #1436: `previous` may not be where `cd -` goes: a change in a
     /// substitution or subshell, or one that may not have happened.
     back_unsure: bool,
+    /// #1449: folders of `others` the line is in only if the `cd ..` (a
+    /// climb, `..` alone) just before failed there. A shell in a folder
+    /// leaves it by `cd ..` (its parent was on the way in), so a loop's
+    /// later passes do not start there; the line's own checks still count
+    /// them. Any other change empties it.
+    failed_climbs: Vec<String>,
 }
 
 struct Classifier {
@@ -1287,6 +1324,9 @@ struct Classifier {
     /// #1436: the command being judged runs in a folder the word reading
     /// cannot see, so a script named relative to it may be any file.
     unseen_folder: bool,
+    /// #1449: reading one of a loop's later passes (`LoopPass`), from a
+    /// folder the line may not reach: a script missing there does not run.
+    extra_pass: bool,
     /// #1268: inside a script a launcher runs with its input added after
     /// it (`xargs env -S'git config'`) or put into its text (`xargs -I% sh
     /// -c 'git config %'`, where any word may be input).
@@ -1651,6 +1691,7 @@ impl Classifier {
             unseen_in_substitution: false,
             searched: false,
             back_unsure: false,
+            failed_climbs: Vec::new(),
         };
         let mut variables: HashMap<String, String> = HashMap::new();
         for (name, value) in [
@@ -1706,6 +1747,7 @@ impl Classifier {
         let mut replayed = 0;
         let mut pass: Option<LoopPass> = None;
         let mut cursor = 0;
+        let outer_extra_pass = self.extra_pass;
         while let Some(simple) = lexed.commands.get(cursor) {
             work::step();
             let index = cursor;
@@ -1716,6 +1758,7 @@ impl Classifier {
                 next_loop = changing.next();
                 if replayed < MAX_REPLAYED_LOOPS {
                     replayed += 1;
+                    let start = possible_folders(&folders);
                     pass = Some(LoopPass {
                         start: changing_loop.start,
                         end: changing_loop.end,
@@ -1730,7 +1773,8 @@ impl Classifier {
                         names: changing_loop.names,
                         climbs: changing_loop.climbs,
                         counts: (changing_loop.back, changing_loop.stack),
-                        folders: possible_folders(&folders),
+                        limit: branch_limit(&start),
+                        folders: start,
                         branches: Vec::new(),
                         seen: Vec::new(),
                         overflow: false,
@@ -1739,6 +1783,10 @@ impl Classifier {
                     folders.unseen = true;
                 }
             }
+            // #1449: a later pass of a loop being read again; a pass that
+            // starts unseen (round 4) still sets `unseen_folder`.
+            self.extra_pass =
+                outer_extra_pass || pass.as_ref().is_some_and(|current| current.round != 1);
             let (words, unseen, skipped) =
                 substitute(simple, &variables, &mut self.substitution_budget);
             // #1436: a value may climb too (`P=../..; … > $P/.zshrc`).
@@ -1856,7 +1904,7 @@ impl Classifier {
                         if current.seen.contains(&folder) {
                             continue;
                         }
-                        if current.seen.len() < MAX_BRANCH_FOLDERS {
+                        if current.seen.len() < current.limit {
                             current.branches.push(folder.clone());
                         } else {
                             current.overflow = true;
@@ -1918,6 +1966,7 @@ impl Classifier {
                             variables = values.clone();
                             folders.cwd = branch;
                             folders.others.clear();
+                            folders.failed_climbs.clear();
                             cursor = current.start;
                         }
                         _ => {
@@ -1933,6 +1982,7 @@ impl Classifier {
                 }
             }
         }
+        self.extra_pass = outer_extra_pass;
         if !splits.is_empty() {
             let here: Vec<&str> = self.visited.iter().map(String::as_str).collect();
             let roots = std::cell::OnceCell::new();
@@ -2554,7 +2604,8 @@ impl Classifier {
             .is_some_and(|scope| scope.is_data(word));
         match self.read_file(&file, word, cwd) {
             FileText::Binary => {}
-            FileText::Missing if data || (depth == 0 && self.argv0 == word) => {}
+            FileText::Missing
+                if data || (depth == 0 && self.argv0 == word) || self.missing_does_not_run() => {}
             FileText::Missing | FileText::Unreadable => {
                 self.ran.push(file);
                 self.note(ProtectedActionKind::UnseenCode);
@@ -2761,6 +2812,14 @@ impl Classifier {
         }
     }
 
+    /// #1449: in a loop's later pass (`extra_pass`), from a folder this
+    /// reading can see, a script or program file missing there does not
+    /// run: the pass is from a folder the line may not reach. The first
+    /// pass reads it as before.
+    fn missing_does_not_run(&self) -> bool {
+        self.extra_pass && !self.unseen_folder
+    }
+
     /// A script the command certainly runs: read in full or fail closed.
     fn required_script(&mut self, file: &str, cwd: &str, depth: usize, shell: bool) {
         if file.contains('$') || file.contains(shell::UNSEEN_OUTPUT) {
@@ -2944,7 +3003,7 @@ impl Classifier {
         }
         self.ran.push(file.to_string());
         let unreadable = |classifier: &mut Self, missing: bool| {
-            if need == Script::Required || !missing {
+            if (need == Script::Required && !classifier.missing_does_not_run()) || !missing {
                 classifier.note(ProtectedActionKind::UnseenCode);
             }
         };
@@ -2969,7 +3028,13 @@ impl Classifier {
             return self.read_windows_file(word, cwd);
         }
         if !self.homes.lookups_allowed(file) {
-            return FileText::Unreadable;
+            // #1449: in a loop's later pass, which may start from a folder
+            // the line never reaches (above the workspace), as missing.
+            return if self.missing_does_not_run() {
+                FileText::Missing
+            } else {
+                FileText::Unreadable
+            };
         }
         // Check before opening: opening a FIFO or device would block.
         let Ok(metadata) = std::fs::metadata(file) else {

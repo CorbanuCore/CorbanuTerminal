@@ -412,6 +412,10 @@ fn bring_back(folders: &mut Folders, held: bool) {
     if folders.lost {
         return;
     }
+    // #1449: what comes back was possible before the change.
+    folders
+        .failed_climbs
+        .retain(|folder| !list.contains(folder));
     for folder in list {
         work::step();
         if folder != folders.cwd && !folders.others.contains(&folder) {

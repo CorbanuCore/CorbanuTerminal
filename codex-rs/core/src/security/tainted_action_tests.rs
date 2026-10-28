@@ -9135,6 +9135,103 @@ fn issue_1436_checks_are_linear() {
     }
 }
 
+/// #1449: two needless prompts #1446 added, both quiet before it. A
+/// loop's later passes (from the folders above the workspace a failed `cd
+/// sub` would lead to) do not ask for a script missing there, and a `cd
+/// sub; …; cd ..` loop in a deep folder stays within the branch-folder
+/// limit: a shell in a folder leaves it by `cd ..`.
+#[cfg(unix)]
+#[test]
+fn issue_1449_loop_passes_add_no_needless_prompts() {
+    let files = [
+        ("sub/build.sh", "true\n"),
+        ("sub/tool.py", "print(1)\n"),
+        ("post.sh", "true\n"),
+    ];
+    let mut wrong = Vec::new();
+    for line in [
+        "for i in 1 2; do cd sub; ./build.sh; cd ..; done",
+        "for i in 1 2; do cd sub; bash build.sh; cd ..; done",
+        "for i in 1 2; do cd sub && ./build.sh; cd ..; done",
+        "for i in 1 2; do cd sub; python3 tool.py; cd ..; done",
+        "for x in a b; do cd sub; make; cd ..; done; make > out",
+        "for x in a b; do cd sub; make; cd ..; done && ./post.sh",
+    ] {
+        if in_workspace(&files, line).is_some() {
+            wrong.push(line.to_string());
+        }
+    }
+    let deep = format!("/w{}", "/d".repeat(20));
+    for cwd in ["/work", "/home/u/src/proj", "/a/b/c/d/e/f/g/h", &deep] {
+        for line in [
+            "for x in a b; do cd sub; make; cd ..; done; make > out",
+            "for x in a b; do cd build; cmake ..; cd ..; done; echo ok > log",
+        ] {
+            if classify_fixture(&shell_in(cwd, &["bash", "-lc", line])).is_some() {
+                wrong.push(format!("{cwd}: {line}"));
+            }
+        }
+    }
+    assert_eq!(wrong, Vec::<String>::new());
+}
+
+/// #1449: what #1446 added still asks: a pass from a folder above still
+/// reads the script found there, and past the branch-folder limit the
+/// folder after the loop is not known.
+#[cfg(unix)]
+#[test]
+fn issue_1449_loop_passes_keep_their_checks() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let work = root.path().join("a/w");
+    std::fs::create_dir_all(&work).expect("a/w");
+    std::fs::write(work.join("run.sh"), "true\n").expect("run.sh");
+    std::fs::write(root.path().join("a/run.sh"), "corbanu vault get k\n").expect("run.sh");
+    let line = "for i in 1 2; do cd nope; cd ..; ./run.sh; done";
+    assert_eq!(
+        classify_with(
+            &shell_in(&work.to_string_lossy(), &["bash", "-lc", line]),
+            &fixture(HOME),
+            Some(root.path()),
+        ),
+        Some(ProtectedActionKind::Vault)
+    );
+    // Each pass from `x` leaves `x/a`, never reached by `cd ..`: past
+    // the limit.
+    assert!(
+        script("cd /tmp/w; for i in 1 2; do cd a; cd b; cd ..; done; echo x >> .zshrc").is_some()
+    );
+    // A missing script in a pass from a folder this reading cannot see.
+    assert!(script("for i in 1 2; do ./run.sh; cd \"$X\"; done").is_some());
+}
+
+/// #1449: the checks stay linear.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Unix fixtures (POSIX paths and shell syntax); Windows coverage is #691"
+)]
+fn issue_1449_checks_are_linear() {
+    let deep = format!("cd /w{}; ", "/d".repeat(30));
+    for (label, unit) in [
+        (
+            "climbs",
+            "for x in a b; do cd sub; ./b.sh; cd ..; done; ".to_string(),
+        ),
+        (
+            "deep climbs",
+            format!("{deep}for x in a b; do cd sub; make; cd ..; done; "),
+        ),
+        (
+            "descents",
+            "cd /tmp/w; for i in 1 2; do cd a; cd b; cd ..; done; ".to_string(),
+        ),
+    ] {
+        work::assert_linear(label, |scale| {
+            let _ = script(&unit.repeat(40 * scale));
+        });
+    }
+}
+
 /// #1422: more spellings that run `mapfile -C`, aliases, `compgen -C`,
 /// and folder changes that run a program rather than the builtin (`CD`,
 /// `env cd`), so the folder they leave is not followed.

@@ -227,6 +227,7 @@ impl Classifier {
             unseen_in_substitution: false,
             searched: false,
             back_unsure: false,
+            failed_climbs: Vec::new(),
         };
         let mut found = Found {
             braces: command.iter().any(|arg| arg.contains('{')),
@@ -720,6 +721,7 @@ impl Classifier {
                     unseen_in_substitution: folders.unseen_in_substitution,
                     searched: folders.searched,
                     back_unsure: folders.back_unsure,
+                    failed_climbs: folders.failed_climbs.clone(),
                 };
                 let reading = quoted::commands(&word.text);
                 found.unreadable |= reading.too_deep || reading.unsure;
@@ -891,7 +893,11 @@ impl Classifier {
             let path = self.homes.resolve(&file.text, &sed.cwd);
             match (rewritten, self.read_file(&path, &file.text, &sed.cwd)) {
                 (false, FileText::Text(text)) => chunks.push(text),
-                (false, FileText::Missing) if sed.other_folder => return,
+                (false, FileText::Missing)
+                    if sed.other_folder || (!sed.unknown && self.missing_does_not_run()) =>
+                {
+                    return;
+                }
                 _ => {
                     self.note(ProtectedActionKind::UnseenCode);
                     return;
@@ -966,6 +972,10 @@ impl Classifier {
         certain: bool,
     ) {
         let before = folders.cwd.clone();
+        // #1449: only the climb below sets it.
+        if unknown_folder::CHANGERS.contains(&name) {
+            folders.failed_climbs.clear();
+        }
         if !self.change_folder(name, args, folders, variables) {
             return;
         }
@@ -992,6 +1002,25 @@ impl Classifier {
                 None => folders.cwd.clone(),
             });
         }
+        // #1449: `cd ..` (no options) from a folder the shell is in goes to
+        // its parent; where it stays, the line is only if it failed.
+        let climb = name == "cd"
+            && args.len() == 1
+            && relative.is_some_and(|target| {
+                target
+                    .split('/')
+                    .all(|part| part == ".." || part.is_empty())
+                    && target.starts_with("..")
+            });
+        let failed: Vec<String> = if climb && !certain {
+            possible
+                .iter()
+                .filter(|folder| !reached.contains(folder))
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        };
         if certain {
             // D194: what follows runs only where the change happened.
             certain_cd::set_aside(folders, std::mem::replace(&mut possible, reached));
@@ -1005,6 +1034,9 @@ impl Classifier {
             }
         }
         too_many(folders);
+        if !folders.lost {
+            folders.failed_climbs = failed;
+        }
     }
 
     /// #1309: the folders a command's relative words resolve against from
