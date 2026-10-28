@@ -7360,7 +7360,7 @@ fn d194_zsh_append_redirections_keep_a_change_certain() {
         .into_iter()
         .filter(|script| line(script).is_some())
         .collect::<Vec<_>>();
-        assert_eq!(unexpectedly_asked, Vec::<&str>::new(), "{shell}");
+        eprintln!("PROBE {shell} unexpectedly_asked: {unexpectedly_asked:?}");
         // These ask: a file of the home, or written in the folder before.
         let unexpectedly_quiet = [
             "cd /home/fixture; make >>| .zshenv",
@@ -7386,8 +7386,9 @@ fn d194_zsh_append_redirections_keep_a_change_certain() {
         .into_iter()
         .filter(|script| line(script).is_none())
         .collect::<Vec<_>>();
-        assert_eq!(unexpectedly_quiet, Vec::<&str>::new(), "{shell}");
+        eprintln!("PROBE {shell} unexpectedly_quiet: {unexpectedly_quiet:?}");
     }
+    panic!("PROBE done");
 }
 
 /// D194: following certain changes stays linear.
@@ -7897,7 +7898,7 @@ fn issue_1410_a_cd_to_an_unseen_folder_is_unknown() {
     .into_iter()
     .filter(|command| script(command).is_none())
     .collect::<Vec<_>>();
-    assert_eq!(quiet, Vec::<&str>::new());
+    eprintln!("PROBE quiet: {quiet:?}");
     // Already asked: git's own `-C` (or work tree) the classifier cannot
     // see; a home the line may still be in (review 1: the change keeps the
     // other folders); a nested script's folder under `env -C`, even a fixed
@@ -7910,7 +7911,9 @@ fn issue_1410_a_cd_to_an_unseen_folder_is_unknown() {
         "X=ZDOTDIR; cd \"${!X}\" && echo x >> .zshrc",
         "env -C /work sh -c 'git pull'",
     ] {
-        assert!(script(command).is_some(), "{command}");
+        if script(command).is_none() {
+            eprintln!("PROBE must-ask but quiet: {command}");
+        }
     }
     for command in [
         // D195: reading the working tree stays quiet.
@@ -7925,8 +7928,11 @@ fn issue_1410_a_cd_to_an_unseen_folder_is_unknown() {
         "DIR=$(cd \"$X\" && pwd); make > log",
         "echo \"$(cd \"$X\" && pwd)\" > log",
     ] {
-        assert_eq!(script(command), None, "{command}");
+        if let Some(k) = script(command) {
+            eprintln!("PROBE must-quiet but asked: {command} {k:?}");
+        }
     }
+    panic!("PROBE done");
 }
 
 /// D195: the check stays linear in the number of folder flags.
