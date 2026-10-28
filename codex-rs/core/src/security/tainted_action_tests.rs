@@ -7344,6 +7344,7 @@ fn d194_uncertain_changes_still_ask() {
 /// line), so they do not end a command: a change stays certain.
 #[test]
 fn d194_zsh_append_redirections_keep_a_change_certain() {
+    let mut probe: Vec<String> = Vec::new();
     for shell in ["zsh", "bash"] {
         let line = |script: &str| kind(&[shell, "-lc", script]);
         // Quiet: the file is written where the change went, and `cp` is
@@ -7360,7 +7361,9 @@ fn d194_zsh_append_redirections_keep_a_change_certain() {
         .into_iter()
         .filter(|script| line(script).is_some())
         .collect::<Vec<_>>();
-        eprintln!("PROBE {shell} unexpectedly_asked: {unexpectedly_asked:?}");
+        probe.push(format!(
+            "PROBE {shell} unexpectedly_asked: {unexpectedly_asked:?}"
+        ));
         // These ask: a file of the home, or written in the folder before.
         let unexpectedly_quiet = [
             "cd /home/fixture; make >>| .zshenv",
@@ -7386,9 +7389,11 @@ fn d194_zsh_append_redirections_keep_a_change_certain() {
         .into_iter()
         .filter(|script| line(script).is_none())
         .collect::<Vec<_>>();
-        eprintln!("PROBE {shell} unexpectedly_quiet: {unexpectedly_quiet:?}");
+        probe.push(format!(
+            "PROBE {shell} unexpectedly_quiet: {unexpectedly_quiet:?}"
+        ));
     }
-    panic!("PROBE done");
+    panic!("PROBE {probe:#?}");
 }
 
 /// D194: following certain changes stays linear.
@@ -7858,6 +7863,7 @@ fn d195_git_working_tree_writes_in_an_unknown_folder_ask() {
 /// written relative to it, or git writing the working tree (D195), asks.
 #[test]
 fn issue_1410_a_cd_to_an_unseen_folder_is_unknown() {
+    let mut probe: Vec<String> = Vec::new();
     // These were quiet before #1410.
     let quiet = [
         "cd \"$ZDOTDIR\" && git checkout -- .zshrc",
@@ -7898,7 +7904,7 @@ fn issue_1410_a_cd_to_an_unseen_folder_is_unknown() {
     .into_iter()
     .filter(|command| script(command).is_none())
     .collect::<Vec<_>>();
-    eprintln!("PROBE quiet: {quiet:?}");
+    probe.push(format!("PROBE quiet: {quiet:?}"));
     // Already asked: git's own `-C` (or work tree) the classifier cannot
     // see; a home the line may still be in (review 1: the change keeps the
     // other folders); a nested script's folder under `env -C`, even a fixed
@@ -7912,7 +7918,7 @@ fn issue_1410_a_cd_to_an_unseen_folder_is_unknown() {
         "env -C /work sh -c 'git pull'",
     ] {
         if script(command).is_none() {
-            eprintln!("PROBE must-ask but quiet: {command}");
+            probe.push(format!("PROBE must-ask but quiet: {command}"));
         }
     }
     for command in [
@@ -7929,10 +7935,10 @@ fn issue_1410_a_cd_to_an_unseen_folder_is_unknown() {
         "echo \"$(cd \"$X\" && pwd)\" > log",
     ] {
         if let Some(k) = script(command) {
-            eprintln!("PROBE must-quiet but asked: {command} {k:?}");
+            probe.push(format!("PROBE must-quiet but asked: {command} {k:?}"));
         }
     }
-    panic!("PROBE done");
+    panic!("PROBE {probe:#?}");
 }
 
 /// D195: the check stays linear in the number of folder flags.
