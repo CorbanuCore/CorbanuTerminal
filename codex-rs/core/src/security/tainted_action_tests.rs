@@ -9175,33 +9175,90 @@ fn issue_1449_loop_passes_add_no_needless_prompts() {
     assert_eq!(wrong, Vec::<String>::new());
 }
 
-/// #1449: what #1446 added still asks: a pass from a folder above still
-/// reads the script found there, and past the branch-folder limit the
-/// folder after the loop is not known.
+/// #1449: what #1446 added still asks. A branch pass still reads the
+/// script it finds in the folder above; the folders such passes reach
+/// count after the loop; a `cd ..` that may not run in the loop's shell
+/// (a substitution, subshell, function, condition, pipeline or background
+/// job) still leaves the folder it is in; a later pass (round 2) and a
+/// file the line names elsewhere still ask when missing; past the
+/// branch-folder limit the folder after the loop is not known.
 #[cfg(unix)]
 #[test]
 fn issue_1449_loop_passes_keep_their_checks() {
+    use ProtectedActionKind::*;
     let root = tempfile::tempdir().expect("tempdir");
     let work = root.path().join("a/w");
     std::fs::create_dir_all(&work).expect("a/w");
     std::fs::write(work.join("run.sh"), "true\n").expect("run.sh");
     std::fs::write(root.path().join("a/run.sh"), "corbanu vault get k\n").expect("run.sh");
-    let line = "for i in 1 2; do cd nope; cd ..; ./run.sh; done";
-    assert_eq!(
+    let in_w = |line: &str| {
         classify_with(
             &shell_in(&work.to_string_lossy(), &["bash", "-lc", line]),
             &fixture(HOME),
             Some(root.path()),
+        )
+    };
+    let mut wrong = Vec::new();
+    for (line, expected) in [
+        // Only the pass from `a` reads `a/run.sh`.
+        ("for i in 1 2; do ./run.sh; cd nope; cd ..; done", Vault),
+        // A file the line names elsewhere may be made there.
+        (
+            "for i in 1 2; do bash t.sh; cd nope; cd ..; cp ../x t.sh; done",
+            UnseenCode,
         ),
-        Some(ProtectedActionKind::Vault)
-    );
+        // A later pass from where the one before ended (round 2).
+        (
+            "for i in 1 2; do bash run.sh; cd ~/Downloads; done",
+            UnseenCode,
+        ),
+    ] {
+        let found = in_w(line);
+        if found != Some(expected) {
+            wrong.push(format!("{line}: {found:?}"));
+        }
+    }
+    // A loop that climbs ends where its passes went.
+    for (cwd, line) in [
+        (
+            "/home/fixture/w/a",
+            "for i in 1 2; do cd nope; cd ..; done; echo x >> .zshrc",
+        ),
+        (
+            "/home/fixture/a/b",
+            "for x in a b; do cd sub; make; cd ..; done; echo x >> .zshrc",
+        ),
+    ] {
+        if classify_fixture(&shell_in(cwd, &["bash", "-lc", line])).is_none() {
+            wrong.push(format!("{cwd}: {line}"));
+        }
+    }
+    // A `cd ..` the loop's shell may not run: pass 2 may write
+    // `~/sub/../.zshrc`.
+    for climb in [
+        "P=$(cd .. && pwd)",
+        "(cd ..)",
+        "(make; cd ..; make)",
+        "make || cd ..",
+        "make && cd ..",
+        "cd .. &",
+        "cd .. | cat",
+        "if make; then cd ..; fi",
+        "f() { make; cd ..; make; }",
+        "case $x in a) make; cd ..; make;; esac",
+        "for j in $J; do cd ..; done",
+    ] {
+        let line = format!("for i in 1 2; do echo x >> ../.zshrc; cd sub; {climb}; done");
+        if classify_fixture(&shell_in("/home/fixture", &["bash", "-lc", &line])).is_none() {
+            wrong.push(line);
+        }
+    }
     // Each pass from `x` leaves `x/a`, never reached by `cd ..`: past
     // the limit.
-    assert!(
-        script("cd /tmp/w; for i in 1 2; do cd a; cd b; cd ..; done; echo x >> .zshrc").is_some()
-    );
-    // A missing script in a pass from a folder this reading cannot see.
-    assert!(script("for i in 1 2; do ./run.sh; cd \"$X\"; done").is_some());
+    if script("cd /tmp/w; for i in 1 2; do cd a; cd b; cd ..; done; echo x >> .zshrc").is_none() {
+        wrong.push("descents".to_string());
+    }
+    assert_eq!(wrong, Vec::<String>::new());
 }
 
 /// #1449: the checks stay linear.

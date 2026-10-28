@@ -228,6 +228,8 @@ impl Classifier {
             searched: false,
             back_unsure: false,
             failed_climbs: Vec::new(),
+            plain: false,
+            replayed: 0,
         };
         let mut found = Found {
             braces: command.iter().any(|arg| arg.contains('{')),
@@ -722,6 +724,8 @@ impl Classifier {
                     searched: folders.searched,
                     back_unsure: folders.back_unsure,
                     failed_climbs: folders.failed_climbs.clone(),
+                    plain: false,
+                    replayed: folders.replayed,
                 };
                 let reading = quoted::commands(&word.text);
                 found.unreadable |= reading.too_deep || reading.unsure;
@@ -894,7 +898,8 @@ impl Classifier {
             match (rewritten, self.read_file(&path, &file.text, &sed.cwd)) {
                 (false, FileText::Text(text)) => chunks.push(text),
                 (false, FileText::Missing)
-                    if sed.other_folder || (!sed.unknown && self.missing_does_not_run()) =>
+                    if sed.other_folder
+                        || (!sed.unknown && self.missing_does_not_run(&file.text)) =>
                 {
                     return;
                 }
@@ -1012,7 +1017,7 @@ impl Classifier {
                     .all(|part| part == ".." || part.is_empty())
                     && target.starts_with("..")
             });
-        let failed: Vec<String> = if climb && !certain {
+        let failed: Vec<String> = if climb && !certain && folders.plain {
             possible
                 .iter()
                 .filter(|folder| !reached.contains(folder))
@@ -1091,7 +1096,7 @@ impl Classifier {
 /// #1309: past `MAX_POSSIBLE_FOLDERS`, or with one too long, the folder
 /// is unknown.
 pub(super) fn too_many(folders: &mut Folders) {
-    if folders.others.len() >= MAX_POSSIBLE_FOLDERS
+    if folders.others.len() >= MAX_POSSIBLE_FOLDERS + folders.replayed
         || folders
             .others
             .iter()
@@ -1100,6 +1105,7 @@ pub(super) fn too_many(folders: &mut Folders) {
         folders.unchecked = true;
         folders.lost = true;
         folders.others.clear();
+        folders.replayed = 0;
     }
 }
 

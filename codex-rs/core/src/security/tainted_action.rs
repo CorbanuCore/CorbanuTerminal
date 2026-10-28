@@ -577,6 +577,8 @@ impl Classifier {
             unknown_folder: 0,
             unseen_folder: false,
             extra_pass: false,
+            unsure_folder: false,
+            line_names: Vec::new(),
             launched: launched_git::Launch::default(),
             substitution_budget: Budget {
                 left: MAX_SUBSTITUTED_BYTES,
@@ -1135,6 +1137,9 @@ struct LoopPass {
     /// #1449: `MAX_BRANCH_FOLDERS` plus the depth of the folders the loop
     /// starts in, up to `MAX_BRANCH_FOLDERS_CAP`.
     limit: usize,
+    /// #1449: its body is plain (`plain_body`), so a `cd ..` in it may be
+    /// `Folders::plain`.
+    plain: bool,
 }
 
 /// #1436: the folders a reading may be in. #1449: less those it is in
@@ -1150,6 +1155,61 @@ fn possible_folders(folders: &Folders) -> Vec<String> {
         )
         .cloned()
         .collect()
+}
+
+/// #1449: whether a loop's body (`commands`, between its first command
+/// and its `done`) is plain: no group, subshell, function, background job,
+/// compound command or `do` but its own, so a command in it that follows
+/// `;` or a line break runs in the loop's shell on each pass.
+/// Substitutions are their own shells.
+fn plain_body(commands: &[SimpleCommand]) -> bool {
+    let mut body = false;
+    commands
+        .iter()
+        .filter(|command| !command.substituted)
+        .all(|command| {
+            work::step();
+            let first = command.words.first().map(String::as_str);
+            let starts_body = first == Some("do") && !std::mem::replace(&mut body, true);
+            command.after != certain_cd::Joint::Other
+                && (starts_body
+                    || !first.is_some_and(|word| {
+                        matches!(
+                            word,
+                            "do" | "done"
+                                | "if"
+                                | "then"
+                                | "elif"
+                                | "else"
+                                | "fi"
+                                | "case"
+                                | "esac"
+                                | "while"
+                                | "until"
+                                | "for"
+                                | "select"
+                                | "function"
+                                | "coproc"
+                                | "!"
+                                | "{"
+                                | "}"
+                        )
+                    }))
+        })
+}
+
+/// #1449: how many of `commands`' words have each basename; `None` when a
+/// word may name any file (a value, a substitution or a glob).
+fn line_names(commands: &[SimpleCommand]) -> Option<HashMap<String, usize>> {
+    let mut names = HashMap::new();
+    for word in commands.iter().flat_map(|command| &command.words) {
+        work::step();
+        if word.contains(['$', '`', '*', '?', '[']) || word.contains(shell::UNSEEN_OUTPUT) {
+            return None;
+        }
+        *names.entry(basename(word).to_string()).or_insert(0) += 1;
+    }
+    Some(names)
 }
 
 /// #1449: the branch-folder limit of a loop that starts in `folders`.
@@ -1258,9 +1318,18 @@ struct Folders {
     /// #1449: folders of `others` the line is in only if the `cd ..` (a
     /// climb, `..` alone) just before failed there. A shell in a folder
     /// leaves it by `cd ..` (its parent was on the way in), so a loop's
-    /// later passes do not start there; the line's own checks still count
-    /// them. Any other change empties it.
+    /// branch passes do not start there; the line's own checks still count
+    /// them. Only a `plain` climb sets it; any other change empties it.
     failed_climbs: Vec<String>,
+    /// #1449: the command being read runs in this shell whenever the line
+    /// reaches it: a `cd` that starts the line or follows `;` or a line
+    /// break, not in a substitution, and not followed by `|` or `&`. Not
+    /// in a group, subshell, function, condition (`&&`, `||`, `then`),
+    /// pipeline or background job, where the shell may stay where it was.
+    plain: bool,
+    /// #1449: folders `others` may hold besides `MAX_POSSIBLE_FOLDERS`:
+    /// those a replayed loop's passes reached, kept after it.
+    replayed: usize,
 }
 
 struct Classifier {
@@ -1324,9 +1393,17 @@ struct Classifier {
     /// #1436: the command being judged runs in a folder the word reading
     /// cannot see, so a script named relative to it may be any file.
     unseen_folder: bool,
-    /// #1449: reading one of a loop's later passes (`LoopPass`), from a
-    /// folder the line may not reach: a script missing there does not run.
+    /// #1449: reading one of a loop's branch passes (`LoopPass`, round 0),
+    /// from a folder the line may not reach: a script missing there does
+    /// not run.
     extra_pass: bool,
+    /// #1449: like `unseen_folder`, for a change not followed or a word
+    /// the quote-aware reading cannot know (`unfollowed`, `unchecked`).
+    unsure_folder: bool,
+    /// #1449: for each line being read (the action's, then nested ones),
+    /// how many of its words have each basename; `None` when a word may
+    /// name any file (a value, a substitution or a glob).
+    line_names: Vec<Option<HashMap<String, usize>>>,
     /// #1268: inside a script a launcher runs with its input added after
     /// it (`xargs env -S'git config'`) or put into its text (`xargs -I% sh
     /// -c 'git config %'`, where any word may be input).
@@ -1692,6 +1769,8 @@ impl Classifier {
             searched: false,
             back_unsure: false,
             failed_climbs: Vec::new(),
+            plain: false,
+            replayed: 0,
         };
         let mut variables: HashMap<String, String> = HashMap::new();
         for (name, value) in [
@@ -1748,6 +1827,7 @@ impl Classifier {
         let mut pass: Option<LoopPass> = None;
         let mut cursor = 0;
         let outer_extra_pass = self.extra_pass;
+        self.line_names.push(line_names(&lexed.commands));
         while let Some(simple) = lexed.commands.get(cursor) {
             work::step();
             let index = cursor;
@@ -1774,6 +1854,12 @@ impl Classifier {
                         climbs: changing_loop.climbs,
                         counts: (changing_loop.back, changing_loop.stack),
                         limit: branch_limit(&start),
+                        plain: plain_body(
+                            lexed
+                                .commands
+                                .get(changing_loop.start + 1..changing_loop.end)
+                                .unwrap_or_default(),
+                        ),
                         folders: start,
                         branches: Vec::new(),
                         seen: Vec::new(),
@@ -1783,10 +1869,9 @@ impl Classifier {
                     folders.unseen = true;
                 }
             }
-            // #1449: a later pass of a loop being read again; a pass that
-            // starts unseen (round 4) still sets `unseen_folder`.
+            // #1449: a branch pass of a loop being read again.
             self.extra_pass =
-                outer_extra_pass || pass.as_ref().is_some_and(|current| current.round != 1);
+                outer_extra_pass || pass.as_ref().is_some_and(|current| current.round == 0);
             let (words, unseen, skipped) =
                 substitute(simple, &variables, &mut self.substitution_budget);
             // #1436: a value may climb too (`P=../..; … > $P/.zshrc`).
@@ -1863,6 +1948,19 @@ impl Classifier {
             if aliases.read(&words) {
                 self.note(ProtectedActionKind::UnseenCode);
             }
+            folders.plain = pass.as_ref().is_some_and(|current| current.plain)
+                && !simple.substituted
+                && matches!(
+                    simple.after,
+                    certain_cd::Joint::Start | certain_cd::Joint::Seq
+                )
+                && simple.words.first().is_some_and(|word| word == "cd")
+                && lexed.commands.get(index + 1).is_none_or(|next| {
+                    !matches!(
+                        next.after,
+                        certain_cd::Joint::Pipe | certain_cd::Joint::Other
+                    )
+                });
             self.simple_command(
                 simple,
                 &words,
@@ -1975,6 +2073,16 @@ impl Classifier {
                                 variables = values;
                                 // Past the limit the line may be anywhere.
                                 folders.unseen |= current.overflow;
+                                // #1449: and in any folder a pass started
+                                // from or left (`cd nope; cd ..` climbs),
+                                // up to the limit, past `too_many`.
+                                for folder in std::mem::take(&mut current.seen) {
+                                    work::step();
+                                    if folder != folders.cwd && !folders.others.contains(&folder) {
+                                        folders.others.push(folder);
+                                    }
+                                }
+                                folders.replayed = folders.replayed.max(folders.others.len());
                             }
                             pass = None;
                         }
@@ -1983,6 +2091,7 @@ impl Classifier {
             }
         }
         self.extra_pass = outer_extra_pass;
+        self.line_names.pop();
         if !splits.is_empty() {
             let here: Vec<&str> = self.visited.iter().map(String::as_str).collect();
             let roots = std::cell::OnceCell::new();
@@ -2085,6 +2194,8 @@ impl Classifier {
             || folders.unseen_in_substitution
             || folders.lost
             || self.unknown_folder > 0;
+        let outer_unsure_folder = self.unsure_folder;
+        self.unsure_folder = outer_unsure_folder || folders.unfollowed || folders.unchecked;
         let lower: Vec<String> = words.iter().map(|word| word.to_lowercase()).collect();
         let (hidden, mut unchecked) = self.word_marks(simple, words, variables);
         loops.read(&simple.words);
@@ -2551,6 +2662,7 @@ impl Classifier {
         self.scripts_of(simple, words, unseen, command.as_ref(), &cwd, depth);
         self.path_programs(words, command.as_ref(), &cwd, depth);
         self.unseen_folder = outer_unseen_folder;
+        self.unsure_folder = outer_unsure_folder;
     }
 
     /// A program named by a path (`./python3`, `./env`, `/usr/bin/env`) is
@@ -2605,7 +2717,9 @@ impl Classifier {
         match self.read_file(&file, word, cwd) {
             FileText::Binary => {}
             FileText::Missing
-                if data || (depth == 0 && self.argv0 == word) || self.missing_does_not_run() => {}
+                if data
+                    || (depth == 0 && self.argv0 == word)
+                    || self.missing_does_not_run(word) => {}
             FileText::Missing | FileText::Unreadable => {
                 self.ran.push(file);
                 self.note(ProtectedActionKind::UnseenCode);
@@ -2812,12 +2926,29 @@ impl Classifier {
         }
     }
 
-    /// #1449: in a loop's later pass (`extra_pass`), from a folder this
-    /// reading can see, a script or program file missing there does not
-    /// run: the pass is from a folder the line may not reach. The first
-    /// pass reads it as before.
-    fn missing_does_not_run(&self) -> bool {
-        self.extra_pass && !self.unseen_folder
+    /// #1449: in a loop's branch pass (`extra_pass`), from a folder this
+    /// reading can see, a script or program file `word` missing there does
+    /// not run: the pass is from a folder the line may not reach. Not
+    /// under Windows path rules (where a file may be missing only because
+    /// it is not opened), nor when a line being read names the file
+    /// elsewhere, which may make it (`cp ../a run.sh`), or has a word that
+    /// may name any file. The first pass reads it as before.
+    fn missing_does_not_run(&self, word: &str) -> bool {
+        let name = basename(word);
+        self.extra_pass
+            && !self.unseen_folder
+            && !self.unsure_folder
+            && !self.homes.windows_paths()
+            && self
+                .line_names
+                .iter()
+                .map(|names| {
+                    names
+                        .as_ref()
+                        .map(|names| names.get(name).copied().unwrap_or(0))
+                })
+                .try_fold(0, |total, count| count.map(|count| total + count))
+                .is_some_and(|total| total <= 1)
     }
 
     /// A script the command certainly runs: read in full or fail closed.
@@ -3003,7 +3134,7 @@ impl Classifier {
         }
         self.ran.push(file.to_string());
         let unreadable = |classifier: &mut Self, missing: bool| {
-            if (need == Script::Required && !classifier.missing_does_not_run()) || !missing {
+            if (need == Script::Required && !classifier.missing_does_not_run(word)) || !missing {
                 classifier.note(ProtectedActionKind::UnseenCode);
             }
         };
@@ -3028,9 +3159,10 @@ impl Classifier {
             return self.read_windows_file(word, cwd);
         }
         if !self.homes.lookups_allowed(file) {
-            // #1449: in a loop's later pass, which may start from a folder
-            // the line never reaches (above the workspace), as missing.
-            return if self.missing_does_not_run() {
+            // #1449: in a loop's branch pass, which may start from a folder
+            // the line never reaches (above the workspace), a name relative
+            // to it as missing.
+            return if self.relative_place(word) && self.missing_does_not_run(word) {
                 FileText::Missing
             } else {
                 FileText::Unreadable
