@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# #1430 CI probe: throwaway packaging-input change, not for merge.
 """Stage one or more Codex npm packages for release."""
 
 import argparse
