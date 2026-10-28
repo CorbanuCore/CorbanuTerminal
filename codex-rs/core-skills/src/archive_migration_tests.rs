@@ -58,6 +58,92 @@ fn archive(entries: &[(&str, &[u8], u32)]) -> Vec<u8> {
 }
 
 #[test]
+fn archive_migration_symlink_members_are_skipped_without_output() {
+    let temp = tempfile::tempdir().unwrap();
+    let dest = temp.path().join("destination");
+    let outside = temp.path().join("sentinel");
+    std::fs::create_dir(&dest).unwrap();
+    std::fs::write(&outside, b"unchanged").unwrap();
+    let target = outside.to_str().unwrap().as_bytes();
+    let bytes = archive(&[
+        ("bundle/link-only/nested/link", target, 0o120777),
+        ("bundle/regular", target, 0o100644),
+    ]);
+
+    extract(&bytes, &dest).unwrap();
+
+    for path in ["link-only/nested/link", "link-only"] {
+        assert_eq!(
+            std::fs::symlink_metadata(dest.join(path))
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::NotFound
+        );
+    }
+    assert_eq!(std::fs::read(dest.join("regular")).unwrap(), target);
+    assert_eq!(std::fs::read_dir(&dest).unwrap().count(), 1);
+    assert_eq!(std::fs::read(&outside).unwrap(), b"unchanged");
+}
+
+#[test]
+fn archive_migration_unsafe_symlink_names_are_rejected() {
+    let temp = tempfile::tempdir().unwrap();
+    let outside = temp.path().join("outside");
+    std::fs::create_dir(&outside).unwrap();
+    let sentinel = outside.join("sentinel");
+    std::fs::write(&sentinel, b"unchanged").unwrap();
+    let names = [
+        "bundle/../outside/sentinel".to_owned(),
+        "bundle/nested/../../outside/sentinel".to_owned(),
+        sentinel.to_str().unwrap().to_owned(),
+    ];
+    for (index, name) in names.iter().enumerate() {
+        let dest = temp.path().join(format!("destination-{index}"));
+        std::fs::create_dir(&dest).unwrap();
+        let bytes = archive(&[(name.as_str(), b"bad", 0o120777)]);
+
+        assert!(extract(&bytes, &dest).is_err(), "accepted {name}");
+
+        assert_eq!(std::fs::read_dir(&dest).unwrap().count(), 0);
+        assert_eq!(std::fs::read(&sentinel).unwrap(), b"unchanged");
+    }
+}
+
+#[test]
+fn archive_migration_symlink_members_preserve_regular_output_in_both_orders() {
+    for link_first in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let dest = temp.path().join("destination");
+        let outside = temp.path().join("sentinel");
+        std::fs::create_dir(&dest).unwrap();
+        std::fs::write(&outside, b"unchanged").unwrap();
+        let target = outside.to_str().unwrap().as_bytes();
+        let regular = ("bundle/shared", b"regular contents".as_slice(), 0o100644);
+        let link = ("./bundle/shared", target, 0o120777);
+        let entries = if link_first {
+            [link, regular]
+        } else {
+            [regular, link]
+        };
+
+        extract(&archive(&entries), &dest).unwrap();
+
+        assert!(
+            std::fs::symlink_metadata(dest.join("shared"))
+                .unwrap()
+                .file_type()
+                .is_file()
+        );
+        assert_eq!(
+            std::fs::read(dest.join("shared")).unwrap(),
+            b"regular contents"
+        );
+        assert_eq!(std::fs::read_dir(&dest).unwrap().count(), 1);
+        assert_eq!(std::fs::read(&outside).unwrap(), b"unchanged");
+    }
+}
+
+#[test]
 fn archive_migration_valid_nested_regular_files() {
     let temp = tempfile::tempdir().unwrap();
     let dest = temp.path().join("destination");

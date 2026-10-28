@@ -1016,20 +1016,6 @@ impl ToolOrchestrator {
             user_namespaces_warned_at.is_some() && approved_by_person_now,
             user_namespaces_warned_at,
         );
-        // A retry of this run (after a sandbox or network denial) reuses
-        // these permissions: the same approved command, so the same answer.
-        if user_namespaces_allowed {
-            crate::security::user_namespaces::note_allowed_run(
-                tool_ctx.session.thread_id(),
-                &turn_ctx.sub_id,
-                &tool_ctx.call_id,
-            );
-            tracing::info!(
-                target: "codex_core::security::tainted_action",
-                call_id = %tool_ctx.call_id,
-                "user namespaces allowed for this run by the person's approval of its request to run outside the sandbox (Moderate)"
-            );
-        }
         let (denied_exec_server_permissions, permissions) = if !user_namespaces_allowed
             && crate::security::user_namespaces::rule_applies(
                 protected_level,
@@ -1218,6 +1204,22 @@ impl ToolOrchestrator {
             return Ok(Round::Stale {
                 person_asked: approved_by == Some(ApprovalResolutionSource::User),
             });
+        }
+        // #1048: only a round that reaches its first attempt gets an
+        // allowed-run note. A stale round never ran; its note must not hide
+        // a later denial for the same call. A sandbox/network retry reuses
+        // these permissions and this one note.
+        if user_namespaces_allowed {
+            crate::security::user_namespaces::note_allowed_run(
+                tool_ctx.session.thread_id(),
+                &turn_ctx.sub_id,
+                &tool_ctx.call_id,
+            );
+            tracing::info!(
+                target: "codex_core::security::tainted_action",
+                call_id = %tool_ctx.call_id,
+                "user namespaces allowed for this run by the person's approval of its request to run outside the sandbox (Moderate)"
+            );
         }
         let initial_attempt_start = Instant::now();
         let (first_result, first_deferred_network_approval) = Self::run_attempt(
@@ -2804,3 +2806,8 @@ mod tests {
 #[cfg(test)]
 #[path = "orchestrator_stale_tests.rs"]
 mod stale_tests;
+
+#[cfg(test)]
+#[cfg(target_os = "linux")]
+#[path = "orchestrator_namespace_note_tests.rs"]
+mod namespace_note_tests;

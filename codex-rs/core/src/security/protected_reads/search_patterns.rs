@@ -16,8 +16,9 @@ use std::collections::HashSet;
 const SEPARATORS: [&str; 9] = ["|", "||", "&&", ";", "&", "|&", "(", ")", "!"];
 
 /// Words after which the next word is a program.
-const PROGRAM_BEFORE: [&str; 10] = [
-    "then", "do", "else", "{", "sudo", "env", "time", "nohup", "command", "exec",
+const PROGRAM_BEFORE: [&str; 14] = [
+    "if", "elif", "while", "until", "then", "do", "else", "{", "sudo", "env", "time", "nohup",
+    "command", "exec",
 ];
 
 #[derive(Clone, Copy, PartialEq)]
