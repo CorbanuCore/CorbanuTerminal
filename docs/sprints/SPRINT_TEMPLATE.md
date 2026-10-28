@@ -68,3 +68,5 @@ updated: YYYY-MM-DD
 - [ ] Parallel handoff, if applicable: commit, contract versions, scope audit and combined-tree test evidence recorded.
 - [ ] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/<plan-slug>/`.
+
+<!-- #1430 CI probe: throwaway, not for merge -->
