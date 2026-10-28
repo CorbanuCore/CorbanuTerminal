@@ -163,3 +163,15 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod ci_1479_canary {
+    fn retry_url(base_url: Option<String>, retry_count: usize) -> usize {
+        base_url.map_or(retry_count, |url| url.len())
+    }
+
+    #[test]
+    fn canary() {
+        assert_eq!(retry_url(None, 3), 3);
+    }
+}
