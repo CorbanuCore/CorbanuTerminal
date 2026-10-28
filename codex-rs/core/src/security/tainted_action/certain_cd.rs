@@ -114,7 +114,7 @@ const COMPOUND: &[&str] = &[
 
 /// Names that may make `cd` or `exit` other than the builtin, or run code
 /// that may (besides any name holding `function` or `alias`).
-const REDEFINERS: &[&str] = &[
+pub(super) const REDEFINERS: &[&str] = &[
     "trap",
     "enable",
     "disable",

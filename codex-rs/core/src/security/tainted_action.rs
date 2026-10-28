@@ -1158,12 +1158,14 @@ fn possible_folders(folders: &Folders) -> Vec<String> {
 }
 
 /// #1449: whether a loop's body (`commands`, between its first command
-/// and its `done`) is plain: no group, subshell, function, background job,
-/// compound command or `do` but its own, no `continue`, `break`, `return`,
-/// `eval`, `source` or `exec`, and no call of a function the line may
-/// define (`functions`), so a command in it that follows `;` or a line
-/// break runs in the loop's shell on each pass. Substitutions are their
-/// own shells.
+/// and its `done`) is plain, so a command in it that follows `;` or a line
+/// break runs in the loop's shell on each pass: no group, subshell,
+/// function, background job, compound command or `do` but its own; no
+/// word that holds a value, a substitution or a glob, or that names (as
+/// any of its tokens: `builtin continue`, `{break,}`) a command that may
+/// end a pass or run other code (`continue`, `break`, `return`, `eval`,
+/// `source`, `.`, `exec`) or a function the line may define
+/// (`functions`). Substitutions are their own shells.
 fn plain_body(commands: &[SimpleCommand], functions: &HashSet<String>) -> bool {
     let mut body = false;
     commands
@@ -1173,17 +1175,27 @@ fn plain_body(commands: &[SimpleCommand], functions: &HashSet<String>) -> bool {
             work::step();
             let first = command.words.first().map(String::as_str);
             let starts_body = first == Some("do") && !std::mem::replace(&mut body, true);
-            let named = command
-                .words
-                .get(usize::from(starts_body))
-                .map(String::as_str);
             command.after != certain_cd::Joint::Other
-                && !named.is_some_and(|word| {
-                    functions.contains(word)
-                        || matches!(
-                            word,
-                            "continue" | "break" | "return" | "eval" | "source" | "." | "exec"
-                        )
+                && command.words.iter().all(|word| {
+                    work::step();
+                    !(word.contains(['$', '`', '*', '?', '['])
+                        || word.contains(shell::UNSEEN_OUTPUT)
+                        || word == "."
+                        || word
+                            .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
+                            .any(|token| {
+                                work::step();
+                                functions.contains(token)
+                                    || matches!(
+                                        token,
+                                        "continue"
+                                            | "break"
+                                            | "return"
+                                            | "eval"
+                                            | "source"
+                                            | "exec"
+                                    )
+                            }))
                 })
                 && (starts_body
                     || !first.is_some_and(|word| {
@@ -1211,6 +1223,49 @@ fn plain_body(commands: &[SimpleCommand], functions: &HashSet<String>) -> bool {
         })
 }
 
+/// #1449: whether a `cd ..` on the line (`commands`) may fail or not be
+/// the builtin, other than by the folder: the line redefines or disables
+/// commands, sets traps or shell options (`enable -n cd`, `trap … DEBUG`,
+/// D194's `certain_cd::REDEFINERS`, a function or alias), changes where
+/// `cd` goes (`HOME`, `PWD`, `CDPATH`, …), or changes a folder's
+/// permissions or the folder itself (`chmod 0 ..`, `mv`, `rm`).
+fn climbs_may_fail(commands: &[SimpleCommand]) -> bool {
+    commands
+        .iter()
+        .flat_map(|command| &command.words)
+        .any(|word| {
+            work::step();
+            unknown_folder::searches(word)
+                || word
+                    .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_'))
+                    .any(|token| {
+                        work::step();
+                        let lower = token.to_ascii_lowercase();
+                        matches!(token, "HOME" | "PWD")
+                            || lower.contains("function")
+                            || lower.contains("alias")
+                            || certain_cd::REDEFINERS.contains(&lower.as_str())
+                            || matches!(
+                                lower.as_str(),
+                                "shopt"
+                                    | "chmod"
+                                    | "chown"
+                                    | "chgrp"
+                                    | "chflags"
+                                    | "chattr"
+                                    | "setfacl"
+                                    | "umask"
+                                    | "mv"
+                                    | "rm"
+                                    | "rmdir"
+                                    | "unlink"
+                                    | "mount"
+                                    | "umount"
+                            )
+                    })
+        })
+}
+
 /// #1449: the names `commands` may define as functions: the last word of
 /// a command of at most two words (`f`, `function f`, `do f`) that the
 /// next command follows as a group or body (its joint is `Other`).
@@ -1228,12 +1283,36 @@ fn function_names(commands: &[SimpleCommand]) -> HashSet<String> {
 }
 
 /// #1449: how many of `commands`' words have each basename; `None` when a
-/// word may name any file (a value, a substitution or a glob).
+/// word may name any file (a value, a substitution or a glob) or names a
+/// program that makes files it is not told the names of (`tar x`, `cp
+/// -r`, `git checkout`).
 fn line_names(commands: &[SimpleCommand]) -> Option<HashMap<String, usize>> {
     let mut names = HashMap::new();
     for word in commands.iter().flat_map(|command| &command.words) {
         work::step();
-        if word.contains(['$', '`', '*', '?', '[']) || word.contains(shell::UNSEEN_OUTPUT) {
+        if word.contains(['$', '`', '*', '?', '['])
+            || word.contains(shell::UNSEEN_OUTPUT)
+            || matches!(
+                basename(word),
+                "tar"
+                    | "gtar"
+                    | "bsdtar"
+                    | "unzip"
+                    | "7z"
+                    | "7za"
+                    | "cpio"
+                    | "pax"
+                    | "rsync"
+                    | "patch"
+                    | "git"
+                    | "cp"
+                    | "ditto"
+                    | "ln"
+                    | "install"
+                    | "curl"
+                    | "wget"
+            )
+        {
             return None;
         }
         *names.entry(basename(word).to_string()).or_insert(0) += 1;
@@ -1852,8 +1931,10 @@ impl Classifier {
         // `MAX_REPLAYED_LOOPS` such a loop starts in a folder not known.
         let mut changing = unknown_folder::changing_loops(&lexed.commands).into_iter();
         let mut next_loop = changing.next();
-        // #1449: names the line may define as functions.
+        // #1449: names the line may define as functions, and whether a
+        // `cd ..` on it may fail other than by the folder.
         let functions = function_names(&lexed.commands);
+        let climbs_unsure = climbs_may_fail(&lexed.commands);
         let mut replayed = 0;
         let mut pass: Option<LoopPass> = None;
         let mut cursor = 0;
@@ -1885,13 +1966,14 @@ impl Classifier {
                         climbs: changing_loop.climbs,
                         counts: (changing_loop.back, changing_loop.stack),
                         limit: branch_limit(&start),
-                        plain: plain_body(
-                            lexed
-                                .commands
-                                .get(changing_loop.start + 1..changing_loop.end)
-                                .unwrap_or_default(),
-                            &functions,
-                        ),
+                        plain: !climbs_unsure
+                            && plain_body(
+                                lexed
+                                    .commands
+                                    .get(changing_loop.start + 1..changing_loop.end)
+                                    .unwrap_or_default(),
+                                &functions,
+                            ),
                         folders: start,
                         branches: Vec::new(),
                         seen: Vec::new(),

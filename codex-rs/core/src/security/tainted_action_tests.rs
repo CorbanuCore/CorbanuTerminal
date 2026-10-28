@@ -9276,16 +9276,33 @@ fn issue_1449_loop_passes_keep_their_checks() {
         "[ -d x ] && break; cd ..",
         "cd .. < /nonexistent",
         "cd .. 2> /dev/null",
+        // Review 3: other spellings of the same, and a `cd ..` that may
+        // fail or not be the builtin.
+        "builtin continue; cd ..",
+        "command continue; cd ..",
+        "time continue; cd ..",
+        "x=1 continue; cd ..",
+        ">/dev/null continue; cd ..",
+        "{break,}; cd ..",
+        "enable -n cd; cd ..",
+        "chmod 0 ..; cd ..; chmod 755 ..",
+        "mv ../x ../y; cd ..",
     ] {
         let line = format!("for i in 1 2; do echo x >> ../.zshrc; cd sub; {climb}; done");
         if classify_fixture(&shell_in("/home/fixture", &["bash", "-lc", &line])).is_none() {
             wrong.push(line);
         }
     }
-    // A function the line defines may end the pass.
-    let line = "f() { continue; }; for i in 1 2; do echo x >> ../.zshrc; cd sub; f; cd ..; done";
-    if classify_fixture(&shell_in("/home/fixture", &["bash", "-lc", line])).is_none() {
-        wrong.push(line.to_string());
+    // A function the line defines may end the pass; so may a value, or a
+    // trap.
+    for line in [
+        "f() { continue; }; for i in 1 2; do echo x >> ../.zshrc; cd sub; f; cd ..; done",
+        "c=continue; for i in 1 2; do echo x >> ../.zshrc; cd sub; $c; cd ..; done",
+        "shopt -s extdebug; trap false DEBUG; for i in 1 2; do echo x >> ../.zshrc; cd sub; cd ..; done",
+    ] {
+        if classify_fixture(&shell_in("/home/fixture", &["bash", "-lc", line])).is_none() {
+            wrong.push(line.to_string());
+        }
     }
     // Each pass from `x` leaves `x/a`, never reached by `cd ..`: past
     // the limit.
