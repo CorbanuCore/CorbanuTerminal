@@ -856,12 +856,19 @@ impl Reader<'_> {
 /// bracket in `${…}` (a `[`, after which a `}` may not end it: `${a[}]((}`),
 /// a newline (a here-document or a comment's end) or a `#` but `$#` and a
 /// base (`16#ff`): a comment, zsh's `##(`.
+/// Review 5: zsh counts `[`/`]` in arithmetic too and reads it as commands
+/// when they do not pair inside (`(( git -C .(N) … ; : ] ))`, `: [ ))`), so
+/// a pair needs the same bracket depth at both ends, never lower between,
+/// and a `]` closing no `[` disqualifies like a quote.
 fn clean_closes(chars: &[char]) -> HashMap<usize, usize> {
-    let mut open = Vec::new();
+    // Each open `(`: where, the bracket depth there, the lowest since.
+    let mut open: Vec<(usize, usize, usize)> = Vec::new();
     let mut last_quote = None;
     let mut closes = HashMap::new();
     // The `${…}` (and braces inside) open at `at`.
     let mut braces = 0usize;
+    // The `[`s open outside `${…}`.
+    let mut square = 0usize;
     for (at, ch) in chars.iter().enumerate() {
         work::step();
         let before = at.checked_sub(1).map(|before| chars[before]);
@@ -875,12 +882,27 @@ fn clean_closes(chars: &[char]) -> HashMap<usize, usize> {
             {
                 last_quote = Some(at);
             }
-            '(' => open.push(at),
+            '[' => square += 1,
+            ']' if square == 0 => last_quote = Some(at),
+            ']' => {
+                square -= 1;
+                if let Some(top) = open.last_mut() {
+                    top.2 = top.2.min(square);
+                }
+            }
+            '(' => open.push((at, square, square)),
             ')' => {
-                if let Some(from) = open.pop()
-                    && last_quote.is_none_or(|quote| quote < from)
-                {
-                    closes.insert(from, at);
+                if let Some((from, depth, lowest)) = open.pop() {
+                    // The brackets this one held were open while it was.
+                    if let Some(top) = open.last_mut() {
+                        top.2 = top.2.min(lowest);
+                    }
+                    if last_quote.is_none_or(|quote| quote < from)
+                        && depth == square
+                        && lowest == depth
+                    {
+                        closes.insert(from, at);
+                    }
                 }
             }
             _ => {}

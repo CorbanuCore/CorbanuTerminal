@@ -7105,6 +7105,13 @@ fn issue_1515_brackets_as_arguments_ask() {
         // patterns), with no comment; a `}` in a subscript does not end `${`.
         "(( y = ${x#((} )); git -C x(N) config core.pager sh; ( x=$(case a in a) :;; b) :;; esac))",
         "(( y = ${a[}]((} )); git -C x(N) config core.pager sh; ( x=$(case a in a) :;; b) :;; esac))",
+        // Review 5: zsh reads arithmetic whose `[`/`]` do not pair as
+        // commands, even when the `[` opened before it.
+        "(( git -C .(N) config core.pager sh; : ] ))",
+        "x=$(( git -C .(N) config core.pager sh; : [ ))",
+        "echo [; (( git -C .(N) config core.pager sh; ] [ ))",
+        "(( git -C .(N) config core.pager sh; ( ] ) ))",
+        "echo $(( git -C @(.) config core.pager sh; ] ))",
     ];
     for (group, commands) in [("asked", &asked_on_main[..]), ("new", &quiet_on_main[..])] {
         for command in commands {
@@ -7150,6 +7157,8 @@ fn issue_1515_brackets_as_arguments_ask() {
         "(( n = $# * (2) )); echo $(( $# * (2) )); git log",
         "(( 1 + ${#x} * (2) )); (( n = 16#ff * (2) )); git log",
         "for ((i=0; i<${#a[@]}; i+=(1))); do git log; done",
+        "(( a[1] + (2) )); (( a[(1)] + b[2] )); (( (a[) ] )); git log",
+        "echo [; (( x = 2*(1) )); git log",
         "declare -a a=(1 2); local b=(x)",
     ] {
         for shell in ["/bin/bash", "/bin/zsh"] {
@@ -7169,6 +7178,8 @@ fn issue_1515_bracket_checks_are_linear() {
         ("arithmetic", "(( x*(1) )); "),
         ("substituted arithmetic", "$(( $x*(1) )) "),
         ("braced arithmetic", "(( ${x#((} + y*(1) )); "),
+        ("bracketed arithmetic", "(( a[(1)] + [ * (1) ] )); "),
+        ("open squares", "[ (( "),
         ("cut git", "git -C x(N) config k v; "),
         ("cut words", "a { b } "),
     ] {
