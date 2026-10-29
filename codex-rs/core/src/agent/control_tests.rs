@@ -1741,6 +1741,294 @@ async fn recovery_resends_a_reserved_message_that_was_never_handed_over() {
     );
 }
 
+/// Plays another owner's write on `message_id` inside the statement that reserves it for any
+/// attempt other than `owner_attempt`, so the write lands between that reservation and the
+/// reserving sender's `Submitting -> Submitted` write, without sleeps or test hooks in the code
+/// under test. Drop the returned trigger with `DROP TRIGGER interleave_after_reservation`.
+async fn interleave_after_reservation(
+    state_db: &StateDbHandle,
+    message_id: &str,
+    owner_attempt: &str,
+    other_owner_write: &str,
+) -> sqlx::SqlitePool {
+    let writer = state_db
+        .sqlite()
+        .open_read_write_pool(&state_db.sqlite().state_db_path())
+        .await
+        .expect("open a second writer on the state db");
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "CREATE TRIGGER interleave_after_reservation AFTER UPDATE OF phase ON agent_mailbox_messages \
+         WHEN NEW.phase = 'submitting' AND NEW.message_id = '{message_id}' \
+         AND NEW.attempt_id IS NOT '{owner_attempt}' \
+         BEGIN UPDATE agent_mailbox_messages SET {other_owner_write} \
+         WHERE message_id = NEW.message_id; END"
+    )))
+    .execute(&writer)
+    .await
+    .expect("install the interleaving trigger");
+    writer
+}
+
+#[tokio::test]
+async fn issue1452_a_sender_that_loses_its_submitting_write_is_not_an_error() {
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::Sqlite);
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (thread_id, _thread) = harness.start_thread().await;
+    let state_db = harness.state_db.clone().expect("state db");
+    let mail = |body: &str| {
+        InterAgentCommunication::new(
+            AgentPath::root(),
+            AgentPath::try_from("/root/worker").expect("agent path"),
+            Vec::new(),
+            body.to_string(),
+            /*trigger_turn*/ false,
+        )
+    };
+    let captured = |communication: &InterAgentCommunication| {
+        harness
+            .manager
+            .captured_ops()
+            .iter()
+            .filter(|(captured_thread_id, op)| {
+                *captured_thread_id == thread_id
+                    && matches!(
+                        op,
+                        Op::InterAgentCommunication { communication: captured }
+                            if captured == communication
+                    )
+            })
+            .count()
+    };
+    let phase = async |message_id: &str| {
+        state_db
+            .get_agent_message(message_id)
+            .await
+            .expect("mailbox lookup")
+            .expect("mailbox row")
+            .phase
+    };
+
+    // Interleaving 1: recovery requeues the row (Submitting -> Ready) between the live sender's
+    // reservation and its Submitted write. The live sender's write loses; recovery delivers it.
+    let requeued = mail("requeued by recovery while the live sender held it");
+    let requeued_id = requeued.message_id.clone().expect("stable message id");
+    harness
+        .control
+        .admit_inter_agent_communication(thread_id, &requeued)
+        .await
+        .expect("admit the requeued message");
+    let writer = interleave_after_reservation(
+        &state_db,
+        &requeued_id,
+        /*owner_attempt*/ "recovery-attempt",
+        "phase = 'ready'",
+    )
+    .await;
+    let live_result = harness
+        .control
+        .send_persisted_inter_agent_communication(
+            thread_id,
+            requeued.clone(),
+            /*parent_turn_id*/ None,
+        )
+        .await;
+    sqlx::query("DROP TRIGGER interleave_after_reservation")
+        .execute(&writer)
+        .await
+        .expect("drop the interleaving trigger");
+    assert_eq!(
+        live_result.as_deref().map_err(ToString::to_string),
+        Ok(requeued_id.as_str()),
+        "a live sender that loses its Submitting -> Submitted write to another owner is not \
+         failed: that owner delivers the message"
+    );
+    assert_eq!(
+        captured(&requeued),
+        0,
+        "the losing live sender does not hand the message over"
+    );
+    assert_eq!(
+        phase(&requeued_id).await,
+        codex_state::AgentMailboxPhase::Ready
+    );
+    harness
+        .control
+        .recover_inter_agent_communications(thread_id)
+        .await
+        .expect("mailbox recovery");
+    assert_eq!(
+        captured(&requeued),
+        1,
+        "the owner that requeued the message hands it over once"
+    );
+
+    // Interleaving 2: recovery requeues and reserves the row again between the live sender's
+    // reservation and its Submitted write. The live sender's write wins and it hands the
+    // message over; recovery's own write then loses and recovery must not hand it over again.
+    let stolen = mail("re-reserved by recovery while the live sender held it");
+    let stolen_id = stolen.message_id.clone().expect("stable message id");
+    harness
+        .control
+        .admit_inter_agent_communication(thread_id, &stolen)
+        .await
+        .expect("admit the re-reserved message");
+    let writer = interleave_after_reservation(
+        &state_db,
+        &stolen_id,
+        /*owner_attempt*/ "recovery-attempt",
+        "phase = 'submitting', attempt_id = 'recovery-attempt'",
+    )
+    .await;
+    let live_result = harness
+        .control
+        .send_persisted_inter_agent_communication(
+            thread_id,
+            stolen.clone(),
+            /*parent_turn_id*/ None,
+        )
+        .await;
+    sqlx::query("DROP TRIGGER interleave_after_reservation")
+        .execute(&writer)
+        .await
+        .expect("drop the interleaving trigger");
+    assert!(
+        live_result.is_ok(),
+        "the live sender whose write won hands the message over: {live_result:?}"
+    );
+    assert_eq!(
+        captured(&stolen),
+        1,
+        "the live sender whose write won hands it over once"
+    );
+    assert!(
+        !state_db
+            .transition_agent_message(
+                &stolen_id,
+                codex_state::AgentMailboxPhase::Submitting,
+                codex_state::AgentMailboxPhase::Submitted,
+                /*now_ms*/ 2_000,
+            )
+            .await
+            .expect("recovery's Submitted write"),
+        "recovery's own Submitted write loses, so recovery does not hand it over"
+    );
+    assert_eq!(
+        phase(&stolen_id).await,
+        codex_state::AgentMailboxPhase::Submitted
+    );
+}
+
+#[tokio::test]
+async fn issue1452_recovery_continues_past_a_message_a_live_sender_hands_over() {
+    let (home, mut config) = test_config().await;
+    let _ = config.features.enable(Feature::Sqlite);
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (thread_id, _thread) = harness.start_thread().await;
+    let state_db = harness.state_db.clone().expect("state db");
+    let mail = |body: &str| {
+        InterAgentCommunication::new(
+            AgentPath::root(),
+            AgentPath::try_from("/root/worker").expect("agent path"),
+            Vec::new(),
+            body.to_string(),
+            /*trigger_turn*/ false,
+        )
+    };
+    let captured = |communication: &InterAgentCommunication| {
+        harness
+            .manager
+            .captured_ops()
+            .iter()
+            .filter(|(captured_thread_id, op)| {
+                *captured_thread_id == thread_id
+                    && matches!(
+                        op,
+                        Op::InterAgentCommunication { communication: captured }
+                            if captured == communication
+                    )
+            })
+            .count()
+    };
+
+    // The first row is held by a live sender ("live-attempt"); its Submitted write lands between
+    // recovery's reservation and recovery's own Submitted write, so the live sender hands it
+    // over and recovery's write loses.
+    let contested = mail("held by a live sender during recovery");
+    let contested_id = contested.message_id.clone().expect("stable message id");
+    harness
+        .control
+        .admit_inter_agent_communication(thread_id, &contested)
+        .await
+        .expect("admit the contested message");
+    assert!(
+        state_db
+            .begin_agent_message_submission(
+                &contested_id,
+                codex_state::AgentMailboxPhase::Ready,
+                "live-attempt",
+                /*now_ms*/ 1_000,
+            )
+            .await
+            .expect("the live sender's reservation")
+    );
+    // A second, ordinary queued row that recovery reaches only after the contested one.
+    let queued = mail("queued behind the contested message");
+    let queued_id = queued.message_id.clone().expect("stable message id");
+    harness
+        .control
+        .admit_inter_agent_communication(thread_id, &queued)
+        .await
+        .expect("admit the queued message");
+    let writer = interleave_after_reservation(
+        &state_db,
+        &contested_id,
+        /*owner_attempt*/ "live-attempt",
+        "phase = 'submitted'",
+    )
+    .await;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "UPDATE agent_mailbox_messages SET created_at_ms = created_at_ms + 60000 \
+         WHERE message_id = '{queued_id}'"
+    )))
+    .execute(&writer)
+    .await
+    .expect("order the queued row after the contested one");
+
+    let recovery = harness
+        .control
+        .recover_inter_agent_communications(thread_id)
+        .await;
+    sqlx::query("DROP TRIGGER interleave_after_reservation")
+        .execute(&writer)
+        .await
+        .expect("drop the interleaving trigger");
+    assert_eq!(
+        recovery.map_err(|err| err.to_string()),
+        Ok(()),
+        "a row another owner delivers does not stop or fail recovery"
+    );
+    assert_eq!(
+        captured(&contested),
+        0,
+        "recovery leaves the contested message to the live sender that won the write"
+    );
+    assert_eq!(
+        state_db
+            .get_agent_message(&contested_id)
+            .await
+            .expect("mailbox lookup")
+            .expect("contested mailbox row")
+            .phase,
+        codex_state::AgentMailboxPhase::Submitted
+    );
+    assert_eq!(
+        captured(&queued),
+        1,
+        "recovery goes on to hand the remaining message over once"
+    );
+}
+
 #[tokio::test]
 async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
     let (home, mut config) = test_config().await;
@@ -1810,7 +2098,7 @@ async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
         agent_path.clone(),
         Vec::new(),
         "replay this reserved message that was never handed over".to_string(),
-        /*trigger_turn*/ true,
+        /*trigger_turn*/ false,
     );
     harness
         .control

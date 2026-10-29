@@ -393,7 +393,7 @@ async fn approvals_selection_popup_snapshot_windows_degraded_sandbox() {
         "expected degraded sandbox note in approvals popup: {popup}"
     );
     assert!(
-        popup.contains("delete or move files"),
+        popup.contains("reading your files"),
         "expected non-admin sandbox risk in approvals popup: {popup}"
     );
 }

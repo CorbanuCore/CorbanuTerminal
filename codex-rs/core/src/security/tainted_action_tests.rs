@@ -10451,3 +10451,100 @@ fn issue_1309_login_and_modifier_checks_are_linear() {
         });
     }
 }
+
+/// #1276 follow-ups from the #1517 review: a launcher in text `eval` or
+/// `trap` runs, an `S` in another env option's value, a bundled `parallel
+/// -kI@`, xargs options after an unknown option's value, rush `-Q`, and a
+/// program after a wrapper's `--`. Each line was quiet on main.
+#[test]
+fn issue_1276_follow_ups_ask() {
+    for command in [
+        // `eval`/`trap` text without quotes of its own.
+        "eval 'xargs env < f'",
+        "eval \"parallel < cmds\"",
+        "eval xargs env < f",
+        "eval eval 'xargs env < f'",
+        "eval 'true; xjobs < cmds'",
+        "nice eval 'xargs env < f'",
+        "trap 'xargs sh -c' EXIT",
+        "trap 'parallel < cmds' EXIT",
+        "trap -- 'xargs env < f' EXIT",
+        "sh -c \"eval 'parallel < f'\"",
+        // Review 1: `eval --`, `command eval`, quoted `eval` in `trap` text.
+        "eval -- 'xargs env < f'",
+        "eval command eval xargs env < f",
+        "eval builtin eval xargs env < f",
+        "eval \"eval -- 'xargs env < f'\"",
+        "trap \"eval 'xargs env < f'\" EXIT",
+        "trap \"trap 'xargs env < f' INT\" EXIT",
+        // An `S` in another env option's value is no split.
+        "xargs -I% env -uSSH_AUTH_SOCK python3 -c 'print(%)' < f",
+        "xargs -I% env -CSrc sh -c '% x' < f",
+        // `-I` bundled after other letters.
+        "parallel -kI@ 'python3 -c \"print(@)\"' ::: a",
+        "parallel -j2 -kI@ '@ x' ::: a",
+        // xargs' options read on after an unknown option's value.
+        "xargs --frob x -I% % config < f",
+        "xargs -0 --frob x -I% % config < f",
+        "xargs --frob x --replace=R R < f",
+        "xargs --frob x --frob y -I% % < f",
+        // rush's `-Q`/`--escape-symbols` take a value.
+        "rush -Q x '{}' < f",
+        "rush -Q x 'python3 -c \"print({})\"' < f",
+        "rush --escape-symbols x '{}' < f",
+        "rush -kQ x '{}' < f",
+        // A program after a wrapper's operands and `--` (GNU tools run a
+        // program named `--`; one that reads options after operands runs
+        // the words after it).
+        "xargs -I% flock l -- % < f",
+        "xargs -I% flock -w 5 l -- % config < f",
+        "xargs -I% timeout 5 -- % < f",
+        "xargs -I% flock l -- python3 -c 'print(%)' < f",
+        "xargs flock l -- < f",
+        r"find . -exec flock l -- {} \;",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::UnseenCode),
+            "{command}"
+        );
+    }
+    for command in [
+        "eval 'echo hi'",
+        "eval \"git status\"",
+        "eval eval eval echo x",
+        "eval -- echo hi",
+        "trap \"eval 'echo bye'\" EXIT",
+        "trap 'echo bye' EXIT",
+        "xargs -I% env -uFOO echo % < f",
+        "xargs -I% env -uSSH_AUTH_SOCK echo % < f",
+        "parallel -kI@ 'echo @' ::: a",
+        "xargs --frob x -I% echo % < f",
+        "rush -Q x 'echo {}' < f",
+        "xargs -I% flock l -- rm % < f",
+        "xargs -I% timeout 5 -- rm -- % < f",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+}
+
+/// #1276 follow-ups: the new readings stay linear.
+#[test]
+fn issue_1276_follow_up_checks_are_linear() {
+    for (label, prefix, unit, suffix) in [
+        ("eval words", "eval ", "eval ", "echo x"),
+        ("eval ends", "eval ", "eval -- ", "echo x"),
+        ("quoted evals", "trap \"", "eval ", "'echo x'\" EXIT"),
+        ("eval line", "eval '", "echo x; ", "'"),
+        ("trap operands", "trap ", "'echo x' ", "EXIT"),
+        ("xargs readings", "xargs ", "--zz x ", "-I% echo %"),
+        ("rush escapes", "rush ", "-Q x ", "'echo {}'"),
+        ("env groups", "xargs -I% env ", "-uSx ", "echo %"),
+        ("wrapper ends", "xargs -I% ", "flock l -- ", "echo %"),
+    ] {
+        work::assert_linear(label, |scale| {
+            let line = format!("{prefix}{}{suffix}", unit.repeat(200 * scale));
+            let _ = script(&line);
+        });
+    }
+}

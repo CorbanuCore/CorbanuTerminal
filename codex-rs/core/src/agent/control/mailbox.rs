@@ -48,6 +48,11 @@ impl AgentControl {
                 // Submitted row, unless the recipient's rollout already applied it (a row written
                 // by an older build that marked Submitted only after the hand-off).
                 AgentMailboxPhase::Submitting | AgentMailboxPhase::Submitted => {
+                    let phase = if message.phase == AgentMailboxPhase::Submitting {
+                        "submitting"
+                    } else {
+                        "submitted"
+                    };
                     if thread
                         .session
                         .has_applied_agent_message_id(&message_id)
@@ -63,7 +68,7 @@ impl AgentControl {
                             .await
                             .map_err(|err| {
                                 CodexErr::Fatal(format!(
-                                    "failed to quarantine applied submitted agent message \
+                                    "failed to quarantine applied {phase} agent message \
                                      {message_id}: {err}"
                                 ))
                             })?;
@@ -85,7 +90,7 @@ impl AgentControl {
                         .await
                         .map_err(|err| {
                             CodexErr::Fatal(format!(
-                                "failed to requeue submitted agent message {message_id}: {err}"
+                                "failed to requeue {phase} agent message {message_id}: {err}"
                             ))
                         })?;
                 }
@@ -309,9 +314,18 @@ impl AgentControl {
                     ))
                 })?
             {
-                return Err(CodexErr::Fatal(format!(
-                    "agent message {message_id} lost its submitting state"
-                )));
+                // #1452: another owner (mailbox recovery, or a live sender racing it) moved the
+                // row off Submitting between this reservation and this write. Only the owner whose
+                // Submitting -> Submitted write wins hands the message over, so this attempt
+                // stops here without an error, as a lost reservation above does; failing it
+                // would stop recovery's loop or invite a resend under a new message id.
+                tracing::debug!(
+                    %message_id,
+                    %agent_id,
+                    "agent mailbox message left its submitting state to another owner; \
+                     that owner delivers it"
+                );
+                return Ok(message_id);
             }
         }
 

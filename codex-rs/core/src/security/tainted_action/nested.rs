@@ -465,7 +465,15 @@ impl Classifier {
             // '...%...'`), or as whole command lines (`parallel < f`). In
             // quoted text read as code (`level` > 0), only where input is
             // put in place.
-            if launched_input::input_runs(&texts, level > 0) {
+            // #1276 follow-up: also in the text `eval` or `trap` runs as a
+            // shell line, which is walked as quoted data when it holds no
+            // quotes of its own (`eval 'xargs env < f'`).
+            if launched_input::input_runs(&texts, level > 0)
+                || (level == 0
+                    && command_at.as_ref().is_some_and(|(index, name)| {
+                        launched_input::evaluated_input_runs(name, &texts[index + 1..])
+                    }))
+            {
                 note_git(found, ProtectedActionKind::UnseenCode);
             }
             // #1283: scripts run in a folder this reading does not follow

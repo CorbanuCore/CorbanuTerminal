@@ -151,6 +151,7 @@ mod permissions_messages;
 mod personality;
 mod pf_23_s01;
 mod pf_25_s01;
+mod plan_glm_reasoning;
 mod plugins;
 mod prompt_cache_key;
 mod prompt_caching;

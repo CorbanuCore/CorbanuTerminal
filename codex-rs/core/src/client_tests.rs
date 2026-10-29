@@ -1868,6 +1868,50 @@ fn ambient_required_low_reasoning_is_enabled_without_duplicate_scalar_control() 
 }
 
 #[test]
+fn plan_sends_ambient_reasoning_only_for_its_ambient_glm_row() {
+    let client = test_model_client(SessionSource::Cli)
+        .for_provider(&ModelProviderInfo::create_pfterminal_plan_provider());
+    let responses_metadata = test_responses_metadata_for_client(
+        &client,
+        /*turn_id*/ None,
+        format!("{}:0", client.state.thread_id),
+        /*parent_thread_id*/ None,
+        TestCodexResponsesRequestKind::Turn,
+    );
+    let request = |slug: &str, effort| {
+        let mut model = test_ambient_model_info();
+        model.slug = slug.to_string();
+        let request = client
+            .build_chat_completions_request(
+                &Prompt::default(),
+                &model,
+                Some(effort),
+                &responses_metadata,
+            )
+            .expect("Plan chat request");
+        (
+            request.reasoning,
+            request.reasoning_effort,
+            request.enable_thinking,
+        )
+    };
+
+    assert_eq!(
+        request(AMBIENT_DEFAULT_MODEL, ReasoningEffort::Medium),
+        (Some(json!({"enabled": true, "effort": "high"})), None, None)
+    );
+    assert_eq!(
+        request(AMBIENT_DEFAULT_MODEL, ReasoningEffort::XHigh),
+        (Some(json!({"enabled": true, "effort": "max"})), None, None)
+    );
+    // Other Plan rows keep the OpenAI-style default.
+    assert_eq!(
+        request("corbanu/glm-5.3-flash", ReasoningEffort::XHigh),
+        (None, None, None)
+    );
+}
+
+#[test]
 fn refreshed_provider_models_keep_exact_request_routes_and_reasoning() {
     let models = codex_models_manager::bundled_models_response()
         .expect("bundled catalogue")

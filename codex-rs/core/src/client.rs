@@ -2568,7 +2568,13 @@ impl ModelClient {
                 tools.retain(|tool| tool.get("type").and_then(Value::as_str) != Some("web_search"));
             }
         }
-        let ambient_reasoning_effort = uses_zai_reasoning
+        // The Corbanu Plan gateway routes `z-ai/glm-5.2` to Ambient and forwards the request body
+        // unchanged (#1489), so that row needs Ambient's `reasoning` object; other Plan rows keep
+        // the OpenAI-style default.
+        let sends_ambient_reasoning = self.state.provider.info().is_ambient()
+            || (self.state.provider.info().is_pfterminal_plan()
+                && model_info.slug == AMBIENT_DEFAULT_MODEL);
+        let ambient_reasoning_effort = (uses_zai_reasoning || sends_ambient_reasoning)
             .then(|| {
                 Self::ambient_zai_reasoning_effort(
                     effort
@@ -2623,7 +2629,7 @@ impl ModelClient {
             .flatten();
         let provider_reasoning = if self.state.provider.info().is_openrouter() {
             Self::openrouter_reasoning(model_info, effort.as_ref())?
-        } else if self.state.provider.info().is_ambient() {
+        } else if sends_ambient_reasoning {
             Some(Self::ambient_reasoning(
                 selected_reasoning_effort.as_deref(),
             ))
@@ -2632,7 +2638,7 @@ impl ModelClient {
         } else {
             None
         };
-        let reasoning_effort = (!self.state.provider.info().is_ambient())
+        let reasoning_effort = (!sends_ambient_reasoning)
             .then_some(selected_reasoning_effort)
             .flatten();
         Ok(ChatCompletionsRequest {
