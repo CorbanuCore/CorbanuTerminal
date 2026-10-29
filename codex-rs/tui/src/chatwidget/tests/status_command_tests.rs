@@ -451,9 +451,22 @@ async fn status_reads_the_cached_named_sign_in_summary_not_the_vault() {
     );
     assert!(rendered.contains("account unavailable"), "{rendered}");
 
+    // The vault could not be read.
+    chat.model_catalog.set_named_sign_in(
+        /*generation*/ MANUAL + 2,
+        account.clone(),
+        crate::provider_named_accounts::NamedSignInState::Unreadable,
+    );
+    let rendered = render_status(&mut chat, &mut rx);
+    assert!(
+        rendered.contains("account work is not signed in"),
+        "{rendered}"
+    );
+    assert!(!rendered.contains("account unavailable"), "{rendered}");
+
     // Known: a `pro` sign-in. An older check answering late changes nothing.
     chat.model_catalog.set_named_sign_in(
-        /*generation*/ MANUAL + 3,
+        /*generation*/ MANUAL + 4,
         account.clone(),
         crate::provider_named_accounts::NamedSignInState::SignedIn(
             codex_login::NamedSignInSummary {
@@ -464,9 +477,9 @@ async fn status_reads_the_cached_named_sign_in_summary_not_the_vault() {
         ),
     );
     chat.model_catalog.set_named_sign_in(
-        /*generation*/ MANUAL + 2,
+        /*generation*/ MANUAL + 3,
         account,
-        crate::provider_named_accounts::NamedSignInState::Unreadable,
+        crate::provider_named_accounts::NamedSignInState::NoSignIn,
     );
     let rendered = render_status(&mut chat, &mut rx);
     assert!(
