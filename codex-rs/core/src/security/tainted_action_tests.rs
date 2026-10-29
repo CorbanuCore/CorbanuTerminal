@@ -10328,3 +10328,117 @@ fn issue_1276_git_config_unseen_words_ask() {
         assert_eq!(script(command), None, "{command}");
     }
 }
+
+/// #1309: more ways a nested script's folder becomes one the quote-aware
+/// reading cannot know (from the #1310 review list): login spellings of
+/// wrappers, which start in the target user's home; programs that start
+/// elsewhere unless told to keep the folder; folder options of more
+/// wrappers; a command word spelled as a pattern; a `cd` behind zsh's
+/// precommand modifiers; and commands that load or switch builtins or
+/// rerun history. A relative write in such a script asks. All were quiet
+/// on main.
+#[test]
+fn issue_1309_login_wrappers_patterns_and_loaders_ask() {
+    for command in [
+        "sudo -i sh -c 'echo x >> .zshenv'",
+        "sudo -u me -i sh -c 'echo x >> .zshenv'",
+        "sudo --login sh -c 'echo x >> .zshenv'",
+        "sudo --log sh -c 'echo x >> .zshenv'",
+        "su - -c \"sh -c 'echo x >> .zshenv'\"",
+        "su - -c 'echo x >> .zshenv'",
+        "su -l me -c \"sh -c 'echo x >> .zshenv'\"",
+        "su --login -c \"sh -c 'echo x >> .zshenv'\"",
+        "su --l -c \"sh -c 'echo x >> .zshenv'\"",
+        "runuser -l me -c \"sh -c 'echo x >> .zshenv'\"",
+        "runuser - me -c \"sh -c 'echo x >> .zshenv'\"",
+        "machinectl shell me@ /bin/sh -c 'echo x >> .zshenv'",
+        "systemd-run --user sh -c 'echo x >> .zshenv'",
+        "systemd-run sh -c 'echo x >> home/fixture/.zshenv'",
+        "systemd-run --unit x sh -c 'echo x >> .zshenv'",
+        "pkexec --user me sh -c 'echo x >> .zshenv'",
+        "schroot -d ~ -- sh -c 'echo x >> .zshenv'",
+        "apptainer exec --pwd ~ img sh -c 'echo x >> .zshenv'",
+        "singularity exec --pwd ~ img sh -c 'echo x >> .zshenv'",
+        "buildah run --workingdir ~ c sh -c 'echo x >> .zshenv'",
+        "touch cd; c? ~; sh -c 'echo x >> .zshenv'",
+        "[c]d ~; sh -c 'echo x >> .zshenv'",
+        "{c,}d ~; sh -c 'echo x >> .zshenv'",
+        "{c..c}d ~; sh -c 'echo x >> .zshenv'",
+        "for i in 1 2; do sh -c 'echo x >> .zshenv'; [c]d ~; done",
+        "f() { sh -c 'echo x >> .zshenv'; }; [c]d ~; f",
+        "noglob cd ~; sh -c 'echo x >> .zshenv'",
+        "nocorrect cd ~; sh -c 'echo x >> .zshenv'",
+        "- cd ~; sh -c 'echo x >> .zshenv'",
+        "noglob nocorrect cd ~; sh -c 'echo x >> .zshenv'",
+        "zmodload zsh/x; sh -c 'echo x >> .zshenv'",
+        "enable -f ./x.so cd; cd /tmp; sh -c 'echo x >> .zshenv'",
+        "enable -n cd; cd /tmp; sh -c 'echo x >> .zshenv'",
+        "disable cd; cd /tmp; sh -c 'echo x >> .zshenv'",
+        "fc -e 'sed -i s/a/b/'; sh -c 'echo x >> .zshenv'",
+        "fc -l -s; sh -c 'echo x >> .zshenv'",
+        "fc -ls; sh -c 'echo x >> .zshenv'",
+        "r; sh -c 'echo x >> .zshenv'",
+        // Review 2: a keep option after the program is the program's;
+        // run0; other commands behind a modifier.
+        "pkexec sh -c 'echo x >> .zshenv' --keep-cwd",
+        "systemd-run sh -c 'echo x >> home/fixture/.zshenv' -d",
+        "systemd-run -u x sh -c 'echo x >> .zshenv' --scope",
+        "run0 -u me sh -c 'echo x >> .zshenv'",
+        "noglob builtin cd ~; sh -c 'echo x >> .zshenv'",
+        "noglob command cd ~; sh -c 'echo x >> .zshenv'",
+        "noglob eval 'cd ~'; sh -c 'echo x >> .zshenv'",
+        "noglob source ./f; sh -c 'echo x >> .zshenv'",
+        "noglob enable -n cd; cd /tmp; sh -c 'echo x >> .zshenv'",
+        "noglob fc -s; sh -c 'echo x >> .zshenv'",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}"
+        );
+    }
+    for command in [
+        "sudo -u me sh -c 'echo x > out.txt'",
+        "sudo -s sh -c 'echo x > out.txt'",
+        "su me -c \"sh -c 'echo x > out.txt'\"",
+        "systemd-run --scope sh -c 'echo x > out.txt'",
+        "systemd-run --user --same-dir sh -c 'echo x > out.txt'",
+        "pkexec --keep-cwd sh -c 'echo x > out.txt'",
+        "pkexec --user me --keep-cwd sh -c 'echo x > out.txt'",
+        "systemd-run -u x -p Nice=5 --scope sh -c 'echo x > out.txt'",
+        "noglob builtin echo; sh -c 'echo x > out.txt'",
+        "[ -d build ] || mkdir build; sh -c 'echo x > out.txt'",
+        "[[ -n x ]] && sh -c 'echo x > out.txt'",
+        "f() { :; }; f; sh -c 'echo x > out.txt'",
+        "fc -l; sh -c 'echo x > out.txt'",
+        "noglob ls *.txt; sh -c 'echo x > out.txt'",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+    // Asked on main too; kept as regressions (a function or alias named
+    // like a modifier is still the command).
+    for command in [
+        "sudo -i sh -c 'git config -f .zshenv --comment x,--get a.b v'",
+        "noglob() { echo $(( $1 )); }; noglob 'a[$(touch ~/.zshrc)]'",
+    ] {
+        assert!(script(command).is_some(), "{command}");
+    }
+}
+
+/// #1309: the login, keep-option, modifier and pattern checks stay linear.
+#[test]
+fn issue_1309_login_and_modifier_checks_are_linear() {
+    for (label, unit, suffix) in [
+        ("keep options", "pkexec ", "--keep-cwd sh -c 'echo x'"),
+        ("valued options", "systemd-run -u ", "sh -c 'echo x'"),
+        ("logins", "sudo -i su - ", "sh -c 'echo x'"),
+        ("modifiers", "noglob nocorrect ", "cd /b; sh -c 'echo x'"),
+        ("patterns", "c?; [c]d; ", "sh -c 'echo x'"),
+        ("fc", "fc -l -l ", "; sh -c 'echo x'"),
+    ] {
+        work::assert_linear(label, |scale| {
+            let line = format!("{}{suffix}", unit.repeat(200 * scale));
+            let _ = script(&line);
+        });
+    }
+}
