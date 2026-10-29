@@ -26,6 +26,7 @@ use super::has_flag;
 use super::indirect;
 use super::paths::glob_any;
 use super::persistence_command;
+use super::rerun;
 use super::windows_paths;
 use super::work;
 use base64::Engine;
@@ -1050,6 +1051,7 @@ impl Classifier {
         let mut git_config = GitConfigWrites::new(&lower, &[], &[]);
         let mut later = LaterWords::new(&lower);
         let mut named_programs = 0;
+        let mut git_programs_read = false;
         for (index, word) in words.iter().enumerate() {
             work::step();
             let name = names[index];
@@ -1079,11 +1081,14 @@ impl Classifier {
                 {
                     self.note(ProtectedActionKind::Persistence);
                 }
+                // #1516: and programs git runs (`grep -O`, `--upload-pack`),
+                // read once per command, as the POSIX pass reads them.
                 if (name == "git" || equals_git)
-                    && code_variables::git_runs_code_after_git(
+                    && (code_variables::git_runs_code_after_git(
                         &words[index + 1..],
                         &words[index + 1..],
-                    )
+                    ) || (!std::mem::replace(&mut git_programs_read, true)
+                        && rerun::git_runs_program(&words[index + 1..], /*subcommand*/ None)))
                 {
                     self.note(ProtectedActionKind::UnseenCode);
                 }

@@ -7,6 +7,7 @@
 
 use super::certain_cd;
 use super::certain_cd::Joint;
+use super::shell;
 use super::shell::UNSEEN_OUTPUT;
 use super::shell::ansi_c;
 use super::work;
@@ -276,10 +277,10 @@ impl Reader<'_> {
     /// #1515: a `{` or `}` word where the shell reads a word (`git -C {
     /// …`), not a reserved word: after a command's words, other than
     /// `function NAME {`.
-    fn note_argument_brace(&mut self, list: &List, arithmetic: usize) {
+    fn note_argument_brace(&mut self, list: &List) {
         let words = &self.out[list.command].words;
         let function = words.len() == 2 && !words[0].quoted && words[0].text == "function";
-        if arithmetic == 0 && !list.keyword && !words.is_empty() && !function {
+        if !list.keyword && !words.is_empty() && !function {
             self.out[list.command].cut = true;
         }
     }
@@ -312,7 +313,7 @@ impl Reader<'_> {
             && !list.word.quoted
             && (named == 1 || (named == 2 && first == Some("function"))))
             || first == Some("[[")
-            || (!list.word.quoted && array_name(text))
+            || (!list.word.quoted && array_name(text) && assigning(words))
     }
 
     fn finish_command(&mut self, list: &mut List) {
@@ -405,9 +406,12 @@ impl Reader<'_> {
                     if !opens && arithmetic == 0 {
                         self.out[list.command].cut = true;
                     }
-                    // `((` (`for ((`), and every bracket inside it.
-                    let math =
-                        arithmetic > 0 || (opens && (next == Some('(') || previous == Some('(')));
+                    // `((` (`for ((`) that `))` closes, and every bracket
+                    // inside it (not a `((` that opens two groups).
+                    let math = arithmetic > 0
+                        || (opens
+                            && next == Some('(')
+                            && shell::arithmetic_expansion(chars, index + 2).is_some());
                     arithmetic += usize::from(math);
                     self.finish_command(&mut list);
                     opened.push((std::mem::take(&mut list.cases), math));
@@ -456,14 +460,14 @@ impl Reader<'_> {
                     }
                 }
                 '{' if !list.has_word && next.is_none_or(char::is_whitespace) => {
-                    self.note_argument_brace(&list, arithmetic);
+                    self.note_argument_brace(&list);
                     self.finish_command(&mut list);
                     list.joint = Some(Joint::Other);
                 }
                 '}' if !list.has_word
                     && next.is_none_or(|next| next.is_whitespace() || ";|&)".contains(next)) =>
                 {
-                    self.note_argument_brace(&list, arithmetic);
+                    self.note_argument_brace(&list);
                     self.finish_command(&mut list);
                     list.joint = Some(Joint::Other);
                 }
@@ -825,9 +829,29 @@ impl Reader<'_> {
 /// #1515: an array assignment's start (`a=`, `a+=`, `a[1]=`), which `(`
 /// follows.
 fn array_name(text: &str) -> bool {
-    let Some(name) = text.strip_suffix('=') else {
-        return false;
-    };
+    text.strip_suffix('=').is_some_and(variable_name)
+}
+
+/// #1515: whether a word after `words` is an assignment: they are all
+/// assignments (`a=1 b=(x)`), or a builtin that assigns comes first
+/// (`declare -a b=(x)`). Elsewhere `b=(x)` is a zsh glob.
+fn assigning(words: &[Word]) -> bool {
+    words.first().is_some_and(|first| {
+        !first.quoted
+            && matches!(
+                first.text.as_str(),
+                "declare" | "typeset" | "local" | "export" | "readonly" | "integer" | "float"
+            )
+    }) || words.iter().all(|word| {
+        work::step();
+        word.text
+            .split_once('=')
+            .is_some_and(|(name, _)| variable_name(name))
+    })
+}
+
+/// A variable's name in an assignment (`a`, `a+`, `a[1]`).
+fn variable_name(name: &str) -> bool {
     let name = name.strip_suffix('+').unwrap_or(name);
     let name = name
         .split_once('[')

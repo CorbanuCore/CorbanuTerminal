@@ -6976,6 +6976,20 @@ fn issue_1516_git_grep_open_files_in_pager_asks() {
             wrong.push(command.join(" "));
         }
     }
+    // The Windows reading, for git named by its Windows path (and
+    // `--upload-pack`, which it did not read either).
+    for line in [
+        "git grep -Osh x",
+        r"C:\Git\cmd\git.exe grep -Osh x",
+        r"C:\Git\cmd\git.exe clone --upload-pack=./x u",
+    ] {
+        if cmd(line) != Some(UnseenCode) {
+            wrong.push(format!("cmd: {line}"));
+        }
+        if powershell(line) != Some(UnseenCode) {
+            wrong.push(format!("powershell: {line}"));
+        }
+    }
     for command in [
         "git grep -n foo",
         "git grep -o foo",
@@ -7052,11 +7066,26 @@ fn issue_1515_brackets_as_arguments_ask() {
         "git grep @(a) -Osh x",
         "corbanu --cd { vault get k",
         "g=git; $g -C { config core.pager sh",
+        "git --namespace { -c core.pager=sh log",
+        // Review 1: not arithmetic, an assignment's place, a finder's
+        // exec option, and programs that run their script.
+        "cat <((git --namespace { config core.pager sh))",
+        "((git --namespace { -c core.pager=sh log) )",
+        "echo $((git -C } -c core.pager=sh log) )",
+        "((git -C x(N) config core.pager sh) )",
+        "git -C a=(x) config core.pager sh",
+        "fd -1 --exec=git --namespace { -c 'alias.x=!sh' x",
+        "fd -1 -xgit --namespace { -c 'alias.x=!sh' x",
+        "bash } x",
+        ". { x",
+        "python3 } x",
     ];
-    for command in asked_on_main.into_iter().chain(quiet_on_main) {
-        for shell in ["/bin/bash", "/bin/zsh"] {
-            if kind(&[shell, "-lc", command]).is_none() {
-                wrong.push(format!("{shell}: {command}"));
+    for (group, commands) in [("asked", &asked_on_main[..]), ("new", &quiet_on_main[..])] {
+        for command in commands {
+            for shell in ["/bin/bash", "/bin/zsh"] {
+                if kind(&[shell, "-lc", command]).is_none() {
+                    wrong.push(format!("{group} {shell}: {command}"));
+                }
             }
         }
     }
@@ -7089,6 +7118,8 @@ fn issue_1515_brackets_as_arguments_ask() {
         "echo a { b } c",
         "ls *(om[1]) *(N)",
         "print -l *.(jpeg|png)",
+        "(( x = 1 )) && git log",
+        "declare -a a=(1 2); local b=(x)",
     ] {
         for shell in ["/bin/bash", "/bin/zsh"] {
             if kind(&[shell, "-lc", command]).is_some() {

@@ -974,7 +974,7 @@ fn misread_parameter(after: &[char]) -> bool {
 /// as a command substitution instead (`$(((1));cat f)`, `$((echo '))';cat f) )`).
 /// When unsure, `None`: its value then counts as command output. Otherwise
 /// the index of its first closing `)`.
-fn arithmetic_expansion(chars: &[char], start: usize) -> Option<usize> {
+pub(super) fn arithmetic_expansion(chars: &[char], start: usize) -> Option<usize> {
     let mut braces = 0_usize;
     for (at, ch) in chars.iter().enumerate().skip(start) {
         work::step();

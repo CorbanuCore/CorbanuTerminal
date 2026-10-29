@@ -1505,21 +1505,34 @@ fn fish_codes(texts: &[String], at: usize, cut: &mut bool) -> Vec<String> {
 }
 
 /// #1515: whether a cut command's later words may count: git under any
-/// name, a program the classifier judges by its later words (the Corbanu
-/// CLI, credential tools, schedulers), or a word it cannot see.
+/// name, a shell, interpreter or `source` (its script), a program the
+/// classifier judges by its later words (the Corbanu CLI, credential tools,
+/// schedulers), or a word it cannot see. Also as a finder's exec option
+/// holds it (`--exec=git`, `-xgit`, #1276).
 fn cut_matters(words: &[Word]) -> bool {
-    words.iter().any(|word| {
-        work::step();
-        let name = name(&word.text);
-        word.dynamic
-            || name == "git"
-            || indirect::equals_git(&name)
-            || git_helpers::git_name(&name).is_some()
-            || super::CLI_NAMES.contains(&name.as_str())
-            || matches!(name.as_str(), "crontab" | "launchctl" | "systemctl")
+    let judged = |text: &str| {
+        let name = basename(text);
+        name == "git"
+            || indirect::equals_git(name)
+            || git_helpers::git_name(name).is_some()
+            || invocation::parse(name, &[]).is_some()
+            || super::CLI_NAMES.contains(&name)
+            || matches!(name, "crontab" | "launchctl" | "systemctl")
             || super::CREDENTIAL_COMMANDS
                 .iter()
                 .any(|(command, _)| *command == name)
+    };
+    words.iter().any(|word| {
+        work::step();
+        let lower = word.text.to_lowercase();
+        let attached = lower.strip_prefix('-').and_then(|option| {
+            option.split_once('=').map(|(_, value)| value).or_else(|| {
+                option
+                    .find('x')
+                    .map(|at| option[at + 1..].trim_start_matches('='))
+            })
+        });
+        word.dynamic || judged(&lower) || attached.is_some_and(judged)
     })
 }
 
