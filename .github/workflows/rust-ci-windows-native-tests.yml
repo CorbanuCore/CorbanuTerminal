@@ -38,9 +38,27 @@ jobs:
           target: x86_64-pc-windows-gnullvm
           cache-scope: bazel-test-windows-native-main
 
+      - name: Prepare named test evidence
+        id: named_evidence
+        continue-on-error: true
+        shell: bash
+        run: |
+          # A new private directory prevents reuse of an earlier invocation.
+          # Only the collector's allowlisted JSON is uploaded below.
+          evidence_dir="$(mktemp -d "${RUNNER_TEMP}/bazel-named-results.XXXXXXXX")"
+          evidence_dir="$(cygpath -m "$evidence_dir")"
+          invocation_id="$(python -c 'import uuid; print(uuid.uuid4())')"
+          checkout_sha="$(git rev-parse HEAD)"
+          echo "directory=$evidence_dir" >> "$GITHUB_OUTPUT"
+          echo "invocation_id=$invocation_id" >> "$GITHUB_OUTPUT"
+          echo "checkout_sha=$checkout_sha" >> "$GITHUB_OUTPUT"
+
       - name: bazel test tui, core, state, login
+        id: native_tests
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+          NAMED_EVIDENCE_DIR: ${{ steps.named_evidence.outputs.directory }}
+          NAMED_EVIDENCE_INVOCATION: ${{ steps.named_evidence.outputs.invocation_id }}
         shell: bash
         run: |
           bazel_targets=(
@@ -67,13 +85,51 @@ jobs:
             --build_metadata=TAG_windows_native_pr=true
           )
 
+          # Capture failure must not prevent the existing tests from running.
+          evidence_args=()
+          if [[ -n "$NAMED_EVIDENCE_DIR" && -n "$NAMED_EVIDENCE_INVOCATION" ]]; then
+            bazel_test_args+=(
+              "--build_event_json_file=${NAMED_EVIDENCE_DIR}/events.json"
+              "--invocation_id=${NAMED_EVIDENCE_INVOCATION}"
+            )
+            evidence_args+=(--test-results-root-file "$NAMED_EVIDENCE_DIR/testlogs-root.txt")
+          fi
+
           ./.github/scripts/run-bazel-ci.sh \
             --print-failed-action-summary \
             --print-failed-test-logs \
+            "${evidence_args[@]}" \
             -- \
             "${bazel_test_args[@]}" \
             -- \
             "${bazel_targets[@]}"
+
+      - name: Collect named test evidence
+        if: always() && !cancelled() && steps.named_evidence.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          NAMED_EVIDENCE_DIR: ${{ steps.named_evidence.outputs.directory }}
+          NAMED_EVIDENCE_INVOCATION: ${{ steps.named_evidence.outputs.invocation_id }}
+          NAMED_EVIDENCE_CHECKOUT: ${{ steps.named_evidence.outputs.checkout_sha }}
+          NATIVE_TEST_OUTCOME: ${{ steps.native_tests.outcome }}
+        run: |
+          python .github/scripts/collect_bazel_test_results.py \
+            --bep "$NAMED_EVIDENCE_DIR/events.json" \
+            --testlogs-root-file "$NAMED_EVIDENCE_DIR/testlogs-root.txt" \
+            --invocation-id "$NAMED_EVIDENCE_INVOCATION" \
+            --checkout-sha "$NAMED_EVIDENCE_CHECKOUT" \
+            --workflow-outcome "$NATIVE_TEST_OUTCOME" \
+            --output "$NAMED_EVIDENCE_DIR/report.json"
+
+      - name: Upload named test evidence
+        if: always() && !cancelled() && steps.named_evidence.outcome == 'success'
+        continue-on-error: true
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: bazel-named-results-test-windows-native-pr
+          path: ${{ steps.named_evidence.outputs.directory }}/report.json
+          if-no-files-found: warn
 
       - name: Upload Bazel execution logs
         if: always() && !cancelled()

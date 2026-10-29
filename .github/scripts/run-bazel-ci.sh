@@ -7,6 +7,7 @@ print_failed_bazel_action_summary=0
 remote_download_toplevel=0
 windows_msvc_host_platform=0
 windows_cross_compile=0
+test_results_root_file=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -29,6 +30,10 @@ while [[ $# -gt 0 ]]; do
     --windows-cross-compile)
       windows_cross_compile=1
       shift
+      ;;
+    --test-results-root-file)
+      test_results_root_file="$2"
+      shift 2
       ;;
     --)
       shift
@@ -83,10 +88,7 @@ case "${RUNNER_OS:-}" in
     ;;
 esac
 
-print_bazel_test_log_tails() {
-  local console_log="$1"
-  local testlogs_dir
-
+resolve_bazel_testlogs_dir() {
   local -a bazel_info_args=(info)
   if [[ -n "${BUILDBUDDY_API_KEY:-}" ]]; then
     # `bazel info` needs the same CI config as the failed test invocation so
@@ -107,10 +109,16 @@ print_bazel_test_log_tails() {
     esac
   done
 
-  testlogs_dir="$(run_bazel_with_startup_args \
+  run_bazel_with_startup_args \
     --noexperimental_remote_repo_contents_cache \
     "${bazel_info_args[@]}" \
-    bazel-testlogs 2>/dev/null || echo bazel-testlogs)"
+    bazel-testlogs 2>/dev/null
+}
+
+print_bazel_test_log_tails() {
+  local console_log="$1"
+  local testlogs_dir
+  testlogs_dir="$(resolve_bazel_testlogs_dir || echo bazel-testlogs)"
 
   local failed_targets=()
   while IFS= read -r target; do
@@ -403,6 +411,14 @@ run_bazel_with_startup_args \
   2>&1 | tee "$bazel_console_log"
 bazel_status=${PIPESTATUS[0]}
 set -e
+
+if [[ -n "$test_results_root_file" ]]; then
+  # The collector needs this invocation's matching output root, not a stale
+  # workspace convenience link. This metadata lookup never replaces test status.
+  if ! { resolve_bazel_testlogs_dir > "$test_results_root_file"; } 2>/dev/null; then
+    { : > "$test_results_root_file"; } 2>/dev/null || true
+  fi
+fi
 
 if [[ ${bazel_status:-0} -ne 0 ]]; then
   if [[ $print_failed_bazel_action_summary -eq 1 ]]; then
