@@ -7101,6 +7101,10 @@ fn issue_1515_brackets_as_arguments_ask() {
         "(( y = x\n((\n)); git -C x(N) config core.pager sh # ))",
         "(( y = ##( )); git -C x(N) config core.pager sh # ))",
         "echo $(( y + ${x#((} )); git -C x(N) config core.pager sh # ))",
+        // ... or a `)` that closes no bracket of the shell's (case
+        // patterns), with no comment; a `}` in a subscript does not end `${`.
+        "(( y = ${x#((} )); git -C x(N) config core.pager sh; ( x=$(case a in a) :;; b) :;; esac))",
+        "(( y = ${a[}]((} )); git -C x(N) config core.pager sh; ( x=$(case a in a) :;; b) :;; esac))",
     ];
     for (group, commands) in [("asked", &asked_on_main[..]), ("new", &quiet_on_main[..])] {
         for command in commands {

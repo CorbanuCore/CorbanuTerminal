@@ -853,8 +853,9 @@ impl Reader<'_> {
 /// backslash or backtick is between them (one pass). Nor any text where
 /// the shell may not count a bracket, which could hide a `(` and stretch
 /// the range past commands (review 4: `(( y = ${x#((} )); git … # ))`): a
-/// bracket in `${…}`, a newline (a here-document or a comment's end) or a
-/// `#` but `$#` and a base (`16#ff`): a comment, zsh's `##(`.
+/// bracket in `${…}` (a `[`, after which a `}` may not end it: `${a[}]((}`),
+/// a newline (a here-document or a comment's end) or a `#` but `$#` and a
+/// base (`16#ff`): a comment, zsh's `##(`.
 fn clean_closes(chars: &[char]) -> HashMap<usize, usize> {
     let mut open = Vec::new();
     let mut last_quote = None;
@@ -868,7 +869,7 @@ fn clean_closes(chars: &[char]) -> HashMap<usize, usize> {
             '\'' | '"' | '`' | '\\' | '\n' => last_quote = Some(at),
             '{' if braces > 0 || before == Some('$') => braces += 1,
             '}' if braces > 0 => braces -= 1,
-            '(' | ')' if braces > 0 => last_quote = Some(at),
+            '(' | ')' | '[' | ']' if braces > 0 => last_quote = Some(at),
             '#' if braces == 0
                 && !before.is_some_and(|c| c == '$' || c.is_ascii_alphanumeric()) =>
             {
