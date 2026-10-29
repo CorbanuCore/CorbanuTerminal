@@ -5,10 +5,14 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
 
 ## Protocol change: `turn.completed` usage can be `null`
 
-- **`corbanu exec --json` reports `"usage": null` when the provider reported
-  no usage for the turn** (#290). Unknown usage is no longer reported as an
+- **`corbanu exec --json` reports `"usage": null` when exec receives no
+  matching usage report** (#290). Unknown usage is no longer reported as an
   all-zero usage object, so consumers can distinguish "not reported" from a
   measured zero. When usage is reported, the object is unchanged.
+- **A non-null usage does not prove the provider reported this turn.** On a
+  resumed thread, if this turn's response reports no usage, `usage` still
+  holds the thread's earlier totals. When only some of a turn's requests report
+  usage, the totals include only those.
 - **The usage is still the completing thread's own total.** It does not add
   usage from spawned subagents and is not a difference from the start of the
   invocation.
@@ -19,7 +23,7 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   null check** will fail on turns with no reported usage and must be updated.
   The TypeScript SDK in `sdk/typescript` handles `null` from this release:
   `TurnCompletedEvent.usage` is `Usage | null`, and `Thread.run()` returns
-  `usage: null` for such turns.
+  `usage: null` when exec receives no usage report.
 
 ## Protocol change: `refused` command status
 
@@ -257,3 +261,14 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   it is in the same scope (folder, provider, not archived) and no conversation
   there got a newer turn after you quit. Otherwise it still picks the newest
   turn, as before. The `/resume` list order and `fork --last` are unchanged.
+
+## Corbanu API with no key: `/status` and first-run setup
+
+- **`/status` no longer claims a missing Corbanu API key.** Under Moderate or
+  Aggressive, with Corbanu Plan chosen but no key, `/status` said
+  `Corbanu Plan API key configured` while `/providers` said not configured. It
+  now says `Corbanu API not configured (set it up in /providers)` (#1563).
+- **First-run setup for a chosen Corbanu Plan opens the provider list.** It used
+  to open an OpenAI-worded key prompt that ended in
+  `Provider API-key selection is no longer available`. The list now starts on
+  **Corbanu API**, whose wallet and API-key setup runs after **Done**.

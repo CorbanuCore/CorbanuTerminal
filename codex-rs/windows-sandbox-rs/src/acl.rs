@@ -751,12 +751,27 @@ unsafe fn is_exact_delete_child_deny(
 
 /// Denies `psid` `DELETE` on `path` itself (not inherited), so a sandbox
 /// whose token carries `psid` can't delete, rename or move it through its own
-/// `DELETE` right (#1506 item 3).
+/// `DELETE` right (#1506 item 3). Returns whether it added the entry; fails
+/// if the entry isn't there afterwards (the DACL couldn't be written, #1542
+/// item 3), since D263 must not start a command without it.
 ///
 /// # Safety
 /// Caller must ensure `psid` points to a valid SID and `path` exists.
 pub unsafe fn add_deny_delete_ace(path: &Path, psid: *mut c_void) -> Result<bool> {
-    add_deny_ace(path, psid, DenyAceKind::Delete)
+    let added = add_deny_ace(path, psid, DenyAceKind::Delete)?;
+    // `add_deny_ace` reports a failed write as "not added"; confirm instead.
+    let (p_dacl, p_sd) = fetch_dacl_handle(path)?;
+    let present = DenyAceKind::Delete.already_present(p_dacl, psid, path.is_dir());
+    if !p_sd.is_null() {
+        LocalFree(p_sd as HLOCAL);
+    }
+    if !present {
+        return Err(anyhow!(
+            "could not deny the sandbox DELETE on {}",
+            path.display()
+        ));
+    }
+    Ok(added)
 }
 
 /// PF-27-S06: denies `psid` reads of every file created directly in `path`

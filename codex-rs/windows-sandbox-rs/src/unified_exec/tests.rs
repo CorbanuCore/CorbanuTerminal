@@ -2743,3 +2743,7 @@ fn legacy_capture_command_log_redacts_credentials() {
 /// #1507: other process-creation routes out of a legacy session.
 #[path = "launch_path_tests.rs"]
 mod launch_paths;
+
+/// D285: what the per-command ACL work costs on a large workspace.
+#[path = "acl_cost_tests.rs"]
+mod acl_cost;

@@ -256,7 +256,16 @@ impl OnboardingScreen {
                 &api_key_provider_options,
             );
             let has_multiple_provider_options = catalog_options.len() > 1;
-            let highlighted_mode = initial_sign_in_option(&catalog_options, forced_login_method);
+            // #1563: a chosen but unset Corbanu Plan starts on its own setup row.
+            let highlighted_mode = if forced_login_method.is_none()
+                && config.model_provider_id
+                    == codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID
+                && catalog_options.contains(&SignInOption::CorbanuPlan)
+            {
+                SignInOption::CorbanuPlan
+            } else {
+                initial_sign_in_option(&catalog_options, forced_login_method)
+            };
             let initial_sign_in_state =
                 if matches!(forced_login_method, Some(ForcedLoginMethod::Api))
                     || (!has_multiple_provider_options && api_key_env_var.is_some())

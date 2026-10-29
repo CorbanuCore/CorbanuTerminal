@@ -34,7 +34,10 @@ export type Usage = {
 /** Emitted when a turn is completed. Typically right after the assistant's response. */
 export type TurnCompletedEvent = {
   type: "turn.completed";
-  /** Token usage for the turn, or `null` when the provider reported no usage. */
+  /**
+   * The thread's latest reported token totals, or `null` when exec received no usage report.
+   * A resumed thread can carry its earlier totals even when this turn reported none.
+   */
   usage: Usage | null;
 };
 

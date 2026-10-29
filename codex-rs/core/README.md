@@ -216,7 +216,14 @@ object's own `DELETE` right; only a delete that relies on the parent's
 `icacls <dir> /remove:d *S-1-1-0` on the affected directories. That command
 also removes any other Everyone deny entries on them. The sandbox `DELETE`
 denies on folders above nested read-only paths (D263) name the sandbox's own
-capability SIDs, like its other deny entries, and stay.
+capability SIDs, like its other deny entries, and stay; if one can't be added,
+the command doesn't start. To remove them, first drop the nested read-only
+path from your configuration (otherwise the next legacy command adds them
+back), then run `icacls <dir> /remove:d *<sid>` on each folder between the
+writable root and the read-only path, for each SID listed in `cap_sid` under
+`CODEX_HOME` (a JSON file). That also removes the sandbox's other deny
+entries for that SID on the folder, which the next legacy command that needs
+them adds back.
 
 New `[permissions]` / split filesystem policies remain supported on Windows
 only when they can be enforced directly by the selected Windows backend or

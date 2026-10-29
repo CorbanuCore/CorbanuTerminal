@@ -246,11 +246,12 @@ impl ChatWidget {
         let model_display_name = self.model_display_name();
         let account_usage = self.status_account_usage();
         let refresh_named_accounts = account_usage.is_some();
+        let account_display = self.status_account_display_for_card();
         let (cell, handle) = crate::status::new_status_output_with_rate_limits_handle(
             &self.config,
             self.runtime_model_provider_base_url.as_deref(),
             self.remote_connection.as_ref(),
-            self.status_account_display.as_ref(),
+            account_display.as_ref(),
             token_info,
             total_usage,
             &self.thread_id,
@@ -278,6 +279,24 @@ impl ChatWidget {
                 &self.config,
             );
         }
+    }
+
+    /// #1563: a key claim yields when the turn gate (and `/providers`)
+    /// refuses the current provider as not configured; a brokered session
+    /// reports a key for every provider that takes one without reading it.
+    fn status_account_display_for_card(&self) -> Option<StatusAccountDisplay> {
+        let display = self.status_account_display.clone();
+        if !matches!(display, Some(StatusAccountDisplay::ApiKey { .. })) {
+            return display;
+        }
+        self.model_catalog
+            .provider_policy()
+            .and_then(|policy| {
+                policy
+                    .not_configured_entry_name(&self.config.model_provider_id, self.current_model())
+            })
+            .map(|provider| StatusAccountDisplay::NotConfigured { provider })
+            .or(display)
     }
 
     /// PF-84: the active provider's per-account token summary, only while
