@@ -9,6 +9,12 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   matching usage report** (#290). Unknown usage is no longer reported as an
   all-zero usage object, so consumers can distinguish "not reported" from a
   measured zero. When usage is reported, the object is unchanged.
+- **Token estimates are not usage reports** (#1570). After compaction or
+  rollback, the thread's usage update can hold only a token estimate with
+  zero counters; when the context window fills, only the window size. Exec no
+  longer reports these: `usage` stays `null`, or keeps the last real report.
+  A provider that reports only `total_tokens` (no input or output counts)
+  now also gives `null`.
 - **A non-null usage does not prove the provider reported this turn.** On a
   resumed thread, if this turn's response reports no usage, `usage` still
   holds the thread's earlier totals. When only some of a turn's requests report

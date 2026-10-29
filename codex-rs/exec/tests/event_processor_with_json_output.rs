@@ -1832,3 +1832,102 @@ fn issue290_usage_update_for_another_thread_is_not_reported_for_this_thread() {
         }
     );
 }
+
+fn synthetic_usage_update(
+    thread_id: &str,
+    turn_id: &str,
+    info: codex_protocol::protocol::TokenUsageInfo,
+) -> ServerNotification {
+    ServerNotification::ThreadTokenUsageUpdated(
+        codex_app_server_protocol::ThreadTokenUsageUpdatedNotification {
+            thread_id: thread_id.to_string(),
+            turn_id: turn_id.to_string(),
+            token_usage: ThreadTokenUsage::from(info),
+            account_usage: None,
+        },
+    )
+}
+
+#[test]
+fn issue1570_recomputed_usage_on_thread_without_reports_stays_null() {
+    use codex_protocol::protocol::TokenUsage as CoreTokenUsage;
+    use codex_protocol::protocol::TokenUsageInfo;
+
+    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    // What `recompute_token_usage` sends after compaction or rollback when the
+    // provider never reported usage: zero totals plus a context estimate.
+    let recomputed = TokenUsageInfo {
+        total_token_usage: CoreTokenUsage::default(),
+        last_token_usage: CoreTokenUsage {
+            total_tokens: 12_345,
+            ..CoreTokenUsage::default()
+        },
+        model_context_window: Some(200_000),
+    };
+    let _ =
+        processor.collect_thread_events(synthetic_usage_update("thread-1", "turn-1", recomputed));
+
+    let completed = processor.collect_thread_events(completed_turn("thread-1", "turn-1"));
+    assert_eq!(
+        completed,
+        CollectedThreadEvents {
+            events: vec![ThreadEvent::TurnCompleted(TurnCompletedEvent {
+                usage: None,
+            })],
+            status: CodexStatus::InitiateShutdown,
+        }
+    );
+    let serialized = serde_json::to_value(&completed.events[0]).expect("serialize event");
+    assert_eq!(serialized["usage"], serde_json::Value::Null);
+}
+
+#[test]
+fn issue1570_context_window_fill_keeps_last_reported_usage() {
+    use codex_protocol::protocol::TokenUsageInfo;
+
+    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let _ = processor.collect_thread_events(usage_update(
+        "thread-1", "turn-1", /*input_tokens*/ 4_200,
+    ));
+    // `set_total_tokens_full` replaces the totals with zero counters.
+    let _ = processor.collect_thread_events(synthetic_usage_update(
+        "thread-1",
+        "turn-1",
+        TokenUsageInfo::full_context_window(/*context_window*/ 200_000),
+    ));
+
+    let completed = processor.collect_thread_events(completed_turn("thread-1", "turn-1"));
+    assert_eq!(
+        completed,
+        CollectedThreadEvents {
+            events: vec![ThreadEvent::TurnCompleted(TurnCompletedEvent {
+                usage: Some(Usage {
+                    input_tokens: 4_200,
+                    cached_input_tokens: 0,
+                    cache_write_input_tokens: 0,
+                    output_tokens: 0,
+                    reasoning_output_tokens: 0,
+                }),
+            })],
+            status: CodexStatus::InitiateShutdown,
+        }
+    );
+}
+
+#[test]
+fn issue1570_provider_reported_zero_usage_is_still_reported() {
+    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+    let _ = processor
+        .collect_thread_events(usage_update("thread-1", "turn-1", /*input_tokens*/ 0));
+
+    let completed = processor.collect_thread_events(completed_turn("thread-1", "turn-1"));
+    assert_eq!(
+        completed,
+        CollectedThreadEvents {
+            events: vec![ThreadEvent::TurnCompleted(TurnCompletedEvent {
+                usage: Some(Usage::default()),
+            })],
+            status: CodexStatus::InitiateShutdown,
+        }
+    );
+}

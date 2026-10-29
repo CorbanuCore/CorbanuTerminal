@@ -13,6 +13,8 @@ billing or run-cost record:
 - If exec receives no matching usage report, `usage` is `null`. Unknown
   usage is never reported as zero counters, so consumers must handle the
   null case instead of reading token counts from it.
+- The token estimate sent after compaction, rollback or a full context window
+  is not a usage report: it leaves `usage` at the last real report, or `null`.
 
 The remaining limits of the JSON output are tracked in
 [#290](https://github.com/CorbanuCore/CorbanuTerminal/issues/290).
