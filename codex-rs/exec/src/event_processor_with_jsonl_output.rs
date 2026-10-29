@@ -497,8 +497,14 @@ impl EventProcessorWithJsonOutput {
             }
             ServerNotification::ModelVerification(_) => CodexStatus::Running,
             ServerNotification::ThreadTokenUsageUpdated(notification) => {
-                self.total_token_usage_by_thread
-                    .insert(notification.thread_id, notification.token_usage);
+                // Core also sends synthetic updates that carry no provider usage: after
+                // compaction or rollback on a thread that never reported usage, and when
+                // the context window is filled. Keep the last real report (or none, so
+                // `usage` stays null) instead of replacing it with zero counters (#1570).
+                if reports_usage(&notification.token_usage) {
+                    self.total_token_usage_by_thread
+                        .insert(notification.thread_id, notification.token_usage);
+                }
                 CodexStatus::Running
             }
             ServerNotification::TurnCompleted(notification) => {
@@ -591,6 +597,24 @@ impl EventProcessorWithJsonOutput {
 
         CollectedThreadEvents { events, status }
     }
+}
+
+/// Whether a thread usage update can be a provider's report. Core's synthetic
+/// updates (`recompute_token_usage`, `fill_to_context_window`) keep every
+/// counter exec reports at zero and put only an estimate or the context window
+/// in `total_tokens`; a provider's measured zero has no `total_tokens` either.
+fn reports_usage(usage: &ThreadTokenUsage) -> bool {
+    let total = &usage.total;
+    let counters_are_zero = [
+        total.input_tokens,
+        total.cached_input_tokens,
+        total.cache_write_input_tokens,
+        total.output_tokens,
+        total.reasoning_output_tokens,
+    ]
+    .iter()
+    .all(|count| *count == 0);
+    !counters_are_zero || (total.total_tokens == 0 && usage.last.total_tokens == 0)
 }
 
 impl EventProcessor for EventProcessorWithJsonOutput {
