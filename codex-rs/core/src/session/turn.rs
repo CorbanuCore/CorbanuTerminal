@@ -2102,7 +2102,21 @@ async fn notify_omitted_tools(sess: &Session, turn_context: &TurnContext, omitte
     {
         return;
     }
-    let newly_omitted = sess.state.lock().await.unreported_omitted_tools(omitted);
+    let notice_lock = {
+        let state = sess.state.lock().await;
+        Arc::clone(&state.omitted_tools_notice_lock)
+    };
+    // Keep selection, delivery and marking together. Cancellation releases
+    // this guard without marking tools that have not been shown yet.
+    let Ok(_notice_guard) = notice_lock.acquire().await else {
+        return;
+    };
+    let (newly_omitted, on_delivered) = {
+        let state = sess.state.lock().await;
+        let newly_omitted = state.unreported_omitted_tools(omitted);
+        let on_delivered = state.omitted_tools_delivery_ack(newly_omitted.clone());
+        (newly_omitted, on_delivered)
+    };
     if newly_omitted.is_empty() {
         return;
     }
@@ -2115,18 +2129,14 @@ async fn notify_omitted_tools(sess: &Session, turn_context: &TurnContext, omitte
         first_omitted = %names[0],
         "too many tools for a provider without namespace tools; omitting the rest"
     );
-    sess.send_event(
+    sess.send_warning_with_delivery_ack(
         turn_context,
-        EventMsg::Warning(WarningEvent {
+        WarningEvent {
             message: omitted_tools_notice(&names),
-        }),
+        },
+        on_delivered,
     )
     .await;
-    // Only once shown: an interrupted turn reports them again next time.
-    sess.state
-        .lock()
-        .await
-        .mark_omitted_tools_reported(newly_omitted);
 }
 
 fn omitted_tools_notice(names: &[String]) -> String {
@@ -4119,6 +4129,18 @@ impl Session {
         self.state.lock().await
     }
 }
+
+#[cfg(test)]
+#[path = "omitted_tools_acknowledgment_tests.rs"]
+mod omitted_tools_acknowledgment_tests;
+
+#[cfg(test)]
+#[path = "omitted_tools_delivery_tests.rs"]
+mod omitted_tools_delivery_tests;
+
+#[cfg(test)]
+#[path = "omitted_tools_notification_tests.rs"]
+mod omitted_tools_notification_tests;
 
 #[cfg(test)]
 #[path = "turn_tests.rs"]
