@@ -1506,9 +1506,10 @@ fn fish_codes(texts: &[String], at: usize, cut: &mut bool) -> Vec<String> {
 
 /// #1515: whether a cut command's later words may count: git under any
 /// name, a shell, interpreter or `source` (its script), a program the
-/// classifier judges by its later words (the Corbanu CLI, credential tools,
-/// schedulers), or a word it cannot see. Also as a finder's exec option
-/// holds it (`--exec=git`, `-xgit`, #1276).
+/// classifier judges by its later words (sed, the Corbanu CLI, credential
+/// tools, schedulers), or a word it cannot see. Also as a finder's exec
+/// option holds it (`--exec=git`, `-xgit`, #1276), or as one part of a word
+/// `eval` splits (`eval 'git -C' { …`).
 fn cut_matters(words: &[Word]) -> bool {
     let judged = |text: &str| {
         let name = basename(text);
@@ -1516,6 +1517,7 @@ fn cut_matters(words: &[Word]) -> bool {
             || indirect::equals_git(name)
             || git_helpers::git_name(name).is_some()
             || invocation::parse(name, &[]).is_some()
+            || sed::NAMES.contains(&name)
             || super::CLI_NAMES.contains(&name)
             || matches!(name, "crontab" | "launchctl" | "systemctl")
             || super::CREDENTIAL_COMMANDS
@@ -1532,7 +1534,13 @@ fn cut_matters(words: &[Word]) -> bool {
                     .map(|at| option[at + 1..].trim_start_matches('='))
             })
         });
-        word.dynamic || judged(&lower) || attached.is_some_and(judged)
+        word.dynamic
+            || judged(&lower)
+            || attached.is_some_and(judged)
+            || lower.split_whitespace().any(|part| {
+                work::step();
+                judged(part)
+            })
     })
 }
 

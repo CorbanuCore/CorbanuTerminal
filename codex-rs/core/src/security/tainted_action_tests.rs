@@ -7080,6 +7080,11 @@ fn issue_1515_brackets_as_arguments_ask() {
         "bash } x",
         ". { x",
         "python3 } x",
+        // Review 2: after a `((` holding `case`, sed, and `eval`'s parts.
+        "(( case )); git -C .(N) config core.pager sh",
+        "(( case )); git -C @(.) config core.pager sh",
+        "sed -n } -e '1e touch /tmp/p' /etc/hosts",
+        "eval 'git -C' { -c 'alias.x=!touch /tmp/p' x",
     ];
     for (group, commands) in [("asked", &asked_on_main[..]), ("new", &quiet_on_main[..])] {
         for command in commands {
@@ -7120,6 +7125,8 @@ fn issue_1515_brackets_as_arguments_ask() {
         "ls *(om[1]) *(N)",
         "print -l *.(jpeg|png)",
         "(( x = 1 )) && git log",
+        "(( x = 2*(1) )); git log",
+        "(( case )); git log",
         "declare -a a=(1 2); local b=(x)",
     ] {
         for shell in ["/bin/bash", "/bin/zsh"] {

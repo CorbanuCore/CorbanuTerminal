@@ -374,9 +374,9 @@ impl Reader<'_> {
                 Joint::Start
             }),
         };
-        // The `case` counts of the brackets around the text being read,
-        // and whether each is arithmetic (`((`, #1515).
-        let mut opened: Vec<(usize, bool)> = Vec::new();
+        // The `case` counts of the brackets around the text being read.
+        let mut opened: Vec<usize> = Vec::new();
+        // #1515: the open brackets of a `((` (all brackets inside it).
         let mut arithmetic = 0usize;
         while index < chars.len() {
             work::step();
@@ -388,12 +388,12 @@ impl Reader<'_> {
                 // substitution (`esac)` closes the case first).
                 ')' => {
                     self.finish_word(&mut list);
+                    // #1515: every bracket inside `((` is arithmetic, so each
+                    // `)` closes one, whatever `case` words it holds.
+                    arithmetic = arithmetic.saturating_sub(1);
                     if list.cases == 0 {
                         match opened.pop() {
-                            Some((cases, math)) => {
-                                list.cases = cases;
-                                arithmetic -= usize::from(math);
-                            }
+                            Some(cases) => list.cases = cases,
                             None if nested => return index + 1,
                             None => {}
                         }
@@ -414,7 +414,7 @@ impl Reader<'_> {
                             && shell::arithmetic_expansion(chars, index + 2).is_some());
                     arithmetic += usize::from(math);
                     self.finish_command(&mut list);
-                    opened.push((std::mem::take(&mut list.cases), math));
+                    opened.push(std::mem::take(&mut list.cases));
                     list.joint = Some(Joint::Other);
                 }
                 ' ' | '\t' => self.finish_word(&mut list),
