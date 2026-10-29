@@ -6729,11 +6729,13 @@ mod tests {
 
     #[test]
     fn issue1577_fill_to_context_window_keeps_reported_counters() {
-        let first = issue1577_usage(4_000, 1_000, 200, 50);
+        let first = issue1577_usage(
+            /*input*/ 4_000, /*cached*/ 1_000, /*output*/ 200, /*reasoning*/ 50,
+        );
         let mut info = TokenUsageInfo::new_or_append(&None, &Some(first.clone()), Some(128_000))
             .expect("first report creates the info");
 
-        info.fill_to_context_window(128_000);
+        info.fill_to_context_window(/*context_window*/ 128_000);
 
         // The provider's counters survive; only total_tokens and last_token_usage
         // carry the fill, exactly as before.
@@ -6753,7 +6755,9 @@ mod tests {
         );
 
         // The next real report is added to the earlier counters, not to zeros.
-        let second = issue1577_usage(300, 100, 40, 10);
+        let second = issue1577_usage(
+            /*input*/ 300, /*cached*/ 100, /*output*/ 40, /*reasoning*/ 10,
+        );
         info.append_last_usage(&second);
         assert_eq!(
             info.total_token_usage,
@@ -6770,7 +6774,7 @@ mod tests {
 
         // A second fill moves total_tokens and last_token_usage as before
         // (total_tokens is already past the window, so last is 0).
-        info.fill_to_context_window(128_000);
+        info.fill_to_context_window(/*context_window*/ 128_000);
         assert_eq!(info.total_token_usage.input_tokens, 4_300);
         assert_eq!(info.total_token_usage.output_tokens, 240);
         assert_eq!(info.total_token_usage.total_tokens, 128_000);
@@ -6780,7 +6784,7 @@ mod tests {
     #[test]
     fn issue1577_full_context_window_without_reports_has_zero_counters() {
         assert_eq!(
-            TokenUsageInfo::full_context_window(64_000),
+            TokenUsageInfo::full_context_window(/*context_window*/ 64_000),
             TokenUsageInfo {
                 total_token_usage: TokenUsage {
                     total_tokens: 64_000,
