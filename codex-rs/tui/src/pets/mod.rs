@@ -280,6 +280,9 @@ mod tests {
     use std::io;
     use std::path::PathBuf;
 
+    use base64::Engine;
+    use base64::engine::general_purpose;
+
     use super::image_protocol::ImageProtocol;
     use super::*;
 
@@ -349,6 +352,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let frame = dir.path().join("frame.png");
         std::fs::write(&frame, b"png").unwrap();
+        let expected_path = frame.canonicalize().unwrap();
         let request = AmbientPetDraw {
             frame,
             protocol: ImageProtocol::KittyLocalFile,
@@ -368,8 +372,20 @@ mod tests {
         let output = String::from_utf8(output).unwrap();
         assert!(output.contains("a=d,d=I,i=49374,q=2;"));
         assert!(output.contains("\x1b[4;3H"));
-        assert!(output.contains("a=T,t=f,f=100,c=4,r=2,q=2,i=49374;"));
-        assert!(!output.contains("cG5n"));
+        let file_header = "a=T,t=f,f=100,c=4,r=2,q=2,i=49374;";
+        let payload_start = output
+            .find(file_header)
+            .expect("transmits a file reference")
+            + file_header.len();
+        let payload = output[payload_start..]
+            .split('\x1b')
+            .next()
+            .expect("file reference payload");
+        // The payload is the base64 file path, so compare it decoded rather than
+        // searching for encoded bytes that a temp path can also contain (#1547).
+        let decoded = general_purpose::STANDARD.decode(payload).unwrap();
+        assert_eq!(decoded, expected_path.to_string_lossy().as_bytes());
+        assert!(!output.contains("t=d"));
         assert!(output.contains("\x1b8"));
     }
 
