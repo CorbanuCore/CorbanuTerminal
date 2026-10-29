@@ -602,7 +602,8 @@ impl EventProcessorWithJsonOutput {
 /// Whether a thread usage update can be a provider's report. Core's synthetic
 /// updates (`recompute_token_usage`, `fill_to_context_window`) keep every
 /// counter exec reports at zero and put only an estimate or the context window
-/// in `total_tokens`; a provider's measured zero has no `total_tokens` either.
+/// in `total_tokens`. A provider's measured zero has no `total_tokens` either,
+/// unless it arrives after a fill, when it cannot be told apart and is ignored.
 fn reports_usage(usage: &ThreadTokenUsage) -> bool {
     let total = &usage.total;
     let counters_are_zero = [
