@@ -2292,3 +2292,7 @@ fn legacy_capture_command_log_redacts_credentials() {
         sandbox_log(codex_home.path())
     );
 }
+
+/// #1507: other process-creation routes out of a legacy session.
+#[path = "launch_path_tests.rs"]
+mod launch_paths;

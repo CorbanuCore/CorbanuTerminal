@@ -183,6 +183,7 @@ mod tests {
         ("indirect.rs", include_str!("indirect.rs")),
         ("invocation.rs", include_str!("invocation.rs")),
         ("launched_git.rs", include_str!("launched_git.rs")),
+        ("launched_input.rs", include_str!("launched_input.rs")),
         ("loader_variables.rs", include_str!("loader_variables.rs")),
         ("mktemp.rs", include_str!("mktemp.rs")),
         ("named_shell.rs", include_str!("named_shell.rs")),

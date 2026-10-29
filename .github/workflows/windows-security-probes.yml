@@ -87,7 +87,8 @@ concurrency:
 env:
   # #158: the legacy (unelevated) sandbox keeps deletes inside writable roots,
   # and labels them Low only while a session uses them (option (b)); #733:
-  # its commands can't start children outside their job.
+  # its commands can't start children outside their job; #1507: nor, on the
+  # hosted runner, through WMI, the Task Scheduler or ShellWindows.
   LEGACY_158_TESTS: >-
     legacy_workspace_write_delete_is_limited_to_writable_roots
     legacy_read_only_cannot_delete_anything
@@ -99,6 +100,10 @@ env:
     legacy_unlabelled_root_is_reported_until_labelled
     legacy_writable_roots_are_the_labelled_roots
     legacy_command_cannot_break_away_from_its_job
+    launch_paths::legacy_launch_plain_child_stays_in_session
+    launch_paths::legacy_launch_through_wmi_stays_in_session
+    launch_paths::legacy_launch_through_task_scheduler_stays_in_session
+    launch_paths::legacy_launch_through_com_shell_windows_stays_in_session
 
 jobs:
   probes:

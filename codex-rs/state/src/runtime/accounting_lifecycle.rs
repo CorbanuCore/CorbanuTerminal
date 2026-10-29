@@ -368,7 +368,12 @@ impl Journal<'_> {
             RetentionFixture::Staging => return Ok(InspectionDay::CheckpointLag),
             RetentionFixture::Absent => anyhow::bail!("missing retention schema"),
         };
-        ensure!(read_at_ms >= checkpoint, "backward inspection read");
+        if read_at_ms < checkpoint {
+            return Err(crate::runtime::accounting::store::ClockBehindLedger {
+                behind_ms: checkpoint.saturating_sub(read_at_ms),
+            }
+            .into());
+        }
         if day > checkpoint / DAY_MS {
             return Ok(InspectionDay::CheckpointLag);
         }

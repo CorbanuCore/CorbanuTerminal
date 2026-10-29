@@ -318,6 +318,60 @@ impl AsOf {
     }
 }
 
+/// #1518: an inspection read at a time behind the ledger's checkpoint. The
+/// ledger is intact; the system clock reads earlier than its newest record, so
+/// the read is refused until the clock catches up.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClockBehindLedger {
+    pub behind_ms: i64,
+}
+
+impl std::fmt::Display for ClockBehindLedger {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "backward inspection read: the system clock is {} ms behind the accounting ledger checkpoint",
+            self.behind_ms
+        )
+    }
+}
+
+impl std::error::Error for ClockBehindLedger {}
+
+/// The clock-behind refusal in `error`'s chain, if that is what it is.
+pub fn clock_behind_ledger(error: &anyhow::Error) -> Option<ClockBehindLedger> {
+    error
+        .chain()
+        .find_map(|cause| cause.downcast_ref::<ClockBehindLedger>().copied())
+}
+
+/// #1522: an inspection of a UTC day that starts after the read time, e.g. a
+/// `/cost` view opened while the clock read ahead and refreshed after it was
+/// set back. Still refused; typed so the caller can name the clock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClockBeforeDay {
+    pub behind_ms: i64,
+}
+
+impl std::fmt::Display for ClockBeforeDay {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "invalid or future day: the system clock is {} ms before the requested UTC day",
+            self.behind_ms
+        )
+    }
+}
+
+impl std::error::Error for ClockBeforeDay {}
+
+/// The future-day refusal in `error`'s chain, if that is what it is.
+pub fn clock_before_day(error: &anyhow::Error) -> Option<ClockBeforeDay> {
+    error
+        .chain()
+        .find_map(|cause| cause.downcast_ref::<ClockBeforeDay>().copied())
+}
+
 /// Say once per process that the clock is behind the ledger.
 fn warn_clock_behind(behind_ms: i64) {
     static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -397,7 +451,13 @@ impl<'a> AccountingStore<'a> {
         requested: Option<InspectionRange>,
     ) -> anyhow::Result<InspectionDay> {
         let start = utc_day.checked_mul(86_400_000).context("day overflow")?;
-        ensure!(utc_day >= 0 && read_at_ms >= start, "invalid or future day");
+        ensure!(utc_day >= 0, "invalid or future day");
+        if read_at_ms < start {
+            return Err(ClockBeforeDay {
+                behind_ms: start.saturating_sub(read_at_ms),
+            }
+            .into());
+        }
         start.checked_add(86_400_000).context("day end overflow")?;
         let mut tx = runtime.pool.begin().await?;
         if !ledger_exists(&mut tx).await? {
