@@ -849,60 +849,44 @@ impl Reader<'_> {
     }
 }
 
-/// #1515: each `(` of `chars` and the `)` that closes it, when no quote,
-/// backslash or backtick is between them (one pass). Nor any text where
-/// the shell may not count a bracket, which could hide a `(` and stretch
-/// the range past commands (review 4: `(( y = ${x#((} )); git … # ))`): a
-/// bracket in `${…}` (a `[`, after which a `}` may not end it: `${a[}]((}`),
-/// a newline (a here-document or a comment's end) or a `#` but `$#` and a
-/// base (`16#ff`): a comment, zsh's `##(`.
-/// Review 5: zsh counts `[`/`]` in arithmetic too and reads it as commands
-/// when they do not pair inside (`(( git -C .(N) … ; : ] ))`, `: [ ))`), so
-/// a pair needs the same bracket depth at both ends, never lower between,
-/// and a `]` closing no `[` disqualifies like a quote.
+/// #1515: each `(` of `chars` and the `)` that closes it, when nothing
+/// between them can make a shell count brackets other than this one pass
+/// does (one pass). Every review found another such corner of zsh's
+/// arithmetic (`${x#((}`, a comment, a here-document, `##(`, unpaired
+/// `[`/`]`, brackets in a nested `$(…)`), so the whole class is out: a
+/// quote, backslash, backtick, newline, `#`, `[`, `]`, `{`, `}` (so `${`)
+/// or `$(` between them, or a `${…}` around them, disqualifies the pair,
+/// and the text is read as commands.
 fn clean_closes(chars: &[char]) -> HashMap<usize, usize> {
-    // Each open `(`: where, the bracket depth there, the lowest since.
-    let mut open: Vec<(usize, usize, usize)> = Vec::new();
+    // Each open `(`: where, and whether a `${…}` holds it.
+    let mut open: Vec<(usize, bool)> = Vec::new();
     let mut last_quote = None;
     let mut closes = HashMap::new();
-    // The `${…}` (and braces inside) open at `at`.
+    // The `${…}` (and braces inside) open.
     let mut braces = 0usize;
-    // The `[`s open outside `${…}`.
-    let mut square = 0usize;
     for (at, ch) in chars.iter().enumerate() {
         work::step();
         let before = at.checked_sub(1).map(|before| chars[before]);
         match ch {
-            '\'' | '"' | '`' | '\\' | '\n' => last_quote = Some(at),
-            '{' if braces > 0 || before == Some('$') => braces += 1,
-            '}' if braces > 0 => braces -= 1,
-            '(' | ')' | '[' | ']' if braces > 0 => last_quote = Some(at),
-            '#' if braces == 0
-                && !before.is_some_and(|c| c == '$' || c.is_ascii_alphanumeric()) =>
-            {
+            '{' if braces > 0 || before == Some('$') => {
+                braces += 1;
                 last_quote = Some(at);
             }
-            '[' => square += 1,
-            ']' if square == 0 => last_quote = Some(at),
-            ']' => {
-                square -= 1;
-                if let Some(top) = open.last_mut() {
-                    top.2 = top.2.min(square);
-                }
+            '}' if braces > 0 => {
+                braces -= 1;
+                last_quote = Some(at);
             }
-            '(' => open.push((at, square, square)),
+            '\'' | '"' | '`' | '\\' | '\n' | '#' | '[' | ']' | '{' | '}' => {
+                last_quote = Some(at);
+            }
+            '$' if chars.get(at + 1) == Some(&'(') => last_quote = Some(at),
+            '(' => open.push((at, braces > 0)),
             ')' => {
-                if let Some((from, depth, lowest)) = open.pop() {
-                    // The brackets this one held were open while it was.
-                    if let Some(top) = open.last_mut() {
-                        top.2 = top.2.min(lowest);
-                    }
-                    if last_quote.is_none_or(|quote| quote < from)
-                        && depth == square
-                        && lowest == depth
-                    {
-                        closes.insert(from, at);
-                    }
+                if let Some((from, braced)) = open.pop()
+                    && !braced
+                    && last_quote.is_none_or(|quote| quote < from)
+                {
+                    closes.insert(from, at);
                 }
             }
             _ => {}

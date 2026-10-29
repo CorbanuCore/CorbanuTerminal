@@ -7112,6 +7112,22 @@ fn issue_1515_brackets_as_arguments_ask() {
         "echo [; (( git -C .(N) config core.pager sh; ] [ ))",
         "(( git -C .(N) config core.pager sh; ( ] ) ))",
         "echo $(( git -C @(.) config core.pager sh; ] ))",
+        // Review 6: zsh counts the brackets of a nested `$(…)`, `$((…))`
+        // or `${…}` on their own. Since then any bracket, `$(`, `${`,
+        // backtick, `#` or newline in the arithmetic reads it as commands.
+        "(( git -C .(N) config core.pager sh; : $(( echo [ )); ] ))",
+        "x=$(( git -C .(N) config core.pager sh; : $(( echo [ )); ] ))",
+        "(( git -C .(N) config core.pager sh; [ $(( ] )) ))",
+        "(( git -C .(N) config core.pager sh; [ $(echo ]) ))",
+        "(( git -C .(N) config core.pager sh; : $(echo [); ] ))",
+        "(( git -C .(N) config core.pager sh; : $( (echo [) ); ] ))",
+        "echo $(( git -C @(.) config core.pager sh; : $(( echo [ )); ] ))",
+        "(( git -C .(N) config core.pager sh; : $(( $(( echo [ )) )); ] ))",
+        "(( git -C .(N) config core.pager sh; : ${x:-[}; ] ))",
+        "(( git -C .(N) config core.pager sh; : `echo [`; ] ))",
+        "(( git -C .(N) config core.pager sh; : $# ))",
+        "(( git -C .(N) config core.pager sh; : 16#ff ))",
+        "(( git -C .(N) config core.pager sh; : a[1] ))",
     ];
     for (group, commands) in [("asked", &asked_on_main[..]), ("new", &quiet_on_main[..])] {
         for command in commands {
