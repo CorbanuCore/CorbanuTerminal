@@ -7128,6 +7128,11 @@ fn issue_1515_brackets_as_arguments_ask() {
         "(( git -C .(N) config core.pager sh; : $# ))",
         "(( git -C .(N) config core.pager sh; : 16#ff ))",
         "(( git -C .(N) config core.pager sh; : a[1] ))",
+        // ... so these ask too, where both shells read arithmetic (a
+        // cut before a word the classifier cannot see).
+        "(( n = $# * (2) )); echo $(( $# * (2) )); git log",
+        "(( 1 + ${#x} * (2) )); (( n = 16#ff * (2) )); git log",
+        "(( x = $(( 1 )) + (2) )); git log",
     ];
     for (group, commands) in [("asked", &asked_on_main[..]), ("new", &quiet_on_main[..])] {
         for command in commands {
@@ -7170,8 +7175,6 @@ fn issue_1515_brackets_as_arguments_ask() {
         "(( x = 1 )) && git log",
         "(( x = 2*(1) )); git log",
         "(( case )); git log",
-        "(( n = $# * (2) )); echo $(( $# * (2) )); git log",
-        "(( 1 + ${#x} * (2) )); (( n = 16#ff * (2) )); git log",
         "for ((i=0; i<${#a[@]}; i+=(1))); do git log; done",
         "(( a[1] + (2) )); (( a[(1)] + b[2] )); (( (a[) ] )); git log",
         "echo [; (( x = 2*(1) )); git log",
@@ -7196,6 +7199,7 @@ fn issue_1515_bracket_checks_are_linear() {
         ("braced arithmetic", "(( ${x#((} + y*(1) )); "),
         ("bracketed arithmetic", "(( a[(1)] + [ * (1) ] )); "),
         ("open squares", "[ (( "),
+        ("nested brackets", "(( $(( [ )) ] + (1) )); "),
         ("cut git", "git -C x(N) config k v; "),
         ("cut words", "a { b } "),
     ] {
