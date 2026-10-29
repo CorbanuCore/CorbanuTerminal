@@ -2,6 +2,22 @@ use super::*;
 use codex_protocol::protocol::AgentMessageKind;
 use codex_state::AgentMailboxAdmission;
 use codex_state::AgentMailboxPhase;
+use std::sync::LazyLock;
+
+/// #1545: every delivery attempt this process reserves starts with this prefix, so recovery can
+/// tell a `Submitted` row a live sender in this process handed over (the recipient moves it on)
+/// from one an earlier process left behind (which must be sent again).
+static THIS_PROCESS_ATTEMPT_PREFIX: LazyLock<String> =
+    LazyLock::new(|| format!("{}/", uuid::Uuid::now_v7()));
+
+fn new_attempt_id() -> String {
+    format!("{}{}", *THIS_PROCESS_ATTEMPT_PREFIX, uuid::Uuid::now_v7())
+}
+
+fn reserved_by_this_process(attempt_id: Option<&str>) -> bool {
+    attempt_id
+        .is_some_and(|attempt_id| attempt_id.starts_with(THIS_PROCESS_ATTEMPT_PREFIX.as_str()))
+}
 
 impl AgentControl {
     pub(crate) async fn recover_inter_agent_communications(
@@ -77,6 +93,22 @@ impl AgentControl {
                             %agent_id,
                             "agent mailbox message was applied before process recovery but its \
                              provider outcome is unknown; automatic replay is disabled"
+                        );
+                        continue;
+                    }
+                    // #1545: a Submitted row whose attempt this process reserved was handed over by
+                    // a live sender here (it writes Submitted before the hand-off), and the
+                    // recipient moves it on when it applies it. Requeueing it would deliver it
+                    // twice under the same message id. Rows left by an earlier process are
+                    // requeued below; Submitting rows were never handed over and are requeued too.
+                    if message.phase == AgentMailboxPhase::Submitted
+                        && reserved_by_this_process(message.attempt_id.as_deref())
+                    {
+                        tracing::debug!(
+                            %message_id,
+                            %agent_id,
+                            "agent mailbox message was handed over by a live sender in this \
+                             process; recovery leaves it to the recipient"
                         );
                         continue;
                     }
@@ -279,7 +311,7 @@ impl AgentControl {
                     | AgentMailboxPhase::TerminalFailure,
                 ) => return Ok(message_id),
             };
-            let attempt_id = uuid::Uuid::now_v7().to_string();
+            let attempt_id = new_attempt_id();
             if !state_db
                 .begin_agent_message_submission(
                     &message_id,
@@ -301,10 +333,9 @@ impl AgentControl {
             // Submitted to ProviderRunning; marked after the hand-off, it stayed Submitted while
             // that turn ran it.
             if !state_db
-                .transition_agent_message(
+                .confirm_agent_message_submission(
                     &message_id,
-                    AgentMailboxPhase::Submitting,
-                    AgentMailboxPhase::Submitted,
+                    &attempt_id,
                     crate::turn_timing::now_unix_timestamp_ms(),
                 )
                 .await
@@ -315,10 +346,11 @@ impl AgentControl {
                 })?
             {
                 // #1452: another owner (mailbox recovery, or a live sender racing it) moved the
-                // row off Submitting between this reservation and this write. Only the owner whose
-                // Submitting -> Submitted write wins hands the message over, so this attempt
-                // stops here without an error, as a lost reservation above does; failing it
-                // would stop recovery's loop or invite a resend under a new message id.
+                // row off Submitting, or reserved it again under its own attempt (#1545), between
+                // this reservation and this write. Only the owner whose Submitting -> Submitted
+                // write wins hands the message over, so this attempt stops here without an error,
+                // as a lost reservation above does; failing it would stop recovery's loop or
+                // invite a resend under a new message id.
                 tracing::debug!(
                     %message_id,
                     %agent_id,
