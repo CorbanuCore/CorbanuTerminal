@@ -5,14 +5,14 @@ expression: unknown
 /status
 
 ╭────────────────────────────────────────────────────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v0.0.0)                                                          │
+│  >_ Corbanu Terminal (v<V>)                                                            │
 │                                                                                        │
 │ Visit https://chatgpt.com/codex/settings/usage for up-to-date                          │
 │ information on rate limits and credits                                                 │
 │                                                                                        │
 │  Model:            gpt-5.5 (reasoning none, summaries auto)                            │
 │  Model provider:   OpenAI · account work                                               │
-│  Directory:        /workspace/tests                                                    │
+│  Directory: [[workspace]]                                                              │
 │  Permissions:      Next turn: Custom (workspace with network access, Ask for approval) │
 │  Security:         Requested Permissive; effective protection unverified (/security)   │
 │  Agents.md:        <none>                                                              │

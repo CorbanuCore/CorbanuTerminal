@@ -2919,7 +2919,7 @@ async fn named_sign_in_status(signed_in: bool, remote: bool, known: bool) -> Str
             )
         }),
     );
-    render_lines(&composite.display_lines(/*width*/ 100)).join("\n")
+    sanitize_directory(render_lines(&composite.display_lines(/*width*/ 100))).join("\n")
 }
 
 /// D171 (#1286): once the session's ChatGPT account is removed or signed
