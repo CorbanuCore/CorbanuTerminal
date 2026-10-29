@@ -7091,6 +7091,14 @@ fn issue_1515_brackets_as_arguments_ask() {
         // Review 3: text read past the arithmetic.
         "((##a))\ngit -C .(N) config core.pager sh",
         "(( ##a))\ngit -C @(.) config core.pager sh",
+        // Review 4: brackets the shell does not count, in `${…}`, a
+        // comment or a here-document, stretching the arithmetic.
+        "(( ${x#((} )); git -C x(N) config core.pager sh # ))",
+        "(( ${x#((} )) && git -C @(a) log --output=~/.zshrc # ))",
+        "(( $(: # ((\n) )); git -C x(N) config core.pager sh # ))",
+        "(( $(cat <<E\n((\nE\n) )); git -C x(N) config core.pager sh # ))",
+        "(( ##( )); git -C x(N) config core.pager sh # ))",
+        "echo $(( ${x#((} )); git -C x(N) config core.pager sh # ))",
     ];
     for (group, commands) in [("asked", &asked_on_main[..]), ("new", &quiet_on_main[..])] {
         for command in commands {

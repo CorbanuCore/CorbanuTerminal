@@ -850,7 +850,11 @@ impl Reader<'_> {
 }
 
 /// #1515: each `(` of `chars` and the `)` that closes it, when no quote,
-/// backslash or backtick is between them (one pass).
+/// backslash or backtick is between them (one pass). Nor any text where
+/// the shell does not count brackets, which could hide a `(` and so stretch
+/// the range past commands (review 4: `(( ${x#((} )); git … # ))`): a `{`
+/// (`${…}`), a `#` other than `$#` (a comment, zsh's `##(`) or a newline
+/// (a here-document or a comment's end).
 fn clean_closes(chars: &[char]) -> HashMap<usize, usize> {
     let mut open = Vec::new();
     let mut last_quote = None;
@@ -858,7 +862,10 @@ fn clean_closes(chars: &[char]) -> HashMap<usize, usize> {
     for (at, ch) in chars.iter().enumerate() {
         work::step();
         match ch {
-            '\'' | '"' | '`' | '\\' => last_quote = Some(at),
+            '\'' | '"' | '`' | '\\' | '{' | '\n' => last_quote = Some(at),
+            '#' if at.checked_sub(1).map(|before| chars[before]) != Some('$') => {
+                last_quote = Some(at);
+            }
             '(' => open.push(at),
             ')' => {
                 if let Some(from) = open.pop()
