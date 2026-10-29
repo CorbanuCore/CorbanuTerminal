@@ -851,19 +851,27 @@ impl Reader<'_> {
 
 /// #1515: each `(` of `chars` and the `)` that closes it, when no quote,
 /// backslash or backtick is between them (one pass). Nor any text where
-/// the shell does not count brackets, which could hide a `(` and so stretch
-/// the range past commands (review 4: `(( ${x#((} )); git … # ))`): a `{`
-/// (`${…}`), a `#` other than `$#` (a comment, zsh's `##(`) or a newline
-/// (a here-document or a comment's end).
+/// the shell may not count a bracket, which could hide a `(` and stretch
+/// the range past commands (review 4: `(( y = ${x#((} )); git … # ))`): a
+/// bracket in `${…}`, a newline (a here-document or a comment's end) or a
+/// `#` but `$#` and a base (`16#ff`): a comment, zsh's `##(`.
 fn clean_closes(chars: &[char]) -> HashMap<usize, usize> {
     let mut open = Vec::new();
     let mut last_quote = None;
     let mut closes = HashMap::new();
+    // The `${…}` (and braces inside) open at `at`.
+    let mut braces = 0usize;
     for (at, ch) in chars.iter().enumerate() {
         work::step();
+        let before = at.checked_sub(1).map(|before| chars[before]);
         match ch {
-            '\'' | '"' | '`' | '\\' | '{' | '\n' => last_quote = Some(at),
-            '#' if at.checked_sub(1).map(|before| chars[before]) != Some('$') => {
+            '\'' | '"' | '`' | '\\' | '\n' => last_quote = Some(at),
+            '{' if braces > 0 || before == Some('$') => braces += 1,
+            '}' if braces > 0 => braces -= 1,
+            '(' | ')' if braces > 0 => last_quote = Some(at),
+            '#' if braces == 0
+                && !before.is_some_and(|c| c == '$' || c.is_ascii_alphanumeric()) =>
+            {
                 last_quote = Some(at);
             }
             '(' => open.push(at),

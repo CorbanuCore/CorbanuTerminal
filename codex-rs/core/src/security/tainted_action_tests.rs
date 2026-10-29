@@ -7091,14 +7091,16 @@ fn issue_1515_brackets_as_arguments_ask() {
         // Review 3: text read past the arithmetic.
         "((##a))\ngit -C .(N) config core.pager sh",
         "(( ##a))\ngit -C @(.) config core.pager sh",
-        // Review 4: brackets the shell does not count, in `${…}`, a
-        // comment or a here-document, stretching the arithmetic.
+        // Review 4: brackets the shell does not count (in `${…}`, a
+        // comment or a here-document) stretched the arithmetic.
         "(( ${x#((} )); git -C x(N) config core.pager sh # ))",
-        "(( ${x#((} )) && git -C @(a) log --output=~/.zshrc # ))",
-        "(( $(: # ((\n) )); git -C x(N) config core.pager sh # ))",
-        "(( $(cat <<E\n((\nE\n) )); git -C x(N) config core.pager sh # ))",
-        "(( ##( )); git -C x(N) config core.pager sh # ))",
-        "echo $(( ${x#((} )); git -C x(N) config core.pager sh # ))",
+        "(( y = ${x#((} )); git -C x(N) config core.pager sh # ))",
+        "(( y = ${x#((} )) && git -C @(a) log --output=~/.zshrc # ))",
+        "shopt -s extglob\n(( y = ${x#((} ))\ngit -C @(.) config core.pager sh # ))",
+        "(( y = 1 # ((\n)); git -C x(N) config core.pager sh # ))",
+        "(( y = x\n((\n)); git -C x(N) config core.pager sh # ))",
+        "(( y = ##( )); git -C x(N) config core.pager sh # ))",
+        "echo $(( y + ${x#((} )); git -C x(N) config core.pager sh # ))",
     ];
     for (group, commands) in [("asked", &asked_on_main[..]), ("new", &quiet_on_main[..])] {
         for command in commands {
@@ -7142,6 +7144,8 @@ fn issue_1515_brackets_as_arguments_ask() {
         "(( x = 2*(1) )); git log",
         "(( case )); git log",
         "(( n = $# * (2) )); echo $(( $# * (2) )); git log",
+        "(( 1 + ${#x} * (2) )); (( n = 16#ff * (2) )); git log",
+        "for ((i=0; i<${#a[@]}; i+=(1))); do git log; done",
         "declare -a a=(1 2); local b=(x)",
     ] {
         for shell in ["/bin/bash", "/bin/zsh"] {
@@ -7160,6 +7164,7 @@ fn issue_1515_bracket_checks_are_linear() {
         ("open brackets", "(("),
         ("arithmetic", "(( x*(1) )); "),
         ("substituted arithmetic", "$(( $x*(1) )) "),
+        ("braced arithmetic", "(( ${x#((} + y*(1) )); "),
         ("cut git", "git -C x(N) config k v; "),
         ("cut words", "a { b } "),
     ] {
