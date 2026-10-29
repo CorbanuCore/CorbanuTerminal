@@ -23,6 +23,7 @@ use super::RECURSIVE_READERS;
 use super::WRITERS;
 use super::code_variables;
 use super::has_flag;
+use super::indirect;
 use super::paths::glob_any;
 use super::persistence_command;
 use super::windows_paths;
@@ -1054,8 +1055,11 @@ impl Classifier {
             let name = names[index];
             // The checks the POSIX pass makes by command name, for names
             // only this reading sees (`C:\Tools\corbanu.exe vault list`).
+            // #1515: `=git` too, where the git option scans stop.
+            let equals_git = indirect::equals_git(&lower[index]);
             let named = CLI_NAMES.contains(&name)
                 || name == "git"
+                || equals_git
                 || matches!(name, "crontab" | "launchctl" | "systemctl")
                 || CREDENTIAL_COMMANDS
                     .iter()
@@ -1075,7 +1079,7 @@ impl Classifier {
                 {
                     self.note(ProtectedActionKind::Persistence);
                 }
-                if name == "git"
+                if (name == "git" || equals_git)
                     && code_variables::git_runs_code_after_git(
                         &words[index + 1..],
                         &words[index + 1..],

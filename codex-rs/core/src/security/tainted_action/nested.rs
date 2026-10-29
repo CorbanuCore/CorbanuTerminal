@@ -438,6 +438,11 @@ impl Classifier {
             found.unreadable |= git_helpers::setting_holds_git_name(&command.words);
             loops.read(&texts);
             self.judge_git(&texts, &loops, found);
+            // #1515: one this reading cut at a bracket the shell reads as
+            // text (`git -C { config core.pager sh`) may go on past it.
+            if command.cut && cut_matters(&command.words) {
+                note_git(found, ProtectedActionKind::UnseenCode);
+            }
             // #1268: where a launcher's input reaches the words, and the
             // scripts of shells it puts input into, wherever the command
             // word is read to be (`xargs --replace sh -c '... {}'`).
@@ -1497,6 +1502,25 @@ fn fish_codes(texts: &[String], at: usize, cut: &mut bool) -> Vec<String> {
         }
     }
     codes
+}
+
+/// #1515: whether a cut command's later words may count: git under any
+/// name, a program the classifier judges by its later words (the Corbanu
+/// CLI, credential tools, schedulers), or a word it cannot see.
+fn cut_matters(words: &[Word]) -> bool {
+    words.iter().any(|word| {
+        work::step();
+        let name = name(&word.text);
+        word.dynamic
+            || name == "git"
+            || indirect::equals_git(&name)
+            || git_helpers::git_name(&name).is_some()
+            || super::CLI_NAMES.contains(&name.as_str())
+            || matches!(name.as_str(), "crontab" | "launchctl" | "systemctl")
+            || super::CREDENTIAL_COMMANDS
+                .iter()
+                .any(|(command, _)| *command == name)
+    })
 }
 
 /// #1283: note `kind` once (a few kinds at most, so checking is cheap).

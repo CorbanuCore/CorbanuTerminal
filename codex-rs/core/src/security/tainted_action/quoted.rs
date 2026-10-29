@@ -54,6 +54,11 @@ pub(super) struct Command {
     pub(super) substituted: bool,
     /// D194: what joins it to the command before it.
     pub(super) after: Joint,
+    /// #1515: this reading ended it at a `{`, `}` or `(` the shell may
+    /// read as text: an argument (`git -C { config core.pager sh`; bash
+    /// reads `}` so too), a glob (zsh `x(N)`, extglob `@(a)`) or zsh's
+    /// `=(…)`. The words after it may be its own.
+    pub(super) cut: bool,
 }
 
 impl Command {
@@ -268,6 +273,48 @@ impl Reader<'_> {
         }
     }
 
+    /// #1515: a `{` or `}` word where the shell reads a word (`git -C {
+    /// …`), not a reserved word: after a command's words, other than
+    /// `function NAME {`.
+    fn note_argument_brace(&mut self, list: &List, arithmetic: usize) {
+        let words = &self.out[list.command].words;
+        let function = words.len() == 2 && !words[0].quoted && words[0].text == "function";
+        if arithmetic == 0 && !list.keyword && !words.is_empty() && !function {
+            self.out[list.command].cut = true;
+        }
+    }
+
+    /// #1515: whether a `(` opens a group, a function's `()`, an array
+    /// value, a `case` pattern or a test's pattern, rather than being text
+    /// a shell may read as a glob (`x(N)`, `@(a)`, `=(…)`) or as an
+    /// argument.
+    fn opens_group(&self, list: &List, next: Option<char>) -> bool {
+        let words = &self.out[list.command].words;
+        let first = words
+            .first()
+            .filter(|word| !word.quoted)
+            .map(|word| word.text.as_str());
+        let last = words
+            .last()
+            .filter(|word| !word.quoted)
+            .map(|word| word.text.as_str());
+        let named = words.len() + usize::from(list.has_word);
+        if !list.has_word {
+            return list.keyword
+                || (words.len() == 1 && first == Some("for"))
+                || (list.case_at.is_some() && last == Some("in"))
+                || first == Some("[[")
+                || (next == Some(')')
+                    && (named == 1 || (named == 2 && first == Some("function"))));
+        }
+        let text = list.word.text.as_str();
+        (next == Some(')')
+            && !list.word.quoted
+            && (named == 1 || (named == 2 && first == Some("function"))))
+            || first == Some("[[")
+            || (!list.word.quoted && array_name(text))
+    }
+
     fn finish_command(&mut self, list: &mut List) {
         self.finish_word(list);
         list.keyword = true;
@@ -326,8 +373,10 @@ impl Reader<'_> {
                 Joint::Start
             }),
         };
-        // The `case` counts of the brackets around the text being read.
-        let mut opened: Vec<usize> = Vec::new();
+        // The `case` counts of the brackets around the text being read,
+        // and whether each is arithmetic (`((`, #1515).
+        let mut opened: Vec<(usize, bool)> = Vec::new();
+        let mut arithmetic = 0usize;
         while index < chars.len() {
             work::step();
             let ch = chars[index];
@@ -340,7 +389,10 @@ impl Reader<'_> {
                     self.finish_word(&mut list);
                     if list.cases == 0 {
                         match opened.pop() {
-                            Some(cases) => list.cases = cases,
+                            Some((cases, math)) => {
+                                list.cases = cases;
+                                arithmetic -= usize::from(math);
+                            }
                             None if nested => return index + 1,
                             None => {}
                         }
@@ -349,8 +401,16 @@ impl Reader<'_> {
                     list.joint = Some(Joint::Other);
                 }
                 '(' => {
+                    let opens = self.opens_group(&list, next);
+                    if !opens && arithmetic == 0 {
+                        self.out[list.command].cut = true;
+                    }
+                    // `((` (`for ((`), and every bracket inside it.
+                    let math =
+                        arithmetic > 0 || (opens && (next == Some('(') || previous == Some('(')));
+                    arithmetic += usize::from(math);
                     self.finish_command(&mut list);
-                    opened.push(std::mem::take(&mut list.cases));
+                    opened.push((std::mem::take(&mut list.cases), math));
                     list.joint = Some(Joint::Other);
                 }
                 ' ' | '\t' => self.finish_word(&mut list),
@@ -396,12 +456,14 @@ impl Reader<'_> {
                     }
                 }
                 '{' if !list.has_word && next.is_none_or(char::is_whitespace) => {
+                    self.note_argument_brace(&list, arithmetic);
                     self.finish_command(&mut list);
                     list.joint = Some(Joint::Other);
                 }
                 '}' if !list.has_word
                     && next.is_none_or(|next| next.is_whitespace() || ";|&)".contains(next)) =>
                 {
+                    self.note_argument_brace(&list, arithmetic);
                     self.finish_command(&mut list);
                     list.joint = Some(Joint::Other);
                 }
@@ -760,6 +822,26 @@ impl Reader<'_> {
 }
 
 /// The redirection at the start of `chars` and its length.
+/// #1515: an array assignment's start (`a=`, `a+=`, `a[1]=`), which `(`
+/// follows.
+fn array_name(text: &str) -> bool {
+    let Some(name) = text.strip_suffix('=') else {
+        return false;
+    };
+    let name = name.strip_suffix('+').unwrap_or(name);
+    let name = name
+        .split_once('[')
+        .filter(|(_, subscript)| subscript.ends_with(']'))
+        .map_or(name, |(name, _)| name);
+    name.chars()
+        .next()
+        .is_some_and(|ch| ch.is_ascii_alphabetic() || ch == '_')
+        && name.chars().all(|ch| {
+            work::step();
+            ch.is_ascii_alphanumeric() || ch == '_'
+        })
+}
+
 fn redirection(chars: &[char]) -> (Redirect, usize) {
     match chars {
         ['<', '<', '<', ..] => (Redirect::HereString, 3),

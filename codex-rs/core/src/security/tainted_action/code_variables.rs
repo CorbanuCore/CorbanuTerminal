@@ -509,9 +509,11 @@ fn git_runs_code_until(args: &[String], raw: &[String], other_git_names_stop: bo
             || raw.get(at).is_some_and(|word| unseen_text(word))
     };
     // #1159: `git.exe` too (a dashed helper takes no git options, so it
-    // does not end them).
+    // does not end them). #1515: and zsh's `=git`, whose own scan reads on
+    // from there, so a line of many stays linear.
     let is_git = |word: &str| {
         shell::basename(word).eq_ignore_ascii_case("git")
+            || super::indirect::equals_git(word)
             || (other_git_names_stop && super::git_helpers::git_name(word) == Some(None))
     };
     // Past the first word that is not an option: only settings with a

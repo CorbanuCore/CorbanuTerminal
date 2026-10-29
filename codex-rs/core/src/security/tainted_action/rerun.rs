@@ -627,8 +627,10 @@ fn length(raw: &str) -> bool {
 /// #1159: whether git's words after `git` (`args`) name a program git runs
 /// that the classifier does not read, or copy hooks or set config on a new
 /// repository: `--upload-pack`, `--receive-pack`, `push`/`archive --exec`,
-/// `clone -u`, `clone`/`init --template`, `clone -c`/`--config`. git takes
-/// any unambiguous prefix of a long option (`--upload`, `--templ`).
+/// `clone -u`, `clone`/`init --template`, `clone -c`/`--config`, and (#1516)
+/// `grep -O`/`--open-files-in-pager`, which runs a pager on the matching
+/// files (`-O sh` runs them). git takes any unambiguous prefix of a long
+/// option (`--upload`, `--templ`, `--op`).
 /// `subcommand`: a dashed helper's (`git-clone`). Read once per command,
 /// from its first git word to its end.
 pub(super) fn git_runs_program(args: &[String], subcommand: Option<&str>) -> bool {
@@ -643,6 +645,7 @@ pub(super) fn git_runs_program(args: &[String], subcommand: Option<&str>) -> boo
     let clone = has("clone");
     let creates = clone || has("init");
     let exec = has("push") || has("archive") || has("send-pack") || has("fetch-pack");
+    let grep = has("grep");
     let long = |word: &str, option: &str, shortest: usize| {
         let name = word.split_once('=').map_or(word, |(name, _)| name);
         name.len() >= shortest && option.starts_with(name)
@@ -655,12 +658,12 @@ pub(super) fn git_runs_program(args: &[String], subcommand: Option<&str>) -> boo
                 || (exec && long(word, "--exec", "--ex".len()))
                 || (creates && long(word, "--template", "--te".len()))
                 || (clone && long(word, "--config", "--con".len()))
+                || (grep && long(word, "--open-files-in-pager", "--op".len()))
         } else {
-            // A group of short options (`-qc k=v`, `-u./x`).
-            clone
-                && word
-                    .strip_prefix('-')
-                    .is_some_and(|cluster| cluster.contains(['c', 'u']))
+            // A group of short options (`-qc k=v`, `-u./x`, `-nOsh`).
+            word.strip_prefix('-').is_some_and(|cluster| {
+                (clone && cluster.contains(['c', 'u'])) || (grep && cluster.contains('O'))
+            })
         }
     })
 }
