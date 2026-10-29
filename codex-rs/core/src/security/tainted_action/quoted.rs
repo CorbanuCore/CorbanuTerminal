@@ -7,10 +7,10 @@
 
 use super::certain_cd;
 use super::certain_cd::Joint;
-use super::shell;
 use super::shell::UNSEEN_OUTPUT;
 use super::shell::ansi_c;
 use super::work;
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct Word {
@@ -111,6 +111,8 @@ fn read(text: &str, nesting: usize, body: bool, arithmetic: bool) -> Reading {
         unterminated: false,
         unsure: false,
         arithmetic: arithmetic || text.contains("((") || text.contains('['),
+        in_arithmetic: None,
+        closes: None,
     };
     if body {
         reader.substitutions_only();
@@ -176,6 +178,13 @@ struct Reader<'a> {
     /// The text may hold arithmetic (`$((`, `((`, `$[`) or a subscript
     /// (`a[...]`), where single quotes do not stop a substitution.
     arithmetic: bool,
+    /// #1515: the `((`/`$((` arithmetic being read, as the index of its
+    /// last `)` and its substitution depth: a `(` before that index at that
+    /// depth is arithmetic, not a cut. By index, so text this reading skips
+    /// (a comment, a here-document) cannot leave it open.
+    in_arithmetic: Option<(usize, usize)>,
+    /// [`clean_closes`] of the text, once a `((` needs it.
+    closes: Option<HashMap<usize, usize>>,
 }
 
 /// One list of commands being read.
@@ -316,6 +325,26 @@ impl Reader<'_> {
             || (!list.word.quoted && array_name(text) && assigning(words))
     }
 
+    /// #1515: whether `index` is inside the arithmetic being read, at its
+    /// depth.
+    fn arithmetic_at(&self, index: usize) -> bool {
+        self.in_arithmetic
+            .is_some_and(|(end, depth)| index < end && depth == self.nesting)
+    }
+
+    /// #1515: the `((` or `$((` whose second `(` is at `open` is
+    /// arithmetic, read at `depth`, when that bracket closes right before
+    /// the last `)` with no quote or backslash between.
+    fn note_arithmetic(&mut self, open: usize, depth: usize) {
+        let chars = self.chars;
+        let closes = self.closes.get_or_insert_with(|| clean_closes(chars));
+        if let Some(&close) = closes.get(&open)
+            && chars.get(close + 1) == Some(&')')
+        {
+            self.in_arithmetic = Some((close + 1, depth));
+        }
+    }
+
     fn finish_command(&mut self, list: &mut List) {
         self.finish_word(list);
         list.keyword = true;
@@ -376,8 +405,6 @@ impl Reader<'_> {
         };
         // The `case` counts of the brackets around the text being read.
         let mut opened: Vec<usize> = Vec::new();
-        // #1515: the open brackets of a `((` (all brackets inside it).
-        let mut arithmetic = 0usize;
         while index < chars.len() {
             work::step();
             let ch = chars[index];
@@ -388,9 +415,6 @@ impl Reader<'_> {
                 // substitution (`esac)` closes the case first).
                 ')' => {
                     self.finish_word(&mut list);
-                    // #1515: every bracket inside `((` is arithmetic, so each
-                    // `)` closes one, whatever `case` words it holds.
-                    arithmetic = arithmetic.saturating_sub(1);
                     if list.cases == 0 {
                         match opened.pop() {
                             Some(cases) => list.cases = cases,
@@ -402,17 +426,14 @@ impl Reader<'_> {
                     list.joint = Some(Joint::Other);
                 }
                 '(' => {
+                    // #1515: a `((` that `))` closes is arithmetic up to it.
                     let opens = self.opens_group(&list, next);
-                    if !opens && arithmetic == 0 {
+                    if opens && next == Some('(') && !self.arithmetic_at(index) {
+                        self.note_arithmetic(index + 1, self.nesting);
+                    }
+                    if !opens && !self.arithmetic_at(index) {
                         self.out[list.command].cut = true;
                     }
-                    // `((` (`for ((`) that `))` closes, and every bracket
-                    // inside it (not a `((` that opens two groups).
-                    let math = arithmetic > 0
-                        || (opens
-                            && next == Some('(')
-                            && shell::arithmetic_expansion(chars, index + 2).is_some());
-                    arithmetic += usize::from(math);
                     self.finish_command(&mut list);
                     opened.push(std::mem::take(&mut list.cases));
                     list.joint = Some(Joint::Other);
@@ -653,6 +674,9 @@ impl Reader<'_> {
             Some('(') => {
                 word.text.push_str(UNSEEN_OUTPUT);
                 dynamic(word);
+                if chars.get(index + 2) == Some(&'(') && !self.arithmetic_at(index) {
+                    self.note_arithmetic(index + 2, self.nesting + 1);
+                }
                 self.list(index + 2, /*nested*/ true)
             }
             Some('{') => {
@@ -825,7 +849,30 @@ impl Reader<'_> {
     }
 }
 
-/// The redirection at the start of `chars` and its length.
+/// #1515: each `(` of `chars` and the `)` that closes it, when no quote,
+/// backslash or backtick is between them (one pass).
+fn clean_closes(chars: &[char]) -> HashMap<usize, usize> {
+    let mut open = Vec::new();
+    let mut last_quote = None;
+    let mut closes = HashMap::new();
+    for (at, ch) in chars.iter().enumerate() {
+        work::step();
+        match ch {
+            '\'' | '"' | '`' | '\\' => last_quote = Some(at),
+            '(' => open.push(at),
+            ')' => {
+                if let Some(from) = open.pop()
+                    && last_quote.is_none_or(|quote| quote < from)
+                {
+                    closes.insert(from, at);
+                }
+            }
+            _ => {}
+        }
+    }
+    closes
+}
+
 /// #1515: an array assignment's start (`a=`, `a+=`, `a[1]=`), which `(`
 /// follows.
 fn array_name(text: &str) -> bool {
@@ -866,6 +913,7 @@ fn variable_name(name: &str) -> bool {
         })
 }
 
+/// The redirection at the start of `chars` and its length.
 fn redirection(chars: &[char]) -> (Redirect, usize) {
     match chars {
         ['<', '<', '<', ..] => (Redirect::HereString, 3),

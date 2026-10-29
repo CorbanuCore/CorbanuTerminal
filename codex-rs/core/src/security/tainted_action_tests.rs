@@ -7047,6 +7047,9 @@ fn issue_1515_brackets_as_arguments_ask() {
         "echo $((git -C } -c core.pager=sh log) )",
         "fd -1 --exec=git --namespace { -c 'alias.x=!sh' x",
         "fd -1 -xgit --namespace { -c 'alias.x=!sh' x",
+        // Review 3: a substitution inside arithmetic.
+        "(( $(git -C x(N) config core.pager sh) ))",
+        "echo $(( $(git -C x(N) config core.pager sh) + 1 ))",
     ];
     let quiet_on_main = [
         "git -C { -c core.pager=sh log",
@@ -7085,6 +7088,9 @@ fn issue_1515_brackets_as_arguments_ask() {
         "(( case )); git -C @(.) config core.pager sh",
         "sed -n } -e '1e touch /tmp/p' /etc/hosts",
         "eval 'git -C' { -c 'alias.x=!touch /tmp/p' x",
+        // Review 3: text read past the arithmetic.
+        "((##a))\ngit -C .(N) config core.pager sh",
+        "(( ##a))\ngit -C @(.) config core.pager sh",
     ];
     for (group, commands) in [("asked", &asked_on_main[..]), ("new", &quiet_on_main[..])] {
         for command in commands {
@@ -7127,6 +7133,7 @@ fn issue_1515_brackets_as_arguments_ask() {
         "(( x = 1 )) && git log",
         "(( x = 2*(1) )); git log",
         "(( case )); git log",
+        "(( n = $# * (2) )); echo $(( $# * (2) )); git log",
         "declare -a a=(1 2); local b=(x)",
     ] {
         for shell in ["/bin/bash", "/bin/zsh"] {
@@ -7136,6 +7143,22 @@ fn issue_1515_brackets_as_arguments_ask() {
         }
     }
     assert_eq!(wrong, Vec::<String>::new());
+}
+
+/// #1515: the bracket checks stay linear.
+#[test]
+fn issue_1515_bracket_checks_are_linear() {
+    for (label, unit) in [
+        ("open brackets", "(("),
+        ("arithmetic", "(( x*(1) )); "),
+        ("substituted arithmetic", "$(( $x*(1) )) "),
+        ("cut git", "git -C x(N) config k v; "),
+        ("cut words", "a { b } "),
+    ] {
+        work::assert_linear(label, |scale| {
+            let _ = kind(&["/bin/zsh", "-lc", &unit.repeat(100 * scale)]);
+        });
+    }
 }
 
 /// #1515: a `=git` an option follows ends git's option scan like `git`
