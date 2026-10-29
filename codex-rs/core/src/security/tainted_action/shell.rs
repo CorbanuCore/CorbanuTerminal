@@ -182,6 +182,31 @@ pub(super) fn prompt_expansion(text: &str, foreign: bool) -> bool {
     })
 }
 
+/// #932 measuring: which reading of `prompt_expansion` holds for some
+/// argument (`@P`, or a computed transformation), for the local measuring
+/// harness.
+#[cfg(test)]
+pub(super) fn prompt_expansion_why(command: &[String], foreign: bool) -> String {
+    let Some(text) = command.iter().find(|arg| prompt_expansion(arg, foreign)) else {
+        return "-".to_string();
+    };
+    let joined = text.replace("\\\n", "");
+    let bare: String = joined
+        .chars()
+        .filter(|ch| !matches!(ch, '\'' | '"' | '\\'))
+        .collect();
+    let at_p = [joined.as_str(), bare.as_str()].iter().any(|text| {
+        text.match_indices("@P").any(|(at, _)| {
+            !text[at + 2..].starts_with(|ch: char| ch.is_ascii_alphanumeric() || ch == '_')
+        })
+    });
+    if at_p {
+        "at_p".to_string()
+    } else {
+        format!("computed foreign={foreign}")
+    }
+}
+
 /// #1064: whether text holds `]@` followed by anything but one of the
 /// letters that only quote or describe a value (`${a[$(f)]@$p}`, but not
 /// `${a[@]}`, `"$@"` or `${a[i]@Q}`). The `]` that ends a subscript is

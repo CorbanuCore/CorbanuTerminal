@@ -1715,6 +1715,13 @@ fn runner_scripts(
             }
             scripts
         }
+        // #1309 follow-up: the shell commands tmux starts (`tmux new -c ~
+        // 'echo x >> .zshenv'`, `tmux -c 'cmd'`), each one shell line; the
+        // words stay read as code too.
+        "tmux" => unknown_folder::tmux_commands(texts, at)
+            .into_iter()
+            .map(|(index, script)| (index, script, /*script role*/ false))
+            .collect(),
         _ => Vec::new(),
     }
 }

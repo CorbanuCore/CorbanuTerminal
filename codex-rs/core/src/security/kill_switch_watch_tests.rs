@@ -64,6 +64,10 @@ fn lower_priority() {
 /// covered without nearing Linux's inotify instance limit.
 const DROPPERS: usize = if cfg!(target_os = "macos") { 16 } else { 2 };
 
+/// How long past the stress window the droppers get to finish a first cycle;
+/// starting an FSEvents watcher can take seconds on a loaded runner (#1553).
+const FIRST_CYCLE_GRACE: Duration = Duration::from_secs(60);
+
 #[test]
 fn notifications_survive_start_stop_drop_cycles_on_a_busy_home() {
     let secs = env_number("CORBANU_1491_STRESS_SECS", /*default*/ 2);
@@ -71,7 +75,9 @@ fn notifications_survive_start_stop_drop_cycles_on_a_busy_home() {
     let home = tempfile::TempDir::new().unwrap();
     let home = canonical(home.path());
     let done = Arc::new(AtomicBool::new(false));
-    let cycles = Arc::new(AtomicUsize::new(0));
+    // Cycles completed per dropper.
+    let cycles: Arc<Vec<AtomicUsize>> =
+        Arc::new((0..DROPPERS).map(|_| AtomicUsize::new(0)).collect());
     let mut threads = Vec::new();
     for writer in ["a", "b"] {
         threads.push(busy_writer(home.clone(), Arc::clone(&done), writer));
@@ -85,7 +91,7 @@ fn notifications_survive_start_stop_drop_cycles_on_a_busy_home() {
             }
         }));
     }
-    for _ in 0..DROPPERS {
+    for dropper in 0..DROPPERS {
         let (home, done, cycles) = (home.clone(), Arc::clone(&done), Arc::clone(&cycles));
         threads.push(std::thread::spawn(move || {
             lower_priority();
@@ -94,16 +100,34 @@ fn notifications_survive_start_stop_drop_cycles_on_a_busy_home() {
                 let watcher = notifications(&home, tx).expect("watch the home");
                 std::thread::sleep(Duration::from_millis(2));
                 drop(watcher);
-                cycles.fetch_add(1, Ordering::Relaxed);
+                cycles[dropper].fetch_add(1, Ordering::Relaxed);
             }
         }));
     }
-    std::thread::sleep(Duration::from_secs(secs));
+    // Stress for the full window, then until every dropper has dropped a
+    // watcher at least once (or the grace runs out).
+    let window = Duration::from_secs(secs);
+    std::thread::sleep(window);
+    let deadline = Instant::now() + FIRST_CYCLE_GRACE;
+    while cycles
+        .iter()
+        .any(|count| count.load(Ordering::Relaxed) == 0)
+        && Instant::now() < deadline
+    {
+        std::thread::sleep(Duration::from_millis(20));
+    }
     done.store(true, Ordering::Relaxed);
     for thread in threads {
         thread.join().unwrap();
     }
-    assert!(cycles.load(Ordering::Relaxed) > 0, "no watcher was dropped");
+    let total: usize = cycles
+        .iter()
+        .map(|count| count.load(Ordering::Relaxed))
+        .sum();
+    assert!(
+        total > 0,
+        "no watcher was dropped within {window:?} plus {FIRST_CYCLE_GRACE:?}"
+    );
 
     // The notifications still arrive: a replaced state file wakes the watch.
     let (tx, rx) = mpsc::channel();

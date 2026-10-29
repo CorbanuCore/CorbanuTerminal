@@ -50,37 +50,65 @@ const STOP_TURN_AFTER_REFUSED_REPEATS: u32 = 8;
 /// interrupt hard-aborts a turn that missed the grace period, the abort path
 /// records each call's abort output from here, so the model still sees how
 /// long the call ran instead of the bare `aborted` placeholder that history
-/// normalization would insert (#1467).
+/// normalization would insert (#1467). A call whose tool already finished keeps
+/// its real output, so a finished-then-killed call (for example a patch that was
+/// applied) is not reported as aborted (D244).
 #[derive(Debug, Default)]
 pub(crate) struct PendingToolCalls {
-    calls: std::sync::Mutex<Vec<(ToolCall, Instant)>>,
+    calls: std::sync::Mutex<Vec<PendingToolCall>>,
+}
+
+#[derive(Debug)]
+struct PendingToolCall {
+    call: ToolCall,
+    started: Instant,
+    finished_output: Option<ResponseInputItem>,
 }
 
 impl PendingToolCalls {
     fn register(&self, call: &ToolCall, started: Instant) {
-        self.lock().push((call.clone(), started));
+        self.lock().push(PendingToolCall {
+            call: call.clone(),
+            started,
+            finished_output: None,
+        });
+    }
+
+    /// Keeps the output a call's tool returned until the turn records it.
+    fn finish(&self, call_id: &str, output: &ResponseInputItem) {
+        if let Some(pending) = self
+            .lock()
+            .iter_mut()
+            .find(|pending| pending.call.call_id == call_id)
+        {
+            pending.finished_output = Some(output.clone());
+        }
     }
 
     /// Forgets a call once its output is in history.
     pub(crate) fn complete(&self, call_id: &str) {
-        self.lock().retain(|(call, _)| call.call_id != call_id);
+        self.lock()
+            .retain(|pending| pending.call.call_id != call_id);
     }
 
-    /// Takes the abort outputs of every remaining call, timed up to `cancelled_at`.
-    pub(crate) fn take_aborted_outputs(&self, cancelled_at: Instant) -> Vec<ResponseInputItem> {
+    /// Takes the outputs of every remaining call: the tool's own output when it
+    /// finished, else its abort output timed up to `cancelled_at`.
+    pub(crate) fn take_unrecorded_outputs(&self, cancelled_at: Instant) -> Vec<ResponseInputItem> {
         std::mem::take(&mut *self.lock())
             .into_iter()
-            .map(|(call, started)| {
-                let secs = cancelled_at
-                    .saturating_duration_since(started)
-                    .as_secs_f32()
-                    .max(0.1);
-                ToolCallRuntime::aborted_response(&call, secs).into_response()
+            .map(|pending| {
+                pending.finished_output.unwrap_or_else(|| {
+                    let secs = cancelled_at
+                        .saturating_duration_since(pending.started)
+                        .as_secs_f32()
+                        .max(0.1);
+                    ToolCallRuntime::aborted_response(&pending.call, secs).into_response()
+                })
             })
             .collect()
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, Vec<(ToolCall, Instant)>> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, Vec<PendingToolCall>> {
         self.calls
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -158,17 +186,18 @@ impl ToolCallRuntime {
         let call = self.router.resolve_flat_tool_call(call);
         let error_call = call.clone();
         let source = call.direct_source();
-        self.step_context
-            .turn
-            .pending_tool_calls
-            .register(&call, Instant::now());
+        let pending_tool_calls = Arc::clone(&self.step_context.turn.pending_tool_calls);
+        pending_tool_calls.register(&call, Instant::now());
         let future = self.handle_tool_call_with_source(call, source, cancellation_token);
         async move {
-            match future.await {
-                Ok(response) => Ok(response.into_response()),
-                Err(FunctionCallError::Fatal(message)) => Err(CodexErr::Fatal(message)),
-                Err(other) => Ok(Self::failure_response(error_call, other)),
-            }
+            let call_id = error_call.call_id.clone();
+            let output = match future.await {
+                Ok(response) => response.into_response(),
+                Err(FunctionCallError::Fatal(message)) => return Err(CodexErr::Fatal(message)),
+                Err(other) => Self::failure_response(error_call, other),
+            };
+            pending_tool_calls.finish(&call_id, &output);
+            Ok(output)
         }
         .in_current_span()
     }

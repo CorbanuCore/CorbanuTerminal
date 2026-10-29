@@ -50,6 +50,8 @@ const SHORT_FOLDER_FLAGS: &[(&str, char)] = &[
     ("sudo", 'i'),
     ("su", 'l'),
     ("runuser", 'l'),
+    // #1309 follow-up: `run0 -D DIR` (also a keep option: `-D .`).
+    ("run0", 'D'),
 ];
 
 /// #1309: wrappers whose login spelling starts the command in the target
@@ -65,13 +67,28 @@ const LOGIN_WORDS: &[(&str, &str, usize)] = &[
     ("machinectl", "shell", 5),
 ];
 
+/// A program of `ELSEWHERE_UNLESS`: its name, keep options, options that
+/// take a value, and options known to take none.
+type KeepOptions = (
+    &'static str,
+    &'static [&'static str],
+    &'static [&'static str],
+    &'static [&'static str],
+);
+
 /// #1309: programs that start what they run in another folder unless an
 /// option keeps the caller's: `pkexec` (the target user's home, unless
 /// `--keep-cwd`), `systemd-run` (a service starts in `/`, or a user
 /// service in home, unless `--scope`, `-d` or `--same-dir`), `run0`
-/// (unless `--chdir`/`-D`); with the options of each that take a value.
-const ELSEWHERE_UNLESS: &[(&str, &[&str], &[&str])] = &[
-    ("pkexec", &["--keep-cwd"], &["--user"]),
+/// (unless `--chdir`/`-D`); with the options of each that take a value,
+/// and those known to take none.
+const ELSEWHERE_UNLESS: &[KeepOptions] = &[
+    (
+        "pkexec",
+        &["--keep-cwd"],
+        &["--user"],
+        &["--disable-internal-agent", "--help", "--version"],
+    ),
     (
         "systemd-run",
         &["--scope", "-d", "--same-dir"],
@@ -92,11 +109,46 @@ const ELSEWHERE_UNLESS: &[(&str, &[&str], &[&str])] = &[
             "--gid",
             "--nice",
         ],
+        &[
+            "--user",
+            "--system",
+            "-r",
+            "--remain-after-exit",
+            "--send-sighup",
+            "-G",
+            "--collect",
+            "--wait",
+            "-P",
+            "--pipe",
+            "-t",
+            "--pty",
+            "-q",
+            "--quiet",
+            "--no-block",
+            "-S",
+            "--shell",
+            "--no-ask-password",
+            "--slice-inherit",
+            "--on-clock-change",
+            "--on-timezone-change",
+            "-h",
+            "--help",
+            "--version",
+        ],
     ),
     (
         "run0",
         &["--chdir", "-D"],
         &["-u", "--user", "-g", "--group", "--unit", "--nice"],
+        &[
+            "--no-ask-password",
+            "--slice-inherit",
+            "--pty",
+            "--pipe",
+            "-h",
+            "--help",
+            "--version",
+        ],
     ),
 ];
 
@@ -109,23 +161,32 @@ const MAX_KEEP_OPTIONS: usize = 64;
 /// '…' --keep-cwd` gives `sh` the option). Only its `valued` options take
 /// the next word as their value; any other is read as a flag, so a value
 /// it takes ends the options and the program counts as elsewhere.
-fn kept(options: &[String], keeps: &[&str], valued: &[&str]) -> bool {
+/// #1309 follow-up: an option neither `valued` nor among its `flags` may
+/// take the next word as its value, so a keep option there does not count
+/// (`systemd-run --on-active -d`).
+fn kept(options: &[String], keeps: &[&str], valued: &[&str], flags: &[&str]) -> bool {
     let mut value_next = false;
+    let mut maybe_value = false;
     for option in options.iter().take(MAX_KEEP_OPTIONS) {
         work::step();
         if std::mem::take(&mut value_next) {
             continue;
         }
+        let after_unknown = std::mem::take(&mut maybe_value);
         if !option.starts_with('-') || option == "--" {
             return false;
         }
         let flag = option
             .split_once('=')
             .map_or(option.as_str(), |(flag, _)| flag);
-        if keeps.contains(&flag) {
+        if keeps.contains(&flag) && !after_unknown {
             return true;
         }
         value_next = !option.contains('=') && valued.contains(&flag);
+        maybe_value = !option.contains('=')
+            && !valued.contains(&flag)
+            && !flags.contains(&flag)
+            && !keeps.contains(&flag);
     }
     false
 }
@@ -319,6 +380,7 @@ pub(super) fn runs_elsewhere(texts: &[String], redefined: bool) -> bool {
 /// The position of the first of `texts` that makes `runs_elsewhere` true:
 /// it holds for the texts before a position after it, and only those.
 pub(super) fn elsewhere_at(texts: &[String], redefined: bool) -> Option<usize> {
+    let mut tmux = Tmux::default();
     let mut letters: Vec<char> = Vec::new();
     let mut logins: Vec<(&str, usize)> = Vec::new();
     let closes = sudo_close_from(texts, redefined);
@@ -361,13 +423,20 @@ pub(super) fn elsewhere_at(texts: &[String], redefined: bool) -> Option<usize> {
         }) {
             return Some(at);
         }
-        if let Some((_, keeps, valued)) = ELSEWHERE_UNLESS
+        if let Some((_, keeps, valued, flags)) = ELSEWHERE_UNLESS
             .iter()
-            .find(|(program, _, _)| basename(text) == *program)
-            && !kept(&texts[at + 1..], keeps, valued)
+            .find(|(program, _, _, _)| basename(text) == *program)
+            && !kept(&texts[at + 1..], keeps, valued, flags)
         {
             return Some(at);
         }
+        // #1309 follow-up: tmux's `new-session`/`new-window`/`split-window`
+        // /`respawn-*` `-c DIR` (`display-popup -d DIR`) runs its command
+        // there.
+        if tmux.option(text) {
+            return Some(at);
+        }
+        tmux.after(text);
         for (wrapper, letter) in SHORT_FOLDER_FLAGS {
             work::step();
             if basename(text) == *wrapper && !letters.contains(letter) {
@@ -382,6 +451,167 @@ pub(super) fn elsewhere_at(texts: &[String], redefined: bool) -> Option<usize> {
         }
     }
     None
+}
+
+/// #1309 follow-up: tmux commands that run a command in the folder an
+/// option names: the command (and its alias), that option's letter, and
+/// the letters of its options that take a value.
+const TMUX_FOLDERS: &[(&str, &str, char, &str)] = &[
+    ("new-session", "new", 'c', "ceFfnstxy"),
+    ("new-window", "neww", 'c', "ceFnt"),
+    ("split-window", "splitw", 'c', "ceFlpt"),
+    ("new-pane", "newp", 'c', "ceFlpt"),
+    ("respawn-pane", "respawnp", 'c', "cet"),
+    ("respawn-window", "respawnw", 'c', "cet"),
+    ("run-shell", "run", 'c', "cdt"),
+    ("display-popup", "popup", 'd', "bcdehsStTwxy"),
+];
+
+/// Shortest prefix of a tmux command name read as that command (tmux
+/// takes any unambiguous one: `new-w`, `split-w`); a shorter or ambiguous
+/// one only over-matches.
+const TMUX_PREFIX: usize = 3;
+
+/// The `TMUX_FOLDERS` entry `word` names: its alias, or a prefix of its
+/// name; not `display`, `display-message`'s alias.
+fn tmux_folder_command(
+    word: &str,
+) -> Option<&'static (&'static str, &'static str, char, &'static str)> {
+    TMUX_FOLDERS.iter().find(|(name, alias, _, _)| {
+        work::step();
+        word == *alias || (word.len() >= TMUX_PREFIX && word != "display" && name.starts_with(word))
+    })
+}
+
+/// tmux's options that take a value, before its command.
+const TMUX_VALUED: &str = "cfLST";
+
+/// #1309 follow-up: the shell commands tmux at `at` in `texts` starts: the
+/// words after each of `TMUX_FOLDERS`' options, to a `;`, joined into one
+/// line, and the value of tmux's own `-c`; each with the word it starts
+/// at. Past `outbound::MAX_JUDGED_POSITIONS` words, the rest is not read.
+pub(super) fn tmux_commands(texts: &[String], at: usize) -> Vec<(usize, String)> {
+    let end = texts
+        .len()
+        .min(at + 1 + super::outbound::MAX_JUDGED_POSITIONS);
+    let mut commands = Vec::new();
+    let mut index = at + 1;
+    // tmux's own options; `-c` runs a shell command.
+    while index < end && texts[index].starts_with('-') && texts[index].len() > 1 {
+        work::step();
+        let word = &texts[index];
+        index += 1;
+        if word == "--" {
+            break;
+        }
+        for (offset, letter) in word.char_indices().skip(1) {
+            work::step();
+            if !TMUX_VALUED.contains(letter) {
+                continue;
+            }
+            let rest = &word[offset + 1..];
+            let value = if rest.is_empty() {
+                index += 1;
+                (index - 1, texts.get(index - 1).cloned())
+            } else {
+                (index - 1, Some(rest.to_string()))
+            };
+            if letter == 'c'
+                && let (holder, Some(value)) = value
+            {
+                commands.push((holder, value));
+            }
+            break;
+        }
+    }
+    while index < end {
+        work::step();
+        let word = &texts[index];
+        index += 1;
+        let Some((_, _, _, valued)) = tmux_folder_command(word) else {
+            continue;
+        };
+        while index < end && texts[index].starts_with('-') && texts[index].len() > 1 {
+            work::step();
+            let option = &texts[index];
+            index += 1;
+            if option == "--" {
+                break;
+            }
+            if let Some((offset, letter)) = option.char_indices().skip(1).find(|(_, letter)| {
+                work::step();
+                valued.contains(*letter)
+            }) {
+                index += usize::from(offset + letter.len_utf8() == option.len());
+            }
+        }
+        index = index.min(end);
+        let start = index;
+        while index < end && texts[index] != ";" {
+            work::step();
+            index += 1;
+        }
+        if start < index {
+            commands.push((start, texts[start..index].join(" ")));
+        }
+    }
+    commands
+}
+
+/// Where `elsewhere_at` is in a tmux line: after `tmux`, and in the
+/// options of one of `TMUX_FOLDERS`.
+#[derive(Default)]
+struct Tmux {
+    seen: bool,
+    /// The folder letter and valued letters of the command whose options
+    /// are being read.
+    options: Option<(char, &'static str)>,
+    /// The next word is an option's value.
+    value_next: bool,
+}
+
+impl Tmux {
+    /// Whether `text`, read in a tmux command's options, names its folder.
+    fn option(&mut self, text: &str) -> bool {
+        let Some((folder, valued)) = self.options else {
+            return false;
+        };
+        if std::mem::take(&mut self.value_next) {
+            return false;
+        }
+        let Some(group) = text
+            .strip_prefix('-')
+            .filter(|group| !group.is_empty() && !group.starts_with('-'))
+        else {
+            self.options = None;
+            return false;
+        };
+        for (index, letter) in group.char_indices() {
+            work::step();
+            if letter == folder {
+                return true;
+            }
+            if valued.contains(letter) {
+                self.value_next = index + letter.len_utf8() == group.len();
+                break;
+            }
+        }
+        false
+    }
+
+    /// Notes `text` as a word read: `tmux`, or one of `TMUX_FOLDERS` after it.
+    fn after(&mut self, text: &str) {
+        if self.options.is_some() {
+            return;
+        }
+        if basename(text).eq_ignore_ascii_case("tmux") {
+            self.seen = true;
+        } else if self.seen
+            && let Some((_, _, folder, valued)) = tmux_folder_command(text)
+        {
+            self.options = Some((*folder, valued));
+        }
+    }
 }
 
 /// Whether `text` is `word` (a login spelling), or for a long option an
@@ -676,6 +906,9 @@ pub(super) fn pattern_word(word: &str) -> bool {
             .is_some_and(|at| word[at..].contains(',') || word[at..].contains(".."))
         // extglob `@(c)d`, `+(c)d`, `!(x)`, zsh `(c|x)d`; not `f()`.
         || (word.contains('(') && !word.ends_with("()"))
+        // #1309 follow-up: zsh extendedglob `cdd#`, `cd##`, `^x`, `cd~x`.
+        || word.contains('^')
+        || word.bytes().skip(1).any(|byte| byte == b'#' || byte == b'~')
 }
 
 /// #1309: zsh's precommand modifiers, which run the command after them:

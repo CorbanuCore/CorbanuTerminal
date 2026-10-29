@@ -34,7 +34,8 @@ export type Usage = {
 /** Emitted when a turn is completed. Typically right after the assistant's response. */
 export type TurnCompletedEvent = {
   type: "turn.completed";
-  usage: Usage;
+  /** Token usage for the turn, or `null` when the provider reported no usage. */
+  usage: Usage | null;
 };
 
 /** Indicates that a turn failed with an error. */

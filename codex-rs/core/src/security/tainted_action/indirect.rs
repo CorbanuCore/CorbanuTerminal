@@ -461,3 +461,74 @@ fn is_runnable_path(lower: &str) -> bool {
         || lower.contains(".husky/")
         || ((lower.starts_with("bin/") || lower.contains("/bin/")) && !name.contains('.'))
 }
+
+/// #932 measuring: why `opaque_execution` holds, as a short tag (the
+/// executor's and the first opaque feeder's command names), for the local
+/// measuring harness.
+#[cfg(test)]
+pub(super) fn opaque_execution_why(commands: &[SimpleCommand]) -> String {
+    let name_of = |command: &SimpleCommand| -> String {
+        command_word(&command.words).map_or_else(
+            || "none".to_string(),
+            |(_, name)| {
+                if name.starts_with('$') {
+                    "$var".to_string()
+                } else if name.contains(super::shell::UNSEEN_OUTPUT) {
+                    "$(output)".to_string()
+                } else {
+                    basename(&name).chars().take(24).collect()
+                }
+            },
+        )
+    };
+    for command in commands.iter().filter(|command| executes_input(command)) {
+        work::step();
+        // The executor's own word, and the first after it: how its code is
+        // given (`-`, `-c`, a file, none).
+        let executor = command_word(&command.words).map_or_else(String::new, |(index, name)| {
+            let next = command.words.get(index + 1).map_or("none", |word| {
+                if word.starts_with('-') {
+                    word.as_str()
+                } else {
+                    "operand"
+                }
+            });
+            let name = if name.starts_with('$') {
+                name
+            } else {
+                String::new()
+            };
+            format!(" word={name:?} next={next:?}")
+        });
+        if command.reads_outer_output {
+            return format!("exec={} outer{executor}", name_of(command));
+        }
+        let mut feeders: Vec<usize> = command.fed_by.clone();
+        feeders.extend(command.pipe_from);
+        let mut seen = std::collections::HashSet::new();
+        while let Some(index) = feeders.pop() {
+            work::step();
+            if !seen.insert(index) {
+                continue;
+            }
+            let Some(stage) = commands.get(index) else {
+                continue;
+            };
+            if !literal_stage(stage) {
+                let link = if command.pipe_from == Some(index) {
+                    "pipe"
+                } else {
+                    "subst"
+                };
+                return format!(
+                    "exec={} {link} feeder={}{executor}",
+                    name_of(command),
+                    name_of(stage)
+                );
+            }
+            feeders.extend(stage.fed_by.iter().copied());
+            feeders.extend(stage.pipe_from);
+        }
+    }
+    "-".to_string()
+}

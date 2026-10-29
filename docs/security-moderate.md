@@ -211,12 +211,15 @@ The kill switch (`/security` → `g`) works under every level.
   where there was none. On Linux the sandbox leaves empty
   files and folders in place while a command runs: a new config file or hooks
   folder that is empty is reported (in any session) once something is put in
-  it, and an empty `.git` folder replaced by another empty one isn't reported
+  it (once this Corbanu Terminal remembers 1024 of them, a new one is
+  reported at once instead, one time per session while it stays held, and
+  again once filled), and an empty `.git` folder replaced by another empty one isn't reported
   (unless the first empty one was reported as a replacement, or, once more
   than 1024 different `.git` folders have been reported as replacements in
   this Corbanu Terminal, any).
   It doesn't watch in between: a process a command left running can change
-  `.git` after the last look, even while an approved command runs, and what it
+  `.git` after the last look, even while an approved command runs (such a
+  process doesn't stop an approval from lifting the rules), and what it
   changes after a turn ends is found at the next command, not before you run
   git yourself. It watches the repositories of the folders agent commands run
   in (a command's own working folder, `workdir`, too): not a repository a
@@ -243,6 +246,12 @@ The kill switch (`/security` → `g`) works under every level.
   history for at most 64 sessions. When another session needs a look, it
   forgets the least recently used session's repository history; the next
   look in that session has the same first-look limit.
+- Corbanu Terminal finds the `.git` files of a repository's linked worktrees
+  through the folders under `.git/worktrees`, and keeps protecting those it
+  found until it quits. A command that makes one of those folders unreadable
+  hides that worktree's `.git` file from the next start, which then doesn't
+  protect it. If a command changed permissions under `.git/worktrees`, check
+  them before you restart.
 - MCP servers, apps, hooks and `!` shell commands run outside the sandbox, as
   under every level.
 - On Linux, where a command you approve can write a Corbanu home's folder

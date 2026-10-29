@@ -10559,3 +10559,171 @@ fn issue_1276_follow_up_checks_are_linear() {
         });
     }
 }
+
+/// #1159 follow-ups from the #1521 review: a zsh `=word` the command reading
+/// skips as an assignment (`=$X`, `=tee`), and the output files of the
+/// command after a precommand modifier (`noglob git log --output=f`). Each
+/// line was quiet on main.
+#[test]
+fn issue_1159_equals_words_and_modified_outputs_ask() {
+    let unseen = [
+        ("bash", "=$X log --output=~/.zshrc"),
+        ("zsh", "=$X log --output=~/.zshrc"),
+        ("bash", "echo x | =tee -a ~/.zshrc"),
+        ("zsh", "echo x | =tee -a ~/.zshrc"),
+        ("zsh", "noglob =tee -a ~/.zshrc"),
+        ("bash", "- =tee -a ~/.zshrc"),
+        ("bash", "=$(printf tee) -a ~/.zshrc"),
+        ("zsh", "=sort -o ~/.zshrc f"),
+        // Review 1: behind a modifier and a wrapper, after an exec marker
+        // or an exec wrapper.
+        ("zsh", "noglob command =tee -a ~/.zshrc"),
+        ("zsh", "noglob nice =sort -o ~/.zshrc f"),
+        ("zsh", r"find . -exec =tee -a ~/.zshrc \;"),
+        ("zsh", "strace =tee -a ~/.zshrc"),
+        // Review 2: a quoted `#` word; an exec wrapper's options.
+        ("zsh", r"find . -name '#*#' -exec =tee -a ~/.zshrc \;"),
+        ("zsh", "find '#dir' -exec =tee -a ~/.zshrc {} +"),
+        ("zsh", "strace -f =tee -a ~/.zshrc"),
+    ];
+    let persistence = [
+        ("bash", "noglob git log --output=~/.zshrc"),
+        ("zsh", "noglob git log --output=~/.zshrc"),
+        ("zsh", "nocorrect git log --output=~/.zshrc"),
+        ("zsh", "noglob nocorrect git log --output=~/.zshrc"),
+        ("bash", "noglob nice git log --output=~/.zshrc"),
+        ("zsh", "noglob tee -a ~/.zshrc"),
+        ("zsh", "noglob sort -o ~/.zshrc f"),
+        ("bash", "cd \"$d\"; noglob git log --output=.zshenv"),
+    ];
+    // Every line is checked before the test fails. On Windows, whose
+    // reading may name another kind first (`=$(printf tee) -a ~/.zshrc` is
+    // `Persistence` there), a line only has to ask.
+    let mut wrong = Vec::new();
+    for (lines, expected) in [
+        (&unseen[..], ProtectedActionKind::UnseenCode),
+        (&persistence[..], ProtectedActionKind::Persistence),
+    ] {
+        for (shell, command) in lines {
+            let found = kind(&[shell, "-c", command]);
+            if found.is_none() || (!cfg!(windows) && found != Some(expected)) {
+                wrong.push(format!("{shell}: {command} -> {found:?}"));
+            }
+        }
+    }
+    for command in [
+        "noglob git log --output=out.txt",
+        "noglob ls *.txt",
+        "noglob tee out.txt",
+        "echo =x",
+        "[ \"$a\" = \"$b\" ]",
+        "# ===== setup =====",
+        "# a == b",
+        "echo hi # ==== x",
+        "find . -name '*.rs' -exec grep -n '==' {} +",
+        "noglob git commit -m '=== x'",
+    ] {
+        let found = kind(&["zsh", "-c", command]);
+        if found.is_some() {
+            wrong.push(format!("zsh: {command} -> {found:?}"));
+        }
+    }
+    assert_eq!(wrong, Vec::<String>::new());
+}
+
+/// #1309 follow-ups from the #1523 review: `run0 -D DIR`, a keep option
+/// that may be an unknown option's value, tmux's `-c DIR` (its commands
+/// read as scripts), and zsh extendedglob command words. Each line was
+/// quiet on main.
+#[test]
+fn issue_1309_follow_ups_ask() {
+    for (shell, command) in [
+        ("bash", "run0 -D ~ sh -c 'echo x >> .zshenv'"),
+        ("bash", "run0 -D . sh -c 'echo x >> .zshenv'"),
+        ("bash", "run0 -uroot -D ~ sh -c 'echo x >> .zshenv'"),
+        (
+            "bash",
+            "systemd-run --on-active -d sh -c 'echo x >> .zshenv'",
+        ),
+        (
+            "bash",
+            "systemd-run --on-calendar --scope sh -c 'echo x >> .zshenv'",
+        ),
+        (
+            "bash",
+            "systemd-run --on-active --same-dir sh -c 'echo x >> .zshenv'",
+        ),
+        ("bash", "run0 --description -D sh -c 'echo x >> .zshenv'"),
+        ("bash", "pkexec --frob --keep-cwd sh -c 'echo x >> .zshenv'"),
+        ("bash", "tmux new -c ~ \"echo x >> .zshenv\""),
+        ("bash", "tmux new-session -c ~ \"echo x >> .zshenv\""),
+        ("bash", "tmux new-window -c ~ \"echo x >> .zshenv\""),
+        ("bash", "tmux split-window -c ~ \"echo x >> .zshenv\""),
+        ("bash", "tmux splitw -h -c ~ \"echo x >> .zshenv\""),
+        ("bash", "tmux respawn-pane -k -c ~ \"echo x >> .zshenv\""),
+        ("bash", "tmux new -d -s x -c ~ \"echo x >> .zshenv\""),
+        ("bash", "tmux new -dc ~ \"echo x >> .zshenv\""),
+        ("bash", "tmux -L s new -c ~ \"echo x >> .zshenv\""),
+        ("bash", "tmux new -d \\; neww -c ~ \"echo x >> .zshenv\""),
+        ("bash", "tmux popup -d ~ \"echo x >> .zshenv\""),
+        ("bash", "tmux new -c ~ 'sh -c \"echo x >> .zshenv\"'"),
+        ("bash", "tmux new -c ~ 'git log --output=.zshenv'"),
+        // Review 1: run-shell, name prefixes, tmux in another case.
+        ("bash", "tmux run -c ~ \"echo x >> .zshenv\""),
+        ("bash", "tmux run-shell -c ~ \"echo x >> .zshenv\""),
+        ("bash", "tmux new-w -c ~ \"echo x >> .zshenv\""),
+        ("bash", "tmux split-w -c ~ \"echo x >> .zshenv\""),
+        ("bash", "tmux respawn-p -c ~ \"echo x >> .zshenv\""),
+        ("bash", "TMUX new -c ~ \"echo x >> .zshenv\""),
+        ("zsh", "cdd# ~; sh -c 'echo x >> .zshenv'"),
+        ("zsh", "cd## ~; sh -c 'echo x >> .zshenv'"),
+        ("zsh", "^x ~; sh -c 'echo x >> .zshenv'"),
+        ("zsh", "cd~x ~; sh -c 'echo x >> .zshenv'"),
+        ("bash", "cdd# ~; sh -c 'echo x >> .zshenv'"),
+    ] {
+        assert_eq!(
+            kind(&[shell, "-c", command]),
+            Some(ProtectedActionKind::Persistence),
+            "{shell}: {command}"
+        );
+    }
+    for command in [
+        "systemd-run --user --same-dir sh -c 'echo x > out.txt'",
+        "systemd-run -u x -p Nice=5 --scope sh -c 'echo x > out.txt'",
+        "systemd-run --wait -q --scope sh -c 'echo x > out.txt'",
+        "pkexec --disable-internal-agent --keep-cwd sh -c 'echo x > out.txt'",
+        "tmux new \"echo x >> .zshenv\"",
+        "tmux new -s c \"echo x > out.txt\"",
+        "tmux new -d sh -c 'echo x > out.txt'",
+        "tmux send-keys -t x 'new' Enter",
+        "tmux new -c /tmp 'echo x > /tmp/out'",
+        "tmux display -p '#S'",
+        "tmux display -d 500 'echo x > .zshenv'",
+        "cd ~/w; sh -c 'echo x > out.txt'",
+    ] {
+        assert_eq!(script(command), None, "{command}");
+    }
+}
+
+/// #1159 and #1309 follow-ups: the new readings stay linear.
+#[test]
+fn issue_1309_follow_up_checks_are_linear() {
+    for (label, prefix, unit, suffix) in [
+        ("equals words", "nice ", "=x ", "echo"),
+        ("modifiers", "", "noglob ", "git log --output=out.txt"),
+        (
+            "keep options",
+            "systemd-run ",
+            "--zz ",
+            "--scope sh -c 'echo x > out.txt'",
+        ),
+        ("tmux options", "tmux new ", "-d ", "'echo x > out.txt'"),
+        ("tmux commands", "tmux ", "new 'echo x' \\; ", ""),
+        ("tmux words", "tmux ", "tmux ", "new -c ~ 'echo x'"),
+    ] {
+        work::assert_linear(label, |scale| {
+            let line = format!("{prefix}{}{suffix}", unit.repeat(200 * scale));
+            let _ = script(&line);
+        });
+    }
+}

@@ -27,6 +27,22 @@ const MAX_REPOS_PER_THREAD: usize = 16;
 const MAX_THREADS: usize = 64;
 /// New, empty config files and hooks folders remembered (`Global::empty_new`).
 const MAX_EMPTY_NEW: usize = 1024;
+
+#[cfg(test)]
+thread_local! {
+    /// A test's own `MAX_EMPTY_NEW` (its thread only), so that the limit can
+    /// be reached without filling the process-wide set other tests use.
+    pub(super) static TEST_MAX_EMPTY_NEW: std::cell::Cell<Option<usize>> =
+        const { std::cell::Cell::new(None) };
+}
+
+fn max_empty_new() -> usize {
+    #[cfg(test)]
+    if let Some(max) = TEST_MAX_EMPTY_NEW.with(std::cell::Cell::get) {
+        return max;
+    }
+    MAX_EMPTY_NEW
+}
 /// `.git` folders reported as swaps remembered (`Global::swapped`).
 pub(super) const MAX_SWAPPED: usize = 1024;
 const SHOWN_FINDINGS: usize = 20;
@@ -506,6 +522,21 @@ struct Snapshot {
     /// session's next look), so that a later swap, also for another empty
     /// folder, is reported (#1497 review).
     swap_held: bool,
+    /// Those of `empty_new` past `MAX_EMPTY_NEW` (not remembered) that this
+    /// look reported, or found reported and held (#943 r8 N2).
+    unremembered: HashSet<PathBuf>,
+    /// #943 item 14: what the last look saw of git folders the repository
+    /// names now that this look didn't walk, because it was a `finish` given
+    /// the git folders found before its command (another look of this
+    /// session saw the `.git` replaced meanwhile). Kept while later looks
+    /// walk the same git folders and see the same `.git`; `told_again` reads
+    /// it.
+    beyond: HashMap<PathBuf, Folder>,
+    beyond_states: HashMap<PathBuf, StateRead>,
+    /// What of `beyond` this session's look that saw it reported.
+    beyond_told: HashSet<HeldWhat>,
+    /// What this look reported, for `beyond_told`.
+    told: HashSet<HeldWhat>,
 }
 
 impl Snapshot {
@@ -522,6 +553,11 @@ impl Snapshot {
             git_dirs: Vec::new(),
             overlapping: false,
             swap_held: false,
+            unremembered: HashSet::new(),
+            beyond: HashMap::new(),
+            beyond_states: HashMap::new(),
+            beyond_told: HashSet::new(),
+            told: HashSet::new(),
         }
     }
 }
@@ -1034,7 +1070,13 @@ impl Held {
     }
 
     fn path(&self) -> &Path {
-        match &self.what {
+        self.what.path()
+    }
+}
+
+impl HeldWhat {
+    fn path(&self) -> &Path {
+        match self {
             HeldWhat::Link { path } | HeldWhat::HardLink { path } | HeldWhat::Exists { path } => {
                 path
             }
@@ -1042,7 +1084,9 @@ impl Held {
             HeldWhat::Replaced { dot_git, .. } => dot_git,
         }
     }
+}
 
+impl Held {
     /// Whether what was found is still there (looked at again, not by
     /// identity: a freed inode may be reused).
     fn stands(&self) -> bool {
@@ -1129,9 +1173,10 @@ fn with_global<T>(f: impl FnOnce(&mut Global) -> T) -> T {
 }
 
 /// `repo`'s slot in this session, counted as used now where `used` (a
-/// command runs there). A forgotten repository (past the limits) gets a
-/// first look again, which reports links, steps and hard links there.
-fn slot_of(thread: ThreadId, repo: &Repo, used: bool) -> Slot {
+/// command runs there), and the git folders stored for it before. A
+/// forgotten repository (past the limits) gets a first look again, which
+/// reports links, steps and hard links there.
+fn slot_of(thread: ThreadId, repo: &Repo, used: bool) -> (Slot, Vec<PathBuf>) {
     with_global(|global| {
         global.uses += 1;
         let uses = global.uses;
@@ -1165,13 +1210,14 @@ fn slot_of(thread: ThreadId, repo: &Repo, used: bool) -> Slot {
             .repos
             .entry(repo.dot_git.clone())
             .or_insert_with(|| (repo.clone(), Slot::default()));
+        let before = stored.git_dirs.clone();
         // #943 review r5: where a command runs there, its git folders as
         // found now (a `.git` made again may be another kind) are what later
         // looks (`recheck`) walk.
         if used && stored.git_dirs != repo.git_dirs {
             *stored = repo.clone();
         }
-        slot.clone()
+        (slot.clone(), before)
     })
 }
 
@@ -1235,7 +1281,7 @@ fn look(thread: ThreadId, repos: &[Repo], first_only: bool, used: bool) -> Vec<F
     let mut held = Vec::new();
     let mut walked = Vec::new();
     for repo in repos {
-        let slot = slot_of(thread, repo, used);
+        let (slot, stored_dirs) = slot_of(thread, repo, used);
         let mut snapshot = slot.lock().unwrap_or_else(PoisonError::into_inner);
         if first_only && snapshot.is_some() {
             continue;
@@ -1386,7 +1432,7 @@ fn look(thread: ThreadId, repos: &[Repo], first_only: bool, used: bool) -> Vec<F
         // Full: those gone meanwhile (a deleted scratch repository) go,
         // looked at without holding `GLOBAL`.
         let candidates = with_global(|global| {
-            if global.empty_new.len() + empty.remember.len() > MAX_EMPTY_NEW {
+            if global.empty_new.len() + empty.remember.len() > max_empty_new() {
                 global.empty_new.iter().cloned().collect()
             } else {
                 Vec::new()
@@ -1403,7 +1449,7 @@ fn look(thread: ThreadId, repos: &[Repo], first_only: bool, used: bool) -> Vec<F
             }
             let mut unremembered = Vec::new();
             for path in empty.remember {
-                if global.empty_new.len() < MAX_EMPTY_NEW || global.empty_new.contains(&path) {
+                if global.empty_new.len() < max_empty_new() || global.empty_new.contains(&path) {
                     global.empty_new.insert(path);
                 } else {
                     unremembered.push(path);
@@ -1411,6 +1457,26 @@ fn look(thread: ThreadId, repos: &[Repo], first_only: bool, used: bool) -> Vec<F
             }
             unremembered
         });
+        // #943 r8 N2: told once, not at every look: not again where this
+        // session's last look reported it (still empty, past the limit) and
+        // that report still holds it (held again below, as before). Filled,
+        // it is reported (`compare`).
+        let repeated: HashSet<PathBuf> = with_global(|global| {
+            unremembered
+                .iter()
+                .filter(|path| prev.is_some_and(|prev| prev.unremembered.contains(*path)))
+                .filter(|path| {
+                    global.held.contains(&Held {
+                        git_dirs: repo.git_dirs.clone(),
+                        what: HeldWhat::Exists {
+                            path: (*path).clone(),
+                        },
+                    })
+                })
+                .cloned()
+                .collect()
+        });
+        cur.unremembered = unremembered.iter().cloned().collect();
         found.extend(
             unremembered
                 .into_iter()
@@ -1424,6 +1490,18 @@ fn look(thread: ThreadId, repos: &[Repo], first_only: bool, used: bool) -> Vec<F
                 .iter()
                 .filter_map(|finding| Held::of(finding, repo, &cur)),
         );
+        cur.told = found
+            .iter()
+            .filter_map(|finding| Held::of(finding, repo, &cur))
+            .map(|held| held.what)
+            .collect();
+        // Held as before; only the message leaves out what was told already
+        // (#943 r8 N2, item 14).
+        let told = told_again(snapshot.as_ref(), repo, &cur, &found);
+        found.retain(|finding| {
+            !told.contains(finding)
+                && !matches!(finding, Finding::Config { path } if repeated.contains(path))
+        });
         // Told each time a look becomes incomplete; held while it is.
         if let Some(why) = &cur.incomplete
             && prev.is_none_or(|prev| prev.incomplete.as_ref() != Some(why))
@@ -1446,6 +1524,11 @@ fn look(thread: ThreadId, repos: &[Repo], first_only: bool, used: bool) -> Vec<F
             started,
         ));
         findings.extend(found);
+        carry_beyond(
+            snapshot.as_ref(),
+            &mut cur,
+            (used && !first_only).then_some(stored_dirs.as_slice()),
+        );
         *snapshot = Some(cur);
     }
     with_global(|global| {
@@ -1573,6 +1656,105 @@ enum Walked {
     /// Only its own entry goes: its `.git` is gone (nothing to follow
     /// there), or it saw them in full but overlapping in other roles.
     Exact(Vec<PathBuf>),
+}
+
+/// #943 item 14: findings in folders `last.beyond` holds (a look after a
+/// stale `finish`) that the look which saw them there reported, unchanged
+/// since, and whose hold still stands: the person was told already.
+fn told_again(
+    last: Option<&Snapshot>,
+    repo: &Repo,
+    cur: &Snapshot,
+    found: &[Finding],
+) -> Vec<Finding> {
+    let Some(last) = last.filter(|last| {
+        !last.beyond.is_empty() && !last.went_missing && last.dot_git == cur.dot_git
+    }) else {
+        return Vec::new();
+    };
+    let unchanged = |finding: &Finding| {
+        Held::of(finding, repo, cur).is_some_and(|held| last.beyond_told.contains(&held.what))
+            && match finding {
+                Finding::Link { path, .. }
+                | Finding::HardLink { path }
+                | Finding::Config { path }
+                | Finding::Remote { path } => {
+                    let entry = |folders: &HashMap<PathBuf, Folder>| {
+                        let folder = folders.get(path.parent()?)?;
+                        folder.entries.get(path.file_name()?).cloned()
+                    };
+                    entry(&last.beyond).is_some_and(|old| entry(&cur.folders) == Some(old))
+                }
+                Finding::Exec { todo, .. } => last
+                    .beyond_states
+                    .get(todo)
+                    .is_some_and(|old| cur.states.get(todo) == Some(old)),
+                Finding::Replaced { .. } | Finding::Incomplete { .. } => false,
+            }
+    };
+    let candidates: Vec<&Finding> = found.iter().filter(|finding| unchanged(finding)).collect();
+    if candidates.is_empty() {
+        return Vec::new();
+    }
+    let holds: Vec<Held> = with_global(|global| global.held.iter().cloned().collect());
+    candidates
+        .into_iter()
+        .filter(|finding| {
+            Held::of(finding, repo, cur).is_some_and(|mine| {
+                holds.iter().any(|held| {
+                    held.what == mine.what
+                        && held.git_dirs.iter().any(|dir| repo.git_dirs.contains(dir))
+                        && held.stands()
+                })
+            })
+        })
+        .cloned()
+        .collect()
+}
+
+/// #943 item 14: `cur.beyond` (and what of it was told). Where `stale` (a
+/// `finish`, with the git folders stored for the repository before it),
+/// what `last` saw of those of them `cur` didn't walk; and `last.beyond`
+/// where `cur` walked the same git folders. Only while the `.git` is the same one (no look saw it
+/// missing).
+fn carry_beyond(last: Option<&Snapshot>, cur: &mut Snapshot, stale: Option<&[PathBuf]>) {
+    let Some(last) = last.filter(|last| !last.went_missing && last.dot_git == cur.dot_git) else {
+        return;
+    };
+    let stale: Vec<&PathBuf> = stale
+        .unwrap_or_default()
+        .iter()
+        .filter(|dir| !cur.git_dirs.contains(dir))
+        .collect();
+    let same = last.git_dirs == cur.git_dirs;
+    let folders = last
+        .folders
+        .iter()
+        .filter(|(dir, _)| stale.iter().any(|stale| dir.starts_with(stale)))
+        .chain(last.beyond.iter().filter(|_| same));
+    for (dir, folder) in folders {
+        if !cur.folders.contains_key(dir) && !cur.beyond.contains_key(dir) {
+            cur.beyond.insert(dir.clone(), folder.clone());
+        }
+    }
+    let told = last
+        .told
+        .iter()
+        .filter(|what| stale.iter().any(|stale| what.path().starts_with(stale)))
+        .chain(last.beyond_told.iter().filter(|_| same));
+    for what in told {
+        cur.beyond_told.insert(what.clone());
+    }
+    for (path, read) in last.states.iter().chain(&last.beyond_states) {
+        if path
+            .parent()
+            .is_some_and(|dir| cur.beyond.contains_key(dir))
+            && !cur.states.contains_key(path)
+            && !cur.beyond_states.contains_key(path)
+        {
+            cur.beyond_states.insert(path.clone(), read.clone());
+        }
+    }
 }
 
 /// What a `.git` made again (missing at the last look, now a different one)

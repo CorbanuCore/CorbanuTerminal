@@ -3,6 +3,24 @@
 Notes for changes on `main` that are not released yet. The release worker moves
 them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
 
+## Protocol change: `turn.completed` usage can be `null`
+
+- **`corbanu exec --json` reports `"usage": null` when the provider reported
+  no usage for the turn** (#290). Unknown usage is no longer reported as an
+  all-zero usage object, so consumers can distinguish "not reported" from a
+  measured zero. When usage is reported, the object is unchanged.
+- **The usage is still the completing thread's own total.** It does not add
+  usage from spawned subagents and is not a difference from the start of the
+  invocation.
+
+### Compatibility
+
+- **Consumers that read token counts from `turn.completed.usage` without a
+  null check** will fail on turns with no reported usage and must be updated.
+  The TypeScript SDK in `sdk/typescript` handles `null` from this release:
+  `TurnCompletedEvent.usage` is `Usage | null`, and `Thread.run()` returns
+  `usage: null` for such turns.
+
 ## Protocol change: `refused` command status
 
 - **A refused command now says "Refused", not "Approval declined".** When a
@@ -201,6 +219,14 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   (Grok 4.6 and 4.5, DeepSeek V4 Pro and V4 Flash 0731 on OpenRouter, and
   GPT-5.5 on OpenAI) are still served and unchanged.
 
+## `NO_PROXY` IP ranges apply to WebSocket connections
+
+- **WebSocket connections now honour IP-range entries in `NO_PROXY`** (#722,
+  D247), such as `172.16.0.0/12`. A connection to an IP address inside a
+  listed range now goes direct, as HTTP requests already did, instead of
+  through `HTTP_PROXY`/`HTTPS_PROXY`. Host names are matched by name only (they
+  are not resolved to check ranges), as before.
+
 ## Interrupting a tool on a busy machine keeps its elapsed time
 
 - **The model now always sees how long an interrupted tool ran** (#1467,
@@ -208,6 +234,10 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   period. The interrupted tool's output (`Wall time: N seconds` /
   `aborted by user`) was then replaced by a bare `aborted`. That output is now
   recorded in this case too, timed to the moment of the interrupt.
+- **A tool that had already finished keeps its real result** (#1536, D244).
+  In the same rare case, a tool that completed just before the interrupt (for
+  example a patch that was applied) was reported to the model as aborted. Its
+  real output is now recorded instead.
 
 ## Windows non-admin sandbox warning
 
@@ -216,3 +246,14 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   workspace; since #705 they can't, except in low-integrity places. It now says
   what it doesn't stop: reading your files, network access by programs that
   ignore proxy settings, and a few ways of starting programs outside its job.
+
+## `corbanu resume --last` reopens the conversation you quit from
+
+- **`resume --last` now opens the conversation that was on screen when you
+  last quit** (#1412, D243). Opening an older conversation with `/resume`
+  doesn't change its "updated" time until you send a turn, so `resume --last`
+  used to reopen the conversation with the newest turn instead. Corbanu now
+  records the conversation on screen when you quit and reopens it, as long as
+  it is in the same scope (folder, provider, not archived) and no conversation
+  there got a newer turn after you quit. Otherwise it still picks the newest
+  turn, as before. The `/resume` list order and `fork --last` are unchanged.

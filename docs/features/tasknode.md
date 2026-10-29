@@ -60,6 +60,43 @@ Profiles do not copy the default account's token, so logging out the default
 account cannot revoke a newly linked named profile. Completing a relink and
 running `/tasknode status` replaces that profile's old token after validation.
 
+### Prove your wallet link
+
+When a task asks you to confirm the wallet linked to your Task Node account,
+use `/tasknode status` in the Corbanu profile where you accepted the task. The
+reply appears in the conversation under `Task Node status`. Copy these rows
+from that one reply, exactly as shown:
+
+```text
+profile: <local profile name, or default>
+account: <Task Node account ID>
+github:  <GitHub username>
+wallet:  <full wallet address>
+```
+
+Copy the whole address after `wallet:`, keeping every character and its
+capitalization. A readable screenshot that shows the `Task Node status` heading
+and those four rows together works too. Never send a seed phrase, private key,
+passcode, API key or session token; proving the link needs no payment, unlock
+or signature.
+
+Don't use the address from `/wallet`. That is your local Solana wallet, and its
+header shortens the address. It is not the wallet linked to your Task Node
+account. The `profile:` row is only a local label; the `account:` and
+`github:` rows identify the Task Node account that the `wallet:` row belongs to.
+
+If the rows are missing or wrong:
+
+- `wallet:` says `not linked` or is blank, or status shows an error: report
+  that result in the task. Don't substitute another address, and don't create
+  a local Solana wallet to fill the gap.
+- The session isn't linked: run `/tasknode link`, finish the login, then run
+  `/tasknode status` again.
+- `github:` shows the wrong account: open the intended Corbanu profile, or
+  relink it to the intended account, and run status again.
+- The correct account still has no wallet: report "Task Node wallet not
+  linked" so the task reviewer can send the current linking steps.
+
 ## Work with tasks
 
 ```text

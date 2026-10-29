@@ -1188,7 +1188,8 @@ impl Session {
         task.handle.abort();
         if hard_aborted {
             // The turn did not record its tool outputs in time. Once it has stopped,
-            // record each pending call's abort output, as the turn would have (#1467).
+            // record each pending call's output, as the turn would have: the tool's
+            // own output if it finished (D244), else its abort output (#1467).
             // Joining waits only for the turn's current poll to return, so the turn
             // cannot record an output after the check below. The join is skipped only
             // when the turn task aborts itself; aborts from tasks the turn spawned must
@@ -1199,7 +1200,7 @@ impl Session {
             let mut outputs: Vec<ResponseItem> = task
                 .turn_context
                 .pending_tool_calls
-                .take_aborted_outputs(cancelled_at)
+                .take_unrecorded_outputs(cancelled_at)
                 .into_iter()
                 .map(ResponseItem::from)
                 .collect();
@@ -1207,6 +1208,16 @@ impl Session {
             if !outputs.is_empty() {
                 self.record_conversation_items(task.turn_context.as_ref(), &outputs)
                     .await;
+                // A finished call's real output is recorded here instead of by the
+                // turn (D244), so apply the turn's external-context check too.
+                for output in &outputs {
+                    crate::stream_events_utils::mark_thread_memory_mode_polluted_if_external_context(
+                        self,
+                        task.turn_context.as_ref(),
+                        output,
+                    )
+                    .await;
+                }
             }
         }
 

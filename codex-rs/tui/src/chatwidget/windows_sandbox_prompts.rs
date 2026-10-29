@@ -516,4 +516,92 @@ impl ChatWidget {
 
     #[cfg(not(target_os = "windows"))]
     pub(crate) fn clear_windows_sandbox_setup_status(&mut self) {}
+
+    /// #1506 item 2 (D262): at startup, asks whether to load the `.codex` or
+    /// `.agents` folders of this project that appeared while a non-admin
+    /// sandbox command ran. Until confirmed, Core ignores them.
+    pub(crate) fn maybe_prompt_planted_project_metadata(&mut self) {
+        // Unreadable records can't be confirmed; the startup warning says so.
+        let codex_config::PlantedProjectMetadata::Known(planted) =
+            codex_config::planted_project_metadata()
+        else {
+            return;
+        };
+        let cwd = self.config.cwd.as_path();
+        let here: Vec<PathBuf> = planted
+            .into_iter()
+            .filter(|path| {
+                path.parent().is_some_and(|parent| {
+                    let parent = dunce::canonicalize(parent).unwrap_or_else(|_| parent.into());
+                    let cwd = dunce::canonicalize(cwd).unwrap_or_else(|_| cwd.into());
+                    cwd.starts_with(&parent)
+                })
+            })
+            .collect();
+        if !here.is_empty() {
+            self.open_planted_project_metadata_prompt(here);
+        }
+    }
+
+    pub(crate) fn open_planted_project_metadata_prompt(&mut self, paths: Vec<PathBuf>) {
+        use ratatui_macros::line;
+
+        let mut lines = vec![
+            line!["Possibly planted project folders".bold()],
+            line![""],
+            line![
+                "These folders appeared while a non-admin Windows sandbox command ran, so a command may have planted them. Corbanu Terminal isn't loading their config, hooks or skills:"
+            ],
+        ];
+        for path in &paths {
+            lines.push(line![format!("  {}", path.display()).cyan()]);
+        }
+        lines.push(line!["Check their contents before you load them.".bold()]);
+        let mut header = ColumnRenderable::new();
+        header.push(*Box::new(Paragraph::new(lines).wrap(Wrap { trim: false })));
+
+        let items = vec![
+            SelectionItem {
+                name: "Keep ignoring them".to_string(),
+                description: Some("Ask again next time".to_string()),
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "Load them".to_string(),
+                description: Some("I checked them; load them from the next start".to_string()),
+                actions: vec![Box::new(move |tx| {
+                    let message = match confirm_planted_project_metadata(&paths) {
+                        Ok(()) => "Confirmed. Restart Corbanu Terminal to load them.".to_string(),
+                        Err(err) => format!("Couldn't confirm them: {err}"),
+                    };
+                    tx.send(AppEvent::InsertHistoryCell(Box::new(
+                        crate::history_cell::new_info_event(message, /*hint*/ None),
+                    )));
+                })],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+        ];
+        self.bottom_pane.show_selection_view(SelectionViewParams {
+            title: None,
+            footer_hint: Some(standard_popup_hint_line()),
+            items,
+            header: Box::new(header),
+            ..Default::default()
+        });
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn confirm_planted_project_metadata(paths: &[PathBuf]) -> anyhow::Result<()> {
+    for path in paths {
+        codex_windows_sandbox::confirm_planted_project_metadata(path)?;
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn confirm_planted_project_metadata(_paths: &[PathBuf]) -> anyhow::Result<()> {
+    Ok(())
 }

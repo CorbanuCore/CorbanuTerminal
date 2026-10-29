@@ -243,6 +243,10 @@ pub use identity::require_logon_sandbox_creds;
 #[cfg(target_os = "windows")]
 pub use identity::sandbox_setup_is_complete;
 #[cfg(target_os = "windows")]
+pub use integrity_leases::confirm_planted_project_metadata;
+#[cfg(target_os = "windows")]
+pub use integrity_leases::planted_project_metadata;
+#[cfg(target_os = "windows")]
 pub use integrity_leases::repair_stale_integrity_labels;
 #[cfg(target_os = "windows")]
 pub use ipc_framed::ErrorPayload;

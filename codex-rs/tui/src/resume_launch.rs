@@ -111,7 +111,7 @@ pub(crate) async fn select_resume_launch_session(
         let Some(app_server) = app_server.as_mut() else {
             unreachable!("app server should be initialized for --resume --last");
         };
-        let target = crate::lookup_latest_session_target_with_app_server(
+        let target = crate::lookup_resume_last_target_with_app_server(
             app_server,
             config,
             filter_cwd,

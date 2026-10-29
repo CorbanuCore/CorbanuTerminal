@@ -44,6 +44,7 @@ for await (const event of events) {
       console.log("item", event.item);
       break;
     case "turn.completed":
+      // event.usage is null when the provider reported no usage for the turn.
       console.log("usage", event.usage);
       break;
   }

@@ -38,6 +38,8 @@ on:
       - "codex-rs/core/src/tools/sandboxing_tests.rs"
       - "codex-rs/core/src/sandboxing/**"
       - "codex-rs/sandboxing/src/windows.rs"
+      - "codex-rs/config/src/loader/mod.rs"
+      - "codex-rs/config/src/planted_project_metadata.rs"
       - "codex-rs/sandboxing/src/lib.rs"
       - ".github/scripts/run-at-medium-integrity.ps1"
   push:
@@ -73,6 +75,8 @@ on:
       - "codex-rs/core/src/tools/sandboxing_tests.rs"
       - "codex-rs/core/src/sandboxing/**"
       - "codex-rs/sandboxing/src/windows.rs"
+      - "codex-rs/config/src/loader/mod.rs"
+      - "codex-rs/config/src/planted_project_metadata.rs"
       - "codex-rs/sandboxing/src/lib.rs"
       - ".github/scripts/run-at-medium-integrity.ps1"
 
@@ -94,6 +98,11 @@ env:
     legacy_read_only_cannot_delete_anything
     legacy_workspace_write_can_delete_inside_writable_roots
     legacy_workspace_write_cannot_delete_or_replace_protected_git_dir
+    legacy_workspace_write_cannot_move_ancestor_of_nested_carve_out
+    legacy_delete_child_denies_are_removed_after_the_session
+    legacy_delete_child_denies_follow_live_sessions
+    legacy_planted_project_metadata_survives_a_crash
+    legacy_delete_child_denies_nested_root_keeps_its_own
     legacy_read_only_after_workspace_write_cannot_delete
     legacy_crashed_session_labels_are_repaired
     legacy_label_registry_is_closed_to_low_integrity
@@ -202,7 +211,7 @@ jobs:
           bin_dir="${CARGO_TARGET_DIR}/debug"
           export CARGO_BIN_EXE_codex_windows_sandbox_setup="$(cygpath -w "${bin_dir}/codex-windows-sandbox-setup.exe")"
           export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --lib -- pf_27_s06 pf_27_s07 sec_win_300 --nocapture --test-threads=1
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --lib -- pf_27_s06 pf_27_s07 sec_win_300 sec_win_1506 --nocapture --test-threads=1
       # The runners are elevated, which hid #294/#295. This reruns those probes
       # with the token of an administrator's normal session (medium integrity).
       # Not covered here: a separate non-administrator account, and the
@@ -289,6 +298,10 @@ jobs:
             Assert-Tests $core 'sec_win_300' 2
             & $medium -Program $core -Arguments @('sec_win_300', '--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "#300 regressions failed in a normal session" }
+            # #1506 item 2: planted .codex/.agents aren't loaded until confirmed.
+            Assert-Tests $core 'sec_win_1506' 1
+            & $medium -Program $core -Arguments @('sec_win_1506', '--nocapture', '--test-threads=1')
+            if ($LASTEXITCODE -ne 0) { throw "#1506 planted-metadata regression failed in a normal session" }
             # Each elevated setup resets the sandbox passwords, so record the
             # setup the normal-session run reuses right before it.
             New-Item -ItemType Directory -Force $env:CODEX_PF27S06_SETUP_SEED | Out-Null

@@ -1207,9 +1207,7 @@ fn plan_update_emits_started_then_updated_then_completed() {
                         }),
                     },
                 }),
-                ThreadEvent::TurnCompleted(TurnCompletedEvent {
-                    usage: Usage::default(),
-                }),
+                ThreadEvent::TurnCompleted(TurnCompletedEvent { usage: None }),
             ],
             status: CodexStatus::InitiateShutdown,
         }
@@ -1336,13 +1334,13 @@ fn token_usage_update_is_emitted_on_turn_completion() {
         completed,
         CollectedThreadEvents {
             events: vec![ThreadEvent::TurnCompleted(TurnCompletedEvent {
-                usage: Usage {
+                usage: Some(Usage {
                     input_tokens: 10,
                     cached_input_tokens: 3,
                     cache_write_input_tokens: 4,
                     output_tokens: 29,
                     reasoning_output_tokens: 7,
-                },
+                }),
             })],
             status: CodexStatus::InitiateShutdown,
         }
@@ -1378,7 +1376,7 @@ fn turn_completion_recovers_final_message_from_turn_items() {
         completed,
         CollectedThreadEvents {
             events: vec![ThreadEvent::TurnCompleted(TurnCompletedEvent {
-                usage: Usage::default(),
+                usage: None,
             })],
             status: CodexStatus::InitiateShutdown,
         }
@@ -1472,9 +1470,7 @@ fn turn_completion_reconciles_started_items_from_turn_items() {
                         }),
                     },
                 }),
-                ThreadEvent::TurnCompleted(TurnCompletedEvent {
-                    usage: Usage::default(),
-                }),
+                ThreadEvent::TurnCompleted(TurnCompletedEvent { usage: None }),
             ],
             status: CodexStatus::InitiateShutdown,
         }
@@ -1523,7 +1519,7 @@ fn turn_completion_overwrites_stale_final_message_from_turn_items() {
         completed,
         CollectedThreadEvents {
             events: vec![ThreadEvent::TurnCompleted(TurnCompletedEvent {
-                usage: Usage::default(),
+                usage: None,
             })],
             status: CodexStatus::InitiateShutdown,
         }
@@ -1568,7 +1564,7 @@ fn turn_completion_preserves_streamed_final_message_when_turn_items_are_empty() 
         completed,
         CollectedThreadEvents {
             events: vec![ThreadEvent::TurnCompleted(TurnCompletedEvent {
-                usage: Usage::default(),
+                usage: None,
             })],
             status: CodexStatus::InitiateShutdown,
         }
@@ -1648,7 +1644,7 @@ fn turn_completion_falls_back_to_final_plan_text() {
         completed,
         CollectedThreadEvents {
             events: vec![ThreadEvent::TurnCompleted(TurnCompletedEvent {
-                usage: Usage::default(),
+                usage: None,
             })],
             status: CodexStatus::InitiateShutdown,
         }
@@ -1733,5 +1729,106 @@ fn model_reroute_surfaces_as_error_item() {
         ThreadItemDetails::Error(ErrorItem {
             message: "model rerouted: gpt-5 -> gpt-5-mini (HighRiskCyberActivity)".to_string(),
         })
+    );
+}
+
+fn completed_turn(thread_id: &str, turn_id: &str) -> ServerNotification {
+    ServerNotification::TurnCompleted(codex_app_server_protocol::TurnCompletedNotification {
+        thread_id: thread_id.to_string(),
+        turn: Turn {
+            id: turn_id.to_string(),
+            items_view: codex_app_server_protocol::TurnItemsView::Full,
+            items: Vec::new(),
+            status: TurnStatus::Completed,
+            error: None,
+            started_at: None,
+            completed_at: None,
+            duration_ms: None,
+        },
+    })
+}
+
+fn usage_update(thread_id: &str, turn_id: &str, input_tokens: i64) -> ServerNotification {
+    ServerNotification::ThreadTokenUsageUpdated(
+        codex_app_server_protocol::ThreadTokenUsageUpdatedNotification {
+            thread_id: thread_id.to_string(),
+            turn_id: turn_id.to_string(),
+            token_usage: ThreadTokenUsage {
+                total: TokenUsageBreakdown {
+                    total_tokens: input_tokens,
+                    input_tokens,
+                    cached_input_tokens: 0,
+                    cache_write_input_tokens: 0,
+                    output_tokens: 0,
+                    reasoning_output_tokens: 0,
+                },
+                last: TokenUsageBreakdown {
+                    total_tokens: input_tokens,
+                    input_tokens,
+                    cached_input_tokens: 0,
+                    cache_write_input_tokens: 0,
+                    output_tokens: 0,
+                    reasoning_output_tokens: 0,
+                },
+                model_context_window: None,
+            },
+            account_usage: None,
+        },
+    )
+}
+
+#[test]
+fn issue290_turn_completion_without_usage_update_reports_no_usage() {
+    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+
+    let completed = processor.collect_thread_events(completed_turn("thread-1", "turn-1"));
+
+    assert_eq!(
+        completed,
+        CollectedThreadEvents {
+            events: vec![ThreadEvent::TurnCompleted(TurnCompletedEvent {
+                usage: None,
+            })],
+            status: CodexStatus::InitiateShutdown,
+        }
+    );
+    let serialized = serde_json::to_value(&completed.events[0]).expect("serialize event");
+    assert_eq!(serialized["usage"], serde_json::Value::Null);
+}
+
+#[test]
+fn issue290_usage_update_for_another_thread_is_not_reported_for_this_thread() {
+    let mut processor = EventProcessorWithJsonOutput::new(/*last_message_path*/ None);
+
+    let _ = processor.collect_thread_events(usage_update(
+        "thread-2", "turn-2", /*input_tokens*/ 58_128,
+    ));
+
+    let completed = processor.collect_thread_events(completed_turn("thread-1", "turn-1"));
+    assert_eq!(
+        completed,
+        CollectedThreadEvents {
+            events: vec![ThreadEvent::TurnCompleted(TurnCompletedEvent {
+                usage: None,
+            })],
+            status: CodexStatus::InitiateShutdown,
+        }
+    );
+
+    let completed_other = processor.collect_thread_events(completed_turn("thread-2", "turn-2"));
+    assert_eq!(
+        completed_other,
+        CollectedThreadEvents {
+            events: vec![ThreadEvent::TurnCompleted(TurnCompletedEvent {
+                usage: Some(Usage {
+                    input_tokens: 58_128,
+                    cached_input_tokens: 0,
+                    cache_write_input_tokens: 0,
+                    output_tokens: 0,
+                    reasoning_output_tokens: 0,
+                }),
+            })],
+            status: CodexStatus::InitiateShutdown,
+        }
     );
 }

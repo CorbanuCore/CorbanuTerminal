@@ -1360,6 +1360,170 @@ impl Arithmetic {
         }
         (tainted, any)
     }
+
+    /// #932 measuring: which reading of `runs_unseen` holds, with the region.
+    #[cfg(test)]
+    pub(super) fn runs_unseen_why(&self, text: &[String]) -> String {
+        if self.unfollowed {
+            return "unfollowed".into();
+        }
+        let (tainted, any) = self.tainted();
+        if (self.opaque || self.sources || self.evaluates_text) && any {
+            return format!(
+                "opaque_sources_evaltext:o{}s{}e{}",
+                u8::from(self.opaque),
+                u8::from(self.sources),
+                u8::from(self.evaluates_text)
+            );
+        }
+        let builds = |value: &str| any && self.builds(value);
+        let tainted_value = |value: &str| {
+            command_output(value)
+                || builds(value)
+                || names(&visible(value)).any(|name| tainted.contains(name))
+        };
+        if self.integers.iter().any(|name| tainted.contains(name)) {
+            return "integers".into();
+        }
+        if let Some(w) = self.evaluated.iter().find(|word| tainted_value(word)) {
+            return format!("evaluated {w:?}");
+        }
+        if self.named.iter().any(|word| {
+            command_output(word)
+                || builds(word)
+                || references(word).any(|name| tainted.contains(name))
+                || word.find('[').is_some_and(|at| tainted_value(&word[at..]))
+        }) {
+            return "named".into();
+        }
+        for arg in text {
+            work::step();
+            let arg = joined(arg);
+            for range in regions(&arg) {
+                work::step();
+                let region = &arg[range];
+                let bare = unquoted(region);
+                if names(&bare).any(|name| tainted.contains(name)) {
+                    return format!("region_tainted_name {region:?}");
+                }
+                if unseen_substitution(region) {
+                    return format!("region_substitution {region:?}");
+                }
+                if any {
+                    let (builders, unknown) = building(region);
+                    if unknown || !builders.is_empty() {
+                        return format!("region_building {region:?}");
+                    }
+                }
+            }
+        }
+        if any && self.strict_unseen(text, &tainted) {
+            return "strict_unseen".into();
+        }
+        "namerefs_or_other".into()
+    }
+
+    /// #932 measuring: the argument text (or lexed word) that reads as a
+    /// qualifier that runs code.
+    #[cfg(test)]
+    pub(super) fn qualifier_trigger(&self, text: &[String]) -> Option<String> {
+        let one = |t: &[String]| self.runs_qualifier_code_in(t);
+        for arg in text {
+            work::step();
+            if one(std::slice::from_ref(arg)) {
+                let j = joined(arg);
+                for t in [j.clone(), j.replace('\\', "")] {
+                    work::step();
+                    for range in all_qualifier_lists(&t) {
+                        work::step();
+                        let hit = (range.is_empty() && range.start == t.len()) || {
+                            let list = &t[range.clone()];
+                            qualifier_runs_code(list)
+                                || (list.contains(['\'', '"', '\\'])
+                                    && quoted_group_end(&t, range.start).is_none_or(|end| {
+                                        qualifier_runs_code(&t[range.start..end])
+                                    }))
+                        };
+                        if hit {
+                            let from = t[..range.start]
+                                .char_indices()
+                                .rev()
+                                .nth(24)
+                                .map_or(0, |(i, _)| i);
+                            let to = t[range.end..]
+                                .char_indices()
+                                .nth(4)
+                                .map_or(t.len(), |(i, _)| range.end + i);
+                            return Some(format!(
+                                "argv:{}|{}|{}",
+                                &t[from..range.start],
+                                &t[range.clone()],
+                                &t[range.end..to]
+                            ));
+                        }
+                    }
+                }
+                return Some("argv:?".to_string());
+            }
+        }
+        for word in &self.qualifier_words {
+            work::step();
+            if one(std::slice::from_ref(word)) {
+                return Some(format!("lexed:{word}"));
+            }
+        }
+        None
+    }
+
+    /// #932 measuring: `runs_qualifier_code` over `text` alone.
+    #[cfg(test)]
+    fn runs_qualifier_code_in(&self, text: &[String]) -> bool {
+        let runs = |text: &str| {
+            all_qualifier_lists(text).into_iter().any(|range| {
+                if range.is_empty() && range.start == text.len() {
+                    return true;
+                }
+                let list = &text[range.clone()];
+                qualifier_runs_code(list)
+                    || (list.contains(['\'', '"', '\\'])
+                        && quoted_group_end(text, range.start)
+                            .is_none_or(|end| qualifier_runs_code(&text[range.start..end])))
+            })
+        };
+        text.iter()
+            .map(|arg| joined(arg))
+            .any(|text| runs(&text) || (text.contains('\\') && runs(&text.replace('\\', ""))))
+    }
+
+    /// #932 measuring: why `uses_glob_substitution` holds.
+    #[cfg(test)]
+    pub(super) fn glob_subst_why(&self, text: &[String]) -> String {
+        let options = |name: &str| name == "options";
+        if self.glob_subst {
+            return "lexed_glob_subst".into();
+        }
+        if let Some(arg) = text
+            .iter()
+            .find(|arg| shell::glob_substitution(&joined(arg)))
+        {
+            return format!("argv:{arg}");
+        }
+        if self.assigned.iter().any(|(name, _)| options(name))
+            || self
+                .filled
+                .iter()
+                .chain(&self.appended)
+                .chain(&self.namerefs)
+                .any(|name| options(name))
+            || self
+                .named
+                .iter()
+                .any(|word| options(word.split(['[', '=']).next().unwrap_or(word)))
+        {
+            return "options_array".into();
+        }
+        "-".into()
+    }
 }
 
 impl Arithmetic {

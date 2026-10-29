@@ -167,6 +167,11 @@ async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
 
 #[tokio::test]
 async fn request_permissions_guardian_review_stops_when_cancelled() {
+    // Generous caps so a loaded CI runner is not mistaken for a hang (#1539).
+    // A request that ignores the cancellation still fails the response check.
+    const START_CAP: Duration = Duration::from_secs(30);
+    const STOP_CAP: Duration = Duration::from_secs(30);
+
     let server = start_mock_server().await;
     let _guardian_request_log = mount_response_once(
         &server,
@@ -239,7 +244,7 @@ async fn request_permissions_guardian_review_stops_when_cancelled() {
         }
     });
 
-    timeout(Duration::from_secs(5), async {
+    timeout(START_CAP, async {
         loop {
             let event = rx_event.recv().await.expect("event channel should be open");
             if matches!(
@@ -255,7 +260,7 @@ async fn request_permissions_guardian_review_stops_when_cancelled() {
 
     cancellation_token.cancel();
 
-    let response = timeout(Duration::from_secs(5), request_handle)
+    let response = timeout(STOP_CAP, request_handle)
         .await
         .expect("request_permissions should stop when cancelled")
         .expect("request_permissions task should not panic");
