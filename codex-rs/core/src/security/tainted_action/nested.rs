@@ -62,6 +62,11 @@ const MAX_COLLECTED: usize = 4096;
 /// the pipeline writes a file the classifier cannot name.
 const MAX_PIPELINE_STAGES: usize = 64;
 
+/// Bytes of known target names retained for one collected `sed`. This keeps
+/// repeated `Sed` records linear in the command input even when few target
+/// names are individually very long.
+const MAX_SAVED_TARGET_BYTES: usize = 64 * 1024;
+
 /// Pipeline stages that save their input to the files they are given.
 const PIPE_WRITERS: &[&str] = &["tee", "dd", "sponge", "cp", "install"];
 
@@ -1227,6 +1232,7 @@ fn collect_seds(
         saved_to.push(None);
     }
     saved_to.extend(pipeline_targets(commands, command));
+    let saved_to = byte_bounded_targets(saved_to);
     for at in sed::positions(texts) {
         work::step();
         found.sed_commands += 1;
@@ -1314,6 +1320,28 @@ fn pipeline_targets(commands: &[Command], command: &Command) -> Vec<Option<Strin
         stage = consumer.pipe_to;
     }
     targets
+}
+
+/// Keep known output names only while their aggregate size remains bounded.
+/// Once the budget is spent, an unnamed target preserves the conservative
+/// result without copying more names into every collected `sed`.
+fn byte_bounded_targets(targets: Vec<Option<String>>) -> Vec<Option<String>> {
+    let mut bounded = Vec::new();
+    let mut bytes: usize = 0;
+    for target in targets {
+        let target_bytes = target.as_ref().map_or(0, String::len);
+        let Some(next) = bytes.checked_add(target_bytes) else {
+            bounded.push(None);
+            break;
+        };
+        if next > MAX_SAVED_TARGET_BYTES {
+            bounded.push(None);
+            break;
+        }
+        bytes = next;
+        bounded.push(target);
+    }
+    bounded
 }
 
 /// Whether a pure filter's arguments may save its output to a file:
