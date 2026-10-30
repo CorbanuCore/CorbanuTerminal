@@ -1,7 +1,11 @@
 use codex_app_server_protocol::ThreadTokenUsage;
 use codex_app_server_protocol::TokenUsageBreakdown;
+use codex_protocol::protocol::TokenUsage;
+use codex_protocol::protocol::TokenUsageInfo;
+use pretty_assertions::assert_eq;
 
 use super::RuntimeState;
+use super::StatusTokenUsage;
 use super::runtime_state;
 use super::thousands;
 use super::token_usage_text;
@@ -111,7 +115,7 @@ fn status_reports_window_occupancy_and_the_unbounded_thread_total() {
         model_context_window: Some(353_400),
     };
 
-    let text = token_usage_text(&usage);
+    let text = token_usage_text(&StatusTokenUsage::apply(/*previous*/ None, usage));
 
     assert!(
         text.contains("Context: 178,010 of 353,400 tokens (50%)"),
@@ -136,7 +140,7 @@ fn status_omits_the_percentage_when_the_window_is_unknown() {
         model_context_window: None,
     };
 
-    let text = token_usage_text(&usage);
+    let text = token_usage_text(&StatusTokenUsage::apply(/*previous*/ None, usage));
 
     assert!(text.contains("Context: 1,500 tokens"), "{text}");
     assert!(!text.contains('%'), "{text}");
@@ -155,5 +159,200 @@ fn status_clamps_an_overfull_window() {
         model_context_window: Some(353_400),
     };
 
-    assert!(token_usage_text(&usage).contains("(100%)"));
+    assert!(
+        token_usage_text(&StatusTokenUsage::apply(/*previous*/ None, usage)).contains("(100%)")
+    );
+}
+
+const WINDOW: i64 = 353_400;
+
+fn provider_report(input: i64, output: i64) -> TokenUsage {
+    TokenUsage {
+        input_tokens: input,
+        cached_input_tokens: 0,
+        cache_write_input_tokens: 0,
+        output_tokens: output,
+        reasoning_output_tokens: 0,
+        total_tokens: input + output,
+    }
+}
+
+/// The info `recompute_token_usage` (core/src/session/mod.rs) sends after
+/// compaction or rollback: the stored totals unchanged, `last` replaced by zero
+/// counters plus the history estimate.
+fn recomputed(info: Option<TokenUsageInfo>, estimate: i64) -> ThreadTokenUsage {
+    let mut info = info.unwrap_or(TokenUsageInfo {
+        total_token_usage: TokenUsage::default(),
+        last_token_usage: TokenUsage::default(),
+        model_context_window: None,
+    });
+    info.last_token_usage = TokenUsage {
+        total_tokens: estimate,
+        ..TokenUsage::default()
+    };
+    info.model_context_window = Some(WINDOW);
+    info.into()
+}
+
+/// A thread whose provider reported 684,885,374 tokens, the last turn 178,010.
+fn reported_thread() -> TokenUsageInfo {
+    let mut info = TokenUsageInfo::new_or_append(
+        /*info*/ &None,
+        &Some(provider_report(
+            /*input*/ 683_203_904,
+            /*output*/ 1_681_470,
+        )),
+        Some(WINDOW),
+    )
+    .expect("a report creates usage info");
+    info.last_token_usage = provider_report(/*input*/ 177_000, /*output*/ 1_010);
+    info
+}
+
+fn reported_total() -> Option<TokenUsageBreakdown> {
+    Some(breakdown(
+        /*total*/ 684_885_374,
+        /*input*/ 683_203_904,
+        /*output*/ 1_681_470,
+    ))
+}
+
+/// #1570: after compaction or rollback on a thread whose provider never reported
+/// usage, `/status` claimed a measured, free thread ("0 tokens (0 in, 0 out)").
+#[test]
+fn issue1570_recompute_on_thread_without_reports_is_not_a_zero_total() {
+    let usage = StatusTokenUsage::apply(
+        /*previous*/ None,
+        recomputed(/*info*/ None, /*estimate*/ 12_000),
+    );
+
+    assert_eq!(
+        usage,
+        StatusTokenUsage {
+            context_tokens: 12_000,
+            model_context_window: Some(WINDOW),
+            thread_total: None,
+        }
+    );
+    let text = token_usage_text(&usage);
+    assert!(
+        text.contains(
+            "Context: 12,000 of 353,400 tokens (3%)\nThread total: not reported by the provider"
+        ),
+        "{text}"
+    );
+}
+
+/// #1570: `fill_to_context_window` replaces the totals with the window size and
+/// zero counters. `/status` showed that as the thread's cost, erasing the real
+/// total. The window is full, so `Context` shows it; the total stays.
+#[test]
+fn issue1570_context_window_fill_keeps_last_reported_total() {
+    let mut info = reported_thread();
+    let previous = StatusTokenUsage::apply(/*previous*/ None, info.clone().into());
+    info.fill_to_context_window(WINDOW);
+    let usage = StatusTokenUsage::apply(Some(previous), info.into());
+
+    assert_eq!(
+        usage,
+        StatusTokenUsage {
+            context_tokens: WINDOW,
+            model_context_window: Some(WINDOW),
+            thread_total: reported_total(),
+        }
+    );
+    let text = token_usage_text(&usage);
+    assert!(
+        text.contains(
+            "Context: 353,400 of 353,400 tokens (100%)\nThread total: 684,885,374 tokens (683,203,904 in, 1,681,470 out)"
+        ),
+        "{text}"
+    );
+}
+
+/// #1570: the window fills before any provider report: full context, unknown total.
+#[test]
+fn issue1570_context_window_fill_without_reports_is_not_a_total() {
+    let usage = StatusTokenUsage::apply(
+        /*previous*/ None,
+        TokenUsageInfo::full_context_window(WINDOW).into(),
+    );
+
+    assert_eq!(
+        usage,
+        StatusTokenUsage {
+            context_tokens: WINDOW,
+            model_context_window: Some(WINDOW),
+            thread_total: None,
+        }
+    );
+}
+
+/// Guard: on a thread that did report, a recompute keeps the reported total and
+/// moves `Context` to the estimate (compaction shrank the history).
+#[test]
+fn recompute_after_reports_keeps_total_and_shows_the_estimate() {
+    let info = reported_thread();
+    let previous = StatusTokenUsage::apply(/*previous*/ None, info.clone().into());
+    let usage =
+        StatusTokenUsage::apply(Some(previous), recomputed(Some(info), /*estimate*/ 40_000));
+
+    assert_eq!(
+        usage,
+        StatusTokenUsage {
+            context_tokens: 40_000,
+            model_context_window: Some(WINDOW),
+            thread_total: reported_total(),
+        }
+    );
+}
+
+/// Guard: a provider's measured zero is a report, not unknown usage.
+#[test]
+fn provider_reported_zero_usage_is_still_shown_as_zero() {
+    let zero = breakdown(/*total*/ 0, /*input*/ 0, /*output*/ 0);
+    let usage = StatusTokenUsage::apply(
+        /*previous*/ None,
+        ThreadTokenUsage {
+            total: zero.clone(),
+            last: zero.clone(),
+            model_context_window: Some(WINDOW),
+        },
+    );
+
+    assert_eq!(usage.thread_total, Some(zero));
+    let text = token_usage_text(&usage);
+    assert!(
+        text.contains("Thread total: 0 tokens (0 in, 0 out)"),
+        "{text}"
+    );
+}
+
+/// Guard: the next real report after an estimate replaces both numbers.
+#[test]
+fn a_report_after_an_estimate_is_shown() {
+    let estimate = StatusTokenUsage::apply(
+        /*previous*/ None,
+        recomputed(/*info*/ None, /*estimate*/ 12_000),
+    );
+    let report = breakdown(
+        /*total*/ 1_500, /*input*/ 1_200, /*output*/ 300,
+    );
+    let usage = StatusTokenUsage::apply(
+        Some(estimate),
+        ThreadTokenUsage {
+            total: report.clone(),
+            last: report.clone(),
+            model_context_window: Some(WINDOW),
+        },
+    );
+
+    assert_eq!(
+        usage,
+        StatusTokenUsage {
+            context_tokens: 1_500,
+            model_context_window: Some(WINDOW),
+            thread_total: Some(report),
+        }
+    );
 }
