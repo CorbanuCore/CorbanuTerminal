@@ -272,3 +272,15 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   to open an OpenAI-worded key prompt that ended in
   `Provider API-key selection is no longer available`. The list now starts on
   **Corbanu API**, whose wallet and API-key setup runs after **Done**.
+
+## Telegram `/status`: token estimates are not a thread total
+
+- **`/status` no longer shows unknown usage as a free thread.** After
+  compaction or rollback on a thread whose provider never reported usage, it
+  said `Thread total: 0 tokens (0 in, 0 out)`. It now says
+  `Thread total: not reported by the provider`, and `Context` shows the token
+  estimate (#1570).
+- **A full context window no longer erases the thread total.** When the window
+  is exceeded, core's update carries only the window size, and `/status`
+  showed it as the thread's cost with `0 in, 0 out`. `Context` now shows the
+  full window and `Thread total` keeps the last real report.
