@@ -281,6 +281,8 @@ impl ExecutorFileSystem for FailingFileSystem {
 struct TestConfig {
     config: Config,
     user_instructions: Option<UserInstructions>,
+    _codex_home: TempDir,
+    _loader_cwd: TempDir,
 }
 
 impl Deref for TestConfig {
@@ -447,9 +449,16 @@ Windows instructions
 /// been configured.
 async fn make_config(root: &TempDir, limit: usize, instructions: Option<&str>) -> TestConfig {
     let codex_home = TempDir::new().unwrap();
+    let loader_cwd = tempfile::Builder::new()
+        .prefix("codex-test-cwd-")
+        .tempdir()
+        .expect("create test cwd");
     let mut config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
-        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(loader_cwd.path().to_path_buf()),
+            ..Default::default()
+        })
         .build()
         .await
         .expect("defaults for test should always succeed");
@@ -464,6 +473,8 @@ async fn make_config(root: &TempDir, limit: usize, instructions: Option<&str>) -
     TestConfig {
         config,
         user_instructions,
+        _codex_home: codex_home,
+        _loader_cwd: loader_cwd,
     }
 }
 
@@ -488,6 +499,10 @@ async fn make_config_with_project_root_markers(
     markers: &[&str],
 ) -> TestConfig {
     let codex_home = TempDir::new().unwrap();
+    let loader_cwd = tempfile::Builder::new()
+        .prefix("codex-test-cwd-")
+        .tempdir()
+        .expect("create test cwd");
     let cli_overrides = vec![(
         "project_root_markers".to_string(),
         TomlValue::Array(
@@ -499,7 +514,10 @@ async fn make_config_with_project_root_markers(
     )];
     let mut config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
-        .harness_overrides(crate::session::tests::kept_test_cwd_overrides())
+        .harness_overrides(crate::config::ConfigOverrides {
+            cwd: Some(loader_cwd.path().to_path_buf()),
+            ..Default::default()
+        })
         .cli_overrides(cli_overrides)
         .build()
         .await
@@ -514,6 +532,8 @@ async fn make_config_with_project_root_markers(
     TestConfig {
         config,
         user_instructions,
+        _codex_home: codex_home,
+        _loader_cwd: loader_cwd,
     }
 }
 
@@ -1676,4 +1696,45 @@ fn create_skill(codex_home: PathBuf, name: &str, description: &str) {
     fs::create_dir_all(&skill_dir).unwrap();
     let content = format!("---\nname: {name}\ndescription: {description}\n---\n\n# Body\n");
     fs::write(skill_dir.join("SKILL.md"), content).unwrap();
+}
+
+/// #1157: helper-owned folders stay usable until their dependent config drops.
+#[tokio::test]
+async fn test_config_helpers_retain_temporary_directories_until_drop() {
+    let root = TempDir::new().expect("working folder");
+    let configs = [
+        (
+            "default",
+            make_config(&root, /*limit*/ 1024, /*instructions*/ None).await,
+        ),
+        (
+            "project root markers",
+            make_config_with_project_root_markers(
+                &root,
+                /*limit*/ 1024,
+                /*instructions*/ None,
+                &[".fixture-root"],
+            )
+            .await,
+        ),
+    ];
+
+    for (helper, config) in configs {
+        let home = config.codex_home.to_path_buf();
+        let loader_cwd = config._loader_cwd.path().to_path_buf();
+        assert_eq!(config.cwd, root.abs());
+        for path in [&home, &loader_cwd] {
+            fs::write(path.join("after-return"), "owned")
+                .expect("helper-owned folder survives helper return");
+            assert_eq!(
+                fs::read_to_string(path.join("after-return")).unwrap(),
+                "owned"
+            );
+        }
+
+        drop(config);
+        assert!(!home.exists(), "{helper} config home is cleaned up");
+        assert!(!loader_cwd.exists(), "{helper} loader cwd is cleaned up");
+        assert!(root.path().is_dir(), "caller still owns the working folder");
+    }
 }
