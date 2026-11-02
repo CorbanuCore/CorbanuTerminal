@@ -7042,7 +7042,13 @@ fn issue_1528_unknown_git_subcommands_with_program_options_ask() {
             "zsh: {command}"
         );
     }
-    for command in ["git gerp -n x", "git g --ignore-case x"] {
+    for command in [
+        "git gerp -n x",
+        "git g --ignore-case x",
+        "git log -Oorder.txt",
+        "git status -uno",
+        "git add -u",
+    ] {
         assert_eq!(script(command), None, "quiet: {command}");
     }
 }
