@@ -22,6 +22,7 @@ use super::ProtectedActionKind;
 use super::RECURSIVE_READERS;
 use super::WRITERS;
 use super::code_variables;
+use super::git_helpers;
 use super::has_flag;
 use super::indirect;
 use super::paths::glob_any;
@@ -1057,11 +1058,14 @@ impl Classifier {
             let name = names[index];
             // The checks the POSIX pass makes by command name, for names
             // only this reading sees (`C:\Tools\corbanu.exe vault list`).
-            // #1515: `=git` too, where the git option scans stop.
+            // #1515: `=git` too, where the git option scans stop. #1528:
+            // a dashed helper named by its Windows path names its subcommand.
             let equals_git = indirect::equals_git(&lower[index]);
+            let git_subcommand = git_helpers::git_name(&lower[index]).flatten();
+            let git = name == "git" || equals_git;
+            let git_or_helper = git || git_subcommand.is_some();
             let named = CLI_NAMES.contains(&name)
-                || name == "git"
-                || equals_git
+                || git_or_helper
                 || matches!(name, "crontab" | "launchctl" | "systemctl")
                 || CREDENTIAL_COMMANDS
                     .iter()
@@ -1083,12 +1087,17 @@ impl Classifier {
                 }
                 // #1516: and programs git runs (`grep -O`, `--upload-pack`),
                 // read once per command, as the POSIX pass reads them.
-                if (name == "git" || equals_git)
-                    && (code_variables::git_runs_code_after_git(
+                if (git
+                    && code_variables::git_runs_code_after_git(
                         &words[index + 1..],
                         &words[index + 1..],
-                    ) || (!std::mem::replace(&mut git_programs_read, true)
-                        && rerun::git_runs_program(&words[index + 1..], /*subcommand*/ None)))
+                    ))
+                    || (git_or_helper
+                        && !std::mem::replace(&mut git_programs_read, true)
+                        && rerun::git_runs_program(
+                            &words[index + 1..],
+                            git_subcommand.as_deref(),
+                        ))
                 {
                     self.note(ProtectedActionKind::UnseenCode);
                 }

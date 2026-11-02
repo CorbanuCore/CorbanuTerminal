@@ -7005,6 +7005,48 @@ fn issue_1516_git_grep_open_files_in_pager_asks() {
     assert_eq!(wrong, Vec::<String>::new());
 }
 
+/// #1528: the Windows reading keeps a dashed helper's subcommand when the
+/// helper is named by a Windows path, so its program-running options ask.
+#[test]
+fn issue_1528_windows_dashed_git_helpers_read_program_options() {
+    use ProtectedActionKind::UnseenCode;
+    for line in [
+        r"C:\Git\mingw64\libexec\git-core\git-grep.exe -Osh x",
+        r"C:\Git\mingw64\libexec\git-core\git-clone.exe -u ./x u",
+        r"C:\Program Files\Git\mingw64\libexec\git-core\git-grep.exe --open-files-in-pager=sh x",
+        r"C:\Program Files\Git\mingw64\libexec\git-core\git-clone.exe --upload-pack=./x u",
+    ] {
+        assert_eq!(cmd(line), Some(UnseenCode), "cmd: {line}");
+        assert_eq!(powershell(line), Some(UnseenCode), "powershell: {line}");
+    }
+}
+
+/// #1528: an unrecognized subcommand may be a configured alias or a name
+/// git autocorrects. Its program-running option shapes therefore ask even
+/// though the classifier cannot recover the eventual built-in subcommand.
+#[test]
+fn issue_1528_unknown_git_subcommands_with_program_options_ask() {
+    use ProtectedActionKind::UnseenCode;
+    for command in [
+        "git g -Osh x",
+        "git gerp -Osh x",
+        "git c -u ./x u",
+        "git clnoe --template=./x u",
+        "git p --exec=./x u",
+        "git g --open-files-in-pager=sh x",
+    ] {
+        assert_eq!(script(command), Some(UnseenCode), "{command}");
+        assert_eq!(
+            kind(&["/bin/zsh", "-lc", command]),
+            Some(UnseenCode),
+            "zsh: {command}"
+        );
+    }
+    for command in ["git gerp -n x", "git g --ignore-case x"] {
+        assert_eq!(script(command), None, "quiet: {command}");
+    }
+}
+
 /// #1515: a `=git` an option follows ends git's option scan like `git`
 /// (each such word starts its own), so a line of many stays linear.
 #[test]
