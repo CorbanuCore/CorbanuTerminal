@@ -1094,10 +1094,7 @@ impl Classifier {
                     ))
                     || (git_or_helper
                         && !std::mem::replace(&mut git_programs_read, true)
-                        && rerun::git_runs_program(
-                            &words[index + 1..],
-                            git_subcommand.as_deref(),
-                        ))
+                        && rerun::git_runs_program(&words[index + 1..], git_subcommand.as_deref()))
                 {
                     self.note(ProtectedActionKind::UnseenCode);
                 }
