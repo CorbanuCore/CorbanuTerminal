@@ -938,6 +938,9 @@ fn paths_in_denial_line(line: &str) -> Vec<String> {
     let fields: Vec<&str> = line.split(": ").collect();
     if fields.len() >= 3 {
         paths.push(fields[1..fields.len() - 1].join(": "));
+        // #1334: without a program prefix, the first field may be part of
+        // a path containing ": ". The caller checks each resolved candidate.
+        paths.push(fields[..fields.len() - 1].join(": "));
     } else if fields.len() == 2 {
         // #1194: BSD `ls` and `find` write `ls: ` and `/x: Operation not
         // permitted` separately, and unified exec merges stdout and stderr
