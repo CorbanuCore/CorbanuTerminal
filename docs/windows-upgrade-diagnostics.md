@@ -55,7 +55,8 @@ different paths.
 ## Interpret a refusal safely
 
 `Ensure-Junction` in [the installer](https://github.com/CorbanuCore/CorbanuTerminal/blob/main/scripts/install/install.ps1) refuses an
-existing junction whose target falls outside its selected installer-owned prefix.
+existing junction whose target does not start with its selected installer-owned
+prefix, ignoring case.
 A junction left by an older home layout can trigger that refusal. For example,
 a target under `.codex\packages\standalone` and an installer using another home
 are evidence of a possible layout mismatch, not proof that deleting the old home
@@ -78,6 +79,12 @@ prefix for the refused junction; do not assume either home directory is always
 authoritative. A target that still exists may keep an old binary runnable, so
 successful command execution alone does not establish that the upgrade took
 effect.
+
+Compare the text using the home override exactly as it was set. The installer
+trims trailing backslashes from the expected prefix but does not otherwise
+normalize paths. Relative paths or forward slashes may not match the recorded
+target even when they appear to name the same location. A text-prefix match
+alone does not establish that the target is inside the expected directory.
 
 Keep the ownership guard in place. Do not delete the junction, edit PATH, or move
 credential/state directories as part of these diagnostics. Ask the maintainer for
