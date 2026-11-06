@@ -149,3 +149,4 @@ const codex = new Codex({
 ```
 
 Thread options still take precedence for overlapping settings because they are emitted after these global overrides.
+
