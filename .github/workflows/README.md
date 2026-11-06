@@ -38,3 +38,4 @@ irrelevant red checks on this fork, so they are manual-only here.
 - If a build/test/clippy check can be expressed in Bazel, prefer putting the PR-time version in `bazel.yml`.
 - Keep `rust-ci.yml` fast enough that it usually does not dominate PR latency.
 - Reserve `rust-ci-full.yml` for heavyweight Cargo-native coverage that Bazel does not replace yet.
+
