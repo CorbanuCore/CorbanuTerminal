@@ -356,9 +356,14 @@ unsafe fn set_file_label(path: &Path, level: &str, flags: u32) -> Result<()> {
 unsafe fn apply_label_acl(path: &Path, acl: &mut LabelAcl) -> Result<()> {
     // D311: our own walk, with the same result; on any failure Windows'
     // walk below, which rewrites every label under `path` again.
+    let mut walk_error = String::new();
     if !walk::is_mutant(walk::Mutant::WindowsWalk) {
-        if walk::set_label_tree(path, acl.as_ptr()).is_ok() {
-            return Ok(());
+        match walk::set_label_tree(path, acl.as_ptr()) {
+            Ok(()) => return Ok(()),
+            Err(err) => {
+                walk_error = format!("{err:#}");
+                eprintln!("diag-1689 walk error for {}: {walk_error}", path.display());
+            }
         }
         walk::note_fallback();
     }
@@ -373,8 +378,12 @@ unsafe fn apply_label_acl(path: &Path, acl: &mut LabelAcl) -> Result<()> {
         acl.as_ptr(),
     );
     if code != ERROR_SUCCESS {
+        eprintln!(
+            "diag-1689 SetNamedSecurityInfoW(label) failed for {}: {code} (walk: {walk_error})",
+            path.display()
+        );
         return Err(anyhow!(
-            "SetNamedSecurityInfoW(label) failed for {}: {code}",
+            "SetNamedSecurityInfoW(label) failed for {}: {code} (diag-1689 walk: {walk_error})",
             path.display()
         ));
     }

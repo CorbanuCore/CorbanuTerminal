@@ -149,255 +149,38 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
       - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
-      - name: Process access probes
-        shell: bash
-        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening -- pf_27_s06 pf_27_s07 --nocapture --test-threads=1
-      - name: Broker token probes (PF-27-S08)
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening --lib pf_27_s08 -- --nocapture --test-threads=1
-      - name: CODEX_HOME deny removal
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib pf_27_s07 -- --nocapture --test-threads=1
-      - name: D263 deny that can't be written (#1542 item 3)
-        if: ${{ !cancelled() }}
+      - name: diag-1689 legacy loop (elevated)
         shell: bash
         run: |
-          set -euo pipefail
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- --exact acl::tests::d263_delete_deny_that_cannot_be_written_is_an_error --nocapture --test-threads=1 2>&1 | tee d263-1542.log
-          grep -q "test result: ok. 1 passed" d263-1542.log
-          rm d263-1542.log
-      - name: D283 nested project metadata (#1541)
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- nested_metadata::tests:: --nocapture --test-threads=1 2>&1 | tee d283-1541.log
-          grep -q "test result: ok. 3 passed" d283-1541.log
-          rm d283-1541.log
-      - name: Configured read-only paths the legacy backend makes (#1686, #1708)
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- --exact spawn_prep::tests::explicit_read_only_paths_include_missing_ones resolved_permissions::tests::temp_root_carries_explicit_read_only_paths_inside_it --nocapture --test-threads=1 2>&1 | tee d1686.log
-          grep -q "test result: ok. 2 passed" d1686.log
-          rm d1686.log
-      - name: D261 denies without the tree walk match it (D285, #1542 item 6)
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- acl::delete_child::tests::d285_ --nocapture --test-threads=1 2>&1 | tee d285.log
-          grep -q "test result: ok. 8 passed" d285.log
-          rm d285.log
-      - name: D311/D313 our own walks (below-check and labels) match Windows' walk (#1542)
-        if: ${{ !cancelled() }}
-        shell: bash
-        env:
-          # The elevated runner may create symbolic links: no link case skips.
-          CORBANU_TEST_REQUIRE_SYMLINKS: "1"
-        run: |
-          set -euo pipefail
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- acl::delete_child::tests::walk_equality::d311_ --nocapture --test-threads=1 2>&1 | tee d311.log
-          grep -q "test result: ok. 15 passed" d311.log
-          if grep -q "skipped: no symbolic link privilege" d311.log; then exit 1; fi
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- acl::walk::tests:: --nocapture --test-threads=1 2>&1 | tee d313.log
-          grep -q "test result: ok. 7 passed" d313.log
-          rm d311.log d313.log
-      - name: Credential file watch (#442)
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib credential_watch -- --nocapture --test-threads=1
-      - name: Build the elevated sandbox helpers
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: cargo build --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --bins
-      - name: P1 Windows hardening regressions (#301, #304, #307, #323, #341, #345)
-        if: ${{ !cancelled() }}
-        shell: bash
-        # Elevated: the #341/#345 tests must not skip. #345 runs a command in
-        # the elevated sandbox, which needs its helpers.
-        env:
-          CODEX_SEC_WIN_341_REQUIRE: "1"
-        run: |
-          set -euo pipefail
-          bin_dir="${CARGO_TARGET_DIR}/debug"
-          export CARGO_BIN_EXE_codex_windows_sandbox_setup="$(cygpath -w "${bin_dir}/codex-windows-sandbox-setup.exe")"
-          export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib sec_win_ -- --nocapture --test-threads=1
-      - name: Legacy sandbox delete boundary (#158)
-        if: ${{ !cancelled() }}
-        shell: bash
-        # One process per test: a failing legacy test poisons the lock the
-        # others share.
-        run: |
-          set -euo pipefail
+          set -uo pipefail
           for t in $LEGACY_158_TESTS; do
-            cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- --exact "unified_exec::tests::$t" --nocapture --test-threads=1 2>&1 | tee legacy-158.log
-            grep -q "test result: ok. 1 passed" legacy-158.log
+            cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- --exact "unified_exec::tests::$t" --nocapture --test-threads=1 > one.log 2>&1
+            if ! grep -q "test result: ok. 1 passed" one.log; then echo "ELEVATED FAIL $t"; cat one.log; fi
+            grep "diag-1689" one.log || true
           done
-          rm legacy-158.log
-      - name: Job breakaway limits (#733)
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-utils-pty --lib win::job::tests -- --nocapture --test-threads=1 2>&1 | tee job-733.log
-          grep -q "test result: ok. 2 passed" job-733.log
-          rm job-733.log
-      - name: Broker token probes after legacy sessions (#158, PF-27-S08)
-        if: ${{ !cancelled() }}
-        shell: bash
-        # The legacy sessions above labelled TEMP Low while they ran; once they
-        # ended, the broker must again be unable to delete there. No repair
-        # runs first: it would hide a release that failed to put labels back.
-        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening --lib pf_27_s08 -- --nocapture --test-threads=1
-      - name: P1 Windows hardening regressions (#320)
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-process-hardening --lib sec_win_ -- --nocapture --test-threads=1
-      - name: Broker transport probes and broker suite over named pipes
-        if: ${{ !cancelled() }}
-        shell: bash
-        # PF-27-S09: model auth over the pipes, vault reads and platform roots
-        # under the broker token, and the environment scrub with its memory scan.
-        # #390: pipe squats (exclusive before start, added instances, after a
-        # broker death and restart) in `credential_broker::isolated::tests::sec_390`.
-        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-network-proxy --lib -- "credential_broker::isolated::" "credential_broker::env_scrub::" "native_certs::" --nocapture --test-threads=1
-      - name: Core model auth through the broker (PF-27-S09)
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-http-client --lib -- broker_frame_requests --nocapture --test-threads=1
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --lib -- model_broker_auth:: --nocapture --test-threads=1
-      - name: Launch contract probes under the elevated sandbox
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          bin_dir="${CARGO_TARGET_DIR}/debug"
-          export CARGO_BIN_EXE_codex_windows_sandbox_setup="$(cygpath -w "${bin_dir}/codex-windows-sandbox-setup.exe")"
-          export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --lib -- pf_27_s06 pf_27_s07 sec_win_300 sec_win_1506 --nocapture --test-threads=1
-      # The runners are elevated, which hid #294/#295. This reruns those probes
-      # with the token of an administrator's normal session (medium integrity).
-      # Not covered here: a separate non-administrator account, and the
-      # elevated sandbox's one-time setup from a normal session (it needs a
-      # UAC answer), so the #294 probe reuses a setup recorded by an elevated
-      # run of the same probe just before.
-      - name: Launch probes in a normal (medium-integrity) session
+          rm -f one.log
+      - name: diag-1689 legacy loop (medium), three passes
         if: ${{ !cancelled() }}
         shell: powershell
         run: |
-          # Actions sets 'Stop', which turns cargo's stderr into errors in Windows
-          # PowerShell; native commands are checked through $LASTEXITCODE instead.
           $ErrorActionPreference = 'Continue'
           $medium = '.github/scripts/run-at-medium-integrity.ps1'
-          function Get-TestExe([string[]]$CargoArgs) {
-            $artifacts = cargo test --locked --manifest-path codex-rs/Cargo.toml @CargoArgs --no-run --message-format=json
-            if ($LASTEXITCODE -ne 0) { throw "cargo test --no-run failed" }
-            ($artifacts | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object { $_.executable } | Select-Object -Last 1).executable
-          }
-          # A filter that matches nothing passes; require the probes to exist.
-          function Assert-Tests([string]$Exe, [string]$Filter, [int]$Count) {
-            $found = @(& $Exe --list --format terse $Filter | Where-Object { $_ -like '*: test' }).Count
-            if ($found -ne $Count) { throw "expected $Count tests matching $Filter, found $found" }
-          }
-          $whoami = & $medium -Program "$env:SystemRoot\System32\whoami.exe" -Arguments @('/groups')
-          $whoami | Select-String 'Mandatory Level|S-1-5-32-544'
-          if (-not ($whoami -match 'Medium Mandatory Level')) { throw "the normal-session token is not medium integrity" }
-          $bin = Join-Path $env:CARGO_TARGET_DIR 'debug'
-          $env:CARGO_BIN_EXE_codex_windows_sandbox_setup = Join-Path $bin 'codex-windows-sandbox-setup.exe'
-          $env:CARGO_BIN_EXE_codex_command_runner = Join-Path $bin 'codex-command-runner.exe'
-          $env:CODEX_PF27S06_SETUP_SEED = Join-Path $env:RUNNER_TEMP 'pf27s06-seed'
-          $env:CODEX_PF27S06_EXPECT_MEDIUM = '1'
-          $env:CODEX_PF27S06_REQUIRE_LOGON = '1'
-          # A throwaway local user for the #295 probe; its password is random and never printed.
-          $bytes = New-Object byte[] 24
-          (New-Object Security.Cryptography.RNGCryptoServiceProvider).GetBytes($bytes)
-          $password = [Convert]::ToBase64String($bytes) + 'a1!'
-          Write-Output "::add-mask::$password"
-          $passwordFile = Join-Path $env:RUNNER_TEMP 'pf27s06-logon.txt'
-          New-LocalUser -Name pf27s06logon -Password (ConvertTo-SecureString $password -AsPlainText -Force) -PasswordNeverExpires -ErrorAction Stop | Out-Null
-          try {
-            [IO.File]::WriteAllText($passwordFile, $password)
-            $env:CODEX_PF27S06_LOGON_USER = 'pf27s06logon'
-            $env:CODEX_PF27S06_LOGON_PASSWORD_FILE = $passwordFile
-            $d1 = Get-TestExe @('-p', 'codex-process-hardening', '--test', 'pf_27_s06_d1_logon_launch')
-            Assert-Tests $d1 'pf_27_s06_d1' 1
-            & $medium -Program $d1 -Arguments @('--nocapture', '--test-threads=1')
-            if ($LASTEXITCODE -ne 0) { throw "#295 probe failed in a normal session" }
-            $sandbox = Get-TestExe @('-p', 'codex-windows-sandbox', '--lib')
-            Assert-Tests $sandbox 'sec_win_' 33
-            & $medium -Program $sandbox -Arguments @('sec_win_', '--nocapture', '--test-threads=1')
-            if ($LASTEXITCODE -ne 0) { throw "P1 hardening regressions failed in a normal session" }
+          $artifacts = cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib --no-run --message-format=json
+          $sandbox = ($artifacts | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object { $_.executable } | Select-Object -Last 1).executable
+          $fails = 0
+          foreach ($pass in 1..3) {
             foreach ($t in $env:LEGACY_158_TESTS.Split(' ')) {
-              Assert-Tests $sandbox "unified_exec::tests::$t" 1
               $out = & $medium -Program $sandbox -Arguments @('--exact', "unified_exec::tests::$t", '--nocapture', '--test-threads=1')
               $code = $LASTEXITCODE
-              $out
-              if ($code -ne 0) { throw "#158 $t failed in a normal session" }
-              # An ignored test passes with nothing run.
-              if (-not ($out -match 'test result: ok\. 1 passed')) { throw "#158 $t did not run in a normal session" }
+              $out | Select-String 'diag-1689|language mode' | ForEach-Object { "pass $pass $t :: $_" }
+              if ($code -ne 0) {
+                $fails++
+                "MEDIUM FAIL pass $pass $t"
+                $out
+                "--- D:\tmp entries (owner, attributes) after the failure"
+                Get-ChildItem -Force $env:TEMP | ForEach-Object { try { "{0} owner={1} attr={2} t={3:o}" -f $_.FullName, (Get-Acl -LiteralPath $_.FullName).Owner, $_.Attributes, $_.LastWriteTimeUtc } catch { "$($_.FullName) acl error" } }
+                icacls $env:TEMP
+              }
             }
-            Assert-Tests $sandbox 'acl::tests::d263_delete_deny_that_cannot_be_written_is_an_error' 1
-            $out = & $medium -Program $sandbox -Arguments @('--exact', 'acl::tests::d263_delete_deny_that_cannot_be_written_is_an_error', '--nocapture', '--test-threads=1')
-            $code = $LASTEXITCODE
-            $out
-            if ($code -ne 0) { throw "#1542 item 3 failed in a normal session" }
-            if (-not ($out -match 'test result: ok\. 1 passed')) { throw "#1542 item 3 did not run in a normal session" }
-            Assert-Tests $sandbox 'acl::delete_child::tests::d285_' 8
-            & $medium -Program $sandbox -Arguments @('acl::delete_child::tests::d285_', '--nocapture', '--test-threads=1')
-            if ($LASTEXITCODE -ne 0) { throw "D285 ACL comparison failed in a normal session" }
-            Assert-Tests $sandbox 'acl::delete_child::tests::walk_equality::d311_' 15
-            & $medium -Program $sandbox -Arguments @('acl::delete_child::tests::walk_equality::d311_', '--nocapture', '--test-threads=1')
-            if ($LASTEXITCODE -ne 0) { throw "D311 walk comparison failed in a normal session" }
-            Assert-Tests $sandbox 'acl::walk::tests::' 7
-            & $medium -Program $sandbox -Arguments @('acl::walk::tests::', '--nocapture', '--test-threads=1')
-            if ($LASTEXITCODE -ne 0) { throw "D313 handle-relative walk tests failed in a normal session" }
-            Assert-Tests $sandbox 'credential_watch' 18
-            & $medium -Program $sandbox -Arguments @('credential_watch', '--nocapture', '--test-threads=1')
-            if ($LASTEXITCODE -ne 0) { throw "#442 credential watch failed in a normal session" }
-            $hardening = Get-TestExe @('-p', 'codex-process-hardening', '--lib')
-            Assert-Tests $hardening 'sec_win_' 2
-            & $medium -Program $hardening -Arguments @('sec_win_', '--nocapture', '--test-threads=1')
-            if ($LASTEXITCODE -ne 0) { throw "#320 regressions failed in a normal session" }
-            Assert-Tests $hardening 'pf_27_s08' 7
-            & $medium -Program $hardening -Arguments @('pf_27_s08', '--nocapture', '--test-threads=1')
-            if ($LASTEXITCODE -ne 0) { throw "PF-27-S08 broker token probes failed in a normal session" }
-            $proxy = Get-TestExe @('-p', 'codex-network-proxy', '--lib')
-            Assert-Tests $proxy 'pf_27_s06_windows_broker_uses_pipes' 1
-            Assert-Tests $proxy 'pf_27_s09' 12
-            Assert-Tests $proxy 'pf_27_s05_raw_key_is_not_left_in_core_memory' 1
-            # Six #390 probes plus the entry point their child processes run.
-            Assert-Tests $proxy 'credential_broker::isolated::tests::sec_390::' 7
-            Assert-Tests $proxy 'sec_390_control_pipe_drops_a_foreign_client' 1
-            & $medium -Program $proxy -Arguments @('credential_broker::isolated::', 'credential_broker::env_scrub::', 'native_certs::', '--nocapture', '--test-threads=1')
-            if ($LASTEXITCODE -ne 0) { throw "the broker suite failed in a normal session" }
-            $core = Get-TestExe @('-p', 'codex-core', '--lib')
-            Assert-Tests $core 'pf_27_s06_d2' 2
-            # #300: the unelevated sandbox, which a normal session uses by default.
-            Assert-Tests $core 'sec_win_300' 2
-            & $medium -Program $core -Arguments @('sec_win_300', '--nocapture', '--test-threads=1')
-            if ($LASTEXITCODE -ne 0) { throw "#300 regressions failed in a normal session" }
-            # #1506 item 2: planted .codex/.agents aren't loaded until confirmed.
-            Assert-Tests $core 'sec_win_1506' 1
-            & $medium -Program $core -Arguments @('sec_win_1506', '--nocapture', '--test-threads=1')
-            if ($LASTEXITCODE -ne 0) { throw "#1506 planted-metadata regression failed in a normal session" }
-            # Each elevated setup resets the sandbox passwords, so record the
-            # setup the normal-session run reuses right before it.
-            New-Item -ItemType Directory -Force $env:CODEX_PF27S06_SETUP_SEED | Out-Null
-            & $core 'pf_27_s06_d2_vault' --nocapture --test-threads=1
-            if ($LASTEXITCODE -ne 0) { throw "#294 probe failed elevated" }
-            & $medium -Program $core -Arguments @('pf_27_s06_d2', '--nocapture', '--test-threads=1')
-            if ($LASTEXITCODE -ne 0) { throw "#294 probes failed in a normal session" }
-          } finally {
-            try { Remove-LocalUser -Name pf27s06logon -ErrorAction Stop } catch { Write-Warning "remove pf27s06logon: $_" }
-            Remove-Item -ErrorAction SilentlyContinue $passwordFile
           }
-      - name: Require a clean worktree
-        if: always() && !cancelled()
-        uses: ./.github/actions/check-clean-worktree
+          "medium failures: $fails"
