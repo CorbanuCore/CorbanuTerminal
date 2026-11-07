@@ -13,7 +13,7 @@ path	kind	code	area	slice	tier	owner	contributor	status	resolution	hunks	lines	t
 .github/pull_request_template.md	modify/delete	UD	CI/workflows	S1d tooling/repo	1	unassigned	yes	open		0	0	false	false	false	false	deleted upstream; skeleton keeps ours
 .github/scripts/build-codex-package-archive.sh	content	UU	CI/workflows	S0 manifests/locks/CI	0	integrator	no	resolved	ours	1	7	false	false	false	false	skeleton keeps main's file; port upstream changes in S4
 .github/scripts/run-bazel-ci.sh	content	UU	CI/workflows	S0 manifests/locks/CI	0	integrator	no	resolved	ours	1	8	false	false	false	false	skeleton keeps main's file; port upstream changes in S4
-.github/scripts/verify_cargo_workspace_manifests.py	content	UU	CI/workflows	S0 manifests/locks/CI	0	integrator	no	resolved	ours	1	1	false	false	false	false	skeleton keeps main's file; port upstream changes in S4
+.github/scripts/verify_cargo_workspace_manifests.py	content	UU	CI/workflows	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	1	false	false	false	false	main's file without the code-mode-runtime feature exception (upstream dropped that feature); port other upstream changes in S4
 .github/workflows/README.md	content	UU	CI/workflows	S0 manifests/locks/CI	0	integrator	no	resolved	ours	1	19	false	false	false	false	skeleton keeps main's file; port upstream changes in S4
 .github/workflows/bazel.yml	content	UU	CI/workflows	S0 manifests/locks/CI	0	integrator	no	resolved	ours	5	110	false	false	false	false	skeleton keeps main's file; port upstream changes in S4
 .github/workflows/repo-checks.yml	content	UU	CI/workflows	S0 manifests/locks/CI	0	integrator	no	resolved	ours	3	106	false	false	false	false	skeleton keeps main's file; port upstream changes in S4
