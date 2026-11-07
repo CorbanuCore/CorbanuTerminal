@@ -6,6 +6,7 @@ use std::time::Duration;
 use codex_exec_server_protocol::JSONRPCErrorError;
 #[cfg(unix)]
 use codex_file_system::WindowsSandboxSelection;
+use codex_network_proxy::BlockedRequestObserver;
 #[cfg(target_os = "macos")]
 use codex_network_proxy::ManagedNetworkSandboxContext;
 use codex_network_proxy::NetworkPolicyAuditObserver;
@@ -50,6 +51,7 @@ async fn prepare_exec_request(
     env: HashMap<String, String>,
     runtime_paths: Option<&ExecServerRuntimeOptions>,
     network_policy_decider: Option<Arc<dyn NetworkPolicyDecider>>,
+    network_denial_reporter: Option<Arc<dyn BlockedRequestObserver>>,
     network_policy_audit_observer: Option<NetworkPolicyAuditObserver>,
 ) -> Result<PreparedExecRequest, JSONRPCErrorError> {
     prepare_exec_request_with_telemetry(
@@ -57,6 +59,7 @@ async fn prepare_exec_request(
         env,
         runtime_paths,
         network_policy_decider,
+        network_denial_reporter,
         network_policy_audit_observer,
         &codex_network_proxy::RemoteCredentialBrokerCache::default(),
         &ProcessTelemetry::default(),
@@ -103,12 +106,8 @@ async fn sandbox_request_wraps_native_argv_on_executor() {
         HashMap::new(),
         Some(&runtime_paths),
         /*network_policy_decider*/ None,
-<<<<<<< HEAD
         /*network_denial_reporter*/ None,
-||||||| 413492cd6c
-=======
         /*network_policy_audit_observer*/ None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     )
     .await
     .expect("prepare sandboxed request");
@@ -146,6 +145,7 @@ async fn sandbox_request_wraps_native_argv_on_executor() {
                 HashMap::new(),
                 Some(&runtime_paths),
                 /*network_policy_decider*/ None,
+                /*network_denial_reporter*/ None,
                 /*network_policy_audit_observer*/ None,
             )
             .await
@@ -179,6 +179,7 @@ async fn sandbox_request_wraps_native_argv_on_executor() {
         HashMap::new(),
         Some(&runtime_paths),
         /*network_policy_decider*/ None,
+        /*network_denial_reporter*/ None,
         /*network_policy_audit_observer*/ None,
     )
     .await
@@ -224,12 +225,8 @@ async fn sandbox_request_routes_custom_arg0_to_inner_helper() {
         HashMap::new(),
         Some(&runtime_paths),
         /*network_policy_decider*/ None,
-<<<<<<< HEAD
         /*network_denial_reporter*/ None,
-||||||| 413492cd6c
-=======
         /*network_policy_audit_observer*/ None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     )
     .await
     .expect("prepare sandboxed request");
@@ -320,12 +317,8 @@ async fn sandbox_request_preserves_prepared_managed_network_policy() {
         HashMap::new(),
         Some(&runtime_paths),
         /*network_policy_decider*/ None,
-<<<<<<< HEAD
         /*network_denial_reporter*/ None,
-||||||| 413492cd6c
-=======
         /*network_policy_audit_observer*/ None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     )
     .await
     .expect("prepare managed-network sandbox request");
@@ -370,6 +363,7 @@ async fn sandbox_request_only_allows_all_unix_sockets_when_configured() {
             HashMap::new(),
             Some(&runtime_paths),
             /*network_policy_decider*/ None,
+            /*network_denial_reporter*/ None,
             /*network_policy_audit_observer*/ None,
         )
         .await
@@ -434,6 +428,7 @@ async fn sandbox_request_preserves_executor_local_proxy_unix_socket_policy() {
         HashMap::new(),
         Some(&runtime_paths),
         /*network_policy_decider*/ None,
+        /*network_denial_reporter*/ None,
         /*network_policy_audit_observer*/ None,
     )
     .await
@@ -506,12 +501,8 @@ async fn native_request_preserves_native_launch_fields() {
         env.clone(),
         /*runtime_paths*/ None,
         /*network_policy_decider*/ None,
-<<<<<<< HEAD
         /*network_denial_reporter*/ None,
-||||||| 413492cd6c
-=======
         /*network_policy_audit_observer*/ None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     )
     .await
     .expect("prepare native request");
@@ -587,18 +578,12 @@ async fn native_request_handles_remote_proxy_config_for_platform(
     }
 
     let prepared = prepare_exec_request(
-<<<<<<< HEAD
-        &params, env, /*runtime_paths*/ None, /*network_policy_decider*/ None,
-        /*network_denial_reporter*/ None,
-||||||| 413492cd6c
-        &params, env, /*runtime_paths*/ None, /*network_policy_decider*/ None,
-=======
         &params,
         env.clone(),
         /*runtime_paths*/ None,
         /*network_policy_decider*/ None,
+        /*network_denial_reporter*/ None,
         /*network_policy_audit_observer*/ None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     )
     .await
     .expect("prepare request with executor-local proxy");
@@ -683,12 +668,8 @@ async fn disabled_remote_proxy_config_is_rejected_before_exporting_ports() {
         HashMap::new(),
         /*runtime_paths*/ None,
         /*network_policy_decider*/ None,
-<<<<<<< HEAD
         /*network_denial_reporter*/ None,
-||||||| 413492cd6c
-=======
         /*network_policy_audit_observer*/ None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     )
     .await
     .err()
@@ -748,12 +729,8 @@ async fn managed_network_honors_windows_sandbox_level(windows_sandbox_level: Win
         HashMap::new(),
         Some(&runtime_paths),
         /*network_policy_decider*/ None,
-<<<<<<< HEAD
         /*network_denial_reporter*/ None,
-||||||| 413492cd6c
-=======
         /*network_policy_audit_observer*/ None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     )
     .await;
 

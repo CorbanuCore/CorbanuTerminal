@@ -121,17 +121,13 @@ use crate::protocol::INITIALIZE_METHOD;
 use crate::protocol::INITIALIZED_METHOD;
 use crate::protocol::InitializeParams;
 use crate::protocol::InitializeResponse;
-<<<<<<< HEAD
 use crate::protocol::MAX_NETWORK_DENIED_PROTOCOL_BYTES;
 use crate::protocol::MAX_NETWORK_POLICY_HOST_BYTES;
 use crate::protocol::MAX_NETWORK_POLICY_REASON_BYTES;
 use crate::protocol::NETWORK_DENIED_METHOD;
-use crate::protocol::NetworkDeniedNotification;
-||||||| 413492cd6c
-=======
 use crate::protocol::NETWORK_POLICY_DECISION_METHOD;
+use crate::protocol::NetworkDeniedNotification;
 use crate::protocol::NetworkPolicyDecisionNotification;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::protocol::ProcessOutputChunk;
 use crate::protocol::ProcessSandboxType;
 use crate::protocol::ProcessSignal;
@@ -242,16 +238,9 @@ pub(crate) struct SessionState {
     ordered_events: StdMutex<OrderedSessionEvents>,
     recoverable: AtomicBool,
     next_write_id: AtomicU64,
-<<<<<<< HEAD
-    network_policy_controller: ArcSwapOption<NetworkPolicyDecisionController>,
-    network_policy_cancelled: CancellationToken,
+    network_policy: NetworkPolicyState,
     /// Records the executor's own network denials (#722, D278).
     network_denial_observer: ArcSwapOption<NetworkDenialObserver>,
-||||||| 413492cd6c
-    network_policy_controller: ArcSwapOption<NetworkPolicyDecisionController>,
-    network_policy_cancelled: CancellationToken,
-=======
-    network_policy: NetworkPolicyState,
 }
 
 struct NetworkPolicyState {
@@ -259,7 +248,6 @@ struct NetworkPolicyState {
     cancelled: CancellationToken,
     cancellation: NetworkRequestCancellation,
     audit: Option<NetworkPolicyAuditContext>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 struct NetworkDenialObserver(Arc<dyn BlockedRequestObserver>);
@@ -1169,7 +1157,6 @@ impl ExecServerClient {
         network_policy_decider: Option<Arc<dyn NetworkPolicyDecider>>,
         network_denial_observer: Option<Arc<dyn BlockedRequestObserver>>,
     ) -> Result<Session, ExecServerError> {
-<<<<<<< HEAD
         let reports_denials = params
             .network_proxy
             .as_ref()
@@ -1179,10 +1166,7 @@ impl ExecServerClient {
                 "network denial reports must match the configured observer".to_string(),
             ));
         }
-||||||| 413492cd6c
-=======
         self.ensure_network_review_capability(&params).await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let policy_decision_timeout_ms = params
             .network_proxy
             .as_ref()
@@ -1565,21 +1549,13 @@ impl SessionState {
             ordered_events: StdMutex::new(OrderedSessionEvents::default()),
             recoverable: AtomicBool::new(recoverable),
             next_write_id: AtomicU64::new(1),
-<<<<<<< HEAD
-            network_policy_controller: ArcSwapOption::empty(),
-            network_policy_cancelled: CancellationToken::new(),
-            network_denial_observer: ArcSwapOption::empty(),
-||||||| 413492cd6c
-            network_policy_controller: ArcSwapOption::empty(),
-            network_policy_cancelled: CancellationToken::new(),
-=======
             network_policy: NetworkPolicyState {
                 controller: ArcSwapOption::empty(),
                 cancelled: CancellationToken::new(),
                 cancellation: NetworkRequestCancellation::default(),
                 audit: None,
             },
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            network_denial_observer: ArcSwapOption::empty(),
         }
     }
 
@@ -1907,21 +1883,13 @@ impl Inner {
         let mut next_sessions = sessions.as_ref().clone();
         next_sessions.remove(process_id);
         self.sessions.store(Arc::new(next_sessions));
-<<<<<<< HEAD
-        expected.network_policy_cancelled.cancel();
-        expected.network_policy_controller.store(None);
-        expected.network_denial_observer.store(None);
-||||||| 413492cd6c
-        expected.network_policy_cancelled.cancel();
-        expected.network_policy_controller.store(None);
-=======
         expected
             .network_policy
             .cancellation
             .record(NetworkRequestCancellationReason::ProcessCancelled);
         expected.network_policy.cancelled.cancel();
         expected.network_policy.controller.store(None);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        expected.network_denial_observer.store(None);
     }
 
     fn take_all_sessions(&self) -> HashMap<ProcessId, Arc<SessionState>> {
@@ -2041,21 +2009,13 @@ fn fail_all_sessions(inner: &Arc<Inner>, message: String) {
     let sessions = inner.take_all_sessions();
 
     for (_, session) in sessions {
-<<<<<<< HEAD
-        session.network_policy_cancelled.cancel();
-        session.network_policy_controller.store(None);
-        session.network_denial_observer.store(None);
-||||||| 413492cd6c
-        session.network_policy_cancelled.cancel();
-        session.network_policy_controller.store(None);
-=======
         session
             .network_policy
             .cancellation
             .record(NetworkRequestCancellationReason::ConnectionClosed);
         session.network_policy.cancelled.cancel();
         session.network_policy.controller.store(None);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        session.network_denial_observer.store(None);
         // Sessions synthesize a closed read response and emit a pushed Failed
         // event. That covers both polling consumers and streaming consumers
         // such as environment-backed MCP stdio.
@@ -2125,7 +2085,6 @@ async fn handle_server_notification(
                 .handle_http_body_delta_notification(notification.params)
                 .await?;
         }
-<<<<<<< HEAD
         NETWORK_DENIED_METHOD => {
             let params: NetworkDeniedNotification =
                 serde_json::from_value(notification.params.unwrap_or(Value::Null))?;
@@ -2139,8 +2098,8 @@ async fn handle_server_notification(
                     .0
                     .on_blocked_request(executor_network_denial(params))
                     .await;
-||||||| 413492cd6c
-=======
+            }
+        }
         NETWORK_POLICY_DECISION_METHOD => {
             let Ok(params) = serde_json::from_value::<NetworkPolicyDecisionNotification>(
                 notification.params.unwrap_or(Value::Null),
@@ -2157,7 +2116,6 @@ async fn handle_server_notification(
             };
             if !network_policy_audit::emit_network_policy_decision(context, &params) {
                 debug!("ignoring invalid exec-server network policy decision notification");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
         }
         other => {
@@ -2218,12 +2176,7 @@ mod tests {
     use crate::ExecutorFileSystem;
     use crate::FileSystemSandboxContext;
     use crate::ProcessId;
-<<<<<<< HEAD
-||||||| 413492cd6c
-    #[cfg(not(windows))]
-=======
     use crate::client_api::DEFAULT_REMOTE_EXEC_SERVER_CONNECT_TIMEOUT;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     use crate::client_api::DEFAULT_REMOTE_EXEC_SERVER_INITIALIZE_TIMEOUT;
     use crate::client_api::ExecServerTransportParams;
     use crate::client_api::RemoteExecServerConnectArgs;
@@ -2261,12 +2214,8 @@ mod tests {
     use crate::protocol::WriteParams;
     use crate::protocol::WriteResponse;
     use crate::protocol::WriteStatus;
-<<<<<<< HEAD
-    use crate::test_tracing::ScopedTestSubscriber;
-||||||| 413492cd6c
-=======
     use crate::remote_file_system::RemoteFileSystem;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    use crate::test_tracing::ScopedTestSubscriber;
 
     async fn read_jsonrpc_line<R>(lines: &mut tokio::io::Lines<BufReader<R>>) -> JSONRPCMessage
     where
@@ -2570,12 +2519,7 @@ mod tests {
                 cwd: None,
             },
             client_name: "stdio-test-client".to_string(),
-<<<<<<< HEAD
             // PowerShell alone can take over a second to start on a loaded runner.
-||||||| 413492cd6c
-            initialize_timeout: Duration::from_secs(1),
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             initialize_timeout: DEFAULT_REMOTE_EXEC_SERVER_INITIALIZE_TIMEOUT,
             resume_session_id: None,
         })

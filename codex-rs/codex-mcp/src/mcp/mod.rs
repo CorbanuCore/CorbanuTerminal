@@ -190,16 +190,10 @@ pub struct McpConfig {
     pub prefix_mcp_tool_names: bool,
     /// MCP servers whose model-visible tool namespaces omit the `mcp__` prefix.
     pub non_prefixed_mcp_tool_servers: Vec<String>,
-<<<<<<< HEAD
     /// The configured multi-agent V2 tool namespace, which MCP servers
     /// exposed without the `mcp__` prefix must not take.
     pub multi_agent_v2_tool_namespace: Option<String>,
-    /// Protocol compatibility policy captured when this MCP configuration is created.
-||||||| 413492cd6c
-    /// Protocol compatibility policy captured when this MCP configuration is created.
-=======
     /// Protocol mode for servers other than the host-owned Codex Apps registration.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub protocol_mode: McpProtocolMode,
     /// Try protocol discovery before initializing eligible local stdio servers.
     pub discover_local_stdio: bool,

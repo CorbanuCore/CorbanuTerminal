@@ -16,15 +16,11 @@
 //!
 //! If the keyring is not available or fails, we fall back to CODEX_HOME/.credentials.json which is consistent with other coding CLI agents.
 
-<<<<<<< HEAD
-mod output_gate;
-||||||| 413492cd6c
-=======
 mod credential_store;
 mod ema_identity;
 mod enterprise_generation;
 mod issuer_binding;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+mod output_gate;
 mod refresh_lock;
 mod refresh_transaction;
 mod resolved_store;
@@ -470,10 +466,6 @@ pub async fn save_oauth_tokens(
     store_mode: OAuthCredentialsStoreMode,
     keyring_backend_kind: AuthKeyringBackendKind,
 ) -> Result<()> {
-<<<<<<< HEAD
-    output_gate::protect(tokens)?;
-||||||| 413492cd6c
-=======
     let lock = RefreshCredentialLock::acquire_for_server(server_name, &tokens.url).await?;
     save_oauth_tokens_with_lock_held(&lock, server_name, tokens, store_mode, keyring_backend_kind)
 }
@@ -486,8 +478,9 @@ pub(crate) fn save_oauth_tokens_with_lock_held(
     store_mode: OAuthCredentialsStoreMode,
     keyring_backend_kind: AuthKeyringBackendKind,
 ) -> Result<()> {
+    // PF-28-S02: tokens enter the secret output gate before they are stored.
+    output_gate::protect(tokens)?;
     invalidate_enterprise_credential_version(server_name, &tokens.url, lock)?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let keyring_store = DefaultKeyringStore;
     let mut observation = telemetry::policy(store_mode, keyring_backend_kind, Operation::Save);
     match store_mode {

@@ -129,16 +129,8 @@ pub(crate) async fn run(
         }
     };
 
-<<<<<<< HEAD
     let mut results = dispatcher::execute_handlers(
-        shell,
-||||||| 413492cd6c
-    let results = dispatcher::execute_handlers(
-        shell,
-=======
-    let results = dispatcher::execute_handlers(
         engine,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         matched,
         &input,
         request.cwd.as_path(),

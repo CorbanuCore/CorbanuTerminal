@@ -59,14 +59,10 @@ use crate::protocol::ExecParams;
 use crate::protocol::ExecResponse;
 use crate::protocol::ExecServerNetworkProtocol;
 use crate::protocol::MAX_NETWORK_POLICY_PROCESS_ID_BYTES;
-<<<<<<< HEAD
 use crate::protocol::NETWORK_DENIED_METHOD;
-use crate::protocol::NetworkDeniedNotification;
-||||||| 413492cd6c
-=======
 use crate::protocol::NETWORK_POLICY_DECISION_METHOD;
+use crate::protocol::NetworkDeniedNotification;
 use crate::protocol::NetworkPolicyDecisionNotification;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::protocol::ProcessOutputChunk;
 use crate::protocol::ProcessSandboxType;
 use crate::protocol::ProcessSignal;
@@ -334,17 +330,12 @@ impl LocalProcess {
                     process_shutdown.clone(),
                 )
             });
-<<<<<<< HEAD
         // #722 (D278): report the proxy's own denials when the client asks.
         let network_denial_reporter = params
             .network_proxy
             .as_ref()
             .is_some_and(|launch| launch.report_denials)
             .then(|| network_denial_reporter(process_id.clone(), Arc::downgrade(&self.inner)));
-        let prepared = prepare_exec_request(
-||||||| 413492cd6c
-        let prepared = prepare_exec_request(
-=======
         let network_policy_audit_observer = params.network_proxy.as_ref().map(|_| {
             let process_id = process_id.clone();
             let inner = Arc::downgrade(&self.inner);
@@ -384,19 +375,14 @@ impl LocalProcess {
             ));
         }
         let prepared = prepare_exec_request_with_telemetry(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             &params,
             child_env(&params),
             self.runtime_paths.as_ref(),
             network_policy_decider,
-<<<<<<< HEAD
             network_denial_reporter,
-||||||| 413492cd6c
-=======
             network_policy_audit_observer,
             &self.inner.credential_brokers,
             &telemetry,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         )
         .await?;
         #[cfg(unix)]
@@ -866,6 +852,7 @@ impl ExecBackend for LocalProcess {
                 child_env(&params),
                 self.runtime_paths.as_ref(),
                 /*network_policy_decider*/ None,
+                /*network_denial_reporter*/ None,
                 /*network_policy_audit_observer*/ None,
                 &self.inner.credential_brokers,
                 &ProcessTelemetry::default(),

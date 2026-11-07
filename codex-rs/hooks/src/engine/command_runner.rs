@@ -51,30 +51,6 @@ use codex_protocol::protocol::HookHandlerType;
 use codex_protocol::protocol::HookOutputEntry;
 use codex_protocol::protocol::HookOutputEntryKind;
 
-<<<<<<< HEAD
-#[derive(Debug)]
-pub(crate) struct CommandRunResult {
-    pub started_at: i64,
-    pub completed_at: i64,
-    pub duration_ms: i64,
-    pub exit_code: Option<i32>,
-    pub stdout: String,
-    pub stderr: String,
-    pub error: Option<String>,
-    /// The hook command never received its input: the process could not be
-    /// spawned or its stdin could not be written.
-    pub start_failed: bool,
-||||||| 413492cd6c
-#[derive(Debug)]
-pub(crate) struct CommandRunResult {
-    pub started_at: i64,
-    pub completed_at: i64,
-    pub duration_ms: i64,
-    pub exit_code: Option<i32>,
-    pub stdout: String,
-    pub stderr: String,
-    pub error: Option<String>,
-=======
 const MAX_CONCURRENT_ASYNC_HOOKS: usize = 8;
 
 /// Owns command execution and bounded asynchronous work for one session.
@@ -220,7 +196,6 @@ impl CommandHookRuntime {
         tasks.abort_all();
         while tasks.join_next().await.is_some() {}
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tracing::instrument(
@@ -286,6 +261,7 @@ pub(crate) async fn run_command(
             }
             None => Err(anyhow::anyhow!("environment hook executor is unavailable")),
         };
+        let start_failed = runtime.environment_executor.is_none();
         let (exit_code, stdout, stderr, error) = match result {
             Ok(output) => (Some(output.exit_code), output.stdout, output.stderr, None),
             Err(error) => (None, String::new(), String::new(), Some(error.to_string())),
@@ -299,6 +275,9 @@ pub(crate) async fn run_command(
             stdout,
             stderr,
             error,
+            // #722 (D245): with no executor the hook never started anywhere. An
+            // executor error may come after the hook ran, so it is not a start failure.
+            start_failed,
         };
     }
 
@@ -460,15 +439,9 @@ fn finish_command_run(
     completion: CommandRunCompletion,
 ) -> HandlerRunResult {
     Span::current().record("hook.command_outcome", completion.outcome);
-<<<<<<< HEAD
     let start_failed = completion.start_failed();
-    CommandRunResult {
-||||||| 413492cd6c
-    CommandRunResult {
-=======
     HandlerRunResult {
         context_metadata: codex_protocol::models::ContentItemMetadata::command_hook(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         started_at,
         completed_at: chrono::Utc::now().timestamp(),
         duration_ms: started.elapsed().as_millis().try_into().unwrap_or(i64::MAX),
@@ -494,17 +467,16 @@ fn build_command(
     if shell.program.is_empty() {
         #[cfg(windows)]
         command.arg("/C");
+        // PF-27-S02: login shells re-load profile files that can export secrets.
         #[cfg(not(windows))]
-        command.arg("-lc");
+        command.arg(if codex_protocol::secretless_launch::is_armed() {
+            "-c"
+        } else {
+            "-lc"
+        });
     } else {
         command.args(&shell.args);
     }
-<<<<<<< HEAD
-    crate::registry::apply_secretless_launch_env(&mut command);
-    command.envs(&handler.env);
-||||||| 413492cd6c
-    command.envs(&handler.env);
-=======
     #[cfg(windows)]
     if shell.program.is_empty() || shell.args.iter().any(|arg| arg.eq_ignore_ascii_case("/c")) {
         command.raw_arg(format!(r#""{command_line}""#));
@@ -532,13 +504,15 @@ fn build_command(
         environment
             .iter()
             .map(|(key, value)| (key.as_os_str(), value.as_os_str()))
+            // PF-27-S02: armed, the session environment is reduced to the launch
+            // allowlist; the hook's own configured variables still apply.
+            .filter(|(key, value)| crate::registry::secretless_launch_allows(key, value))
             .chain(
                 env.iter()
                     .map(|(key, value)| (OsStr::new(key), OsStr::new(value))),
             )
             .filter(|(key, _)| !key.to_str().is_some_and(is_non_inheritable_env_var)),
     );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     command
 }
 
@@ -547,26 +521,6 @@ fn default_shell_program(environment: &[(OsString, OsString)]) -> OsString {
     let (environment_variable, fallback_program) = ("COMSPEC", "cmd.exe");
 
     #[cfg(not(windows))]
-<<<<<<< HEAD
-    {
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-        let mut command = Command::new(shell);
-        // PF-27-S02: login shells re-load profile files that can export secrets.
-        if codex_protocol::secretless_launch::is_armed() {
-            command.arg("-c");
-        } else {
-            command.arg("-lc");
-        }
-        command
-    }
-||||||| 413492cd6c
-    {
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-        let mut command = Command::new(shell);
-        command.arg("-lc");
-        command
-    }
-=======
     let (environment_variable, fallback_program) = ("SHELL", "/bin/sh");
 
     environment
@@ -585,7 +539,6 @@ fn default_shell_program(environment: &[(OsString, OsString)]) -> OsString {
         })
         .map(|(_, value)| value.clone())
         .unwrap_or_else(|| OsString::from(fallback_program))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[cfg(test)]

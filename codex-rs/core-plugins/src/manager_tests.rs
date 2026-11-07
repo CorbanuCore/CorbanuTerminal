@@ -193,13 +193,15 @@ fn curated_repo_sync_does_not_start_after_shutdown() {
     let tmp = TempDir::new().unwrap();
     let config = PluginsConfigInput::new(
         unrestricted_config_layer_stack(),
+        Default::default(),
         "openai".to_string(),
         /*plugins_enabled*/ true,
         /*remote_plugin_enabled*/ false,
         "https://chatgpt.com".to_string(),
         test_http_client_factory(),
+        /*product_sku*/ None,
     );
-    let manager = Arc::new(PluginsManager::new(tmp.path().to_path_buf()));
+    let manager = Arc::new(test_plugins_manager(tmp.path().to_path_buf()));
 
     manager.cancel_curated_repo_sync();
     manager.maybe_start_curated_repo_sync_for_config(
@@ -3205,14 +3207,6 @@ approval_mode = "prompt""#
 }
 
 #[tokio::test]
-<<<<<<< HEAD
-async fn skill_snapshots_resolve_remote_plugin_identity_from_authoritative_source() {
-    // #981: the snapshot below would also list the developer's own
-    // `$HOME/.agents/skills`. Skip that root, as the core test harness does (#888).
-    codex_core_skills::loader::ignore_user_home_skills_for_tests(/*ignore*/ true);
-||||||| 413492cd6c
-async fn skill_snapshots_resolve_remote_plugin_identity_from_authoritative_source() {
-=======
 async fn plugin_defaults_resolve_remote_enablement_and_separate_cache_entries() {
     let codex_home = TempDir::new().unwrap();
     let cache_root = codex_home
@@ -3321,7 +3315,6 @@ async fn plugin_defaults_resolve_remote_enablement_and_separate_cache_entries() 
 
 #[tokio::test]
 async fn skill_roots_resolve_remote_plugin_identity_from_authoritative_source() {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut duplicate_plugin = remote_installed_plugin("sample");
     duplicate_plugin.id = "plugins~Plugin_duplicate".to_string();
 

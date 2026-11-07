@@ -23,7 +23,6 @@ use crate::mcp::sanitize_responses_api_tool_name;
 
 const LEGACY_MCP_TOOL_NAME_PREFIX: &str = "mcp__";
 
-<<<<<<< HEAD
 /// Namespaces of built-in tools (the multi-agent V2 namespace is configurable;
 /// `collaboration` is its default). An MCP server exposed without the `mcp__`
 /// prefix must not take one: on the Responses wire its tools would clash with
@@ -118,12 +117,7 @@ fn warn_forced_prefix(server_name: &str, namespace: &str, reserved: ReservedMcpN
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-||||||| 413492cd6c
-#[derive(Debug, Clone, Serialize, Deserialize)]
-=======
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub struct ToolInfo {
     /// Raw MCP server name used for routing the tool call.
     pub server_name: String,

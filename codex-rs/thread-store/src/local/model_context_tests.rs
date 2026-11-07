@@ -757,14 +757,8 @@ fn turn_context(root: &Path, turn_id: &str) -> RolloutItem {
         realtime_active: None,
         cyber_access_program: None,
         effort: None,
-<<<<<<< HEAD
         security_level: None,
-        summary: ReasoningSummary::Auto,
-||||||| 413492cd6c
-        summary: ReasoningSummary::Auto,
-=======
         summary: Some(ReasoningSummary::Auto),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     })
 }
 
