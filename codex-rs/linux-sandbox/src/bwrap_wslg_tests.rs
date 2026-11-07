@@ -18,6 +18,7 @@ fn wslg_mask_follows_filesystem_grants_and_denials(root_access: FileSystemAccess
         FileSystemPath::from(denied.clone()),
         FileSystemPath::GlobPattern {
             pattern: format!("{}/*.txt", temp_dir.path().display()),
+            scan: None,
         },
     ] {
         let policy = FileSystemSandboxPolicy::restricted(vec![
@@ -232,6 +233,7 @@ fn glob_ancestor_mask_in_no_rg_fallback() {
     policy.entries.push(FileSystemSandboxEntry {
         path: FileSystemPath::GlobPattern {
             pattern: format!("{}/alias*", temp.path().display()),
+            scan: None,
         },
         access: FileSystemAccessMode::Deny,
         missing_path_behavior: None,

@@ -491,9 +491,7 @@ fn a_live_placeholder_folder_is_held_while_it_is_masked() {
     std::fs::create_dir(&placeholder).expect("placeholder folder");
 
     let entry = |path: &Path, access| FileSystemSandboxEntry {
-        path: FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
-        },
+        path: FileSystemPath::from(AbsolutePathBuf::from_absolute_path(path).expect("absolute")),
         access,
         missing_path_behavior: None,
     };
@@ -553,6 +551,10 @@ fn ended_pid() -> u32 {
 /// cleaning up, with `others` markers (pid, contents) written first: the
 /// record comes last, so a concurrent sweep never sees a state the test
 /// does not mean.
+/// The marker an older helper wrote for a protected-create target (removed
+/// upstream, #54445): a marker folder of another kind, left alone.
+const OLD_PROTECTED_CREATE_MARKER: &[u8] = b"protected-create\n";
+
 fn plant_stale_placeholder(placeholder: &Path, others: &[(u32, &[u8])]) -> PathBuf {
     let marker_dir = synthetic_mount_marker_dir(placeholder);
     std::fs::create_dir_all(&marker_dir).expect("marker dir");
@@ -762,7 +764,7 @@ fn stale_placeholder_sweep_leaves_placeholders_in_use() {
     let other = temp_dir.path().join("other");
     std::fs::write(&other, "").expect("placeholder");
     let other_marker_dir =
-        plant_stale_placeholder(&other, &[(ended_pid(), PROTECTED_CREATE_MARKER)]);
+        plant_stale_placeholder(&other, &[(ended_pid(), OLD_PROTECTED_CREATE_MARKER)]);
 
     remove_stale_synthetic_mount_targets();
 
@@ -812,9 +814,9 @@ fn the_registry_stays_locked_from_building_the_arguments_to_registering() {
             missing_path_behavior: None,
         },
         FileSystemSandboxEntry {
-            path: FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path(&project).expect("absolute"),
-            },
+            path: FileSystemPath::from(
+                AbsolutePathBuf::from_absolute_path(&project).expect("absolute"),
+            ),
             access: FileSystemAccessMode::Write,
             missing_path_behavior: None,
         },
@@ -832,16 +834,14 @@ fn the_registry_stays_locked_from_building_the_arguments_to_registering() {
         "the arguments were built unlocked"
     );
 
-    let (synthetic, protected) = register_mount_targets(
+    let synthetic = register_mount_targets(
         &args.synthetic_mount_targets,
-        &args.protected_create_targets,
         args.registry_lock,
         &args.args,
     );
     // (Other tests may hold it now.)
     assert!(!REGISTRY_LOCK_HELD.get(), "registering kept the lock");
     cleanup_synthetic_mount_targets(&synthetic);
-    cleanup_protected_create_targets(&protected);
 }
 
 /// #673: another live run's placeholder (`~/.aws`, denied outside this
@@ -873,9 +873,7 @@ fn a_placeholder_found_while_building_stays_until_it_is_registered() {
     std::fs::write(&placeholder, "").expect("placeholder");
 
     let entry = |path: &Path, access| FileSystemSandboxEntry {
-        path: FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
-        },
+        path: FileSystemPath::from(AbsolutePathBuf::from_absolute_path(path).expect("absolute")),
         access,
         missing_path_behavior: None,
     };
@@ -920,16 +918,15 @@ fn a_placeholder_found_while_building_stays_until_it_is_registered() {
             }]);
         }
     });
-    std::thread::sleep(Duration::from_millis(300));
+    std::thread::sleep(std::time::Duration::from_millis(300));
     assert!(
         placeholder.exists(),
         "the maker removed a placeholder this run found"
     );
     assert!(!maker_cleanup.is_finished(), "the cleanup did not wait");
 
-    let (registrations, _) = register_mount_targets(
+    let registrations = register_mount_targets(
         &args.synthetic_mount_targets,
-        &args.protected_create_targets,
         args.registry_lock,
         &args.args,
     );
@@ -966,109 +963,6 @@ fn cleanup_synthetic_mount_targets_preserves_real_pre_existing_empty_file() {
 }
 
 #[test]
-<<<<<<< HEAD
-fn cleanup_protected_create_targets_removes_created_path_and_reports_violation() {
-    let temp_dir = tempfile::TempDir::new().expect("tempdir");
-    let dot_git = temp_dir.path().join(".git");
-    let target = crate::bwrap::ProtectedCreateTarget::missing(&dot_git);
-
-    let registrations = register_protected_create_targets(&[target]);
-    std::fs::create_dir(&dot_git).expect("create protected path");
-    let violation = cleanup_protected_create_targets(&registrations);
-
-    assert!(violation);
-    assert!(!dot_git.exists());
-}
-
-#[test]
-fn cleanup_protected_create_targets_removes_path_despite_active_marker() {
-    let temp_dir = tempfile::TempDir::new().expect("tempdir");
-    let dot_git = temp_dir.path().join(".git");
-    let target = crate::bwrap::ProtectedCreateTarget::missing(&dot_git);
-
-    let registrations = register_protected_create_targets(std::slice::from_ref(&target));
-    let active_marker = registrations[0].marker_dir.join("1");
-    std::fs::write(&active_marker, PROTECTED_CREATE_MARKER).expect("write active marker");
-    std::fs::write(&dot_git, "").expect("create protected path");
-
-    let violation = cleanup_protected_create_targets(&registrations);
-    assert!(violation);
-    assert!(!dot_git.exists());
-}
-
-#[test]
-fn cleanup_protected_create_targets_removes_read_only_directory_and_reports_violation() {
-    let temp_dir = tempfile::TempDir::new().expect("tempdir");
-    let dot_git = temp_dir.path().join(".git");
-    let outside = temp_dir.path().join("outside");
-    let target = crate::bwrap::ProtectedCreateTarget::missing(&dot_git);
-
-    let registrations = register_protected_create_targets(&[target]);
-    std::fs::create_dir(&outside).expect("create outside directory");
-    std::fs::set_permissions(&outside, std::fs::Permissions::from_mode(0o755))
-        .expect("set outside directory permissions");
-    std::fs::create_dir(&dot_git).expect("create protected path");
-    std::fs::write(dot_git.join("config"), "[core]\n").expect("write protected child");
-    std::os::unix::fs::symlink(&outside, dot_git.join("outside-link"))
-        .expect("link outside directory");
-    std::fs::set_permissions(&dot_git, std::fs::Permissions::from_mode(0o000))
-        .expect("make protected path read-only");
-
-    let violation = cleanup_protected_create_targets(&registrations);
-
-    assert!(violation);
-    assert!(!dot_git.exists());
-    assert_eq!(
-        std::fs::metadata(&outside)
-            .expect("outside directory remains")
-            .permissions()
-            .mode()
-            & 0o777,
-        0o755
-    );
-}
-
-#[test]
-||||||| 413492cd6c
-fn cleanup_protected_create_targets_removes_created_path_and_reports_violation() {
-    let temp_dir = tempfile::TempDir::new().expect("tempdir");
-    let dot_git = temp_dir.path().join(".git");
-    let target = crate::bwrap::ProtectedCreateTarget::missing(&dot_git);
-
-    let registrations = register_protected_create_targets(&[target]);
-    std::fs::create_dir(&dot_git).expect("create protected path");
-    let violation = cleanup_protected_create_targets(&registrations);
-
-    assert!(violation);
-    assert!(!dot_git.exists());
-}
-
-#[test]
-fn cleanup_protected_create_targets_waits_for_other_active_registrations() {
-    let temp_dir = tempfile::TempDir::new().expect("tempdir");
-    let dot_git = temp_dir.path().join(".git");
-    let target = crate::bwrap::ProtectedCreateTarget::missing(&dot_git);
-
-    let registrations = register_protected_create_targets(std::slice::from_ref(&target));
-    let active_marker = registrations[0].marker_dir.join("1");
-    std::fs::write(&active_marker, PROTECTED_CREATE_MARKER).expect("write active marker");
-    std::fs::write(&dot_git, "").expect("create protected path");
-
-    let violation = cleanup_protected_create_targets(&registrations);
-    assert!(violation);
-    assert!(dot_git.exists());
-
-    std::fs::remove_file(active_marker).expect("remove active marker");
-    let registrations = register_protected_create_targets(std::slice::from_ref(&target));
-    let violation = cleanup_protected_create_targets(&registrations);
-
-    assert!(violation);
-    assert!(!dot_git.exists());
-}
-
-#[test]
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 fn bwrap_signal_forwarder_terminates_child_and_keeps_parent_alive() {
     let supervisor_pid = unsafe { libc::fork() };
     assert!(supervisor_pid >= 0, "failed to fork supervisor");
@@ -1115,26 +1009,6 @@ fn run_bwrap_signal_forwarder_test_supervisor() -> ! {
 #[test]
 fn managed_proxy_inner_command_includes_route_spec() {
     let permission_profile = read_only_permission_profile();
-<<<<<<< HEAD
-    let args = build_inner_seccomp_command(InnerSeccompCommandArgs {
-        sandbox_policy_cwd: Path::new("/tmp"),
-        command_cwd: Some(Path::new("/tmp/link")),
-        permission_profile: &permission_profile,
-        allow_network_for_proxy: true,
-        proxy_route_spec: Some("{\"routes\":[]}".to_string()),
-        close_inherited_fd: None,
-        command: vec!["/bin/true".to_string()],
-    });
-||||||| 413492cd6c
-    let args = build_inner_seccomp_command(InnerSeccompCommandArgs {
-        sandbox_policy_cwd: Path::new("/tmp"),
-        command_cwd: Some(Path::new("/tmp/link")),
-        permission_profile: &permission_profile,
-        allow_network_for_proxy: true,
-        proxy_route_spec: Some("{\"routes\":[]}".to_string()),
-        command: vec!["/bin/true".to_string()],
-    });
-=======
     for managed_network in [
         ManagedNetworkSandboxContext::default(),
         ManagedNetworkSandboxContext {
@@ -1149,10 +1023,10 @@ fn managed_proxy_inner_command_includes_route_spec() {
             command_cwd: Some(Path::new("/tmp/link")),
             permission_profile: &permission_profile,
             managed_network: Some(managed_network.clone()),
+            close_inherited_fd: None,
             proxy_route_spec: Some("{\"routes\":[]}".to_string()),
             command: vec!["/bin/true".to_string()],
         });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         assert!(args.iter().any(|arg| arg == "--proxy-route-spec"));
         assert!(args.iter().any(|arg| arg == "{\"routes\":[]}"));
@@ -1225,7 +1099,7 @@ fn inner_command_names_the_inherited_descriptor_to_close() {
             sandbox_policy_cwd: Path::new("/tmp"),
             command_cwd: None,
             permission_profile: &permission_profile,
-            allow_network_for_proxy: false,
+            managed_network: None,
             proxy_route_spec: None,
             close_inherited_fd: fd,
             command: vec!["/bin/true".to_string()],
@@ -1349,12 +1223,48 @@ fn apply_seccomp_then_exec_with_legacy_landlock_panics() {
     assert!(result.is_err());
 }
 
+/// What main refused (a root-write profile with a denial, which needs
+/// direct runtime enforcement) legacy Landlock still refuses (S3a review
+/// L2): such a profile is not full write, so upstream's check refuses it
+/// first; main's check stays behind it.
+#[test]
+#[should_panic(expected = "filesystem-restricted execution requires bubblewrap")]
+fn legacy_landlock_rejects_root_write_with_denials() {
+    let policy = FileSystemSandboxPolicy::restricted(vec![
+        codex_protocol::permissions::FileSystemSandboxEntry::new(
+            codex_protocol::permissions::FileSystemPath::Special {
+                value: codex_protocol::permissions::FileSystemSpecialPath::Root,
+            },
+            codex_protocol::permissions::FileSystemAccessMode::Write,
+        ),
+        codex_protocol::permissions::FileSystemSandboxEntry::new(
+            codex_protocol::permissions::FileSystemPath::GlobPattern {
+                pattern: "/tmp/s3a-l2/**/*.env".to_string(),
+                scan: None,
+            },
+            codex_protocol::permissions::FileSystemAccessMode::Deny,
+        ),
+    ]);
+    assert!(
+        policy
+            .needs_direct_runtime_enforcement(NetworkSandboxPolicy::Restricted, Path::new("/tmp"))
+    );
+    ensure_legacy_landlock_mode_supports_policy(
+        /*use_legacy_landlock*/ true,
+        &policy,
+        NetworkSandboxPolicy::Restricted,
+        Path::new("/tmp"),
+    );
+}
+
 #[test]
 #[should_panic(expected = "filesystem-restricted execution requires bubblewrap")]
 fn legacy_landlock_cannot_bypass_daemon_socket_isolation() {
     ensure_legacy_landlock_mode_supports_policy(
         /*use_legacy_landlock*/ true,
         &read_only_file_system_policy(),
+        NetworkSandboxPolicy::Restricted,
+        Path::new("/tmp"),
     );
 }
 

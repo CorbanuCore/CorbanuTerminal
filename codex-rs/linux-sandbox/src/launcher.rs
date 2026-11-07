@@ -11,13 +11,9 @@ use crate::bundled_bwrap;
 use crate::bundled_bwrap::BundledBwrapLauncher;
 use crate::exec_util::argv_to_cstrings;
 use crate::exec_util::make_files_inheritable;
-<<<<<<< HEAD
+use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_sandboxing::APPARMOR_BWRAP_USERNS_PROFILE;
 use codex_sandboxing::find_apparmor_bwrap_launcher;
-||||||| 413492cd6c
-=======
-use codex_protocol::permissions::FileSystemSandboxPolicy;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_sandboxing::find_system_bwrap_in_path;
 use codex_utils_absolute_path::AbsolutePathBuf;
 
@@ -33,44 +29,19 @@ struct SystemBwrapLauncher {
     program: AbsolutePathBuf,
     apparmor_launcher: Option<AbsolutePathBuf>,
     supports_argv0: bool,
-<<<<<<< HEAD
     /// `--bind-fd` (bubblewrap 0.8+), needed for a session's command (#536).
     supports_bind_fd: bool,
-||||||| 413492cd6c
-=======
     supports_ro_bind_fd: bool,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct SystemBwrapCapabilities {
     supports_argv0: bool,
     supports_perms: bool,
-<<<<<<< HEAD
     supports_bind_fd: bool,
-||||||| 413492cd6c
-=======
     supports_ro_bind_fd: bool,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
-<<<<<<< HEAD
-pub(crate) fn exec_bwrap(argv: Vec<String>, preserved_files: Vec<File>) -> ! {
-    // #536: arguments that bind checked writable folders need `--bind-fd`.
-    let launcher = if argv.iter().any(|arg| arg == "--bind-fd") {
-        bind_fd_launcher()
-    } else {
-        preferred_bwrap_launcher()
-    };
-    match launcher {
-        BubblewrapLauncher::System(launcher) => exec_system_bwrap(&launcher, argv, preserved_files),
-||||||| 413492cd6c
-pub(crate) fn exec_bwrap(argv: Vec<String>, preserved_files: Vec<File>) -> ! {
-    match preferred_bwrap_launcher() {
-        BubblewrapLauncher::System(launcher) => {
-            exec_system_bwrap(&launcher.program, argv, preserved_files)
-        }
-=======
 static LAUNCHER: OnceLock<BubblewrapLauncher> = OnceLock::new();
 
 pub(crate) fn exec_bwrap(mut argv: Vec<String>, preserved_files: Vec<File>) -> ! {
@@ -82,15 +53,20 @@ pub(crate) fn exec_bwrap(mut argv: Vec<String>, preserved_files: Vec<File>) -> !
         argv.insert(1, "--as-pid-1".to_string());
     }
 
-    match preferred_bwrap_launcher() {
+    // #536: arguments that bind checked writable folders need `--bind-fd`.
+    let launcher = if argv.iter().any(|arg| arg == "--bind-fd") {
+        bind_fd_launcher()
+    } else {
+        preferred_bwrap_launcher().clone()
+    };
+    match launcher {
         BubblewrapLauncher::System(launcher) => {
             if !launcher.supports_ro_bind_fd {
                 translate_legacy_bwrap_fd_mounts(&mut argv)
                     .unwrap_or_else(|error| panic!("invalid legacy bubblewrap fd mount: {error}"));
             }
-            exec_system_bwrap(&launcher.program, argv, preserved_files)
+            exec_system_bwrap(&launcher, argv, preserved_files)
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         BubblewrapLauncher::Bundled(launcher) => launcher.exec(argv, preserved_files),
         BubblewrapLauncher::Unavailable => exit_bwrap_unavailable(),
     }
@@ -236,12 +212,8 @@ fn system_bwrap_launcher_for_path_with_probe(
     let Some(SystemBwrapCapabilities {
         supports_argv0,
         supports_perms: true,
-<<<<<<< HEAD
         supports_bind_fd,
-||||||| 413492cd6c
-=======
         supports_ro_bind_fd,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }) = system_bwrap_capabilities(system_bwrap_path)
     else {
         return None;
@@ -260,12 +232,8 @@ fn system_bwrap_launcher_for_path_with_probe(
         }),
         program: system_bwrap_path,
         supports_argv0,
-<<<<<<< HEAD
         supports_bind_fd,
-||||||| 413492cd6c
-=======
         supports_ro_bind_fd,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     })
 }
 
@@ -290,7 +258,7 @@ pub(crate) fn preferred_bwrap_supports_argv0() -> bool {
 /// writable roots with `--bind-fd` (bubblewrap 0.8+): the preferred one, or
 /// the bundled one when the system's is older.
 fn bind_fd_launcher() -> BubblewrapLauncher {
-    bind_fd_choice(preferred_bwrap_launcher(), || {
+    bind_fd_choice(preferred_bwrap_launcher().clone(), || {
         bundled_bwrap::launcher().map(BubblewrapLauncher::Bundled)
     })
 }
@@ -330,13 +298,9 @@ fn system_bwrap_capabilities(system_bwrap_path: &Path) -> Option<SystemBwrapCapa
     Some(SystemBwrapCapabilities {
         supports_argv0: stdout.contains("--argv0") || stderr.contains("--argv0"),
         supports_perms: stdout.contains("--perms") || stderr.contains("--perms"),
-<<<<<<< HEAD
         // bubblewrap added `--bind-fd` in v0.8.0.
         supports_bind_fd: stdout.contains("--bind-fd") || stderr.contains("--bind-fd"),
-||||||| 413492cd6c
-=======
         supports_ro_bind_fd: stdout.contains("--ro-bind-fd") || stderr.contains("--ro-bind-fd"),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     })
 }
 
@@ -392,184 +356,5 @@ fn exec_system_bwrap(
 }
 
 #[cfg(test)]
-<<<<<<< HEAD
-mod tests {
-    use super::*;
-    use pretty_assertions::assert_eq;
-    use tempfile::NamedTempFile;
-
-    #[test]
-    fn prefers_system_bwrap_when_help_lists_argv0() {
-        let fake_bwrap = NamedTempFile::new().expect("temp file");
-        let fake_bwrap_path = fake_bwrap.path();
-        let expected = AbsolutePathBuf::from_absolute_path(fake_bwrap_path).expect("absolute");
-
-        assert_eq!(
-            system_bwrap_launcher_for_path_with_probe(fake_bwrap_path, |_| {
-                Some(SystemBwrapCapabilities {
-                    supports_argv0: true,
-                    supports_perms: true,
-                    supports_bind_fd: true,
-                })
-            }),
-            Some(SystemBwrapLauncher {
-                apparmor_launcher: None,
-                program: expected,
-                supports_argv0: true,
-                supports_bind_fd: true,
-            })
-        );
-    }
-
-    #[test]
-    fn prefers_system_bwrap_when_system_bwrap_lacks_argv0() {
-        let fake_bwrap = NamedTempFile::new().expect("temp file");
-        let fake_bwrap_path = fake_bwrap.path();
-
-        assert_eq!(
-            system_bwrap_launcher_for_path_with_probe(fake_bwrap_path, |_| {
-                Some(SystemBwrapCapabilities {
-                    supports_argv0: false,
-                    supports_perms: true,
-                    supports_bind_fd: true,
-                })
-            }),
-            Some(SystemBwrapLauncher {
-                apparmor_launcher: None,
-                program: AbsolutePathBuf::from_absolute_path(fake_bwrap_path).expect("absolute"),
-                supports_argv0: false,
-                supports_bind_fd: true,
-            })
-        );
-    }
-
-    #[test]
-    fn ignores_system_bwrap_when_system_bwrap_lacks_perms() {
-        let fake_bwrap = NamedTempFile::new().expect("temp file");
-
-        assert_eq!(
-            system_bwrap_launcher_for_path_with_probe(fake_bwrap.path(), |_| {
-                Some(SystemBwrapCapabilities {
-                    supports_argv0: false,
-                    supports_perms: false,
-                    supports_bind_fd: true,
-                })
-            }),
-            None
-        );
-    }
-
-    /// #536: a session's command needs `--bind-fd`: a system bubblewrap
-    /// without it gives way to the bundled one, and without that the command
-    /// cannot run.
-    #[test]
-    fn bind_fd_choice_falls_back_to_the_bundled_bubblewrap() {
-        let system = |supports_bind_fd| {
-            BubblewrapLauncher::System(SystemBwrapLauncher {
-                program: AbsolutePathBuf::from_absolute_path("/usr/bin/bwrap").expect("absolute"),
-                apparmor_launcher: None,
-                supports_argv0: false,
-                supports_bind_fd,
-            })
-        };
-        // Any launcher stands in for the bundled one here.
-        let bundled = || Some(BubblewrapLauncher::Unavailable);
-        assert_eq!(bind_fd_choice(system(true), bundled), system(true));
-        assert_eq!(
-            bind_fd_choice(system(false), bundled),
-            BubblewrapLauncher::Unavailable
-        );
-        assert_eq!(
-            bind_fd_choice(system(false), || Some(system(true))),
-            system(true)
-        );
-        assert_eq!(
-            bind_fd_choice(system(false), || None),
-            BubblewrapLauncher::Unavailable
-        );
-        assert_eq!(
-            bind_fd_choice(BubblewrapLauncher::Unavailable, bundled),
-            BubblewrapLauncher::Unavailable
-        );
-    }
-
-    #[test]
-    fn ignores_system_bwrap_when_system_bwrap_is_missing() {
-        assert_eq!(
-            system_bwrap_launcher_for_path(Path::new("/definitely/not/a/bwrap")),
-            None
-        );
-    }
-}
-||||||| 413492cd6c
-mod tests {
-    use super::*;
-    use pretty_assertions::assert_eq;
-    use tempfile::NamedTempFile;
-
-    #[test]
-    fn prefers_system_bwrap_when_help_lists_argv0() {
-        let fake_bwrap = NamedTempFile::new().expect("temp file");
-        let fake_bwrap_path = fake_bwrap.path();
-        let expected = AbsolutePathBuf::from_absolute_path(fake_bwrap_path).expect("absolute");
-
-        assert_eq!(
-            system_bwrap_launcher_for_path_with_probe(fake_bwrap_path, |_| {
-                Some(SystemBwrapCapabilities {
-                    supports_argv0: true,
-                    supports_perms: true,
-                })
-            }),
-            Some(SystemBwrapLauncher {
-                program: expected,
-                supports_argv0: true,
-            })
-        );
-    }
-
-    #[test]
-    fn prefers_system_bwrap_when_system_bwrap_lacks_argv0() {
-        let fake_bwrap = NamedTempFile::new().expect("temp file");
-        let fake_bwrap_path = fake_bwrap.path();
-
-        assert_eq!(
-            system_bwrap_launcher_for_path_with_probe(fake_bwrap_path, |_| {
-                Some(SystemBwrapCapabilities {
-                    supports_argv0: false,
-                    supports_perms: true,
-                })
-            }),
-            Some(SystemBwrapLauncher {
-                program: AbsolutePathBuf::from_absolute_path(fake_bwrap_path).expect("absolute"),
-                supports_argv0: false,
-            })
-        );
-    }
-
-    #[test]
-    fn ignores_system_bwrap_when_system_bwrap_lacks_perms() {
-        let fake_bwrap = NamedTempFile::new().expect("temp file");
-
-        assert_eq!(
-            system_bwrap_launcher_for_path_with_probe(fake_bwrap.path(), |_| {
-                Some(SystemBwrapCapabilities {
-                    supports_argv0: false,
-                    supports_perms: false,
-                })
-            }),
-            None
-        );
-    }
-
-    #[test]
-    fn ignores_system_bwrap_when_system_bwrap_is_missing() {
-        assert_eq!(
-            system_bwrap_launcher_for_path(Path::new("/definitely/not/a/bwrap")),
-            None
-        );
-    }
-}
-=======
 #[path = "launcher_tests.rs"]
 mod tests;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

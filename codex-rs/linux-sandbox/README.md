@@ -95,7 +95,6 @@ commands that would enter the bubblewrap path.
 - In managed proxy mode, the helper uses `--unshare-net` plus an internal
   TCP->UDS->TCP routing bridge so tool traffic reaches only configured proxy
   endpoints.
-<<<<<<< HEAD
 - In managed proxy mode, after the bridge is live, seccomp blocks new
   AF_UNIX/socketpair creation for the user command.
 - When the policy carries a `:user_namespaces` deny entry (Corbanu adds it
@@ -214,12 +213,6 @@ commands that would enter the bubblewrap path.
   is recorded, as before.
 - When bubblewrap is active, it mounts a fresh `/proc` via `--proc /proc` by default, but
   you can skip this in restrictive container environments with `--no-proc`.
-||||||| 413492cd6c
-- In managed proxy mode, after the bridge is live, seccomp blocks new
-  AF_UNIX/socketpair creation for the user command.
-- When bubblewrap is active, it mounts a fresh `/proc` via `--proc /proc` by default, but
-  you can skip this in restrictive container environments with `--no-proc`.
-=======
 - In managed proxy mode, after the bridge is live, seccomp allows IP sockets
   inside the isolated network namespace and blocks new standalone `AF_UNIX`
   sockets unless `dangerously_allow_all_unix_sockets` is granted. Unix socket
@@ -243,7 +236,6 @@ commands that would enter the bubblewrap path.
   container masks; explicit filesystem denials are applied afterward.
   Filesystem, user, IPC, network, seccomp, and existing container `/proc` masks
   remain in force. The default `isolate` mode retains PID isolation.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 **Notes**
 
