@@ -1,13 +1,12 @@
-<<<<<<< HEAD
-use super::JobObject;
+//! Verifies console suppression through contained launches and both containment fallbacks.
+
+use super::*;
 use pretty_assertions::assert_eq;
-use std::os::windows::io::AsRawHandle;
-use winapi::um::jobapi2::QueryInformationJobObject;
-use winapi::um::winnt::JOB_OBJECT_LIMIT_BREAKAWAY_OK;
-use winapi::um::winnt::JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+use std::os::windows::process::CommandExt;
+use std::process::Stdio;
+use std::time::Duration;
+use winapi::um::winnt::JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
 use winapi::um::winnt::JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK;
-use winapi::um::winnt::JOBOBJECT_EXTENDED_LIMIT_INFORMATION;
-use winapi::um::winnt::JobObjectExtendedLimitInformation;
 
 const FLAGS: u32 = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
     | JOB_OBJECT_LIMIT_BREAKAWAY_OK
@@ -48,16 +47,7 @@ fn job_without_breakaway_never_allows_it() {
     assert_eq!(limit_flags(&job), JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE);
     job.preserve_descendants().expect("preserve descendants");
     assert_eq!(limit_flags(&job), 0);
-||||||| 413492cd6c
-=======
-//! Verifies console suppression through contained launches and both containment fallbacks.
-
-use super::*;
-use pretty_assertions::assert_eq;
-use std::os::windows::process::CommandExt;
-use std::process::Stdio;
-use std::time::Duration;
-use winapi::um::winnt::JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
+}
 
 #[tokio::test]
 async fn background_launches_keep_consoles_hidden_when_containment_fails() -> anyhow::Result<()> {
@@ -136,5 +126,4 @@ async fn background_launches_keep_consoles_hidden_when_containment_fails() -> an
     }
     tokio::time::timeout(Duration::from_secs(/*secs*/ 10), holder.wait()).await??;
     Ok(())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }

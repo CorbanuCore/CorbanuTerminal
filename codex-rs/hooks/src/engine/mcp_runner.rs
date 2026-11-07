@@ -101,6 +101,9 @@ pub(crate) async fn run_mcp_tool(
         stdout,
         stderr: String::new(),
         error,
+        // #722 (D245) concerns command hooks given a remote cwd this host lacks;
+        // an MCP hook does not run in a working folder.
+        start_failed: false,
     }
 }
 

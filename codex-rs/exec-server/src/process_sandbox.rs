@@ -4,12 +4,8 @@ use std::sync::Arc;
 
 use crate::process_telemetry::ProcessTelemetry;
 use codex_exec_server_protocol::JSONRPCErrorError;
-<<<<<<< HEAD
-use codex_network_proxy::BlockedRequestObserver;
-||||||| 413492cd6c
-=======
 use codex_file_system::WindowsSandboxSelection;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_network_proxy::BlockedRequestObserver;
 use codex_network_proxy::CUSTOM_CA_ENV_KEYS;
 use codex_network_proxy::CredentialMaskingFailureMode;
 use codex_network_proxy::ManagedNetworkSandboxContext;
@@ -121,14 +117,10 @@ pub(crate) async fn prepare_exec_request_with_telemetry(
     env: HashMap<String, String>,
     runtime_paths: Option<&ExecServerRuntimeOptions>,
     network_policy_decider: Option<Arc<dyn NetworkPolicyDecider>>,
-<<<<<<< HEAD
     network_denial_reporter: Option<Arc<dyn BlockedRequestObserver>>,
-||||||| 413492cd6c
-=======
     network_policy_audit_observer: Option<NetworkPolicyAuditObserver>,
     credential_brokers: &RemoteCredentialBrokerCache,
     telemetry: &ProcessTelemetry,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 ) -> Result<PreparedExecRequest, JSONRPCErrorError> {
     let network_proxy = params.network_proxy.clone();
     if let Some(sandbox) = params.sandbox.as_ref()
@@ -177,13 +169,9 @@ pub(crate) async fn prepare_exec_request_with_telemetry(
             runtime_paths.is_some_and(|paths| paths.proxy_private_ips_via_upstream),
             env,
             network_policy_decider,
-<<<<<<< HEAD
             network_denial_reporter,
-||||||| 413492cd6c
-=======
             network_policy_audit_observer,
             telemetry,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         )
         .await?;
     let Some(sandbox_context) = params.sandbox.as_ref() else {
@@ -402,13 +390,9 @@ async fn prepare_managed_network(
     proxy_private_ips_via_upstream: bool,
     env: HashMap<String, String>,
     network_policy_decider: Option<Arc<dyn NetworkPolicyDecider>>,
-<<<<<<< HEAD
     network_denial_reporter: Option<Arc<dyn BlockedRequestObserver>>,
-||||||| 413492cd6c
-=======
     network_policy_audit_observer: Option<NetworkPolicyAuditObserver>,
     telemetry: &ProcessTelemetry,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 ) -> Result<
     (
         HashMap<String, String>,

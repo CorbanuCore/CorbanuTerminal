@@ -1401,7 +1401,7 @@ fn pty_terminate_stops_the_reader_while_an_escaped_process_holds_the_terminal() 
             &env_map,
             &None,
             TerminalSize::default(),
-            &[],
+            crate::ChildFds::Inherited(&[]),
         )
         .await?;
         let (session, mut output_rx, _exit_rx) = combine_spawned_output(spawned);

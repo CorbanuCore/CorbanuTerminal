@@ -1,9 +1,5 @@
 mod common;
 
-<<<<<<< HEAD
-use anyhow::Context;
-||||||| 413492cd6c
-=======
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -11,7 +7,6 @@ use anyhow::Context;
 use codex_exec_server::EnvironmentInfo;
 use codex_exec_server::EnvironmentStatus;
 use codex_exec_server::EnvironmentStatusKind;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_exec_server::ExecResponse;
 use codex_exec_server::InitializeParams;
 use codex_exec_server::InitializeResponse;
@@ -28,22 +23,8 @@ use codex_utils_path_uri::PathUri;
 use common::exec_server::exec_server;
 use common::exec_server::exec_server_with_env;
 use pretty_assertions::assert_eq;
-<<<<<<< HEAD
-use std::time::Duration;
-use tokio::time::Instant;
-
-/// `SESSION_ALREADY_ATTACHED_ERROR_CODE` in `src/rpc.rs` (crate-private).
-const SESSION_ALREADY_ATTACHED_ERROR_CODE: i64 = -32010;
-/// How long a resume may keep hitting "already attached" while the server
-/// finishes detaching the closed connection. The resumed process must outlive
-/// it (see the `sleep 30` below).
-const RESUME_ATTACHED_RETRY_BUDGET: Duration = Duration::from_secs(20);
-const RESUME_ATTACHED_RETRY_INTERVAL: Duration = Duration::from_millis(50);
-||||||| 413492cd6c
-=======
 use tokio::time::sleep;
 use tokio::time::timeout;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn exec_server_starts_process_over_websocket() -> anyhow::Result<()> {
@@ -756,8 +737,7 @@ async fn exec_server_resumes_detached_session_without_killing_processes() -> any
                     if id == &initialize_id
             )
         })
-        .await
-        .context("waiting for the initialize response")?;
+        .await?;
     let JSONRPCMessage::Response(JSONRPCResponse { result, .. }) = response else {
         anyhow::bail!("expected initialize response, got {response:?}");
     };
@@ -772,13 +752,7 @@ async fn exec_server_resumes_detached_session_without_killing_processes() -> any
             "process/start",
             serde_json::json!({
                 "processId": "proc-resume",
-<<<<<<< HEAD
-                "argv": ["/bin/sh", "-c", "sleep 30"],
-||||||| 413492cd6c
-                "argv": ["/bin/sh", "-c", "sleep 5"],
-=======
                 "argv": process_argv,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 "cwd": PathUri::from_host_native_path(std::env::current_dir()?)?,
                 "env": process_env,
                 "tty": false,
@@ -787,60 +761,6 @@ async fn exec_server_resumes_detached_session_without_killing_processes() -> any
             }),
         )
         .await?;
-<<<<<<< HEAD
-    let _ = server
-        .wait_for_event(|event| {
-            matches!(
-                event,
-                JSONRPCMessage::Response(JSONRPCResponse { id, .. }) if id == &process_start_id
-            )
-        })
-        .await
-        .context("waiting for the process/start response")?;
-
-    server.disconnect_websocket().await?;
-    server.reconnect_websocket().await?;
-
-    // The server detaches the old connection only after it has processed the
-    // close, so a fast resume can see "already attached" (#796). The real
-    // client retries that error (`client_recovery.rs`); so does the test.
-    let resume_deadline = Instant::now() + RESUME_ATTACHED_RETRY_BUDGET;
-    let result = loop {
-        let resume_initialize_id = server
-            .send_request(
-                "initialize",
-                serde_json::to_value(InitializeParams {
-                    client_name: "exec-server-test".to_string(),
-                    resume_session_id: Some(initialize_response.session_id.clone()),
-                })?,
-||||||| 413492cd6c
-    let _ = server
-        .wait_for_event(|event| {
-            matches!(
-                event,
-                JSONRPCMessage::Response(JSONRPCResponse { id, .. }) if id == &process_start_id
-            )
-        })
-        .await?;
-
-    server.disconnect_websocket().await?;
-    server.reconnect_websocket().await?;
-
-    let resume_initialize_id = server
-        .send_request(
-            "initialize",
-            serde_json::to_value(InitializeParams {
-                client_name: "exec-server-test".to_string(),
-                resume_session_id: Some(initialize_response.session_id.clone()),
-            })?,
-        )
-        .await?;
-    let response = server
-        .wait_for_event(|event| {
-            matches!(
-                event,
-                JSONRPCMessage::Response(JSONRPCResponse { id, .. }) if id == &resume_initialize_id
-=======
     let response = server
         .wait_for_event(|event| {
             matches!(
@@ -848,46 +768,19 @@ async fn exec_server_resumes_detached_session_without_killing_processes() -> any
                 JSONRPCMessage::Response(JSONRPCResponse { id, .. })
                     | JSONRPCMessage::Error(JSONRPCError { id, .. })
                     if id == &process_start_id
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             )
-<<<<<<< HEAD
-            .await?;
-        let response = server
-            .wait_for_event(|event| match event {
-                JSONRPCMessage::Response(JSONRPCResponse { id, .. })
-                | JSONRPCMessage::Error(JSONRPCError { id, .. }) => id == &resume_initialize_id,
-                _ => false,
-            })
-            .await
-            .context("waiting for the resume initialize response")?;
-        match response {
-            JSONRPCMessage::Response(JSONRPCResponse { result, .. }) => break result,
-            JSONRPCMessage::Error(JSONRPCError { error, .. })
-                if error.code == SESSION_ALREADY_ATTACHED_ERROR_CODE
-                    && Instant::now() < resume_deadline =>
-            {
-                tokio::time::sleep(RESUME_ATTACHED_RETRY_INTERVAL).await;
-            }
-            other => anyhow::bail!("resume initialize failed: {other:?}"),
-        }
-||||||| 413492cd6c
-        })
-        .await?;
-    let JSONRPCMessage::Response(JSONRPCResponse { result, .. }) = response else {
-        panic!("expected resume initialize response");
-=======
         })
         .await?;
     let JSONRPCMessage::Response(_) = response else {
         anyhow::bail!("expected process/start response, got {response:?}");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
 
     server.disconnect_websocket().await?;
     server.reconnect_websocket().await?;
 
     // Closing the old socket does not wait for the server to detach its session.
-    let result = timeout(Duration::from_secs(5), async {
+    // Generous for loaded runners (#796); the process lives until it is terminated.
+    let result = timeout(Duration::from_secs(20), async {
         loop {
             let resume_initialize_id = server
                 .send_request(
@@ -953,8 +846,7 @@ async fn exec_server_resumes_detached_session_without_killing_processes() -> any
                     if id == &process_read_id
             )
         })
-        .await
-        .context("waiting for the process/read response")?;
+        .await?;
     let JSONRPCMessage::Response(JSONRPCResponse { result, .. }) = response else {
         anyhow::bail!("expected process/read response, got {response:?}");
     };
@@ -980,8 +872,7 @@ async fn exec_server_resumes_detached_session_without_killing_processes() -> any
                     if id == &terminate_id
             )
         })
-        .await
-        .context("waiting for the process/terminate response")?;
+        .await?;
     let JSONRPCMessage::Response(JSONRPCResponse { result, .. }) = response else {
         anyhow::bail!("expected process/terminate response, got {response:?}");
     };

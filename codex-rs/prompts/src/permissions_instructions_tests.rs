@@ -63,6 +63,7 @@ fn builds_permissions_from_profile() {
             ),
             FileSystemSandboxEntry::new(
                 FileSystemPath::GlobPattern {
+                    scan: None,
                     pattern: denied_glob.clone(),
                 },
                 FileSystemAccessMode::Deny,
@@ -117,6 +118,7 @@ fn builds_permissions_from_profile_with_executor_denied_reads() {
             ),
             FileSystemSandboxEntry::new(
                 FileSystemPath::GlobPattern {
+                    scan: None,
                     pattern: "~/private/**".into(),
                 },
                 FileSystemAccessMode::Deny,
@@ -128,14 +130,8 @@ fn builds_permissions_from_profile_with_executor_denied_reads() {
             },
             FileSystemSandboxEntry {
                 path: FileSystemPath::GlobPattern {
-<<<<<<< HEAD
                     scan: None,
-                    pattern: denied_glob.to_string_lossy().into_owned(),
-||||||| 413492cd6c
-                    pattern: denied_glob.to_string_lossy().into_owned(),
-=======
                     pattern: denied_glob.into(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 },
                 access: FileSystemAccessMode::Deny,
                 missing_path_behavior: None,

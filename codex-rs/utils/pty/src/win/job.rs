@@ -104,13 +104,6 @@ impl JobObject {
         })
     }
 
-    /// Creates a Job Object whose owned descendants cannot explicitly break away.
-    pub fn create_without_breakaway() -> io::Result<Self> {
-        let job = Self::create()?;
-        Self::set_limit_flags(&job.handle, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)?;
-        Ok(job)
-    }
-
     /// Captures an owned process handle before its numeric identifier can be reused.
     pub fn open_process_handle(process_id: u32) -> io::Result<ProcessHandle> {
         Self::open_process(process_id, PROCESS_TERMINATE)

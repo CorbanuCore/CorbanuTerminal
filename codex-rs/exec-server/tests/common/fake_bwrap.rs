@@ -1,6 +1,8 @@
 use std::path::Path;
 use std::path::PathBuf;
 
+/// A stand-in for a current bubblewrap. It also advertises `--bind-fd`: #536 binds a command's
+/// writable roots with `--bind-fd` and refuses to run without it.
 pub(crate) fn write_fake_bwrap(bin_dir: &Path) -> anyhow::Result<PathBuf> {
     std::fs::create_dir_all(bin_dir)?;
     let fake_bwrap = bin_dir.join("bwrap");
@@ -11,7 +13,7 @@ set -euo pipefail
 
 for arg in "$@"; do
   if [[ "${arg}" == "--help" ]]; then
-    echo "Usage: bwrap --argv0 --perms --as-pid-1"
+    echo "Usage: bwrap --argv0 --perms --as-pid-1 --bind-fd"
     exit 0
   fi
 done

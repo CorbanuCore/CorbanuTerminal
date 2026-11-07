@@ -264,10 +264,7 @@ fn rollout_item_type(item: &RolloutItem) -> String {
         RolloutItem::TurnContext(_) => "turn_context".to_string(),
         RolloutItem::TokenUsageRecord(_) => "token_usage_record".to_string(),
         RolloutItem::WorldState(_) => "world_state".to_string(),
-<<<<<<< HEAD
         RolloutItem::SourceOrigin(_) => "source_origin".to_string(),
-||||||| 413492cd6c
-=======
         RolloutItem::RetainedContext(_) => "retained_context".to_string(),
         RolloutItem::SecurityRiskScore(_) => "security_risk_score".to_string(),
         RolloutItem::RealtimeItem(item) => match &item.content {
@@ -284,7 +281,6 @@ fn rollout_item_type(item: &RolloutItem) -> String {
                 "realtime.session_closed".to_string()
             }
         },
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         RolloutItem::EventMsg(EventMsg::ItemCompleted(event)) => {
             format!("event.item_completed.{}", turn_item_type(&event.item))
         }

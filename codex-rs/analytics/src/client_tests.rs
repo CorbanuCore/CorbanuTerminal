@@ -297,12 +297,8 @@ fn client_with_receiver() -> (
     let (sender, receiver) = mpsc::channel(8);
     let queue = AnalyticsEventsQueue {
         sender,
-<<<<<<< HEAD
         auth_manager: None,
-||||||| 413492cd6c
-=======
         product_generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         app_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
         plugin_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
     };
@@ -815,7 +811,7 @@ fn track_plugin_measurements_rejects_unbounded_inputs_before_queueing() {
     client.track_plugin_measurements(mixed_rows);
     assert!(matches!(
         receiver.try_recv(),
-        Ok(AnalyticsEventsQueueMessage::Fact(fact))
+        Ok(AnalyticsEventsQueueMessage::Fact(fact, _))
             if matches!(
                 fact.as_ref(),
                 AnalyticsFact::Custom(CustomAnalyticsFact::PluginMeasurements(input))
@@ -827,7 +823,7 @@ fn track_plugin_measurements_rejects_unbounded_inputs_before_queueing() {
     client.track_plugin_measurements(measurements(MAX_PLUGIN_MEASUREMENTS_PER_BATCH));
     assert!(matches!(
         receiver.try_recv(),
-        Ok(AnalyticsEventsQueueMessage::Fact(fact))
+        Ok(AnalyticsEventsQueueMessage::Fact(fact, _))
             if matches!(
                 fact.as_ref(),
                 AnalyticsFact::Custom(CustomAnalyticsFact::PluginMeasurements(input))
@@ -1010,7 +1006,7 @@ fn app_used_preserves_first_classification_and_emits_again_next_turn() {
         ("turn-1", Some(ElicitationType::AuthOrLink)),
         ("turn-2", None),
     ] {
-        let Ok(AnalyticsEventsQueueMessage::Fact(input)) = receiver.try_recv() else {
+        let Ok(AnalyticsEventsQueueMessage::Fact(input, _)) = receiver.try_recv() else {
             panic!("expected app-used analytics fact");
         };
         let AnalyticsFact::Custom(CustomAnalyticsFact::AppUsed(input)) = *input else {
@@ -1075,7 +1071,7 @@ fn track_notification_records_realtime_session_boundaries() {
         },
     ));
 
-    let Ok(AnalyticsEventsQueueMessage::Fact(input)) = receiver.try_recv() else {
+    let Ok(AnalyticsEventsQueueMessage::Fact(input, _)) = receiver.try_recv() else {
         panic!("expected realtime session started fact");
     };
     let AnalyticsFact::RealtimeSessionStarted {
@@ -1097,7 +1093,7 @@ fn track_notification_records_realtime_session_boundaries() {
         },
     ));
 
-    let Ok(AnalyticsEventsQueueMessage::Fact(input)) = receiver.try_recv() else {
+    let Ok(AnalyticsEventsQueueMessage::Fact(input, _)) = receiver.try_recv() else {
         panic!("expected realtime session closed fact");
     };
     let AnalyticsFact::RealtimeSessionClosed {
@@ -1123,7 +1119,7 @@ fn realtime_handoff_tracks_only_marker_without_transcript() {
             }),
         },
     ));
-    let Ok(AnalyticsEventsQueueMessage::Fact(input)) = receiver.try_recv() else {
+    let Ok(AnalyticsEventsQueueMessage::Fact(input, _)) = receiver.try_recv() else {
         panic!("expected realtime handoff marker");
     };
     assert!(matches!(
@@ -1159,7 +1155,6 @@ fn track_event_request_batches_only_isolates_accepted_line_fingerprint_events() 
     assert!(batches[2][0].should_send_in_isolated_request());
 }
 
-<<<<<<< HEAD
 /// #658: a fact carries the sign-in the process's sessions used when it was
 /// recorded; none while they run on different accounts.
 #[test]
@@ -1178,6 +1173,7 @@ fn issue_658_facts_carry_the_sign_in_they_were_recorded_under() {
         queue: Some(AnalyticsEventsQueue {
             sender,
             auth_manager: Some(Arc::clone(&base)),
+            product_generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             app_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
             plugin_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
         }),
@@ -1204,8 +1200,8 @@ fn issue_658_facts_carry_the_sign_in_they_were_recorded_under() {
     assert_eq!(record(3), Some(None));
     drop(default);
     let _ = std::fs::remove_dir_all(base.codex_home());
-||||||| 413492cd6c
-=======
+}
+
 #[cfg(debug_assertions)]
 #[tokio::test]
 async fn account_switch_between_batches_does_not_send_old_credentials() {
@@ -1312,5 +1308,4 @@ async fn account_switch_between_batches_does_not_send_old_credentials() {
     );
     assert!(requests[0].contains("test-access-token-a"));
     fs::remove_dir_all(home).unwrap();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }

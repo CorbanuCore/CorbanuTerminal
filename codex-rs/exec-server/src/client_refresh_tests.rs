@@ -482,6 +482,7 @@ async fn registration_renewal_recovers_the_session_and_running_process() -> Resu
                     network_proxy: None,
                 },
                 /*network_policy_decider*/ None,
+                /*network_denial_observer*/ None,
             )
             .await?;
     let mut events = process.subscribe_events();
@@ -1013,6 +1014,7 @@ async fn retirement_rejects_pending_process_start_before_stream_cleanup() -> Res
                 network_proxy: None,
             },
             /*network_policy_decider*/ None,
+            /*network_denial_observer*/ None,
         );
         tokio::pin!(call);
         assert!(futures::poll!(call.as_mut()).is_pending());

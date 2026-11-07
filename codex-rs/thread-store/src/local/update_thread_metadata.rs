@@ -35,18 +35,12 @@ use crate::ThreadStoreResult;
 use crate::UpdateThreadMetadataParams;
 use crate::local::read_thread;
 
-<<<<<<< HEAD
 /// What became of a best-effort SQLite metadata write.
 enum Written {
     /// Written, or nothing to write.
     Now,
     /// Not tried: the state DB is known to be busy.
     PutOff,
-}
-
-struct ResolvedRolloutPath {
-    path: PathBuf,
-    archived: bool,
 }
 
 /// How a best-effort SQLite metadata write meets a busy state DB.
@@ -62,14 +56,6 @@ enum BusyDb {
     Wait,
 }
 
-||||||| 413492cd6c
-struct ResolvedRolloutPath {
-    path: PathBuf,
-    archived: bool,
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub(super) async fn update_thread_metadata(
     store: &LocalThreadStore,
     params: UpdateThreadMetadataParams,
@@ -99,23 +85,19 @@ async fn update_thread_metadata_with(
     busy_db: BusyDb,
 ) -> ThreadStoreResult<StoredThread> {
     let thread_id = params.thread_id;
-<<<<<<< HEAD
-    // A patch put off earlier goes first; this one's fields win.
-    let patch = match store.take_deferred_metadata(thread_id) {
+    let mut pending_metadata = store.pending_thread_metadata.lock(thread_id).await;
+    let pending_patch = pending_metadata
+        .as_ref()
+        .and_then(|metadata| metadata.as_ref().cloned());
+    // A patch put off earlier while the state DB was busy goes first (#359); this one's
+    // fields win.
+    let mut patch = match store.take_deferred_metadata(thread_id) {
         Some(mut deferred) => {
             deferred.merge(params.patch);
             deferred
         }
         None => params.patch,
     };
-||||||| 413492cd6c
-    let patch = params.patch;
-=======
-    let mut pending_metadata = store.pending_thread_metadata.lock(thread_id).await;
-    let pending_patch = pending_metadata
-        .as_ref()
-        .and_then(|metadata| metadata.as_ref().cloned());
-    let mut patch = params.patch;
     if let Some(staged_patch) = pending_patch.as_ref() {
         let mut merged_patch = staged_patch.clone();
         merged_patch.merge(patch);
@@ -126,7 +108,6 @@ async fn update_thread_metadata_with(
             operation: "projects",
         });
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     if patch.is_empty() {
         return read_thread::read_thread(
             store,
@@ -452,7 +433,6 @@ async fn apply_metadata_update(
                     .map_err(|err| ThreadStoreError::Internal {
                         message: format!("failed to read thread metadata for {thread_id}: {err}"),
                     })?;
-<<<<<<< HEAD
             creating.store(existing.is_none(), std::sync::atomic::Ordering::Relaxed);
             // A best-effort update waits briefly for the lock. While the DB is
             // known to be busy, one for an existing row is put off untried; a
@@ -464,8 +444,6 @@ async fn apply_metadata_update(
             }
             let writer: &codex_state::StateRuntime =
                 if quick { state_db.quick() } else { state_db };
-||||||| 413492cd6c
-=======
             // Existing timestamp-only observations must not rewrite metadata or its indexes.
             // Missing rows and changed rollout paths still need the normal repair path.
             if let Some(updated_at) = patch.updated_at
@@ -473,14 +451,15 @@ async fn apply_metadata_update(
                 && existing.as_ref().is_some_and(|metadata| {
                     rollout_path.as_ref().is_none_or(|path| path == &metadata.rollout_path)
                 })
-                && state_db
+                && writer
                     .touch_thread_updated_at(thread_id, updated_at)
                     .await
+                    .inspect_err(note_busy)
                     .map_err(|err| ThreadStoreError::Internal {
                         message: format!("failed to update thread timestamp for {thread_id}: {err}"),
                     })?
             {
-                return Ok(());
+                return Ok(Written::Now);
             }
             let project_id = if existing.is_none()
                 && let Some(Some(project_id)) = patch.project_id.as_ref()
@@ -498,7 +477,6 @@ async fn apply_metadata_update(
             } else {
                 patch.project_id.clone()
             };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             let advance_recency_at = patch.advance_recency_at;
             if existing.is_none() && rollout_path.is_none() {
                 let resolved = if include_archived {
@@ -615,47 +593,37 @@ async fn apply_metadata_update(
                 metadata.git_branch = branch;
                 metadata.git_origin_url = origin_url;
             }
-<<<<<<< HEAD
-            writer
-                .upsert_thread(&metadata)
-                .await
-                .inspect_err(note_busy)
-                .map_err(|err| ThreadStoreError::Internal {
-||||||| 413492cd6c
-            state_db
-                .upsert_thread(&metadata)
-                .await
-                .map_err(|err| ThreadStoreError::Internal {
-=======
             if let Some(project_id) = project_id.as_ref() {
                 metadata.project_id = project_id.clone();
             }
             if let Some(daybreak_enabled) = patch.daybreak_enabled {
                 metadata.daybreak_enabled = Some(daybreak_enabled);
             }
-            let upsert_result = state_db.upsert_thread(&metadata).await;
+            let upsert_result = writer.upsert_thread(&metadata).await.inspect_err(note_busy);
             if existing.is_none()
                 && metadata.project_id.is_some()
                 && matches!(&upsert_result, Err(err) if err.to_string().contains("FOREIGN KEY constraint failed"))
             {
                 metadata.project_id = None;
-                state_db.upsert_thread(&metadata).await.map_err(|err| {
-                    ThreadStoreError::Internal {
+                writer
+                    .upsert_thread(&metadata)
+                    .await
+                    .inspect_err(note_busy)
+                    .map_err(|err| ThreadStoreError::Internal {
                         message: format!("failed to update thread metadata for {thread_id}: {err}"),
-                    }
-                })?;
+                    })?;
             } else {
                 upsert_result.map_err(|err| ThreadStoreError::Internal {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     message: format!("failed to update thread metadata for {thread_id}: {err}"),
                 })?;
             }
             if existing.is_some()
                 && let Some(project_id) = project_id.as_ref()
             {
-                state_db
+                writer
                     .set_thread_project(&thread_id.to_string(), project_id.as_deref())
                     .await
+                    .inspect_err(note_busy)
                     .map_err(|err| {
                         let message = err.to_string();
                         if message.contains("project not found") {
@@ -724,15 +692,11 @@ async fn apply_metadata_update(
                         message: format!("failed to update memory mode for {thread_id}: {err}"),
                     })?;
             }
-<<<<<<< HEAD
-            Ok(Written::Now)
-||||||| 413492cd6c
-            Ok(())
-=======
             if let Some(daybreak_enabled) = patch.daybreak_enabled
-                && !state_db
+                && !writer
                     .set_thread_daybreak_enabled(thread_id, daybreak_enabled)
                     .await
+                    .inspect_err(note_busy)
                     .map_err(|err| ThreadStoreError::Internal {
                         message: format!(
                             "failed to update Daybreak preference for {thread_id}: {err}"
@@ -745,8 +709,7 @@ async fn apply_metadata_update(
                     ),
                 });
             }
-            Ok(())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            Ok(Written::Now)
         }
         .await
     } else if require_sqlite_write {

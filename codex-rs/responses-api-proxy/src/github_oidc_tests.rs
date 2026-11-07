@@ -1,3 +1,8 @@
+#![allow(
+    clippy::disallowed_methods,
+    reason = "#[traced_test] installs tracing-test's in-memory global subscriber"
+)]
+
 use super::*;
 use crate::Args;
 use crate::auth::tests::direct_token_client;
