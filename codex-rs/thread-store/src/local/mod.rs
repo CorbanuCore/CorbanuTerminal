@@ -104,14 +104,10 @@ use crate::StoredProject;
 use crate::StoredProjectsPage;
 use crate::StoredThread;
 use crate::StoredThreadHistory;
-<<<<<<< HEAD
-||||||| 413492cd6c
-=======
 use crate::StoredThreadSection;
 use crate::StoredThreadSectionsPage;
 use crate::ThreadAttachmentOwnerPage;
 use crate::ThreadAttachmentPage;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::ThreadMetadataPatch;
 use crate::ThreadOccurrenceSearchPage;
 use crate::ThreadPage;
@@ -156,16 +152,12 @@ pub struct LocalThreadStore {
     writer_lock_coordinator: Arc<WriterLockCoordinator>,
     state_db: Option<StateDbHandle>,
     thread_history_db: Arc<OnceCell<sqlx::SqlitePool>>,
-<<<<<<< HEAD
     /// Best-effort metadata patches put off while the state DB was busy, per
     /// thread; applied with the thread's next metadata update (#359).
     deferred_metadata: Arc<std::sync::Mutex<HashMap<ThreadId, ThreadMetadataPatch>>>,
-||||||| 413492cd6c
-=======
     thread_data_cleanup: Option<Arc<ThreadDataCleanup>>,
     #[cfg(test)]
     startup_migration_retry_gate: Option<Arc<StartupMigrationRetryGate>>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 type ThreadDataCleanup = dyn Fn(Vec<ThreadId>) -> ThreadStoreFuture<'static, ()> + Send + Sync;
@@ -291,18 +283,13 @@ impl LocalThreadStore {
             writer_lock_coordinator,
             state_db,
             thread_history_db: Arc::new(OnceCell::new()),
-<<<<<<< HEAD
             deferred_metadata: Arc::default(),
-||||||| 413492cd6c
-=======
             thread_data_cleanup: None,
             #[cfg(test)]
             startup_migration_retry_gate: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 
-<<<<<<< HEAD
     /// Keep `patch` for `thread_id`'s next metadata update, after any patch
     /// already kept (#359).
     fn defer_metadata(&self, thread_id: ThreadId, patch: ThreadMetadataPatch) {
@@ -330,8 +317,8 @@ impl LocalThreadStore {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .contains_key(&thread_id)
-||||||| 413492cd6c
-=======
+    }
+
     /// Adds cleanup for host-owned durable data when threads are permanently deleted.
     /// Runs after reference and writer checks, under the lifecycle locks, before deleting rollouts.
     /// Cleanup must be idempotent: later deletion steps can fail and the caller may retry.
@@ -341,7 +328,6 @@ impl LocalThreadStore {
     ) -> Self {
         self.thread_data_cleanup = Some(Arc::new(cleanup));
         self
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// Return the state DB handle used by local rollout writers.
@@ -1205,14 +1191,8 @@ mod tests {
                 realtime_active: None,
                 cyber_access_program: None,
                 effort: None,
-<<<<<<< HEAD
                 security_level: None,
-                summary: ReasoningSummary::Auto,
-||||||| 413492cd6c
-                summary: ReasoningSummary::Auto,
-=======
                 summary: Some(ReasoningSummary::Auto),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             })
         };
 
@@ -1220,18 +1200,12 @@ mod tests {
         let live_thread = LiveThread::create_with_inherited_model_context(
             store,
             params,
-<<<<<<< HEAD
             &[turn_context(
                 "parent-model",
                 "parent-provider",
                 AskForApproval::Never,
             )],
-||||||| 413492cd6c
-            &[turn_context("parent-model", AskForApproval::Never)],
-=======
-            &[turn_context("parent-model", AskForApproval::Never)],
             &mut guard,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         )
         .await
         .expect("create live thread with inherited context");

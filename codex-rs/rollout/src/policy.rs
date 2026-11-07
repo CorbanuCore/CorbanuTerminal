@@ -43,17 +43,11 @@ pub fn persisted_rollout_item(
         | RolloutItem::TurnContext(_)
         | RolloutItem::TokenUsageRecord(_)
         | RolloutItem::WorldState(_)
-<<<<<<< HEAD
-        | RolloutItem::SourceOrigin(_)
-        | RolloutItem::SessionMeta(_) => true,
-||||||| 413492cd6c
-        | RolloutItem::SessionMeta(_) => true,
-=======
         | RolloutItem::RetainedContext(_)
         | RolloutItem::SecurityRiskScore(_)
         | RolloutItem::DynamicToolsUpdated { .. }
+        | RolloutItem::SourceOrigin(_)
         | RolloutItem::SessionMeta(_) => Some(Cow::Borrowed(item)),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 
@@ -137,33 +131,9 @@ fn persisted_event_msg(
     history_mode: ThreadHistoryMode,
 ) -> Option<Cow<'_, EventMsg>> {
     match ev {
-<<<<<<< HEAD
-        EventMsg::ItemCompleted(event) => {
-            // Paginated rollouts store TurnItems.
-            // Legacy rollouts keep only items with no raw ResponseItem or legacy equivalent.
-            matches!(history_mode, ThreadHistoryMode::Paginated)
-                || matches!(
-                    event.item,
-                    TurnItem::Plan(_) | TurnItem::Extension(ExtensionItem::Sleep(_))
-                )
-        }
+        EventMsg::ItemCompleted(event) => persisted_item_completed_event(ev, event, history_mode),
         EventMsg::ModelResponseCompleted(_)
         | EventMsg::TokenCount(_)
-||||||| 413492cd6c
-        EventMsg::ItemCompleted(event) => {
-            // Paginated rollouts store TurnItems.
-            // Legacy rollouts keep only items with no raw ResponseItem or legacy equivalent.
-            matches!(history_mode, ThreadHistoryMode::Paginated)
-                || matches!(
-                    event.item,
-                    TurnItem::Plan(_) | TurnItem::Extension(ExtensionItem::Sleep(_))
-                )
-        }
-        EventMsg::TokenCount(_)
-=======
-        EventMsg::ItemCompleted(event) => persisted_item_completed_event(ev, event, history_mode),
-        EventMsg::TokenCount(_)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         | EventMsg::ThreadGoalUpdated(_)
         | EventMsg::ThreadRolledBack(_)
         | EventMsg::TurnAborted(_)

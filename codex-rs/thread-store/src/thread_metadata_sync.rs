@@ -345,18 +345,12 @@ impl ThreadMetadataSync {
                 | RolloutItem::InterAgentCommunication(_)
                 | RolloutItem::InterAgentCommunicationMetadata { .. }
                 | RolloutItem::Compacted(_)
-<<<<<<< HEAD
-                | RolloutItem::WorldState(_)
-                | RolloutItem::SourceOrigin(_) => {}
-||||||| 413492cd6c
-                | RolloutItem::WorldState(_) => {}
-=======
                 | RolloutItem::RealtimeItem(_)
                 | RolloutItem::TokenUsageRecord(_)
                 | RolloutItem::RetainedContext(_)
                 | RolloutItem::SecurityRiskScore(_)
-                | RolloutItem::WorldState(_) => {}
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                | RolloutItem::WorldState(_)
+                | RolloutItem::SourceOrigin(_) => {}
             }
         }
         Some(update)
