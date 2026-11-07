@@ -769,6 +769,14 @@ fn run_powershell_launch(
     // Not the runner's shared temp folder, which the sandbox may be unable
     // to label Low (#1689).
     let temp = user_owned_test_root();
+    // MUTANT (#1689 evidence, never merged): a TEMP the sandbox can't label
+    // Low, as the runner's shared one sometimes is.
+    let denied = std::process::Command::new(system32_exe("icacls.exe"))
+        .arg(temp.path())
+        .args(["/deny", "*S-1-1-0:(WO)"])
+        .output()
+        .expect("run icacls /deny");
+    assert!(denied.status.success(), "icacls /deny failed");
     let runtime = current_thread_runtime();
     let mut outcome = runtime.block_on(async {
         let codex_home = sandbox_home(name);
