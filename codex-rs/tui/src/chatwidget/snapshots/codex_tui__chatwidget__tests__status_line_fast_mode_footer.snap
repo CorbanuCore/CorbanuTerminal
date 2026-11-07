@@ -6,4 +6,10 @@ expression: normalized_backend_snapshot(terminal.backend())
 "                                                                                "
 "› Ask Corbanu Terminal to do anything                                           "
 "                                                                                "
+<<<<<<< HEAD
 "  Fast off                                                                      "
+||||||| 413492cd6c
+"  Fast on                                                                       "
+=======
+"  gpt-5.2 high · Standard                                                       "
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

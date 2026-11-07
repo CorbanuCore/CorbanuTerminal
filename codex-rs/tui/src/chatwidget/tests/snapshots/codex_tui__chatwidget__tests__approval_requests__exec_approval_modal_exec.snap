@@ -16,6 +16,7 @@ Buffer {
         "                                                                                ",
         "  $ echo hello world                                                            ",
         "                                                                                ",
+        "                                                                                ",
         "› 1. Yes, proceed (y)                                                           ",
         "  2. No, and tell Corbanu Terminal what to do differently (esc)                 ",
         "                                                                                ",
@@ -35,6 +36,7 @@ Buffer {
         x: 4, y: 9, fg: Rgb(137, 180, 250), bg: Reset, underline: Reset, modifier: NONE,
         x: 8, y: 9, fg: Rgb(205, 214, 244), bg: Reset, underline: Reset, modifier: NONE,
         x: 20, y: 9, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+<<<<<<< HEAD
         x: 0, y: 11, fg: Cyan, bg: Reset, underline: Reset, modifier: BOLD,
         x: 21, y: 11, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
         x: 59, y: 12, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
@@ -42,5 +44,22 @@ Buffer {
         x: 2, y: 14, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
         x: 0, y: 15, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
         x: 2, y: 15, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
+||||||| 413492cd6c
+        x: 0, y: 11, fg: Cyan, bg: Reset, underline: Reset, modifier: BOLD,
+        x: 21, y: 11, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+        x: 48, y: 12, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
+        x: 51, y: 12, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+        x: 2, y: 14, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
+=======
+        x: 0, y: 12, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD | REVERSED,
+        x: 0, y: 13, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+        x: 48, y: 13, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
+        x: 51, y: 13, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+        x: 2, y: 15, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
+        x: 8, y: 15, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
+        x: 13, y: 15, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
+        x: 28, y: 15, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
+        x: 31, y: 15, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     ]
 }

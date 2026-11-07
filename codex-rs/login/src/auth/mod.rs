@@ -1,12 +1,17 @@
 mod access_token;
 mod agent_identity;
+mod api_key;
 mod auth_headers;
+mod bedrock_access_keys;
 mod bedrock_api_key;
+mod change_state;
 pub mod default_client;
 pub mod error;
 mod personal_access_token;
+mod source;
 mod storage;
 mod util;
+mod workload_identity;
 
 mod external_bearer;
 mod manager;
@@ -14,9 +19,14 @@ mod named_chatgpt;
 mod provider_key_vault;
 mod revoke;
 
+pub use api_key::is_fedramp_api_key;
 pub use auth_headers::AuthHeaders;
+pub use bedrock_access_keys::BedrockAccessKeysAuth;
+pub use bedrock_access_keys::login_with_bedrock_access_keys;
 pub use bedrock_api_key::BedrockApiKeyAuth;
 pub use bedrock_api_key::login_with_bedrock_api_key;
+pub use change_state::AuthChangeState;
+pub use change_state::RequestAuthChange;
 pub use error::RefreshTokenFailedError;
 pub use error::RefreshTokenFailedReason;
 pub use external_bearer::CLAUDE_PLAN_TOKEN_HELPER_SUBCOMMAND;
@@ -29,6 +39,7 @@ pub use external_bearer::is_claude_plan_token_helper;
 pub use external_bearer::validate_provider_auth_command;
 pub use external_bearer::validate_provider_auth_command_for_account;
 pub use manager::*;
+<<<<<<< HEAD
 pub use named_chatgpt::NamedChatgptAccount;
 pub use named_chatgpt::NamedSignInSummary;
 pub use named_chatgpt::PreviousSignIn;
@@ -46,3 +57,7 @@ pub use provider_key_vault::provider_account_api_key;
 pub use provider_key_vault::provider_account_aws_profile;
 pub use provider_key_vault::provider_account_holds;
 pub use provider_key_vault::provider_account_sign_in;
+||||||| 413492cd6c
+=======
+pub use workload_identity::is_workload_identity_selected;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

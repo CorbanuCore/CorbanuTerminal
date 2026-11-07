@@ -1,12 +1,31 @@
 ---
 source: tui/src/history_cell/tests.rs
+<<<<<<< HEAD
+||||||| 413492cd6c
+source: tui/src/history_cell.rs
+=======
+assertion_line: 778
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 expression: rendered
 ---
+<<<<<<< HEAD
 ╭─────────────────────────────────────╮
 │ >_ Corbanu Terminal (v<V>)          │
 │                                     │
 │ model:     gpt-5   /model to change │
 │ directory: /tmp/project             │
 ╰─────────────────────────────────────╯
+||||||| 413492cd6c
+╭─────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.0.0)            │
+│                                     │
+│ model:     gpt-5   /model to change │
+│ directory: /tmp/project             │
+╰─────────────────────────────────────╯
+=======
+
+  >_ OpenAI Codex (v0.0.0)
+     /tmp/project
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
   Tip: Model just became available

@@ -275,12 +275,7 @@ impl StreamingPatchParser {
                     }
 
                     if update_line == EMPTY_CHANGE_CONTEXT_MARKER {
-                        chunks.push(UpdateFileChunk {
-                            change_context: None,
-                            old_lines: Vec::new(),
-                            new_lines: Vec::new(),
-                            is_end_of_file: false,
-                        });
+                        chunks.push(UpdateFileChunk::default());
                         self.state.mode = StreamingParserMode::UpdateFile { hunk_line_number };
                         return Ok(());
                     }
@@ -288,9 +283,7 @@ impl StreamingPatchParser {
                     if let Some(change_context) = update_line.strip_prefix(CHANGE_CONTEXT_MARKER) {
                         chunks.push(UpdateFileChunk {
                             change_context: Some(change_context.to_string()),
-                            old_lines: Vec::new(),
-                            new_lines: Vec::new(),
-                            is_end_of_file: false,
+                            ..UpdateFileChunk::default()
                         });
                         self.state.mode = StreamingParserMode::UpdateFile { hunk_line_number };
                         return Ok(());
@@ -319,16 +312,10 @@ impl StreamingPatchParser {
 
                     if line.is_empty() {
                         if chunks.is_empty() {
-                            chunks.push(UpdateFileChunk {
-                                change_context: None,
-                                old_lines: Vec::new(),
-                                new_lines: Vec::new(),
-                                is_end_of_file: false,
-                            });
+                            chunks.push(UpdateFileChunk::default());
                         }
                         if let Some(chunk) = chunks.last_mut() {
-                            chunk.old_lines.push(String::new());
-                            chunk.new_lines.push(String::new());
+                            chunk.push_context_line(String::new());
                         }
                         self.state.mode = StreamingParserMode::UpdateFile { hunk_line_number };
                         return Ok(());
@@ -336,16 +323,10 @@ impl StreamingPatchParser {
 
                     if let Some(line_to_add) = line.strip_prefix(' ') {
                         if chunks.is_empty() {
-                            chunks.push(UpdateFileChunk {
-                                change_context: None,
-                                old_lines: Vec::new(),
-                                new_lines: Vec::new(),
-                                is_end_of_file: false,
-                            });
+                            chunks.push(UpdateFileChunk::default());
                         }
                         if let Some(chunk) = chunks.last_mut() {
-                            chunk.old_lines.push(line_to_add.to_string());
-                            chunk.new_lines.push(line_to_add.to_string());
+                            chunk.push_context_line(line_to_add.to_string());
                         }
                         self.state.mode = StreamingParserMode::UpdateFile { hunk_line_number };
                         return Ok(());
@@ -353,12 +334,7 @@ impl StreamingPatchParser {
 
                     if let Some(line_to_add) = line.strip_prefix('+') {
                         if chunks.is_empty() {
-                            chunks.push(UpdateFileChunk {
-                                change_context: None,
-                                old_lines: Vec::new(),
-                                new_lines: Vec::new(),
-                                is_end_of_file: false,
-                            });
+                            chunks.push(UpdateFileChunk::default());
                         }
                         if let Some(chunk) = chunks.last_mut() {
                             chunk.new_lines.push(line_to_add.to_string());
@@ -369,12 +345,7 @@ impl StreamingPatchParser {
 
                     if let Some(line_to_remove) = line.strip_prefix('-') {
                         if chunks.is_empty() {
-                            chunks.push(UpdateFileChunk {
-                                change_context: None,
-                                old_lines: Vec::new(),
-                                new_lines: Vec::new(),
-                                is_end_of_file: false,
-                            });
+                            chunks.push(UpdateFileChunk::default());
                         }
                         if let Some(chunk) = chunks.last_mut() {
                             chunk.old_lines.push(line_to_remove.to_string());
@@ -451,6 +422,7 @@ mod tests {
                     change_context: None,
                     old_lines: vec!["old".to_string()],
                     new_lines: vec!["new".to_string()],
+                    context_line_indices: vec![],
                     is_end_of_file: false,
                 }],
             }])
@@ -641,12 +613,14 @@ mod tests {
                         change_context: None,
                         old_lines: vec!["old a".to_string(), "*** Update File: b.txt".to_string()],
                         new_lines: vec!["new a".to_string(), "*** Update File: b.txt".to_string()],
+                        context_line_indices: vec![(1, 1)],
                         is_end_of_file: false,
                     },
                     UpdateFileChunk {
                         change_context: None,
                         old_lines: vec!["old b".to_string()],
                         new_lines: vec!["new b".to_string()],
+                        context_line_indices: vec![],
                         is_end_of_file: false,
                     },
                 ],
@@ -686,6 +660,7 @@ mod tests {
                         String::new(),
                         "context after".to_string(),
                     ],
+                    context_line_indices: vec![(0, 0), (1, 1), (2, 2)],
                     is_end_of_file: false,
                 }],
             }])
@@ -706,6 +681,7 @@ mod tests {
                     change_context: None,
                     old_lines: Vec::new(),
                     new_lines: vec!["quux".to_string()],
+                    context_line_indices: vec![],
                     is_end_of_file: true,
                 }],
             }])
@@ -724,6 +700,7 @@ mod tests {
                     change_context: None,
                     old_lines: vec!["old".to_string()],
                     new_lines: vec!["new".to_string()],
+                    context_line_indices: vec![],
                     is_end_of_file: false,
                 }],
             }])
@@ -739,6 +716,7 @@ mod tests {
                     change_context: None,
                     old_lines: vec!["old\r".to_string()],
                     new_lines: vec!["new".to_string()],
+                    context_line_indices: vec![],
                     is_end_of_file: false,
                 }],
             }])
@@ -775,6 +753,7 @@ mod tests {
                     change_context: None,
                     old_lines: vec!["old".to_string()],
                     new_lines: vec!["new".to_string()],
+                    context_line_indices: vec![],
                     is_end_of_file: false,
                 }],
             }])
@@ -788,6 +767,7 @@ mod tests {
                     change_context: None,
                     old_lines: vec!["old".to_string()],
                     new_lines: vec!["new".to_string()],
+                    context_line_indices: vec![],
                     is_end_of_file: false,
                 }],
             }])

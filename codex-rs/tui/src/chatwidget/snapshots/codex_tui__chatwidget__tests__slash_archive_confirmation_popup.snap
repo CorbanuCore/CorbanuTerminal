@@ -2,10 +2,27 @@
 source: tui/src/chatwidget/tests/slash_commands.rs
 expression: popup
 ---
+<<<<<<< HEAD
   Archive this session?
   This will archive the current session and exit Corbanu Terminal.
+||||||| 413492cd6c
+  Archive this session?
+  Are you sure? This will archive the current session and exit Codex
+=======
+      Archive this session?
+› As  Are you sure? This will archive the current session
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
+<<<<<<< HEAD
 › No, don't archive      Return to the current session
   Yes, archive and exit  Archive this session now
+||||||| 413492cd6c
+› 1. No, don't archive      Return to the current session
+  2. Yes, archive and exit  Archive this session now
+=======
+  GP
+    › 1. No, don't archive  Return to the current session
+      2. Yes, archive       Archive this session now
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
-  Press enter to confirm or esc to go back
+      enter select · esc back

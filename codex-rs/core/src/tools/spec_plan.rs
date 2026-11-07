@@ -1,15 +1,24 @@
 use crate::agent::exceeds_thread_spawn_depth_limit;
 use crate::agent::next_thread_spawn_depth;
-use crate::connectors::AppInfo;
 use crate::environment_selection::TurnEnvironmentSnapshot;
+<<<<<<< HEAD
 use crate::mcp_tool_exposure::build_mcp_tool_runtimes;
 use crate::security::protected_surface::ToolOrigin;
+||||||| 413492cd6c
+use crate::mcp_tool_exposure::build_mcp_tool_runtimes;
+=======
+use crate::image_preparation::unified_image_budget_enabled;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
-use crate::tools::code_mode::default_exec_yield_time_override_ms;
 use crate::tools::code_mode::execute_spec::create_code_mode_tool;
+<<<<<<< HEAD
 use crate::tools::collaboration_wire::uses_openai_reserved_collaboration_schema;
 use crate::tools::context::ToolInvocation;
+||||||| 413492cd6c
+use crate::tools::context::ToolInvocation;
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::tools::effective_tool_mode;
 use crate::tools::flat_tool_names::FlatToolNames;
 use crate::tools::flat_tool_names::flatten_namespaced_tools;
@@ -29,9 +38,9 @@ use crate::tools::handlers::PlanHandler;
 use crate::tools::handlers::ReadMcpResourceHandler;
 use crate::tools::handlers::RequestPermissionsHandler;
 use crate::tools::handlers::RequestPluginInstallHandler;
+use crate::tools::handlers::RequestUserInputAsyncHandler;
 use crate::tools::handlers::RequestUserInputHandler;
-use crate::tools::handlers::ShellCommandHandler;
-use crate::tools::handlers::ShellCommandHandlerOptions;
+use crate::tools::handlers::SendMessageToUserAsyncHandler;
 use crate::tools::handlers::SleepHandler;
 use crate::tools::handlers::StructuredEditHandler;
 use crate::tools::handlers::StructuredWriteHandler;
@@ -50,7 +59,11 @@ use crate::tools::handlers::multi_agents_common::DEFAULT_WAIT_TIMEOUT_MS;
 use crate::tools::handlers::multi_agents_common::MAX_WAIT_TIMEOUT_MS;
 use crate::tools::handlers::multi_agents_common::MIN_WAIT_TIMEOUT_MS;
 use crate::tools::handlers::multi_agents_spec::MULTI_AGENT_V1_NAMESPACE;
+<<<<<<< HEAD
 use crate::tools::handlers::multi_agents_spec::SpawnAgentRuntime;
+||||||| 413492cd6c
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::tools::handlers::multi_agents_spec::SpawnAgentToolOptions;
 use crate::tools::handlers::multi_agents_spec::WaitAgentTimeoutOptions;
 use crate::tools::handlers::multi_agents_spec::apply_openai_reserved_collaboration_schema;
@@ -68,52 +81,80 @@ use crate::tools::handlers::tool_search_spec::ToolSearchSourceListing;
 use crate::tools::handlers::view_image_spec::ViewImageToolOptions;
 use crate::tools::hosted_spec::WebSearchToolOptions;
 use crate::tools::hosted_spec::create_web_search_tool;
-use crate::tools::registry::CoreToolRuntime;
+use crate::tools::multi_agent_tool::multi_agent_v2_handler;
+use crate::tools::registry::NativeReview;
+use crate::tools::registry::RegisteredTool;
 use crate::tools::registry::ToolExposure;
 use crate::tools::registry::ToolRegistry;
-use crate::tools::registry::override_tool_exposure;
 use crate::tools::router::ToolRouter;
+use crate::tools::tool_namespaces_info::collect_tool_namespaces_info;
+use codex_connectors::apps_config_from_layer_stack;
 use codex_extension_api::ExtensionData;
 use codex_features::Feature;
+use codex_features::SleepToolMode;
 use codex_login::AuthManager;
+<<<<<<< HEAD
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
+||||||| 413492cd6c
+=======
+use codex_mcp::CODEX_APPS_MCP_SERVER_NAME;
+use codex_prompts::ResolvedModelMessages;
+use codex_protocol::DEFAULT_FUNCTION_NAMESPACE;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::account::PlanType;
 use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::dynamic_tools::DynamicToolNamespaceTool;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
+use codex_protocol::error::CodexErrorDetails;
+use codex_protocol::error::Result as CodexResult;
+use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::InputModality;
+<<<<<<< HEAD
 use codex_protocol::openai_models::ModelPreset;
+||||||| 413492cd6c
+=======
+use codex_protocol::openai_models::ModelInfo;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::openai_models::ToolMode;
 use codex_protocol::permissions::FileSystemSandboxKind;
 use codex_protocol::protocol::MultiAgentVersion;
-use codex_tools::ResponsesApiNamespace;
+use codex_tools::IndirectNamespacePrefixes;
 use codex_tools::ResponsesApiNamespaceTool;
 use codex_tools::ResponsesApiTool;
 use codex_tools::TOOL_SEARCH_TOOL_NAME;
 use codex_tools::ToolCall as ExtensionToolCall;
 use codex_tools::ToolEnvironmentMode;
 use codex_tools::ToolExecutor;
+use codex_tools::ToolExposures;
 use codex_tools::ToolName;
-use codex_tools::ToolSearchInfo;
 use codex_tools::ToolSpec;
-use codex_tools::UnifiedExecShellMode;
 use codex_tools::can_request_original_image_detail;
 use codex_tools::collect_code_mode_exec_prompt_tool_definitions;
 use codex_tools::collect_request_plugin_install_entries;
 use codex_tools::default_namespace_description;
 use codex_tools::request_user_input_available_modes;
+<<<<<<< HEAD
 use codex_tools::shell_command_backend_for_features;
 use codex_tools::shell_type_for_model_and_features;
 use codex_utils_string::take_bytes_at_char_boundary;
 use futures::future::BoxFuture;
+||||||| 413492cd6c
+use codex_tools::shell_command_backend_for_features;
+use codex_tools::shell_type_for_model_and_features;
+use futures::future::BoxFuture;
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use std::collections::BTreeMap;
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::collections::btree_map::Entry;
 use std::sync::Arc;
 use tracing::instrument;
 use tracing::warn;
 
+<<<<<<< HEAD
 /// Most function tools one request may carry on wires without namespaces: the
 /// smallest documented limit among them (OpenAI Chat Completions rejects more
 /// than 128 tools).
@@ -123,12 +164,18 @@ const MAX_FLAT_NAMESPACE_DESCRIPTION_BYTES: usize = 300;
 /// `ext/memories` tool namespace.
 const MEMORY_TOOLS_NAMESPACE: &str = "memories";
 const MULTI_AGENT_V2_NAMESPACE_DESCRIPTION: &str = "Tools for spawning and managing sub-agents.";
+||||||| 413492cd6c
+const MULTI_AGENT_V2_NAMESPACE_DESCRIPTION: &str = "Tools for spawning and managing sub-agents.";
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 const IMAGE_GEN_NAMESPACE: &str = "image_gen";
 const IMAGEGEN_TOOL_NAME: &str = "imagegen";
 
 #[derive(Clone, Copy)]
 struct CoreToolPlanContext<'a> {
+    tool_policy: &'a codex_extension_api::ToolPolicy,
     turn_context: &'a TurnContext,
+    model_info: &'a ModelInfo,
     environments: &'a TurnEnvironmentSnapshot,
     mcp: &'a codex_mcp::McpBinding,
     tool_suggest_candidates: Option<&'a crate::tools::router::ToolSuggestCandidates>,
@@ -138,15 +185,18 @@ struct CoreToolPlanContext<'a> {
 }
 
 #[instrument(level = "trace", skip_all)]
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_tool_router(
     session: &Session,
     turn_context: &TurnContext,
+    model_info: &ModelInfo,
     environments: &TurnEnvironmentSnapshot,
-    mcp: &codex_mcp::McpBinding,
-    connectors: Option<&[AppInfo]>,
+    mcp: &Arc<codex_mcp::McpBinding>,
+    apps_enabled: bool,
     step_store: &ExtensionData,
     tool_suggest_candidates: Option<&crate::tools::router::ToolSuggestCandidates>,
-) -> ToolRouter {
+    dynamic_tools: &[DynamicToolSpec],
+) -> CodexResult<ToolRouter> {
     let default_agent_type_description =
         crate::agent::role::spawn_tool_spec::build(&std::collections::BTreeMap::new());
     let wait_for_environment_tool_config = session
@@ -154,7 +204,9 @@ pub(crate) fn build_tool_router(
         .thread_extension_data
         .get::<crate::WaitForEnvironmentToolConfig>();
     let context = CoreToolPlanContext {
+        tool_policy: &session.tool_policy,
         turn_context,
+        model_info,
         environments,
         mcp,
         tool_suggest_candidates,
@@ -162,51 +214,166 @@ pub(crate) fn build_tool_router(
         default_agent_type_description: &default_agent_type_description,
         wait_agent_timeouts: wait_agent_timeout_options(turn_context),
     };
-    let mut registry = ToolRegistry::default();
+    let mut registry = ToolRegistry::with_tool_policy(Arc::clone(&session.tool_policy));
     add_core_tool_sources(&context, &mut registry);
 
-    let hosted_specs = if crate::guardian::is_guardian_reviewer_source(&turn_context.session_source)
-    {
-        Vec::new()
-    } else {
-        for runtime in build_mcp_tool_runtimes(
-            mcp.tools(),
-            connectors,
-            &turn_context.config,
-            search_tool_enabled(turn_context),
-        ) {
-            registry.register_external(runtime);
-        }
-        let standalone_web_search_tool = append_extension_tool_executors(
-            turn_context,
-            extension_tool_executors(session, step_store),
-            &mut registry,
-        );
-        append_dynamic_tool_runtimes(&turn_context.dynamic_tools, &mut registry);
-        hosted_model_tool_specs(turn_context, standalone_web_search_tool.as_slice())
-    };
+    let registered_mcp_tools = session.services.mcp_handler_cache.append_mcp_tools(
+        mcp,
+        &turn_context.config,
+        apps_enabled,
+        &mcp.config().mcp_server_catalog,
+        model_info.supports_search_tool,
+        session.services.mcp_manager.shared_definitions(),
+        &mut registry,
+    );
+    apply_mcp_tool_exposure_policy(
+        turn_context,
+        model_info,
+        mcp,
+        &registered_mcp_tools,
+        &mut registry,
+    );
+    let standalone_web_search_tool = append_extension_tool_executors(
+        turn_context,
+        model_info,
+        extension_tool_executors(session, step_store),
+        &mut registry,
+    );
+    append_dynamic_tool_runtimes(dynamic_tools, &mut registry);
+    let hosted_specs = hosted_model_tool_specs(
+        turn_context,
+        model_info,
+        standalone_web_search_tool.as_slice(),
+    );
 
     finalize_tool_router(
         turn_context,
+        model_info,
         registry,
         hosted_specs,
         &session.services.tool_search_handler_cache,
     )
 }
 
+/// Use the effective mode because the model can override the thread's configured mode.
+fn code_mode_only_strict_3p_tools(turn_context: &TurnContext, model_info: &ModelInfo) -> bool {
+    effective_tool_mode(turn_context, model_info) == ToolMode::CodeModeOnly
+        && turn_context
+            .config
+            .features
+            .enabled(Feature::CodeModeOnlyStrictThirdPartyTools)
+}
+
+fn apply_mcp_tool_exposure_policy(
+    turn_context: &TurnContext,
+    model_info: &ModelInfo,
+    mcp: &codex_mcp::McpBinding,
+    registered_mcp_tools: &HashSet<ToolName>,
+    registry: &mut ToolRegistry,
+) {
+    let mut omitted_exposures_by_tool = HashMap::new();
+    let apps_config = apps_config_from_layer_stack(&turn_context.config.config_layer_stack);
+    for tool in mcp.tools() {
+        let tool_name = tool.canonical_tool_name();
+        // Disabled, denied, app-only and over-budget MCP tools are absent from this set.
+        if !registered_mcp_tools.contains(&tool_name) {
+            continue;
+        }
+        let Some(server) = mcp.config().mcp_server_catalog.server(&tool.server_name) else {
+            continue;
+        };
+        omitted_exposures_by_tool
+            .entry(tool_name)
+            .or_insert_with(|| {
+                let connector_omissions = (tool.server_name == CODEX_APPS_MCP_SERVER_NAME)
+                    .then_some(tool.connector_id.as_deref())
+                    .flatten()
+                    .and_then(|id| apps_config.as_ref()?.apps.get(id))
+                    .and_then(|app| app.omit_tools_from.as_deref())
+                    .unwrap_or_default();
+                server
+                    .config()
+                    .omit_tools_from
+                    .as_deref()
+                    .unwrap_or_default()
+                    .iter()
+                    .chain(connector_omissions)
+                    .copied()
+                    .collect::<ToolExposures>()
+            });
+    }
+
+    for tool in registry.entries_mut() {
+        let tool_name = tool.runtime.tool_name();
+        let Some(omitted_exposures) = omitted_exposures_by_tool.get(&tool_name) else {
+            continue;
+        };
+        if code_mode_only_strict_3p_tools(turn_context, model_info) {
+            // Ignore MCP/app omit_tools_from; eligible tools must stay deferred in exec.
+            // Log conflicts without adding a warning to the model's prompt.
+            if omitted_exposures.intersects(ToolExposures::DEFERRED | ToolExposures::CODE_MODE) {
+                tracing::warn!(
+                    tool_name = %tool_name,
+                    "Ignoring MCP/app omit_tools_from because code_mode_only_strict_3p_tools is enabled"
+                );
+            }
+            continue;
+        }
+        let tool_name = tool_name.with_default_namespace();
+
+        let mut exposures = ToolExposures::ALL.difference(*omitted_exposures);
+        if tool_name.namespace.as_ref().is_some_and(|namespace| {
+            turn_context
+                .config
+                .code_mode
+                .direct_only_tool_namespaces
+                .contains(namespace)
+        }) {
+            exposures = exposures.difference(ToolExposures::DEFERRED | ToolExposures::CODE_MODE);
+        }
+
+        exposures = if model_info.supports_search_tool
+            && exposures.contains(ToolExposures::DEFERRED)
+            && (effective_tool_mode(turn_context, model_info) != ToolMode::CodeModeOnly
+                || exposures.contains(ToolExposures::CODE_MODE))
+        {
+            exposures.difference(ToolExposures::DIRECT)
+        } else {
+            exposures.difference(ToolExposures::DEFERRED)
+        };
+
+        tool.exposure = match (
+            exposures.contains(ToolExposures::DIRECT),
+            exposures.contains(ToolExposures::DEFERRED),
+            exposures.contains(ToolExposures::CODE_MODE),
+        ) {
+            (false, false, false) => ToolExposure::Hidden,
+            (false, false, true) => ToolExposure::CodeModeOnly,
+            (true, false, false) => ToolExposure::DirectModelOnly,
+            (true, false, true) => ToolExposure::Direct,
+            (false, true, false) => ToolExposure::DeferredModelOnly,
+            (false, true, true) => ToolExposure::Deferred,
+            (true, true, _) => unreachable!("direct and deferred exposure are mutually exclusive"),
+        };
+    }
+}
+
 #[cfg(test)]
 #[instrument(level = "trace", skip_all)]
-pub(crate) fn build_core_tool_runtimes(
+pub(crate) fn build_core_tool_registry(
     turn_context: &TurnContext,
+    model_info: &ModelInfo,
     environments: &TurnEnvironmentSnapshot,
     mcp: &codex_mcp::McpBinding,
     tool_suggest_candidates: Option<&crate::tools::router::ToolSuggestCandidates>,
     wait_for_environment_tool_config: Option<&Arc<crate::WaitForEnvironmentToolConfig>>,
-) -> Vec<Arc<dyn CoreToolRuntime>> {
+) -> ToolRegistry {
     let default_agent_type_description =
         crate::agent::role::spawn_tool_spec::build(&std::collections::BTreeMap::new());
     let context = CoreToolPlanContext {
+        tool_policy: &Default::default(),
         turn_context,
+        model_info,
         environments,
         mcp,
         tool_suggest_candidates,
@@ -216,38 +383,43 @@ pub(crate) fn build_core_tool_runtimes(
     };
     let mut registry = ToolRegistry::default();
     add_core_tool_sources(&context, &mut registry);
-    registry.runtimes().cloned().collect()
+    registry
 }
 
 #[cfg(test)]
 #[instrument(level = "trace", skip_all)]
-pub(crate) fn append_source_tool_runtimes(
+pub(crate) fn append_source_tools(
     turn_context: &TurnContext,
-    tool_runtimes: &mut Vec<Arc<dyn CoreToolRuntime>>,
-    mcp_tool_runtimes: Vec<Arc<dyn CoreToolRuntime>>,
-    extension_tool_executors: impl IntoIterator<Item = Arc<dyn ToolExecutor<ExtensionToolCall>>>,
+    model_info: &ModelInfo,
+    registry: &mut ToolRegistry,
+    mcp_tools: Vec<RegisteredTool>,
+    extension_tool_executors: impl IntoIterator<
+        Item = Arc<dyn for<'call> ToolExecutor<ExtensionToolCall<'call>>>,
+    >,
     dynamic_tools: &[DynamicToolSpec],
 ) -> Vec<ToolSpec> {
-    if crate::guardian::is_guardian_reviewer_source(&turn_context.session_source) {
-        return Vec::new();
+    for tool in mcp_tools {
+        registry.register_external_with_exposure(tool.runtime, tool.exposure);
     }
-
-    let mut registry = ToolRegistry::from_tools(std::mem::take(tool_runtimes));
-    for runtime in mcp_tool_runtimes {
-        registry.register_external(runtime);
-    }
-    let standalone_web_search_tool =
-        append_extension_tool_executors(turn_context, extension_tool_executors, &mut registry);
-    append_dynamic_tool_runtimes(dynamic_tools, &mut registry);
-    tool_runtimes.extend(registry.runtimes().cloned());
-    hosted_model_tool_specs(turn_context, standalone_web_search_tool.as_slice())
+    let standalone_web_search_tool = append_extension_tool_executors(
+        turn_context,
+        model_info,
+        extension_tool_executors,
+        registry,
+    );
+    append_dynamic_tool_runtimes(dynamic_tools, registry);
+    hosted_model_tool_specs(
+        turn_context,
+        model_info,
+        standalone_web_search_tool.as_slice(),
+    )
 }
 
 #[instrument(level = "trace", skip_all)]
 pub(crate) fn extension_tool_executors<'a>(
     session: &'a Session,
     step_store: &'a ExtensionData,
-) -> impl Iterator<Item = Arc<dyn ToolExecutor<ExtensionToolCall>>> + 'a {
+) -> impl Iterator<Item = Arc<dyn for<'call> ToolExecutor<ExtensionToolCall<'call>>>> + 'a {
     session
         .services
         .extensions
@@ -265,33 +437,90 @@ pub(crate) fn extension_tool_executors<'a>(
 #[instrument(level = "trace", skip_all)]
 pub(crate) fn finalize_tool_router(
     turn_context: &TurnContext,
+    model_info: &ModelInfo,
     mut registry: ToolRegistry,
-    hosted_specs: Vec<ToolSpec>,
+    mut hosted_specs: Vec<ToolSpec>,
     tool_search_handler_cache: &ToolSearchHandlerCache,
-) -> ToolRouter {
+) -> CodexResult<ToolRouter> {
+    let model_messages = ResolvedModelMessages::from_model(model_info);
+    hosted_specs.retain(|spec| registry.tool_policy.allows(&ToolName::plain(spec.name())));
     apply_direct_model_only_namespace_overrides(turn_context, &mut registry);
-    let code_mode_enabled = matches!(
-        effective_tool_mode(turn_context),
-        ToolMode::CodeMode | ToolMode::CodeModeOnly
-    );
+    enforce_strict_3p_tools(turn_context, model_info, &mut registry);
+    let tool_mode = effective_tool_mode(turn_context, model_info);
+    let code_mode_enabled = matches!(tool_mode, ToolMode::CodeMode | ToolMode::CodeModeOnly);
     if code_mode_enabled {
-        registry.remove(&ToolName::plain(codex_code_mode::PUBLIC_TOOL_NAME));
-        registry.remove(&ToolName::plain(codex_code_mode::WAIT_TOOL_NAME));
+        for tool_name in [
+            ToolName::plain(codex_code_mode::PUBLIC_TOOL_NAME),
+            ToolName::plain(codex_code_mode::WAIT_TOOL_NAME),
+        ] {
+            if registry.remove(&tool_name).is_some() {
+                registry.record_collision(tool_name);
+            }
+        }
     }
     let tool_search_name = ToolName::plain(TOOL_SEARCH_TOOL_NAME);
-    if search_tool_enabled(turn_context)
-        && registry.runtimes().any(|runtime| {
-            runtime.tool_name() != tool_search_name
-                && runtime.exposure() == ToolExposure::Deferred
-                && runtime.search_info().is_some()
-        })
-    {
-        registry.remove(&tool_search_name);
-        append_tool_search_executor(turn_context, &mut registry, tool_search_handler_cache);
+    let search_exposure = if model_info.supports_search_tool
+        && registry.tool_policy.allows(&tool_search_name)
+        && registry.entries().any(|tool| {
+            tool.runtime.tool_name() != tool_search_name
+                && tool.exposure.is_deferred()
+                && tool.runtime.search_info().is_some()
+        }) {
+        Some(
+            if turn_context
+                .config
+                .features
+                .enabled(Feature::CodeModeToolSearch)
+            {
+                tool_exposure_with_namespace_override(
+                    turn_context,
+                    tool_search_name.clone(),
+                    ToolExposure::Direct,
+                )
+            } else {
+                ToolExposure::Direct
+            },
+        )
+    } else {
+        None
+    };
+    if search_exposure.is_some() {
+        if registry.remove(&tool_search_name).is_some() {
+            registry.record_collision(tool_search_name.clone());
+        }
+        // Special model tools own the namespace matching their wire identity, so
+        // regular namespace tools cannot advertise that same model-visible surface.
+        let conflicting_tool_names = registry
+            .entries()
+            .filter_map(|tool| {
+                let owned_spec;
+                let spec = if let Some(spec) = tool.runtime.immutable_spec() {
+                    spec.as_ref()
+                } else {
+                    owned_spec = tool.runtime.spec();
+                    &owned_spec
+                };
+                let ToolSpec::Namespace(namespace) = spec else {
+                    return None;
+                };
+                (namespace.name == tool_search_name.name).then(|| tool.runtime.tool_name())
+            })
+            .collect::<Vec<_>>();
+        for tool_name in conflicting_tool_names {
+            if registry.remove(&tool_name).is_some() {
+                registry.record_collision(tool_name);
+            }
+        }
     }
 
-    let code_mode_tool_names = register_code_mode_executors(turn_context, &mut registry);
+    prepare_function_description_prefixes(
+        turn_context,
+        model_info,
+        &mut registry,
+        search_exposure,
+    )?;
 
+<<<<<<< HEAD
     let ModelVisibleSpecs {
         specs,
         flat_tool_names,
@@ -302,15 +531,144 @@ pub(crate) fn finalize_tool_router(
             turn_context.config.multi_agent_v2.tool_namespace.clone(),
         ))
         .with_omitted_tools(omitted_tools)
+||||||| 413492cd6c
+    let model_visible_specs =
+        build_model_visible_specs(turn_context, &registry, &code_mode_tool_names, hosted_specs);
+    ToolRouter::from_parts(registry, model_visible_specs)
+=======
+    if let Some(exposure) = search_exposure {
+        append_tool_search_executor(
+            turn_context,
+            &mut registry,
+            tool_search_handler_cache,
+            exposure,
+        );
+    }
+
+    let indirect_prefixes = IndirectNamespacePrefixes::new(
+        model_messages.indirect_description_prefixes(),
+        registry.mcp_namespaces(),
+    )
+    .map_err(|error| CodexErrorDetails::InvalidRequest(error.to_string()))?;
+    let code_mode_tool_names =
+        register_code_mode_executors(turn_context, model_info, &mut registry, &indirect_prefixes);
+    let include_tool_namespaces_info = turn_context
+        .config
+        .tool_registry
+        .turn_metadata_includes_tool_info
+        && model_info.use_responses_lite;
+
+    if turn_context.config.tool_registry.error_on_tool_collisions {
+        if let Some(tool_name) = registry.first_collision() {
+            let namespace = tool_name.namespace.as_deref().unwrap_or("functions");
+            let name = format!("{namespace}.{}", tool_name.name);
+            return Err(CodexErrorDetails::ToolCollision(name).into());
+        }
+
+        let mut namespace_descriptions = BTreeMap::new();
+        let mut namespace_owners = BTreeMap::new();
+        for tool in registry.entries() {
+            let owned_spec;
+            let spec = if let Some(spec) = tool.runtime.immutable_spec() {
+                spec.as_ref()
+            } else {
+                owned_spec = tool.runtime.spec();
+                &owned_spec
+            };
+            if include_tool_namespaces_info && tool.exposure != ToolExposure::Hidden {
+                let namespace_name = match spec {
+                    ToolSpec::Namespace(namespace) => namespace.name.as_str(),
+                    ToolSpec::Function(_) | ToolSpec::Freeform(_) => DEFAULT_FUNCTION_NAMESPACE,
+                    ToolSpec::ToolSearch { .. } => TOOL_SEARCH_TOOL_NAME,
+                    ToolSpec::WebSearch { .. } => continue,
+                };
+                let owner = tool.runtime.mcp_server_name();
+                match namespace_owners.get(namespace_name) {
+                    Some(existing_owner) if existing_owner != &owner => {
+                        return Err(
+                            CodexErrorDetails::ToolCollision(namespace_name.to_string()).into()
+                        );
+                    }
+                    Some(_) => {}
+                    None => {
+                        namespace_owners.insert(namespace_name.to_string(), owner);
+                    }
+                }
+            }
+
+            let ToolSpec::Namespace(namespace) = spec else {
+                continue;
+            };
+            if namespace.description.trim().is_empty() {
+                continue;
+            }
+            match namespace_descriptions.entry(namespace.name.clone()) {
+                Entry::Vacant(entry) => {
+                    entry.insert(namespace.description.clone());
+                }
+                Entry::Occupied(entry) if entry.get() != &namespace.description => {
+                    return Err(CodexErrorDetails::ToolCollision(entry.key().clone()).into());
+                }
+                Entry::Occupied(_) => {}
+            }
+        }
+    }
+
+    let model_visible_specs = build_model_visible_specs(
+        turn_context,
+        model_info,
+        &registry,
+        &code_mode_tool_names,
+        hosted_specs,
+    );
+    let tool_namespaces_info = include_tool_namespaces_info
+        .then(|| {
+            collect_tool_namespaces_info(&registry, &code_mode_tool_names, &model_visible_specs)
+        })
+        .filter(|info| !info.is_empty());
+    let child_management_tools = required_child_management_tool_names(turn_context, model_info);
+
+    Ok(ToolRouter::from_parts(
+        registry,
+        model_visible_specs,
+        tool_mode,
+        code_mode_tool_names,
+        tool_namespaces_info,
+        &child_management_tools,
+    ))
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn apply_direct_model_only_namespace_overrides(
     turn_context: &TurnContext,
     registry: &mut ToolRegistry,
 ) {
-    for runtime in registry.runtimes_mut() {
-        let configured = runtime
-            .tool_name()
+    if turn_context
+        .config
+        .code_mode
+        .direct_only_tool_namespaces
+        .is_empty()
+    {
+        return;
+    }
+
+    for tool in registry.entries_mut() {
+        tool.exposure = tool_exposure_with_namespace_override(
+            turn_context,
+            tool.runtime.tool_name(),
+            tool.exposure,
+        );
+    }
+}
+
+fn tool_exposure_with_namespace_override(
+    turn_context: &TurnContext,
+    tool_name: ToolName,
+    exposure: ToolExposure,
+) -> ToolExposure {
+    if exposure.is_available_in_code_mode()
+        && tool_name
+            .with_default_namespace()
             .namespace
             .as_ref()
             .is_some_and(|namespace| {
@@ -319,9 +677,35 @@ fn apply_direct_model_only_namespace_overrides(
                     .code_mode
                     .direct_only_tool_namespaces
                     .contains(namespace)
-            });
-        if configured && runtime.exposure().is_available_in_code_mode() {
-            *runtime = override_tool_exposure(Arc::clone(runtime), ToolExposure::DirectModelOnly);
+            })
+    {
+        ToolExposure::DirectModelOnly
+    } else {
+        exposure
+    }
+}
+
+/// Run after namespace overrides so eligible third-party tools always remain deferred.
+fn enforce_strict_3p_tools(
+    turn_context: &TurnContext,
+    model_info: &ModelInfo,
+    registry: &mut ToolRegistry,
+) {
+    if !code_mode_only_strict_3p_tools(turn_context, model_info) {
+        return;
+    }
+
+    for tool in registry.entries_mut() {
+        // Remaining Hidden entries failed eligibility or budget checks; keep them hidden.
+        if !tool.runtime.is_third_party_tool() || tool.exposure == ToolExposure::Hidden {
+            continue;
+        }
+        if tool.exposure != ToolExposure::Deferred {
+            tracing::warn!(
+                tool_name = %tool.runtime.tool_name().with_default_namespace(),
+                "Deferring third-party tool because code_mode_only_strict_3p_tools is enabled"
+            );
+            tool.exposure = ToolExposure::Deferred;
         }
     }
 }
@@ -338,12 +722,14 @@ struct ModelVisibleSpecs {
 #[instrument(level = "trace", skip_all)]
 fn build_model_visible_specs(
     turn_context: &TurnContext,
+    model_info: &ModelInfo,
     registry: &ToolRegistry,
     code_mode_tool_names: &BTreeMap<String, ToolName>,
     hosted_specs: Vec<ToolSpec>,
 ) -> ModelVisibleSpecs {
     let namespace_tools = namespace_tools_enabled(turn_context);
     let mut specs = Vec::new();
+<<<<<<< HEAD
     // Without namespace support, namespaced tools are offered under flat names
     // instead of being dropped with their namespace: MCP tools (#515, #227)
     // and every other grouped tool (#547). Built-in tools go first so MCP tools
@@ -391,10 +777,42 @@ fn build_model_visible_specs(
                 }
                 spec => specs.push(spec),
             }
+||||||| 413492cd6c
+    for runtime in registry.runtimes() {
+        let tool_name = runtime.tool_name();
+        let exposure = runtime.exposure();
+        if exposure.is_direct() && !is_hidden_by_code_mode_only(turn_context, &tool_name, exposure)
+        {
+            let spec = runtime.spec();
+            specs.push(spec_for_model_request(
+                turn_context,
+                exposure,
+                &tool_name,
+                code_mode_tool_names,
+                spec,
+            ));
+=======
+    for tool in registry.entries() {
+        let exposure = tool.exposure;
+        if !is_directly_visible(turn_context, model_info, tool) {
+            continue;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
+
+        let tool_name = tool.runtime.tool_name();
+        let spec = Arc::unwrap_or_clone(tool.spec());
+        specs.push(spec_for_model_request(
+            turn_context,
+            model_info,
+            exposure,
+            &tool_name,
+            code_mode_tool_names,
+            spec,
+        ));
     }
     specs.extend(hosted_specs);
 
+<<<<<<< HEAD
     let mut specs: Vec<ToolSpec> = merge_into_namespaces(specs)
         .into_iter()
         .filter(|spec| namespace_tools || !matches!(spec, ToolSpec::Namespace(_)))
@@ -480,17 +898,40 @@ fn flat_namespace_function(
         };
     }
     Some(tool)
+||||||| 413492cd6c
+    merge_into_namespaces(specs)
+        .into_iter()
+        .filter(|spec| {
+            namespace_tools_enabled(turn_context) || !matches!(spec, ToolSpec::Namespace(_))
+        })
+        .collect()
+=======
+    let mcp_namespaces = registry
+        .mcp_namespaces()
+        .map(|(_, namespace)| namespace)
+        .collect();
+    merge_into_namespaces(specs, &mcp_namespaces)
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn spec_for_model_request(
     turn_context: &TurnContext,
+    model_info: &ModelInfo,
     exposure: ToolExposure,
     tool_name: &ToolName,
     code_mode_tool_names: &BTreeMap<String, ToolName>,
     spec: ToolSpec,
 ) -> ToolSpec {
+<<<<<<< HEAD
     let tool_mode = effective_tool_mode(turn_context);
     let spec = if matches!(tool_mode, ToolMode::CodeMode | ToolMode::CodeModeOnly)
+||||||| 413492cd6c
+    let tool_mode = effective_tool_mode(turn_context);
+    if matches!(tool_mode, ToolMode::CodeMode | ToolMode::CodeModeOnly)
+=======
+    let tool_mode = effective_tool_mode(turn_context, model_info);
+    if matches!(tool_mode, ToolMode::CodeMode | ToolMode::CodeModeOnly)
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         && exposure.is_available_in_code_mode()
         && !is_excluded_from_code_mode(turn_context, tool_name)
         && codex_code_mode::is_code_mode_nested_tool(spec.name())
@@ -500,7 +941,10 @@ fn spec_for_model_request(
             ))
             .is_some_and(|winner| winner == tool_name)
     {
-        codex_tools::augment_tool_spec_for_code_mode(spec)
+        codex_tools::augment_tool_spec_for_code_mode(
+            spec,
+            turn_context.config.code_mode.tool_input_schema_max_bytes,
+        )
     } else {
         spec
     };
@@ -526,17 +970,16 @@ fn spec_for_model_request(
 #[instrument(level = "trace", skip_all)]
 fn hosted_model_tool_specs(
     turn_context: &TurnContext,
+    model_info: &ModelInfo,
     registered_extension_tool_names: &[ToolName],
 ) -> Vec<ToolSpec> {
     // Responses Lite accepts schemas for client-executed tools, not hosted Responses tools.
-    if turn_context.model_info.use_responses_lite
-        || crate::guardian::is_guardian_reviewer_source(&turn_context.session_source)
-    {
+    if model_info.use_responses_lite {
         return Vec::new();
     }
 
     let mut specs = Vec::new();
-    let standalone_web_search_available = standalone_web_search_enabled(turn_context)
+    let standalone_web_search_available = standalone_web_search_enabled(turn_context, model_info)
         && registered_extension_tool_names.contains(&ToolName::namespaced("web", "run"));
     // `Some(Cached/Live/Disabled)` are the options for mode when standalone search is unavailable
     // and the provider supports hosted search. `None` prevents emitting a hosted search tool.
@@ -549,15 +992,11 @@ fn hosted_model_tool_specs(
     if let Some(hosted_web_search_tool) = create_web_search_tool(WebSearchToolOptions {
         web_search_mode,
         web_search_config,
-        web_search_tool_type: turn_context.model_info.web_search_tool_type,
+        web_search_tool_type: model_info.web_search_tool_type,
     }) {
         specs.push(hosted_web_search_tool);
     }
     specs
-}
-
-pub(crate) fn search_tool_enabled(turn_context: &TurnContext) -> bool {
-    turn_context.model_info.supports_search_tool && namespace_tools_enabled(turn_context)
 }
 
 pub(crate) fn tool_suggest_enabled(turn_context: &TurnContext) -> bool {
@@ -567,26 +1006,65 @@ pub(crate) fn tool_suggest_enabled(turn_context: &TurnContext) -> bool {
         && features.enabled(Feature::Plugins)
 }
 
-fn namespace_tools_enabled(turn_context: &TurnContext) -> bool {
-    turn_context.provider.capabilities().namespace_tools
-}
-
 fn multi_agent_v2_enabled(turn_context: &TurnContext) -> bool {
     turn_context.multi_agent_version == MultiAgentVersion::V2
 }
 
-fn collab_tools_enabled(turn_context: &TurnContext) -> bool {
+fn collab_tools_enabled(turn_context: &TurnContext, model_info: &ModelInfo) -> bool {
     match turn_context.multi_agent_version {
         MultiAgentVersion::Disabled => false,
         MultiAgentVersion::V1 => !exceeds_thread_spawn_depth_limit(
             next_thread_spawn_depth(&turn_context.session_source),
             turn_context.config.agent_max_depth,
         ),
-        MultiAgentVersion::V2 => true,
+        MultiAgentVersion::V2 => {
+            !turn_context.config.multi_agent_v2.disable_native_tools
+                && (turn_context.session_source.get_agent_path().is_none()
+                    || model_info.multi_agent_version == Some(MultiAgentVersion::V2))
+        }
     }
 }
 
-fn image_generation_available(turn_context: &TurnContext) -> bool {
+fn required_child_management_tool_names(
+    turn_context: &TurnContext,
+    model_info: &ModelInfo,
+) -> Vec<ToolName> {
+    if !collab_tools_enabled(turn_context, model_info) {
+        return Vec::new();
+    }
+
+    let (namespace, names): (_, &[&str]) = match turn_context.multi_agent_version {
+        MultiAgentVersion::Disabled => return Vec::new(),
+        MultiAgentVersion::V1 => (
+            Some(MULTI_AGENT_V1_NAMESPACE),
+            &["send_input", "wait_agent", "resume_agent", "close_agent"],
+        ),
+        MultiAgentVersion::V2 => (
+            turn_context.config.multi_agent_v2.tool_namespace.as_deref(),
+            if turn_context.config.multi_agent_v2.disable_direct_message {
+                &["interrupt_agent", "list_agents"]
+            } else {
+                &[
+                    "send_message",
+                    "followup_task",
+                    "interrupt_agent",
+                    "list_agents",
+                ]
+            },
+        ),
+    };
+    let mut tools = names
+        .iter()
+        .map(|name| ToolName::new(namespace.map(str::to_owned), (*name).to_owned()))
+        .collect::<Vec<_>>();
+    if multi_agent_v2_enabled(turn_context) && turn_context.config.multi_agent_v2.wait_agent_enabled
+    {
+        tools.push(ToolName::new(namespace.map(str::to_owned), "wait_agent"));
+    }
+    tools
+}
+
+fn image_generation_available(turn_context: &TurnContext, model_info: &ModelInfo) -> bool {
     if !turn_context
         .config
         .features
@@ -606,16 +1084,11 @@ fn image_generation_available(turn_context: &TurnContext) -> bool {
         return false;
     }
 
-    let capabilities = turn_context.provider.capabilities();
-    if !capabilities.image_generation || !capabilities.namespace_tools {
+    if !turn_context.provider.capabilities().image_generation {
         return false;
     }
 
-    if !turn_context
-        .model_info
-        .input_modalities
-        .contains(&InputModality::Image)
-    {
+    if !model_info.input_modalities.contains(&InputModality::Image) {
         return false;
     }
 
@@ -663,10 +1136,11 @@ fn agent_type_description(
 
 fn is_hidden_by_code_mode_only(
     turn_context: &TurnContext,
+    model_info: &ModelInfo,
     tool_name: &ToolName,
     exposure: ToolExposure,
 ) -> bool {
-    let tool_mode = effective_tool_mode(turn_context);
+    let tool_mode = effective_tool_mode(turn_context, model_info);
     tool_mode == ToolMode::CodeModeOnly
         && exposure.is_available_in_code_mode()
         && codex_code_mode::is_code_mode_nested_tool(&codex_tools::code_mode_name_for_tool_name(
@@ -674,7 +1148,22 @@ fn is_hidden_by_code_mode_only(
         ))
 }
 
+fn is_directly_visible(
+    turn_context: &TurnContext,
+    model_info: &ModelInfo,
+    tool: &RegisteredTool,
+) -> bool {
+    tool.exposure.is_direct()
+        && !is_hidden_by_code_mode_only(
+            turn_context,
+            model_info,
+            &tool.runtime.tool_name(),
+            tool.exposure,
+        )
+}
+
 fn is_excluded_from_code_mode(turn_context: &TurnContext, tool_name: &ToolName) -> bool {
+    let tool_name = tool_name.clone().with_default_namespace();
     tool_name.namespace.as_ref().is_some_and(|namespace| {
         turn_context
             .config
@@ -684,11 +1173,138 @@ fn is_excluded_from_code_mode(turn_context: &TurnContext, tool_name: &ToolName) 
     })
 }
 
+fn prepare_function_description_prefixes(
+    turn_context: &TurnContext,
+    model_info: &ModelInfo,
+    registry: &mut ToolRegistry,
+    search_exposure: Option<ToolExposure>,
+) -> CodexResult<()> {
+    let model_messages = ResolvedModelMessages::from_model(model_info);
+    let prefixes = model_messages.functions_namespace_functions_description_prefixes();
+    let mut available_tools = Vec::new();
+    if prefixes.is_some_and(|prefixes| !prefixes.is_empty()) {
+        let code_mode_enabled = matches!(
+            effective_tool_mode(turn_context, model_info),
+            ToolMode::CodeMode | ToolMode::CodeModeOnly
+        );
+        let search_name = ToolName::plain(TOOL_SEARCH_TOOL_NAME);
+        let search_visible = search_exposure.is_some_and(|exposure| {
+            !is_hidden_by_code_mode_only(turn_context, model_info, &search_name, exposure)
+                || (code_mode_enabled
+                    && registry
+                        .tool_policy
+                        .allows(&ToolName::plain(codex_code_mode::PUBLIC_TOOL_NAME))
+                    && turn_context
+                        .config
+                        .features
+                        .enabled(Feature::CodeModeToolSearch)
+                    && exposure.is_available_in_code_mode()
+                    && !is_excluded_from_code_mode(turn_context, &search_name))
+        });
+        available_tools.extend(
+            registry
+                .entries()
+                .filter(|tool| {
+                    is_directly_visible(turn_context, model_info, tool)
+                        || (search_visible
+                            && tool.exposure.is_deferred()
+                            && tool.runtime.search_info().is_some())
+                })
+                .map(|tool| tool.runtime.tool_name()),
+        );
+        available_tools.extend(
+            code_mode_tools(turn_context, model_info, registry)
+                .map(|(_, _, tool)| tool.runtime.tool_name()),
+        );
+        // These wrappers are generated after their inner descriptions are ready.
+        if code_mode_enabled {
+            available_tools.extend(
+                [
+                    codex_code_mode::PUBLIC_TOOL_NAME,
+                    codex_code_mode::WAIT_TOOL_NAME,
+                ]
+                .into_iter()
+                .map(ToolName::plain)
+                .filter(|name| registry.tool_policy.allows(name)),
+            );
+        }
+    }
+    registry
+        .apply_functions_namespace_function_prefixes(prefixes, available_tools)
+        .map_err(|error| CodexErrorDetails::InvalidRequest(error.to_owned()).into())
+}
+
+/// Select the same nested tools for prefix budgeting and Code Mode construction.
+/// A registered tool alone is not reachable when policy disallows the exec wrapper.
+fn code_mode_tools<'a>(
+    turn_context: &'a TurnContext,
+    model_info: &'a ModelInfo,
+    registry: &'a ToolRegistry,
+) -> impl Iterator<Item = (String, Arc<ToolSpec>, &'a RegisteredTool)> {
+    let tool_mode = effective_tool_mode(turn_context, model_info);
+    let enabled = matches!(tool_mode, ToolMode::CodeMode | ToolMode::CodeModeOnly)
+        && registry
+            .tool_policy
+            .allows(&ToolName::plain(codex_code_mode::PUBLIC_TOOL_NAME));
+    let mut seen = HashSet::new();
+    registry.entries().filter_map(move |tool| {
+        if !enabled || !tool.exposure.is_available_in_code_mode() {
+            return None;
+        }
+
+        let tool_name = tool.runtime.tool_name();
+        // Deferred third-party tools still need an exec route to be discoverable.
+        if is_excluded_from_code_mode(turn_context, &tool_name)
+            && !(code_mode_only_strict_3p_tools(turn_context, model_info)
+                && tool.runtime.is_third_party_tool())
+        {
+            return None;
+        }
+
+        let spec = tool.spec();
+        // Derive the name without serializing and augmenting every tool schema.
+        let code_mode_name = match spec.as_ref() {
+            ToolSpec::Function(_) | ToolSpec::Freeform(_) => {
+                codex_tools::code_mode_name_for_tool_name(&tool_name)
+            }
+            ToolSpec::Namespace(namespace) if !namespace.tools.is_empty() => {
+                codex_tools::code_mode_name_for_tool_name(&tool_name)
+            }
+            ToolSpec::ToolSearch { .. }
+                if turn_context
+                    .config
+                    .features
+                    .enabled(Feature::CodeModeToolSearch) =>
+            {
+                codex_tools::code_mode_name_for_tool_name(&tool_name)
+            }
+            ToolSpec::Namespace(_) | ToolSpec::ToolSearch { .. } | ToolSpec::WebSearch { .. } => {
+                return None;
+            }
+        };
+        if !codex_code_mode::is_code_mode_nested_tool(&code_mode_name) {
+            return None;
+        }
+        let code_mode_name = codex_code_mode::normalize_code_mode_identifier(&code_mode_name);
+        if !seen.insert(code_mode_name.clone()) {
+            tracing::warn!(
+                tool_name = %tool_name,
+                code_mode_name = %code_mode_name,
+                "skipping tool with a duplicate normalized code-mode name"
+            );
+            return None;
+        }
+        Some((code_mode_name, spec, tool))
+    })
+}
+
 fn register_code_mode_executors(
     turn_context: &TurnContext,
+    model_info: &ModelInfo,
     registry: &mut ToolRegistry,
+    indirect_prefixes: &IndirectNamespacePrefixes<'_>,
 ) -> BTreeMap<String, ToolName> {
-    let tool_mode = effective_tool_mode(turn_context);
+    let tool_mode = effective_tool_mode(turn_context, model_info);
     if !matches!(tool_mode, ToolMode::CodeMode | ToolMode::CodeModeOnly) {
         return BTreeMap::new();
     }
@@ -697,87 +1313,83 @@ fn register_code_mode_executors(
     let mut code_mode_nested_tool_specs = Vec::new();
     let mut exec_prompt_tool_specs = Vec::new();
     let mut deferred_exec_prompt_tool_specs = Vec::new();
-    let deferred_tools_guidance_enabled = search_tool_enabled(turn_context);
-    for executor in registry.runtimes() {
-        let exposure = executor.exposure();
-        if !exposure.is_available_in_code_mode() {
-            continue;
-        }
-
-        let tool_name = executor.tool_name();
-        if is_excluded_from_code_mode(turn_context, &tool_name) {
-            continue;
-        }
-
-        let spec = executor.spec();
-        let Some(code_mode_tool) = codex_tools::tool_spec_to_code_mode_tool_definition(&spec)
-        else {
-            continue;
-        };
-
-        let code_mode_name = code_mode_tool.name;
-        match code_mode_tool_names.entry(codex_code_mode::normalize_code_mode_identifier(
-            &code_mode_name,
-        )) {
-            Entry::Vacant(entry) => {
-                entry.insert(tool_name);
-            }
-            Entry::Occupied(_) => {
-                tracing::warn!(
-                    tool_name = %tool_name,
-                    code_mode_name = %code_mode_name,
-                    "skipping tool with a duplicate normalized code-mode name"
-                );
-                continue;
-            }
-        }
+    let mut included_deferred_mcp_output_schema = false;
+    let deferred_tools_guidance_enabled = model_info.supports_search_tool;
+    for (name, spec, tool) in code_mode_tools(turn_context, model_info, registry) {
+        code_mode_tool_names.insert(name, tool.runtime.tool_name());
+        let exposure = tool.exposure;
+        let cached_runtime = tool.cached_runtime().cloned();
 
         if exposure == ToolExposure::Deferred {
-            if deferred_tools_guidance_enabled {
-                deferred_exec_prompt_tool_specs.push(spec.clone());
+            if deferred_tools_guidance_enabled
+                && (cached_runtime.is_none() || !included_deferred_mcp_output_schema)
+            {
+                if cached_runtime.is_some() {
+                    included_deferred_mcp_output_schema = true;
+                }
+                deferred_exec_prompt_tool_specs.push(Arc::clone(&spec));
             }
         } else {
-            exec_prompt_tool_specs.push(spec.clone());
+            exec_prompt_tool_specs.push(spec.as_ref().clone());
         }
-        code_mode_nested_tool_specs.push(spec);
+        code_mode_nested_tool_specs.push((spec, cached_runtime));
     }
 
-    if turn_context.model_info.use_responses_lite {
-        turn_context
-            .turn_metadata_state
-            .set_code_mode_tool_names(code_mode_tool_names.clone());
+    let deferred_tool_discovery = if exec_prompt_tool_specs
+        .iter()
+        .any(|spec| matches!(spec, ToolSpec::ToolSearch { .. }))
+    {
+        codex_code_mode::DeferredToolDiscovery::RankedSearch
+    } else {
+        codex_code_mode::DeferredToolDiscovery::Catalog
+    };
+    let mut namespace_descriptions = code_mode_namespace_descriptions(&exec_prompt_tool_specs);
+    let code_mode_input_schema_max_bytes =
+        turn_context.config.code_mode.tool_input_schema_max_bytes;
+    let mut enabled_tools = collect_code_mode_exec_prompt_tool_definitions(
+        exec_prompt_tool_specs.iter(),
+        code_mode_input_schema_max_bytes,
+    );
+    let deferred_tools = collect_code_mode_exec_prompt_tool_definitions(
+        deferred_exec_prompt_tool_specs.iter().map(Arc::as_ref),
+        code_mode_input_schema_max_bytes,
+    );
+    let model_messages = ResolvedModelMessages::from_model(model_info);
+    if tool_mode == ToolMode::CodeModeOnly {
+        indirect_prefixes.apply_exec_prompt(&mut enabled_tools, &mut namespace_descriptions);
     }
-
-    let namespace_descriptions = code_mode_namespace_descriptions(&exec_prompt_tool_specs);
-    let mut enabled_tools =
-        collect_code_mode_exec_prompt_tool_definitions(exec_prompt_tool_specs.iter());
     enabled_tools
         .sort_by(|left, right| compare_code_mode_tools(left, right, &namespace_descriptions));
-    let deferred_tools =
-        collect_code_mode_exec_prompt_tool_definitions(deferred_exec_prompt_tool_specs.iter());
-    let default_exec_yield_time_ms =
-        default_exec_yield_time_override_ms(&turn_context.config.features)
-            .unwrap_or(codex_code_mode::DEFAULT_EXEC_YIELD_TIME_MS);
-
+    let exec_description = codex_code_mode::build_exec_tool_description(
+        &enabled_tools,
+        &deferred_tools,
+        &namespace_descriptions,
+        turn_context.config.code_mode.default_exec_yield_time_ms,
+        tool_mode == ToolMode::CodeModeOnly,
+        if unified_image_budget_enabled(&turn_context.config.features, model_info) {
+            codex_code_mode::ImageDetailVisibility::Hidden
+        } else {
+            codex_code_mode::ImageDetailVisibility::Visible
+        },
+        deferred_tool_discovery,
+        model_messages.code_mode(),
+    );
     let execute_handler = CodeModeExecuteHandler::new(
-        create_code_mode_tool(
-            &enabled_tools,
-            &deferred_tools,
-            &namespace_descriptions,
-            default_exec_yield_time_ms,
-            tool_mode == ToolMode::CodeModeOnly,
-        ),
+        create_code_mode_tool(exec_description),
         code_mode_nested_tool_specs,
     );
 
-    registry.prepend_trusted(Arc::new(CodeModeWaitHandler));
+    registry.prepend_trusted(Arc::new(CodeModeWaitHandler::new(
+        model_messages.code_mode_wait_description_override(),
+        model_messages.code_mode_wait_parameters_override(),
+    )));
     registry.prepend_trusted(Arc::new(execute_handler));
 
     code_mode_tool_names
 }
 
 #[instrument(level = "trace", skip_all, fields(tool_spec_count = specs.len()))]
-fn merge_into_namespaces(specs: Vec<ToolSpec>) -> Vec<ToolSpec> {
+fn merge_into_namespaces(specs: Vec<ToolSpec>, mcp_namespaces: &HashSet<&str>) -> Vec<ToolSpec> {
     let mut merged_specs = Vec::with_capacity(specs.len());
     let mut namespace_indices = BTreeMap::<String, usize>::new();
     for spec in specs {
@@ -808,14 +1420,22 @@ fn merge_into_namespaces(specs: Vec<ToolSpec>) -> Vec<ToolSpec> {
             continue;
         };
 
-        namespace.tools.sort_by(|left, right| match (left, right) {
-            (
-                ResponsesApiNamespaceTool::Function(left),
-                ResponsesApiNamespaceTool::Function(right),
-            ) => left.name.cmp(&right.name),
+        namespace.tools.sort_by(|left, right| {
+            let left_name = match left {
+                ResponsesApiNamespaceTool::Function(tool) => &tool.name,
+                ResponsesApiNamespaceTool::Custom(tool) => &tool.name,
+            };
+            let right_name = match right {
+                ResponsesApiNamespaceTool::Function(tool) => &tool.name,
+                ResponsesApiNamespaceTool::Custom(tool) => &tool.name,
+            };
+            left_name.cmp(right_name)
         });
 
-        if namespace.description.trim().is_empty() {
+        // Native tools resolve their own defaults, including intentional empty descriptions.
+        if namespace.description.trim().is_empty()
+            && mcp_namespaces.contains(namespace.name.as_str())
+        {
             namespace.description = default_namespace_description(&namespace.name);
         }
     }
@@ -847,30 +1467,18 @@ fn code_mode_namespace_descriptions(
 
 #[instrument(level = "trace", skip_all)]
 fn add_core_tool_sources(context: &CoreToolPlanContext<'_>, registry: &mut ToolRegistry) {
-    // Guardian reviewers receive only `exec_command`, `write_stdin`, and `view_image`
-    // when an environment is available; all general tool sources stay excluded.
-    if crate::guardian::is_guardian_reviewer_source(&context.turn_context.session_source) {
-        let turn_context = context.turn_context;
-        let environment_mode = tool_environment_mode(context.environments);
-        if environment_mode.has_environment() {
-            let include_environment_id = matches!(environment_mode, ToolEnvironmentMode::Multiple);
-            registry.add(ExecCommandHandler::new(ExecCommandHandlerOptions {
-                allow_login_shell: turn_context.config.permissions.allow_login_shell,
-                exec_permission_approvals_enabled: false,
-                include_environment_id,
-                include_shell_parameter: unified_exec_should_include_shell_parameter(
-                    turn_context,
-                    context.environments,
-                ),
-            }));
-            registry.add(WriteStdinHandler);
-            registry.add(ViewImageHandler::new(ViewImageToolOptions {
-                can_request_original_image_detail: can_request_original_image_detail(
-                    &turn_context.model_info,
-                ),
-                include_environment_id,
-            }));
-        }
+    // The startup ceiling applies to the thread and every selected environment.
+    if context.tool_policy.require_managed_sandbox
+        && (!matches!(
+            context.turn_context.permission_profile(),
+            PermissionProfile::Managed { .. }
+        ) || context.environments.turn_environments().any(|environment| {
+            !matches!(
+                environment.permission_profile(),
+                PermissionProfile::Managed { .. }
+            )
+        }))
+    {
         return;
     }
 
@@ -880,10 +1488,9 @@ fn add_core_tool_sources(context: &CoreToolPlanContext<'_>, registry: &mut ToolR
     add_collaboration_tools(context, registry);
 }
 
-fn standalone_web_search_enabled(turn_context: &TurnContext) -> bool {
-    namespace_tools_enabled(turn_context)
-        && turn_context.provider.capabilities().web_search
-        && (turn_context.model_info.use_responses_lite
+fn standalone_web_search_enabled(turn_context: &TurnContext, model_info: &ModelInfo) -> bool {
+    turn_context.provider.capabilities().web_search
+        && (model_info.use_responses_lite
             || turn_context
                 .config
                 .features
@@ -892,7 +1499,27 @@ fn standalone_web_search_enabled(turn_context: &TurnContext) -> bool {
 }
 
 fn tool_environment_mode(environments: &TurnEnvironmentSnapshot) -> ToolEnvironmentMode {
-    ToolEnvironmentMode::from_count(environments.turn_environments().count())
+    // Keep environment selectors stable as selected attachments change readiness.
+    ToolEnvironmentMode::from_count(environments.environments.len())
+}
+
+fn should_include_windows_shell_guidance(environments: &TurnEnvironmentSnapshot) -> bool {
+    let mut environments = environments.turn_environments();
+    let Some(environment) = environments.next() else {
+        return false;
+    };
+    let executor_platform_os = if environments.next().is_none() {
+        environment.executor_platform_os.as_deref()
+    } else {
+        None
+    };
+
+    // One tool schema can target any ready environment. Multi-environment turns and legacy
+    // executors without platform OS information preserve the host-derived guidance.
+    match executor_platform_os {
+        Some(platform_os) => platform_os == "windows",
+        None => cfg!(windows),
+    }
 }
 
 #[instrument(level = "trace", skip_all)]
@@ -900,66 +1527,50 @@ fn add_shell_tools(context: &CoreToolPlanContext<'_>, registry: &mut ToolRegistr
     let turn_context = context.turn_context;
     let features = turn_context.config.features.get();
     let environment_mode = tool_environment_mode(context.environments);
-    if !environment_mode.has_environment() {
+    if !features.enabled(Feature::ShellTool)
+        || matches!(context.model_info.shell_type, ConfigShellToolType::Disabled)
+    {
         return;
     }
 
-    let allow_login_shell = turn_context.config.permissions.allow_login_shell;
-    let exec_permission_approvals_enabled = features.enabled(Feature::ExecPermissionApprovals);
-    let include_environment_id = matches!(environment_mode, ToolEnvironmentMode::Multiple);
-    let shell_command_options = ShellCommandHandlerOptions {
-        backend_config: shell_command_backend_for_features(features),
-        allow_login_shell,
-        exec_permission_approvals_enabled,
-    };
-
-    match shell_type_for_model_and_features(&turn_context.model_info, features) {
-        ConfigShellToolType::UnifiedExec => {
-            registry.add(ExecCommandHandler::new(ExecCommandHandlerOptions {
-                allow_login_shell,
-                exec_permission_approvals_enabled,
-                include_environment_id,
-                include_shell_parameter: unified_exec_should_include_shell_parameter(
-                    turn_context,
-                    context.environments,
-                ),
-            }));
-            registry.add(WriteStdinHandler);
-
-            // Keep the legacy shell tool registered while unified exec is
-            // model-visible.
-            registry.add_with_exposure(
-                ShellCommandHandler::new(shell_command_options),
-                ToolExposure::Hidden,
-            );
-        }
-        ConfigShellToolType::Disabled => {}
-        ConfigShellToolType::Default
-        | ConfigShellToolType::Local
-        | ConfigShellToolType::ShellCommand => {
-            registry.add(ShellCommandHandler::new(shell_command_options));
-        }
+    if context.tool_policy.require_unified_exec && !features.enabled(Feature::UnifiedExec) {
+        return;
     }
-}
-
-fn unified_exec_should_include_shell_parameter(
-    turn_context: &TurnContext,
-    environments: &TurnEnvironmentSnapshot,
-) -> bool {
-    !matches!(
-        &turn_context.unified_exec_shell_mode,
-        UnifiedExecShellMode::ZshFork(_)
-    ) || environments
-        .turn_environments()
-        .any(|environment| environment.environment.is_remote())
+    let exec_permission_approvals_enabled = features.enabled(Feature::ExecPermissionApprovals)
+        && context.tool_policy.expose_additional_permissions;
+    let include_environment_id = matches!(environment_mode, ToolEnvironmentMode::Multiple);
+    let options = ExecCommandHandlerOptions {
+        allow_tty: features.enabled(Feature::UnifiedExecTty),
+        exec_permission_approvals_enabled,
+        include_environment_id,
+        include_windows_shell_guidance: should_include_windows_shell_guidance(context.environments),
+    };
+    if features.enabled(Feature::UnifiedExec) {
+        registry.add(ExecCommandHandler::new(options));
+        registry.add(WriteStdinHandler);
+    } else {
+        // Managed requirements are the only configuration path that can keep
+        // unified exec disabled. Preserve command execution without exposing a
+        // resumable process or write_stdin authority prohibited by policy.
+        registry.add(ExecCommandHandler::one_shot(options));
+    }
 }
 
 #[instrument(level = "trace", skip_all)]
 fn add_mcp_resource_tools(context: &CoreToolPlanContext<'_>, registry: &mut ToolRegistry) {
-    if context.mcp.has_servers() {
-        registry.add(ListMcpResourcesHandler);
-        registry.add(ListMcpResourceTemplatesHandler);
-        registry.add(ReadMcpResourceHandler);
+    if context.mcp.has_servers()
+        || effective_tool_mode(context.turn_context, context.model_info) == ToolMode::CodeModeOnly
+    {
+        let messages = ResolvedModelMessages::from_model(context.model_info).mcp_resources();
+        registry.add(ListMcpResourcesHandler::new(
+            messages.and_then(|messages| messages.list_mcp_resources.as_ref()),
+        ));
+        registry.add(ListMcpResourceTemplatesHandler::new(
+            messages.and_then(|messages| messages.list_mcp_resource_templates.as_ref()),
+        ));
+        registry.add(ReadMcpResourceHandler::new(
+            messages.and_then(|messages| messages.read_mcp_resource.as_ref()),
+        ));
     }
 }
 
@@ -994,24 +1605,104 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
         );
     }
 
-    if environment_mode.has_environment() && features.enabled(Feature::RequestPermissionsTool) {
+    if turn_context.config.experimental_request_user_input_enabled
+        && !turn_context.session_source.is_non_root_agent()
+        && context
+            .model_info
+            .experimental_supported_tools
+            .iter()
+            // Existing model catalogs still advertise the previous name.
+            .any(|tool| {
+                matches!(
+                    tool.as_str(),
+                    "request_user_input_async" | "send_user_message_async"
+                )
+            })
+    {
+        let model_messages = ResolvedModelMessages::from_model(context.model_info);
+        registry.add_with_exposure(
+            RequestUserInputAsyncHandler {
+                description: model_messages
+                    .request_user_input_async_description()
+                    .to_string(),
+                parameters: model_messages
+                    .request_user_input_async_parameters_override()
+                    .map(str::to_owned),
+            },
+            ToolExposure::DirectModelOnly,
+        );
+    }
+
+    if !turn_context.session_source.is_non_root_agent()
+        && (features.enabled(Feature::SendMessageToUserAsync)
+            || context
+                .model_info
+                .experimental_supported_tools
+                .iter()
+                .any(|tool| tool == "send_message_to_user_async"))
+    {
+        registry.add_with_exposure(SendMessageToUserAsyncHandler, ToolExposure::DirectModelOnly);
+    }
+
+    if features.enabled(Feature::RequestPermissionsTool) {
         registry.add(RequestPermissionsHandler);
     }
 
     if features.enabled(Feature::TokenBudget) {
-        registry.add_with_exposure(NewContextWindowHandler, ToolExposure::DirectModelOnly);
-        registry.add(GetContextRemainingHandler);
+        let model_messages = ResolvedModelMessages::from_model(context.model_info);
+        let messages = model_messages.context_management();
+        registry.add_with_exposure(
+            NewContextWindowHandler::new(
+                messages.and_then(|messages| messages.new_context.as_ref()),
+            ),
+            ToolExposure::DirectModelOnly,
+        );
+        registry.add(GetContextRemainingHandler::new(
+            messages.and_then(|messages| messages.get_context_remaining.as_ref()),
+        ));
     }
 
-    if features.enabled(Feature::CurrentTimeReminder) {
+    let current_time_reminder_enabled = features.enabled(Feature::CurrentTimeReminder);
+    let model_has_clock = context
+        .model_info
+        .experimental_supported_tools
+        .iter()
+        .any(|tool| tool == "clock");
+    if current_time_reminder_enabled || model_has_clock {
         registry.add(CurrentTimeHandler);
     }
     if features.enabled(Feature::SleepTool)
+<<<<<<< HEAD
         || turn_context
             .config
             .current_time_reminder
             .as_ref()
             .is_some_and(|config| config.sleep_tool)
+||||||| 413492cd6c
+        if turn_context
+            .config
+            .current_time_reminder
+            .as_ref()
+            .is_some_and(|config| config.sleep_tool)
+        {
+            registry.add(SleepHandler);
+        }
+=======
+        && match turn_context.config.sleep_tool_mode {
+            SleepToolMode::AlwaysOn => true,
+            SleepToolMode::ModelDriven => {
+                if current_time_reminder_enabled {
+                    turn_context
+                        .config
+                        .current_time_reminder
+                        .as_ref()
+                        .is_some_and(|config| config.sleep_tool)
+                } else {
+                    model_has_clock
+                }
+            }
+        }
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     {
         registry.add(SleepHandler);
     }
@@ -1032,8 +1723,15 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
         ));
     }
 
+<<<<<<< HEAD
     if environment_mode.has_environment() && edit_tools_allowed_by_permission_profile(turn_context)
     {
+||||||| 413492cd6c
+    if environment_mode.has_environment() && turn_context.model_info.apply_patch_tool_type.is_some()
+    {
+=======
+    if context.model_info.apply_patch_tool_type.is_some() {
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let include_environment_id = matches!(environment_mode, ToolEnvironmentMode::Multiple);
         if native_structured_edit_protocol_enabled(turn_context) {
             registry.add(StructuredEditHandler::new(include_environment_id));
@@ -1045,7 +1743,7 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
         }
     }
 
-    if turn_context
+    if context
         .model_info
         .experimental_supported_tools
         .iter()
@@ -1054,11 +1752,15 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
         registry.add(TestSyncHandler);
     }
 
-    if environment_mode.has_environment() {
+    if features.enabled(Feature::ViewImage) {
         let include_environment_id = matches!(environment_mode, ToolEnvironmentMode::Multiple);
         registry.add(ViewImageHandler::new(ViewImageToolOptions {
             can_request_original_image_detail: can_request_original_image_detail(
-                &turn_context.model_info,
+                context.model_info,
+            ),
+            unified_image_budget: unified_image_budget_enabled(
+                &turn_context.config.features,
+                context.model_info,
             ),
             include_environment_id,
         }));
@@ -1083,20 +1785,31 @@ fn edit_tools_allowed_by_permission_profile(turn_context: &TurnContext) -> bool 
 #[instrument(level = "trace", skip_all)]
 fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut ToolRegistry) {
     let turn_context = context.turn_context;
-    if collab_tools_enabled(turn_context) {
+    if collab_tools_enabled(turn_context, context.model_info) {
         if multi_agent_v2_enabled(turn_context) {
+            let model_messages = ResolvedModelMessages::from_model(context.model_info);
+            let spawn_agent_description =
+                model_messages.multi_agent_tool_description_override("spawn_agent");
             let exposure = if turn_context.config.multi_agent_v2.non_code_mode_only {
                 ToolExposure::DirectModelOnly
             } else {
                 ToolExposure::Direct
             };
-            let tool_namespace = namespace_tools_enabled(turn_context)
-                .then_some(turn_context.config.multi_agent_v2.tool_namespace.as_deref())
-                .flatten();
+            let tool_namespace = turn_context.config.multi_agent_v2.tool_namespace.as_deref();
+            let native_review = if turn_context
+                .config
+                .features
+                .enabled(Feature::GuardianNativeMultiAgentHistory)
+            {
+                NativeReview::Required
+            } else {
+                NativeReview::Disabled
+            };
             let agent_type_description =
                 agent_type_description(turn_context, context.default_agent_type_description);
             let hide_spawn_agent_metadata =
                 turn_context.config.multi_agent_v2.hide_spawn_agent_metadata;
+<<<<<<< HEAD
             let spawn_options = SpawnAgentToolOptions {
                 available_models: spawn_agent_available_models(
                     turn_context,
@@ -1117,36 +1830,113 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                 expose_account: turn_context.config.features.enabled(Feature::NamedAccounts),
             };
             registry.register_trusted(override_tool_exposure(
+||||||| 413492cd6c
+            registry.register_trusted(override_tool_exposure(
+=======
+            registry.register_trusted_with_native_review(
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 multi_agent_v2_handler(
+<<<<<<< HEAD
                     SpawnAgentHandlerV2::new(spawn_options.clone()),
+||||||| 413492cd6c
+                    SpawnAgentHandlerV2::new(SpawnAgentToolOptions {
+                        available_models: turn_context.available_models.clone(),
+                        agent_type_description,
+                        expose_agent_type: !turn_context.config.agent_roles.is_empty(),
+                        hide_agent_type_model_reasoning: hide_spawn_agent_metadata,
+                        expose_spawn_agent_model_overrides: turn_context
+                            .config
+                            .multi_agent_v2
+                            .expose_spawn_agent_model_overrides,
+                        multi_agent_version: turn_context.multi_agent_version,
+                        usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
+                    }),
+=======
+                    SpawnAgentHandlerV2::new(
+                        SpawnAgentToolOptions {
+                            available_models: turn_context.available_models.clone(),
+                            multi_agent_version: turn_context.multi_agent_version,
+                            model_catalog_in_context: turn_context
+                                .config
+                                .features
+                                .enabled(Feature::ModelCatalogInContext),
+                            agent_type_description,
+                            expose_agent_type: !turn_context.config.agent_roles.is_empty(),
+                            hide_agent_type_model_reasoning: hide_spawn_agent_metadata,
+                            expose_spawn_agent_model_overrides: turn_context
+                                .config
+                                .multi_agent_v2
+                                .expose_spawn_agent_model_overrides,
+                            usage_hint_text: turn_context
+                                .config
+                                .multi_agent_v2
+                                .usage_hint_text
+                                .clone(),
+                        },
+                        spawn_agent_description.map(str::to_owned),
+                    ),
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     tool_namespace,
+                    // Spawn composes the selected description with inheritance and usage guidance.
+                    /*description_override*/
+                    None,
+                    model_messages.multi_agent_tool_parameters_override("spawn_agent"),
                 ),
                 exposure,
-            ));
-            registry.register_trusted(override_tool_exposure(
-                multi_agent_v2_handler(SendMessageHandlerV2, tool_namespace),
-                exposure,
-            ));
-            registry.register_trusted(override_tool_exposure(
-                multi_agent_v2_handler(FollowupTaskHandlerV2, tool_namespace),
-                exposure,
-            ));
+                native_review,
+            );
+            if !turn_context.config.multi_agent_v2.disable_direct_message {
+                registry.register_trusted_with_native_review(
+                    multi_agent_v2_handler(
+                        SendMessageHandlerV2,
+                        tool_namespace,
+                        model_messages.multi_agent_tool_description_override("send_message"),
+                        model_messages.multi_agent_tool_parameters_override("send_message"),
+                    ),
+                    exposure,
+                    native_review,
+                );
+                registry.register_trusted_with_native_review(
+                    multi_agent_v2_handler(
+                        FollowupTaskHandlerV2,
+                        tool_namespace,
+                        model_messages.multi_agent_tool_description_override("followup_task"),
+                        model_messages.multi_agent_tool_parameters_override("followup_task"),
+                    ),
+                    exposure,
+                    native_review,
+                );
+            }
             if turn_context.config.multi_agent_v2.wait_agent_enabled {
-                registry.register_trusted(override_tool_exposure(
+                registry.register_trusted_with_exposure(
                     multi_agent_v2_handler(
                         WaitAgentHandlerV2::new(context.wait_agent_timeouts),
                         tool_namespace,
+                        model_messages.multi_agent_tool_description_override("wait_agent"),
+                        model_messages.multi_agent_tool_parameters_override("wait_agent"),
                     ),
                     exposure,
-                ));
+                );
             }
-            registry.register_trusted(override_tool_exposure(
-                multi_agent_v2_handler(InterruptAgentHandler, tool_namespace),
+            registry.register_trusted_with_native_review(
+                multi_agent_v2_handler(
+                    InterruptAgentHandler,
+                    tool_namespace,
+                    model_messages.multi_agent_tool_description_override("interrupt_agent"),
+                    model_messages.multi_agent_tool_parameters_override("interrupt_agent"),
+                ),
                 exposure,
-            ));
-            registry.register_trusted(override_tool_exposure(
-                multi_agent_v2_handler(ListAgentsHandlerV2, tool_namespace),
+                native_review,
+            );
+            registry.register_trusted_with_exposure(
+                multi_agent_v2_handler(
+                    ListAgentsHandlerV2,
+                    tool_namespace,
+                    model_messages.multi_agent_tool_description_override("list_agents"),
+                    model_messages.multi_agent_tool_parameters_override("list_agents"),
+                ),
                 exposure,
+<<<<<<< HEAD
             ));
             if uses_openai_reserved_collaboration_schema(turn_context) {
                 // OpenAI's reserved collaboration schema encrypts assignment fields. That is
@@ -1166,14 +1956,20 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                     exposure,
                 ));
             }
+||||||| 413492cd6c
+            ));
+=======
+            );
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         } else {
             let agent_type_description =
                 agent_type_description(turn_context, context.default_agent_type_description);
-            let exposure = if search_tool_enabled(turn_context) {
+            let exposure = if context.model_info.supports_search_tool {
                 ToolExposure::Deferred
             } else {
                 ToolExposure::Direct
             };
+<<<<<<< HEAD
             let spawn_options = SpawnAgentToolOptions {
                 available_models: spawn_agent_available_models(
                     turn_context,
@@ -1190,6 +1986,37 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                 expose_account: turn_context.config.features.enabled(Feature::NamedAccounts),
             };
             registry.add_with_exposure(SpawnAgentHandler::new(spawn_options.clone()), exposure);
+||||||| 413492cd6c
+            registry.add_with_exposure(
+                SpawnAgentHandler::new(SpawnAgentToolOptions {
+                    available_models: turn_context.available_models.clone(),
+                    agent_type_description,
+                    expose_agent_type: !turn_context.config.agent_roles.is_empty(),
+                    hide_agent_type_model_reasoning: false,
+                    expose_spawn_agent_model_overrides: true,
+                    multi_agent_version: turn_context.multi_agent_version,
+                    usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
+                }),
+                exposure,
+            );
+=======
+            registry.add_with_exposure(
+                SpawnAgentHandler::new(SpawnAgentToolOptions {
+                    available_models: turn_context.available_models.clone(),
+                    multi_agent_version: turn_context.multi_agent_version,
+                    model_catalog_in_context: turn_context
+                        .config
+                        .features
+                        .enabled(Feature::ModelCatalogInContext),
+                    agent_type_description,
+                    expose_agent_type: !turn_context.config.agent_roles.is_empty(),
+                    hide_agent_type_model_reasoning: false,
+                    expose_spawn_agent_model_overrides: true,
+                    usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
+                }),
+                exposure,
+            );
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             registry.add_with_exposure(SendInputHandler, exposure);
             registry.add_with_exposure(ResumeAgentHandler, exposure);
             registry
@@ -1259,12 +2086,8 @@ fn append_tool_search_executor(
     turn_context: &TurnContext,
     registry: &mut ToolRegistry,
     tool_search_handler_cache: &ToolSearchHandlerCache,
+    exposure: ToolExposure,
 ) {
-    let search_infos = registry
-        .runtimes()
-        .filter(|executor| executor.exposure() == ToolExposure::Deferred)
-        .filter_map(|executor| executor.search_info())
-        .collect::<Vec<_>>();
     let source_listing = if turn_context
         .config
         .features
@@ -1274,15 +2097,17 @@ fn append_tool_search_executor(
     } else {
         ToolSearchSourceListing::Include
     };
-    registry.register_trusted(tool_search_handler_cache.get_or_build(search_infos, source_listing));
+    let handler = tool_search_handler_cache.get_or_build(registry, source_listing);
+    registry.register_trusted_with_exposure(handler, exposure);
 }
 
 fn append_extension_tool_executors(
     turn_context: &TurnContext,
-    executors: impl IntoIterator<Item = Arc<dyn ToolExecutor<ExtensionToolCall>>>,
+    model_info: &ModelInfo,
+    executors: impl IntoIterator<Item = Arc<dyn for<'call> ToolExecutor<ExtensionToolCall<'call>>>>,
     registry: &mut ToolRegistry,
 ) -> Option<ToolName> {
-    let standalone_web_search_enabled = standalone_web_search_enabled(turn_context);
+    let standalone_web_search_enabled = standalone_web_search_enabled(turn_context, model_info);
     let web_search_mode_on = turn_context.config.web_search_mode.value() != WebSearchMode::Disabled;
     let mut standalone_web_search_tool = None;
 
@@ -1293,7 +2118,7 @@ fn append_extension_tool_executors(
             continue;
         }
         if tool_name == ToolName::namespaced(IMAGE_GEN_NAMESPACE, IMAGEGEN_TOOL_NAME)
-            && !image_generation_available(turn_context)
+            && !image_generation_available(turn_context, model_info)
         {
             continue;
         }
@@ -1306,6 +2131,7 @@ fn append_extension_tool_executors(
     standalone_web_search_tool
 }
 
+<<<<<<< HEAD
 fn multi_agent_v2_handler(
     handler: impl CoreToolRuntime + 'static,
     namespace: Option<&str>,
@@ -1547,6 +2373,76 @@ impl CoreToolRuntime for MultiAgentV2NamespaceOverride {
     }
 }
 
+||||||| 413492cd6c
+fn multi_agent_v2_handler(
+    handler: impl CoreToolRuntime + 'static,
+    namespace: Option<&str>,
+) -> Arc<dyn CoreToolRuntime> {
+    match namespace {
+        Some(namespace) => Arc::new(MultiAgentV2NamespaceOverride {
+            handler: Arc::new(handler),
+            namespace: namespace.to_string(),
+        }),
+        None => Arc::new(handler),
+    }
+}
+
+struct MultiAgentV2NamespaceOverride {
+    handler: Arc<dyn CoreToolRuntime>,
+    namespace: String,
+}
+
+impl ToolExecutor<ToolInvocation> for MultiAgentV2NamespaceOverride {
+    fn tool_name(&self) -> ToolName {
+        ToolName::namespaced(self.namespace.clone(), self.handler.tool_name().name)
+    }
+
+    fn spec(&self) -> ToolSpec {
+        match self.handler.spec() {
+            ToolSpec::Function(tool) => ToolSpec::Namespace(ResponsesApiNamespace {
+                name: self.namespace.clone(),
+                description: MULTI_AGENT_V2_NAMESPACE_DESCRIPTION.to_string(),
+                tools: vec![ResponsesApiNamespaceTool::Function(tool)],
+            }),
+            spec => spec,
+        }
+    }
+
+    fn exposure(&self) -> ToolExposure {
+        self.handler.exposure()
+    }
+
+    fn supports_parallel_tool_calls(&self) -> bool {
+        self.handler.supports_parallel_tool_calls()
+    }
+
+    fn search_info(&self) -> Option<ToolSearchInfo> {
+        self.handler.search_info()
+    }
+
+    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+        self.handler.handle(invocation)
+    }
+}
+
+impl CoreToolRuntime for MultiAgentV2NamespaceOverride {
+    fn wait_until_ready<'a>(&'a self, session: &'a Arc<Session>) -> Option<BoxFuture<'a, ()>> {
+        self.handler.wait_until_ready(session)
+    }
+
+    fn matches_kind(&self, payload: &crate::tools::context::ToolPayload) -> bool {
+        self.handler.matches_kind(payload)
+    }
+
+    fn create_diff_consumer(
+        &self,
+    ) -> Option<Box<dyn crate::tools::registry::ToolArgumentDiffConsumer>> {
+        self.handler.create_diff_consumer()
+    }
+}
+
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 fn compare_code_mode_tools(
     left: &codex_code_mode::ToolDefinition,
     right: &codex_code_mode::ToolDefinition,

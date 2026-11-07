@@ -1,16 +1,28 @@
 ---
 source: tui/src/chatwidget/tests/exec_flow.rs
-expression: contents
+expression: normalize_snapshot_paths(contents)
 ---
 
 
   Would you like to make the following edits?
 
-  Reason: The model wants to apply changes
+  Description: The model wants to apply changes
+  Destination: /tmp/project/README.md
 
+<<<<<<< HEAD
 › 1. Yes, proceed (y)
   2. Yes, and don't ask again for these files
   3. No, and tell Corbanu Terminal what to do differently (esc)
+||||||| 413492cd6c
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for these files (a)
+  3. No, and tell Codex what to do differently (esc)
+=======
+
+› 1. Yes, proceed (y)                                                           
+  2. Yes, and don't ask again for these files (a)
+  3. No, and tell Codex what to do differently (esc)
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
   A letter in brackets only highlights its option; enter confirms it. Options   
   that last beyond this request: choose with ↑/↓, then enter.                   

@@ -1,8 +1,19 @@
+use crate::metrics::MEMORY_STORAGE_BYTES;
+use crate::workspace::memory_storage_bytes;
 use codex_core::CodexThread;
 use codex_core::NewThread;
 use codex_core::Prompt;
+<<<<<<< HEAD
+||||||| 413492cd6c
+use codex_core::ResponseEvent;
+=======
+use codex_core::ResponseEvent;
+use codex_core::StartIfIdleSubmission;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_core::StartThreadOptions;
 use codex_core::ThreadManager;
+use codex_core::TurnInputRequest;
+use codex_core::TurnStartOptions;
 use codex_core::config::Config;
 use codex_core::detached_memory_responses_metadata;
 use codex_core::memory_stage_one::LabelledStageOneInput;
@@ -20,19 +31,34 @@ use codex_model_provider::SharedModelProvider;
 use codex_model_provider::create_model_provider;
 use codex_otel::SessionTelemetry;
 use codex_otel::TelemetryAuthMode;
+use codex_protocol::MemoryVersion;
 use codex_protocol::SessionId;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::InternalSessionSource;
-use codex_protocol::protocol::Op;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::ThreadSource;
 use codex_protocol::protocol::TokenUsage;
 use codex_protocol::user_input::UserInput;
+<<<<<<< HEAD
 use codex_state::StateRuntime;
+||||||| 413492cd6c
+use codex_rollout_trace::InferenceTraceContext;
+use codex_state::StateRuntime;
+=======
+use codex_rollout_trace::InferenceTraceContext;
+use codex_state::MemoryStore;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_terminal_detection::user_agent;
+<<<<<<< HEAD
+||||||| 413492cd6c
+use futures::StreamExt;
+=======
+use futures::StreamExt;
+use std::path::Path;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -43,6 +69,7 @@ pub(crate) struct SpawnedConsolidationAgent {
 
 #[derive(Clone, Debug)]
 pub(crate) struct StageOneRequestContext {
+    version: MemoryVersion,
     pub(crate) model_info: ModelInfo,
     pub(crate) session_telemetry: SessionTelemetry,
     pub(crate) reasoning_effort: Option<ReasoningEffort>,
@@ -52,25 +79,45 @@ pub(crate) struct StageOneRequestContext {
 
 impl StageOneRequestContext {
     pub(crate) fn start_timer(&self, name: &str) -> Option<codex_otel::Timer> {
-        self.session_telemetry.start_timer(name, &[]).ok()
+        self.session_telemetry
+            .start_timer(name, &memory_metric_tags(self.version, &[]))
+            .ok()
     }
 
     pub(crate) fn counter(&self, name: &str, inc: i64, tags: &[(&str, &str)]) {
-        self.session_telemetry.counter(name, inc, tags);
+        self.session_telemetry
+            .counter(name, inc, &memory_metric_tags(self.version, tags));
     }
 
     pub(crate) fn histogram(&self, name: &str, value: i64, tags: &[(&str, &str)]) {
-        self.session_telemetry.histogram(name, value, tags);
+        self.session_telemetry
+            .histogram(name, value, &memory_metric_tags(self.version, tags));
     }
 }
 
 pub(crate) struct MemoryStartupContext {
+    version: MemoryVersion,
     thread_id: ThreadId,
     thread: Arc<CodexThread>,
     thread_manager: Arc<ThreadManager>,
     auth_manager: Arc<AuthManager>,
     provider: SharedModelProvider,
     session_telemetry: SessionTelemetry,
+}
+
+fn memory_metric_tags<'a>(
+    version: MemoryVersion,
+    tags: &[(&'a str, &'a str)],
+) -> Vec<(&'a str, &'a str)> {
+    let mut tags = tags.to_vec();
+    tags.push((
+        "memory_version",
+        match version {
+            MemoryVersion::V1 => "v1",
+            MemoryVersion::V2 => "v2",
+        },
+    ));
+    tags
 }
 
 fn build_session_telemetry(
@@ -90,7 +137,7 @@ fn build_session_telemetry(
         &config.model_provider,
         auth_manager.codex_api_key_env_enabled(),
     );
-    SessionTelemetry::new(
+    let mut session_telemetry = SessionTelemetry::new(
         thread_id,
         model,
         model,
@@ -102,7 +149,11 @@ fn build_session_telemetry(
         user_agent(),
         source,
     )
-    .with_auth_env(auth_env_telemetry.to_otel_metadata())
+    .with_auth_env(auth_env_telemetry.to_otel_metadata());
+    if !config.otel.log_sse_deltas {
+        session_telemetry = session_telemetry.without_sse_delta_logs();
+    }
+    session_telemetry
 }
 
 impl MemoryStartupContext {
@@ -170,6 +221,7 @@ impl MemoryStartupContext {
         );
 
         Self {
+            version: config.memories.version,
             thread_id,
             thread,
             thread_manager,
@@ -183,8 +235,49 @@ impl MemoryStartupContext {
         self.thread_id
     }
 
-    pub(crate) fn state_db(&self) -> Option<Arc<StateRuntime>> {
-        self.thread.state_db()
+    pub(crate) async fn record_storage_size(&self, root: &Path) {
+        let bytes = match memory_storage_bytes(root).await {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                tracing::warn!("failed measuring memory storage size: {err}");
+                return;
+            }
+        };
+        self.session_telemetry.histogram_with_boundaries(
+            MEMORY_STORAGE_BYTES,
+            i64::try_from(bytes).unwrap_or(i64::MAX),
+            // Log-spaced byte buckets cover small summaries through large memory collections.
+            &[
+                0.0,
+                1_024.0,
+                4_096.0,
+                16_384.0,
+                65_536.0,
+                262_144.0,
+                1_048_576.0,
+                4_194_304.0,
+                16_777_216.0,
+                67_108_864.0,
+                268_435_456.0,
+                1_073_741_824.0,
+            ],
+            &memory_metric_tags(self.version, &[]),
+        );
+    }
+
+    pub(crate) async fn memory_store(&self) -> Option<MemoryStore> {
+        match self
+            .thread
+            .state_db()?
+            .memories_for_version(self.version)
+            .await
+        {
+            Ok(store) => Some(store),
+            Err(err) => {
+                tracing::warn!("failed opening memory store: {err}");
+                None
+            }
+        }
     }
 
     pub(crate) fn provider(&self) -> &dyn ModelProvider {
@@ -224,15 +317,19 @@ impl MemoryStartupContext {
     }
 
     pub(crate) fn counter(&self, name: &str, inc: i64, tags: &[(&str, &str)]) {
-        self.session_telemetry.counter(name, inc, tags);
+        self.session_telemetry
+            .counter(name, inc, &memory_metric_tags(self.version, tags));
     }
 
     pub(crate) fn histogram(&self, name: &str, value: i64, tags: &[(&str, &str)]) {
-        self.session_telemetry.histogram(name, value, tags);
+        self.session_telemetry
+            .histogram(name, value, &memory_metric_tags(self.version, tags));
     }
 
     pub(crate) fn start_timer(&self, name: &str) -> Option<codex_otel::Timer> {
-        self.session_telemetry.start_timer(name, &[]).ok()
+        self.session_telemetry
+            .start_timer(name, &memory_metric_tags(self.version, &[]))
+            .ok()
     }
 
     pub(crate) async fn stage_one_request_context(
@@ -252,7 +349,8 @@ impl MemoryStartupContext {
             .unwrap_or(model_info.default_reasoning_summary);
 
         StageOneRequestContext {
-            model_info,
+            version: self.version,
+            model_info: Arc::unwrap_or_clone(model_info.model),
             session_telemetry: build_session_telemetry(
                 &self.auth_manager,
                 self.thread_id,
@@ -291,14 +389,59 @@ impl MemoryStartupContext {
         let session_source = config_snapshot.session_source;
         let session_id = SessionId::from(self.thread_id);
         let session_id_string = session_id.to_string();
+<<<<<<< HEAD
+||||||| 413492cd6c
+        let model_client = ModelClient::new(
+            Some(Arc::clone(&self.auth_manager)),
+            AgentIdentityAuthPolicy::JwtOnly,
+            self.thread_id,
+            config.model_provider.clone(),
+            session_source.clone(),
+            config_snapshot.originator,
+            config.model_verbosity,
+            config.features.enabled(Feature::EnableRequestCompression),
+            config.features.enabled(Feature::RuntimeMetrics),
+            /*beta_features_header*/ None,
+            /*concurrent_reasoning_summaries_enabled*/ false,
+            /*attestation_provider*/ None,
+            config.http_client_factory(),
+        );
+
+        let mut client_session = model_client.new_session();
+=======
+        let model_client = ModelClient::new(
+            Some(Arc::clone(&self.auth_manager)),
+            AgentIdentityAuthPolicy::JwtOnly,
+            self.thread_id,
+            config.model_provider.clone(),
+            session_source.clone(),
+            config_snapshot.originator,
+            config.model_verbosity,
+            config.features.enabled(Feature::ContentItemKinds),
+            config.features.enabled(Feature::ReasoningEffortOverride),
+            config.features.enabled(Feature::EnableRequestCompression),
+            config.features.enabled(Feature::RuntimeMetrics),
+            /*beta_features_header*/ None,
+            /*concurrent_reasoning_summaries_enabled*/ false,
+            /*output_token_replay_enabled*/ false,
+            /*attestation_provider*/ None,
+            config.http_client_factory(),
+            config.workspace_routing_context(),
+            Vec::new(),
+        );
+
+        let mut client_session = model_client.new_session();
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let window_id = format!("{}:0", self.thread_id);
         let responses_metadata = detached_memory_responses_metadata(
+            &self.thread_manager,
             installation_id,
             session_id_string,
             self.thread_id.to_string(),
             window_id,
             &session_source,
             &config.cwd,
+            &config_snapshot.permission_profile,
             /*sandbox*/ None,
         )
         .await;
@@ -321,6 +464,7 @@ impl MemoryStartupContext {
         &self,
         config: Config,
         prompt: Vec<UserInput>,
+        workspace_lock: Arc<crate::MemoryWorkspaceLock>,
     ) -> anyhow::Result<SpawnedConsolidationAgent> {
         // Consolidation is paid inference on this conversation's behalf with
         // no thread of its own: its requests are recorded under this one
@@ -340,24 +484,39 @@ impl MemoryStartupContext {
             thread_id, thread, ..
         } = self.thread_manager.start_thread(options).await?;
 
+        // Cancellation or a shutdown timeout must not release workspace ownership
+        // while the agent can still write. The phase-2 handler keeps another owner
+        // through the final baseline reset after this thread has terminated.
+        let running_thread = Arc::clone(&thread);
+        tokio::spawn(async move {
+            running_thread.wait_until_terminated().await;
+            drop(workspace_lock);
+        });
+
         let agent = SpawnedConsolidationAgent { thread_id, thread };
-        if let Err(err) = agent
+        let submit_result = match agent
             .thread
-            .submit(Op::UserInput {
-                items: prompt,
-                final_output_json_schema: None,
-                responsesapi_client_metadata: None,
-                additional_context: Default::default(),
-                thread_settings: Default::default(),
-            })
+            .start_turn_if_idle(
+                TurnInputRequest::user_input(prompt).on_start(TurnStartOptions {
+                    turn_trigger: Some("memory_consolidation".to_owned()),
+                    ..Default::default()
+                }),
+            )
             .await
         {
+            Ok(StartIfIdleSubmission::Started { .. }) => Ok(()),
+            Ok(submission) => Err(anyhow::anyhow!(
+                "memory consolidation input was not started: {submission:?}"
+            )),
+            Err(err) => Err(err.into()),
+        };
+        if let Err(err) = submit_result {
             if let Err(shutdown_err) = self.shutdown_consolidation_agent(agent).await {
                 tracing::warn!(
                     "failed to shut down consolidation agent after submit error: {shutdown_err}"
                 );
             }
-            return Err(err.into());
+            return Err(err);
         }
 
         Ok(agent)

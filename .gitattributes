@@ -1,5 +1,6 @@
 codex-rs/app-server-protocol/schema/** linguist-generated
 codex-rs/hooks/schema/generated/** linguist-generated
+<<<<<<< HEAD
 *.snap -whitespace
 *.sha256 text eol=lf
 scripts/security_platform_probe.py text eol=lf
@@ -11,3 +12,8 @@ qa/security-levels/classifier/*.json text eol=lf
 qa/security-levels/classifier/**/*.json text eol=lf
 qa/security-levels/planning/openclaw-2026-08-28/*.json text eol=lf
 qa/security-levels/planning/openclaw-2026-08-28/**/*.json text eol=lf
+||||||| 413492cd6c
+=======
+third_party/voice/sources.json text eol=lf
+patches/v8_array_sort_elements_kind.patch text eol=lf
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

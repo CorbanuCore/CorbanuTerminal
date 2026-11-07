@@ -25,4 +25,10 @@ expression: normalize_snapshot_paths(term.backend().vt100().screen().contents())
 
 › Ask Corbanu Terminal to do anything
 
+<<<<<<< HEAD
   Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -…
+||||||| 413492cd6c
+  gpt-5.6-sol default · /tmp/project
+=======
+  GPT-5.6-Sol default · /tmp/project
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

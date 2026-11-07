@@ -1,29 +1,74 @@
-// All this file should be replaced by the existing fragment implementation ofc
+//! Extension prompt placement with content and producer attribution kept together.
+
+use codex_context_fragments::AnnotatedContent;
+use codex_context_fragments::ContextualUserFragment;
+use codex_context_fragments::RenderedFragment;
+use codex_protocol::models::ContentItem;
+use codex_protocol::models::ContentItemKind;
+use codex_protocol::models::ContentItemMetadata;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PromptSlot {
     DeveloperPolicy,
     DeveloperCapabilities,
-    ContextualUser,
-    SeparateDeveloper,
+    /// Content inside the context-window message, supplied by `contribute_thread_context`.
+    ContextWindow,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PromptFragment {
     slot: PromptSlot,
+<<<<<<< HEAD
     text: String,
     source_id: Option<&'static str>,
     stored_data: bool,
+||||||| 413492cd6c
+    text: String,
+=======
+    content: AnnotatedContent,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl PromptFragment {
-    /// Creates a prompt fragment for the given slot.
-    pub fn new(slot: PromptSlot, text: impl Into<String>) -> Self {
+    /// Places a contextual fragment in the prompt, preserving its content, kind, and source.
+    /// The slot determines placement within the developer message, regardless of its original role.
+    pub fn from_fragment(slot: PromptSlot, fragment: &impl ContextualUserFragment) -> Self {
         Self {
             slot,
+<<<<<<< HEAD
             text: text.into(),
             source_id: None,
             stored_data: false,
+||||||| 413492cd6c
+            text: text.into(),
+=======
+            content: fragment.render_fragment().into_parts().1,
+        }
+    }
+
+    /// Creates harness-provided context for the given slot.
+    pub fn new(slot: PromptSlot, text: impl Into<String>, content_kind: ContentItemKind) -> Self {
+        Self {
+            slot,
+            content: AnnotatedContent::text(text, content_kind, ContentItemMetadata::harness()),
+        }
+    }
+
+    /// Creates tool-supplied context without changing its prompt placement.
+    pub fn tool(
+        slot: PromptSlot,
+        text: impl Into<String>,
+        content_kind: ContentItemKind,
+        namespace: String,
+    ) -> Self {
+        Self {
+            slot,
+            content: AnnotatedContent::text(
+                text,
+                content_kind,
+                ContentItemMetadata::tool(Some(namespace.into())),
+            ),
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 
@@ -47,18 +92,13 @@ impl PromptFragment {
     }
 
     /// Creates a developer-policy prompt fragment.
-    pub fn developer_policy(text: impl Into<String>) -> Self {
-        Self::new(PromptSlot::DeveloperPolicy, text)
+    pub fn developer_policy(text: impl Into<String>, content_kind: ContentItemKind) -> Self {
+        Self::new(PromptSlot::DeveloperPolicy, text, content_kind)
     }
 
     /// Creates a developer-capabilities prompt fragment.
-    pub fn developer_capability(text: impl Into<String>) -> Self {
-        Self::new(PromptSlot::DeveloperCapabilities, text)
-    }
-
-    /// Creates a separate top-level developer prompt fragment.
-    pub fn separate_developer(text: impl Into<String>) -> Self {
-        Self::new(PromptSlot::SeparateDeveloper, text)
+    pub fn developer_capability(text: impl Into<String>, content_kind: ContentItemKind) -> Self {
+        Self::new(PromptSlot::DeveloperCapabilities, text, content_kind)
     }
 
     /// Returns the target prompt slot.
@@ -66,9 +106,25 @@ impl PromptFragment {
         self.slot
     }
 
-    /// Returns the model-visible text.
-    pub fn text(&self) -> &str {
-        &self.text
+    /// Returns the model-visible content.
+    pub fn content(&self) -> &ContentItem {
+        self.content.content()
+    }
+
+    /// Returns the producer-owned classification of the model-visible content.
+    pub fn content_kind(&self) -> &ContentItemKind {
+        self.content.kind()
+    }
+
+    /// Consumes the placement wrapper when assembling a shared context message.
+    pub fn into_content(self) -> AnnotatedContent {
+        self.content
+    }
+}
+
+impl From<PromptFragment> for RenderedFragment {
+    fn from(fragment: PromptFragment) -> Self {
+        Self::new("developer", fragment.content)
     }
 
     /// Returns the stable producer ID, if the fragment is attributed.

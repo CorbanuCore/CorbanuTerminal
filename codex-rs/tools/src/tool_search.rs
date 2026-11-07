@@ -1,15 +1,50 @@
 use crate::JsonSchema;
 use crate::LoadableToolSpec;
+use crate::ResponsesApiNamespace;
 use crate::ResponsesApiNamespaceTool;
 use crate::ResponsesApiTool;
+use crate::ToolName;
 use crate::ToolSearchSourceInfo;
 use crate::ToolSpec;
 use crate::default_namespace_description;
+use codex_protocol::DEFAULT_FUNCTION_NAMESPACE;
+use std::sync::Arc;
 
 #[derive(Clone, PartialEq)]
 pub struct ToolSearchEntry {
     pub search_text: String,
-    pub output: LoadableToolSpec,
+    spec: Arc<ToolSpec>,
+}
+
+impl ToolSearchEntry {
+    /// Iterate candidate identities without materializing their tool schemas.
+    pub fn tool_names(&self) -> impl Iterator<Item = ToolName> + '_ {
+        let (namespace, name, tools): (&str, Option<&str>, &[ResponsesApiNamespaceTool]) =
+            match self.spec.as_ref() {
+                ToolSpec::Function(tool) => (DEFAULT_FUNCTION_NAMESPACE, Some(&tool.name), &[]),
+                ToolSpec::Freeform(tool) => (DEFAULT_FUNCTION_NAMESPACE, Some(&tool.name), &[]),
+                ToolSpec::Namespace(namespace) => {
+                    (&namespace.name, None, namespace.tools.as_slice())
+                }
+                ToolSpec::ToolSearch { .. } | ToolSpec::WebSearch { .. } => {
+                    unreachable!("search entries contain only loadable tools");
+                }
+            };
+        name.into_iter()
+            .chain(tools.iter().map(|tool| match tool {
+                ResponsesApiNamespaceTool::Function(tool) => tool.name.as_str(),
+                ResponsesApiNamespaceTool::Custom(tool) => tool.name.as_str(),
+            }))
+            .map(move |name| ToolName::namespaced(namespace, name))
+    }
+
+    /// Materialize only selected results; output schemas remain shared until discarded.
+    pub fn to_loadable_spec(&self) -> LoadableToolSpec {
+        let Some(output) = normalize_search_spec(self.spec.as_ref().clone()) else {
+            unreachable!("search entries contain only loadable tools");
+        };
+        output
+    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -19,6 +54,21 @@ pub struct ToolSearchInfo {
 }
 
 impl ToolSearchInfo {
+    /// Keep the immutable catalog snapshot alive without duplicating its schemas.
+    pub fn from_shared_spec(
+        search_text: String,
+        spec: Arc<ToolSpec>,
+        source_info: Option<ToolSearchSourceInfo>,
+    ) -> Option<Self> {
+        match spec.as_ref() {
+            ToolSpec::Function(_) | ToolSpec::Freeform(_) | ToolSpec::Namespace(_) => Some(Self {
+                entry: ToolSearchEntry { search_text, spec },
+                source_info,
+            }),
+            ToolSpec::ToolSearch { .. } | ToolSpec::WebSearch { .. } => None,
+        }
+    }
+
     pub fn from_tool_spec(
         spec: ToolSpec,
         source_info: Option<ToolSearchSourceInfo>,
@@ -32,6 +82,7 @@ impl ToolSearchInfo {
         spec: ToolSpec,
         source_info: Option<ToolSearchSourceInfo>,
     ) -> Option<Self> {
+<<<<<<< HEAD
         let spec_search_text = default_tool_search_text(&spec);
         let search_text = combine_search_text(search_text, spec_search_text);
         let output = match spec {
@@ -56,16 +107,45 @@ impl ToolSearchInfo {
             }
         };
 
+||||||| 413492cd6c
+        let output = match spec {
+            ToolSpec::Function(mut tool) => {
+                tool.defer_loading = Some(true);
+                tool.output_schema = None;
+                LoadableToolSpec::Function(tool)
+            }
+            ToolSpec::Namespace(mut namespace) => {
+                if namespace.description.trim().is_empty() {
+                    namespace.description = default_namespace_description(&namespace.name);
+                }
+                for tool in &mut namespace.tools {
+                    let ResponsesApiNamespaceTool::Function(tool) = tool;
+                    tool.defer_loading = Some(true);
+                    tool.output_schema = None;
+                }
+                LoadableToolSpec::Namespace(namespace)
+            }
+            ToolSpec::ToolSearch { .. } | ToolSpec::WebSearch { .. } | ToolSpec::Freeform(_) => {
+                return None;
+            }
+        };
+
+=======
+        // Dynamic-tool cache entries compare normalized specs by value.
+        // Preserve that behavior; shared MCP specs normalize only when selected.
+        let output = normalize_search_spec(spec)?;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         Some(Self {
             entry: ToolSearchEntry {
                 search_text,
-                output,
+                spec: Arc::new(output.into()),
             },
             source_info,
         })
     }
 }
 
+<<<<<<< HEAD
 fn combine_search_text(primary: String, fallback: String) -> String {
     let primary = primary.trim();
     let fallback = fallback.trim();
@@ -78,6 +158,43 @@ fn combine_search_text(primary: String, fallback: String) -> String {
         (false, true) => primary.to_string(),
         (false, false) => format!("{primary} {fallback}"),
     }
+||||||| 413492cd6c
+=======
+fn normalize_search_spec(spec: ToolSpec) -> Option<LoadableToolSpec> {
+    let mut namespace = match spec {
+        ToolSpec::Function(tool) => ResponsesApiNamespace {
+            name: DEFAULT_FUNCTION_NAMESPACE.to_string(),
+            description: default_namespace_description(DEFAULT_FUNCTION_NAMESPACE),
+            tools: vec![ResponsesApiNamespaceTool::Function(tool)],
+        },
+        ToolSpec::Freeform(tool) => ResponsesApiNamespace {
+            name: DEFAULT_FUNCTION_NAMESPACE.to_string(),
+            description: default_namespace_description(DEFAULT_FUNCTION_NAMESPACE),
+            tools: vec![ResponsesApiNamespaceTool::Custom(tool)],
+        },
+        ToolSpec::Namespace(namespace) => namespace,
+        ToolSpec::ToolSearch { .. } | ToolSpec::WebSearch { .. } => {
+            return None;
+        }
+    };
+
+    if namespace.description.trim().is_empty() {
+        namespace.description = default_namespace_description(&namespace.name);
+    }
+    for tool in &mut namespace.tools {
+        match tool {
+            ResponsesApiNamespaceTool::Function(tool) => {
+                tool.defer_loading = Some(true);
+                tool.output_schema = None;
+                tool.parameters.mcp_input_schema_max_bytes = None;
+            }
+            ResponsesApiNamespaceTool::Custom(tool) => {
+                tool.defer_loading = Some(true);
+            }
+        }
+    }
+    Some(LoadableToolSpec::Namespace(namespace))
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn default_tool_search_text(spec: &ToolSpec) -> String {
@@ -89,8 +206,16 @@ fn default_tool_search_text(spec: &ToolSpec) -> String {
             push_search_part(&mut parts, namespace.name.clone());
             push_search_part(&mut parts, namespace.description.clone());
             for tool in &namespace.tools {
-                let ResponsesApiNamespaceTool::Function(tool) = tool;
-                append_function_search_text(tool, &mut parts);
+                match tool {
+                    ResponsesApiNamespaceTool::Function(tool) => {
+                        append_function_search_text(tool, &mut parts);
+                    }
+                    ResponsesApiNamespaceTool::Custom(tool) => {
+                        push_search_part(&mut parts, tool.name.clone());
+                        push_search_part(&mut parts, tool.description.clone());
+                        push_search_part(&mut parts, tool.format.syntax.clone());
+                    }
+                }
             }
         }
         ToolSpec::ToolSearch { description, .. } => {
@@ -118,9 +243,9 @@ fn append_function_search_text(tool: &ResponsesApiTool, parts: &mut Vec<String>)
 
 fn append_schema_search_text(schema: &JsonSchema, parts: &mut Vec<String>) {
     if let Some(description) = &schema.description {
-        push_search_part(parts, description.clone());
+        push_search_part(parts, description.to_string());
     }
-    if let Some(properties) = &schema.properties {
+    if let Some(properties) = schema.properties.as_deref() {
         for (name, schema) in properties {
             push_search_part(parts, name.clone());
             append_schema_search_text(schema, parts);

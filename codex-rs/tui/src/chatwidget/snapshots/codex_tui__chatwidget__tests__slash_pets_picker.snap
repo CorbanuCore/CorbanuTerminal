@@ -1,11 +1,13 @@
 ---
 source: tui/src/chatwidget/tests/slash_commands.rs
+assertion_line: 2890
 expression: popup
 ---
   Select Pet
   Choose a pet to wake in the terminal.
 
   Type to filter pets...
+<<<<<<< HEAD
   Disable terminal pets
   BSOD                   A tiny blue-screen
                          gremlin
@@ -23,3 +25,34 @@ expression: popup
                          for new ideas
                                          3 / 9
   Press enter to confirm or esc to go back
+||||||| 413492cd6c
+  Disable terminal pets
+  BSOD                   A tiny blue-screen
+                         gremlin
+› Codex                  The original Codex
+                         companion
+  Dewey                  A tidy duck for calm         Loading preview...
+                         workspace days
+  Fireball               Hot path energy for
+                         fast iteration
+  Null Signal            Quiet signal from the
+                         void
+  Rocky                  A steady rock when
+                         the diff gets large
+  Seedy                  Small green shoots
+                         for new ideas
+
+  Press enter to confirm or esc to go back
+=======
+
+  Disable terminal pets
+  BSOD                                                Loading preview...
+› Codex
+  Dewey
+  Fireball
+  Null Signal
+  Rocky
+  Seedy
+↓
+  enter select · esc back
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

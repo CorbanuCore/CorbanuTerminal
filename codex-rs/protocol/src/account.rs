@@ -16,6 +16,7 @@ pub enum PlanType {
     Plus,
     Pro,
     ProLite,
+    ProMax,
     Team,
     #[serde(rename = "self_serve_business_prolite")]
     #[ts(rename = "self_serve_business_prolite")]
@@ -33,6 +34,16 @@ pub enum PlanType {
     EnterpriseCbpUsageBased,
     Enterprise,
     Edu,
+    #[serde(rename = "edu_plus")]
+    #[ts(rename = "edu_plus")]
+    EduPlus,
+    #[serde(rename = "edu_pro")]
+    #[ts(rename = "edu_pro")]
+    EduPro,
+    Sci,
+    #[serde(rename = "sci_plus")]
+    #[ts(rename = "sci_plus")]
+    SciPlus,
     #[serde(other)]
     Unknown,
 }
@@ -48,6 +59,7 @@ pub enum ProviderAccount {
     AmazonBedrock {
         uses_codex_managed_credentials: bool,
     },
+    Gcp,
 }
 
 impl PlanType {
@@ -68,19 +80,16 @@ impl PlanType {
         )
     }
 
+    /// Groups education plans by workspace capabilities without losing their SKU identity.
+    pub fn is_education_like(self) -> bool {
+        matches!(self, Self::Edu | Self::EduPlus | Self::EduPro)
+    }
+
     pub fn is_workspace_account(self) -> bool {
-        matches!(
-            self,
-            Self::Team
-                | Self::SelfServeBusinessProLite
-                | Self::SelfServeBusinessUsageBased
-                | Self::Business
-                | Self::Ent26
-                | Self::EnterpriseCbpAutomation
-                | Self::EnterpriseCbpUsageBased
-                | Self::Enterprise
-                | Self::Edu
-        )
+        self.is_team_like()
+            || self.is_business_like()
+            || self.is_education_like()
+            || matches!(self, Self::Enterprise | Self::Sci | Self::SciPlus)
     }
 }
 
@@ -101,6 +110,7 @@ impl From<KnownPlan> for PlanType {
             KnownPlan::Plus => Self::Plus,
             KnownPlan::Pro => Self::Pro,
             KnownPlan::ProLite => Self::ProLite,
+            KnownPlan::ProMax => Self::ProMax,
             KnownPlan::Team => Self::Team,
             KnownPlan::SelfServeBusinessProLite => Self::SelfServeBusinessProLite,
             KnownPlan::SelfServeBusinessUsageBased => Self::SelfServeBusinessUsageBased,
@@ -110,6 +120,10 @@ impl From<KnownPlan> for PlanType {
             KnownPlan::EnterpriseCbpUsageBased => Self::EnterpriseCbpUsageBased,
             KnownPlan::Enterprise => Self::Enterprise,
             KnownPlan::Edu => Self::Edu,
+            KnownPlan::EduPlus => Self::EduPlus,
+            KnownPlan::EduPro => Self::EduPro,
+            KnownPlan::Sci => Self::Sci,
+            KnownPlan::SciPlus => Self::SciPlus,
         }
     }
 }
@@ -219,6 +233,12 @@ mod tests {
         );
         assert_eq!(PlanType::Enterprise.is_workspace_account(), true);
         assert_eq!(PlanType::Edu.is_workspace_account(), true);
+        assert_eq!(PlanType::EduPlus.is_workspace_account(), true);
+        assert_eq!(PlanType::EduPro.is_workspace_account(), true);
+        for plan in [KnownPlan::Sci, KnownPlan::SciPlus] {
+            assert!(plan.is_workspace_account());
+            assert!(PlanType::from(plan).is_workspace_account());
+        }
         assert_eq!(PlanType::Pro.is_workspace_account(), false);
     }
 

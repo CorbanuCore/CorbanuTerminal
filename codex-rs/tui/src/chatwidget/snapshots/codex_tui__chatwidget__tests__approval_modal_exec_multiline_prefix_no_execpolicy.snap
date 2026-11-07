@@ -10,8 +10,17 @@ expression: contents
   print('hello')
   PY
 
+<<<<<<< HEAD
 › 1. Yes, proceed (y)
   2. No, and tell Corbanu Terminal what to do differently (esc)
+||||||| 413492cd6c
+› 1. Yes, proceed (y)
+  2. No, and tell Codex what to do differently (esc)
+=======
+
+› 1. Yes, proceed (y)                                                                               
+  2. No, and tell Codex what to do differently (esc)
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
   A letter in brackets only highlights its option; enter confirms it.                               
   Press enter to confirm or esc to cancel

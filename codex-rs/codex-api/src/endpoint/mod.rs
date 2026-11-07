@@ -1,6 +1,11 @@
+<<<<<<< HEAD
 pub(crate) mod anthropic_messages;
 pub(crate) mod chat_completions;
 pub(crate) mod compact;
+||||||| 413492cd6c
+pub(crate) mod compact;
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub(crate) mod images;
 pub(crate) mod memories;
 pub(crate) mod models;
@@ -8,14 +13,21 @@ pub(crate) mod realtime_call;
 pub(crate) mod realtime_websocket;
 pub(crate) mod responses;
 pub(crate) mod responses_websocket;
+mod responses_websocket_probe;
 pub(crate) mod search;
 mod session;
 
+<<<<<<< HEAD
 pub use anthropic_messages::AnthropicMessagesClient;
 pub use anthropic_messages::AnthropicMessagesOptions;
 pub use chat_completions::ChatCompletionsClient;
 pub use chat_completions::ChatCompletionsOptions;
 pub use compact::CompactClient;
+||||||| 413492cd6c
+pub use compact::CompactClient;
+=======
+pub use images::ImageRequestError;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use images::ImagesClient;
 pub use memories::MemoriesClient;
 pub use models::ModelsClient;
@@ -28,6 +40,7 @@ pub use realtime_websocket::RealtimeEventParser;
 pub use realtime_websocket::RealtimeOutputModality;
 pub use realtime_websocket::RealtimeSessionConfig;
 pub use realtime_websocket::RealtimeSessionMode;
+pub use realtime_websocket::RealtimeTranscriptState;
 pub use realtime_websocket::RealtimeWebsocketClient;
 pub use realtime_websocket::RealtimeWebsocketConnection;
 pub use realtime_websocket::RealtimeWebsocketEvents;
@@ -38,7 +51,9 @@ pub use realtime_websocket::session_update_session_json;
 pub use responses::ResponsesClient;
 pub use responses::ResponsesOptions;
 pub use responses_websocket::ResponsesWebsocketClient;
-pub use responses_websocket::ResponsesWebsocketClose;
 pub use responses_websocket::ResponsesWebsocketConnection;
-pub use responses_websocket::ResponsesWebsocketProbe;
+pub use responses_websocket_probe::ResponsesWebsocketClose;
+pub use responses_websocket_probe::ResponsesWebsocketProbe;
+pub use responses_websocket_probe::ResponsesWebsocketProbeError;
+pub use responses_websocket_probe::ResponsesWebsocketProbeFailureStage;
 pub use search::SearchClient;

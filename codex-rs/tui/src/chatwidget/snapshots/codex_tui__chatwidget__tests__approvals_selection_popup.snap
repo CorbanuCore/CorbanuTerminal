@@ -4,11 +4,27 @@ expression: popup
 ---
   Update Model Permissions
 
+<<<<<<< HEAD
 › 1. Ask for approval  Corbanu Terminal can read and edit files in the current
                        workspace, and run commands. Approval is required to
                        access the internet or edit other files.
   2. Full Access       Corbanu Terminal can edit files outside this workspace
                        and access the internet without asking for approval.
                        Exercise caution when using.
+||||||| 413492cd6c
+› 1. Ask for approval  Codex can read and edit files in the current workspace,
+                       and run commands. Approval is required to access the
+                       internet or edit other files.
+  2. Full Access       Codex can edit files outside this workspace and access
+                       the internet without asking for approval. Exercise
+                       caution when using.
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
-  Press enter to confirm or esc to go back
+› 1. Ask for approval  Read and edit workspace files and run commands, with
+                       approval required for internet access or edits outside
+                       the workspace
+  2. Full Access       Use with caution: Codex can edit files outside this
+                       workspace and access the internet without approval
+
+  enter select · esc back

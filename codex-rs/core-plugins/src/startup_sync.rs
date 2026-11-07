@@ -11,8 +11,8 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use self::http_client::StartupSyncHttpClient;
-use self::http_client::StartupSyncRequestBuilder;
 use codex_http_client::HttpClientFactory;
+use codex_http_client::RequestBuilder;
 use codex_login::default_client::default_headers;
 use codex_otel::CURATED_PLUGINS_STARTUP_SYNC_FINAL_METRIC;
 use codex_otel::CURATED_PLUGINS_STARTUP_SYNC_METRIC;
@@ -31,7 +31,7 @@ const CURATED_PLUGINS_BACKUP_ARCHIVE_API_URL: &str =
     "https://chatgpt.com/backend-api/plugins/export/curated";
 const OPENAI_PLUGINS_OWNER: &str = "openai";
 const OPENAI_PLUGINS_REPO: &str = "plugins";
-const OPENAI_PLUGINS_GIT_URL: &str = "https://github.com/openai/plugins.git";
+pub(crate) const OPENAI_PLUGINS_GIT_URL: &str = "https://github.com/openai/plugins.git";
 const CURATED_PLUGINS_FETCH_REF: &str = "refs/codex/curated-sync";
 const CURATED_PLUGINS_RELATIVE_DIR: &str = ".tmp/plugins";
 const CURATED_PLUGINS_SHA_FILE: &str = ".tmp/plugins.sha";
@@ -43,28 +43,6 @@ const CURATED_PLUGINS_HTTP_TIMEOUT: Duration = Duration::from_secs(30);
 const CURATED_PLUGINS_BACKUP_ARCHIVE_TIMEOUT: Duration = Duration::from_secs(30);
 // Keep this comfortably above a normal sync attempt so we do not race another Codex process.
 const CURATED_PLUGINS_STALE_TEMP_DIR_MAX_AGE: Duration = Duration::from_secs(10 * 60);
-// These variables can redirect Git away from the repository selected by `-C`,
-// or inject command-scoped configuration into the sync commands.
-const REPOSITORY_LOCAL_GIT_ENVIRONMENT_VARIABLES: &[&str] = &[
-    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-    "GIT_CEILING_DIRECTORIES",
-    "GIT_COMMON_DIR",
-    "GIT_CONFIG",
-    "GIT_CONFIG_COUNT",
-    "GIT_CONFIG_PARAMETERS",
-    "GIT_DIR",
-    "GIT_DISCOVERY_ACROSS_FILESYSTEM",
-    "GIT_GRAFT_FILE",
-    "GIT_IMPLICIT_WORK_TREE",
-    "GIT_INDEX_FILE",
-    "GIT_NAMESPACE",
-    "GIT_OBJECT_DIRECTORY",
-    "GIT_PREFIX",
-    "GIT_REPLACE_REF_BASE",
-    "GIT_SHALLOW_FILE",
-    "GIT_WORK_TREE",
-];
-
 #[derive(Debug, Deserialize)]
 struct GitHubRepositorySummary {
     default_branch: String,
@@ -109,14 +87,12 @@ pub fn sync_openai_plugins_repo(
     http_client_factory: HttpClientFactory,
     cancel: &AtomicBool,
 ) -> Result<String, String> {
+    // Keep Git-only egress working without trusting workspace PATH entries.
+    let git_binary = codex_utils_path::system_executable("git");
+    // Apple's /usr/bin/git is an installer shim when developer tools are absent.
+    // The resolver prefers the real CLT/Xcode executable when installed.
     #[cfg(target_os = "macos")]
-    let git_binary = match which::which("git") {
-        Ok(git_path) => macos_git_binary_from_path(git_path, apple_developer_tools_available()),
-        Err(_) => None,
-    };
-    #[cfg(not(target_os = "macos"))]
-    let git_binary = Some(PathBuf::from("git"));
-
+    let git_binary = git_binary.filter(|path| path != Path::new("/usr/bin/git"));
     sync_openai_plugins_repo_with_transport_overrides(
         codex_home,
         git_binary.as_deref(),
@@ -141,8 +117,16 @@ fn sync_openai_plugins_repo_with_transport_overrides(
     }
 
     let git_sync_result = match git_binary {
+<<<<<<< HEAD
         Some(binary) => sync_openai_plugins_repo_via_git(codex_home, Git { binary, cancel }),
         None => Err("git executable is unavailable".to_string()),
+||||||| 413492cd6c
+        Some(git_binary) => sync_openai_plugins_repo_via_git(codex_home, git_binary),
+        None => Err("git executable is unavailable".to_string()),
+=======
+        Some(git_binary) => sync_openai_plugins_repo_via_git(codex_home, git_binary),
+        None => Err("no Git executable found in trusted installation directories".to_string()),
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
     if git_sync_result.is_err() && cancel.load(Ordering::SeqCst) {
         return Err(SYNC_CANCELLED.to_string());
@@ -155,11 +139,13 @@ fn sync_openai_plugins_repo_with_transport_overrides(
             Ok(remote_sha)
         }
         Err(err) => {
-            emit_curated_plugins_startup_sync_metric("git", "failure");
-            warn!(
-                error = %err,
-                "git sync failed for curated plugin sync; falling back to GitHub HTTP"
-            );
+            if git_binary.is_some() {
+                emit_curated_plugins_startup_sync_metric("git", "failure");
+                warn!(
+                    error = %err,
+                    "git sync failed for curated plugin sync; falling back to GitHub HTTP"
+                );
+            }
             match sync_openai_plugins_repo_via_http(codex_home, api_base_url, http_client_factory) {
                 Ok(remote_sha) => {
                     emit_curated_plugins_startup_sync_metric("http", "success");
@@ -226,8 +212,16 @@ fn lock_curated_plugins_startup_sync(codex_home: &Path) -> Result<File, String> 
 fn sync_openai_plugins_repo_via_git(codex_home: &Path, git: Git<'_>) -> Result<String, String> {
     let repo_path = curated_plugins_repo_path(codex_home);
     let sha_path = codex_home.join(CURATED_PLUGINS_SHA_FILE);
+<<<<<<< HEAD
     let remote_sha = git_ls_remote_head_sha(git)?;
     let local_sha = read_local_git_or_sha_file(&repo_path, &sha_path, git);
+||||||| 413492cd6c
+    let remote_sha = git_ls_remote_head_sha(git_binary)?;
+    let local_sha = read_local_git_or_sha_file(&repo_path, &sha_path, git_binary);
+=======
+    let remote_sha = git_ls_remote_head_sha(codex_home, git_binary)?;
+    let local_sha = read_local_git_or_sha_file(&repo_path, &sha_path, git_binary);
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     if local_sha.as_deref() == Some(remote_sha.as_str()) && repo_path.join(".git").is_dir() {
         return Ok(remote_sha);
@@ -304,7 +298,13 @@ fn fetch_curated_plugins_commit_from(
     context: &str,
 ) -> Result<(), String> {
     let fetch_refspec = format!("+{source_revision}:{CURATED_PLUGINS_FETCH_REF}");
+<<<<<<< HEAD
     let mut command = git.command();
+||||||| 413492cd6c
+    let mut command = git_command(git_binary);
+=======
+    let mut command = git_command(git_binary)?;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     command
         .arg("-C")
         .arg(repo_path)
@@ -336,7 +336,13 @@ fn run_git_in_repo(
     args: &[&str],
     context: &str,
 ) -> Result<(), String> {
+<<<<<<< HEAD
     let mut command = git.command();
+||||||| 413492cd6c
+    let mut command = git_command(git_binary);
+=======
+    let mut command = git_command(git_binary)?;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     command.arg("-C").arg(repo_path).args(args);
     let output = git.run(&mut command, context)?;
     ensure_git_success(&output, context)
@@ -641,11 +647,21 @@ fn read_local_git_or_sha_file(repo_path: &Path, sha_path: &Path, git: Git<'_>) -
     read_sha_file(sha_path)
 }
 
+<<<<<<< HEAD
 fn git_ls_remote_head_sha(git: Git<'_>) -> Result<String, String> {
     let mut command = git.command();
+||||||| 413492cd6c
+fn git_ls_remote_head_sha(git_binary: &Path) -> Result<String, String> {
+    let mut command = git_command(git_binary);
+=======
+fn git_ls_remote_head_sha(codex_home: &Path, git_binary: &Path) -> Result<String, String> {
+    let mut command = git_command(git_binary)?;
+    let _trusted_repository = crate::configure_trusted_git_repository(&mut command, codex_home)?;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     command
+        .current_dir(codex_home)
         .arg("ls-remote")
-        .arg("https://github.com/openai/plugins.git")
+        .arg(OPENAI_PLUGINS_GIT_URL)
         .arg("HEAD");
     let output = git.run(&mut command, "git ls-remote curated plugins repo")?;
     ensure_git_success(&output, "git ls-remote curated plugins repo")?;
@@ -665,9 +681,17 @@ fn git_ls_remote_head_sha(git: Git<'_>) -> Result<String, String> {
     Ok(sha.to_string())
 }
 
+<<<<<<< HEAD
 fn git_head_sha(repo_path: &Path, git: Git<'_>) -> Result<String, String> {
     let output = git
         .command()
+||||||| 413492cd6c
+fn git_head_sha(repo_path: &Path, git_binary: &Path) -> Result<String, String> {
+    let output = git_command(git_binary)
+=======
+fn git_head_sha(repo_path: &Path, git_binary: &Path) -> Result<String, String> {
+    let output = git_command(git_binary)?
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         .arg("-C")
         .arg(repo_path)
         .arg("rev-parse")
@@ -691,6 +715,7 @@ fn git_head_sha(repo_path: &Path, git: Git<'_>) -> Result<String, String> {
     Ok(sha)
 }
 
+<<<<<<< HEAD
 /// The `git` the sync runs, and the flag that cancels it.
 #[derive(Clone, Copy)]
 struct Git<'a> {
@@ -717,30 +742,31 @@ fn git_command(git_binary: &Path) -> Command {
     for name in REPOSITORY_LOCAL_GIT_ENVIRONMENT_VARIABLES {
         command.env_remove(name);
     }
-    command
-}
-
-#[cfg(any(target_os = "macos", test))]
-fn macos_git_binary_from_path(
-    git_path: PathBuf,
-    apple_developer_tools_available: bool,
-) -> Option<PathBuf> {
-    if git_path == Path::new("/usr/bin/git") && !apple_developer_tools_available {
-        None
-    } else {
-        Some(git_path)
+||||||| 413492cd6c
+fn git_command(git_binary: &Path) -> Command {
+    let mut command = Command::new(git_binary);
+    command.env("GIT_OPTIONAL_LOCKS", "0");
+    for name in REPOSITORY_LOCAL_GIT_ENVIRONMENT_VARIABLES {
+        command.env_remove(name);
     }
-}
-
-#[cfg(target_os = "macos")]
-fn apple_developer_tools_available() -> bool {
-    Command::new("/usr/bin/xcode-select")
-        .arg("-p")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
+=======
+fn git_command(git_binary: &Path) -> Result<Command, String> {
+    let mut command = crate::PluginGitMode::Automatic.command(git_binary);
+    // Git launches transports and credential helpers too. Selecting a trusted
+    // main executable alone does not prevent a workspace PATH helper from running.
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    command
+        .env(
+            "PATH",
+            codex_utils_path::system_path()
+                .map_err(|err| format!("failed to construct trusted Git PATH: {err}"))?,
+        )
+        .env_remove("GIT_EXEC_PATH")
+        .env_remove("GIT_TEMPLATE_DIR")
+        .env_remove("DEVELOPER_DIR")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("NoDefaultCurrentDirectoryInExePath", "1");
+    Ok(command)
 }
 
 fn run_git_command_with_timeout(
@@ -1085,7 +1111,10 @@ async fn fetch_github_text(
         .await
         .map_err(|err| format!("failed to {context} from {url}: {err}"))?;
     let status = response.status();
-    let body = response.text().await.unwrap_or_default();
+    let body = response
+        .text()
+        .await
+        .map_err(|err| format!("failed to {context} from {url}: {err}"))?;
     if !status.is_success() {
         return Err(format!(
             "{context} from {url} failed with status {status}: {body}"
@@ -1128,7 +1157,10 @@ async fn fetch_public_text(
         .await
         .map_err(|err| format!("failed to {context} from {url}: {err}"))?;
     let status = response.status();
-    let body = response.text().await.unwrap_or_default();
+    let body = response
+        .text()
+        .await
+        .map_err(|err| format!("failed to {context} from {url}: {err}"))?;
     if !status.is_success() {
         return Err(format!(
             "{context} from {url} failed with status {status}: {body}"
@@ -1161,17 +1193,14 @@ async fn fetch_public_bytes(
     Ok(body.to_vec())
 }
 
-fn github_request(http_clients: &StartupSyncHttpClient, url: &str) -> StartupSyncRequestBuilder {
+fn github_request(http_clients: &StartupSyncHttpClient, url: &str) -> RequestBuilder {
     startup_sync_request(http_clients, url)
         .timeout(CURATED_PLUGINS_HTTP_TIMEOUT)
         .header("accept", GITHUB_API_ACCEPT_HEADER)
         .header("x-github-api-version", GITHUB_API_VERSION_HEADER)
 }
 
-fn startup_sync_request(
-    http_clients: &StartupSyncHttpClient,
-    url: &str,
-) -> StartupSyncRequestBuilder {
+fn startup_sync_request(http_clients: &StartupSyncHttpClient, url: &str) -> RequestBuilder {
     http_clients
         .request(Method::GET, url)
         .headers(default_headers())
@@ -1209,6 +1238,9 @@ fn extract_zipball_to_dir(bytes: &[u8], destination: &Path) -> Result<(), String
             ));
         }
         let Some(relative_path) = entry.enclosed_name() else {
+            let name = entry
+                .name()
+                .map_err(|err| format!("invalid curated plugins zip entry {index}: {err}"))?;
             return Err(format!(
                 "curated plugins zip entry `{name}` escapes extraction root"
             ));
@@ -1263,12 +1295,32 @@ fn extract_zipball_to_dir(bytes: &[u8], destination: &Path) -> Result<(), String
                 output_path.display()
             )
         })?;
+<<<<<<< HEAD
         apply_zip_permissions(entry.unix_mode(), &output_path)?;
+||||||| 413492cd6c
+        apply_zip_permissions(&entry, &output_path)?;
+=======
+        #[cfg(unix)]
+        if let Some(mode) = entry.unix_mode() {
+            use std::os::unix::fs::PermissionsExt;
+
+            // zip strips setuid, setgid, and sticky bits from the archive's Unix mode.
+            output
+                .set_permissions(std::fs::Permissions::from_mode(mode))
+                .map_err(|err| {
+                    format!(
+                        "failed to set permissions on curated plugins file {}: {err}",
+                        output_path.display()
+                    )
+                })?;
+        }
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     Ok(())
 }
 
+<<<<<<< HEAD
 // zip 9's `enclosed_name` strips a leading root, drive or UNC prefix and returns a
 // relative path. Refuse such names on every platform, as zip 2 did.
 fn zip_name_is_rooted(name: &str) -> bool {
@@ -1319,6 +1371,32 @@ fn apply_zip_permissions(_mode: Option<u32>, _output_path: &Path) -> Result<(), 
     Ok(())
 }
 
+||||||| 413492cd6c
+#[cfg(unix)]
+fn apply_zip_permissions(entry: &zip::read::ZipFile<'_>, output_path: &Path) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let Some(mode) = entry.unix_mode() else {
+        return Ok(());
+    };
+    std::fs::set_permissions(output_path, std::fs::Permissions::from_mode(mode)).map_err(|err| {
+        format!(
+            "failed to set permissions on curated plugins file {}: {err}",
+            output_path.display()
+        )
+    })
+}
+
+#[cfg(not(unix))]
+fn apply_zip_permissions(
+    _entry: &zip::read::ZipFile<'_>,
+    _output_path: &Path,
+) -> Result<(), String> {
+    Ok(())
+}
+
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[cfg(test)]
 #[path = "startup_sync_tests.rs"]
 mod tests;

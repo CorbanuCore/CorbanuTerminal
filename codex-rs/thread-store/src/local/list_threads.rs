@@ -87,7 +87,8 @@ pub(super) async fn list_threads(
         .iter()
         .map(|thread| (thread.thread_id, thread.history_mode))
         .collect::<HashMap<_, _>>();
-    let names = resolve_thread_names(store, &thread_history_modes).await;
+    let names =
+        resolve_thread_names(store, &thread_history_modes, params.use_state_db_only).await?;
     for thread in &mut items {
         if let Some(name) = names.get(&thread.thread_id).cloned() {
             set_thread_name(thread, name);
@@ -109,6 +110,10 @@ pub(super) async fn list_threads(
                 thread.section_entered_at = *section_entered_at;
             }
         }
+    }
+
+    if let Some(project_id) = params.project_id.as_ref() {
+        items.retain(|thread| &thread.project_id == project_id);
     }
 
     Ok(ThreadPage { items, next_cursor })
@@ -181,6 +186,10 @@ async fn list_section_threads(
         model_providers: params.model_providers.as_deref(),
         cwd_filters: normalized_cwd_filters.as_deref(),
         section: Some(Some(section)),
+        project_id: params
+            .project_id
+            .as_ref()
+            .map(|project_id| project_id.as_deref()),
         anchor: anchor.as_ref(),
         sort_key: codex_state::SortKey::SectionPosition,
         sort_direction: match params.sort_direction {
@@ -189,23 +198,10 @@ async fn list_section_threads(
         },
         search_term: params.search_term.as_deref(),
     };
-    let page = match params.relation_filter {
-        Some(ThreadRelationFilter::DirectChildrenOf(thread_id)) => {
+    let page = match params.relation_filter.map(state_relation_filter) {
+        Some(relation_filter) => {
             state_db
-                .list_threads_by_relation(
-                    params.page_size,
-                    codex_state::ThreadRelationFilter::DirectChildrenOf(thread_id),
-                    filters,
-                )
-                .await
-        }
-        Some(ThreadRelationFilter::DescendantsOf(thread_id)) => {
-            state_db
-                .list_threads_by_relation(
-                    params.page_size,
-                    codex_state::ThreadRelationFilter::DescendantsOf(thread_id),
-                    filters,
-                )
+                .list_threads_by_relation(params.page_size, relation_filter, filters)
                 .await
         }
         None => state_db.list_threads(params.page_size, filters).await,
@@ -245,17 +241,7 @@ pub(super) async fn list_rollout_threads(
     sort_key: codex_rollout::ThreadSortKey,
     sort_direction: codex_rollout::SortDirection,
 ) -> ThreadStoreResult<codex_rollout::ThreadsPage> {
-    if params.relation_filter.is_some() || params.section.is_some() {
-        let relation_filter = params
-            .relation_filter
-            .map(|relation_filter| match relation_filter {
-                ThreadRelationFilter::DirectChildrenOf(parent_thread_id) => {
-                    codex_state::ThreadRelationFilter::DirectChildrenOf(parent_thread_id)
-                }
-                ThreadRelationFilter::DescendantsOf(ancestor_thread_id) => {
-                    codex_state::ThreadRelationFilter::DescendantsOf(ancestor_thread_id)
-                }
-            });
+    if params.relation_filter.is_some() || params.section.is_some() || params.project_id.is_some() {
         let page = codex_rollout::state_db::list_threads_db(
             state_db.as_deref(),
             &config.sqlite,
@@ -266,9 +252,10 @@ pub(super) async fn list_rollout_threads(
             params.allowed_sources.as_slice(),
             params.model_providers.as_deref(),
             params.cwd_filters.as_deref(),
-            relation_filter,
+            params.relation_filter.map(state_relation_filter),
             params.archived,
             params.section.as_ref().map(Option::as_deref),
+            params.project_id.as_ref().map(Option::as_deref),
             params.search_term.as_deref(),
         )
         .await
@@ -344,6 +331,20 @@ pub(super) async fn list_rollout_threads(
     })
 }
 
+fn state_relation_filter(filter: ThreadRelationFilter) -> codex_state::ThreadRelationFilter {
+    match filter {
+        ThreadRelationFilter::DirectChildrenOf(id) => {
+            codex_state::ThreadRelationFilter::DirectChildrenOf(id)
+        }
+        ThreadRelationFilter::DescendantsOf(id) => {
+            codex_state::ThreadRelationFilter::DescendantsOf(id)
+        }
+        ThreadRelationFilter::AttachedThreadsOf(id) => {
+            codex_state::ThreadRelationFilter::AttachedThreadsOf(id)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
@@ -391,6 +392,7 @@ mod tests {
                 model_providers: None,
                 cwd_filters: None,
                 section: None,
+                project_id: None,
                 archived: false,
                 search_term: None,
                 relation_filter: None,
@@ -452,6 +454,7 @@ mod tests {
                 model_providers: None,
                 cwd_filters: None,
                 section: None,
+                project_id: None,
                 archived: false,
                 search_term: Some("needle".to_string()),
                 relation_filter: None,
@@ -525,6 +528,7 @@ mod tests {
                 model_providers: None,
                 cwd_filters: None,
                 section: None,
+                project_id: None,
                 archived: false,
                 search_term: Some("canonical".to_string()),
                 relation_filter: None,
@@ -562,6 +566,7 @@ mod tests {
                 model_providers: None,
                 cwd_filters: None,
                 section: None,
+                project_id: None,
                 archived: false,
                 search_term: None,
                 relation_filter: None,
@@ -579,6 +584,7 @@ mod tests {
                 model_providers: None,
                 cwd_filters: None,
                 section: None,
+                project_id: None,
                 archived: true,
                 search_term: None,
                 relation_filter: None,
@@ -617,26 +623,34 @@ mod tests {
     async fn list_threads_returns_local_rollout_summary() {
         let home = TempDir::new().expect("temp dir");
         let config = test_config(home.path());
-        let store = LocalThreadStore::new(config, /*state_db*/ None);
+        let runtime = codex_state::StateRuntime::init(
+            config.sqlite.clone(),
+            config.default_model_provider_id.clone(),
+        )
+        .await
+        .expect("initialize state DB");
+        let store = LocalThreadStore::new(config, Some(runtime.clone()));
         let uuid = Uuid::from_u128(101);
         let path =
             write_session_file(home.path(), "2025-01-03T12-00-00", uuid).expect("session file");
 
+        let params = ListThreadsParams {
+            page_size: 10,
+            cursor: None,
+            sort_key: ThreadSortKey::CreatedAt,
+            sort_direction: SortDirection::Desc,
+            allowed_sources: vec![SessionSource::Cli],
+            model_providers: Some(vec!["test-provider".to_string()]),
+            cwd_filters: None,
+            section: None,
+            project_id: None,
+            archived: false,
+            search_term: None,
+            relation_filter: None,
+            use_state_db_only: false,
+        };
         let page = store
-            .list_threads(ListThreadsParams {
-                page_size: 10,
-                cursor: None,
-                sort_key: ThreadSortKey::CreatedAt,
-                sort_direction: SortDirection::Desc,
-                allowed_sources: vec![SessionSource::Cli],
-                model_providers: Some(vec!["test-provider".to_string()]),
-                cwd_filters: None,
-                section: None,
-                archived: false,
-                search_term: None,
-                relation_filter: None,
-                use_state_db_only: false,
-            })
+            .list_threads(params.clone())
             .await
             .expect("thread listing");
 
@@ -653,6 +667,22 @@ mod tests {
         assert_eq!(page.items[0].model_provider, "test-provider");
         assert_eq!(page.items[0].cli_version, "test_version");
         assert_eq!(page.items[0].source, SessionSource::Cli);
+
+        // Name query errors must abort DB-only lookup while ordinary listing keeps its fallback.
+        let history_modes = HashMap::from([(thread_id, ThreadHistoryMode::Legacy)]);
+        codex_rollout::append_thread_name(home.path(), thread_id, "indexed name")
+            .await
+            .expect("write indexed name");
+        runtime.close().await;
+        resolve_thread_names(&store, &history_modes, /*use_state_db_only*/ true)
+            .await
+            .expect_err("name query errors must be reported");
+        let fallback = store
+            .list_threads(params)
+            .await
+            .expect("ordinary listing must preserve filesystem fallback");
+        assert_eq!(fallback.items[0].thread_id, thread_id);
+        assert_eq!(fallback.items[0].name.as_deref(), Some("indexed name"));
     }
 
     #[tokio::test]
@@ -710,6 +740,7 @@ mod tests {
             model_providers: None,
             cwd_filters: None,
             section: Some(Some(PINNED_THREAD_SECTION_ID.to_owned())),
+            project_id: None,
             archived: false,
             search_term: None,
             relation_filter: None,
@@ -763,6 +794,7 @@ mod tests {
                 model_providers: None,
                 cwd_filters: None,
                 section: None,
+                project_id: None,
                 archived: false,
                 search_term: None,
                 relation_filter: None,

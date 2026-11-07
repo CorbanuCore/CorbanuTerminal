@@ -1,6 +1,13 @@
+<<<<<<< HEAD
 use codex_model_provider_info::canonical_catalog_provider;
 use codex_model_provider_info::corrected_catalog_provider;
 use codex_protocol::openai_models::InputModality;
+||||||| 413492cd6c
+=======
+//! TUI model and collaboration inventories; refreshing models preserves the server mode catalog.
+
+use codex_protocol::config_types::CollaborationModeMask;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ReasoningEffort;
 use std::convert::Infallible;
@@ -8,6 +15,7 @@ use std::sync::RwLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
+<<<<<<< HEAD
 pub(crate) fn include_runtime_model(
     models: &mut Vec<ModelPreset>,
     model: &str,
@@ -61,7 +69,24 @@ pub(crate) fn include_runtime_model(
 }
 
 #[derive(Debug)]
+||||||| 413492cd6c
+#[derive(Debug, Clone)]
+=======
+pub(crate) const LUNA_RESERVE_MODEL: &str = "gpt-reserve";
+pub(crate) const LUNA_MODEL: &str = "gpt-6-luna";
+
+pub(crate) fn model_display_name(model: &str) -> &str {
+    if model.eq_ignore_ascii_case(LUNA_RESERVE_MODEL) {
+        "Luna Reserve"
+    } else {
+        model
+    }
+}
+
+#[derive(Debug, Clone)]
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub(crate) struct ModelCatalog {
+<<<<<<< HEAD
     models: RwLock<Vec<ModelPreset>>,
     /// Ids [`ModelCatalog::set_provider_models`] added, per provider.
     provider_model_ids: RwLock<std::collections::HashMap<String, Vec<String>>>,
@@ -89,11 +114,18 @@ pub(crate) struct ModelCatalog {
             (u64, crate::provider_named_accounts::NamedSignInState),
         >,
     >,
+||||||| 413492cd6c
+    models: Vec<ModelPreset>,
+=======
+    pub(crate) models: Vec<ModelPreset>,
+    pub(crate) collaboration_modes: Vec<CollaborationModeMask>,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl ModelCatalog {
     pub(crate) fn new(models: Vec<ModelPreset>) -> Self {
         Self {
+<<<<<<< HEAD
             models: RwLock::new(models),
             provider_model_ids: RwLock::new(std::collections::HashMap::new()),
             provider_models_check: std::sync::atomic::AtomicU64::new(0),
@@ -399,6 +431,18 @@ impl ModelCatalog {
                 codex_provider_auth::CurrentSelectionDecision::RequireExplicitRecovery { .. }
             )
         })
+||||||| 413492cd6c
+        Self { models }
+=======
+            models,
+            collaboration_modes: Vec::new(),
+        }
+    }
+
+    pub(crate) fn with_collaboration_modes(mut self, modes: Vec<CollaborationModeMask>) -> Self {
+        self.collaboration_modes = modes;
+        self
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(crate) fn try_list_models(&self) -> Result<Vec<ModelPreset>, Infallible> {
@@ -430,6 +474,14 @@ impl ModelCatalog {
                 .is_some_and(|provider_id| provider_id.starts_with("gpu-"))
         });
         models.extend(runtime_models);
+    }
+
+    pub(crate) fn display_name<'a>(&'a self, model: &'a str) -> &'a str {
+        self.models
+            .iter()
+            .find(|preset| preset.model == model)
+            .map(|preset| preset.display_name.as_str())
+            .unwrap_or_else(|| model_display_name(model))
     }
 }
 

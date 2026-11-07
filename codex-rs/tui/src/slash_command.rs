@@ -17,7 +17,13 @@ pub enum SlashCommand {
     // DO NOT ALPHA-SORT! Enum order is presentation order in the popup, so
     // more frequently used commands should be listed first.
     Model,
+<<<<<<< HEAD
     Gpu,
+||||||| 413492cd6c
+=======
+    Presets,
+    Daybreak,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     Ide,
     Permissions,
     Security,
@@ -25,8 +31,6 @@ pub enum SlashCommand {
     Vim,
     #[strum(serialize = "setup-default-sandbox")]
     ElevateSandbox,
-    #[strum(serialize = "sandbox-add-read-dir")]
-    SandboxReadRoot,
     Experimental,
     #[strum(to_string = "approve")]
     AutoReview,
@@ -41,24 +45,41 @@ pub enum SlashCommand {
     Delete,
     Resume,
     Fork,
+    Worktree,
     App,
     Init,
     Compact,
+    Config,
+    Recap,
     Plan,
+    Voice,
     Goal,
+<<<<<<< HEAD
     Agent,
     Spawn,
     Orchestrate,
     Tasknode,
     Panes,
+||||||| 413492cd6c
+    Agent,
+=======
+    Agents,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     Side,
     Btw,
     Copy,
+    Export,
     Raw,
+    Tui,
     Diff,
     Docs,
     Mention,
     Status,
+    Daemon,
+    Warnings,
+    Cd,
+    #[strum(to_string = "pwd", serialize = "cwd")]
+    Pwd,
     Usage,
     Cost,
     DebugConfig,
@@ -83,7 +104,6 @@ pub enum SlashCommand {
     #[strum(to_string = "stop", serialize = "clean")]
     Stop,
     Clear,
-    Personality,
     TestApproval,
     #[strum(serialize = "subagents")]
     MultiAgents,
@@ -98,21 +118,36 @@ impl SlashCommand {
     /// User-visible description shown in the popup.
     pub fn description(self) -> &'static str {
         match self {
+            SlashCommand::Config => "configure Codex preferences",
             SlashCommand::Feedback => "send logs to maintainers",
             SlashCommand::New => "start a new chat during a conversation",
             SlashCommand::Init => "create an AGENTS.md file with instructions for Corbanu Terminal",
             SlashCommand::Compact => "summarize conversation to prevent hitting the context limit",
+            SlashCommand::Recap => "summarize the current conversation now",
             SlashCommand::Review => "review my current changes and find issues",
             SlashCommand::Rename => "rename the current thread",
             SlashCommand::Resume => "resume a saved chat",
-            SlashCommand::Archive => "archive this session and exit",
-            SlashCommand::Delete => "permanently delete this session and exit",
+            SlashCommand::Archive => "archive this session",
+            SlashCommand::Delete => "permanently delete this session",
             SlashCommand::Clear => "clear the terminal and start a new chat",
             SlashCommand::Fork => "fork the current chat",
+<<<<<<< HEAD
             SlashCommand::App => "continue this session in Corbanu Terminal Desktop",
             SlashCommand::Quit | SlashCommand::Exit => "exit Corbanu Terminal",
             SlashCommand::Copy => "copy last response as markdown",
+||||||| 413492cd6c
+            SlashCommand::App => "continue this session in the Desktop app",
+            SlashCommand::Quit | SlashCommand::Exit => "exit Codex",
+            SlashCommand::Copy => "copy last response as markdown",
+=======
+            SlashCommand::Worktree => "start or continue a conversation in a new worktree",
+            SlashCommand::App => "continue this session in the Desktop app",
+            SlashCommand::Quit | SlashCommand::Exit => "exit Codex",
+            SlashCommand::Copy => "copy the last response or part of it",
+            SlashCommand::Export => "export the conversation as markdown",
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             SlashCommand::Raw => "toggle raw scrollback mode for copy-friendly terminal selection",
+            SlashCommand::Tui => "choose the TUI mode for the next launch",
             SlashCommand::Diff => "show git diff (including untracked files)",
             SlashCommand::Docs => "open MkDocs documentation in the terminal",
             SlashCommand::Mention => "mention a file",
@@ -121,12 +156,22 @@ impl SlashCommand {
             }
             SlashCommand::Import => "import setup, this project, and recent chats from Claude Code",
             SlashCommand::Hooks => "view and manage lifecycle hooks",
+            SlashCommand::Daemon => "Manage the local background server",
+            SlashCommand::Warnings => "view retained warnings and diagnostic details",
             SlashCommand::Status => "show current session configuration and token usage",
+<<<<<<< HEAD
             SlashCommand::Usage if cfg!(feature = "developer-accounting") => {
                 "view recorded request cost, account usage, or use a rate-limit reset"
             }
             SlashCommand::Usage => "view account usage or use a rate-limit reset",
             SlashCommand::Cost => "what your turns cost, on whichever provider served them",
+||||||| 413492cd6c
+            SlashCommand::Usage => "view account usage or use a usage limit reset",
+=======
+            SlashCommand::Cd => "change the current working directory",
+            SlashCommand::Pwd => "show the current working directory",
+            SlashCommand::Usage => "view account usage or use a usage limit reset",
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             SlashCommand::DebugConfig => "show config layers and requirement sources for debugging",
             SlashCommand::Title => "configure which items appear in the terminal title",
             SlashCommand::Statusline => "configure which items appear in the status line",
@@ -137,18 +182,37 @@ impl SlashCommand {
             SlashCommand::MemoryDrop => "DO NOT USE",
             SlashCommand::MemoryUpdate => "DO NOT USE",
             SlashCommand::Model => "choose what model and reasoning effort to use",
+<<<<<<< HEAD
             SlashCommand::Gpu => "rent, inspect, or terminate GPU capacity",
+||||||| 413492cd6c
+=======
+            SlashCommand::Presets => "run or save reusable prompts and slash commands",
+            SlashCommand::Daybreak => "turn Daybreak on or off",
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             SlashCommand::Ide => {
                 "include current selection, open files, and other context from your IDE"
             }
+<<<<<<< HEAD
             SlashCommand::Personality => "choose a communication style for Corbanu Terminal",
+||||||| 413492cd6c
+            SlashCommand::Personality => "choose a communication style for Codex",
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             SlashCommand::Plan => "switch to Plan mode",
+            SlashCommand::Voice => "start or stop voice; use /voice settings to choose a voice",
             SlashCommand::Goal => "set or view the goal for a long-running task",
+<<<<<<< HEAD
             SlashCommand::Agent | SlashCommand::MultiAgents => "switch the active agent thread",
             SlashCommand::Spawn => "orchestrate Nazgul, Troll, and Orc agent roles",
             SlashCommand::Orchestrate => "attach and manage native pane whips",
             SlashCommand::Tasknode => "interact with Task Node tasks and rewards",
             SlashCommand::Panes => "switch Corbanu Terminal, Claude Code, or agent panes",
+||||||| 413492cd6c
+            SlashCommand::Agent | SlashCommand::MultiAgents => "switch the active agent thread",
+=======
+            SlashCommand::Agents => "open the agent command center",
+            SlashCommand::MultiAgents => "switch between this session's subagents",
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             SlashCommand::Side | SlashCommand::Btw => {
                 "start a side conversation in an ephemeral fork"
             }
@@ -157,13 +221,10 @@ impl SlashCommand {
             SlashCommand::Keymap => "remap TUI shortcuts",
             SlashCommand::Vim => "toggle Vim mode for the composer",
             SlashCommand::ElevateSandbox => "set up elevated agent sandbox",
-            SlashCommand::SandboxReadRoot => {
-                "let sandbox read a directory: /sandbox-add-read-dir <absolute_path>"
-            }
             SlashCommand::Experimental => "toggle experimental features",
             SlashCommand::AutoReview => "approve one retry of a recent auto-review denial",
             SlashCommand::Memories => "configure memory use and generation",
-            SlashCommand::Mcp => "list configured MCP tools; use /mcp verbose for details",
+            SlashCommand::Mcp => "list MCP tools; use /mcp verbose or /mcp login <name>",
             SlashCommand::Apps => "manage apps",
             SlashCommand::Plugins => "browse plugins",
             SlashCommand::Providers => "configure, activate, or deactivate providers",
@@ -187,23 +248,36 @@ impl SlashCommand {
         matches!(
             self,
             SlashCommand::Review
+                | SlashCommand::Model
+                | SlashCommand::Permissions
+                | SlashCommand::Title
+                | SlashCommand::Statusline
                 | SlashCommand::Rename
                 | SlashCommand::New
                 | SlashCommand::Clear
                 | SlashCommand::Fork
                 | SlashCommand::Plan
                 | SlashCommand::Goal
+                | SlashCommand::Voice
                 | SlashCommand::Ide
                 | SlashCommand::Keymap
                 | SlashCommand::Mcp
+                | SlashCommand::Export
                 | SlashCommand::Raw
+<<<<<<< HEAD
                 | SlashCommand::Docs
+||||||| 413492cd6c
+=======
+                | SlashCommand::Cd
+                | SlashCommand::Pwd
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 | SlashCommand::Usage
                 | SlashCommand::Cost
                 | SlashCommand::Pets
                 | SlashCommand::Side
                 | SlashCommand::Btw
                 | SlashCommand::Resume
+<<<<<<< HEAD
                 | SlashCommand::SandboxReadRoot
                 | SlashCommand::Spawn
                 | SlashCommand::Orchestrate
@@ -212,6 +286,10 @@ impl SlashCommand {
                 | SlashCommand::Wallet
                 | SlashCommand::Telegram
                 | SlashCommand::Gpu
+||||||| 413492cd6c
+                | SlashCommand::SandboxReadRoot
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         )
     }
 
@@ -229,11 +307,16 @@ impl SlashCommand {
         matches!(
             self,
             SlashCommand::Copy
+                | SlashCommand::Agents
+                | SlashCommand::Export
                 | SlashCommand::Raw
                 | SlashCommand::Diff
                 | SlashCommand::Docs
                 | SlashCommand::Mention
                 | SlashCommand::Status
+                | SlashCommand::Daemon
+                | SlashCommand::Warnings
+                | SlashCommand::Pwd
                 | SlashCommand::Usage
                 | SlashCommand::Cost
                 | SlashCommand::Ide
@@ -247,35 +330,87 @@ impl SlashCommand {
         )
     }
 
+    /// Whether dispatch needs thread state to validate this command before consuming its draft.
+    /// The composer must defer busy-state rejection and draft clearing for these commands.
+    pub(crate) fn requires_dispatch_validation(self) -> bool {
+        matches!(self, SlashCommand::Review)
+    }
+
+    /// Commands that do not require a writable current thread. The server must still be connected.
+    pub(crate) fn available_when_thread_unavailable(self) -> bool {
+        matches!(
+            self,
+            SlashCommand::New
+                | SlashCommand::Clear
+                | SlashCommand::Resume
+                | SlashCommand::Agents
+                | SlashCommand::MultiAgents
+                | SlashCommand::Quit
+                | SlashCommand::Exit
+                | SlashCommand::Status
+                | SlashCommand::Warnings
+                | SlashCommand::DebugConfig
+                | SlashCommand::Pwd
+                | SlashCommand::Rollout
+                | SlashCommand::Copy
+                | SlashCommand::Raw
+        )
+    }
+
     /// Whether this command can be run while a task is in progress.
     pub fn available_during_task(self) -> bool {
         match self {
             SlashCommand::New
+<<<<<<< HEAD
+||||||| 413492cd6c
+            | SlashCommand::Archive
+            | SlashCommand::Delete
+=======
+            | SlashCommand::Delete
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             | SlashCommand::Fork
+            | SlashCommand::Worktree
             | SlashCommand::Init
             | SlashCommand::Compact
+            | SlashCommand::Recap
+            | SlashCommand::Export
             | SlashCommand::Keymap
+            | SlashCommand::Tui
             | SlashCommand::Vim
             | SlashCommand::ElevateSandbox
-            | SlashCommand::SandboxReadRoot
             | SlashCommand::Experimental
             | SlashCommand::Memories
             | SlashCommand::Import
             | SlashCommand::Review
             | SlashCommand::Plan
+            | SlashCommand::Cd
             | SlashCommand::Clear
             | SlashCommand::Logout
             | SlashCommand::MemoryDrop
             | SlashCommand::MemoryUpdate => false,
+<<<<<<< HEAD
             SlashCommand::Cost
             | SlashCommand::Diff
             | SlashCommand::Archive
             | SlashCommand::Delete
             | SlashCommand::Docs
+||||||| 413492cd6c
+            SlashCommand::Diff
+=======
+            SlashCommand::Diff
+            | SlashCommand::Archive
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             | SlashCommand::Resume
             | SlashCommand::Model
+<<<<<<< HEAD
             | SlashCommand::Gpu
             | SlashCommand::Personality
+||||||| 413492cd6c
+            | SlashCommand::Personality
+=======
+            | SlashCommand::Presets
+            | SlashCommand::Daybreak
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             | SlashCommand::Permissions
             | SlashCommand::Security
             | SlashCommand::Copy
@@ -285,12 +420,16 @@ impl SlashCommand {
             | SlashCommand::Skills
             | SlashCommand::Hooks
             | SlashCommand::Status
+            | SlashCommand::Daemon
+            | SlashCommand::Warnings
+            | SlashCommand::Pwd
             | SlashCommand::Usage
             | SlashCommand::DebugConfig
             | SlashCommand::Ps
             | SlashCommand::Stop
             | SlashCommand::App
             | SlashCommand::Goal
+            | SlashCommand::Voice
             | SlashCommand::Mcp
             | SlashCommand::Apps
             | SlashCommand::Plugins
@@ -313,16 +452,16 @@ impl SlashCommand {
             | SlashCommand::Btw => true,
             SlashCommand::Rollout => true,
             SlashCommand::TestApproval => true,
-            SlashCommand::Agent | SlashCommand::MultiAgents => true,
-            SlashCommand::Theme | SlashCommand::Pets => false,
+            SlashCommand::Agents | SlashCommand::MultiAgents => true,
+            SlashCommand::Config | SlashCommand::Theme | SlashCommand::Pets => false,
         }
     }
 
     fn is_visible(self) -> bool {
         match self {
-            SlashCommand::SandboxReadRoot => cfg!(target_os = "windows"),
             SlashCommand::Copy => !cfg!(target_os = "android"),
             SlashCommand::App => cfg!(any(target_os = "macos", target_os = "windows")),
+            SlashCommand::Voice => true,
             SlashCommand::Rollout | SlashCommand::TestApproval => cfg!(debug_assertions),
             // The recorded-request view is held: collection cannot exist in a
             // shipped binary, and advertising the view there was never

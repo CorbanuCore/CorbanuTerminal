@@ -1,37 +1,51 @@
+use crate::AnnotatedContent;
+use crate::message_from_parts;
 use codex_protocol::models::ContentItem;
+<<<<<<< HEAD
 use codex_protocol::models::InternalChatMessageMetadataPassthrough;
 use codex_protocol::models::ResponseInputItem;
+||||||| 413492cd6c
+use codex_protocol::models::ResponseInputItem;
+=======
+use codex_protocol::models::ContentItemKind;
+use codex_protocol::models::ContentItemMetadata;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::models::ResponseItem;
+use codex_protocol::models::input_text;
 
-/// Type-erased registration for a contextual user fragment.
-///
-/// Implementations are used by context filtering code to recognize injected
-/// fragments without constructing the concrete context payload.
-pub trait FragmentRegistration: Sync {
-    fn matches_text(&self, text: &str) -> bool;
+/// A rendered contextual fragment and the role that owns its annotated content.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RenderedFragment {
+    role: &'static str,
+    content: AnnotatedContent,
 }
 
-pub struct FragmentRegistrationProxy<T> {
-    _marker: std::marker::PhantomData<fn() -> T>,
-}
+impl RenderedFragment {
+    /// Creates a rendered fragment without separating its role and annotated content.
+    pub fn new(role: &'static str, content: AnnotatedContent) -> Self {
+        Self { role, content }
+    }
 
-impl<T> FragmentRegistrationProxy<T> {
-    pub const fn new() -> Self {
-        Self {
-            _marker: std::marker::PhantomData,
-        }
+    /// Returns the response role associated with this fragment.
+    pub fn role(&self) -> &'static str {
+        self.role
+    }
+
+    /// Returns this fragment's model-visible content and classification.
+    pub fn annotated_content(&self) -> &AnnotatedContent {
+        &self.content
+    }
+
+    /// Separates the role and annotated content at an API boundary.
+    pub fn into_parts(self) -> (&'static str, AnnotatedContent) {
+        (self.role, self.content)
     }
 }
 
-impl<T> Default for FragmentRegistrationProxy<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<T: ContextualUserFragment> FragmentRegistration for FragmentRegistrationProxy<T> {
-    fn matches_text(&self, text: &str) -> bool {
-        T::matches_text(text)
+impl From<RenderedFragment> for ResponseItem {
+    fn from(fragment: RenderedFragment) -> Self {
+        let (role, annotated_content) = fragment.into_parts();
+        message_from_parts(role, vec![annotated_content])
     }
 }
 
@@ -39,29 +53,48 @@ impl<T: ContextualUserFragment> FragmentRegistration for FragmentRegistrationPro
 ///
 /// Implementations own the response role and provide the exact fragment body.
 /// Marked fragments also provide start/end markers used to recognize injected
-/// context later. `render()` concatenates markers and body without adding
-/// separators, so implementations should include any whitespace they need
-/// between tags in `body()`. Unmarked fragments should leave both markers empty,
-/// in which case the default helpers render only the body and never match
-/// arbitrary text.
+/// context later. `render()` concatenates markers and `InputText` bodies without
+/// adding separators, so implementations should include any whitespace they need
+/// between tags in `body()`. All other content passes through unchanged. Unmarked
+/// fragments should leave both markers empty and never match arbitrary text.
+/// Producers must enforce size bounds for all model-visible content before rendering.
+/// User-role non-text content is currently classified as ordinary user media because
+/// contextual-user-message recognition relies on text markers.
 pub trait ContextualUserFragment {
     fn role(&self) -> &'static str;
 
-    /// Whether this fragment must be recorded as its own response item.
-    fn requires_separate_message(&self) -> bool {
-        false
+    /// Attribution is supplied when the fragment is produced, never inferred from rendered text.
+    fn content_metadata(&self) -> ContentItemMetadata {
+        ContentItemMetadata::harness()
     }
 
+<<<<<<< HEAD
     /// Stable producer ID recorded with the rendered fragment, such as a World State section ID.
     ///
     /// Provider adapters use it to tell apart distinct sources that share markers.
     fn source_id(&self) -> Option<&'static str> {
         None
     }
+||||||| 413492cd6c
+=======
+    /// Binds producer attribution before this fragment is rendered or persisted.
+    fn with_metadata(self, metadata: ContentItemMetadata) -> AttributedFragment<Self>
+    where
+        Self: Sized,
+    {
+        AttributedFragment {
+            fragment: self,
+            metadata,
+        }
+    }
+
+    /// Returns a stable `<feature>.<name>` classification, using `generic` for shared fragments.
+    fn content_kind(&self) -> ContentItemKind;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     fn markers(&self) -> (&'static str, &'static str);
 
-    fn body(&self) -> String;
+    fn body(&self) -> ContentItem;
 
     fn type_markers() -> (&'static str, &'static str)
     where
@@ -75,38 +108,100 @@ pub trait ContextualUserFragment {
         matches_marked_text(start_marker, end_marker, text)
     }
 
-    fn render(&self) -> String {
+    fn render(&self) -> ContentItem {
         let (start_marker, end_marker) = self.markers();
         let body = self.body();
         if start_marker.is_empty() && end_marker.is_empty() {
             return body;
         }
 
-        format!("{start_marker}{body}{end_marker}")
+        match body {
+            ContentItem::InputText { text } => {
+                input_text(format!("{start_marker}{text}{end_marker}"))
+            }
+            content => content,
+        }
+    }
+
+    /// Renders the role, model-visible content, and classification together.
+    fn render_fragment(&self) -> RenderedFragment {
+        RenderedFragment::new(
+            self.role(),
+            AnnotatedContent::from_parts(
+                self.render(),
+                self.content_kind(),
+                self.content_metadata(),
+            ),
+        )
     }
 
     fn into(self) -> ResponseItem
     where
         Self: Sized,
     {
+<<<<<<< HEAD
         context_message(self.role(), [(self.render(), self.source_id())])
-    }
-
-    fn into_boxed_response_item(self: Box<Self>) -> ResponseItem {
-        context_message(self.role(), [(self.render(), self.source_id())])
-    }
-
-    fn into_response_input_item(self) -> ResponseInputItem
-    where
-        Self: Sized,
-    {
-        ResponseInputItem::Message {
+||||||| 413492cd6c
+        ResponseItem::Message {
+            id: None,
             role: self.role().to_string(),
             content: vec![ContentItem::InputText {
                 text: self.render(),
             }],
             phase: None,
+            internal_chat_message_metadata_passthrough: None,
         }
+=======
+        ResponseItem::from(self.render_fragment())
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    }
+
+    fn into_boxed_response_item(self: Box<Self>) -> ResponseItem {
+<<<<<<< HEAD
+        context_message(self.role(), [(self.render(), self.source_id())])
+||||||| 413492cd6c
+        ResponseItem::Message {
+            id: None,
+            role: self.role().to_string(),
+            content: vec![ContentItem::InputText {
+                text: self.render(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        }
+=======
+        ResponseItem::from(self.render_fragment())
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    }
+}
+
+/// A contextual fragment with attribution supplied by its producer.
+pub struct AttributedFragment<F> {
+    fragment: F,
+    metadata: ContentItemMetadata,
+}
+
+impl<F: ContextualUserFragment> ContextualUserFragment for AttributedFragment<F> {
+    fn role(&self) -> &'static str {
+        self.fragment.role()
+    }
+    fn content_kind(&self) -> ContentItemKind {
+        self.fragment.content_kind()
+    }
+    fn markers(&self) -> (&'static str, &'static str) {
+        self.fragment.markers()
+    }
+    fn type_markers() -> (&'static str, &'static str) {
+        F::type_markers()
+    }
+    fn body(&self) -> ContentItem {
+        self.fragment.body()
+    }
+    fn render(&self) -> ContentItem {
+        self.fragment.render()
+    }
+    fn content_metadata(&self) -> ContentItemMetadata {
+        self.metadata.clone()
     }
 }
 

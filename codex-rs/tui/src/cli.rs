@@ -1,6 +1,7 @@
 use clap::Args;
 use clap::FromArgMatches;
 use clap::Parser;
+use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_cli::ApprovalModeCliArg;
 use codex_utils_cli::CliConfigOverrides;
 use codex_utils_cli::SharedCliOptions;
@@ -8,6 +9,10 @@ use codex_utils_cli::SharedCliOptions;
 #[derive(Parser, Clone, Debug)]
 #[command(version)]
 pub struct Cli {
+    /// Internal: launching CLI that handles daemon updates after the TUI exits.
+    #[clap(skip)]
+    pub daemon_cli_executable: Option<AbsolutePathBuf>,
+
     /// Optional user prompt to start the session.
     #[arg(value_name = "PROMPT", value_hint = clap::ValueHint::Other)]
     pub prompt: Option<String>,
@@ -36,6 +41,10 @@ pub struct Cli {
     /// Internal: include non-interactive sessions in resume listings.
     #[clap(skip)]
     pub resume_include_non_interactive: bool,
+
+    /// Internal: open the agents overview instead of starting a thread.
+    #[clap(skip)]
+    pub agents_overview: bool,
 
     // Internal controls set by the top-level `codex fork` subcommand.
     // These are not exposed as user flags on the base `codex` command.
@@ -71,6 +80,7 @@ pub struct Cli {
     #[arg(long = "no-alt-screen", default_value_t = false)]
     pub no_alt_screen: bool,
 
+<<<<<<< HEAD
     /// Named account for this session (`<name>` for the session's provider,
     /// or `<provider>:<name>`). Another provider's account is used by spawned
     /// agents and workers on that provider and when you switch to it. Needs
@@ -78,6 +88,12 @@ pub struct Cli {
     /// default account.
     #[arg(long = "account", value_name = "[PROVIDER:]NAME")]
     pub account: Option<String>,
+||||||| 413492cd6c
+=======
+    /// Run without the shared background server, even if it is already running.
+    #[arg(long)]
+    pub no_daemon: bool,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     #[clap(skip)]
     pub config_overrides: CliConfigOverrides,
@@ -144,4 +160,5 @@ fn mark_tui_args(cmd: clap::Command) -> clap::Command {
     cmd.mut_arg("dangerously_bypass_approvals_and_sandbox", |arg| {
         arg.conflicts_with("approval_policy")
     })
+    .mut_arg("auto_review", |arg| arg.conflicts_with("approval_policy"))
 }

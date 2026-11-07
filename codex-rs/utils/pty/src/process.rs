@@ -114,8 +114,8 @@ type ResizeFn = Box<dyn FnMut(TerminalSize) -> anyhow::Result<()> + Send>;
 pub struct ProcessHandle {
     writer_tx: StdMutex<Option<mpsc::Sender<Vec<u8>>>>,
     killer: StdMutex<Option<Box<dyn ChildTerminator>>>,
-    reader_handle: StdMutex<Option<JoinHandle<()>>>,
-    reader_abort_handles: StdMutex<Vec<AbortHandle>>,
+    stdout_reader: Option<JoinHandle<()>>,
+    stderr_reader: Option<JoinHandle<()>>,
     writer_handle: StdMutex<Option<JoinHandle<()>>>,
     wait_handle: StdMutex<Option<JoinHandle<()>>>,
     exit_status: Arc<AtomicBool>,
@@ -139,8 +139,8 @@ impl ProcessHandle {
     pub(crate) fn new(
         writer_tx: mpsc::Sender<Vec<u8>>,
         killer: Box<dyn ChildTerminator>,
-        reader_handle: JoinHandle<()>,
-        reader_abort_handles: Vec<AbortHandle>,
+        stdout_reader: Option<JoinHandle<()>>,
+        stderr_reader: Option<JoinHandle<()>>,
         writer_handle: JoinHandle<()>,
         wait_handle: JoinHandle<()>,
         exit_status: Arc<AtomicBool>,
@@ -151,8 +151,8 @@ impl ProcessHandle {
         Self {
             writer_tx: StdMutex::new(Some(writer_tx)),
             killer: StdMutex::new(Some(killer)),
-            reader_handle: StdMutex::new(Some(reader_handle)),
-            reader_abort_handles: StdMutex::new(reader_abort_handles),
+            stdout_reader,
+            stderr_reader,
             writer_handle: StdMutex::new(Some(writer_handle)),
             wait_handle: StdMutex::new(Some(wait_handle)),
             exit_status,
@@ -160,6 +160,14 @@ impl ProcessHandle {
             _pty_handles: StdMutex::new(pty_handles),
             resizer: StdMutex::new(resizer),
         }
+    }
+
+    pub fn stdout_reader(&self) -> Option<AbortHandle> {
+        self.stdout_reader.as_ref().map(JoinHandle::abort_handle)
+    }
+
+    pub fn stderr_reader(&self) -> Option<AbortHandle> {
+        self.stderr_reader.as_ref().map(JoinHandle::abort_handle)
     }
 
     /// Returns a channel sender for writing raw bytes to the child stdin.
@@ -245,10 +253,11 @@ impl ProcessHandle {
         result
     }
 
-    /// Attempts to kill the child and abort helper tasks.
+    /// Attempts to kill the child and abort I/O helper tasks.
     pub fn terminate(&self) {
         self.request_terminate();
 
+<<<<<<< HEAD
         // #780: a PTY reader runs on a blocking thread, which aborting its
         // task does not stop. Dropping the handles stops it (`_reader_stop`)
         // and closes the master, which hangs up the terminal. Stopping the
@@ -261,13 +270,16 @@ impl ProcessHandle {
 
         if let Ok(mut h) = self.reader_handle.lock()
             && let Some(handle) = h.take()
+||||||| 413492cd6c
+        if let Ok(mut h) = self.reader_handle.lock()
+            && let Some(handle) = h.take()
+=======
+        for reader in [&self.stdout_reader, &self.stderr_reader]
+            .into_iter()
+            .flatten()
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         {
-            handle.abort();
-        }
-        if let Ok(mut handles) = self.reader_abort_handles.lock() {
-            for handle in handles.drain(..) {
-                handle.abort();
-            }
+            reader.abort();
         }
         if let Ok(mut h) = self.writer_handle.lock()
             && let Some(handle) = h.take()
@@ -277,7 +289,8 @@ impl ProcessHandle {
         if let Ok(mut h) = self.wait_handle.lock()
             && let Some(handle) = h.take()
         {
-            handle.abort();
+            // Even a queued PTY waiter must run to reap the terminated child.
+            drop(handle);
         }
     }
 }
@@ -471,11 +484,8 @@ pub fn spawn_from_driver(driver: ProcessDriver) -> SpawnedProcess {
             #[cfg(windows)]
             interrupt_terminates,
         }),
-        reader_handle,
-        stderr_reader_handle
-            .map(|handle| handle.abort_handle())
-            .into_iter()
-            .collect(),
+        Some(reader_handle),
+        stderr_reader_handle,
         writer_handle,
         wait_handle,
         exit_status,

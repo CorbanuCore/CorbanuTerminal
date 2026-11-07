@@ -108,6 +108,8 @@ pub enum PlanType {
     Pro,
     #[serde(rename = "prolite")]
     ProLite,
+    #[serde(rename = "promax")]
+    ProMax,
     #[serde(rename = "free_workspace")]
     FreeWorkspace,
     #[serde(rename = "team")]
@@ -134,6 +136,14 @@ pub enum PlanType {
     Enterprise,
     #[serde(rename = "edu")]
     Edu,
+    #[serde(rename = "edu_plus")]
+    EduPlus,
+    #[serde(rename = "edu_pro")]
+    EduPro,
+    #[serde(rename = "sci")]
+    Sci,
+    #[serde(rename = "sci_plus")]
+    SciPlus,
     #[serde(rename = "unknown", other)]
     Unknown,
 }

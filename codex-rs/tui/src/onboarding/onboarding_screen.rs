@@ -1,9 +1,9 @@
 //! Onboarding screen orchestration and top-level keyboard routing.
 //!
 //! The onboarding flow is a small state machine over visible steps
-//! (welcome/auth/trust). This module decides which step receives key/paste
+//! (welcome/auth/trust/GovCloud). This module decides which step receives key/paste
 //! events and enforces flow-level safety rules that cut across individual step
-//! widgets.
+//! widgets. Folder-entry consent reuses this same event loop for startup and in-app navigation.
 //!
 //! In particular, onboarding quit handling has a text-entry guard: while any
 //! text field has focus (an API key, a Claude token or code, or a named
@@ -14,11 +14,12 @@
 
 use codex_app_server_client::AppServerEvent;
 use codex_app_server_client::AppServerRequestHandle;
+use codex_app_server_protocol::ClientRequest;
+use codex_app_server_protocol::ConfigBatchWriteParams;
+use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::ServerNotification;
 use codex_exec_server::LOCAL_FS;
 use codex_git_utils::resolve_root_git_project_for_trust;
-#[cfg(target_os = "windows")]
-use codex_protocol::config_types::WindowsSandboxLevel;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyEventKind;
@@ -45,8 +46,13 @@ use crate::LoginStatus;
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
 use crate::app_server_session::AppServerSession;
+use crate::clipboard_copy::CopyFormat;
+use crate::clipboard_copy::CopyStatus;
+use crate::config_update::RemoteProjectTrust;
 use crate::config_update::format_config_error;
+use crate::config_update::replace_config_value;
 use crate::config_update::write_trusted_project;
+use crate::empty_state_animation::Presentation;
 use crate::key_hint::KeyBindingListExt;
 use crate::legacy_core::config::Config;
 use crate::onboarding::auth::ApiKeyInputState;
@@ -54,28 +60,50 @@ use crate::onboarding::auth::ApiKeyProviderOption;
 use crate::onboarding::auth::AuthModeWidget;
 use crate::onboarding::auth::SignInOption;
 use crate::onboarding::auth::SignInState;
+<<<<<<< HEAD
 use crate::onboarding::auth::catalog_sign_in_options_from_statuses;
+||||||| 413492cd6c
+=======
+use crate::onboarding::bedrock::BedrockState;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::onboarding::keys;
 use crate::onboarding::provider_setup::DeferredProviderSetup;
 use crate::onboarding::provider_setup::ProviderSetupSession;
 use crate::onboarding::trust_directory::TrustDirectorySelection;
 use crate::onboarding::trust_directory::TrustDirectoryWidget;
 use crate::onboarding::welcome::WelcomeWidget;
+<<<<<<< HEAD
 use crate::provider_auth_effect_executor::ProviderAuthEffectExecutor;
 use crate::provider_status_host::ProviderAccountMetadata;
 use crate::provider_status_host::ProviderStatusHost;
+||||||| 413492cd6c
+=======
+use crate::startup_draft::StartupCancelled;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::tui::FrameRequester;
+use crate::tui::MouseCapture;
 use crate::tui::Tui;
 use crate::tui::TuiEvent;
 use color_eyre::eyre::Result;
+use color_eyre::eyre::WrapErr;
 use std::sync::Arc;
 use std::sync::RwLock;
+use uuid::Uuid;
+
+#[path = "directory_trust.rs"]
+mod directory_trust;
+pub(crate) use directory_trust::DirectoryTrustOptions;
+pub(crate) use directory_trust::check_directory_trust;
 
 #[allow(clippy::large_enum_variant)]
 enum Step {
     Welcome(WelcomeWidget),
     Auth(AuthModeWidget),
     TrustDirectory(TrustDirectoryWidget),
+    GovCloudGuidance {
+        state: BedrockState,
+        acknowledged: bool,
+    },
 }
 
 pub(crate) trait KeyboardHandler {
@@ -97,6 +125,7 @@ pub(crate) trait StepStateProvider {
 pub(crate) struct OnboardingScreen {
     request_frame: FrameRequester,
     steps: Vec<Step>,
+    remote_trust_key: Option<String>,
     is_done: bool,
     should_exit: bool,
     provider_auth_controller: codex_provider_auth::ProviderAuthController,
@@ -107,12 +136,17 @@ pub(crate) struct OnboardingScreen {
 
 pub(crate) struct OnboardingScreenArgs {
     pub show_trust_screen: bool,
+    pub remote_project_trust: Option<RemoteProjectTrust>,
     pub show_login_screen: bool,
+    pub bedrock_setup_enabled: bool,
+    pub gcp_setup_enabled: bool,
     pub login_status: LoginStatus,
+    pub app_server_target: crate::AppServerTarget,
     pub app_server_request_handle: Option<AppServerRequestHandle>,
     pub config: Config,
 }
 
+#[derive(Default)]
 pub(crate) struct OnboardingResult {
     pub directory_trust_persisted: bool,
     pub should_exit: bool,
@@ -120,6 +154,7 @@ pub(crate) struct OnboardingResult {
     pub deferred_provider_setup: Option<DeferredProviderSetup>,
 }
 
+<<<<<<< HEAD
 fn provider_api_key_options(host: &ProviderStatusHost) -> Vec<ApiKeyProviderOption> {
     host.catalog()
         .entries()
@@ -175,6 +210,21 @@ fn initial_sign_in_option(
             .copied()
             .unwrap_or(SignInOption::ChatGpt),
     }
+||||||| 413492cd6c
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct ApiKeyEntryContext {
+    /// True when onboarding is currently rendering the API-key entry state.
+    active: bool,
+    /// True when the API-key input field currently contains user text.
+    has_text: bool,
+=======
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct TextEntryContext {
+    /// Whether onboarding is currently rendering a text-entry state.
+    active: bool,
+    /// Whether printable quit shortcuts should be consumed as text input.
+    has_text: bool,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl OnboardingScreen {
@@ -185,12 +235,18 @@ impl OnboardingScreen {
     ) -> Self {
         let OnboardingScreenArgs {
             show_trust_screen,
+            remote_project_trust,
             show_login_screen,
+            bedrock_setup_enabled,
+            gcp_setup_enabled,
             login_status,
+            app_server_target,
             app_server_request_handle,
             config,
         } = args;
+        let local_settings = crate::local_settings::LocalSettings::from(&config);
         let cwd = config.cwd.to_path_buf();
+<<<<<<< HEAD
         let provider_status_host = ProviderStatusHost::from_config(
             &config,
             ProviderAccountMetadata {
@@ -243,13 +299,38 @@ impl OnboardingScreen {
             api_key_provider_name = provider.name.clone();
             api_key_env_var = provider.environment_variable().map(str::to_string);
         }
+||||||| 413492cd6c
+        let forced_login_method = config.forced_login_method;
+=======
+        let remote_trust_key = remote_project_trust
+            .as_ref()
+            .map(|project| project.trust_target.to_string_lossy().into_owned());
+        let auth_config = config.auth_config();
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let mut steps: Vec<Step> = Vec::new();
         steps.push(Step::Welcome(WelcomeWidget::new(
             !matches!(login_status, LoginStatus::NotAuthenticated),
             tui.frame_requester(),
-            config.animations,
+            local_settings.tui.animations && local_settings.tui.effects.welcome,
         )));
+        #[cfg(target_os = "windows")]
+        let show_windows_create_sandbox_hint = if show_trust_screen
+            && remote_project_trust.is_none()
+            && let Some(handle) = &app_server_request_handle
+        {
+            crate::windows_sandbox::WindowsSandboxConfig::read(
+                handle.clone(),
+                config.cwd.display().to_string(),
+            )
+            .await
+            .is_ok_and(|state| !state.is_enabled())
+        } else {
+            false
+        };
+        #[cfg(not(target_os = "windows"))]
+        let show_windows_create_sandbox_hint = false;
         if show_login_screen {
+<<<<<<< HEAD
             let catalog_options = catalog_sign_in_options_from_statuses(
                 &provider_status_host,
                 &provider_statuses,
@@ -304,17 +385,37 @@ impl OnboardingScreen {
             } else {
                 std::collections::BTreeMap::new()
             };
+||||||| 413492cd6c
+            let highlighted_mode = match forced_login_method {
+                Some(ForcedLoginMethod::Api) => SignInOption::ApiKey,
+                _ => SignInOption::ChatGpt,
+            };
+=======
+            let highlighted_mode =
+                if auth_config.is_login_method_allowed(ForcedLoginMethod::Chatgpt) {
+                    SignInOption::ChatGpt
+                } else {
+                    SignInOption::OtherMethods
+                };
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             if let Some(app_server_request_handle) = app_server_request_handle {
                 let mut widget = AuthModeWidget {
                     request_frame: tui.frame_requester(),
                     highlighted_mode,
+                    activation_key_guard: None,
                     error: Arc::new(RwLock::new(None)),
                     sign_in_state: Arc::new(RwLock::new(initial_sign_in_state)),
                     login_status,
+<<<<<<< HEAD
                     replace_provider_with_openai_on_login: config.model_provider_id
                         == codex_model_provider_info::OPENAI_PROVIDER_ID
                         || !config.model_provider.requires_openai_auth,
+||||||| 413492cd6c
+=======
+                    app_server_target,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     app_server_request_handle,
+<<<<<<< HEAD
                     forced_login_method,
                     api_key_provider_id,
                     api_key_provider_name,
@@ -322,6 +423,16 @@ impl OnboardingScreen {
                     api_key_provider_options,
                     selected_api_key_option,
                     animations_enabled: config.animations,
+||||||| 413492cd6c
+                    forced_login_method,
+                    animations_enabled: config.animations,
+=======
+                    auth_config,
+                    bedrock_setup_enabled,
+                    gcp_setup_enabled,
+                    animations_enabled: local_settings.tui.animations
+                        && local_settings.tui.effects.shimmer,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     animations_suppressed: std::cell::Cell::new(false),
                     codex_home,
                     claude_event_tx,
@@ -337,18 +448,25 @@ impl OnboardingScreen {
                 tracing::warn!("skipping onboarding login step without app-server request handle");
             }
         }
-        #[cfg(target_os = "windows")]
-        let show_windows_create_sandbox_hint =
-            crate::windows_sandbox::level_from_config(&config) == WindowsSandboxLevel::Disabled;
-        #[cfg(not(target_os = "windows"))]
-        let show_windows_create_sandbox_hint = false;
         let highlighted = TrustDirectorySelection::Trust;
         if show_trust_screen {
-            let trust_target = resolve_root_git_project_for_trust(LOCAL_FS.as_ref(), &config.cwd)
-                .await
-                .map(Into::into)
-                .unwrap_or_else(|| cwd.clone());
+            let (cwd, trust_target) = match remote_project_trust {
+                Some(RemoteProjectTrust {
+                    cwd, trust_target, ..
+                }) => (cwd, trust_target),
+                None => {
+                    let trust_target =
+                        resolve_root_git_project_for_trust(LOCAL_FS.as_ref(), &config.cwd)
+                            .await
+                            .map(Into::into)
+                            .unwrap_or_else(|| cwd.clone());
+                    (cwd, trust_target)
+                }
+            };
             steps.push(Step::TrustDirectory(TrustDirectoryWidget {
+                restricted: false,
+                existing_task: false,
+                cancel: super::trust_directory::TrustCancelAction::Quit,
                 cwd,
                 trust_target,
                 show_windows_create_sandbox_hint,
@@ -361,6 +479,7 @@ impl OnboardingScreen {
         Self {
             request_frame: tui.frame_requester(),
             steps,
+            remote_trust_key,
             is_done: false,
             should_exit: false,
             provider_auth_controller: codex_provider_auth::ProviderAuthController::default(),
@@ -410,7 +529,7 @@ impl OnboardingScreen {
         // material so terminal selection is not interrupted by redraws.
         self.current_steps().into_iter().any(|step| match step {
             Step::Auth(widget) => widget.should_suppress_animations(),
-            Step::Welcome(_) | Step::TrustDirectory(_) => false,
+            Step::Welcome(_) | Step::TrustDirectory(_) | Step::GovCloudGuidance { .. } => false,
         })
     }
 
@@ -432,6 +551,7 @@ impl OnboardingScreen {
         self.should_exit
     }
 
+<<<<<<< HEAD
     fn configured_provider(&self) -> Option<String> {
         self.steps.iter().find_map(|step| {
             if let Step::Auth(widget) = step {
@@ -446,6 +566,15 @@ impl OnboardingScreen {
             Step::Auth(widget) => widget.deferred_provider_setup(),
             Step::Welcome(_) | Step::TrustDirectory(_) => None,
         })
+||||||| 413492cd6c
+=======
+    /// Check whether the first unfinished onboarding step can grant directory trust.
+    fn is_trust_step_active(&self) -> bool {
+        self.steps
+            .iter()
+            .find(|step| matches!(step.get_step_state(), StepState::InProgress))
+            .is_some_and(|step| matches!(step, Step::TrustDirectory(_)))
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn cancel_auth_if_active(&self) {
@@ -459,7 +588,7 @@ impl OnboardingScreen {
     fn auth_widget_mut(&mut self) -> Option<&mut AuthModeWidget> {
         self.steps.iter_mut().find_map(|step| match step {
             Step::Auth(widget) => Some(widget),
-            Step::Welcome(_) | Step::TrustDirectory(_) => None,
+            Step::Welcome(_) | Step::TrustDirectory(_) | Step::GovCloudGuidance { .. } => None,
         })
     }
 
@@ -479,6 +608,7 @@ impl OnboardingScreen {
         }
     }
 
+<<<<<<< HEAD
     fn handle_claude_event(&mut self, event: AppEvent) {
         if let Some(widget) = self.auth_widget_mut() {
             widget.handle_claude_event(event);
@@ -498,6 +628,31 @@ impl OnboardingScreen {
                     if let Some(widget) = self.auth_widget_mut() {
                         widget.on_api_key_configured(target.provider_id.as_str());
                     }
+||||||| 413492cd6c
+    fn api_key_entry_context(&self) -> ApiKeyEntryContext {
+        self.steps
+            .iter()
+            .find_map(|step| {
+                if let Step::Auth(widget) = step {
+                    Some(ApiKeyEntryContext {
+                        active: widget.is_api_key_entry_active(),
+                        has_text: widget.api_key_entry_has_text(),
+                    })
+                } else {
+                    None
+=======
+    fn text_entry_context(&self) -> TextEntryContext {
+        self.steps
+            .iter()
+            .find_map(|step| {
+                if let Step::Auth(widget) = step {
+                    Some(TextEntryContext {
+                        active: widget.is_text_entry_active(),
+                        has_text: widget.should_suppress_printable_quit(),
+                    })
+                } else {
+                    None
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 }
                 effect => {
                     if let Some(executor) = &self.provider_auth_executor {
@@ -522,20 +677,54 @@ impl OnboardingScreen {
 impl KeyboardHandler for OnboardingScreen {
     /// Route key events to onboarding steps while preserving text-entry safety.
     ///
+<<<<<<< HEAD
     /// While a text field has focus, printable quit bindings are text. Control
     /// quit chords still work as emergency exits.
+||||||| 413492cd6c
+    /// In API-key entry mode, printable quit bindings are suppressed only after
+    /// the user has started typing in the API-key field. This keeps the
+    /// printable `q` quit key usable on an empty field while protecting in-progress
+    /// text entry from accidental exits. Control/alt quit chords still work as
+    /// emergency exits.
+=======
+    /// OpenAI API-key entry suppresses printable quit bindings after typing
+    /// starts, while cloud provider fields suppress them from the first character.
+    /// Control/alt quit chords still work as emergency exits.
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     fn handle_key_event(&mut self, key_event: KeyEvent) {
-        if !matches!(key_event.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+        if key_event.kind == KeyEventKind::Release {
+            if let Some(widget) = self.auth_widget_mut() {
+                widget.handle_key_event(key_event);
+            }
             return;
         }
+<<<<<<< HEAD
+||||||| 413492cd6c
+        let api_key_entry_context = self.api_key_entry_context();
+=======
+        let text_entry_context = self.text_entry_context();
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let should_quit = key_event.kind == KeyEventKind::Press
             && keys::QUIT.is_pressed(key_event)
+<<<<<<< HEAD
             && !is_text_key_in_text_field(key_event, self.text_entry_active());
+||||||| 413492cd6c
+            && !suppress_quit_while_typing_api_key(key_event, api_key_entry_context);
+=======
+            && !suppress_quit_while_typing(key_event, text_entry_context);
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         if should_quit {
             if self.is_auth_in_progress() {
                 self.cancel_auth_if_active();
                 // If the user cancels the auth menu, exit the app rather than
                 // leave the user at a prompt in an unauthed state.
+                self.should_exit = true;
+            } else if self.is_trust_step_active()
+                || self
+                    .steps
+                    .iter()
+                    .any(|step| matches!(step, Step::GovCloudGuidance { .. }))
+            {
                 self.should_exit = true;
             }
             self.is_done = true;
@@ -576,10 +765,33 @@ impl KeyboardHandler for OnboardingScreen {
     }
 }
 
+<<<<<<< HEAD
 /// Returns `true` when a key is text for the focused text field, so it must
 /// never act as a shortcut: a printable character without control/alt.
 fn is_text_key_in_text_field(key_event: KeyEvent, text_entry_active: bool) -> bool {
     text_entry_active
+||||||| 413492cd6c
+/// Returns `true` when a quit shortcut should be ignored as text input.
+///
+/// This only applies while API-key entry is active and the key is a printable
+/// character without control/alt modifiers and there is already text in the
+/// input field. Empty input intentionally does not trigger suppression so
+/// the printable `q` quit key can still exit onboarding.
+fn suppress_quit_while_typing_api_key(
+    key_event: KeyEvent,
+    api_key_entry_context: ApiKeyEntryContext,
+) -> bool {
+    api_key_entry_context.active
+        && api_key_entry_context.has_text
+=======
+/// Returns `true` when a quit shortcut should be ignored as text input.
+///
+/// This only applies when the active text-entry state suppresses printable quit
+/// shortcuts and the key has no control/alt modifiers.
+fn suppress_quit_while_typing(key_event: KeyEvent, text_entry_context: TextEntryContext) -> bool {
+    text_entry_context.active
+        && text_entry_context.has_text
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         && matches!(key_event.code, KeyCode::Char(_))
         && !key_event
             .modifiers
@@ -589,11 +801,18 @@ fn is_text_key_in_text_field(key_event: KeyEvent, text_entry_active: bool) -> bo
 impl WidgetRef for &OnboardingScreen {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
         let suppress_animations = self.should_suppress_animations();
+        let logo_presentation = if suppress_animations {
+            Presentation::Hidden
+        } else if self.text_entry_context().active {
+            Presentation::Faded
+        } else {
+            Presentation::Animated
+        };
         for step in self.current_steps() {
             match step {
-                Step::Welcome(widget) => widget.set_animations_suppressed(suppress_animations),
+                Step::Welcome(widget) => widget.set_presentation(logo_presentation),
                 Step::Auth(widget) => widget.set_animations_suppressed(suppress_animations),
-                Step::TrustDirectory(_) => {}
+                Step::TrustDirectory(_) | Step::GovCloudGuidance { .. } => {}
             }
         }
 
@@ -667,12 +886,18 @@ impl KeyboardHandler for Step {
             Step::Welcome(widget) => widget.handle_key_event(key_event),
             Step::Auth(widget) => widget.handle_key_event(key_event),
             Step::TrustDirectory(widget) => widget.handle_key_event(key_event),
+            Step::GovCloudGuidance {
+                state,
+                acknowledged,
+            } => {
+                *acknowledged = state.handle_guidance_key_event(&key_event);
+            }
         }
     }
 
     fn handle_paste(&mut self, pasted: String) {
         match self {
-            Step::Welcome(_) => {}
+            Step::Welcome(_) | Step::GovCloudGuidance { .. } => {}
             Step::Auth(widget) => widget.handle_paste(pasted),
             Step::TrustDirectory(widget) => widget.handle_paste(pasted),
         }
@@ -685,6 +910,13 @@ impl StepStateProvider for Step {
             Step::Welcome(w) => w.get_step_state(),
             Step::Auth(w) => w.get_step_state(),
             Step::TrustDirectory(w) => w.get_step_state(),
+            Step::GovCloudGuidance { acknowledged, .. } => {
+                if *acknowledged {
+                    StepState::Complete
+                } else {
+                    StepState::InProgress
+                }
+            }
         }
     }
 }
@@ -723,39 +955,136 @@ impl WidgetRef for Step {
             Step::TrustDirectory(widget) => {
                 widget.render_ref(area, buf);
             }
+            Step::GovCloudGuidance { state, .. } => state.render(area, buf, /*error*/ None),
         }
     }
 }
 
+pub(crate) async fn run_gov_cloud_guidance(tui: &mut Tui) -> Result<()> {
+    let screen = OnboardingScreen {
+        request_frame: tui.frame_requester(),
+        steps: vec![Step::GovCloudGuidance {
+            state: BedrockState::guidance(),
+            acknowledged: false,
+        }],
+        remote_trust_key: None,
+        is_done: false,
+        should_exit: false,
+    };
+    let result = run_onboarding_screen(
+        screen, /*app_server_request_handle*/ None, /*app_server*/ None, tui,
+    )
+    .await?;
+    if result.should_exit {
+        return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, StartupCancelled).into());
+    }
+    Ok(())
+}
+
 pub(crate) async fn run_onboarding_app(
     args: OnboardingScreenArgs,
+    app_server: Option<&mut AppServerSession>,
+    tui: &mut Tui,
+) -> Result<OnboardingResult> {
+    let request_handle = args.app_server_request_handle.clone();
+    let screen = OnboardingScreen::new(tui, args).await;
+    run_onboarding_screen(screen, request_handle, app_server, tui).await
+}
+
+async fn run_onboarding_screen(
+    onboarding_screen: OnboardingScreen,
+    app_server_request_handle: Option<AppServerRequestHandle>,
+    app_server: Option<&mut AppServerSession>,
+    tui: &mut Tui,
+) -> Result<OnboardingResult> {
+    // Let the terminal select and copy login URLs and device codes, even in fullscreen mode.
+    let previous_mouse_capture = tui.mouse_capture;
+    let result = match tui.set_mouse_capture(MouseCapture::Disabled) {
+        Ok(()) => {
+            run_onboarding_screen_inner(
+                onboarding_screen,
+                app_server_request_handle,
+                app_server,
+                tui,
+            )
+            .await
+        }
+        Err(error) => Err(error.into()),
+    };
+    let restore = tui.set_mouse_capture(previous_mouse_capture);
+    result.and_then(|result| restore.map(|()| result).map_err(Into::into))
+}
+
+async fn run_onboarding_screen_inner(
+    mut onboarding_screen: OnboardingScreen,
+    app_server_request_handle: Option<AppServerRequestHandle>,
     mut app_server: Option<&mut AppServerSession>,
     tui: &mut Tui,
 ) -> Result<OnboardingResult> {
     use tokio_stream::StreamExt;
+<<<<<<< HEAD
 
     let app_server_request_handle = args.app_server_request_handle.clone();
     let (claude_event_tx, mut claude_event_rx) = tokio::sync::mpsc::unbounded_channel();
     let mut onboarding_screen =
         OnboardingScreen::new(tui, args, AppEventSender::new(claude_event_tx)).await;
+||||||| 413492cd6c
+
+    let app_server_request_handle = args.app_server_request_handle.clone();
+    let mut onboarding_screen = OnboardingScreen::new(tui, args).await;
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut directory_trust_persisted = false;
     // One-time guard to fully clear the screen after ChatGPT login success message is shown
     let mut did_full_clear_after_success = false;
+    let mut pending_copy: Option<(u64, String)> = None;
 
     tui.draw(u16::MAX, |frame| {
         frame.render_widget_ref(&onboarding_screen, frame.area());
     })?;
 
+    tui.discard_pending_input_before_interactive_screen()?;
     let tui_events = tui.event_stream();
     tokio::pin!(tui_events);
+    let mut trust_step_was_active = onboarding_screen.is_trust_step_active();
 
     while !onboarding_screen.is_done() {
         tokio::select! {
             event = tui_events.next() => {
                 if let Some(event) = event {
+                    tui.screen_size_for_event(&event)?;
                     match event {
                         TuiEvent::Key(key_event) => {
-                            onboarding_screen.handle_key_event(key_event);
+                            let copy_link = if key_event.kind == KeyEventKind::Press
+                                && keys::COPY_LINK.is_pressed(key_event)
+                                && let Some(Step::Auth(widget)) = onboarding_screen.current_steps().last()
+                                && let Ok(state) = widget.sign_in_state.read()
+                                && let SignInState::ChatGptContinueInBrowser(state) = &*state
+                                && !state.auth_url.is_empty()
+                            {
+                                Some((state.login_id.clone(), Arc::<str>::from(state.auth_url.as_str())))
+                            } else {
+                                None
+                            };
+                            if let Some((login_id, url)) = copy_link {
+                                let result = tui.clipboard.copy(url, CopyFormat::PlainText, tui.frame_requester());
+                                let message = match result {
+                                    Ok(CopyStatus::Pending(id)) => {
+                                        pending_copy = Some((id, login_id));
+                                        "Copying link…".to_string()
+                                    }
+                                    Ok(CopyStatus::Busy) => "Clipboard busy; try again".to_string(),
+                                    Ok(CopyStatus::Confirmed) => "Copied link to clipboard".to_string(),
+                                    Ok(CopyStatus::Unconfirmed) => "Copy requested; check your clipboard".to_string(),
+                                    Err(error) => format!("Could not copy link: {error}"),
+                                };
+                                if let Some(Step::Auth(widget)) = onboarding_screen.current_steps_mut().into_iter().last() {
+                                    *widget.error.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(message);
+                                }
+                                tui.frame_requester().schedule_frame();
+                            } else {
+                                onboarding_screen.handle_key_event(key_event);
+                            }
                             if !directory_trust_persisted {
                                 directory_trust_persisted = persist_selected_trust(
                                     &mut onboarding_screen,
@@ -767,7 +1096,38 @@ pub(crate) async fn run_onboarding_app(
                         TuiEvent::Paste(text) => {
                             onboarding_screen.handle_paste(text);
                         }
-                        TuiEvent::Draw | TuiEvent::Resize => {
+                        TuiEvent::Draw
+                        | TuiEvent::Resume
+                        | TuiEvent::Resize(_)
+                        | TuiEvent::FocusGained
+                        | TuiEvent::FocusLost => {
+                            if let Some((id, result)) = tui.clipboard.poll().cloned()
+                                && let Some((pending_id, login_id)) = &pending_copy
+                                && id == *pending_id
+                            {
+                                if let Some(Step::Auth(widget)) = onboarding_screen.current_steps_mut().into_iter().last()
+                                    && widget.sign_in_state.read().is_ok_and(|state| {
+                                        matches!(&*state, SignInState::ChatGptContinueInBrowser(state) if state.login_id == *login_id)
+                                    })
+                                {
+                                    let message = match result {
+                                        Ok(CopyStatus::Confirmed) => "Copied link to clipboard".to_string(),
+                                        Ok(CopyStatus::Unconfirmed) => "Copy requested; check your clipboard".to_string(),
+                                        Ok(CopyStatus::Busy | CopyStatus::Pending(_)) => "Clipboard busy; try again".to_string(),
+                                        Err(error) => format!("Could not copy link: {error}"),
+                                    };
+                                    *widget.error.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(message);
+                                }
+                                pending_copy = None;
+                            }
+                            for step in &onboarding_screen.steps {
+                                if let Step::Welcome(widget) = step {
+                                    if matches!(&event, TuiEvent::Resume) {
+                                        widget.set_presentation(crate::empty_state_animation::Presentation::Hidden);
+                                    }
+                                    widget.set_focused(tui.is_terminal_focused());
+                                }
+                            }
                             if !did_full_clear_after_success
                                 && onboarding_screen.steps.iter().any(|step| {
                                     if let Step::Auth(w) = step {
@@ -798,11 +1158,14 @@ pub(crate) async fn run_onboarding_app(
                                 let _ = tui.terminal.clear();
                                 did_full_clear_after_success = true;
                             }
-                            let _ = tui.draw(u16::MAX, |frame| {
+                            tui.draw(u16::MAX, |frame| {
                                 frame.render_widget_ref(&onboarding_screen, frame.area());
-                            });
+                            })?;
                         }
+                        TuiEvent::Mouse(_) => {}
                     }
+                } else {
+                    return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, StartupCancelled).into());
                 }
             }
             event = async {
@@ -812,7 +1175,7 @@ pub(crate) async fn run_onboarding_app(
                 }
             }, if app_server.is_some() => {
                 if let Some(event) = event {
-                    match event {
+                    match event.event {
                         AppServerEvent::ServerNotification(notification) => {
                             onboarding_screen.handle_app_server_notification(*notification);
                         }
@@ -835,6 +1198,18 @@ pub(crate) async fn run_onboarding_app(
                 }
             }
         }
+
+        discard_pending_input_on_trust_step_transition(
+            &onboarding_screen,
+            &mut trust_step_was_active,
+            |onboarding_screen| {
+                tui.draw(u16::MAX, |frame| {
+                    frame.render_widget_ref(onboarding_screen, frame.area());
+                })?;
+                tui.discard_pending_input_before_interactive_screen()?;
+                Ok(())
+            },
+        )?;
     }
     // `TuiEventStream` shares the broker-owned crossterm source. The onboarding stream can leave
     // that source registered with its now-stale task waker when this sequential screen exits.
@@ -849,6 +1224,7 @@ pub(crate) async fn run_onboarding_app(
     })
 }
 
+<<<<<<< HEAD
 fn openai_metadata(login_status: LoginStatus) -> codex_login::OpenAiAuthMetadata {
     match login_status {
         LoginStatus::NotAuthenticated => codex_login::OpenAiAuthMetadata::Missing,
@@ -864,6 +1240,23 @@ fn openai_metadata(login_status: LoginStatus) -> codex_login::OpenAiAuthMetadata
         }
         LoginStatus::AuthMode(_) => codex_login::OpenAiAuthMetadata::Unsupported,
     }
+||||||| 413492cd6c
+=======
+/// Render a newly activated trust step before discarding keys from the preceding screen.
+///
+/// Once the step is active, preserve fresh navigation and confirmation input.
+fn discard_pending_input_on_trust_step_transition(
+    onboarding_screen: &OnboardingScreen,
+    trust_step_was_active: &mut bool,
+    render_and_discard: impl FnOnce(&OnboardingScreen) -> Result<()>,
+) -> Result<()> {
+    let trust_step_is_active = onboarding_screen.is_trust_step_active();
+    if trust_step_is_active && !*trust_step_was_active {
+        render_and_discard(onboarding_screen)?;
+    }
+    *trust_step_was_active = trust_step_is_active;
+    Ok(())
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 async fn persist_selected_trust(
@@ -877,6 +1270,7 @@ async fn persist_selected_trust(
         .find_map(|(index, step)| {
             if let Step::TrustDirectory(widget) = step
                 && widget.selection == Some(TrustDirectorySelection::Trust)
+                && !widget.restricted
             {
                 return Some((index, widget.trust_target.clone()));
             }
@@ -886,11 +1280,36 @@ async fn persist_selected_trust(
         return false;
     };
 
-    let result = match request_handle {
-        Some(request_handle) => write_trusted_project(request_handle, &trust_target)
+    let result = match (
+        request_handle,
+        onboarding_screen.remote_trust_key.as_deref(),
+    ) {
+        (Some(request_handle), Some(project_key)) => {
+            let project_key = project_key.replace('\\', "\\\\").replace('"', "\\\"");
+            request_handle
+                .request_typed::<serde_json::Value>(ClientRequest::ConfigBatchWrite {
+                    request_id: RequestId::String(format!(
+                        "tui-project-trust-write-{}",
+                        Uuid::new_v4()
+                    )),
+                    params: ConfigBatchWriteParams {
+                        edits: vec![replace_config_value(
+                            format!("projects.\"{project_key}\".trust_level"),
+                            serde_json::json!("trusted"),
+                        )],
+                        file_path: None,
+                        expected_version: None,
+                        reload_user_config: true,
+                    },
+                })
+                .await
+                .map(|_| ())
+                .wrap_err("config/batchWrite failed while persisting remote project trust")
+        }
+        (Some(request_handle), None) => write_trusted_project(request_handle, &trust_target)
             .await
             .map(|_| ()),
-        None => Err(color_eyre::eyre::eyre!("app server unavailable")),
+        (None, _) => Err(color_eyre::eyre::eyre!("app server unavailable")),
     };
 
     match result {
@@ -915,18 +1334,36 @@ async fn persist_selected_trust(
 
 #[cfg(test)]
 mod tests {
+<<<<<<< HEAD
     use super::KeyboardHandler;
+||||||| 413492cd6c
+    use super::ApiKeyEntryContext;
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     use super::OnboardingScreen;
     use super::Step;
     use super::StepState;
     use super::StepStateProvider;
+<<<<<<< HEAD
     use super::initial_sign_in_option;
     use super::is_text_key_in_text_field;
+||||||| 413492cd6c
+=======
+    use super::TextEntryContext;
+    use super::discard_pending_input_on_trust_step_transition;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     use super::persist_selected_trust;
+<<<<<<< HEAD
     use super::provider_api_key_options;
     use super::visible_step_indices;
     use crate::onboarding::auth::SignInOption;
     use crate::onboarding::auth::catalog_sign_in_options;
+||||||| 413492cd6c
+    use super::suppress_quit_while_typing_api_key;
+=======
+    use super::suppress_quit_while_typing;
+    use crate::onboarding::onboarding_screen::KeyboardHandler;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     use crate::onboarding::trust_directory::TrustDirectorySelection;
     use crate::onboarding::trust_directory::TrustDirectoryWidget;
     use crate::provider_status_host::ProviderStatusHost;
@@ -939,20 +1376,45 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
+<<<<<<< HEAD
     fn printable_quit_key_is_text_in_a_text_field_even_when_empty() {
         // #461: an empty field must not quit either, or a value that starts
         // with `q` ends the session and the rest reaches the shell.
         assert!(is_text_key_in_text_field(
+||||||| 413492cd6c
+    fn suppresses_printable_quit_key_during_api_key_entry() {
+        let suppressed = suppress_quit_while_typing_api_key(
+=======
+    fn suppresses_printable_quit_key_during_api_key_entry() {
+        let suppressed = suppress_quit_while_typing(
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
+<<<<<<< HEAD
             /*text_entry_active*/ true,
         ));
         assert!(is_text_key_in_text_field(
             KeyEvent::new(KeyCode::Char('Q'), KeyModifiers::SHIFT),
             /*text_entry_active*/ true,
         ));
+||||||| 413492cd6c
+            ApiKeyEntryContext {
+                active: true,
+                has_text: true,
+            },
+        );
+        assert!(suppressed);
+=======
+            TextEntryContext {
+                active: true,
+                has_text: true,
+            },
+        );
+        assert!(suppressed);
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     #[test]
+<<<<<<< HEAD
     fn control_quit_chords_still_quit_from_a_text_field() {
         for key in ['c', 'd'] {
             assert!(!is_text_key_in_text_field(
@@ -965,12 +1427,36 @@ mod tests {
     #[test]
     fn printable_quit_key_is_a_shortcut_outside_text_fields() {
         assert!(!is_text_key_in_text_field(
+||||||| 413492cd6c
+    fn does_not_suppress_printable_quit_key_when_api_key_input_is_empty() {
+        let suppressed = suppress_quit_while_typing_api_key(
+=======
+    fn does_not_suppress_printable_quit_key_when_api_key_input_is_empty() {
+        let suppressed = suppress_quit_while_typing(
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
+<<<<<<< HEAD
             /*text_entry_active*/ false,
         ));
+||||||| 413492cd6c
+            ApiKeyEntryContext {
+                active: true,
+                has_text: false,
+            },
+        );
+        assert!(!suppressed);
+=======
+            TextEntryContext {
+                active: true,
+                has_text: false,
+            },
+        );
+        assert!(!suppressed);
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     #[test]
+<<<<<<< HEAD
     fn forced_chatgpt_never_defaults_to_the_hidden_anthropic_option() {
         assert_eq!(
             initial_sign_in_option(
@@ -978,10 +1464,28 @@ mod tests {
                 Some(ForcedLoginMethod::Chatgpt),
             ),
             SignInOption::ChatGpt
+||||||| 413492cd6c
+    fn does_not_suppress_control_quit_key_during_api_key_entry() {
+        let suppressed = suppress_quit_while_typing_api_key(
+            KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL),
+            ApiKeyEntryContext {
+                active: true,
+                has_text: true,
+            },
+=======
+    fn does_not_suppress_control_quit_key_during_api_key_entry() {
+        let suppressed = suppress_quit_while_typing(
+            KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL),
+            TextEntryContext {
+                active: true,
+                has_text: true,
+            },
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         );
     }
 
     #[test]
+<<<<<<< HEAD
     fn forced_api_key_never_defaults_to_the_hidden_anthropic_option() {
         assert_eq!(
             initial_sign_in_option(
@@ -1006,6 +1510,21 @@ mod tests {
                 name: "PF53 Custom".to_string(),
                 env_key: Some("PF53_CUSTOM_API_KEY".to_string()),
                 ..Default::default()
+||||||| 413492cd6c
+    fn does_not_suppress_when_not_in_api_key_entry() {
+        let suppressed = suppress_quit_while_typing_api_key(
+            KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
+            ApiKeyEntryContext {
+                active: false,
+                has_text: true,
+=======
+    fn does_not_suppress_when_not_in_api_key_entry() {
+        let suppressed = suppress_quit_while_typing(
+            KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
+            TextEntryContext {
+                active: false,
+                has_text: true,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             },
         );
         let host = ProviderStatusHost::from_config(
@@ -1098,6 +1617,104 @@ mod tests {
         );
     }
 
+    #[test]
+    fn buffered_enter_is_discarded_when_trust_step_becomes_active() {
+        let mut onboarding_screen = OnboardingScreen {
+            request_frame: FrameRequester::test_dummy(),
+            steps: vec![Step::TrustDirectory(TrustDirectoryWidget {
+                restricted: false,
+                existing_task: false,
+                cancel: super::super::trust_directory::TrustCancelAction::Quit,
+                cwd: PathBuf::from("/workspace/project"),
+                trust_target: PathBuf::from("/workspace/project"),
+                show_windows_create_sandbox_hint: false,
+                should_quit: false,
+                selection: None,
+                highlighted: TrustDirectorySelection::Trust,
+                error: None,
+            })],
+            remote_trust_key: None,
+            is_done: false,
+            should_exit: false,
+        };
+
+        let mut buffered_keys = vec![KeyEvent::from(KeyCode::Enter)];
+        let mut trust_step_was_active = false;
+        let mut drain_count = 0;
+        discard_pending_input_on_trust_step_transition(
+            &onboarding_screen,
+            &mut trust_step_was_active,
+            |_| {
+                drain_count += 1;
+                buffered_keys.clear();
+                Ok(())
+            },
+        )
+        .expect("discard buffered trust input");
+        for key in buffered_keys {
+            onboarding_screen.handle_key_event(key);
+        }
+
+        assert!(onboarding_screen.is_trust_step_active());
+        let Step::TrustDirectory(widget) = &onboarding_screen.steps[0] else {
+            panic!("trust step should remain present");
+        };
+        assert_eq!(widget.selection, None);
+        assert_eq!(widget.highlighted, TrustDirectorySelection::Trust);
+
+        let mut navigation_keys = vec![KeyEvent::from(KeyCode::Down)];
+        discard_pending_input_on_trust_step_transition(
+            &onboarding_screen,
+            &mut trust_step_was_active,
+            |_| {
+                drain_count += 1;
+                navigation_keys.clear();
+                Ok(())
+            },
+        )
+        .expect("retain fresh trust navigation");
+        assert_eq!(drain_count, 1);
+        onboarding_screen.handle_key_event(navigation_keys.remove(0));
+        let Step::TrustDirectory(widget) = &onboarding_screen.steps[0] else {
+            panic!("trust step should remain present");
+        };
+        assert_eq!(widget.highlighted, TrustDirectorySelection::Quit);
+        onboarding_screen.handle_key_event(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+        assert!(onboarding_screen.should_exit());
+    }
+
+    #[tokio::test]
+    async fn restricted_acceptance_and_cancellation_do_not_persist_trust() {
+        for key in [KeyCode::Enter, KeyCode::Esc] {
+            let mut screen = OnboardingScreen {
+                request_frame: FrameRequester::test_dummy(),
+                steps: vec![Step::TrustDirectory(TrustDirectoryWidget {
+                    restricted: true,
+                    existing_task: false,
+                    cancel: super::super::trust_directory::TrustCancelAction::AgentsOverview,
+                    cwd: PathBuf::from("/workspace/project"),
+                    trust_target: PathBuf::from("/workspace/project"),
+                    show_windows_create_sandbox_hint: false,
+                    should_quit: false,
+                    selection: None,
+                    highlighted: TrustDirectorySelection::Trust,
+                    error: None,
+                })],
+                remote_trust_key: Some("/workspace/project".to_string()),
+                is_done: false,
+                should_exit: false,
+            };
+            screen.handle_key_event(key.into());
+            assert!(!persist_selected_trust(&mut screen, /*request_handle*/ None).await);
+            assert!(screen.is_done());
+            assert_eq!(screen.should_exit(), key == KeyCode::Esc);
+            let Step::TrustDirectory(widget) = &screen.steps[0] else {
+                panic!("trust step")
+            };
+            assert_eq!(widget.error, None);
+        }
+    }
+
     #[tokio::test]
     async fn trust_persistence_failure_keeps_trust_step_in_progress() {
         let (_provider_auth_action_tx, provider_auth_action_rx) =
@@ -1105,6 +1722,9 @@ mod tests {
         let mut onboarding_screen = OnboardingScreen {
             request_frame: FrameRequester::test_dummy(),
             steps: vec![Step::TrustDirectory(TrustDirectoryWidget {
+                restricted: false,
+                existing_task: false,
+                cancel: super::super::trust_directory::TrustCancelAction::Quit,
                 cwd: PathBuf::from("/workspace/project"),
                 trust_target: PathBuf::from("/workspace/project"),
                 show_windows_create_sandbox_hint: false,
@@ -1113,6 +1733,7 @@ mod tests {
                 highlighted: TrustDirectorySelection::Trust,
                 error: None,
             })],
+            remote_trust_key: None,
             is_done: false,
             should_exit: false,
             provider_auth_controller: codex_provider_auth::ProviderAuthController::default(),

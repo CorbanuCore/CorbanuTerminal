@@ -80,7 +80,7 @@ impl<T: HttpTransport> ResponsesClient<T> {
         fields(
             transport = "responses_http",
             http.method = "POST",
-            api.path = "responses"
+            api.path = "/responses"
         )
     )]
     pub async fn stream_request(
@@ -96,7 +96,6 @@ impl<T: HttpTransport> ResponsesClient<T> {
             compression,
             turn_state,
         } = options;
-
         let body = EncodedJsonBody::encode(&request)
             .map_err(|e| ApiError::Stream(format!("failed to encode responses request: {e}")))?;
 
@@ -113,10 +112,6 @@ impl<T: HttpTransport> ResponsesClient<T> {
             .await
     }
 
-    fn path() -> &'static str {
-        "responses"
-    }
-
     #[instrument(
         name = "responses.stream",
         level = "info",
@@ -124,7 +119,7 @@ impl<T: HttpTransport> ResponsesClient<T> {
         fields(
             transport = "responses_http",
             http.method = "POST",
-            api.path = "responses",
+            api.path = "/responses",
             turn.has_state = turn_state.is_some()
         )
     )]
@@ -157,7 +152,7 @@ impl<T: HttpTransport> ResponsesClient<T> {
             .session
             .stream_encoded_json_with(
                 Method::POST,
-                Self::path(),
+                "/responses",
                 extra_headers,
                 Some(body),
                 |req| {

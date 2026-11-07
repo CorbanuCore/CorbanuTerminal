@@ -7,6 +7,9 @@ mod approval_policy;
 mod auth_env;
 #[path = "completion_backfill_tests.rs"]
 mod completion_backfill;
+#[path = "cyber_access_program_tests.rs"]
+mod cyber_access_program;
+mod daybreak;
 mod ephemeral;
 mod home_unreadable_wait;
 mod hooks;
@@ -21,5 +24,12 @@ mod provider_auth_failure_exit;
 mod provider_key_env;
 mod resume;
 mod sandbox;
+#[cfg(target_os = "macos")]
+mod seatbelt;
 mod server_error_exit;
+<<<<<<< HEAD
 mod trace_log_credentials;
+||||||| 413492cd6c
+=======
+mod worktree;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

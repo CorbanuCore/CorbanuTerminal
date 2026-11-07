@@ -1,0 +1,30 @@
+---
+source: tui/src/chatwidget/tests/guardian.rs
+assertion_line: 205
+expression: normalize_snapshot_paths(term.backend().vt100().screen().contents())
+---
+
+
+
+
+
+<<<<<<< HEAD:codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_approved_exec_renders_approved_request.snap
+✔ Auto-reviewer approved Corbanu to run rm -f /tmp/guardian-approved.sqlite this
+  time
+||||||| 413492cd6c:codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_approved_exec_renders_approved_request.snap
+✔ Auto-reviewer approved codex to run rm -f /tmp/guardian-approved.sqlite this
+  time
+=======
+
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_approved_exec_is_hidden_from_history.snap
+
+
+› Ask Corbanu Terminal to do anything
+
+<<<<<<< HEAD:codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_approved_exec_renders_approved_request.snap
+  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -- tok/s
+||||||| 413492cd6c:codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_approved_exec_renders_approved_request.snap
+  gpt-5.6-sol default · /tmp/project
+=======
+  GPT-5.6-Sol default · /tmp/project
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_approved_exec_is_hidden_from_history.snap

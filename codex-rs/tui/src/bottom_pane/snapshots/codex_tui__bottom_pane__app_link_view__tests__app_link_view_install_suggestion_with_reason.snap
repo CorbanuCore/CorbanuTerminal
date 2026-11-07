@@ -13,6 +13,16 @@ expression: "render_snapshot(&view, Rect::new(0, 0, 72, view.desired_height(72))
   After installed, use $ to insert this app into the prompt.
 
 
+<<<<<<< HEAD
   › 1. Install on ChatGPT
     2. Back
   Use ↑ ↓ to move, enter to select, esc to close
+||||||| 413492cd6c
+  › 1. Install on ChatGPT
+    2. Back
+  Use tab / ↑ ↓ to move, enter to select, esc to close
+=======
+› 1. Install on ChatGPT
+  2. Back
+  tab / ↑ ↓ move · enter select · esc close
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

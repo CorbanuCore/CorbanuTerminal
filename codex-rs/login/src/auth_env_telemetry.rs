@@ -62,10 +62,12 @@ mod tests {
             account: None,
             name: "Custom".to_string(),
             base_url: None,
+            model_catalog_url: None,
             env_key: Some("sk-should-not-leak".to_string()),
             env_key_instructions: None,
             experimental_bearer_token: None,
             auth: None,
+            gateway_oauth: None,
             aws: None,
             wire_api: WireApi::Responses,
             query_params: None,
@@ -82,8 +84,17 @@ mod tests {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
+<<<<<<< HEAD
             billing: None,
             runtime_policy: Default::default(),
+||||||| 413492cd6c
+=======
+            capabilities: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            include_internal_metadata: false,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
 
         let telemetry =

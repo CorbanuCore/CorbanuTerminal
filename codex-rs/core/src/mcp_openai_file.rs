@@ -13,20 +13,36 @@
 
 use crate::session::session::Session;
 use crate::session::step_context::StepContext;
+use codex_api::HostedFileUploadContext;
 use codex_api::OPENAI_FILE_UPLOAD_LIMIT_BYTES;
 use codex_api::upload_openai_file;
+<<<<<<< HEAD
 use codex_file_system::FileSystemReadStream;
 use codex_file_system::FileSystemSandboxContext;
 use codex_http_client::RouteAwareClientPool;
+||||||| 413492cd6c
+use codex_http_client::RouteAwareClientPool;
+=======
+use codex_exec_server::GetMetadataOptions;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_login::CodexAuth;
+use codex_protocol::permissions::FileSystemAccessMode;
+use codex_sandboxing::policy_transforms::effective_file_system_sandbox_policy;
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
+use std::sync::Arc;
+
+struct FileArgumentLocation<'a> {
+    field_name: &'a str,
+    index: Option<usize>,
+}
 
 pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
     sess: &Session,
     step_context: &StepContext,
     arguments_value: Option<JsonValue>,
     openai_file_input_optional_fields: Option<&HashMap<String, Vec<String>>>,
+    hosted_upload: Option<&HostedFileUploadContext>,
 ) -> Result<Option<JsonValue>, String> {
     let Some(openai_file_input_optional_fields) = openai_file_input_optional_fields else {
         return Ok(arguments_value);
@@ -69,14 +85,21 @@ pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
             continue;
         };
         let Some(uploaded_value) = rewrite_argument_value_for_openai_files(
+            sess,
             step_context,
+<<<<<<< HEAD
             read_policy.as_ref(),
             read_sandbox.as_ref(),
             &sess.services.openai_file_upload_client_pool,
+||||||| 413492cd6c
+            &sess.services.openai_file_upload_client_pool,
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             auth.as_ref(),
             field_name,
             optional_fields,
             value,
+            hosted_upload,
         )
         .await?
         else {
@@ -94,28 +117,44 @@ pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
 
 #[allow(clippy::too_many_arguments)]
 async fn rewrite_argument_value_for_openai_files(
+    sess: &Session,
     step_context: &StepContext,
+<<<<<<< HEAD
     read_policy: Option<&codex_protocol::permissions::FileSystemSandboxPolicy>,
     read_sandbox: Option<&FileSystemSandboxContext>,
     client_pool: &RouteAwareClientPool,
+||||||| 413492cd6c
+    client_pool: &RouteAwareClientPool,
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     auth: Option<&CodexAuth>,
     field_name: &str,
     optional_fields: &[String],
     value: &JsonValue,
+    hosted_upload: Option<&HostedFileUploadContext>,
 ) -> Result<Option<JsonValue>, String> {
     match value {
         JsonValue::String(file_path) => {
             check_upload_readable(step_context, read_policy, file_path)?;
             let rewritten = build_uploaded_argument_value(
+                sess,
                 step_context,
+<<<<<<< HEAD
                 read_policy,
                 read_sandbox,
                 client_pool,
+||||||| 413492cd6c
+                client_pool,
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 auth,
-                field_name,
-                /*index*/ None,
+                FileArgumentLocation {
+                    field_name,
+                    index: None,
+                },
                 optional_fields,
                 file_path,
+                hosted_upload,
             )
             .await?;
             Ok(Some(rewritten))
@@ -128,15 +167,24 @@ async fn rewrite_argument_value_for_openai_files(
                 };
                 check_upload_readable(step_context, read_policy, file_path)?;
                 let rewritten = build_uploaded_argument_value(
+                    sess,
                     step_context,
+<<<<<<< HEAD
                     read_policy,
                     read_sandbox,
                     client_pool,
+||||||| 413492cd6c
+                    client_pool,
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     auth,
-                    field_name,
-                    Some(index),
+                    FileArgumentLocation {
+                        field_name,
+                        index: Some(index),
+                    },
                     optional_fields,
                     file_path,
+                    hosted_upload,
                 )
                 .await?;
                 rewritten_values.push(rewritten);
@@ -187,16 +235,23 @@ fn check_upload_readable(
 
 #[allow(clippy::too_many_arguments)]
 async fn build_uploaded_argument_value(
+    sess: &Session,
     step_context: &StepContext,
+<<<<<<< HEAD
     read_policy: Option<&codex_protocol::permissions::FileSystemSandboxPolicy>,
     read_sandbox: Option<&FileSystemSandboxContext>,
     client_pool: &RouteAwareClientPool,
+||||||| 413492cd6c
+    client_pool: &RouteAwareClientPool,
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     auth: Option<&CodexAuth>,
-    field_name: &str,
-    index: Option<usize>,
+    argument: FileArgumentLocation<'_>,
     optional_fields: &[String],
     file_path: &str,
+    hosted_upload: Option<&HostedFileUploadContext>,
 ) -> Result<JsonValue, String> {
+    let FileArgumentLocation { field_name, index } = argument;
     let contextualize_error = |error: String| match index {
         Some(index) => {
             format!("failed to upload `{file_path}` for `{field_name}[{index}]`: {error}")
@@ -219,7 +274,35 @@ async fn build_uploaded_argument_value(
         .cwd()
         .join(file_path)
         .map_err(|error| contextualize_error(error.to_string()))?;
+    let additional_permissions =
+        turn_context.granted_permissions(&turn_environment.selection.environment_id);
+    let file_system_policy = effective_file_system_sandbox_policy(
+        &turn_environment
+            .permission_profile()
+            .file_system_sandbox_policy(),
+        additional_permissions.as_ref(),
+    );
+    let requires_sandbox = !file_system_policy.has_full_disk_read_access()
+        || file_system_policy
+            .entries
+            .iter()
+            .any(|entry| entry.access == FileSystemAccessMode::Deny);
+    let sandbox =
+        requires_sandbox.then(|| turn_environment.sandbox_context(additional_permissions));
+    if sandbox.is_some() {
+        let environment_info = turn_environment
+            .environment
+            .info()
+            .await
+            .map_err(|error| contextualize_error(error.to_string()))?;
+        if !environment_info.capabilities.sandboxed_file_streaming {
+            return Err(contextualize_error(
+                "selected executor does not support sandboxed file streaming".to_string(),
+            ));
+        }
+    }
     let fs = turn_environment.environment.get_filesystem();
+<<<<<<< HEAD
     let (size, contents) = if let Some(policy) = read_policy
         && !read_sandbox.is_some_and(FileSystemSandboxContext::should_run_in_sandbox)
     {
@@ -256,6 +339,55 @@ async fn build_uploaded_argument_value(
             .await
             .map_err(contextualize_error)?
     };
+||||||| 413492cd6c
+    let metadata = fs
+        .get_metadata(&path_uri, /*sandbox*/ None)
+        .await
+        .map_err(|error| contextualize_error(error.to_string()))?;
+    if !metadata.is_file {
+        return Err(contextualize_error(format!(
+            "path `{}` is not a file",
+            path_uri.inferred_native_path_string()
+        )));
+    }
+    if metadata.size > OPENAI_FILE_UPLOAD_LIMIT_BYTES {
+        return Err(contextualize_error(format!(
+            "file `{}` is too large: {} bytes exceeds the limit of {} bytes",
+            path_uri.inferred_native_path_string(),
+            metadata.size,
+            OPENAI_FILE_UPLOAD_LIMIT_BYTES,
+        )));
+    }
+    let contents = fs
+        .read_file_stream(&path_uri, /*sandbox*/ None)
+        .await
+        .map_err(|error| contextualize_error(error.to_string()))?;
+=======
+    let metadata = fs
+        .get_metadata(&path_uri, GetMetadataOptions::default(), sandbox.as_ref())
+        .await
+        .map_err(|error| contextualize_error(error.to_string()))?;
+    if !metadata.is_file {
+        return Err(contextualize_error(format!(
+            "path `{}` is not a file",
+            path_uri.inferred_native_path_string()
+        )));
+    }
+    if metadata.size > OPENAI_FILE_UPLOAD_LIMIT_BYTES {
+        return Err(contextualize_error(format!(
+            "file `{}` is too large: {} bytes exceeds the limit of {} bytes",
+            path_uri.inferred_native_path_string(),
+            metadata.size,
+            OPENAI_FILE_UPLOAD_LIMIT_BYTES,
+        )));
+    }
+    // Keep the initial read permission check before allocating a remote file record.
+    let mut first_contents = Some(
+        fs.read_file_stream(&path_uri, sandbox.as_ref())
+            .await
+            .map_err(|error| contextualize_error(error.to_string()))?,
+    );
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let file_name = path_uri
         .basename()
         .or_else(|| {
@@ -267,14 +399,35 @@ async fn build_uploaded_argument_value(
             })
         })
         .unwrap_or_else(|| "file".to_string());
+    let open_contents = move || {
+        let first_contents = first_contents.take();
+        let fs = Arc::clone(&fs);
+        let path_uri = path_uri.clone();
+        let sandbox = sandbox.clone();
+        async move {
+            match first_contents {
+                Some(contents) => Ok(contents),
+                None => fs.read_file_stream(&path_uri, sandbox.as_ref()).await,
+            }
+        }
+    };
     let upload_auth = codex_model_provider::auth_provider_from_auth(auth);
     let uploaded = upload_openai_file(
         turn_context.config.chatgpt_base_url.trim_end_matches('/'),
         upload_auth.as_ref(),
-        client_pool,
+        &sess.services.openai_file_upload_client_pool,
         file_name,
+<<<<<<< HEAD
         size,
         contents,
+||||||| 413492cd6c
+        metadata.size,
+        contents,
+=======
+        metadata.size,
+        open_contents,
+        hosted_upload,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     )
     .await
     .map_err(|error| contextualize_error(error.to_string()))?;
@@ -361,7 +514,6 @@ mod tests {
     use crate::environment_selection::TurnEnvironmentState;
     use crate::session::tests::make_session_and_context;
     use crate::session::turn_context::TurnContext;
-    use crate::session::turn_context::TurnEnvironment;
     use codex_utils_absolute_path::AbsolutePathBuf;
     use codex_utils_path_uri::PathUri;
     use pretty_assertions::assert_eq;
@@ -371,18 +523,14 @@ mod tests {
 
     fn set_primary_environment_cwd(turn_context: &mut TurnContext, cwd: &Path) {
         let cwd = AbsolutePathBuf::try_from(cwd).expect("absolute path");
-        turn_context.permission_profile = codex_protocol::models::PermissionProfile::Disabled;
-        let TurnEnvironmentState::Ready(primary) = &mut turn_context.environments.environments[0]
+        let TurnEnvironmentState::Ready(primary) =
+            &mut turn_context.initial_environments.environments[0]
         else {
             panic!("expected ready primary environment");
         };
-        *primary = TurnEnvironment::new(
-            primary.environment_id.clone(),
-            Arc::clone(&primary.environment),
-            PathUri::from_abs_path(&cwd),
-            Vec::new(),
-            primary.shell.clone(),
-        );
+        primary.selection.cwd = PathUri::from_abs_path(&cwd);
+        primary.selection.workspace_roots.clear();
+        primary.config_mut().workspace_roots.clear();
     }
 
     #[tokio::test]
@@ -398,6 +546,7 @@ mod tests {
             &step_context,
             arguments.clone(),
             /*openai_file_input_optional_fields*/ None,
+            /*hosted_upload*/ None,
         )
         .await
         .expect("rewrite should succeed");
@@ -458,29 +607,35 @@ mod tests {
             .await
             .expect("write local file");
         set_primary_environment_cwd(&mut turn_context, dir.path());
-        let selection = turn_context
-            .environments
+        let environment = turn_context
+            .initial_environments
             .primary()
-            .expect("ready primary environment")
-            .selection();
+            .expect("ready primary environment");
+        let selection = environment.selection();
+        let environment_config = environment.config().clone();
+        let local_windows_sandbox_type = environment_config.windows_sandbox_type;
         let environments = crate::environment_selection::ThreadEnvironments::new(
             session.services.turn_environments.environment_manager(),
             crate::shell::default_user_shell(),
+            crate::session::ThreadEnvironmentDefaults::new(
+                environment_config,
+                local_windows_sandbox_type,
+            ),
             crate::shell_snapshot::ShellSnapshot::disabled(),
             Default::default(),
             /*non_blocking_snapshots*/ true,
         );
         environments.update_selections(std::slice::from_ref(&selection));
-        turn_context.environments = environments.snapshot().await;
+        turn_context.initial_environments = environments.snapshot().await;
         turn_context
-            .environments
+            .initial_environments
             .starting()
             .next()
             .expect("environment should initially be starting")
             .wait_until_ready()
             .await
             .expect("environment should become ready");
-        let step_environments = turn_context.environments.refresh_readiness();
+        let step_environments = turn_context.initial_environments.refresh_readiness();
 
         let mut config = (*turn_context.config).clone();
         config.chatgpt_base_url = format!("{}/backend-api", server.uri());
@@ -491,15 +646,24 @@ mod tests {
             .environments = step_environments;
 
         let rewritten = build_uploaded_argument_value(
+            &session,
             &step_context,
+<<<<<<< HEAD
             /*read_policy*/ None,
             /*read_sandbox*/ None,
             &session.services.openai_file_upload_client_pool,
+||||||| 413492cd6c
+            &session.services.openai_file_upload_client_pool,
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             Some(&auth),
-            "file",
-            /*index*/ None,
+            FileArgumentLocation {
+                field_name: "file",
+                index: None,
+            },
             &["mime_type".to_string(), "file_name".to_string()],
             "file_report.csv",
+            /*hosted_upload*/ None,
         )
         .await
         .expect("rewrite should upload the local file");
@@ -727,15 +891,24 @@ mod tests {
         let step_context = StepContext::for_test(Arc::new(turn_context));
 
         let error = build_uploaded_argument_value(
+            &session,
             &step_context,
+<<<<<<< HEAD
             /*read_policy*/ None,
             /*read_sandbox*/ None,
             &session.services.openai_file_upload_client_pool,
+||||||| 413492cd6c
+            &session.services.openai_file_upload_client_pool,
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             Some(&auth),
-            "file",
-            /*index*/ None,
+            FileArgumentLocation {
+                field_name: "file",
+                index: None,
+            },
             &[],
             "oversized.bin",
+            /*hosted_upload*/ None,
         )
         .await
         .expect_err("oversized file should be rejected");
@@ -803,14 +976,21 @@ mod tests {
         turn_context.config = Arc::new(config);
         let step_context = StepContext::for_test(Arc::new(turn_context));
         let rewritten = rewrite_argument_value_for_openai_files(
+            &session,
             &step_context,
+<<<<<<< HEAD
             /*read_policy*/ None,
             /*read_sandbox*/ None,
             &session.services.openai_file_upload_client_pool,
+||||||| 413492cd6c
+            &session.services.openai_file_upload_client_pool,
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             Some(&auth),
             "file",
             &[],
             &serde_json::json!("file_report.csv"),
+            /*hosted_upload*/ None,
         )
         .await
         .expect("rewrite should succeed");
@@ -918,14 +1098,21 @@ mod tests {
         turn_context.config = Arc::new(config);
         let step_context = StepContext::for_test(Arc::new(turn_context));
         let rewritten = rewrite_argument_value_for_openai_files(
+            &session,
             &step_context,
+<<<<<<< HEAD
             /*read_policy*/ None,
             /*read_sandbox*/ None,
             &session.services.openai_file_upload_client_pool,
+||||||| 413492cd6c
+            &session.services.openai_file_upload_client_pool,
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             Some(&auth),
             "files",
             &[],
             &serde_json::json!(["one.csv", "two.csv"]),
+            /*hosted_upload*/ None,
         )
         .await
         .expect("rewrite should succeed");
@@ -961,6 +1148,7 @@ mod tests {
                 "file": "/definitely/missing/file.csv",
             })),
             Some(&HashMap::from([("file".to_string(), Vec::new())])),
+            /*hosted_upload*/ None,
         )
         .await
         .expect_err("missing file should fail");

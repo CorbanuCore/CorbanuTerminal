@@ -1,4 +1,5 @@
 use super::*;
+<<<<<<< HEAD
 use codex_protocol::openai_models::ModelBilling;
 use codex_protocol::openai_models::ModelCapabilityTier;
 use codex_protocol::openai_models::ModelOrchestrationMetadata;
@@ -8,11 +9,19 @@ use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::ReasoningEffortPreset;
 use codex_protocol::openai_models::WeekdaySet;
 use codex_protocol::protocol::MultiAgentVersion;
+||||||| 413492cd6c
+use codex_protocol::openai_models::ModelPreset;
+use codex_protocol::openai_models::ModelServiceTier;
+use codex_protocol::openai_models::ReasoningEffort;
+use codex_protocol::openai_models::ReasoningEffortPreset;
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_tools::JsonSchemaPrimitiveType;
 use codex_tools::JsonSchemaType;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 
+<<<<<<< HEAD
 fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {
     ModelPreset {
         id: id.to_string(),
@@ -44,7 +53,40 @@ fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {
     }
 }
 
+||||||| 413492cd6c
+fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {
+    ModelPreset {
+        id: id.to_string(),
+        model: format!("{id}-model"),
+        display_name: format!("{id} display"),
+        description: format!("{id} description"),
+        default_reasoning_effort: ReasoningEffort::Medium,
+        supported_reasoning_efforts: vec![ReasoningEffortPreset {
+            effort: ReasoningEffort::Medium,
+            description: "Balanced".to_string(),
+        }],
+        supports_personality: false,
+        additional_speed_tiers: Vec::new(),
+        service_tiers: vec![ModelServiceTier {
+            id: "priority".to_string(),
+            name: "Fast".to_string(),
+            description: "1.5x speed, increased usage".to_string(),
+        }],
+        default_service_tier: None,
+        is_default: false,
+        upgrade: None,
+        show_in_picker,
+        multi_agent_version: Some(MultiAgentVersion::V2),
+        availability_nux: None,
+        supported_in_api: true,
+        input_modalities: Vec::new(),
+    }
+}
+
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[test]
+<<<<<<< HEAD
 fn scheduled_billing_renders_weekday_and_legacy_daily_contracts() {
     let scheduled = |peak_weekdays| ModelBilling::PlanSchedule {
         off_peak_relative_burn_millis: 1_000,
@@ -89,6 +131,37 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
         usage_hint_text: None,
         expose_account: false,
     });
+||||||| 413492cd6c
+fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
+    let mut incompatible = model_preset("incompatible", /*show_in_picker*/ true);
+    incompatible.multi_agent_version = Some(MultiAgentVersion::V1);
+    let tool = create_spawn_agent_tool_v2(SpawnAgentToolOptions {
+        available_models: vec![
+            model_preset("visible", /*show_in_picker*/ true),
+            model_preset("hidden", /*show_in_picker*/ false),
+            incompatible,
+        ],
+        agent_type_description: "role help".to_string(),
+        expose_agent_type: true,
+        hide_agent_type_model_reasoning: false,
+        expose_spawn_agent_model_overrides: true,
+        multi_agent_version: MultiAgentVersion::V2,
+        usage_hint_text: None,
+    });
+=======
+fn spawn_agent_tool_v2_requires_task_name() {
+    let tool = create_spawn_agent_tool_v2(
+        SpawnAgentToolOptions {
+            agent_type_description: "role help".to_string(),
+            expose_agent_type: true,
+            hide_agent_type_model_reasoning: false,
+            expose_spawn_agent_model_overrides: true,
+            usage_hint_text: None,
+            ..Default::default()
+        },
+        /*description_override*/ None,
+    );
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     let ToolSpec::Function(ResponsesApiTool {
         description,
@@ -110,6 +183,7 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
     assert!(description.contains("Spawns an agent to work on the specified task."));
     assert!(description.contains("The spawned agent will have the same tools as you"));
     assert!(!description.contains("max_concurrent_threads_per_session"));
+<<<<<<< HEAD
     assert!(description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2));
     assert!(
         description.contains(
@@ -122,6 +196,20 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
     assert!(!description.contains("hidden-model"));
     assert!(description.contains("legacy-model"));
     assert!(description.contains("unspecified-model"));
+||||||| 413492cd6c
+    assert!(description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE));
+    assert!(
+        description
+            .contains("Available model overrides (optional; inherited parent model is preferred):")
+    );
+    assert!(description.contains(
+        "- `visible-model`: visible description Reasoning efforts: medium (default). Service tiers: priority."
+    ));
+    assert!(!description.contains("hidden-model"));
+    assert!(!description.contains("incompatible-model"));
+=======
+    assert!(description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE));
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     assert!(properties.contains_key("task_name"));
     assert!(properties.contains_key("message"));
     assert_eq!(
@@ -145,13 +233,13 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
             .and_then(|schema| schema.description.as_deref()),
         Some("Reasoning effort override for the new agent. Omit to inherit the parent effort.")
     );
+    assert!(!properties.contains_key("service_tier"));
     assert_eq!(
-        properties
-            .get("service_tier")
-            .and_then(|schema| schema.description.as_deref()),
-        Some(SPAWN_AGENT_SERVICE_TIER_OVERRIDE_DESCRIPTION)
+        parameters.required.as_deref(),
+        Some(["task_name".to_string(), "message".to_string()].as_slice())
     );
     assert_eq!(
+<<<<<<< HEAD
         parameters.required.as_ref(),
         Some(&vec!["task_name".to_string(), "message".to_string()])
     );
@@ -165,10 +253,22 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
             "reasoning_effort",
             "service_tier"
         ])
+||||||| 413492cd6c
+        parameters.required.as_ref(),
+        Some(&vec!["task_name".to_string(), "message".to_string()])
+    );
+    assert_eq!(
+        output_schema.expect("spawn_agent output schema")["required"],
+        json!(["task_name", "nickname"])
+=======
+        output_schema.expect("spawn_agent output schema").to_value()["required"],
+        json!(["task_name", "nickname"])
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     );
 }
 
 #[test]
+<<<<<<< HEAD
 fn spawn_agent_catalog_exposes_parent_runtime_and_frontier_effort_policy() {
     let mut sol = model_preset("sol", /*show_in_picker*/ true);
     sol.model = "gpt-5.6-sol".to_string();
@@ -252,19 +352,67 @@ fn spawn_agent_catalog_separates_explicit_choices_from_cost_based_allocation() {
     assert!(description.contains("`openai` / `priced-model`; plan, burn 1x, balanced;"));
     assert!(description.contains("must not be chosen for automatic cost-based allocation"));
     assert!(description.contains("not an exhaustive allowlist"));
+||||||| 413492cd6c
+=======
+fn spawn_agent_catalog_description_preserves_generated_context() {
+    let options = SpawnAgentToolOptions {
+        agent_type_description: "Available agent roles: explorer".to_string(),
+        expose_spawn_agent_model_overrides: true,
+        usage_hint_text: Some("Local usage hint.".to_string()),
+        ..Default::default()
+    };
+    let ToolSpec::Function(default_tool) =
+        create_spawn_agent_tool_v2(options.clone(), /*description_override*/ None)
+    else {
+        panic!("spawn_agent should be a function tool");
+    };
+    let ToolSpec::Function(mut configured_tool) =
+        create_spawn_agent_tool_v2(options, Some("Catalog spawning guidance."))
+    else {
+        panic!("spawn_agent should be a function tool");
+    };
+    assert!(
+        configured_tool
+            .description
+            .contains("Catalog spawning guidance.")
+    );
+    assert!(
+        configured_tool
+            .description
+            .contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE)
+    );
+    assert!(configured_tool.description.ends_with("Local usage hint."));
+    assert!(
+        !configured_tool
+            .description
+            .contains("Spawns an agent to work on the specified task.")
+    );
+    configured_tool.description = default_tool.description.clone();
+    assert_eq!(configured_tool, default_tool);
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[test]
 fn spawn_agent_tool_v1_keeps_legacy_fork_context_field() {
     let tool = create_spawn_agent_tool_v1(SpawnAgentToolOptions {
+<<<<<<< HEAD
         available_models: Vec::new(),
         inherited_runtime: None,
+||||||| 413492cd6c
+        available_models: Vec::new(),
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         agent_type_description: "role help".to_string(),
         expose_agent_type: true,
         hide_agent_type_model_reasoning: false,
         expose_spawn_agent_model_overrides: true,
         usage_hint_text: None,
+<<<<<<< HEAD
         expose_account: false,
+||||||| 413492cd6c
+=======
+        ..Default::default()
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     });
 
     let ToolSpec::Namespace(namespace) = tool else {
@@ -309,14 +457,10 @@ fn spawn_agent_tool_v1_keeps_legacy_fork_context_field() {
             .and_then(|schema| schema.description.as_deref()),
         Some(SPAWN_AGENT_MODEL_OVERRIDE_DESCRIPTION)
     );
-    assert_eq!(
-        properties
-            .get("service_tier")
-            .and_then(|schema| schema.description.as_deref()),
-        Some(SPAWN_AGENT_SERVICE_TIER_OVERRIDE_DESCRIPTION)
-    );
+    assert!(!properties.contains_key("service_tier"));
 }
 
+<<<<<<< HEAD
 #[test]
 fn spawn_agent_tool_caps_visible_model_summaries() {
     let available_models = (0..=MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION)
@@ -349,7 +493,64 @@ fn spawn_agent_tool_caps_reasoning_effort_value_length() {
     let mut model = model_preset("visible", /*show_in_picker*/ true);
     let custom_effort = ReasoningEffort::Custom(
         "é".repeat(MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION + 1),
+||||||| 413492cd6c
+#[test]
+fn spawn_agent_tool_caps_visible_model_summaries() {
+    let tool = create_spawn_agent_tool_v2(SpawnAgentToolOptions {
+        available_models: vec![
+            model_preset("first", /*show_in_picker*/ true),
+            model_preset("second", /*show_in_picker*/ true),
+            model_preset("third", /*show_in_picker*/ true),
+            model_preset("fourth", /*show_in_picker*/ true),
+            model_preset("fifth", /*show_in_picker*/ true),
+            model_preset("sixth", /*show_in_picker*/ true),
+        ],
+        agent_type_description: "role help".to_string(),
+        expose_agent_type: true,
+        hide_agent_type_model_reasoning: false,
+        expose_spawn_agent_model_overrides: true,
+        multi_agent_version: MultiAgentVersion::V2,
+        usage_hint_text: None,
+    });
+
+    let ToolSpec::Function(ResponsesApiTool { description, .. }) = tool else {
+        panic!("spawn_agent should be a function tool");
+    };
+
+    for model in ["first", "second", "third", "fourth", "fifth"] {
+        assert!(
+            description.contains(&format!("`{model}-model`")),
+            "expected {model} model summary in spawn_agent description: {description:?}"
+        );
+    }
+    assert!(!description.contains("`sixth-model`"));
+}
+
+#[test]
+fn spawn_agent_tool_caps_reasoning_effort_value_length() {
+    let mut model = model_preset("visible", /*show_in_picker*/ true);
+    let custom_effort = ReasoningEffort::Custom(
+        "é".repeat(MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION + 1),
+=======
+#[test_case::test_case(false; "inline_catalog")]
+#[test_case::test_case(true; "context_catalog")]
+fn spawn_agent_tool_keeps_model_controls_when_spawn_metadata_is_hidden(
+    model_catalog_in_context: bool,
+) {
+    let tool = create_spawn_agent_tool_v2(
+        SpawnAgentToolOptions {
+            agent_type_description: "role help".to_string(),
+            expose_agent_type: false,
+            hide_agent_type_model_reasoning: true,
+            expose_spawn_agent_model_overrides: true,
+            model_catalog_in_context,
+            usage_hint_text: None,
+            ..Default::default()
+        },
+        /*description_override*/ None,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     );
+<<<<<<< HEAD
     model.default_reasoning_effort = custom_effort.clone();
     model.supported_reasoning_efforts = vec![ReasoningEffortPreset {
         effort: custom_effort,
@@ -377,6 +578,35 @@ fn spawn_agent_tool_keeps_model_controls_when_spawn_metadata_is_hidden() {
         usage_hint_text: None,
         expose_account: false,
     });
+||||||| 413492cd6c
+    model.default_reasoning_effort = custom_effort.clone();
+    model.supported_reasoning_efforts = vec![ReasoningEffortPreset {
+        effort: custom_effort,
+        description: "Model-defined".to_string(),
+    }];
+
+    assert_eq!(
+        spawn_agent_models_description(&[model], MultiAgentVersion::V2),
+        format!(
+            "Available model overrides (optional; inherited parent model is preferred):\n- `visible-model`: visible description Reasoning efforts: {} (default). Service tiers: priority.",
+            "é".repeat(MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION)
+        )
+    );
+}
+
+#[test]
+fn spawn_agent_tool_keeps_model_controls_when_spawn_metadata_is_hidden() {
+    let tool = create_spawn_agent_tool_v2(SpawnAgentToolOptions {
+        available_models: vec![model_preset("visible", /*show_in_picker*/ true)],
+        agent_type_description: "role help".to_string(),
+        expose_agent_type: false,
+        hide_agent_type_model_reasoning: true,
+        expose_spawn_agent_model_overrides: true,
+        multi_agent_version: MultiAgentVersion::V2,
+        usage_hint_text: None,
+    });
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     let ToolSpec::Function(ResponsesApiTool {
         description,
@@ -395,12 +625,24 @@ fn spawn_agent_tool_keeps_model_controls_when_spawn_metadata_is_hidden() {
     assert!(properties.contains_key("model"));
     assert!(properties.contains_key("reasoning_effort"));
     assert!(!properties.contains_key("service_tier"));
+<<<<<<< HEAD
     assert!(!description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2));
     assert!(description.contains("Available authorized exact runtime overrides"));
+||||||| 413492cd6c
+    assert!(!description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE));
+    assert!(description.contains("Available model overrides"));
+=======
+    assert!(!description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE));
+    assert_eq!(
+        description.contains(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2),
+        model_catalog_in_context
+    );
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[test]
 fn spawn_agent_tool_hides_model_controls_without_override_exposure() {
+<<<<<<< HEAD
     let tool = create_spawn_agent_tool_v2(SpawnAgentToolOptions {
         available_models: vec![model_preset("visible", /*show_in_picker*/ true)],
         inherited_runtime: None,
@@ -411,6 +653,29 @@ fn spawn_agent_tool_hides_model_controls_without_override_exposure() {
         usage_hint_text: None,
         expose_account: false,
     });
+||||||| 413492cd6c
+    let tool = create_spawn_agent_tool_v2(SpawnAgentToolOptions {
+        available_models: vec![model_preset("visible", /*show_in_picker*/ true)],
+        agent_type_description: "role help".to_string(),
+        expose_agent_type: false,
+        hide_agent_type_model_reasoning: true,
+        expose_spawn_agent_model_overrides: false,
+        multi_agent_version: MultiAgentVersion::V2,
+        usage_hint_text: None,
+    });
+=======
+    let tool = create_spawn_agent_tool_v2(
+        SpawnAgentToolOptions {
+            agent_type_description: "role help".to_string(),
+            expose_agent_type: false,
+            hide_agent_type_model_reasoning: true,
+            expose_spawn_agent_model_overrides: false,
+            usage_hint_text: None,
+            ..Default::default()
+        },
+        Some(""),
+    );
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     let ToolSpec::Function(ResponsesApiTool {
         description,
@@ -467,8 +732,8 @@ fn send_message_tool_requires_message_and_has_no_output_schema() {
         Some("Relative or canonical task name to message (from spawn_agent).")
     );
     assert_eq!(
-        parameters.required.as_ref(),
-        Some(&vec!["target".to_string(), "message".to_string()])
+        parameters.required.as_deref(),
+        Some(["target".to_string(), "message".to_string()].as_slice())
     );
     assert_eq!(output_schema, None);
 }
@@ -508,8 +773,8 @@ fn followup_task_tool_requires_message_and_has_no_output_schema() {
     );
     assert!(!properties.contains_key("items"));
     assert_eq!(
-        parameters.required.as_ref(),
-        Some(&vec!["target".to_string(), "message".to_string()])
+        parameters.required.as_deref(),
+        Some(["target".to_string(), "message".to_string()].as_slice())
     );
     assert_eq!(output_schema, None);
 }
@@ -546,15 +811,23 @@ fn wait_agent_tool_v2_uses_timeout_only_summary_output() {
         properties
             .get("timeout_ms")
             .and_then(|schema| schema.description.as_deref()),
-        Some(
-            "Timeout in milliseconds. Defaults to 30000, min 10000, max 3600000. Prefer longer waits (minutes) to avoid busy polling."
-        )
+        Some("Timeout in milliseconds. Defaults to 30000, min 10000, max 3600000.")
     );
     assert_eq!(parameters.required.as_ref(), None);
     let output_schema = output_schema.expect("wait output schema");
     assert_eq!(
+<<<<<<< HEAD
         output_schema["properties"]["message"]["description"],
         json!("Brief wait summary without the agent's final content.")
+||||||| 413492cd6c
+        output_schema.expect("wait output schema")["properties"]["message"]["description"],
+        json!("Brief wait summary without the agent's final content.")
+=======
+        output_schema.expect("wait output schema").to_value()["properties"]["message"]["description"],
+        json!(
+            "Brief wait summary without the agent's final content, including any timeout adjustment."
+        )
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     );
     assert_eq!(
         output_schema["required"],
@@ -607,7 +880,8 @@ fn list_agents_tool_includes_path_prefix_and_agent_fields() {
         Some("Task-path prefix filter without a trailing slash. Omit to list all live agents.")
     );
     assert_eq!(
-        output_schema.expect("list_agents output schema")["properties"]["agents"]["items"]["required"],
+        output_schema.expect("list_agents output schema").to_value()["properties"]["agents"]["items"]
+            ["required"],
         json!(["agent_name", "agent_status"])
     );
 }
@@ -620,8 +894,8 @@ fn list_agents_tool_status_schema_includes_interrupted() {
     };
 
     assert_eq!(
-        output_schema.expect("list_agents output schema")["properties"]["agents"]["items"]["properties"]
-            ["agent_status"]["allOf"][0]["oneOf"][0]["enum"],
+        output_schema.expect("list_agents output schema").to_value()["properties"]["agents"]["items"]
+            ["properties"]["agent_status"]["allOf"][0]["oneOf"][0]["enum"],
         json!([
             "pending_init",
             "running",

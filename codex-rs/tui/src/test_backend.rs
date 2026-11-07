@@ -74,10 +74,23 @@ impl Write for ScrollOnClearParser {
 impl VT100Backend {
     /// Creates a new `TestBackend` with the specified width and height.
     pub fn new(width: u16, height: u16) -> Self {
+        Self::with_scrollback(width, height, /*scrollback_len*/ 0)
+    }
+
+    pub fn with_scrollback(width: u16, height: u16, scrollback_len: usize) -> Self {
         crossterm::style::force_color_output(true);
         Self {
+<<<<<<< HEAD
             crossterm_backend: CrosstermBackend::new(ScrollOnClearParser::new(
                 height, width, /*scrollback*/ 0,
+||||||| 413492cd6c
+            crossterm_backend: CrosstermBackend::new(vt100::Parser::new(height, width, 0)),
+=======
+            crossterm_backend: CrosstermBackend::new(vt100::Parser::new(
+                height,
+                width,
+                scrollback_len,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             )),
         }
     }
