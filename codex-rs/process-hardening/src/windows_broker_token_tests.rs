@@ -724,47 +724,51 @@ fn run_script_probe(confined: bool) -> Report {
     let env: HashMap<String, String> = std::env::vars()
         .filter(|(name, _)| !name.to_ascii_uppercase().starts_with("CODEX_PF27S08_"))
         .collect();
-    let token: HANDLE = if confined {
+    let token: std::os::windows::io::RawHandle = if confined {
         create_broker_token(BrokerTokenOptions {
             default_dacl: BrokerDefaultDacl::OwnedByCapability,
         })
         .expect("broker token")
-        .into_raw_handle() as HANDLE
+        .into_raw_handle()
     } else {
         // SAFETY: returns an owned handle to this process's token.
         unsafe { codex_windows_sandbox::get_current_token_for_restriction() }.expect("token")
     };
     let cwd = std::env::temp_dir();
+    // windows-sandbox uses windows-sys 0.61 (pointer handles); this crate's
+    // own calls stay on 0.52 (`isize`).
     let spawned = codex_windows_sandbox::spawn_process_with_pipes(
-        token,
+        // SAFETY: `token` stays open until it is closed below.
+        unsafe { std::os::windows::io::BorrowedHandle::borrow_raw(token) },
         &argv,
         &cwd,
         &env,
         codex_windows_sandbox::StdinMode::Closed,
         codex_windows_sandbox::StderrMode::MergeStdout,
         codex_windows_sandbox::ConsoleMode::NoWindow,
-        /*use_private_desktop*/ false,
+        codex_windows_sandbox::LaunchDesktop::prepare(/*logs_base_dir*/ None).expect("desktop"),
         /*logs_base_dir*/ None,
     )
     .expect("spawn cscript");
     let (sender, receiver) = std::sync::mpsc::channel::<Vec<u8>>();
-    let reader = codex_windows_sandbox::read_handle_loop(spawned.stdout_read, move |chunk| {
+    // SAFETY: the spawn hands over the pipe's read end.
+    let stdout_read =
+        unsafe { std::os::windows::io::FromRawHandle::from_raw_handle(spawned.stdout_read) };
+    let reader = codex_windows_sandbox::read_handle_loop(stdout_read, move |chunk| {
         let _ = sender.send(chunk.to_vec());
     });
     let mut code = 0_u32;
     // SAFETY: the handles stay valid until closed below.
     unsafe {
         const WAIT_TIMEOUT: u32 = 0x102;
-        if WaitForSingleObject(spawned.process.hProcess, 180_000) == WAIT_TIMEOUT {
-            TerminateProcess(spawned.process.hProcess, 1);
+        let process = spawned.process.hProcess as HANDLE;
+        if WaitForSingleObject(process, 180_000) == WAIT_TIMEOUT {
+            TerminateProcess(process, 1);
         }
-        windows_sys::Win32::System::Threading::GetExitCodeProcess(
-            spawned.process.hProcess,
-            &mut code,
-        );
-        CloseHandle(spawned.process.hThread);
-        CloseHandle(spawned.process.hProcess);
-        CloseHandle(token);
+        windows_sys::Win32::System::Threading::GetExitCodeProcess(process, &mut code);
+        CloseHandle(spawned.process.hThread as HANDLE);
+        CloseHandle(process);
+        CloseHandle(token as HANDLE);
     }
     let _ = reader.join();
     let output: Vec<u8> = receiver.try_iter().flatten().collect();
