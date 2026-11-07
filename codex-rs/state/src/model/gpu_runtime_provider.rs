@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
+#[derive(Debug, Clone, PartialEq, Eq, sqlx_macros::FromRow)]
 pub struct GpuProvisionStep {
     pub rental_id: String,
     pub step_id: String,
@@ -12,7 +12,7 @@ pub struct GpuProvisionStep {
     pub updated_at_ms: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
+#[derive(Debug, Clone, PartialEq, Eq, sqlx_macros::FromRow)]
 pub struct GpuRuntimeProvider {
     pub rental_id: String,
     /// Infrastructure marketplace that owns the billable resource.

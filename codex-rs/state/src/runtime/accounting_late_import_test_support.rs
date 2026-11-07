@@ -22,7 +22,10 @@ pub(super) fn home() -> impl std::ops::Deref<Target = std::path::PathBuf> {
 
 pub(super) async fn open(path: &Path) -> anyhow::Result<Arc<StateRuntime>> {
     StateRuntime::init(
-        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(path.to_path_buf())?),
+        SqliteConfig::from_sqlite_home_with_nfs_enforcement(
+            AbsolutePathBuf::try_from(path.to_path_buf())?,
+            /*enforce_delete_on_nfs*/ false,
+        ),
         "synthetic".into(),
     )
     .await

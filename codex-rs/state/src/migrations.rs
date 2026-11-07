@@ -4,9 +4,8 @@ use crate::sqlite::SqliteWriteQueryExt;
 use sqlx::migrate::Migrator;
 use sqlx_sqlite::SqlitePool;
 
-<<<<<<< HEAD
-pub(crate) static STATE_MIGRATOR: Migrator = sqlx::migrate!("./migrations");
-static ACCOUNTING_MIGRATOR: Migrator = sqlx::migrate!("./accounting_migrations");
+pub(crate) static STATE_MIGRATOR: Migrator = sqlx_macros::migrate!("./migrations");
+static ACCOUNTING_MIGRATOR: Migrator = sqlx_macros::migrate!("./accounting_migrations");
 
 /// Optional accounting history is never adopted by ordinary state migration.
 pub(crate) fn accounting_migrator() -> Migrator {
@@ -19,25 +18,12 @@ pub(crate) fn accounting_migrator() -> Migrator {
         create_schemas: Cow::Borrowed(&[]),
     }
 }
-pub(crate) static LOGS_MIGRATOR: Migrator = sqlx::migrate!("./logs_migrations");
-pub(crate) static GOALS_MIGRATOR: Migrator = sqlx::migrate!("./goals_migrations");
-pub(crate) static MEMORIES_MIGRATOR: Migrator = sqlx::migrate!("./memory_migrations");
-pub(crate) static THREAD_HISTORY_MIGRATOR: Migrator = sqlx::migrate!("./thread_history_migrations");
-||||||| 413492cd6c
-pub(crate) static STATE_MIGRATOR: Migrator = sqlx::migrate!("./migrations");
-pub(crate) static LOGS_MIGRATOR: Migrator = sqlx::migrate!("./logs_migrations");
-pub(crate) static GOALS_MIGRATOR: Migrator = sqlx::migrate!("./goals_migrations");
-pub(crate) static MEMORIES_MIGRATOR: Migrator = sqlx::migrate!("./memory_migrations");
-pub(crate) static THREAD_HISTORY_MIGRATOR: Migrator = sqlx::migrate!("./thread_history_migrations");
-=======
-pub(crate) static STATE_MIGRATOR: Migrator = sqlx_macros::migrate!("./migrations");
 pub(crate) static LOGS_MIGRATOR: Migrator = sqlx_macros::migrate!("./logs_migrations");
 pub(crate) static GOALS_MIGRATOR: Migrator = sqlx_macros::migrate!("./goals_migrations");
 pub(crate) static MEMORIES_MIGRATOR: Migrator = sqlx_macros::migrate!("./memory_migrations");
 pub(crate) static QUEUE_MIGRATOR: Migrator = sqlx_macros::migrate!("./queue_migrations");
 pub(crate) static THREAD_HISTORY_MIGRATOR: Migrator =
     sqlx_macros::migrate!("./thread_history_migrations");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 /// Allow an older Codex binary to open a database that has already been
 /// migrated by a newer binary running in parallel.

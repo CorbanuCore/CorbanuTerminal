@@ -97,7 +97,10 @@ async fn main() -> Result<()> {
         _ => anyhow::bail!("usage: accounting_demo_seed <sqlite-home> others|history [owner]"),
     };
     let runtime = StateRuntime::init(
-        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.clone())?),
+        SqliteConfig::from_sqlite_home_with_nfs_enforcement(
+            AbsolutePathBuf::try_from(home.clone())?,
+            /*enforce_delete_on_nfs*/ false,
+        ),
         "openai".into(),
     )
     .await?;
