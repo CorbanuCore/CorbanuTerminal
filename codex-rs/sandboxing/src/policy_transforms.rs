@@ -34,50 +34,8 @@ pub fn normalize_additional_permissions(
                         "glob file system permissions only support deny-read entries".to_string(),
                     );
                 }
-<<<<<<< HEAD
-                let path = match entry.path {
-                    FileSystemPath::Path { path } => FileSystemPath::Path {
-                        path: canonicalize_preserving_symlinks(path.as_path())
-                            .ok()
-                            .and_then(|path| AbsolutePathBuf::from_absolute_path(path).ok())
-                            .unwrap_or(path),
-                    },
-                    FileSystemPath::GlobPattern { pattern, scan } => {
-                        FileSystemPath::GlobPattern { pattern, scan }
-                    }
-                    FileSystemPath::Special { value } => FileSystemPath::Special { value },
-                };
-                let normalized_entry = FileSystemSandboxEntry {
-                    path,
-                    access: entry.access,
-                    missing_path_behavior: entry.missing_path_behavior,
-                };
-                if !entries.contains(&normalized_entry) {
-                    entries.push(normalized_entry);
-||||||| 413492cd6c
-                let path = match entry.path {
-                    FileSystemPath::Path { path } => FileSystemPath::Path {
-                        path: canonicalize_preserving_symlinks(path.as_path())
-                            .ok()
-                            .and_then(|path| AbsolutePathBuf::from_absolute_path(path).ok())
-                            .unwrap_or(path),
-                    },
-                    FileSystemPath::GlobPattern { pattern } => {
-                        FileSystemPath::GlobPattern { pattern }
-                    }
-                    FileSystemPath::Special { value } => FileSystemPath::Special { value },
-                };
-                let normalized_entry = FileSystemSandboxEntry {
-                    path,
-                    access: entry.access,
-                    missing_path_behavior: entry.missing_path_behavior,
-                };
-                if !entries.contains(&normalized_entry) {
-                    entries.push(normalized_entry);
-=======
                 if !entries.contains(&entry) {
                     entries.push(entry);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 }
             }
             let file_system = FileSystemPermissions {
@@ -387,18 +345,9 @@ fn deny_entry_constrains_accepted_grant(
                 return true;
             };
             match &deny_entry.path {
-<<<<<<< HEAD
                 FileSystemPath::GlobPattern { pattern, .. } => {
-                    glob_static_prefix_path(pattern, cwd)
-                        .is_some_and(|prefix| paths_overlap(prefix.as_path(), grant_path.as_path()))
-||||||| 413492cd6c
-                FileSystemPath::GlobPattern { pattern } => glob_static_prefix_path(pattern, cwd)
-                    .is_some_and(|prefix| paths_overlap(prefix.as_path(), grant_path.as_path())),
-=======
-                FileSystemPath::GlobPattern { pattern } => {
                     glob_static_prefix_path(pattern, context)
                         .is_none_or(|prefix| paths_overlap(&prefix, &grant_path))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 }
                 FileSystemPath::Path { .. } | FileSystemPath::Special { .. } => {
                     resolve_permission_path(&deny_entry.path, context)
@@ -458,7 +407,7 @@ fn materialize_cwd_dependent_entry(
     context: &FileSystemSandboxPolicyContext<'_>,
 ) -> Option<FileSystemSandboxEntry> {
     match &entry.path {
-        FileSystemPath::GlobPattern { pattern } => {
+        FileSystemPath::GlobPattern { pattern, scan } => {
             let is_windows = context.cwd.infer_path_convention() == Some(PathConvention::Windows);
             let home_relative = pattern
                 .strip_prefix("~/")
@@ -476,41 +425,15 @@ fn materialize_cwd_dependent_entry(
             let path = root.join(pattern).ok()?;
             let path = FileSystemPath::GlobPattern {
                 pattern: path.inferred_native_path_string(),
+                scan: scan.clone(),
             };
             Some(FileSystemSandboxEntry {
                 path,
                 access: entry.access,
                 missing_path_behavior: entry.missing_path_behavior,
             })
-<<<<<<< HEAD
-            .unwrap_or_else(|| entry.clone()),
-        FileSystemPath::GlobPattern { pattern, scan } => FileSystemSandboxEntry {
-            path: FileSystemPath::GlobPattern {
-                scan: scan.clone(),
-                pattern: AbsolutePathBuf::resolve_path_against_base(pattern, cwd)
-                    .to_string_lossy()
-                    .into_owned(),
-            },
-            access: entry.access,
-            missing_path_behavior: entry.missing_path_behavior,
-        },
-        FileSystemPath::Path { .. } | FileSystemPath::Special { .. } => entry.clone(),
-||||||| 413492cd6c
-            .unwrap_or_else(|| entry.clone()),
-        FileSystemPath::GlobPattern { pattern } => FileSystemSandboxEntry {
-            path: FileSystemPath::GlobPattern {
-                pattern: AbsolutePathBuf::resolve_path_against_base(pattern, cwd)
-                    .to_string_lossy()
-                    .into_owned(),
-            },
-            access: entry.access,
-            missing_path_behavior: entry.missing_path_behavior,
-        },
-        FileSystemPath::Path { .. } | FileSystemPath::Special { .. } => entry.clone(),
-=======
         }
         FileSystemPath::Path { .. } | FileSystemPath::Special { .. } => Some(entry.clone()),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 

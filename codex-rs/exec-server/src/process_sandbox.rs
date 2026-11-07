@@ -343,7 +343,9 @@ pub(crate) async fn prepare_exec_request_with_telemetry(
         })?;
         request.arg0 = params.arg0.clone();
         let proxy_enforced = params.enforce_managed_network;
-        let use_elevated = windows_sandbox_uses_elevated_backend(windows_sandbox_level);
+        // D355 (S3a): a proxy-enforced session uses the elevated backend.
+        let use_elevated =
+            windows_sandbox_uses_elevated_backend(windows_sandbox_level, proxy_enforced);
         let filesystem_overrides = if use_elevated {
             resolve_windows_elevated_filesystem_overrides(
                 sandbox,
