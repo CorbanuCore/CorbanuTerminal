@@ -20,6 +20,8 @@ pub(crate) enum PrivateHelper {
     FsHelper,
     #[cfg(target_os = "windows")]
     WindowsSandbox,
+    /// Upstream's Windows MXC launcher; it exits with an error elsewhere.
+    WindowsMxc,
     ApplyPatch,
 }
 
@@ -37,6 +39,9 @@ impl PrivateHelper {
         if argv1 == CODEX_FS_HELPER_ARG1 {
             return Some(Self::FsHelper);
         }
+        if argv1 == codex_sandboxing::CODEX_WINDOWS_MXC_ARG1 {
+            return Some(Self::WindowsMxc);
+        }
         #[cfg(target_os = "windows")]
         if argv1 == CODEX_WINDOWS_SANDBOX_ARG1 {
             return Some(Self::WindowsSandbox);
@@ -53,7 +58,9 @@ impl PrivateHelper {
     /// The credential broker is started by Core, outside any sandbox Core
     /// does not already run in, and confines itself only later. Its view of
     /// the home is Core's, which Core's own preflight has just read, so an
-    /// unreadable home there is a real failure worth reporting.
+    /// unreadable home there is a real failure worth reporting. The MXC
+    /// launcher is the same: it is started outside the sandbox and creates
+    /// the sandbox for its child itself, so it keeps the preflight.
     fn runs_sandboxed(self) -> bool {
         match self {
             #[cfg(unix)]
@@ -63,6 +70,7 @@ impl PrivateHelper {
             Self::FsHelper | Self::ApplyPatch => true,
             #[cfg(any(unix, windows))]
             Self::CredentialBroker => false,
+            Self::WindowsMxc => false,
         }
     }
 }
@@ -89,6 +97,11 @@ mod tests {
                 CODEX_CORE_APPLY_PATCH_ARG1,
                 Some(PrivateHelper::ApplyPatch),
                 true,
+            ),
+            (
+                codex_sandboxing::CODEX_WINDOWS_MXC_ARG1,
+                Some(PrivateHelper::WindowsMxc),
+                false,
             ),
             ("--version", None, false),
             ("exec", None, false),
