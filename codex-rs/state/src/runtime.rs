@@ -26,14 +26,8 @@ use chrono::DateTime;
 use chrono::Utc;
 use codex_history::RolloutItem;
 use codex_protocol::ThreadId;
-<<<<<<< HEAD
-use codex_protocol::protocol::RolloutItem;
 #[cfg(test)]
 use codex_utils_absolute_path::test_support::PathExt;
-||||||| 413492cd6c
-use codex_protocol::protocol::RolloutItem;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use serde_json::Value;
 use sqlx::QueryBuilder;
 use sqlx::Row;
@@ -56,30 +50,20 @@ mod busy_retry;
 pub(crate) mod db_lock;
 mod external_agent_config_imports;
 mod goals;
-<<<<<<< HEAD
 mod gpu_rentals;
 mod gpu_runtime_providers;
-mod log_scrub;
-||||||| 413492cd6c
-=======
 mod guardian_feedback;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+mod log_scrub;
 mod logs;
 mod logs_maintenance;
 mod memories;
-<<<<<<< HEAD
-mod provider_request_fallback;
-mod provider_requests;
-mod recovery;
-||||||| 413492cd6c
-mod recovery;
-=======
 mod memory_versions;
 mod projects;
+mod provider_request_fallback;
+mod provider_requests;
 mod queued_items;
 pub(crate) mod reclamation;
 pub(crate) mod recovery;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod remote_control;
 mod rollout_migration;
 #[cfg(test)]
@@ -107,7 +91,6 @@ pub use guardian_feedback::MAX_GUARDIAN_REVIEW_BYTES;
 pub use guardian_feedback::MAX_GUARDIAN_REVIEW_RECORDS;
 pub use guardian_feedback::MAX_GUARDIAN_REVIEW_RECORDS_PER_THREAD;
 pub use memories::MemoryStore;
-<<<<<<< HEAD
 pub use provider_request_fallback::ProviderRequestThrottled;
 pub use provider_request_fallback::StateDbFallback;
 pub use provider_requests::ProviderRequestBlock;
@@ -117,14 +100,8 @@ pub use provider_requests::ProviderRequestLease;
 pub use provider_requests::ProviderRequestLeaseDecision;
 pub use provider_requests::ProviderRequestPreflight;
 pub use provider_requests::ProviderRequestResult;
-pub use recovery::RuntimeDbBackup;
-pub(super) use recovery::RuntimeDbInitError;
-||||||| 413492cd6c
-pub use recovery::RuntimeDbBackup;
-pub(super) use recovery::RuntimeDbInitError;
-=======
 pub use queued_items::SqliteQueueStore;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+pub(super) use recovery::RuntimeDbInitError;
 pub use recovery::backup_runtime_db_for_fresh_start;
 pub use recovery::collect_runtime_db_backups;
 pub use recovery::is_sqlite_corruption_error;
@@ -157,7 +134,6 @@ pub struct StateRuntime {
     thread_queue: SqliteQueueStore,
     thread_updated_at_millis: Arc<AtomicI64>,
     thread_recency_at_millis: Arc<AtomicI64>,
-<<<<<<< HEAD
     /// When this process last completed the accounting ledger's whole-ledger
     /// validation (`i64::MIN` if never). It stands for the rest of that UTC hour,
     /// so a write retried after contention does not validate again.
@@ -178,6 +154,7 @@ pub struct StateRuntime {
     /// Ledger records the ledger refused, per conversation; see
     /// `accounting_refusals`.
     accounting_refusals: Arc<std::sync::Mutex<std::collections::HashMap<ThreadId, u64>>>,
+    reclamation: Arc<reclamation::SqliteReclamationWorker>,
 }
 
 /// How long a write a model request waits on (see [`StateRuntime::quick`])
@@ -189,10 +166,6 @@ pub const QUICK_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_mi
 /// wait) or no pooled connection free in time.
 pub fn is_state_db_busy(error: &anyhow::Error) -> bool {
     accounting::store::is_contention(error)
-||||||| 413492cd6c
-=======
-    reclamation: Arc<reclamation::SqliteReclamationWorker>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl StateRuntime {
@@ -246,7 +219,6 @@ impl StateRuntime {
         let logs_path = sqlite.logs_db_path();
         let goals_path = sqlite.goals_db_path();
         let memories_path = sqlite.memories_db_path();
-<<<<<<< HEAD
         validate_applied_migrations(&sqlite, &state_path, &state_migrator)
             .await
             .map_err(|source| {
@@ -257,10 +229,7 @@ impl StateRuntime {
                     source,
                 )
             })?;
-||||||| 413492cd6c
-=======
         let queue_path = sqlite.queue_db_path();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let pool = match sqlite
             .open_state_db(&state_migrator, telemetry_override, Some(&init_lock))
             .await
@@ -271,13 +240,9 @@ impl StateRuntime {
                 return Err(err);
             }
         };
-<<<<<<< HEAD
         // A new logs database has nothing an older build wrote.
         let logs_db_is_new = !crate::sqlite::database_has_content(&logs_path);
-||||||| 413492cd6c
-=======
         let has_memories_v2 = tokio::fs::try_exists(sqlite.memories_v2_db_path()).await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let logs_pool = match sqlite
             .open_logs_db(&logs_migrator, telemetry_override, Some(&init_lock))
             .await
@@ -314,12 +279,8 @@ impl StateRuntime {
                 return Err(err);
             }
         };
-<<<<<<< HEAD
-        drop(init_lock);
-||||||| 413492cd6c
-=======
         let queue_pool = match sqlite
-            .open_queue_db(&queue_migrator, telemetry_override)
+            .open_queue_db(&queue_migrator, telemetry_override, Some(&init_lock))
             .await
         {
             Ok(db) => Arc::new(db),
@@ -335,7 +296,7 @@ impl StateRuntime {
                 return Err(err);
             }
         };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        drop(init_lock);
         let started = Instant::now();
         let backfill_state_result = ensure_backfill_state_row_in_pool(pool.as_ref()).await;
         crate::telemetry::record_init_result(
@@ -388,7 +349,6 @@ impl StateRuntime {
             };
         let thread_updated_at_millis = thread_updated_at_millis.unwrap_or(0);
         let thread_recency_at_millis = thread_recency_at_millis.unwrap_or(0);
-<<<<<<< HEAD
         let quick_pool = match sqlite.open_state_db_quick(QUICK_BUSY_TIMEOUT).await {
             Ok(quick_pool) => Some(Arc::new(quick_pool)),
             Err(err) => {
@@ -400,12 +360,7 @@ impl StateRuntime {
             }
         };
         let mut runtime = Self {
-||||||| 413492cd6c
-        let runtime = Arc::new(Self {
-=======
-        let runtime = Arc::new(Self {
             reclamation: reclamation::SqliteReclamationWorker::spawn(sqlite.clone()),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             thread_goals: GoalStore::new(Arc::clone(&goals_pool)),
             memories: MemoryStore::new(Arc::clone(&memories_pool), Arc::clone(&pool)),
             memories_v2: Arc::new(tokio::sync::OnceCell::new()),
@@ -416,7 +371,6 @@ impl StateRuntime {
             default_provider,
             thread_updated_at_millis: Arc::new(AtomicI64::new(thread_updated_at_millis)),
             thread_recency_at_millis: Arc::new(AtomicI64::new(thread_recency_at_millis)),
-<<<<<<< HEAD
             accounting_validated_at_millis: Arc::new(AtomicI64::new(i64::MIN)),
             provider_request_memory: Arc::default(),
             contention: Arc::default(),
@@ -427,20 +381,6 @@ impl StateRuntime {
         };
         runtime.quick = quick_pool.map(|quick_pool| Arc::new(runtime.on_pool(quick_pool)));
         let runtime = Arc::new(runtime);
-        if let Err(err) = runtime.run_logs_startup_maintenance().await {
-            warn!(
-                "failed to run startup maintenance for logs db at {}: {err}",
-                logs_path.display(),
-            );
-||||||| 413492cd6c
-        });
-        if let Err(err) = runtime.run_logs_startup_maintenance().await {
-            warn!(
-                "failed to run startup maintenance for logs db at {}: {err}",
-                logs_path.display(),
-            );
-=======
-        });
         // Existing v2 state must participate in startup corruption recovery.
         // Keep creation lazy for users who have never used v2.
         if has_memories_v2
@@ -450,14 +390,9 @@ impl StateRuntime {
         {
             runtime.close().await;
             return Err(err);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
-<<<<<<< HEAD
         log_scrub::start(&runtime.logs_pool, &logs_path, logs_db_is_new).await;
-||||||| 413492cd6c
-=======
         runtime.start_periodic_logs_maintenance(std::time::Duration::from_secs(30 * 60));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         Ok(runtime)
     }
 
@@ -471,6 +406,9 @@ impl StateRuntime {
             logs_pool: Arc::clone(&self.logs_pool),
             thread_goals: self.thread_goals.clone(),
             memories: self.memories.clone(),
+            memories_v2: Arc::clone(&self.memories_v2),
+            thread_queue: self.thread_queue.clone(),
+            reclamation: Arc::clone(&self.reclamation),
             thread_updated_at_millis: Arc::clone(&self.thread_updated_at_millis),
             thread_recency_at_millis: Arc::clone(&self.thread_recency_at_millis),
             accounting_validated_at_millis: Arc::clone(&self.accounting_validated_at_millis),
@@ -604,6 +542,7 @@ impl StateRuntime {
                         .open_memories_db(
                             &runtime_memories_migrator(),
                             /*telemetry_override*/ None,
+                            /*init_lock*/ None,
                         )
                         .await?
                 }
@@ -614,31 +553,7 @@ impl StateRuntime {
             result?;
             cleared = true;
         }
-<<<<<<< HEAD
-
-        let memories_migrator = runtime_memories_migrator();
-        let pool = sqlite
-            .open_memories_db(
-                &memories_migrator,
-                /*telemetry_override*/ None,
-                /*init_lock*/ None,
-            )
-            .await?;
-        memories::clear_memory_data_in_pool(&pool).await?;
-        pool.close().await;
-        Ok(true)
-||||||| 413492cd6c
-
-        let memories_migrator = runtime_memories_migrator();
-        let pool = sqlite
-            .open_memories_db(&memories_migrator, /*telemetry_override*/ None)
-            .await?;
-        memories::clear_memory_data_in_pool(&pool).await?;
-        pool.close().await;
-        Ok(true)
-=======
         Ok(cleared)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 
@@ -675,7 +590,9 @@ pub(super) async fn validate_applied_migrations(
     if !tokio::fs::try_exists(path).await? {
         return Ok(());
     }
-    let pool = sqlite.open_read_only_pool(path).await?;
+    let pool = sqlite
+        .open_read_only_pool(path, /*busy_timeout*/ None)
+        .await?;
     let table_exists = sqlx::query_scalar::<_, i64>(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations'",
     )

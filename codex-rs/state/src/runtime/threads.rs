@@ -1,23 +1,18 @@
 use super::*;
 use crate::SortDirection;
-use crate::sqlite::SqlitePoolWriteExt;
 use crate::sqlite::SqliteWriteQueryExt;
 use codex_protocol::SanitizedGitUrl;
 use codex_protocol::protocol::SessionSource;
 use std::sync::atomic::AtomicI64;
 use std::sync::atomic::Ordering;
 
-<<<<<<< HEAD
 #[derive(Clone, Copy)]
 enum DeletionTime {
     AtWriterLock,
     #[cfg(test)]
     Explicit(i64),
 }
-||||||| 413492cd6c
-=======
 const EXCLUDE_ATTACHED_THREADS: &str = " AND threads.attached_thread_parent_id IS NULL";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 impl StateRuntime {
     pub async fn get_thread(&self, id: ThreadId) -> anyhow::Result<Option<crate::ThreadMetadata>> {
@@ -1237,7 +1232,6 @@ ON CONFLICT(id) DO UPDATE SET
             self.thread_goals.delete_thread_goal(*thread_id).await?;
         }
 
-<<<<<<< HEAD
         let validated_at_ms = Self::prepare_delete(self, time).await?;
         let mut tx = super::accounting::native::begin_delete(&self.pool).await?;
         let result = async {
@@ -1328,11 +1322,6 @@ ON CONFLICT(id) DO UPDATE SET
             .iter()
             .map(ThreadId::to_string)
             .collect::<Vec<_>>();
-||||||| 413492cd6c
-        let mut tx = self.pool.begin().await?;
-=======
-        let mut tx = self.pool.begin_immediate().await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         for thread_id_string in &thread_id_strings {
             sqlx::query("DELETE FROM thread_dynamic_tools WHERE thread_id = ?")
                 .bind(thread_id_string)
@@ -1352,7 +1341,7 @@ ON CONFLICT(id) DO UPDATE SET
         for thread_id_string in &thread_id_strings {
             sqlx::query("DELETE FROM thread_read_receipts WHERE thread_id = ?")
                 .bind(thread_id_string)
-                .execute(&mut *tx)
+                .execute(&mut *conn)
                 .await?;
             rows_affected += sqlx::query("DELETE FROM threads WHERE id = ?")
                 .bind(thread_id_string)
@@ -1540,16 +1529,12 @@ pub(super) fn extract_memory_mode(items: &[RolloutItem]) -> Option<String> {
         | RolloutItem::Compacted(_)
         | RolloutItem::TurnContext(_)
         | RolloutItem::WorldState(_)
-<<<<<<< HEAD
         | RolloutItem::SourceOrigin(_)
-||||||| 413492cd6c
-=======
         | RolloutItem::RealtimeItem(_)
         | RolloutItem::RetainedContext(_)
         | RolloutItem::DynamicToolsUpdated { .. }
         | RolloutItem::SecurityRiskScore(_)
         | RolloutItem::TokenUsageRecord(_)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         | RolloutItem::EventMsg(_) => None,
     })
 }

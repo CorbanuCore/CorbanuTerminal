@@ -11,19 +11,14 @@
 
 use crate::DbTelemetry;
 use crate::migrations::repair_legacy_recency_migration_version;
-<<<<<<< HEAD
 use crate::migrations::runtime_goals_migrator;
 use crate::migrations::runtime_logs_migrator;
 use crate::migrations::runtime_memories_migrator;
+use crate::migrations::runtime_queue_migrator;
 use crate::migrations::runtime_state_migrator;
 use crate::migrations::runtime_thread_history_migrator;
-use crate::runtime::RuntimeDbInitError;
-use crate::runtime::validate_applied_migrations;
-||||||| 413492cd6c
-use crate::runtime::RuntimeDbInitError;
-=======
 use crate::runtime::recovery::RuntimeDbInitError;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use crate::runtime::validate_applied_migrations;
 use crate::telemetry;
 use crate::telemetry::DbKind;
 use codex_file_system::LocalLogsDir;
@@ -58,10 +53,11 @@ use validation::SqliteQuickCheckManager;
 
 const DEFAULT_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
-<<<<<<< HEAD
 const LOGS_DB_FILENAME: &str = "pfterminal_logs_2.sqlite";
 const GOALS_DB_FILENAME: &str = "pfterminal_goals_1.sqlite";
 const MEMORIES_DB_FILENAME: &str = "pfterminal_memories_1.sqlite";
+const MEMORIES_V2_DB_FILENAME: &str = "pfterminal_memories_v2_1.sqlite";
+const QUEUE_DB_FILENAME: &str = "pfterminal_queue_1.sqlite";
 const STATE_DB_FILENAME: &str = "pfterminal_state_5.sqlite";
 const THREAD_HISTORY_DB_FILENAME: &str = "pfterminal_thread_history_1.sqlite";
 /// Held while a runtime database is created and migrated (#549). Never
@@ -90,20 +86,6 @@ const QUICK_POOL_OPEN_POLL: Duration = Duration::from_millis(5);
 /// How long a connection of a main pool ([`SqliteConfig::open_read_write_pool`])
 /// waits for another connection's write lock before SQLITE_BUSY.
 pub(crate) const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
-||||||| 413492cd6c
-const LOGS_DB_FILENAME: &str = "logs_2.sqlite";
-const GOALS_DB_FILENAME: &str = "goals_1.sqlite";
-const MEMORIES_DB_FILENAME: &str = "memories_1.sqlite";
-const STATE_DB_FILENAME: &str = "state_5.sqlite";
-const THREAD_HISTORY_DB_FILENAME: &str = "thread_history_1.sqlite";
-=======
-const LOGS_DB_FILENAME: &str = "logs_2.sqlite";
-const GOALS_DB_FILENAME: &str = "goals_1.sqlite";
-const MEMORIES_DB_FILENAME: &str = "memories_1.sqlite";
-const QUEUE_DB_FILENAME: &str = "queue_1.sqlite";
-const STATE_DB_FILENAME: &str = "state_5.sqlite";
-const THREAD_HISTORY_DB_FILENAME: &str = "thread_history_1.sqlite";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum RecoveryMode {
@@ -183,7 +165,8 @@ const MEMORIES_DB: RuntimeDbSpec = RuntimeDbSpec {
 
 const MEMORIES_V2_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "memories v2 DB",
-    filename: "memories_v2_1.sqlite",
+    filename: MEMORIES_V2_DB_FILENAME,
+    legacy_filename: "memories_v2_1.sqlite",
     background_reclamation: false,
     ..MEMORIES_DB
 };
@@ -191,6 +174,7 @@ const MEMORIES_V2_DB: RuntimeDbSpec = RuntimeDbSpec {
 const QUEUE_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "queue DB",
     filename: QUEUE_DB_FILENAME,
+    legacy_filename: "queue_1.sqlite",
     kind: DbKind::Queue,
     open_phase: "open_queue",
     migrate_phase: "migrate_queue",
@@ -239,16 +223,12 @@ pub struct RuntimeDbPath {
 #[derive(Clone, Debug)]
 pub struct SqliteConfig {
     sqlite_home: AbsolutePathBuf,
-<<<<<<< HEAD
     logs_db_path_override: Option<AbsolutePathBuf>,
-||||||| 413492cd6c
-=======
     local_logs_dir: Option<LocalLogsDir>,
     is_nfs: Arc<OnceCell<bool>>,
     logs_is_nfs: Arc<OnceCell<bool>>,
     enforce_delete_on_nfs: bool,
     quick_check_manager: SqliteQuickCheckManager,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 // Directory locks, cached filesystem information, and validation history are operational state,
@@ -256,6 +236,7 @@ pub struct SqliteConfig {
 impl PartialEq for SqliteConfig {
     fn eq(&self, other: &Self) -> bool {
         self.sqlite_home == other.sqlite_home
+            && self.logs_db_path_override == other.logs_db_path_override
             && self.enforce_delete_on_nfs == other.enforce_delete_on_nfs
             && self.local_logs_dir.as_ref().map(LocalLogsDir::path)
                 == other.local_logs_dir.as_ref().map(LocalLogsDir::path)
@@ -269,20 +250,6 @@ impl SqliteConfig {
         note = "Use SqliteConfig::from_sqlite_home_with_nfs_enforcement with the managed unsafe_enforce_sqlite_journal_mode requirement, or SqliteConfig::new_for_testing in tests"
     )]
     pub fn from_sqlite_home(sqlite_home: AbsolutePathBuf) -> Self {
-<<<<<<< HEAD
-        Self {
-            sqlite_home,
-            logs_db_path_override: None,
-        }
-    }
-
-    /// Override the logs database path while retaining the shared SQLite home for other runtime
-    /// databases.
-    pub fn with_logs_db_path(mut self, logs_db_path: AbsolutePathBuf) -> Self {
-        self.logs_db_path_override = Some(logs_db_path);
-||||||| 413492cd6c
-        Self { sqlite_home }
-=======
         Self::from_sqlite_home_with_nfs_enforcement(
             sqlite_home,
             /*enforce_delete_on_nfs*/ false,
@@ -296,6 +263,7 @@ impl SqliteConfig {
     ) -> Self {
         Self {
             sqlite_home,
+            logs_db_path_override: None,
             local_logs_dir: None,
             is_nfs: Arc::new(OnceCell::new()),
             logs_is_nfs: Arc::new(OnceCell::new()),
@@ -308,7 +276,13 @@ impl SqliteConfig {
     /// Other clients on all hosts must remain stopped during migration.
     pub fn enable_delete_mode_on_nfs(mut self, enabled: bool) -> Self {
         self.enforce_delete_on_nfs = enabled;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        self
+    }
+
+    /// Override the logs database path while retaining the shared SQLite home for other runtime
+    /// databases.
+    pub fn with_logs_db_path(mut self, logs_db_path: AbsolutePathBuf) -> Self {
+        self.logs_db_path_override = Some(logs_db_path);
         self
     }
 
@@ -361,21 +335,17 @@ impl SqliteConfig {
 
     /// Return the path to the logs database.
     pub fn logs_db_path(&self) -> PathBuf {
-<<<<<<< HEAD
         self.logs_db_path_override.as_ref().map_or_else(
-            || LOGS_DB.path(self.home()),
+            || LOGS_DB.path(self),
             codex_utils_absolute_path::AbsolutePathBuf::to_path_buf,
         )
-||||||| 413492cd6c
-        LOGS_DB.path(self.home())
-=======
-        LOGS_DB.path(self)
     }
 
+    /// The logs database left in the home after logs moved to a local directory.
     pub(crate) fn legacy_logs_db_path(&self) -> Option<PathBuf> {
+        self.local_logs_dir.as_ref()?;
         let path = self.home().join(LOGS_DB_FILENAME);
         (path != self.logs_db_path()).then_some(path)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// Return the path to the goals database.
@@ -397,6 +367,7 @@ impl SqliteConfig {
             MEMORIES_V2_DB,
             &crate::migrations::runtime_memories_migrator(),
             /*telemetry_override*/ None,
+            /*init_lock*/ None,
         )
         .await
     }
@@ -423,7 +394,6 @@ impl SqliteConfig {
             .collect()
     }
 
-<<<<<<< HEAD
     /// Adopt pre-namespace PF Terminal databases once, while refusing to touch an upstream
     /// `.codex` home or a database whose applied migrations do not match this distribution.
     pub(crate) async fn migrate_legacy_runtime_db_names(&self) -> anyhow::Result<()> {
@@ -442,7 +412,8 @@ impl SqliteConfig {
 
         for spec in RUNTIME_DBS {
             let legacy_path = self.home().join(spec.legacy_filename);
-            let namespaced_path = spec.path(self.home());
+            // Adoption renames in place; logs moved to a local directory later.
+            let namespaced_path = self.home().join(spec.filename);
             if !tokio::fs::try_exists(&legacy_path).await?
                 || tokio::fs::try_exists(&namespaced_path).await?
             {
@@ -453,6 +424,7 @@ impl SqliteConfig {
                 DbKind::Logs => runtime_logs_migrator(),
                 DbKind::Goals => runtime_goals_migrator(),
                 DbKind::Memories => runtime_memories_migrator(),
+                DbKind::Queue => runtime_queue_migrator(),
                 DbKind::ThreadHistory => runtime_thread_history_migrator(),
             };
             validate_applied_migrations(self, &legacy_path, &migrator).await?;
@@ -465,8 +437,8 @@ impl SqliteConfig {
             }
         }
         Ok(())
-||||||| 413492cd6c
-=======
+    }
+
     pub(crate) fn reclamation_db_paths(&self) -> Vec<RuntimeDbPath> {
         self.runtime_db_paths()
             .into_iter()
@@ -477,7 +449,6 @@ impl SqliteConfig {
                 background_reclamation: true,
             }))
             .collect()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(super) async fn open_state_db(
@@ -503,7 +474,7 @@ impl SqliteConfig {
         let options = SqliteConnectOptions::new()
             .filename(self.state_db_path())
             .create_if_missing(false)
-            .journal_mode(SqliteJournalMode::Wal)
+            // The main pool already chose the journal mode (WAL, or DELETE on NFS).
             .synchronous(SqliteSynchronous::Normal)
             .busy_timeout(busy_timeout)
             .log_statements(LevelFilter::Off);
@@ -544,8 +515,9 @@ impl SqliteConfig {
         &self,
         migrator: &Migrator,
         telemetry_override: Option<&dyn DbTelemetry>,
+        init_lock: Option<&RuntimeDbInitLock>,
     ) -> anyhow::Result<SqlitePool> {
-        self.open_runtime_db(QUEUE_DB, migrator, telemetry_override)
+        self.open_runtime_db(QUEUE_DB, migrator, telemetry_override, init_lock)
             .await
     }
 
@@ -568,17 +540,11 @@ impl SqliteConfig {
         telemetry_override: Option<&dyn DbTelemetry>,
         init_lock: Option<&RuntimeDbInitLock>,
     ) -> anyhow::Result<SqlitePool> {
-<<<<<<< HEAD
-        let path = spec.path(self.home());
+        let path = spec.path(self);
         let _own_lock = match init_lock {
             Some(_) => None,
             None => Some(self.lock_runtime_db_init().await),
         };
-||||||| 413492cd6c
-        let path = spec.path(self.home());
-=======
-        let path = spec.path(self);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let started = Instant::now();
         let pool_result = self
             .open_read_write_pool_with_spec(path.as_path(), Some(spec), telemetry_override)
@@ -687,15 +653,6 @@ impl SqliteConfig {
     }
 
     /// Open a writable Codex SQLite database, creating it if necessary.
-<<<<<<< HEAD
-    pub async fn open_read_write_pool(&self, path: &Path) -> Result<SqlitePool, Error> {
-        retry_shm_reset_race(path, || self.open_read_write_pool_once(path)).await
-    }
-
-    async fn open_read_write_pool_once(&self, path: &Path) -> Result<SqlitePool, Error> {
-||||||| 413492cd6c
-    pub async fn open_read_write_pool(&self, path: &Path) -> Result<SqlitePool, Error> {
-=======
     /// Keep this configuration alive to retain the cleanup lock for local logs.
     pub async fn open_read_write_pool(&self, path: &Path) -> anyhow::Result<SqlitePool> {
         self.open_read_write_pool_with_spec(
@@ -737,52 +694,18 @@ impl SqliteConfig {
             JournalModePolicy::InitializeWal
         };
         let recovery = recover_spec.map_or(RecoveryMode::Unavailable, |spec| spec.recovery);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let options = SqliteConnectOptions::new()
             .filename(path)
             .create_if_missing(true)
             .synchronous(SqliteSynchronous::Normal)
-<<<<<<< HEAD
             .busy_timeout(BUSY_TIMEOUT)
-||||||| 413492cd6c
-            .auto_vacuum(SqliteAutoVacuum::Incremental)
-            .busy_timeout(Duration::from_secs(5))
-=======
-            .busy_timeout(DEFAULT_BUSY_TIMEOUT)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             .log_statements(LevelFilter::Off);
-<<<<<<< HEAD
-        // Setting `auto_vacuum` takes the write lock even when the value is
-        // unchanged, so it must not be a per-connection option: every pooled
-        // connection would run it as it connects, and on a database another
-        // process is writing, opening a connection - for a reader too - waited
-        // out the busy timeout and failed. It only takes effect before the first
-        // table exists (later changes need a VACUUM), so set it once, on the one
-        // connection that creates the database, and leave existing ones alone.
-        if !database_has_content(path) {
-            let mut creator = options
-                .clone()
-                .auto_vacuum(SqliteAutoVacuum::Incremental)
-                .connect()
-                .await?;
-            // An empty file keeps no settings; writing the header persists them.
-            sqlx::query("VACUUM").execute(&mut creator).await?;
-            creator.close().await?;
-        }
-        let pool = SqlitePoolOptions::new()
-            .max_connections(5)
-            .connect_with(options)
-            .await?;
-        open_wal_index(pool).await
-||||||| 413492cd6c
-        SqlitePoolOptions::new()
-            .max_connections(5)
-            .connect_with(options)
-            .await
-=======
         // Each failed attempt closes its pool before initialization is retried.
+        // #691: the Windows WAL reset race is retried while opening. `connect_once`
+        // already reads the schema on its first connection, which opens the WAL
+        // index, so the race shows here.
         let connect = || async {
-            connect_once(&options, journal_mode_policy)
+            retry_shm_reset_race(path, || connect_once(&options, journal_mode_policy))
                 .await
                 .map_err(anyhow::Error::from)
         };
@@ -821,37 +744,9 @@ impl SqliteConfig {
         }
 
         Ok(pool)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// Open an existing Codex SQLite database without creating or modifying it.
-<<<<<<< HEAD
-    pub async fn open_read_only_pool(&self, path: &Path) -> Result<SqlitePool, Error> {
-        retry_shm_reset_race(path, || async {
-            let options = SqliteConnectOptions::new()
-                .filename(path)
-                .create_if_missing(false)
-                .read_only(true)
-                .log_statements(LevelFilter::Off);
-            let pool = SqlitePoolOptions::new()
-                .max_connections(1)
-                .connect_with(options)
-                .await?;
-            open_wal_index(pool).await
-        })
-        .await
-||||||| 413492cd6c
-    pub async fn open_read_only_pool(&self, path: &Path) -> Result<SqlitePool, Error> {
-        let options = SqliteConnectOptions::new()
-            .filename(path)
-            .create_if_missing(false)
-            .read_only(true)
-            .log_statements(LevelFilter::Off);
-        SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with(options)
-            .await
-=======
     /// Keep this configuration alive to retain the cleanup lock for local logs.
     pub async fn open_read_only_pool(
         &self,
@@ -867,11 +762,14 @@ impl SqliteConfig {
         if let Some(busy_timeout) = busy_timeout {
             options = options.busy_timeout(busy_timeout);
         }
-        SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with(options)
-            .await
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        retry_shm_reset_race(path, || async {
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(options.clone())
+                .await?;
+            open_wal_index(pool).await
+        })
+        .await
     }
 
     /// Open old logs for cleanup without creating, migrating, or rebuilding the database.
@@ -912,7 +810,6 @@ impl SqliteConfig {
     }
 }
 
-<<<<<<< HEAD
 /// Builds the short-wait pool from `pool_options` (tests add a slow
 /// `after_connect`). Waiting for one of its connections counts against the
 /// same short wait, and a timeout reads as a busy DB, so opening a connection
@@ -1081,11 +978,22 @@ async fn open_wal_index(pool: SqlitePool) -> Result<SqlitePool, Error> {
         .await
     {
         Ok(_) => Ok(pool),
+        // Another connection holds a lock, so the index is in use, not being
+        // reset; the caller's own busy handling (and deadline) applies later.
+        Err(err) if is_lock_contention(&err) => Ok(pool),
         Err(err) => {
             pool.close().await;
             Err(err)
         }
     }
+}
+
+/// SQLITE_BUSY or SQLITE_LOCKED, including their extended codes.
+fn is_lock_contention(err: &Error) -> bool {
+    err.as_database_error()
+        .and_then(sqlx::error::DatabaseError::code)
+        .and_then(|code| code.parse::<i32>().ok())
+        .is_some_and(|code| matches!(code & 0xff, 5 | 6))
 }
 
 /// Runs `open`, retrying it after [`is_shm_reset_race`] errors.
@@ -1132,8 +1040,8 @@ async fn rename_if_source_still_exists(source: &Path, destination: &Path) -> any
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(err) => Err(err.into()),
     }
-||||||| 413492cd6c
-=======
+}
+
 async fn probe_nfs(home: &Path, probe: &OnceCell<bool>) -> anyhow::Result<bool> {
     probe
         .get_or_try_init(|| async {
@@ -1142,9 +1050,13 @@ async fn probe_nfs(home: &Path, probe: &OnceCell<bool>) -> anyhow::Result<bool> 
         })
         .await
         .copied()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[cfg(test)]
 #[path = "sqlite_tests.rs"]
 mod tests;
+
+// Corbanu-only tests (main) for the init lock, legacy names, the quick pool and #691.
+#[cfg(test)]
+#[path = "sqlite_corbanu_tests.rs"]
+mod corbanu_tests;

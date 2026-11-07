@@ -46,7 +46,8 @@ async fn guardian_metadata_cleanup_preserves_custom_names_and_titles() {
         .open_read_write_pool(&sqlite.state_db_path())
         .await
         .expect("sqlite database should open");
-    migrator_through(/*version*/ 56)
+    // Upstream 0056 is our 0063 (S1c renumbering: upstream 0047-0062 -> 0054-0069).
+    migrator_through(/*version*/ 63)
         .run(&pool)
         .await
         .expect("pre-cleanup migrations should apply");
@@ -319,7 +320,8 @@ async fn thread_attachment_migration_preserves_existing_data() {
         .open_read_write_pool(&sqlite.state_db_path())
         .await
         .expect("sqlite database should open");
-    migrator_through(/*version*/ 51)
+    // Upstream 0051 (thread_artifacts) is our 0058.
+    migrator_through(/*version*/ 58)
         .run(&pool)
         .await
         .expect("released thread migrations should apply");
@@ -384,7 +386,8 @@ async fn thread_attachment_migration_preserves_existing_data() {
         )
     );
 
-    let mut released_migrator = migrator_through(/*version*/ 50);
+    // Upstream 0050 is our 0057.
+    let mut released_migrator = migrator_through(/*version*/ 57);
     released_migrator.ignore_missing = true;
     released_migrator
         .run(&pool)
@@ -605,7 +608,11 @@ async fn realtime_items_preserve_older_thread_history_writers() {
         no_tx: THREAD_HISTORY_MIGRATOR.no_tx,
     };
     let pool = sqlite
-        .open_thread_history_db(&older_migrator, /*telemetry_override*/ None)
+        .open_thread_history_db(
+            &older_migrator,
+            /*telemetry_override*/ None,
+            /*init_lock*/ None,
+        )
         .await
         .expect("existing thread history migrations should apply");
     sqlx::query(
@@ -651,7 +658,11 @@ async fn realtime_items_preserve_older_thread_history_writers() {
     assert_eq!(checkpoint, (42, 3));
 
     let older_pool = sqlite
-        .open_thread_history_db(&older_migrator, /*telemetry_override*/ None)
+        .open_thread_history_db(
+            &older_migrator,
+            /*telemetry_override*/ None,
+            /*init_lock*/ None,
+        )
         .await
         .expect("older binaries should tolerate the additive realtime migration");
     sqlx::query(

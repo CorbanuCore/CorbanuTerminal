@@ -215,7 +215,7 @@ impl GpuOperationKind {
     }
 }
 
-#[derive(Debug, sqlx::FromRow)]
+#[derive(Debug, sqlx_macros::FromRow)]
 pub(crate) struct GpuRentalRow {
     pub(crate) rental_id: String,
     pub(crate) installation_id: String,

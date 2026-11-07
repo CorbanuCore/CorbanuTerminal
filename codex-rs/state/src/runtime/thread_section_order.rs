@@ -1,5 +1,4 @@
 use super::StateRuntime;
-use crate::sqlite::SqlitePoolWriteExt;
 use chrono::DateTime;
 use chrono::Utc;
 use codex_protocol::ThreadId;
@@ -114,13 +113,7 @@ LIMIT ?
             ));
         }
 
-<<<<<<< HEAD
         let mut tx = crate::runtime::db_lock::begin_immediate(&self.pool).await?;
-||||||| 413492cd6c
-        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-=======
-        let mut tx = self.pool.begin_immediate().await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let thread_id = thread_id.to_string();
         let current_section = sqlx::query_scalar::<_, Option<String>>(
             "SELECT thread_section_id FROM threads WHERE id = ?",

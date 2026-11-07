@@ -38,18 +38,12 @@ pub fn apply_rollout_item(
         RolloutItem::InterAgentCommunication(_)
         | RolloutItem::InterAgentCommunicationMetadata { .. } => {}
         RolloutItem::Compacted(_) => {}
-<<<<<<< HEAD
         RolloutItem::WorldState(_) | RolloutItem::SourceOrigin(_) => {}
-||||||| 413492cd6c
-        RolloutItem::WorldState(_) => {}
-=======
-        RolloutItem::WorldState(_) => {}
         RolloutItem::DynamicToolsUpdated { .. }
         | RolloutItem::RetainedContext(_)
         | RolloutItem::SecurityRiskScore(_) => {}
         RolloutItem::RealtimeItem(_) => {}
         RolloutItem::TokenUsageRecord(_) => {}
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
     if metadata.model_provider.is_empty() {
         metadata.model_provider = default_provider.to_string();
@@ -79,19 +73,13 @@ pub fn rollout_item_affects_thread_metadata(item: &RolloutItem) -> bool {
         | RolloutItem::InterAgentCommunication(_)
         | RolloutItem::InterAgentCommunicationMetadata { .. }
         | RolloutItem::Compacted(_)
-<<<<<<< HEAD
-        | RolloutItem::WorldState(_)
-        | RolloutItem::SourceOrigin(_) => false,
-||||||| 413492cd6c
-        | RolloutItem::WorldState(_) => false,
-=======
         | RolloutItem::RealtimeItem(_)
         | RolloutItem::RetainedContext(_)
         | RolloutItem::DynamicToolsUpdated { .. }
         | RolloutItem::SecurityRiskScore(_)
         | RolloutItem::TokenUsageRecord(_)
-        | RolloutItem::WorldState(_) => false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        | RolloutItem::WorldState(_)
+        | RolloutItem::SourceOrigin(_) => false,
     }
 }
 
@@ -609,14 +597,8 @@ mod tests {
                 realtime_active: None,
                 cyber_access_program: None,
                 effort: None,
-<<<<<<< HEAD
                 security_level: None,
-                summary: codex_protocol::config_types::ReasoningSummary::Auto,
-||||||| 413492cd6c
-                summary: codex_protocol::config_types::ReasoningSummary::Auto,
-=======
                 summary: Some(codex_protocol::config_types::ReasoningSummary::Auto),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }),
             "test-provider",
         );
@@ -662,14 +644,8 @@ mod tests {
                 realtime_active: None,
                 cyber_access_program: None,
                 effort: None,
-<<<<<<< HEAD
                 security_level: None,
-                summary: codex_protocol::config_types::ReasoningSummary::Auto,
-||||||| 413492cd6c
-                summary: codex_protocol::config_types::ReasoningSummary::Auto,
-=======
                 summary: Some(codex_protocol::config_types::ReasoningSummary::Auto),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }),
             "test-provider",
         );
@@ -711,14 +687,8 @@ mod tests {
                 realtime_active: None,
                 cyber_access_program: None,
                 effort: Some(ReasoningEffort::High),
-<<<<<<< HEAD
                 security_level: None,
-                summary: codex_protocol::config_types::ReasoningSummary::Auto,
-||||||| 413492cd6c
-                summary: codex_protocol::config_types::ReasoningSummary::Auto,
-=======
                 summary: Some(codex_protocol::config_types::ReasoningSummary::Auto),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }),
             "test-provider",
         );
@@ -757,14 +727,8 @@ mod tests {
                 realtime_active: None,
                 cyber_access_program: None,
                 effort: Some(ReasoningEffort::High),
-<<<<<<< HEAD
                 security_level: None,
-                summary: codex_protocol::config_types::ReasoningSummary::Auto,
-||||||| 413492cd6c
-                summary: codex_protocol::config_types::ReasoningSummary::Auto,
-=======
                 summary: Some(codex_protocol::config_types::ReasoningSummary::Auto),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }),
             "test-provider",
         );

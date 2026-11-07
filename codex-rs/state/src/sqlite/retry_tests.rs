@@ -29,7 +29,11 @@ async fn retries_after_a_competing_writer_releases_its_lock() -> anyhow::Result<
     });
     let sqlite = SqliteConfig::new_for_testing(sqlite_home.as_path().abs());
     let pool = sqlite
-        .open_logs_db(&runtime_logs_migrator(), /*telemetry_override*/ None)
+        .open_logs_db(
+            &runtime_logs_migrator(),
+            /*telemetry_override*/ None,
+            /*init_lock*/ None,
+        )
         .await?;
     let mut competing_writer = pool.acquire().await?;
     let mut writer = pool.acquire().await?;
@@ -82,7 +86,11 @@ async fn queue_enqueue_survives_received_busy_without_duplicating_the_message() 
     });
     let sqlite = SqliteConfig::new_for_testing(sqlite_home.as_path().abs());
     let pool = sqlite
-        .open_queue_db(&runtime_queue_migrator(), /*telemetry_override*/ None)
+        .open_queue_db(
+            &runtime_queue_migrator(),
+            /*telemetry_override*/ None,
+            /*init_lock*/ None,
+        )
         .await?;
     let (attempt_finished, mut finished) = mpsc::unbounded_channel();
     // No connection is opened or released until enqueue's first attempt.
@@ -144,7 +152,11 @@ async fn queue_update_survives_received_busy_and_commits_once() -> anyhow::Resul
     });
     let sqlite = SqliteConfig::new_for_testing(sqlite_home.as_path().abs());
     let pool = sqlite
-        .open_queue_db(&runtime_queue_migrator(), /*telemetry_override*/ None)
+        .open_queue_db(
+            &runtime_queue_migrator(),
+            /*telemetry_override*/ None,
+            /*init_lock*/ None,
+        )
         .await?;
     let observer = SqliteQueueStore::new(Arc::new(pool.clone()));
     let thread_id = ThreadId::new();
@@ -212,7 +224,11 @@ async fn queue_delete_survives_received_busy_and_preserves_other_messages() -> a
     });
     let sqlite = SqliteConfig::new_for_testing(sqlite_home.as_path().abs());
     let pool = sqlite
-        .open_queue_db(&runtime_queue_migrator(), /*telemetry_override*/ None)
+        .open_queue_db(
+            &runtime_queue_migrator(),
+            /*telemetry_override*/ None,
+            /*init_lock*/ None,
+        )
         .await?;
     let observer = SqliteQueueStore::new(Arc::new(pool.clone()));
     let thread_id = ThreadId::new();

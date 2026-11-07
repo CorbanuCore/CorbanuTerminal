@@ -14,7 +14,11 @@ async fn reclaims_current_and_legacy_logs_with_independent_directory_locks() -> 
     let mut sizes = Vec::new();
     for config in [&sqlite, &legacy] {
         let pool = config
-            .open_logs_db(&runtime_logs_migrator(), /*telemetry_override*/ None)
+            .open_logs_db(
+                &runtime_logs_migrator(),
+                /*telemetry_override*/ None,
+                /*init_lock*/ None,
+            )
             .await?;
         sqlx::query(
             "WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i < 4096) \
@@ -92,7 +96,11 @@ async fn interrupted_reclamation_releases_writer_and_resumes_without_data_loss()
     let sqlite = SqliteConfig::new_for_testing(unique_temp_dir().abs());
     tokio::fs::create_dir_all(sqlite.home()).await?;
     let pool = sqlite
-        .open_logs_db(&runtime_logs_migrator(), /*telemetry_override*/ None)
+        .open_logs_db(
+            &runtime_logs_migrator(),
+            /*telemetry_override*/ None,
+            /*init_lock*/ None,
+        )
         .await?;
     sqlx::query(
         "WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i < 4096) \

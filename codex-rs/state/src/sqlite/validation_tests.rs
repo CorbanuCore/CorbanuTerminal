@@ -83,6 +83,7 @@ async fn runtime_opens_recover_or_report_corruption_by_database_policy() -> anyh
                     .open_thread_history_db(
                         &crate::migrations::runtime_thread_history_migrator(),
                         Some(&telemetry),
+                        /*init_lock*/ None,
                     )
                     .await?;
                 assert_eq!(
@@ -164,6 +165,7 @@ async fn quick_check_failure_is_recovered_before_runtime_init_returns() -> anyho
         .open_logs_db(
             &crate::migrations::runtime_logs_migrator(),
             /*telemetry_override*/ None,
+            /*init_lock*/ None,
         )
         .await?
         .close()
@@ -273,7 +275,9 @@ async fn repeated_pool_opens_share_completed_and_incomplete_attempts() -> anyhow
 
         let migrator = crate::migrations::runtime_logs_migrator();
         let pool = sqlite
-            .open_logs_db(&migrator, /*telemetry_override*/ None)
+            .open_logs_db(
+                &migrator, /*telemetry_override*/ None, /*init_lock*/ None,
+            )
             .await?;
         sqlx::raw_sql(
             "UPDATE sample SET value=NULL WHERE value=1;
@@ -287,8 +291,12 @@ async fn repeated_pool_opens_share_completed_and_incomplete_attempts() -> anyhow
         // Corruption introduced after the first attempt exposes any repeated scan.
         let cloned_sqlite = sqlite.clone();
         let (first, second) = tokio::join!(
-            sqlite.open_logs_db(&migrator, /*telemetry_override*/ None),
-            cloned_sqlite.open_logs_db(&migrator, /*telemetry_override*/ None),
+            sqlite.open_logs_db(
+                &migrator, /*telemetry_override*/ None, /*init_lock*/ None
+            ),
+            cloned_sqlite.open_logs_db(
+                &migrator, /*telemetry_override*/ None, /*init_lock*/ None
+            ),
         );
         let first = first?;
         let second = second?;
@@ -303,7 +311,9 @@ async fn repeated_pool_opens_share_completed_and_incomplete_attempts() -> anyhow
         // A separately constructed configuration must check and recover the file.
         let independent_sqlite = SqliteConfig::new_for_testing(home.as_path().abs());
         let repaired = independent_sqlite
-            .open_logs_db(&migrator, /*telemetry_override*/ None)
+            .open_logs_db(
+                &migrator, /*telemetry_override*/ None, /*init_lock*/ None,
+            )
             .await?;
         assert_eq!(
             quick_check(&repaired, Instant::now() + Duration::from_secs(/*secs*/ 5)).await?,
