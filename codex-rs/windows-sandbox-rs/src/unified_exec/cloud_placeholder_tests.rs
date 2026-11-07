@@ -75,7 +75,7 @@ fn library_proc(library: &str, name: &str) -> unsafe extern "system" fn() -> isi
     // SAFETY: plain library and symbol lookups with NUL-terminated names.
     unsafe {
         let module = LoadLibraryW(library.as_ptr());
-        assert!(module != 0, "load library for {name}");
+        assert!(!module.is_null(), "load library for {name}");
         GetProcAddress(module, symbol.as_ptr().cast()).expect(name)
     }
 }

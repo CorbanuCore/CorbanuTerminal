@@ -14,7 +14,9 @@ use std::path::PathBuf;
 fn write(path: &Path) -> FileSystemSandboxEntry {
     FileSystemSandboxEntry::new(
         FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+            path: AbsolutePathBuf::from_absolute_path(path)
+                .expect("absolute")
+                .into(),
         },
         FileSystemAccessMode::Write,
     )

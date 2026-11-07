@@ -9,25 +9,16 @@ mod sandbox_integrity;
 #[cfg(target_os = "macos")]
 pub mod seatbelt;
 mod spawn;
-<<<<<<< HEAD
-pub mod user_namespaces;
-||||||| 413492cd6c
-=======
 mod terminal_queries;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+pub mod user_namespaces;
 mod violation;
 mod windows;
-<<<<<<< HEAD
 mod windows_legacy_warning;
-pub mod writable_root_ledger;
-||||||| 413492cd6c
-=======
 #[cfg(windows)]
 mod windows_mxc;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+pub mod writable_root_ledger;
 
 #[cfg(target_os = "linux")]
-<<<<<<< HEAD
 pub use bwrap::APPARMOR_BWRAP_USERNS_PROFILE;
 #[cfg(target_os = "linux")]
 pub use bwrap::BWRAP_UNAVAILABLE_MESSAGE;
@@ -37,12 +28,10 @@ pub use bwrap::find_apparmor_bwrap_launcher;
 pub use bwrap::find_apparmor_bwrap_launcher_for_fd;
 #[cfg(target_os = "linux")]
 pub use bwrap::find_bundled_bwrap;
-||||||| 413492cd6c
-=======
+#[cfg(target_os = "linux")]
 pub use bwrap::find_executable_in_search_paths;
 #[cfg(target_os = "linux")]
 pub use bwrap::find_pre_sandbox_executable_in_path;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[cfg(target_os = "linux")]
 pub use bwrap::find_system_bwrap_in_path;
 #[cfg(target_os = "linux")]
@@ -114,18 +103,15 @@ impl From<SandboxTransformError> for CodexErr {
             SandboxTransformError::EnvironmentNetworkProxy(message) => {
                 CodexErr::UnsupportedOperation(message)
             }
-<<<<<<< HEAD
             SandboxTransformError::WritableRootRefused(refusal) => {
                 CodexErr::UnsupportedOperation(refusal.to_string())
-||||||| 413492cd6c
-=======
+            }
             SandboxTransformError::WindowsMxcPreparation(message) => {
                 CodexErr::UnsupportedOperation(message)
             }
             #[cfg(target_os = "macos")]
             SandboxTransformError::SeatbeltPreparation(message) => {
                 CodexErr::UnsupportedOperation(message)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
             #[cfg(target_os = "linux")]
             SandboxTransformError::Wsl1UnsupportedForBubblewrap => {

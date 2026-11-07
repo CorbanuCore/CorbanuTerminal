@@ -302,7 +302,7 @@ pub fn require_logon_sandbox_creds(
             read_roots: Some(needed_read),
             read_roots_include_platform_defaults,
             write_roots: Some(needed_write),
-            deny_read_paths: Some(deny_read_paths_override.to_vec()),
+            deny_read: Some(deny_read_override.clone()),
             deny_write_paths: Some(deny_write_paths_override.to_vec()),
         },
         &offline_proxy_settings,
@@ -408,24 +408,6 @@ fn require_sandbox_account_with_setup(
                 codex_home,
                 proxy_enforced,
             },
-<<<<<<< HEAD
-            crate::setup::SetupRootOverrides {
-                read_roots: Some(needed_read.clone()),
-                read_roots_include_platform_defaults,
-                write_roots: Some(needed_write.clone()),
-                deny_read: Some(deny_read_override.clone()),
-                deny_write_paths: Some(deny_write_paths_override.to_vec()),
-            },
-||||||| 413492cd6c
-            crate::setup::SetupRootOverrides {
-                read_roots: Some(needed_read.clone()),
-                read_roots_include_platform_defaults,
-                write_roots: Some(needed_write.clone()),
-                deny_read_paths: Some(deny_read_paths_override.to_vec()),
-                deny_write_paths: Some(deny_write_paths_override.to_vec()),
-            },
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             &desired_offline_proxy_settings,
         )?;
         for username in [OFFLINE_USERNAME, ONLINE_USERNAME] {
@@ -438,46 +420,6 @@ fn require_sandbox_account_with_setup(
         }
         identity = select_identity(network_identity, codex_home)?;
     }
-<<<<<<< HEAD
-    // Always refresh ACLs (non-elevated) for current roots via the setup binary.
-    run_setup_refresh_with_overrides_and_proxy_settings(
-        crate::setup::SandboxSetupRequest {
-            permissions,
-            command_cwd,
-            env_map,
-            codex_home,
-            proxy_enforced,
-        },
-        crate::setup::SetupRootOverrides {
-            read_roots: Some(needed_read),
-            read_roots_include_platform_defaults,
-            write_roots: Some(needed_write),
-            deny_read: Some(deny_read_override.clone()),
-            deny_write_paths: Some(deny_write_paths_override.to_vec()),
-        },
-        &desired_offline_proxy_settings,
-    )?;
-||||||| 413492cd6c
-    // Always refresh ACLs (non-elevated) for current roots via the setup binary.
-    run_setup_refresh_with_overrides_and_proxy_settings(
-        crate::setup::SandboxSetupRequest {
-            permissions,
-            command_cwd,
-            env_map,
-            codex_home,
-            proxy_enforced,
-        },
-        crate::setup::SetupRootOverrides {
-            read_roots: Some(needed_read),
-            read_roots_include_platform_defaults,
-            write_roots: Some(needed_write),
-            deny_read_paths: Some(deny_read_paths_override.to_vec()),
-            deny_write_paths: Some(deny_write_paths_override.to_vec()),
-        },
-        &desired_offline_proxy_settings,
-    )?;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let identity = identity.ok_or_else(|| {
         anyhow!(
             "Windows sandbox setup is missing or out of date; rerun the sandbox setup with elevation"

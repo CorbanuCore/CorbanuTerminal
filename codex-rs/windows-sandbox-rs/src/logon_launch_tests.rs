@@ -119,7 +119,7 @@ fn race() {
 fn pipe_handles(process: HANDLE) -> Vec<usize> {
     let mut pipes = Vec::new();
     for value in (4..MAX_HANDLE_VALUE).step_by(4) {
-        let mut copy: HANDLE = 0;
+        let mut copy: HANDLE = std::ptr::null_mut();
         // SAFETY: `process` is our child, opened with full access; a value
         // that is not a handle there just fails.
         let ok = unsafe {

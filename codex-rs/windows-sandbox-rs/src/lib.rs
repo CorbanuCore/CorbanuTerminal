@@ -95,27 +95,21 @@ mod hide_users;
 #[cfg(target_os = "windows")]
 mod identity;
 #[cfg(target_os = "windows")]
-<<<<<<< HEAD
+mod installation_record;
+#[cfg(target_os = "windows")]
 mod integrity;
 #[cfg(target_os = "windows")]
 mod integrity_leases;
-||||||| 413492cd6c
-=======
-mod installation_record;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[cfg(target_os = "windows")]
 mod logging;
 #[cfg(target_os = "windows")]
-<<<<<<< HEAD
 mod logon_launch;
 #[cfg(target_os = "windows")]
 mod nested_metadata;
-||||||| 413492cd6c
-=======
+#[cfg(target_os = "windows")]
 mod no_reparse_dir;
 #[cfg(target_os = "windows")]
 mod package_identity;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[cfg(target_os = "windows")]
 mod path_normalization;
 #[cfg(target_os = "windows")]
@@ -176,14 +170,10 @@ mod workspace_acl;
 
 pub mod credential_watch;
 mod deny_read_resolver;
-<<<<<<< HEAD
 mod deny_read_targets;
 pub mod local_drive;
-||||||| 413492cd6c
-=======
 #[cfg(target_os = "windows")]
 mod uninstall_windows;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 #[cfg(target_os = "windows")]
 mod conpty;
@@ -307,7 +297,7 @@ pub use deny_read_acl::apply_deny_read_acls;
 pub use deny_read_acl::plan_deny_read_acl_paths;
 pub use deny_read_resolver::GLOB_SCAN_PROGRAM;
 pub use deny_read_resolver::resolve_windows_deny_read_paths;
-<<<<<<< HEAD
+pub use deny_read_resolver::resolve_windows_deny_read_paths_in_environment;
 pub use deny_read_resolver::resolve_windows_deny_read_targets;
 #[cfg(target_os = "windows")]
 pub use deny_read_sessions::DENY_READ_SYNC_LOCK_WAIT;
@@ -321,10 +311,6 @@ pub use deny_read_sessions::ensure_registry as ensure_deny_read_session_registry
 pub use deny_read_sessions::register_this_process as register_deny_read_session;
 #[cfg(target_os = "windows")]
 pub use deny_read_state::SECRETLESS_LAUNCH_LOCK_FILE;
-||||||| 413492cd6c
-=======
-pub use deny_read_resolver::resolve_windows_deny_read_paths_in_environment;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[cfg(target_os = "windows")]
 pub use deny_read_state::sync_persistent_deny_read_acls;
 pub use deny_read_targets::DenyReadRule;
@@ -332,8 +318,6 @@ pub use deny_read_targets::DenyReadRuleTargets;
 pub use deny_read_targets::DenyReadTargets;
 #[cfg(target_os = "windows")]
 pub use desktop::LaunchDesktop;
-#[cfg(target_os = "windows")]
-pub use desktop::mark_as_command_runner;
 #[cfg(target_os = "windows")]
 pub use dpapi::protect as dpapi_protect;
 #[cfg(target_os = "windows")]
@@ -359,7 +343,8 @@ pub use identity::require_logon_sandbox_creds;
 #[cfg(target_os = "windows")]
 pub use identity::sandbox_setup_is_complete;
 #[cfg(target_os = "windows")]
-<<<<<<< HEAD
+pub use identity::sandbox_setup_is_complete_with_settings;
+#[cfg(target_os = "windows")]
 pub use integrity_leases::confirm_planted_project_metadata;
 #[cfg(target_os = "windows")]
 pub use integrity_leases::planted_project_metadata;
@@ -367,10 +352,6 @@ pub use integrity_leases::planted_project_metadata;
 pub use integrity_leases::project_metadata_counts_as_planted;
 #[cfg(target_os = "windows")]
 pub use integrity_leases::repair_stale_integrity_labels;
-||||||| 413492cd6c
-=======
-pub use identity::sandbox_setup_is_complete_with_settings;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[cfg(target_os = "windows")]
 pub use ipc_framed::ErrorPayload;
 #[cfg(target_os = "windows")]
@@ -412,7 +393,8 @@ pub use logging::log_note;
 #[cfg(target_os = "windows")]
 pub use logging::log_writer;
 #[cfg(target_os = "windows")]
-<<<<<<< HEAD
+pub use logging::setup_log_writer;
+#[cfg(target_os = "windows")]
 pub use logon_launch::LOGON_LAUNCH_ARG;
 #[cfg(target_os = "windows")]
 pub use logon_launch::LaunchedProcess;
@@ -428,9 +410,6 @@ pub use logon_launch::create_process_with_logon;
 pub use logon_launch::run_logon_launcher;
 #[cfg(target_os = "windows")]
 pub use logon_launch::run_window_access_reaper;
-||||||| 413492cd6c
-=======
-pub use logging::setup_log_writer;
 #[cfg(target_os = "windows")]
 pub use no_reparse_dir::DirectoryOpenDisposition;
 #[cfg(target_os = "windows")]
@@ -441,7 +420,6 @@ pub use no_reparse_dir::open_directory_no_reparse;
 pub use no_reparse_dir::validate_local_directory_path;
 #[cfg(target_os = "windows")]
 pub use package_identity::process_package_family;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[cfg(target_os = "windows")]
 pub use path_normalization::canonicalize_path;
 #[cfg(target_os = "windows")]
@@ -585,10 +563,6 @@ pub use unified_exec::spawn_windows_sandbox_session_elevated_for_permission_prof
 pub use unified_exec::spawn_windows_sandbox_session_for_level;
 #[cfg(target_os = "windows")]
 pub use unified_exec::spawn_windows_sandbox_session_legacy;
-pub use unlabelled_roots::legacy_writable_roots;
-pub use unlabelled_roots::unlabelled_roots_mark;
-pub use unlabelled_roots::unlabelled_roots_since;
-pub use unlabelled_roots::unlabelled_writable_root_warning;
 #[cfg(target_os = "windows")]
 pub use uninstall_windows::PreparedWindowsSandboxCleanup;
 #[cfg(target_os = "windows")]
@@ -599,6 +573,10 @@ pub use uninstall_windows::clean_up_packaged_windows_sandbox;
 pub use uninstall_windows::prepare_packaged_windows_sandbox_cleanup;
 #[cfg(target_os = "windows")]
 pub use uninstall_windows::prepare_packaged_windows_sandbox_cleanup_with_retained_tokens;
+pub use unlabelled_roots::legacy_writable_roots;
+pub use unlabelled_roots::unlabelled_roots_mark;
+pub use unlabelled_roots::unlabelled_roots_since;
+pub use unlabelled_roots::unlabelled_writable_root_warning;
 #[cfg(target_os = "windows")]
 pub use wfp::install_wfp_filters_for_account;
 #[cfg(target_os = "windows")]
@@ -628,12 +606,8 @@ pub use winutil::quote_windows_arg;
 #[cfg(target_os = "windows")]
 pub use winutil::resolve_sid;
 #[cfg(target_os = "windows")]
-<<<<<<< HEAD
-||||||| 413492cd6c
-=======
 pub use winutil::set_local_user_flags;
 #[cfg(target_os = "windows")]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use winutil::string_from_sid_bytes;
 #[cfg(target_os = "windows")]
 pub use winutil::to_wide;
@@ -889,26 +863,20 @@ mod windows_impl {
         };
         let (stdin_pair, stdout_pair, stderr_pair) = unsafe { setup_stdio_pipes()? };
         let ((in_r, in_w), (out_r, out_w), (err_r, err_w)) = (stdin_pair, stdout_pair, stderr_pair);
-        let spawn_res = crate::LaunchDesktop::prepare_legacy(
-            &permissions,
-            &current_dir,
-            &env_map,
-            &security,
-            &additional_deny_write_paths,
-            logs_base_dir,
-        )
-        .and_then(|desktop| unsafe {
-            create_process_as_user(
-                security.h_token,
-                &command,
-                cwd,
-                &env_map,
-                logs_base_dir,
-                Some((in_r, out_w, err_w)),
-                ConsoleMode::NoWindow,
-                desktop,
-            )
-        });
+        let spawn_res = crate::LaunchDesktop::prepare_legacy(&security, logs_base_dir).and_then(
+            |desktop| unsafe {
+                create_process_as_user(
+                    security.h_token,
+                    &command,
+                    cwd,
+                    &env_map,
+                    logs_base_dir,
+                    Some((in_r, out_w, err_w)),
+                    ConsoleMode::NoWindow,
+                    desktop,
+                )
+            },
+        );
         let created = match spawn_res {
             Ok(v) => v,
             Err(err) => {

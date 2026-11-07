@@ -33,7 +33,6 @@ pub struct WindowsSandboxFilesystemOverrides {
     pub additional_deny_write_paths: Vec<AbsolutePathBuf>,
 }
 
-<<<<<<< HEAD
 /// How to switch to the backend that can enforce read restrictions (#300).
 macro_rules! switch_to_elevated {
     () => {
@@ -62,19 +61,6 @@ pub fn windows_sandbox_uses_elevated_backend(
     // proxy-enforced sessions must use that backend even when the configured mode is
     // the default restricted-token sandbox.
     proxy_enforced || matches!(sandbox_level, WindowsSandboxLevel::Elevated)
-||||||| 413492cd6c
-pub fn windows_sandbox_uses_elevated_backend(
-    sandbox_level: WindowsSandboxLevel,
-    proxy_enforced: bool,
-) -> bool {
-    // Windows firewall enforcement is tied to the logon-user sandbox identities, so
-    // proxy-enforced sessions must use that backend even when the configured mode is
-    // the default restricted-token sandbox.
-    proxy_enforced || matches!(sandbox_level, WindowsSandboxLevel::Elevated)
-=======
-pub fn windows_sandbox_uses_elevated_backend(sandbox_level: WindowsSandboxLevel) -> bool {
-    matches!(sandbox_level, WindowsSandboxLevel::Elevated)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 pub fn permission_profile_supports_windows_restricted_token_sandbox(
@@ -300,11 +286,6 @@ pub fn resolve_windows_elevated_filesystem_overrides(
     // deny-write sentinels.
     file_system_sandbox_policy.remove_skip_missing_path_entries();
 
-<<<<<<< HEAD
-    let additional_deny_read = codex_windows_sandbox::resolve_windows_deny_read_targets(
-||||||| 413492cd6c
-    let additional_deny_read_paths = codex_windows_sandbox::resolve_windows_deny_read_paths(
-=======
     #[cfg(target_os = "windows")]
     codex_windows_sandbox::resolve_workload_temp_paths(
         &mut file_system_sandbox_policy,
@@ -313,8 +294,7 @@ pub fn resolve_windows_elevated_filesystem_overrides(
     #[cfg(not(target_os = "windows"))]
     let _ = workload_env;
 
-    let additional_deny_read_paths = codex_windows_sandbox::resolve_windows_deny_read_paths(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    let additional_deny_read = codex_windows_sandbox::resolve_windows_deny_read_targets(
         &file_system_sandbox_policy,
         sandbox_policy_cwd,
     )?;

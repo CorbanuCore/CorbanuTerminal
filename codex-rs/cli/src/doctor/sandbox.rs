@@ -122,7 +122,12 @@ pub(super) fn sandbox_check(config: &Config, arg0_paths: &Arg0DispatchPaths) -> 
             == codex_protocol::sandbox::SandboxType::WindowsMxc;
         let elevated = !mxc
             && configured_level != WindowsSandboxLevel::Disabled
-            && windows_sandbox_uses_elevated_backend(configured_level);
+            // The configured backend; a proxy-enforced session uses the
+            // elevated one regardless (D355).
+            && windows_sandbox_uses_elevated_backend(
+                configured_level,
+                /*proxy_enforced*/ false,
+            );
         let backend = if mxc {
             "mxc".to_string()
         } else if elevated {

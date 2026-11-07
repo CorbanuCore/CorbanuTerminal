@@ -95,18 +95,12 @@ pub(crate) fn start_runner_stdout_reader(
     credential_watch: Option<crate::credential_watch::CredentialWatch>,
 ) {
     std::thread::spawn(move || {
-<<<<<<< HEAD
         let stopped_by_watch = || {
             credential_watch
                 .as_ref()
                 .and_then(crate::credential_watch::CredentialWatch::finish)
         };
-        loop {
-||||||| 413492cd6c
-        loop {
-=======
         let exit = loop {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             let msg = match crate::ipc_framed::read_frame(&mut pipe_read) {
                 Ok(Some(v)) => v,
                 Ok(None) => {
@@ -145,32 +139,7 @@ pub(crate) fn start_runner_stdout_reader(
                     }
                 }
                 Message::Exit { payload } => {
-<<<<<<< HEAD
-                    let mut exit_code = payload.exit_code;
-                    if let Some(found) = stopped_by_watch() {
-                        let message =
-                            format!("\n{}\n", crate::credential_watch::stopped_message(&found))
-                                .into_bytes();
-                        match stderr_tx.as_ref() {
-                            Some(stderr_tx) => {
-                                let _ = stderr_tx.send(message);
-                            }
-                            None => {
-                                let _ = stdout_tx.send(message);
-                            }
-                        }
-                        if exit_code == 0 {
-                            exit_code = 1;
-                        }
-                    }
-                    let _ = exit_tx.send(exit_code);
-                    break;
-||||||| 413492cd6c
-                    let _ = exit_tx.send(payload.exit_code);
-                    break;
-=======
                     break Some((payload.exit_code, payload.timed_out));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 }
                 Message::Error { payload } => {
                     send_runner_error(&payload.message, &stdout_tx, stderr_tx.as_ref());
@@ -184,6 +153,24 @@ pub(crate) fn start_runner_stdout_reader(
                 | Message::Terminate { .. } => {}
             }
         };
+        let exit = exit.map(|(mut exit_code, timed_out)| {
+            if let Some(found) = stopped_by_watch() {
+                let message = format!("\n{}\n", crate::credential_watch::stopped_message(&found))
+                    .into_bytes();
+                match stderr_tx.as_ref() {
+                    Some(stderr_tx) => {
+                        let _ = stderr_tx.send(message);
+                    }
+                    None => {
+                        let _ = stdout_tx.send(message);
+                    }
+                }
+                if exit_code == 0 {
+                    exit_code = 1;
+                }
+            }
+            (exit_code, timed_out)
+        });
         crate::elevated::runner_metrics::record_command(exit);
         let _ = exit_tx.send(exit.map_or(-1, |(code, _)| code));
     });

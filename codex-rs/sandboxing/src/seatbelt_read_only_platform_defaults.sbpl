@@ -90,20 +90,10 @@
 (allow file-read* file-test-existence file-write-data file-ioctl
   (literal "/dev/dtracehelper"))
 
-<<<<<<< HEAD:codex-rs/sandboxing/src/restricted_read_only_platform_defaults.sbpl
 ; Scratch space so tools can create temp files. Reads and writes there are
 ; granted by the generated profile (seatbelt.rs, `platform_tmp_policy`).
 (allow file-test-existence (subpath "/tmp"))
 
-||||||| 413492cd6c:codex-rs/sandboxing/src/restricted_read_only_platform_defaults.sbpl
-; Scratch space so tools can create temp files.
-(allow file-read* file-test-existence file-write* (subpath "/tmp"))
-(allow file-read* file-write* (subpath "/private/tmp"))
-(allow file-read* file-write* (subpath "/var/tmp"))
-(allow file-read* file-write* (subpath "/private/var/tmp"))
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/sandboxing/src/seatbelt_read_only_platform_defaults.sbpl
 ; Allow reading standard config directories.
 (allow file-read* (subpath "/etc"))
 (allow file-read* (subpath "/private/etc"))

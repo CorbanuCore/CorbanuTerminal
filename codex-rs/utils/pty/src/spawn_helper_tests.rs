@@ -19,7 +19,7 @@ use crate::spawn_pipe_process_no_stdin;
 const PARENT_FIXTURE: &str = "--codex-spawn-test-parent";
 const CHILD_FIXTURE: &str = "--codex-spawn-test-child";
 
-#[ctor::ctor]
+#[ctor::ctor(unsafe)]
 fn initialize_spawn_helper() {
     if let Ok(arguments) = std::fs::read("/proc/self/cmdline") {
         let mut arguments = arguments.split(|byte| *byte == 0).skip(1);
@@ -162,7 +162,10 @@ async fn helper_target_dies_when_parent_is_killed() -> anyhow::Result<()> {
         .expect("child reports its PID after verifying PDEATHSIG")
         .parse::<libc::pid_t>()?;
     // The fixture child waits on the cleanup pipe while its parent is alive.
-    let child = tokio::io::unix::AsyncFd::new(open_pidfd(pid)?)?;
+    let pidfd = open_pidfd(pid)?;
+    // SAFETY: the `AsyncFd` owns the pidfd, so the descriptor stays open and unchanged for the
+    // registration's whole lifetime.
+    let child = unsafe { tokio::io::unix::AsyncFd::register(pidfd) }.map_err(io::Error::from)?;
     parent.kill().await?;
     let stopped = tokio::time::timeout(Duration::from_secs(5), child.readable()).await;
     drop(cleanup);

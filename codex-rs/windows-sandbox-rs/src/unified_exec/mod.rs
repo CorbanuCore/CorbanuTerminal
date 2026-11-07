@@ -56,7 +56,14 @@ pub(crate) async fn spawn_windows_sandbox_session_with_desktop(
     request: WindowsSandboxSessionRequest<'_>,
     private_desktop_name: Option<String>,
 ) -> Result<SpawnedProcess> {
-    if matches!(request.windows_sandbox_level, WindowsSandboxLevel::Elevated) {
+    // D355 (main): Windows firewall enforcement is tied to the logon-user
+    // sandbox identities, so a proxy-enforced session uses the elevated
+    // backend even when the configured mode is the restricted-token sandbox.
+    // Upstream refuses such a session instead (the bail below stays as a
+    // backstop).
+    if request.proxy_enforced
+        || matches!(request.windows_sandbox_level, WindowsSandboxLevel::Elevated)
+    {
         backends::elevated::spawn_windows_sandbox_session_elevated_for_permission_profile(
             request.permission_profile,
             request.workspace_roots,

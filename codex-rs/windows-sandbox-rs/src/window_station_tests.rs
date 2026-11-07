@@ -155,7 +155,7 @@ fn enter_fresh_window_station() -> bool {
             &station_attributes.attributes,
         )
     };
-    if handle == 0 {
+    if handle.is_null() {
         let err = std::io::Error::last_os_error();
         let elevated = crate::setup::is_elevated().expect("elevation");
         assert!(
@@ -168,7 +168,7 @@ fn enter_fresh_window_station() -> bool {
     // desktop without `WRITE_DAC`.
     // SAFETY: opens the window station created above; kept until exit.
     let limited = unsafe { OpenWindowStationW(station.as_ptr(), 0, LIMITED_STATION_ACCESS) };
-    assert_ne!(limited, 0, "{}", std::io::Error::last_os_error());
+    assert!(!limited.is_null(), "{}", std::io::Error::last_os_error());
     // SAFETY: `limited` is the window station opened above.
     assert_ne!(unsafe { SetProcessWindowStation(limited) }, 0);
     // SAFETY: no longer needed; the process holds `limited`.
@@ -186,10 +186,10 @@ fn enter_fresh_window_station() -> bool {
             &desktop_attributes.attributes,
         )
     };
-    assert_ne!(desktop, 0, "{}", std::io::Error::last_os_error());
+    assert!(!desktop.is_null(), "{}", std::io::Error::last_os_error());
     // SAFETY: opens the desktop created above; kept until exit.
     let limited = unsafe { OpenDesktopW(name.as_ptr(), 0, 0, LIMITED_DESKTOP_ACCESS) };
-    assert_ne!(limited, 0, "{}", std::io::Error::last_os_error());
+    assert!(!limited.is_null(), "{}", std::io::Error::last_os_error());
     // SAFETY: this test thread has no windows or hooks yet.
     assert_ne!(
         unsafe { SetThreadDesktop(limited) },
@@ -314,33 +314,19 @@ fn sec_win_341_commands_start_in_the_launchers_window_station() {
     }
     let station = current_window_station_name().expect("window station");
     assert!(station.starts_with("Service-0x0-"), "{station}");
-    let shared = LaunchDesktop::prepare(
-        /*use_private_desktop*/ false, /*low_integrity*/ false, None,
-    )
-    .expect("desktop");
-    let private = LaunchDesktop::prepare(
-        /*use_private_desktop*/ true, /*low_integrity*/ false, None,
-    )
-    .expect("desktop");
+    // Upstream (rust-v0.167.0): commands always start on a private desktop.
+    let private = LaunchDesktop::prepare(/*logs_base_dir*/ None).expect("desktop");
     let name = |desktop: &LaunchDesktop| {
         let start = desktop.startup_info_desktop();
         let len = (0..).take_while(|&i| unsafe { *start.add(i) } != 0).count();
         String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(start, len) })
     };
-    eprintln!(
-        "sec-win-341: launch desktops {} and {}",
-        name(&shared),
-        name(&private)
-    );
+    eprintln!("sec-win-341: launch desktop {}", name(&private));
     // `whoami.exe` loads user32, so it fails to start on a desktop it can't
     // reach.
-    let codes: Vec<u32> = [&shared, &private]
-        .iter()
-        .map(|desktop| run_on_desktop(&system32("whoami.exe"), desktop.startup_info_desktop()))
-        .collect();
-    eprintln!("sec-win-341: whoami exit codes {codes:x?}");
-    assert_eq!(codes, vec![0, 0]);
-    assert_eq!(name(&shared), format!("{station}\\Default"));
+    let code = run_on_desktop(&system32("whoami.exe"), private.startup_info_desktop());
+    eprintln!("sec-win-341: whoami exit code {code:x}");
+    assert_eq!(code, 0);
     assert!(
         name(&private).starts_with(&format!("{station}\\CodexSandboxDesktop-")),
         "{}",
@@ -401,7 +387,10 @@ fn allow_entries(sid: &[u8]) -> (Vec<u32>, Vec<u32>) {
     unsafe {
         let station = OpenWindowStationW(station.as_ptr(), 0, READ_CONTROL);
         let desktop = OpenDesktopW(desktop.as_ptr(), 0, 0, READ_CONTROL);
-        assert!(station != 0 && desktop != 0, "open window objects");
+        assert!(
+            !station.is_null() && !desktop.is_null(),
+            "open window objects"
+        );
         let entries = (
             object_allow_entries(station, sid),
             object_allow_entries(desktop, sid),
@@ -412,7 +401,7 @@ fn allow_entries(sid: &[u8]) -> (Vec<u32>, Vec<u32>) {
     }
 }
 
-fn object_allow_entries(handle: isize, sid: &[u8]) -> Vec<u32> {
+fn object_allow_entries(handle: *mut c_void, sid: &[u8]) -> Vec<u32> {
     let (dacl, descriptor) = object_dacl(handle).expect("DACL");
     let mut masks = Vec::new();
     // SAFETY: reads `dacl`, owned by `descriptor` until it is freed below.
@@ -445,7 +434,7 @@ fn object_allow_entries(handle: isize, sid: &[u8]) -> Vec<u32> {
 }
 
 fn process_logon_sid_for_test(process: HANDLE) -> Vec<u8> {
-    let mut token: HANDLE = 0;
+    let mut token: HANDLE = std::ptr::null_mut();
     // SAFETY: `process` is live; the token is closed below.
     unsafe {
         assert_ne!(
@@ -522,6 +511,7 @@ fn sec_win_341_runner_user_can_start_on_a_non_interactive_window_station() {
             application: &whoami,
             command_line: &command_line,
             cwd: &system32(""),
+            logon_flags: 0,
         },
         &whoami,
     )
@@ -575,6 +565,7 @@ fn sec_win_345_access_is_for_the_runners_logon_and_its_lifetime() {
             application: &cmd,
             command_line: &command_line,
             cwd: &system32(""),
+            logon_flags: 0,
         },
         &cmd,
     )
@@ -692,13 +683,13 @@ fn window_station_probe_in_the_sandbox() {
         unsafe {
             let station = OpenWindowStationW(station.as_ptr(), 0, 0x0008);
             let desktop = OpenDesktopW(core_desktop.as_ptr(), 0, 0, 0x0001);
-            if station != 0 {
+            if !station.is_null() {
                 CloseWindowStation(station);
             }
-            if desktop != 0 {
+            if !desktop.is_null() {
                 CloseDesktop(desktop);
             }
-            (station != 0, desktop != 0)
+            (!station.is_null(), !desktop.is_null())
         }
     };
     // Core narrows the access right after the runner reports the command
@@ -787,7 +778,8 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
     let mut controls = 0;
     let mut results = Vec::new();
     // ConPTY too: its console host starts on the runner's desktop.
-    for (private_desktop, tty) in [(true, false), (false, false), (true, true)] {
+    // Upstream (rust-v0.167.0): commands always start on a private desktop.
+    for (private_desktop, tty) in [(true, false), (true, true)] {
         let mut env_map = std::collections::HashMap::from([
             (PROBE_ENV.to_string(), core_desktop.clone()),
             (
@@ -854,7 +846,6 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
                 // A ConPTY whose input closes ends its console's processes.
                 /*stdin_open*/
                 tty,
-                private_desktop,
             )
             .await
             .expect("start the probe in the elevated sandbox");
@@ -946,10 +937,9 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
             gone.clone(),
         )
     };
-    assert_eq!(
-        results,
-        vec![expected("false"), expected("true"), expected("false")]
-    );
+    // Private desktop without and with ConPTY (no shared desktop left): the
+    // commands never use Core's desktop.
+    assert_eq!(results, vec![expected("false"), expected("false")]);
 }
 
 /// Copies the elevated sandbox's helpers (`CARGO_BIN_EXE_*`, else the
@@ -976,11 +966,10 @@ pub(crate) fn stage_sandbox_helpers() {
     }
 }
 
-/// #345: with the unelevated sandbox and `sandbox_private_desktop = false`,
-/// commands started on Core's own non-interactive desktop died with
-/// `0xC0000142`: their restricted tokens' restricting SIDs don't include the
-/// user the desktop grants. Core now gives its own logon SID (which they
-/// have) access to its desktop while they run.
+/// #345: unelevated commands off the interactive window station start (they
+/// died with `0xC0000142` on Core's own desktop). Since rust-v0.167.0 they
+/// always run on a private desktop in Core's window station, and Core's own
+/// desktop keeps no entry for its logon afterwards.
 #[test]
 fn sec_win_345_unelevated_commands_start_on_cores_own_desktop() {
     if !on_fresh_window_station(
@@ -1009,7 +998,6 @@ fn sec_win_345_unelevated_commands_start_on_cores_own_desktop() {
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ false,
         )
         .await
         .expect("start whoami in the unelevated sandbox");
@@ -1094,6 +1082,7 @@ fn sec_win_345_launcher_path_grants_the_logon_and_resumes() {
             application: &cmd,
             command_line: &slow_command_line(&cmd, 3),
             cwd: &system32(""),
+            logon_flags: 0,
         },
         &command_runner(),
     )
@@ -1146,6 +1135,7 @@ fn window_station_core_that_exits_early() {
             application: &cmd,
             command_line: &slow_command_line(&cmd, 6),
             cwd: &system32(""),
+            logon_flags: 0,
         },
         &cmd,
     )

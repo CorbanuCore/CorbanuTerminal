@@ -11,19 +11,14 @@ use crate::setup::gather_read_roots;
 use crate::spawn_prep::LegacySessionSecurity;
 use crate::token::get_current_token_for_restriction;
 use crate::token::get_logon_sid_bytes;
-<<<<<<< HEAD
-use crate::window_station::WindowAccess;
-use crate::window_station::current_logon_sid;
-||||||| 413492cd6c
-=======
 use crate::token::get_user_sid_bytes;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::winutil::format_last_error;
 use crate::winutil::resolve_sid;
 use crate::winutil::sid_bytes_from_string;
 use crate::winutil::string_from_sid_bytes;
 use crate::winutil::to_wide;
 use anyhow::Result;
+use codex_utils_absolute_path::AbsolutePathBuf;
 use rand::Rng;
 use rand::SeedableRng;
 use rand::rngs::SmallRng;
@@ -98,6 +93,8 @@ pub(crate) struct DesktopPolicy {
     capability_sids: BTreeSet<Vec<u8>>,
     network_enabled: bool,
     network_proxy_restricting_sid: Option<Vec<u8>>,
+    /// #158: the legacy sandbox's Low-integrity commands need a Low desktop.
+    low_integrity: bool,
     // None denotes the legacy backend's unrestricted reads and different desktop ACLs.
     read_roots: Option<BTreeSet<PathBuf>>,
     write_roots: BTreeSet<PathBuf>,
@@ -136,10 +133,18 @@ impl DesktopPolicy {
             network_proxy_restricting_sid: network_proxy_restricting_sid
                 .map(sid_bytes_from_string)
                 .transpose()?,
+            low_integrity: false,
             read_roots: Some(read_roots.into_iter().collect()),
             write_roots: write_roots.into_iter().collect(),
             deny_read_paths: plan_deny_read_acl_paths(
-                overrides.deny_read_paths.as_deref().unwrap_or_default(),
+                &overrides
+                    .deny_read
+                    .as_ref()
+                    .map(crate::DenyReadTargets::paths)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(AbsolutePathBuf::into_path_buf)
+                    .collect::<Vec<_>>(),
             )?
             .into_iter()
             .collect(),
@@ -152,104 +157,29 @@ impl DesktopPolicy {
 }
 
 pub struct LaunchDesktop {
-<<<<<<< HEAD
-    _private_desktop: Option<PrivateDesktop>,
-    /// #345: this process's logon's access to its own non-interactive
-    /// desktop, for commands started there; removed on drop.
-    _window_access: Option<WindowAccess>,
-||||||| 413492cd6c
-    _private_desktop: Option<PrivateDesktop>,
-=======
     _private_desktop: PrivateDesktop,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     startup_name: Vec<u16>,
 }
 
 impl LaunchDesktop {
-<<<<<<< HEAD
-    /// In an interactive session, `Winsta0\Default` or a private desktop in
-    /// `Winsta0`, as before. In an SSH session or a service (a non-interactive
-    /// window station), where a child sent to `Winsta0` fails to start (#341),
-    /// this process's own window station and desktop, or a private desktop in
-    /// that window station (where it is created).
-    ///
-    /// On this process's own non-interactive desktop, this process's logon
-    /// SID gets `DESKTOP_ACCESS` (read and write objects) there while the
-    /// value lives: the commands' restricted tokens have it as a restricting
-    /// SID, unlike the user SID the desktop grants, and fail to start
-    /// without it (#345). The elevated sandbox's runner can't change Core's
-    /// desktop; Core gave the runner's logon that access before starting it.
-    ///
-    /// `low_integrity` (the legacy sandbox, #158): the desktop the command
-    /// starts on gets a Low label, without which a Low-integrity process
-    /// fails to start (`0xC0000142`). The interactive `Winsta0\Default`
-    /// already admits Low-integrity processes.
-    pub fn prepare(
-        use_private_desktop: bool,
-        low_integrity: bool,
-        logs_base_dir: Option<&Path>,
-    ) -> Result<Self> {
-        let own_station = crate::window_station::current_window_station_name()
-            .filter(|name| !crate::window_station::is_interactive_window_station(name));
-        let station = own_station.as_deref().unwrap_or("Winsta0");
-        if use_private_desktop {
-            let private_desktop = PrivateDesktop::create(low_integrity, logs_base_dir)?;
-            let startup_name = to_wide(format!("{station}\\{}", private_desktop.name));
-            Ok(Self {
-                _private_desktop: Some(private_desktop),
-                _window_access: None,
-                startup_name,
-            })
-        } else {
-            let (desktop, window_access) = match own_station {
-                Some(_) => {
-                    let desktop = crate::window_station::current_desktop_name()
-                        .unwrap_or_else(|| "Default".to_string());
-                    if low_integrity && let Err(err) = crate::integrity::label_desktop_low(&desktop)
-                    {
-                        logging::debug_log(
-                            &format!("could not label this process's desktop Low: {err:#}"),
-                            logs_base_dir,
-                        );
-                    }
-                    (desktop, grant_own_desktop(logs_base_dir))
-                }
-                None => ("Default".to_string(), None),
-            };
-            Ok(Self {
-                _private_desktop: None,
-                _window_access: window_access,
-                startup_name: to_wide(format!("{station}\\{desktop}")),
-||||||| 413492cd6c
-    pub fn prepare(use_private_desktop: bool, logs_base_dir: Option<&Path>) -> Result<Self> {
-        if use_private_desktop {
-            let private_desktop = PrivateDesktop::create(logs_base_dir)?;
-            let startup_name = to_wide(format!("Winsta0\\{}", private_desktop.name));
-            Ok(Self {
-                _private_desktop: Some(private_desktop),
-                startup_name,
-            })
-        } else {
-            Ok(Self {
-                _private_desktop: None,
-                startup_name: to_wide("Winsta0\\Default"),
-=======
+    /// A legacy command's own private desktop, as on main: never shared with
+    /// another command (D259 keeps legacy commands apart), open to this
+    /// process's logon, Low-labelled for a Low-integrity token (#158).
+    /// Upstream shares one desktop per policy; only the `codex sandbox`
+    /// wrapper's named desktops still do ([`Self::shared_legacy_name`]).
     pub(crate) fn prepare_legacy(
-        permissions: &ResolvedWindowsSandboxPermissions,
-        cwd: &Path,
-        env: &HashMap<String, String>,
         security: &LegacySessionSecurity,
-        additional_deny_write_paths: &[PathBuf],
         logs_base_dir: Option<&Path>,
     ) -> Result<Self> {
-        Self::open_private(&Self::shared_legacy_name(
-            permissions,
-            cwd,
-            env,
-            security,
-            additional_deny_write_paths,
+        let private_desktop = PrivateDesktop::create(
+            crate::integrity::token_is_low_integrity(security.h_token),
             logs_base_dir,
-        )?)
+        )?;
+        let startup_name = to_wide(format!("{}\\{}", launch_station(), private_desktop.name));
+        Ok(Self {
+            _private_desktop: private_desktop,
+            startup_name,
+        })
     }
 
     pub(crate) fn shared_legacy_name(
@@ -273,6 +203,7 @@ impl LaunchDesktop {
                 .collect::<Result<_>>()?,
             network_enabled: permissions.network_policy().is_enabled(),
             network_proxy_restricting_sid: None,
+            low_integrity: crate::integrity::token_is_low_integrity(security.h_token),
             read_roots: None,
             write_roots: paths.allow.into_iter().collect(),
             deny_read_paths: BTreeSet::new(),
@@ -290,15 +221,33 @@ impl LaunchDesktop {
         let desktop = match desktops.entry((sandbox_sid, policy)) {
             std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
             std::collections::hash_map::Entry::Vacant(entry) => {
-                entry.insert(PrivateDesktop::create(logs_base_dir)?)
+                let low_integrity = entry.key().1.low_integrity;
+                entry.insert(PrivateDesktop::create(low_integrity, logs_base_dir)?)
             }
         };
         Ok(desktop.name.clone())
     }
 
+    /// A private desktop for a command started with `h_token`, labelled Low
+    /// when the token runs at Low integrity (#158), as main's launches were.
+    pub fn prepare_for_token(
+        h_token: windows_sys::Win32::Foundation::HANDLE,
+        logs_base_dir: Option<&Path>,
+    ) -> Result<Self> {
+        let private_desktop = PrivateDesktop::create(
+            crate::integrity::token_is_low_integrity(h_token),
+            logs_base_dir,
+        )?;
+        let startup_name = to_wide(format!("{}\\{}", launch_station(), private_desktop.name));
+        Ok(Self {
+            _private_desktop: private_desktop,
+            startup_name,
+        })
+    }
+
     pub fn prepare(logs_base_dir: Option<&Path>) -> Result<Self> {
-        let private_desktop = PrivateDesktop::create(logs_base_dir)?;
-        let startup_name = to_wide(format!("Winsta0\\{}", private_desktop.name));
+        let private_desktop = PrivateDesktop::create(/*low_integrity*/ false, logs_base_dir)?;
+        let startup_name = to_wide(format!("{}\\{}", launch_station(), private_desktop.name));
         Ok(Self {
             _private_desktop: private_desktop,
             startup_name,
@@ -313,7 +262,6 @@ impl LaunchDesktop {
                 !nonce.is_empty()
                     && nonce.len() <= 32
                     && nonce.bytes().all(|byte| byte.is_ascii_hexdigit())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             })
         {
             anyhow::bail!("invalid private desktop name");
@@ -335,7 +283,7 @@ impl LaunchDesktop {
                 handle,
                 name: name.to_owned(),
             },
-            startup_name: to_wide(format!("Winsta0\\{name}")),
+            startup_name: to_wide(format!("{}\\{name}", launch_station())),
         })
     }
 
@@ -344,32 +292,15 @@ impl LaunchDesktop {
     }
 }
 
-<<<<<<< HEAD
-static IS_COMMAND_RUNNER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-/// The elevated sandbox's command runner calls this first: Core gave its
-/// logon the access to Core's desktop, which the runner can't change.
-pub fn mark_as_command_runner() {
-    IS_COMMAND_RUNNER.store(true, std::sync::atomic::Ordering::SeqCst);
+/// The window station a private desktop is created in, which is this process's
+/// own. In an SSH session or a service that is not `Winsta0`, and a child sent
+/// to `Winsta0\\<name>` fails to start (#341).
+fn launch_station() -> String {
+    crate::window_station::current_window_station_name()
+        .filter(|name| !crate::window_station::is_interactive_window_station(name))
+        .unwrap_or_else(|| "Winsta0".to_string())
 }
 
-/// See [`LaunchDesktop::prepare`]. A failure is logged, not fatal.
-fn grant_own_desktop(logs_base_dir: Option<&Path>) -> Option<WindowAccess> {
-    if IS_COMMAND_RUNNER.load(std::sync::atomic::Ordering::SeqCst) {
-        return None;
-    }
-    match current_logon_sid().and_then(|sid| WindowAccess::grant_desktop(&sid)) {
-        Ok(access) => access,
-        Err(err) => {
-            logging::debug_log(
-                &format!("could not give this logon its own desktop: {err:#}"),
-                logs_base_dir,
-            );
-            None
-        }
-    }
-||||||| 413492cd6c
-=======
 /// Reuses a private desktop only for the same sandbox account and effective permissions.
 pub(crate) fn shared_private_desktop_for_user(
     sandbox_username: &str,
@@ -456,7 +387,6 @@ pub(crate) fn shared_private_desktop_for_user(
         },
     );
     Ok(name)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 struct PrivateDesktop {

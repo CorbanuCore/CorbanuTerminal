@@ -82,7 +82,6 @@ fn time_commands(label: &str, root: &Path) {
                 &[],
                 /*tty*/ false,
                 /*stdin_open*/ false,
-                /*use_private_desktop*/ true,
             )
             .await
             .expect("spawn legacy command");
