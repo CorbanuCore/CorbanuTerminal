@@ -1431,14 +1431,6 @@
             "kind": {
               "$ref": "#/definitions/SubAgentActivityKind"
             },
-<<<<<<< HEAD
-            "taskPreview": {
-              "type": [
-                "string",
-                "null"
-              ]
-||||||| 413492cd6c
-=======
             "model": {
               "description": "Resolved model at sub-agent creation; absent from older records and other activities.",
               "type": [
@@ -1456,7 +1448,12 @@
                 }
               ],
               "description": "Resolved reasoning effort at sub-agent creation, when known."
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            },
+            "taskPreview": {
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "type": {
               "enum": [

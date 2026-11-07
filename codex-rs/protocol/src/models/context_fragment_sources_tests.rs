@@ -18,6 +18,8 @@ fn message(
         ..Default::default()
     };
     ResponseItem::Message {
+        encrypted_content: None,
+        status: None,
         id: None,
         role: "developer".to_string(),
         content: texts

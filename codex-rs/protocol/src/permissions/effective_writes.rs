@@ -55,7 +55,7 @@ impl<'a> EffectiveWrites<'a> {
                 .iter()
                 .any(|spelled| {
                     self.policy
-                        .can_write_path_with_cwd(spelled.as_path(), &self.cwd)
+                        .can_write_local_path_with_cwd(spelled.as_path(), &self.cwd)
                 })
     }
 
@@ -79,8 +79,10 @@ impl<'a> EffectiveWrites<'a> {
         } else {
             self.normalized()
         };
-        normalized
-            .can_write_path_with_cwd(normalize_effective_absolute_path(path).as_path(), &self.cwd)
+        normalized.can_write_local_path_with_cwd(
+            normalize_effective_absolute_path(path).as_path(),
+            &self.cwd,
+        )
     }
 
     fn normalized(&self) -> &FileSystemSandboxPolicy {

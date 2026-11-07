@@ -474,23 +474,20 @@ impl CodexErr {
             | CodexErrorDetails::InternalAgentDied
             | CodexErrorDetails::Io(_)
             | CodexErrorDetails::Json(_)
-<<<<<<< HEAD
-            | CodexErrorDetails::TokioJoin(_) => true,
-            CodexErrorDetails::UnexpectedStatus(error) => is_retryable_http_status(error.status),
-||||||| 413492cd6c
-            | CodexErrorDetails::TokioJoin(_) => true,
-=======
             | CodexErrorDetails::TokioJoin(_) => Some(
                 self.server_retry_delay()
                     .unwrap_or_else(|| backoff(retry_count)),
             ),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            CodexErrorDetails::UnexpectedStatus(error) => is_retryable_http_status(error.status)
+                .then(|| {
+                    self.server_retry_delay()
+                        .unwrap_or_else(|| backoff(retry_count))
+                }),
             #[cfg(target_os = "linux")]
             CodexErrorDetails::LandlockRuleset(_) | CodexErrorDetails::LandlockPathFd(_) => None,
         }
     }
 
-<<<<<<< HEAD
     /// #616: whether this failure came from an unreadable Corbanu home
     /// (see [`crate::home_unreadable`]).
     pub fn is_home_unreadable(&self) -> bool {
@@ -498,16 +495,9 @@ impl CodexErr {
             if crate::home_unreadable::is_home_unreadable(error))
     }
 
-    pub fn retry_delay(&self) -> Option<Duration> {
-        self.retry_delay
-||||||| 413492cd6c
-    pub fn retry_delay(&self) -> Option<Duration> {
-        self.retry_delay
-=======
     /// Returns the original server-advised instant for callers that pass the error on.
     pub fn retry_after(&self) -> Option<RetryAfter> {
         self.retry_after
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// Returns the remaining server-advised delay without applying local retry policy.
@@ -553,6 +543,11 @@ impl CodexErr {
             CodexErrorDetails::RetryLimit(_) => CodexErrorInfo::ResponseTooManyFailedAttempts {
                 http_status_code: self.http_status_code_value(),
             },
+            CodexErrorDetails::UnexpectedStatus(error)
+                if error.status == StatusCode::UNAUTHORIZED =>
+            {
+                CodexErrorInfo::Unauthorized
+            }
             CodexErrorDetails::ConnectionFailed(_) | CodexErrorDetails::UnexpectedStatus(_) => {
                 CodexErrorInfo::HttpConnectionFailed {
                     http_status_code: self.http_status_code_value(),
@@ -564,11 +559,6 @@ impl CodexErr {
                 }
             }
             CodexErrorDetails::RefreshTokenFailed(_) => CodexErrorInfo::Unauthorized,
-            CodexErrorDetails::UnexpectedStatus(error)
-                if error.status == StatusCode::UNAUTHORIZED =>
-            {
-                CodexErrorInfo::Unauthorized
-            }
             CodexErrorDetails::SessionConfiguredNotFirstEvent
             | CodexErrorDetails::InternalServerError
             | CodexErrorDetails::InternalAgentDied => CodexErrorInfo::InternalServerError,
@@ -621,6 +611,16 @@ fn is_retryable_http_status(status: StatusCode) -> bool {
         )
 }
 
+/// The text of `error` with credentials in its URL redacted.
+fn redacted_http_error(error: &HttpError) -> String {
+    match error {
+        codex_http_client::RouteAwareRequestError::Request(error) => {
+            codex_http_client::redact_reqwest_error(error)
+        }
+        error => error.to_string(),
+    }
+}
+
 #[derive(Debug)]
 pub struct ConnectionFailedError {
     pub source: HttpError,
@@ -631,7 +631,7 @@ impl std::fmt::Display for ConnectionFailedError {
         write!(
             f,
             "Connection failed: {}",
-            codex_http_client::redact_reqwest_error(&self.source)
+            redacted_http_error(&self.source)
         )
     }
 }
@@ -647,7 +647,7 @@ impl std::fmt::Display for ResponseStreamFailed {
         write!(
             f,
             "Error while reading the server response: {}{}",
-            codex_http_client::redact_reqwest_error(&self.source),
+            redacted_http_error(&self.source),
             self.request_id
                 .as_ref()
                 .map(|id| format!(", request id: {id}"))

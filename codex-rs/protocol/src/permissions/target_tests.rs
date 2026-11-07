@@ -34,9 +34,11 @@ fn read_denials_use_target_paths_and_native_glob_semantics() {
                 path: cwd.join("private").unwrap(),
             }),
             deny(FileSystemPath::GlobPattern {
+                scan: None,
                 pattern: "~/secrets/*.key".into(),
             }),
             deny(FileSystemPath::GlobPattern {
+                scan: None,
                 pattern: "nested/**/*.env".into(),
             }),
         ]);
@@ -147,6 +149,7 @@ fn managed_denials_preserve_native_metadata_read_rejections() {
                 ),
                 (
                     FileSystemPath::GlobPattern {
+                        scan: None,
                         pattern: denied_root.join("*").unwrap().inferred_native_path_string(),
                     },
                     FileSystemAccessMode::Read,
@@ -204,6 +207,7 @@ fn malformed_or_unresolvable_denials_fail_closed() {
     };
     for pattern in ["~/secrets/**", "secrets/[z-a]"] {
         let policy = FileSystemSandboxPolicy::restricted(vec![deny(FileSystemPath::GlobPattern {
+            scan: None,
             pattern: pattern.into(),
         })]);
         assert!(ReadDenyMatcher::try_new_with_context(&policy, &context).is_err());
@@ -337,6 +341,7 @@ fn read_globs_reject_metacharacters_in_home_and_cwd_facts() {
         ] {
             let policy =
                 FileSystemSandboxPolicy::restricted(vec![deny(FileSystemPath::GlobPattern {
+                    scan: None,
                     pattern: pattern.into(),
                 })]);
             let context = FileSystemSandboxPolicyContext {
@@ -359,6 +364,7 @@ fn workspace_globs_fail_closed_on_literal_root_metacharacters_on_every_host() {
     for prefix in ["file:///home", "file:///C:/Users"] {
         let root = uri(prefix).join("sam[1]").unwrap();
         let policy = FileSystemSandboxPolicy::restricted(vec![deny(FileSystemPath::GlobPattern {
+            scan: None,
             pattern: crate::permissions::project_roots_glob_pattern(std::path::Path::new(
                 "private/*.key",
             )),
@@ -394,6 +400,7 @@ fn materializing_legacy_home_relative_workspace_denials_removes_all_grants() {
             }
             let denied_path = if subpath.contains('*') {
                 FileSystemPath::GlobPattern {
+                    scan: None,
                     pattern: crate::permissions::project_roots_glob_pattern(std::path::Path::new(
                         subpath,
                     )),

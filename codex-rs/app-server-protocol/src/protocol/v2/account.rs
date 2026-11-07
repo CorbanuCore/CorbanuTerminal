@@ -62,20 +62,12 @@ pub enum Account {
 impl From<ProviderAccount> for Account {
     fn from(account: ProviderAccount) -> Self {
         match account {
-<<<<<<< HEAD
             ProviderAccount::ApiKey => Self::ApiKey { env_var: None },
-            ProviderAccount::Chatgpt { email, plan_type } => Self::Chatgpt { email, plan_type },
-||||||| 413492cd6c
-            ProviderAccount::ApiKey => Self::ApiKey {},
-            ProviderAccount::Chatgpt { email, plan_type } => Self::Chatgpt { email, plan_type },
-=======
-            ProviderAccount::ApiKey => Self::ApiKey {},
             ProviderAccount::Chatgpt { email, plan_type } => Self::Chatgpt {
                 email,
                 plan_type,
                 workspace_name: None,
             },
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             ProviderAccount::AmazonBedrock {
                 uses_codex_managed_credentials,
             } => Self::AmazonBedrock {

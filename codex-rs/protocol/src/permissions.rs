@@ -24,7 +24,6 @@ use crate::protocol::NetworkAccess;
 use crate::protocol::SandboxPolicy;
 use crate::protocol::WritableRoot;
 
-<<<<<<< HEAD
 mod glob_scan;
 pub use glob_scan::FileSystemDenyGlob;
 pub use glob_scan::FileSystemGlobScan;
@@ -34,12 +33,10 @@ pub use effective_reads::EffectiveReads;
 mod effective_writes;
 pub use effective_writes::EffectiveWrites;
 
+mod deny_read_validator;
 #[cfg(test)]
 #[path = "permissions/effective_reads_tests.rs"]
 mod effective_reads_tests;
-||||||| 413492cd6c
-=======
-mod deny_read_validator;
 mod local_aliases;
 mod target;
 mod windows_glob;
@@ -51,7 +48,6 @@ pub use deny_read_validator::DenyReadViolation;
 pub use local_aliases::LocalFileSystemPolicyMatcher;
 pub use windows_glob::WindowsDenyReadGlobScan;
 pub use windows_glob::windows_deny_read_glob_scan;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 const PROTECTED_METADATA_GIT_PATH_NAME: &str = ".git";
 const PROTECTED_METADATA_AGENTS_PATH_NAME: &str = ".agents";
@@ -595,32 +591,41 @@ impl WritableRootLinks {
 
 /// Runtime matcher for read-deny entries in a filesystem sandbox policy.
 pub struct ReadDenyMatcher {
-<<<<<<< HEAD
-    denied_candidates: Vec<Vec<PathBuf>>,
-    /// Each glob, and whether its matches leave out the template names
-    /// ([`credential_glob_exempts_templates`]).
-    deny_read_matchers: Vec<(GlobMatcher, bool)>,
-||||||| 413492cd6c
-    denied_candidates: Vec<Vec<PathBuf>>,
-    deny_read_matchers: Vec<GlobMatcher>,
-=======
     native_cwd: Option<AbsolutePathBuf>,
     user_home_dir: Option<PathUri>,
     temporary_directories: Vec<PathUri>,
     prepared: PreparedReadDenyMatcher,
+    /// Local-path matchers only: each exact denied root by every spelling
+    /// (as written and at its canonical location), so a path reached through
+    /// a link into a denied root is denied too.
+    denied_candidates: Vec<Vec<PathBuf>>,
+    /// Local-path matchers only: directories that may not be listed (issue
+    /// #506), by every spelling.
+    unlistable_candidates: Vec<Vec<PathBuf>>,
 }
 
 /// Prepared PathUri deny roots and globs for repeated executor-owned read checks.
 struct PreparedReadDenyMatcher {
     denied_roots: Vec<PathUri>,
-    deny_read_matchers: Vec<GlobMatcher>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    /// Each glob, and whether its matches leave out the template names
+    /// ([`credential_glob_exempts_templates`]).
+    deny_read_matchers: Vec<(GlobMatcher, bool)>,
     invalid_pattern: bool,
-    /// Directories that may not be listed (issue #506), by every spelling.
-    unlistable_candidates: Vec<Vec<PathBuf>>,
 }
 
 impl ReadDenyMatcher {
+    /// A matcher for executor-owned URI paths, without local-path spellings.
+    fn from_prepared(prepared: PreparedReadDenyMatcher) -> Self {
+        Self {
+            native_cwd: None,
+            user_home_dir: None,
+            temporary_directories: Vec::new(),
+            prepared,
+            denied_candidates: Vec::new(),
+            unlistable_candidates: Vec::new(),
+        }
+    }
+
     /// Builds a matcher for executor-owned URI paths without host projection.
     pub fn from_context(
         file_system_sandbox_policy: &FileSystemSandboxPolicy,
@@ -633,15 +638,37 @@ impl ReadDenyMatcher {
             .then(|| {
                 file_system_sandbox_policy
                     .prepare_deny_read_matcher(context, InvalidDenyReadGlobBehavior::FailClosed)
-                    .map(|prepared| Self {
-                        native_cwd: None,
-                        user_home_dir: None,
-                        temporary_directories: Vec::new(),
-                        prepared,
-                    })
+                    .map(Self::from_prepared)
                     .ok()
             })
             .flatten()
+    }
+
+    /// Builds a local-path matcher from exact deny-read roots and deny-read
+    /// glob entries.
+    ///
+    /// Returns `None` when the policy has no deny-read restrictions, so callers
+    /// can skip read-deny checks without allocating matcher state. The `cwd`
+    /// resolves cwd-relative policy paths and special paths before matching.
+    /// Malformed deny patterns fail closed: every path is denied.
+    pub fn new_for_local_paths(
+        file_system_sandbox_policy: &FileSystemSandboxPolicy,
+        cwd: &Path,
+    ) -> Option<Self> {
+        Self::build(
+            file_system_sandbox_policy,
+            cwd,
+            InvalidDenyReadGlobBehavior::FailClosed,
+        )
+        // Fail-closed glob handling returns no error; an unusable cwd denies
+        // every read rather than none.
+        .unwrap_or_else(|_| {
+            Some(Self::from_prepared(PreparedReadDenyMatcher {
+                denied_roots: Vec::new(),
+                deny_read_matchers: Vec::new(),
+                invalid_pattern: true,
+            }))
+        })
     }
 
     /// Builds a local-path matcher for callers that must reject malformed glob patterns.
@@ -668,69 +695,6 @@ impl ReadDenyMatcher {
         if !file_system_sandbox_policy.has_denied_read_restrictions() {
             return Ok(None);
         }
-<<<<<<< HEAD
-
-        // Exact roots are stored as all meaningful path spellings we can derive
-        // cheaply. This lets direct tool checks catch both a symlink path and
-        // its canonical target without changing the policy entries themselves.
-        let denied_candidates = file_system_sandbox_policy
-            .get_unreadable_roots_with_cwd(cwd)
-            .into_iter()
-            .map(|path| normalized_and_canonical_candidates(path.as_path()))
-            .collect();
-        // Pattern entries stay as policy-level globs. They are matched at read
-        // time here instead of being snapshotted to startup filesystem state.
-        let mut invalid_pattern = false;
-        let mut deny_read_matchers = Vec::new();
-        let globs = file_system_sandbox_policy.get_unreadable_globs_with_cwd(cwd);
-        let rule_roots = credential_rule_roots(&globs);
-        for pattern in globs {
-            // Credential globs match in any letter case (`.ENV` on a
-            // case-insensitive filesystem is `.env`); this also covers their
-            // folder part, which only ever denies more.
-            let case_insensitive = credential_file_glob_root(&pattern).is_some();
-            let exempts_templates = credential_glob_exempts_templates(&pattern, &rule_roots);
-            match build_glob_matcher(&pattern, case_insensitive) {
-                Ok(matcher) => deny_read_matchers.push((matcher, exempts_templates)),
-                Err(err) => match invalid_glob_behavior {
-                    InvalidDenyReadGlobBehavior::FailClosed => invalid_pattern = true,
-                    InvalidDenyReadGlobBehavior::ReturnError => {
-                        return Err(format!("invalid deny-read glob pattern `{pattern}`: {err}"));
-                    }
-                },
-            }
-        }
-        let unlistable_candidates = file_system_sandbox_policy
-            .get_unlistable_directories()
-            .into_iter()
-            .map(|path| normalized_and_canonical_candidates(path.as_path()))
-            .collect();
-||||||| 413492cd6c
-
-        // Exact roots are stored as all meaningful path spellings we can derive
-        // cheaply. This lets direct tool checks catch both a symlink path and
-        // its canonical target without changing the policy entries themselves.
-        let denied_candidates = file_system_sandbox_policy
-            .get_unreadable_roots_with_cwd(cwd)
-            .into_iter()
-            .map(|path| normalized_and_canonical_candidates(path.as_path()))
-            .collect();
-        // Pattern entries stay as policy-level globs. They are matched at read
-        // time here instead of being snapshotted to startup filesystem state.
-        let mut invalid_pattern = false;
-        let mut deny_read_matchers = Vec::new();
-        for pattern in file_system_sandbox_policy.get_unreadable_globs_with_cwd(cwd) {
-            match build_glob_matcher(&pattern) {
-                Ok(matcher) => deny_read_matchers.push(matcher),
-                Err(err) => match invalid_glob_behavior {
-                    InvalidDenyReadGlobBehavior::FailClosed => invalid_pattern = true,
-                    InvalidDenyReadGlobBehavior::ReturnError => {
-                        return Err(format!("invalid deny-read glob pattern `{pattern}`: {err}"));
-                    }
-                },
-            }
-        }
-=======
         let cwd = AbsolutePathBuf::from_absolute_path(cwd)
             .map_err(|err| format!("invalid read-deny cwd: {err}"))?;
         let cwd_uri = PathUri::from_abs_path(&cwd);
@@ -744,27 +708,32 @@ impl ReadDenyMatcher {
         };
         let prepared = file_system_sandbox_policy
             .prepare_deny_read_matcher(&context, invalid_glob_behavior)?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        // Exact roots are also stored as all meaningful path spellings we can
+        // derive cheaply. This lets direct tool checks catch both a symlink
+        // path and its canonical target without changing the policy entries.
+        let denied_candidates = file_system_sandbox_policy
+            .get_unreadable_roots_with_cwd(cwd.as_path())
+            .into_iter()
+            .map(|path| normalized_and_canonical_candidates(path.as_path()))
+            .collect();
+        let unlistable_candidates = file_system_sandbox_policy
+            .get_unlistable_directories()
+            .into_iter()
+            .map(|path| normalized_and_canonical_candidates(path.as_path()))
+            .collect();
         Ok(Some(Self {
-<<<<<<< HEAD
-            denied_candidates,
-            deny_read_matchers,
-            invalid_pattern,
-            unlistable_candidates,
-||||||| 413492cd6c
-            denied_candidates,
-            deny_read_matchers,
-            invalid_pattern,
-=======
             native_cwd: Some(cwd),
             user_home_dir,
             temporary_directories,
             prepared,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            denied_candidates,
+            unlistable_candidates,
         }))
     }
 
-    /// Returns whether a local native `path` is denied by this matcher.
+    /// Returns whether a local native `path` is denied by this matcher, by
+    /// each of its spellings: as written and, when it exists, at its
+    /// canonical location, so a link into a denied path is denied as well.
     pub fn is_local_path_read_denied(&self, path: &Path) -> bool {
         let Some(cwd) = self.native_cwd.as_ref() else {
             return true;
@@ -772,6 +741,27 @@ impl ReadDenyMatcher {
         let Some(path) = resolve_candidate_path(path, cwd.as_path()) else {
             return true;
         };
+        normalized_and_canonical_candidates(path.as_path())
+            .iter()
+            .any(|candidate| self.is_spelling_read_denied(candidate))
+    }
+
+    /// Whether `path`, exactly as spelled, is denied (no canonicalization).
+    fn is_spelling_read_denied(&self, path: &Path) -> bool {
+        let Some(cwd) = self.native_cwd.as_ref() else {
+            return true;
+        };
+        let Some(path) = resolve_candidate_path(path, cwd.as_path()) else {
+            return true;
+        };
+        if self
+            .denied_candidates
+            .iter()
+            .flatten()
+            .any(|denied| path.as_path().starts_with(denied))
+        {
+            return true;
+        }
         let path = PathUri::from(path);
         let cwd = PathUri::from_abs_path(cwd);
         let context = FileSystemSandboxPolicyContext {
@@ -783,22 +773,10 @@ impl ReadDenyMatcher {
         self.is_read_denied_uri(&path, &context)
     }
 
-<<<<<<< HEAD
-        self.deny_read_matchers.iter().any(|(matcher, credential)| {
-            path_candidates.iter().any(|candidate| {
-                matcher.is_match(candidate)
-                    && !(*credential
-                        && candidate
-                            .file_name()
-                            .is_some_and(is_credential_template_name))
-            })
-        })
-    }
-
     /// Returns whether listing the directory `path` is denied: its contents
     /// are unreadable, or it is a directory the policy may not list (#506).
     pub fn is_listing_denied(&self, path: &Path) -> bool {
-        if self.is_read_denied(path) {
+        if self.is_local_path_read_denied(path) {
             return true;
         }
         let path_candidates = normalized_and_canonical_candidates(path);
@@ -807,13 +785,8 @@ impl ReadDenyMatcher {
                 .iter()
                 .any(|candidate| unlistable.contains(candidate))
         })
-||||||| 413492cd6c
-        self.deny_read_matchers.iter().any(|matcher| {
-            path_candidates
-                .iter()
-                .any(|candidate| matcher.is_match(candidate))
-        })
-=======
+    }
+
     /// Returns whether an executor-owned URI is denied under its matching path context.
     pub fn is_read_denied_uri(
         &self,
@@ -835,8 +808,7 @@ impl ReadDenyMatcher {
         path: &Path,
         canonical_path: &Path,
     ) -> bool {
-        self.is_local_path_read_denied(path) || self.is_local_path_read_denied(canonical_path)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        self.is_spelling_read_denied(path) || self.is_spelling_read_denied(canonical_path)
     }
 }
 
@@ -857,8 +829,6 @@ pub enum FileSystemPath {
         pattern: String,
         /// Linux expansion provenance for generated database-entry denials.
         /// Omitted for ordinary user and credential globs.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
         scan: Option<FileSystemGlobScan>,
     },
     Special {
@@ -881,6 +851,11 @@ pub enum RawFileSystemPath {
     },
     GlobPattern {
         pattern: String,
+        /// Linux expansion provenance for generated database-entry denials.
+        /// Omitted for ordinary user and credential globs.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        scan: Option<FileSystemGlobScan>,
     },
     Special {
         value: FileSystemSpecialPath,
@@ -926,7 +901,7 @@ impl TryFrom<RawFileSystemPath> for FileSystemPath {
             RawFileSystemPath::Path { path } => Self::Path {
                 path: path_uri_from_raw(path)?,
             },
-            RawFileSystemPath::GlobPattern { pattern } => Self::GlobPattern { pattern },
+            RawFileSystemPath::GlobPattern { pattern, scan } => Self::GlobPattern { pattern, scan },
             RawFileSystemPath::Special { value } => Self::Special { value },
         })
     }
@@ -940,7 +915,7 @@ impl TryFrom<FileSystemPath> for RawFileSystemPath {
             FileSystemPath::Path { path } => Self::Path {
                 path: raw_path_from_uri(path)?,
             },
-            FileSystemPath::GlobPattern { pattern } => Self::GlobPattern { pattern },
+            FileSystemPath::GlobPattern { pattern, scan } => Self::GlobPattern { pattern, scan },
             FileSystemPath::Special { value } => Self::Special { value },
         })
     }
@@ -1239,13 +1214,13 @@ impl FileSystemSandboxPolicy {
         })
     }
 
-    /// As [`Self::has_explicit_non_write_entry_for_path_with_cwd`], but an
+    /// As [`Self::has_explicit_non_write_entry_for_local_path_with_cwd`], but an
     /// entry spelled differently also matches when both resolve (links
     /// followed) to the same existing location: a carve-out under a writable
     /// root reached through a link is listed against the root's resolved path
     /// (#1542 item 2, D293).
     pub fn has_explicit_non_write_entry_resolving_to(&self, path: &Path, cwd: &Path) -> bool {
-        if self.has_explicit_non_write_entry_for_path_with_cwd(path, cwd) {
+        if self.has_explicit_non_write_entry_for_local_path_with_cwd(path, cwd) {
             return true;
         }
         let Some(real) = resolve_candidate_path(path, cwd)
@@ -1644,12 +1619,7 @@ impl FileSystemSandboxPolicy {
             .unwrap_or(FileSystemAccessMode::Deny)
     }
 
-<<<<<<< HEAD
-    pub fn can_read_path_with_cwd(&self, path: &Path, cwd: &Path) -> bool {
-        self.resolve_access_with_cwd(path, cwd).can_read()
-    }
-
-    /// Like [`Self::can_read_path_with_cwd`], with the policy's paths and
+    /// Like [`Self::can_read_local_path_with_cwd`], with the policy's paths and
     /// `path` normalized alike, the way the sandboxes normalize their roots
     /// before matching denials to them: top-level aliases resolve (`/tmp`
     /// and `/private/tmp` on macOS name one file), nested links stay as
@@ -1670,12 +1640,12 @@ impl FileSystemSandboxPolicy {
         EffectiveReads::new(self, cwd)
     }
 
-    /// Like [`Self::can_write_path_with_cwd`], with the policy's paths and
+    /// Like [`Self::can_write_local_path_with_cwd`], with the policy's paths and
     /// `path` normalized alike, as [`Self::can_read_effective_path_with_cwd`]
     /// does: Seatbelt normalizes a writable root spelled `/tmp` to
     /// `/private/tmp`, so `/private/tmp/x` is writable through it (#619).
     /// Everything else, protected metadata names included, is decided as
-    /// [`Self::can_write_path_with_cwd`] decides it for the normalized
+    /// [`Self::can_write_local_path_with_cwd`] decides it for the normalized
     /// policy. #652: also writable through a writable root reached through a
     /// nested link ([`Self::writable_root_spellings_with_cwd`]), which the
     /// sandboxes grant at its real location. For deciding where a path
@@ -1710,9 +1680,7 @@ impl FileSystemSandboxPolicy {
                 } => entry.clone(),
                 path => match resolve_entry_path(path, cwd_absolute.as_ref()) {
                     Some(path) => FileSystemSandboxEntry {
-                        path: FileSystemPath::Path {
-                            path: normalize_effective_absolute_path(path),
-                        },
+                        path: normalize_effective_absolute_path(path).into(),
                         ..entry.clone()
                     },
                     None => entry.clone(),
@@ -1729,7 +1697,7 @@ impl FileSystemSandboxPolicy {
     /// A writable entry tied with a read-only one for the same path becomes
     /// read-only (a denial wins already); in memory only.
     fn with_read_only_ties(mut self) -> Self {
-        let read_only: Vec<AbsolutePathBuf> = self
+        let read_only: Vec<PathUri> = self
             .entries
             .iter()
             .filter(|entry| entry.access == FileSystemAccessMode::Read)
@@ -1794,23 +1762,12 @@ impl FileSystemSandboxPolicy {
         self.writable_root_links_with_cwd(cwd).spellings(path, cwd)
     }
 
-    pub fn can_write_path_with_cwd(&self, path: &Path, cwd: &Path) -> bool {
-        if !self.resolve_access_with_cwd(path, cwd).can_write() {
-||||||| 413492cd6c
-    pub fn can_read_path_with_cwd(&self, path: &Path, cwd: &Path) -> bool {
-        self.resolve_access_with_cwd(path, cwd).can_read()
-    }
-
-    pub fn can_write_path_with_cwd(&self, path: &Path, cwd: &Path) -> bool {
-        if !self.resolve_access_with_cwd(path, cwd).can_write() {
-=======
     pub fn can_write_path(
         &self,
         path: &PathUri,
         context: &FileSystemSandboxPolicyContext<'_>,
     ) -> bool {
         if !self.resolve_access(path, context).can_write() {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             return false;
         }
         self.has_full_disk_write_access_with_context(context)
@@ -1825,6 +1782,12 @@ impl FileSystemSandboxPolicy {
         if !matches!(self.kind, FileSystemSandboxKind::Restricted) {
             return None;
         }
+        // #606: macOS volumes ignore case, so a `.GIT` made where `.git` is
+        // missing is the folder git opens as `.git`, and Seatbelt refuses it
+        // (its rules match without regard to case there). Approvals agree once
+        // the policy denies reads (Moderate and Aggressive); a policy without
+        // denied paths keeps today's answers.
+        let any_case = cfg!(target_os = "macos") && self.has_denied_read_restrictions();
         let entries = self.resolved_entries(context);
         let (protected, metadata_name) = entries
             .iter()
@@ -1836,6 +1799,20 @@ impl FileSystemSandboxPolicy {
                         let protected = root.join_descendant(metadata_name).ok()?;
                         path.starts_with(&protected)
                             .then_some((protected, *metadata_name))
+                    })
+                    .or_else(|| {
+                        if !any_case {
+                            return None;
+                        }
+                        let relative = path.relative_path_from(root)?;
+                        let first = relative.split('/').next()?;
+                        let metadata_name = PROTECTED_METADATA_PATH_NAMES
+                            .iter()
+                            .copied()
+                            .find(|metadata_name| first.eq_ignore_ascii_case(metadata_name))?;
+                        // As spelled (`.GIT`), so only an explicit entry for
+                        // that spelling opens it.
+                        Some((root.join_descendant(first).ok()?, metadata_name))
                     })
             })?;
         (!entries.iter().any(|(root, access)| {
@@ -1880,35 +1857,22 @@ impl FileSystemSandboxPolicy {
                         invalid_pattern: true,
                     });
                 }
-<<<<<<< HEAD
-                FileSystemPath::GlobPattern { pattern, scan } => {
-                    if let (Some(cwd), Some(subpath)) =
-                        (cwd.as_ref(), parse_project_roots_glob_pattern(pattern))
-                    {
-                        entry.path = FileSystemPath::GlobPattern {
-                            scan: scan.clone(),
-                            pattern: resolve_project_roots_glob_pattern(subpath, cwd),
-                        };
-||||||| 413492cd6c
-                FileSystemPath::GlobPattern { pattern } => {
-                    if let (Some(cwd), Some(subpath)) =
-                        (cwd.as_ref(), parse_project_roots_glob_pattern(pattern))
-                    {
-                        entry.path = FileSystemPath::GlobPattern {
-                            pattern: resolve_project_roots_glob_pattern(subpath, cwd),
-                        };
-=======
                 InvalidDenyReadGlobBehavior::ReturnError => return Err(err),
             },
         };
+        let rule_roots = credential_rule_roots(&patterns);
         for pattern in patterns {
-            match build_glob_matcher(&pattern, convention) {
-                Ok(matcher) => deny_read_matchers.push(matcher),
+            // Credential globs match in any letter case (`.ENV` on a
+            // case-insensitive filesystem is `.env`); this also covers their
+            // folder part, which only ever denies more.
+            let case_insensitive = credential_file_glob_root(&pattern).is_some();
+            let exempts_templates = credential_glob_exempts_templates(&pattern, &rule_roots);
+            match build_glob_matcher(&pattern, convention, case_insensitive) {
+                Ok(matcher) => deny_read_matchers.push((matcher, exempts_templates)),
                 Err(err) => match invalid_glob_behavior {
                     InvalidDenyReadGlobBehavior::FailClosed => invalid_pattern = true,
                     InvalidDenyReadGlobBehavior::ReturnError => {
                         return Err(format!("invalid deny-read glob pattern `{pattern}`: {err}"));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     }
                 },
             }
@@ -1941,17 +1905,27 @@ impl FileSystemSandboxPolicy {
             .denied_roots
             .iter()
             .any(|root| path.starts_with(root))
-            || prepared.deny_read_matchers.iter().any(|matcher| {
-                let path = match convention {
-                    PathConvention::Posix => path.decoded_path_bytes(),
-                    PathConvention::Windows => Cow::Owned(
-                        path.inferred_native_path_string()
-                            .replace('\\', "/")
-                            .into_bytes(),
-                    ),
-                };
-                matcher.is_match_candidate(&Candidate::from_bytes(path.as_ref()))
-            })
+            || prepared
+                .deny_read_matchers
+                .iter()
+                .any(|(matcher, exempts_templates)| {
+                    if *exempts_templates
+                        && path
+                            .basename()
+                            .is_some_and(|name| is_credential_template_name(OsStr::new(&name)))
+                    {
+                        return false;
+                    }
+                    let path = match convention {
+                        PathConvention::Posix => path.decoded_path_bytes(),
+                        PathConvention::Windows => Cow::Owned(
+                            path.inferred_native_path_string()
+                                .replace('\\', "/")
+                                .into_bytes(),
+                        ),
+                    };
+                    matcher.is_match_candidate(&Candidate::from_bytes(path.as_ref()))
+                })
     }
 
     fn deny_read_globs(
@@ -1962,7 +1936,7 @@ impl FileSystemSandboxPolicy {
             .iter()
             .filter(|entry| entry.access == FileSystemAccessMode::Deny)
             .filter_map(|entry| {
-                let FileSystemPath::GlobPattern { pattern } = &entry.path else {
+                let FileSystemPath::GlobPattern { pattern, .. } = &entry.path else {
                     return None;
                 };
                 let is_windows =
@@ -2036,86 +2010,22 @@ impl FileSystemSandboxPolicy {
     ) -> Option<Self> {
         let mut entries = Vec::with_capacity(self.entries.len());
         for entry in self.entries {
-            let (subpath, is_glob) = match &entry.path {
+            let (subpath, is_glob, scan) = match &entry.path {
                 FileSystemPath::Special {
                     value: FileSystemSpecialPath::ProjectRoots { subpath },
-                } => (subpath.as_deref(), false),
-                FileSystemPath::GlobPattern { pattern }
+                } => (subpath.as_deref(), false, None),
+                FileSystemPath::GlobPattern { pattern, scan }
                     if pattern.starts_with(PROJECT_ROOTS_GLOB_PATTERN_PREFIX) =>
                 {
                     (
                         Some(&pattern[PROJECT_ROOTS_GLOB_PATTERN_PREFIX.len()..]),
                         true,
+                        scan.clone(),
                     )
                 }
-<<<<<<< HEAD
-                FileSystemPath::GlobPattern { pattern, scan } => {
-                    if let Some(subpath) = parse_project_roots_glob_pattern(&pattern) {
-                        entries.extend(workspace_roots.iter().map(|root| FileSystemSandboxEntry {
-                            path: FileSystemPath::GlobPattern {
-                                scan: scan.clone(),
-                                pattern: resolve_project_roots_glob_pattern(subpath, root),
-                            },
-                            access: entry.access,
-                            missing_path_behavior: entry.missing_path_behavior,
-                        }));
-                    } else {
-                        entries.push(FileSystemSandboxEntry {
-                            path: FileSystemPath::GlobPattern { pattern, scan },
-                            access: entry.access,
-                            missing_path_behavior: entry.missing_path_behavior,
-                        });
-                    }
-                }
-                FileSystemPath::Path { path } => {
-                    entries.push(FileSystemSandboxEntry {
-                        path: FileSystemPath::Path { path },
-                        access: entry.access,
-                        missing_path_behavior: entry.missing_path_behavior,
-                    });
-                }
-                FileSystemPath::Special { value } => {
-                    entries.push(FileSystemSandboxEntry {
-                        path: FileSystemPath::Special { value },
-                        access: entry.access,
-                        missing_path_behavior: entry.missing_path_behavior,
-                    });
-||||||| 413492cd6c
-                FileSystemPath::GlobPattern { pattern } => {
-                    if let Some(subpath) = parse_project_roots_glob_pattern(&pattern) {
-                        entries.extend(workspace_roots.iter().map(|root| FileSystemSandboxEntry {
-                            path: FileSystemPath::GlobPattern {
-                                pattern: resolve_project_roots_glob_pattern(subpath, root),
-                            },
-                            access: entry.access,
-                            missing_path_behavior: entry.missing_path_behavior,
-                        }));
-                    } else {
-                        entries.push(FileSystemSandboxEntry {
-                            path: FileSystemPath::GlobPattern { pattern },
-                            access: entry.access,
-                            missing_path_behavior: entry.missing_path_behavior,
-                        });
-                    }
-                }
-                FileSystemPath::Path { path } => {
-                    entries.push(FileSystemSandboxEntry {
-                        path: FileSystemPath::Path { path },
-                        access: entry.access,
-                        missing_path_behavior: entry.missing_path_behavior,
-                    });
-                }
-                FileSystemPath::Special { value } => {
-                    entries.push(FileSystemSandboxEntry {
-                        path: FileSystemPath::Special { value },
-                        access: entry.access,
-                        missing_path_behavior: entry.missing_path_behavior,
-                    });
-=======
                 _ => {
                     entries.push(entry);
                     continue;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 }
             };
             if entry.access == FileSystemAccessMode::Deny
@@ -2150,6 +2060,7 @@ impl FileSystemSandboxPolicy {
                     Some(path) if is_glob => (
                         FileSystemPath::GlobPattern {
                             pattern: path.inferred_native_path_string(),
+                            scan: scan.clone(),
                         },
                         entry.access,
                     ),
@@ -2326,15 +2237,11 @@ impl FileSystemSandboxPolicy {
     /// is, or lies inside, another root's read-only path is not a grant and
     /// is left out (see [`Self::writable_links_into_read_only_paths`]).
     pub fn get_writable_roots_with_cwd(&self, cwd: &Path) -> Vec<WritableRoot> {
-<<<<<<< HEAD
-        let roots = self.writable_roots_including_links_into_read_only_paths(cwd);
-        let excluded = links_into_read_only_paths(&roots);
-        roots
-            .into_iter()
-            .enumerate()
-            .filter(|(index, _)| !excluded.iter().any(|(link, _)| link == index))
-            .map(|(_, root)| root)
-            .collect()
+        exclude_links_into_read_only_paths(self.get_writable_roots_with_cwd_impl(
+            cwd,
+            WritableRootPathResolution::Effective,
+            RootMetadataWriteMounts::Separate,
+        ))
     }
 
     /// Issue #535: the writable roots this policy names that are left out of
@@ -2358,7 +2265,7 @@ impl FileSystemSandboxPolicy {
             .collect()
     }
 
-    /// #606: whether `path` may be written as [`Self::can_write_path_with_cwd`]
+    /// #606: whether `path` may be written as [`Self::can_write_local_path_with_cwd`]
     /// says, and not through a writable root
     /// [`Self::get_writable_roots_with_cwd`] leaves out (#535, `excluded`
     /// from [`Self::writable_links_into_read_only_paths`]): the sandboxes
@@ -2370,7 +2277,7 @@ impl FileSystemSandboxPolicy {
         cwd: &Path,
         excluded: &[WritableLinkIntoReadOnlyPath],
     ) -> bool {
-        if !self.can_write_path_with_cwd(path, cwd) {
+        if !self.can_write_local_path_with_cwd(path, cwd) {
             return false;
         }
         if excluded.is_empty() {
@@ -2389,8 +2296,6 @@ impl FileSystemSandboxPolicy {
     }
 
     fn writable_roots_including_links_into_read_only_paths(&self, cwd: &Path) -> Vec<WritableRoot> {
-||||||| 413492cd6c
-=======
         self.get_writable_roots_with_cwd_impl(
             cwd,
             WritableRootPathResolution::Effective,
@@ -2407,11 +2312,11 @@ impl FileSystemSandboxPolicy {
         &self,
         cwd: &Path,
     ) -> Vec<WritableRoot> {
-        self.get_writable_roots_with_cwd_impl(
+        exclude_links_into_read_only_paths(self.get_writable_roots_with_cwd_impl(
             cwd,
             WritableRootPathResolution::Effective,
             RootMetadataWriteMounts::InheritWritableRoot,
-        )
+        ))
     }
 
     /// Reports configured writable roots for diagnostics without inspecting the filesystem.
@@ -2449,11 +2354,11 @@ impl FileSystemSandboxPolicy {
         &self,
         cwd: &Path,
     ) -> Vec<WritableRoot> {
-        self.get_writable_roots_with_cwd_impl(
+        exclude_links_into_read_only_paths(self.get_writable_roots_with_cwd_impl(
             cwd,
             WritableRootPathResolution::PreserveMutableComponents,
             RootMetadataWriteMounts::Separate,
-        )
+        ))
     }
 
     fn get_writable_roots_with_cwd_impl(
@@ -2462,7 +2367,6 @@ impl FileSystemSandboxPolicy {
         path_resolution: WritableRootPathResolution,
         root_metadata_mounts: RootMetadataWriteMounts,
     ) -> Vec<WritableRoot> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         if self.has_full_disk_write_access() {
             return Vec::new();
         }
@@ -2763,7 +2667,6 @@ impl FileSystemSandboxPolicy {
         patterns
     }
 
-<<<<<<< HEAD
     /// Directories agent commands may not list (issue #506), from
     /// [`FileSystemSandboxEntry::deny_directory_listing`] entries. Only a
     /// restricted policy carries them; what is below each directory keeps its
@@ -2798,7 +2701,7 @@ impl FileSystemSandboxPolicy {
                 .into_iter()
                 .filter(|entry| entry.access == FileSystemAccessMode::Read)
                 .filter(|entry| root.as_ref() != Some(&entry.path))
-                .filter(|entry| !self.can_write_path_with_cwd(entry.path.as_path(), cwd))
+                .filter(|entry| !self.can_write_local_path_with_cwd(entry.path.as_path(), cwd))
                 .map(|entry| entry.path)
                 .collect(),
             /*normalize_effective_paths*/ false,
@@ -2841,8 +2744,8 @@ impl FileSystemSandboxPolicy {
                 .entries
                 .iter()
                 .any(FileSystemSandboxEntry::denies_user_namespaces)
-||||||| 413492cd6c
-=======
+    }
+
     /// Replace deny globs with a backend's concrete snapshot, preserving other entries.
     /// An empty snapshot still removes the original patterns.
     pub fn with_expanded_deny_globs(mut self, paths: Vec<AbsolutePathBuf>) -> Self {
@@ -2854,7 +2757,6 @@ impl FileSystemSandboxPolicy {
                 .map(|path| FileSystemSandboxEntry::new(path.into(), FileSystemAccessMode::Deny)),
         );
         self
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub fn to_legacy_sandbox_policy(
@@ -3248,6 +3150,13 @@ fn special_path_matches_path_uri(value: &FileSystemSpecialPath, path: &PathUri) 
     }
 }
 
+/// The most specific entry wins; at equal depth the stronger access does
+/// (`deny` over `write` over `read`).
+fn resolved_entry_precedence(entry: &ResolvedFileSystemEntry) -> (usize, FileSystemAccessMode) {
+    let specificity = entry.path.as_path().components().count();
+    (specificity, entry.access)
+}
+
 fn absolute_root_path_for_cwd(cwd: &AbsolutePathBuf) -> AbsolutePathBuf {
     let root = cwd
         .as_path()
@@ -3258,7 +3167,6 @@ fn absolute_root_path_for_cwd(cwd: &AbsolutePathBuf) -> AbsolutePathBuf {
         .unwrap_or_else(|err| panic!("cwd root must be an absolute path: {err}"))
 }
 
-<<<<<<< HEAD
 fn normalized_and_canonical_candidates(path: &Path) -> Vec<PathBuf> {
     // Compare the lexical absolute form plus the canonical target when it
     // exists. Missing paths still need the lexical candidate so future-created
@@ -3286,39 +3194,11 @@ fn push_unique(candidates: &mut Vec<PathBuf>, candidate: PathBuf) {
     }
 }
 
-fn build_glob_matcher(pattern: &str, case_insensitive: bool) -> Result<GlobMatcher, String> {
-||||||| 413492cd6c
-fn normalized_and_canonical_candidates(path: &Path) -> Vec<PathBuf> {
-    // Compare the lexical absolute form plus the canonical target when it
-    // exists. Missing paths still need the lexical candidate so future-created
-    // denied paths remain blocked by direct tool checks.
-    let mut candidates = Vec::new();
-
-    if let Ok(normalized) = AbsolutePathBuf::from_absolute_path(path) {
-        push_unique(&mut candidates, normalized.to_path_buf());
-    } else {
-        push_unique(&mut candidates, path.to_path_buf());
-    }
-
-    if let Ok(canonical) = path.canonicalize()
-        && let Ok(canonical_absolute) = AbsolutePathBuf::from_absolute_path(canonical)
-    {
-        push_unique(&mut candidates, canonical_absolute.to_path_buf());
-    }
-
-    candidates
-}
-
-fn push_unique(candidates: &mut Vec<PathBuf>, candidate: PathBuf) {
-    if !candidates.iter().any(|existing| existing == &candidate) {
-        candidates.push(candidate);
-    }
-}
-
-fn build_glob_matcher(pattern: &str) -> Result<GlobMatcher, String> {
-=======
-fn build_glob_matcher(pattern: &str, convention: PathConvention) -> Result<GlobMatcher, String> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+fn build_glob_matcher(
+    pattern: &str,
+    convention: PathConvention,
+    case_insensitive: bool,
+) -> Result<GlobMatcher, String> {
     // Keep `*` and `?` within a single path component and preserve an unclosed
     // `[` as a literal so matcher behavior stays aligned with config parsing.
     let pattern = if convention == PathConvention::Windows {
@@ -3329,13 +3209,9 @@ fn build_glob_matcher(pattern: &str, convention: PathConvention) -> Result<GlobM
     GlobBuilder::new(&pattern)
         .literal_separator(true)
         .allow_unclosed_class(true)
-<<<<<<< HEAD
-        .case_insensitive(case_insensitive)
-||||||| 413492cd6c
-=======
         .backslash_escape(convention == PathConvention::Posix)
-        .case_insensitive(convention == PathConvention::Windows)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        // Credential globs match in any letter case on every platform (#442).
+        .case_insensitive(case_insensitive || convention == PathConvention::Windows)
         .build()
         .map(|glob| glob.compile_matcher())
         .map_err(|err| err.to_string())
@@ -3431,6 +3307,19 @@ pub struct PinnedWritableRoot {
 /// spelled through the read-only path itself (an explicit `.git/hooks`
 /// root) and a root without a link below its top-level folder (`/tmp` and
 /// `/var` on macOS are top-level aliases) stay grants.
+/// Issue #535: `roots` without those [`links_into_read_only_paths`] finds:
+/// a root reached through a link into another root's read-only path is not
+/// a grant.
+fn exclude_links_into_read_only_paths(roots: Vec<WritableRoot>) -> Vec<WritableRoot> {
+    let excluded = links_into_read_only_paths(&roots);
+    roots
+        .into_iter()
+        .enumerate()
+        .filter(|(index, _)| !excluded.iter().any(|(link, _)| link == index))
+        .map(|(_, root)| root)
+        .collect()
+}
+
 #[cfg(unix)]
 fn links_into_read_only_paths(roots: &[WritableRoot]) -> Vec<(usize, AbsolutePathBuf)> {
     let mut excluded = Vec::new();
@@ -3833,73 +3722,6 @@ fn has_explicit_resolved_path_entry(
     entries.iter().any(|entry| &entry.path == path)
 }
 
-<<<<<<< HEAD
-/// The protected metadata name `name` is; with `any_case` also in another
-/// case (#606).
-fn metadata_path_name(name: &OsStr, any_case: bool) -> Option<&'static str> {
-    PROTECTED_METADATA_PATH_NAMES
-        .iter()
-        .copied()
-        .find(|metadata_name| {
-            name == OsStr::new(metadata_name)
-                || (any_case && name.eq_ignore_ascii_case(metadata_name))
-        })
-}
-
-fn metadata_child_of_writable_root(
-    policy: &FileSystemSandboxPolicy,
-    target: &Path,
-    cwd: &Path,
-) -> Option<(AbsolutePathBuf, &'static str)> {
-    // #606: macOS volumes ignore case, so a `.GIT` made where `.git` is
-    // missing is the folder git opens as `.git`, and Seatbelt refuses it
-    // (its rules match without regard to case there). Approvals agree once
-    // the policy denies reads (Moderate and Aggressive); a policy without
-    // denied paths keeps today's answers.
-    let any_case = cfg!(target_os = "macos") && policy.has_denied_read_restrictions();
-    policy
-        .resolved_entries_with_cwd(cwd)
-        .iter()
-        .filter(|entry| entry.access.can_write())
-        .filter_map(|entry| {
-            let relative_path = target.strip_prefix(entry.path.as_path()).ok()?;
-            let first_component = relative_path.components().next()?;
-            let metadata_name = metadata_path_name(first_component.as_os_str(), any_case)?;
-            // As spelled (#606: `.GIT` on macOS), so only an explicit entry
-            // for that spelling opens it.
-            Some((entry.path.join(first_component), metadata_name))
-        })
-        .next()
-}
-
-||||||| 413492cd6c
-fn metadata_path_name(name: &OsStr) -> Option<&'static str> {
-    PROTECTED_METADATA_PATH_NAMES
-        .iter()
-        .copied()
-        .find(|metadata_name| name == OsStr::new(metadata_name))
-}
-
-fn metadata_child_of_writable_root(
-    policy: &FileSystemSandboxPolicy,
-    target: &Path,
-    cwd: &Path,
-) -> Option<(AbsolutePathBuf, &'static str)> {
-    policy
-        .resolved_entries_with_cwd(cwd)
-        .iter()
-        .filter(|entry| entry.access.can_write())
-        .filter_map(|entry| {
-            let relative_path = target.strip_prefix(entry.path.as_path()).ok()?;
-            let first_component = relative_path.components().next()?;
-            let metadata_name = metadata_path_name(first_component.as_os_str())?;
-            Some((entry.path.join(metadata_name), metadata_name))
-        })
-        .next()
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 fn protected_metadata_names_for_writable_root(
     matching: &LocalFileSystemPolicyMatcher<'_>,
     root: &AbsolutePathBuf,
@@ -4036,7 +3858,6 @@ mod tests {
         std::os::unix::fs::symlink(original, link)
     }
 
-<<<<<<< HEAD
     /// D293 (#1542 item 2): an entry spelled through a linked root matches
     /// the path listed against the root's resolved location; a different
     /// path or a writable entry doesn't.
@@ -4055,13 +3876,13 @@ mod tests {
         let policy = FileSystemSandboxPolicy::restricted(vec![
             FileSystemSandboxEntry::new(
                 FileSystemPath::Path {
-                    path: absolute(linked.join("a/b")),
+                    path: absolute(linked.join("a/b")).into(),
                 },
                 FileSystemAccessMode::Read,
             ),
             FileSystemSandboxEntry::new(
                 FileSystemPath::Path {
-                    path: absolute(linked.join("w")),
+                    path: absolute(linked.join("w")).into(),
                 },
                 FileSystemAccessMode::Write,
             ),
@@ -4069,7 +3890,7 @@ mod tests {
         let resolved = fs::canonicalize(&real)?;
         assert_eq!(
             (
-                policy.has_explicit_non_write_entry_for_path_with_cwd(
+                policy.has_explicit_non_write_entry_for_local_path_with_cwd(
                     &resolved.join("a/b"),
                     dir.path()
                 ),
@@ -4081,8 +3902,8 @@ mod tests {
             (false, true, true, false, false)
         );
         Ok(())
-||||||| 413492cd6c
-=======
+    }
+
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn writable_roots_protect_gitdir_target_outside_alias_root() {
@@ -4527,7 +4348,6 @@ mod tests {
                 .expect("missing executor home fails closed");
             assert!(prepared.invalid_pattern);
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     #[test]
@@ -5400,7 +5220,9 @@ mod tests {
             },
             FileSystemSandboxEntry {
                 path: FileSystemPath::Path {
-                    path: AbsolutePathBuf::from_absolute_path(denied).expect("absolute"),
+                    path: AbsolutePathBuf::from_absolute_path(denied)
+                        .expect("absolute")
+                        .into(),
                 },
                 access: FileSystemAccessMode::Deny,
                 missing_path_behavior: None,
@@ -5438,7 +5260,7 @@ mod tests {
         }
         // The literal check is what #467 reported.
         let policy = deny_in_workspace(&physical.join(".env"));
-        assert!(policy.can_read_path_with_cwd(&logical.join(".env"), &logical));
+        assert!(policy.can_read_local_path_with_cwd(&logical.join(".env"), &logical));
     }
 
     /// #619: a writable root spelled `/tmp` holds `/private/tmp/x` for the
@@ -5469,7 +5291,7 @@ mod tests {
             entry(&logical, FileSystemAccessMode::Write),
         ]);
         let target = physical.join("home/AGENTS.md");
-        assert!(!policy.can_write_path_with_cwd(&target, &physical));
+        assert!(!policy.can_write_local_path_with_cwd(&target, &physical));
         assert!(policy.can_write_effective_path_with_cwd(&target, &physical));
         assert!(policy.can_write_effective_path_with_cwd(&logical.join("x"), &physical));
         for read_only in [physical.join("home"), logical.join("home")] {
@@ -5537,13 +5359,15 @@ mod tests {
         std::os::unix::fs::symlink(&real, &link).expect("link");
         let policy = FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
             path: FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path(&link).expect("absolute"),
+                path: AbsolutePathBuf::from_absolute_path(&link)
+                    .expect("absolute")
+                    .into(),
             },
             access: FileSystemAccessMode::Write,
             missing_path_behavior: None,
         }]);
         let target = real.join("home/hooks.json");
-        assert!(!policy.can_write_path_with_cwd(&target, &base));
+        assert!(!policy.can_write_local_path_with_cwd(&target, &base));
         assert!(policy.can_write_effective_path_with_cwd(&target, &base));
         assert!(!policy.can_grant_write_effective_path_with_cwd(&target, &base));
         assert_eq!(
@@ -6025,66 +5849,6 @@ mod tests {
     }
 
     #[test]
-<<<<<<< HEAD
-    fn materialize_project_roots_with_cwd_expands_symbolic_glob_entries() {
-        let cwd = TempDir::new().expect("tempdir");
-        let policy = FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
-            path: FileSystemPath::GlobPattern {
-                scan: None,
-                pattern: project_roots_glob_pattern(Path::new("**/*.env")),
-            },
-            access: FileSystemAccessMode::Deny,
-            missing_path_behavior: None,
-        }]);
-
-        let actual = policy.materialize_project_roots_with_cwd(cwd.path());
-
-        assert_eq!(
-            actual,
-            FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
-                path: FileSystemPath::GlobPattern {
-                    scan: None,
-                    pattern: AbsolutePathBuf::resolve_path_against_base("**/*.env", cwd.path())
-                        .to_string_lossy()
-                        .into_owned(),
-                },
-                access: FileSystemAccessMode::Deny,
-                missing_path_behavior: None,
-            }])
-        );
-    }
-
-    #[test]
-||||||| 413492cd6c
-    fn materialize_project_roots_with_cwd_expands_symbolic_glob_entries() {
-        let cwd = TempDir::new().expect("tempdir");
-        let policy = FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
-            path: FileSystemPath::GlobPattern {
-                pattern: project_roots_glob_pattern(Path::new("**/*.env")),
-            },
-            access: FileSystemAccessMode::Deny,
-            missing_path_behavior: None,
-        }]);
-
-        let actual = policy.materialize_project_roots_with_cwd(cwd.path());
-
-        assert_eq!(
-            actual,
-            FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
-                path: FileSystemPath::GlobPattern {
-                    pattern: AbsolutePathBuf::resolve_path_against_base("**/*.env", cwd.path())
-                        .to_string_lossy()
-                        .into_owned(),
-                },
-                access: FileSystemAccessMode::Deny,
-                missing_path_behavior: None,
-            }])
-        );
-    }
-
-    #[test]
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     fn with_additional_legacy_workspace_writable_roots_protects_metadata() {
         let temp_dir = TempDir::new().expect("tempdir");
         let extra = AbsolutePathBuf::from_absolute_path(temp_dir.path().join("extra"))
@@ -6243,9 +6007,12 @@ mod tests {
         ));
     }
 
+    /// Corbanu keeps the link-following local check (base and `main`
+    /// behaviour): a denied root is denied through a link to it, and a link
+    /// that is denied denies its target. Executor URI checks stay lexical.
     #[cfg(unix)]
     #[test]
-    fn native_read_deny_matching_uses_uri_matcher_semantics() {
+    fn native_read_deny_matching_follows_links_both_ways() {
         let temp = TempDir::new().expect("tempdir");
         let real_dir = temp.path().join("real");
         let alias_dir = temp.path().join("alias");
@@ -6262,10 +6029,8 @@ mod tests {
                 PathUri::from_host_native_path(denied_root).expect("deny root URI");
             let candidate_uri = PathUri::from_host_native_path(candidate).expect("candidate URI");
 
-            assert_eq!(
-                is_read_denied(candidate, &policy, temp.path()),
-                candidate_uri.starts_with(&denied_root_uri)
-            );
+            assert!(is_read_denied(candidate, &policy, temp.path()));
+            assert!(!candidate_uri.starts_with(&denied_root_uri));
         }
     }
 
@@ -6655,8 +6420,8 @@ mod tests {
         assert!(policy.has_full_disk_write_access());
         assert!(policy.get_unreadable_roots_with_cwd(cwd).is_empty());
         assert!(policy.get_unreadable_globs_with_cwd(cwd).is_empty());
-        assert!(policy.can_write_path_with_cwd(home.as_path(), cwd));
-        assert!(policy.can_read_path_with_cwd(home.join("tmp").as_path(), cwd));
+        assert!(policy.can_write_local_path_with_cwd(home.as_path(), cwd));
+        assert!(policy.can_read_local_path_with_cwd(home.join("tmp").as_path(), cwd));
         // A runtime that knows the entry cannot run it as plain full access.
         assert!(policy.needs_direct_runtime_enforcement(NetworkSandboxPolicy::Restricted, cwd));
         assert!(!policy.is_semantically_equivalent_to(
@@ -6669,12 +6434,12 @@ mod tests {
             cwd,
         ));
 
-        let matcher = ReadDenyMatcher::new(&policy, cwd).expect("matcher");
+        let matcher = ReadDenyMatcher::new_for_local_paths(&policy, cwd).expect("matcher");
         assert!(matcher.is_listing_denied(home.as_path()));
         assert!(matcher.is_listing_denied(&home.as_path().join("tmp").join("..")));
-        assert!(!matcher.is_read_denied(home.as_path()));
+        assert!(!matcher.is_local_path_read_denied(home.as_path()));
         assert!(!matcher.is_listing_denied(home.join("tmp").as_path()));
-        assert!(!matcher.is_read_denied(home.join("tmp").as_path()));
+        assert!(!matcher.is_local_path_read_denied(home.join("tmp").as_path()));
         // Not carried by a policy that does not restrict.
         assert!(
             FileSystemSandboxPolicy::unrestricted()
@@ -6718,8 +6483,8 @@ mod tests {
         assert!(policy.has_full_disk_write_access());
         assert!(policy.get_unreadable_roots_with_cwd(cwd).is_empty());
         assert!(!policy.has_denied_read_restrictions());
-        assert!(policy.can_write_path_with_cwd(home.as_path(), cwd));
-        assert!(policy.can_read_path_with_cwd(home.as_path(), cwd));
+        assert!(policy.can_write_local_path_with_cwd(home.as_path(), cwd));
+        assert!(policy.can_read_local_path_with_cwd(home.as_path(), cwd));
         assert!(policy.needs_direct_runtime_enforcement(NetworkSandboxPolicy::Restricted, cwd));
         assert!(!policy.is_semantically_equivalent_to(&full, cwd));
         assert!(
@@ -6829,7 +6594,9 @@ mod tests {
         let entry = |path: &Path| {
             FileSystemSandboxEntry::new(
                 FileSystemPath::Path {
-                    path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+                    path: AbsolutePathBuf::from_absolute_path(path)
+                        .expect("absolute")
+                        .into(),
                 },
                 FileSystemAccessMode::Write,
             )
@@ -6895,7 +6662,9 @@ mod tests {
         let entry = |path: &Path| {
             FileSystemSandboxEntry::new(
                 FileSystemPath::Path {
-                    path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+                    path: AbsolutePathBuf::from_absolute_path(path)
+                        .expect("absolute")
+                        .into(),
                 },
                 FileSystemAccessMode::Write,
             )
@@ -6914,7 +6683,7 @@ mod tests {
         assert_eq!(excluded.len(), 1);
         let hook = link.join("hooks").join("pre-commit");
         // The literal check still counts it (the disagreement #606 names).
-        assert!(policy.can_write_path_with_cwd(&hook, &workspace));
+        assert!(policy.can_write_local_path_with_cwd(&hook, &workspace));
         for path in [hook.as_path(), link.as_path(), &link.join("config")] {
             assert!(
                 !policy.can_write_path_outside_excluded_links(path, &workspace, &excluded),
@@ -6978,7 +6747,7 @@ mod tests {
         ] {
             let path = workspace.join(name).join("config");
             assert!(
-                !denying.can_write_path_with_cwd(&path, &workspace),
+                !denying.can_write_local_path_with_cwd(&path, &workspace),
                 "{name}"
             );
             assert_eq!(
@@ -6986,13 +6755,16 @@ mod tests {
                 Some(metadata),
                 "{name}"
             );
-            assert!(open.can_write_path_with_cwd(&path, &workspace), "{name}");
+            assert!(
+                open.can_write_local_path_with_cwd(&path, &workspace),
+                "{name}"
+            );
             assert_eq!(
                 forbidden_agent_metadata_write(&path, &workspace, &open),
                 None,
                 "{name}"
             );
         }
-        assert!(denying.can_write_path_with_cwd(&workspace.join(".gitx/config"), &workspace));
+        assert!(denying.can_write_local_path_with_cwd(&workspace.join(".gitx/config"), &workspace));
     }
 }

@@ -269,7 +269,6 @@ pub struct GuardianAssessmentEvent {
     pub action: GuardianAssessmentAction,
 }
 
-<<<<<<< HEAD
 /// An [`ExecApprovalRequestEvent`] that nobody waits for any more (its
 /// request timed out or was cancelled; the action was already refused), so
 /// clients should close its prompt (#722, D279).
@@ -291,8 +290,8 @@ impl ExecApprovalRequestWithdrawnEvent {
             .clone()
             .unwrap_or_else(|| self.call_id.clone())
     }
-||||||| 413492cd6c
-=======
+}
+
 /// Distinguishes a command approval from input sent to an existing terminal.
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
@@ -302,7 +301,6 @@ pub enum ExecApprovalKind {
     /// Requires a fresh human decision; automated and reusable approvals are invalid.
     HumanCommand,
     WriteStdin,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]

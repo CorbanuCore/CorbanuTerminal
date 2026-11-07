@@ -72,6 +72,10 @@ pub(super) enum RolloutItemWire<'a> {
     RealtimeItem {
         payload: Cow<'a, RealtimeItem>,
     },
+    /// Host-recorded origins for preceding items (`source_envelopes`).
+    SourceOrigin {
+        payload: Cow<'a, codex_protocol::provenance::SourceOriginRecord>,
+    },
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]
@@ -174,6 +178,9 @@ impl<'a> From<&'a RolloutItem> for RolloutItemWire<'a> {
             RolloutItem::RealtimeItem(payload) => Self::RealtimeItem {
                 payload: Cow::Borrowed(payload),
             },
+            RolloutItem::SourceOrigin(payload) => Self::SourceOrigin {
+                payload: Cow::Borrowed(payload),
+            },
         }
     }
 }
@@ -255,6 +262,7 @@ impl From<RolloutItemWire<'_>> for RolloutItem {
             }
             RolloutItemWire::EventMsg { payload } => Self::EventMsg(payload.into_owned()),
             RolloutItemWire::RealtimeItem { payload } => Self::RealtimeItem(payload.into_owned()),
+            RolloutItemWire::SourceOrigin { payload } => Self::SourceOrigin(payload.into_owned()),
         }
     }
 }

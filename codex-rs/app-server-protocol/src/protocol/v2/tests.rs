@@ -359,10 +359,7 @@ fn thread_resume_response_round_trips_initial_turns_page() {
     };
 
     let value = serde_json::to_value(&response).expect("serialize thread resume response");
-<<<<<<< HEAD
     assert_eq!(value["providerAccount"], json!("zai:work"));
-||||||| 413492cd6c
-=======
     assert_eq!(value["thread"]["originator"], json!("future_client"));
     assert_eq!(
         value["thread"]["environments"],
@@ -370,7 +367,6 @@ fn thread_resume_response_round_trips_initial_turns_page() {
             "environmentId": "remote", "cwd": r"C:\workspace", "runtimeWorkspaceRoots": [r"C:\workspace\src"]
         }])
     );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     assert_eq!(
         value["thread"]["section"],
         json!({
@@ -5507,7 +5503,6 @@ fn realtime_start_deserializes_client_handoff_channel_prefixes() {
     );
 }
 
-<<<<<<< HEAD
 /// #1038: the first-message-edit mark is an experimental camelCase flag,
 /// omitted when false, so an ordinary thread/start is unchanged on the wire.
 #[test]
@@ -5532,8 +5527,8 @@ fn thread_start_reopened_by_prompt_edit_wire_shape() {
         },
     );
     assert_eq!(reason, Some("thread/start.reopenedByPromptEdit"));
-||||||| 413492cd6c
-=======
+}
+
 #[test]
 fn tool_request_user_input_params_default_legacy_missing_is_blocking_to_true() {
     let params = serde_json::from_value::<ToolRequestUserInputParams>(json!({
@@ -5603,5 +5598,4 @@ fn feedback_paths_preserve_native_wire_spelling_before_host_validation() {
             path
         );
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }

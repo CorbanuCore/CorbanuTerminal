@@ -329,20 +329,8 @@ pub enum FileSystemPath {
 impl From<CoreFileSystemPath> for FileSystemPath {
     fn from(value: CoreFileSystemPath) -> Self {
         match value {
-<<<<<<< HEAD
-            CoreFileSystemPath::Path { path } => Self::Path {
-                path: LegacyAppPathString::from_abs_path(&path),
-            },
-            CoreFileSystemPath::GlobPattern { pattern, .. } => Self::GlobPattern { pattern },
-||||||| 413492cd6c
-            CoreFileSystemPath::Path { path } => Self::Path {
-                path: LegacyAppPathString::from_abs_path(&path),
-            },
-            CoreFileSystemPath::GlobPattern { pattern } => Self::GlobPattern { pattern },
-=======
             CoreFileSystemPath::Path { path } => Self::Path { path: path.into() },
-            CoreFileSystemPath::GlobPattern { pattern } => Self::GlobPattern { pattern },
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            CoreFileSystemPath::GlobPattern { pattern, .. } => Self::GlobPattern { pattern },
             CoreFileSystemPath::Special { value } => Self::Special {
                 value: value.into(),
             },

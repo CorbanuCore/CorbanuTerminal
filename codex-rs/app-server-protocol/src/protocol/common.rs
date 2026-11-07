@@ -914,15 +914,13 @@ client_request_definitions! {
         serialization: None,
         response: v2::ThreadItemsListResponse,
     },
-<<<<<<< HEAD
     #[experimental("thread/turns/items/list")]
     ThreadTurnsItemsList => "thread/turns/items/list" {
         params: v2::ThreadTurnsItemsListParams,
         // Compatibility alias over the same append-only item store.
         serialization: None,
         response: v2::ThreadTurnsItemsListResponse,
-||||||| 413492cd6c
-=======
+    },
     #[experimental("thread/items/read")]
     ThreadItemsRead => "thread/items/read" {
         params: v2::ThreadItemsReadParams,
@@ -936,7 +934,6 @@ client_request_definitions! {
         params: v2::ThreadGuardianReviewParams,
         serialization: thread_id(params.thread_id),
         response: v2::ThreadGuardianReviewResponse,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     },
     /// Append raw Responses API items to the thread history without starting a user turn.
     ThreadInjectItems => "thread/inject_items" {

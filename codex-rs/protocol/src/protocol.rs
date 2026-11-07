@@ -1784,11 +1784,8 @@ pub enum EventMsg {
 
     ExecApprovalRequest(ExecApprovalRequestEvent),
 
-<<<<<<< HEAD
     /// An earlier `ExecApprovalRequest` is no longer awaited; close its prompt.
     ExecApprovalRequestWithdrawn(ExecApprovalRequestWithdrawnEvent),
-||||||| 413492cd6c
-=======
     /// Ends an in-process network prompt, including when its proxy request is dropped.
     #[serde(skip)]
     #[schemars(skip)]
@@ -1796,7 +1793,6 @@ pub enum EventMsg {
     NetworkApprovalResolved {
         approval_id: String,
     },
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     RequestPermissions(RequestPermissionsEvent),
 
@@ -2720,20 +2716,8 @@ impl TokenUsageInfo {
         let delta = (context_window - previous_total).max(0);
 
         self.model_context_window = Some(context_window);
-<<<<<<< HEAD
         self.total_token_usage.total_tokens = context_window;
-||||||| 413492cd6c
-        self.total_token_usage = TokenUsage {
-            total_tokens: context_window,
-            ..TokenUsage::default()
-        };
-=======
-        self.total_token_usage = TokenUsage {
-            total_tokens: context_window,
-            ..TokenUsage::default()
-        };
         self.last_usage_includes_reasoning = None;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         self.last_token_usage = TokenUsage {
             total_tokens: delta,
             ..TokenUsage::default()
@@ -2954,6 +2938,8 @@ impl TokenUsage {
                 other.reasoning_output_tokens,
             ),
             total_tokens: less(self.total_tokens, other.total_tokens),
+            // A per-response provider figure; a difference of totals has none.
+            codex_rollout_budget_units: None,
         }
     }
 
@@ -3645,65 +3631,6 @@ impl fmt::Display for InternalSessionSource {
     }
 }
 
-<<<<<<< HEAD
-fn multi_agent_version_from_items(
-    items: &[RolloutItem],
-    thread_id: Option<ThreadId>,
-) -> Option<MultiAgentVersion> {
-    let session_meta_version = items.iter().rev().find_map(|item| match item {
-        RolloutItem::SessionMeta(meta_line)
-            if thread_id.is_none_or(|thread_id| meta_line.meta.id == thread_id) =>
-        {
-            meta_line.meta.multi_agent_version
-        }
-        _ => None,
-    });
-
-    session_meta_version.or_else(|| {
-        items.iter().rev().find_map(|item| match item {
-            RolloutItem::TurnContext(turn_context) => turn_context.multi_agent_version,
-            RolloutItem::SessionMeta(_)
-            | RolloutItem::ResponseItem(_)
-            | RolloutItem::InterAgentCommunication(_)
-            | RolloutItem::InterAgentCommunicationMetadata { .. }
-            | RolloutItem::Compacted(_)
-            | RolloutItem::WorldState(_)
-            | RolloutItem::SourceOrigin(_)
-            | RolloutItem::EventMsg(_) => None,
-        })
-    })
-}
-
-||||||| 413492cd6c
-fn multi_agent_version_from_items(
-    items: &[RolloutItem],
-    thread_id: Option<ThreadId>,
-) -> Option<MultiAgentVersion> {
-    let session_meta_version = items.iter().rev().find_map(|item| match item {
-        RolloutItem::SessionMeta(meta_line)
-            if thread_id.is_none_or(|thread_id| meta_line.meta.id == thread_id) =>
-        {
-            meta_line.meta.multi_agent_version
-        }
-        _ => None,
-    });
-
-    session_meta_version.or_else(|| {
-        items.iter().rev().find_map(|item| match item {
-            RolloutItem::TurnContext(turn_context) => turn_context.multi_agent_version,
-            RolloutItem::SessionMeta(_)
-            | RolloutItem::ResponseItem(_)
-            | RolloutItem::InterAgentCommunication(_)
-            | RolloutItem::InterAgentCommunicationMetadata { .. }
-            | RolloutItem::Compacted(_)
-            | RolloutItem::WorldState(_)
-            | RolloutItem::EventMsg(_) => None,
-        })
-    })
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(rename_all = "snake_case")]
@@ -3900,46 +3827,6 @@ impl<'de> Deserialize<'de> for SessionMetaLine {
     }
 }
 
-<<<<<<< HEAD
-#[derive(Serialize, Deserialize, Debug, Clone, JsonSchema, TS)]
-#[serde(tag = "type", content = "payload", rename_all = "snake_case")]
-pub enum RolloutItem {
-    SessionMeta(SessionMetaLine),
-    ResponseItem(ResponseItem),
-    /// Legacy delivery item reconstructed as a model-visible `agent_message`.
-    InterAgentCommunication(InterAgentCommunication),
-    /// Local delivery metadata that is not part of the Responses API item.
-    InterAgentCommunicationMetadata {
-        trigger_turn: bool,
-    },
-    Compacted(CompactedItem),
-    TurnContext(TurnContextItem),
-    WorldState(WorldStateItem),
-    EventMsg(EventMsg),
-    /// Host-recorded origins for preceding items (`source_envelopes`).
-    SourceOrigin(crate::provenance::SourceOriginRecord),
-}
-
-||||||| 413492cd6c
-#[derive(Serialize, Deserialize, Debug, Clone, JsonSchema, TS)]
-#[serde(tag = "type", content = "payload", rename_all = "snake_case")]
-pub enum RolloutItem {
-    SessionMeta(SessionMetaLine),
-    ResponseItem(ResponseItem),
-    /// Legacy delivery item reconstructed as a model-visible `agent_message`.
-    InterAgentCommunication(InterAgentCommunication),
-    /// Local delivery metadata that is not part of the Responses API item.
-    InterAgentCommunicationMetadata {
-        trigger_turn: bool,
-    },
-    Compacted(CompactedItem),
-    TurnContext(TurnContextItem),
-    WorldState(WorldStateItem),
-    EventMsg(EventMsg),
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 /// Persisted comparison state used to resume model-visible world-state diffing.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, TS)]
 pub struct WorldStateItem {
@@ -4007,29 +3894,15 @@ pub struct TurnContextItem {
     pub cyber_access_program: Option<CyberAccessProgram>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effort: Option<ReasoningEffortConfig>,
-<<<<<<< HEAD
     /// The security level this turn ran under (PF-23-S03). Memory work on
     /// this rollout later treats it as a floor; absent in older rollouts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(skip)]
     pub security_level: Option<codex_security_policy::SecurityLevel>,
-    // Compatibility-only field written with a default value so older Codex
-    // versions can deserialize turn-context rollout items. It is no longer
-    // read by context reconstruction and should be removed in a future schema
-    // cleanup.
-    pub summary: ReasoningSummaryConfig,
-||||||| 413492cd6c
-    // Compatibility-only field written with a default value so older Codex
-    // versions can deserialize turn-context rollout items. It is no longer
-    // read by context reconstruction and should be removed in a future schema
-    // cleanup.
-    pub summary: ReasoningSummaryConfig,
-=======
     /// Legacy placeholder written as `Some(ReasoningSummaryConfig::None)` for older readers.
     /// Optional so newer readers also accept its future removal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<ReasoningSummaryConfig>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl TurnContextItem {
@@ -5320,6 +5193,8 @@ mod tests {
     #[test]
     fn subagent_activity_serializes_one_reconciled_named_identity() -> Result<()> {
         let event = SubAgentActivityEvent {
+            model: None,
+            reasoning_effort: None,
             event_id: "message-7".to_string(),
             occurred_at_ms: 7,
             agent_thread_id: ThreadId::new(),
@@ -7110,14 +6985,8 @@ mod tests {
             realtime_active: None,
             cyber_access_program: None,
             effort: None,
-<<<<<<< HEAD
             security_level: None,
-            summary: ReasoningSummaryConfig::Auto,
-||||||| 413492cd6c
-            summary: ReasoningSummaryConfig::Auto,
-=======
             summary: Some(ReasoningSummaryConfig::None),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
 
         let value = serde_json::to_value(item)?;
@@ -7285,6 +7154,7 @@ mod tests {
             output_tokens: output,
             reasoning_output_tokens: reasoning,
             total_tokens: input + output,
+            codex_rollout_budget_units: None,
         }
     }
 
@@ -7293,8 +7163,12 @@ mod tests {
         let first = issue1577_usage(
             /*input*/ 4_000, /*cached*/ 1_000, /*output*/ 200, /*reasoning*/ 50,
         );
-        let mut info = TokenUsageInfo::new_or_append(&None, &Some(first.clone()), Some(128_000))
-            .expect("first report creates the info");
+        let mut info = TokenUsageInfo::new_or_append(
+            &None,
+            &first,
+            /*includes_reasoning*/ true,
+            Some(128_000),
+        );
 
         info.fill_to_context_window(/*context_window*/ 128_000);
 
@@ -7312,6 +7186,7 @@ mod tests {
                     ..TokenUsage::default()
                 },
                 model_context_window: Some(128_000),
+                last_usage_includes_reasoning: None,
             }
         );
 
@@ -7319,7 +7194,12 @@ mod tests {
         let second = issue1577_usage(
             /*input*/ 300, /*cached*/ 100, /*output*/ 40, /*reasoning*/ 10,
         );
-        info.append_last_usage(&second);
+        info = TokenUsageInfo::new_or_append(
+            &Some(info),
+            &second,
+            /*includes_reasoning*/ true,
+            /*model_context_window*/ None,
+        );
         assert_eq!(
             info.total_token_usage,
             TokenUsage {
@@ -7329,6 +7209,7 @@ mod tests {
                 output_tokens: 240,
                 reasoning_output_tokens: 60,
                 total_tokens: 128_000 + 340,
+                codex_rollout_budget_units: None,
             }
         );
         assert_eq!(info.last_token_usage, second);
@@ -7356,6 +7237,7 @@ mod tests {
                     ..TokenUsage::default()
                 },
                 model_context_window: Some(64_000),
+                last_usage_includes_reasoning: None,
             }
         );
     }

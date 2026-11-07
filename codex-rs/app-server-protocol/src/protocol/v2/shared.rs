@@ -132,7 +132,6 @@ pub enum CodexErrorInfo {
     Other,
 }
 
-<<<<<<< HEAD
 impl CodexErrorInfo {
     /// Whether the provider rejected the request's credential (HTTP 401).
     pub fn is_credential_rejection(&self) -> bool {
@@ -152,8 +151,9 @@ impl CodexErrorInfo {
                     http_status_code: Some(401)
                 }
         )
-||||||| 413492cd6c
-=======
+    }
+}
+
 fn serialize_other_codex_error_info<S>(serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
@@ -170,7 +170,6 @@ where
         _ => Err(serde::de::Error::custom(
             "expected an error string or object",
         )),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 

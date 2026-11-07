@@ -33,7 +33,6 @@ fn generated_and_identical_generic_globs_survive_profile_transport_and_merging()
     let decoded: PermissionProfile = serde_json::from_slice(&wire).unwrap();
     let transported = decoded
         .file_system_sandbox_policy()
-        .materialize_project_roots_with_cwd(root.as_path())
         .materialize_project_roots_with_workspace_roots(std::slice::from_ref(&root));
     let scans = transported.get_unreadable_glob_scans_with_cwd(root.as_path());
     assert_eq!(scans.len(), 2);
@@ -48,7 +47,8 @@ fn generated_and_identical_generic_globs_survive_profile_transport_and_merging()
 #[test]
 fn an_ordinary_glob_defaults_to_no_scan_hint_and_stays_wire_compatible() {
     let wire = serde_json::json!({"type": "glob_pattern", "pattern": "**/*.sqlite*"});
-    let path: FileSystemPath = serde_json::from_value(wire.clone()).unwrap();
+    let raw: super::super::RawFileSystemPath = serde_json::from_value(wire.clone()).unwrap();
+    let path = FileSystemPath::try_from(raw).unwrap();
     assert_eq!(
         path,
         FileSystemPath::GlobPattern {
@@ -56,7 +56,8 @@ fn an_ordinary_glob_defaults_to_no_scan_hint_and_stays_wire_compatible() {
             scan: None
         }
     );
-    assert_eq!(serde_json::to_value(path).unwrap(), wire);
+    let raw = super::super::RawFileSystemPath::try_from(path).unwrap();
+    assert_eq!(serde_json::to_value(raw).unwrap(), wire);
 }
 
 #[test]

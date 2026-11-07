@@ -33,12 +33,8 @@ use crate::ResponseItemId;
 use crate::mcp::CallToolResult;
 use codex_utils_path_uri::PathUri;
 
-<<<<<<< HEAD
-mod context_fragment_sources;
-||||||| 413492cd6c
-=======
 mod configuration_update;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+mod context_fragment_sources;
 mod executed_tool_calls;
 mod producer;
 
@@ -1004,14 +1000,10 @@ pub enum MessagePhase {
 ///
 /// Responses API strongly types this payload. Do not modify it without first getting API
 /// approval and making the corresponding Responses API change.
-<<<<<<< HEAD
 // Exception: local-only `context_fragment_sources` and `producer`, removed by request
 // serialization before any provider call. Kept as a plain comment so generated app-server
 // schemas do not change.
-||||||| 413492cd6c
-=======
 #[serde_as]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, JsonSchema, TS)]
 pub struct InternalChatMessageMetadataPassthrough {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1046,7 +1038,14 @@ pub struct InternalChatMessageMetadataPassthrough {
     #[schemars(skip)]
     #[ts(skip)]
     pub executed_tool_calls: Option<Vec<ExecutedToolCall>>,
-<<<<<<< HEAD
+    /// Whether the host recorded the complete ordered call inventory without losing calls or names.
+    /// Recorded arguments may be truncated independently of this claim.
+    /// For a direct tool output this covers its single invocation; with `cell_id`, it covers
+    /// the Code Mode cell across its outputs. Neither case describes tool success.
+    #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
+    #[schemars(skip)]
+    #[ts(skip)]
+    pub tool_calls_complete: Option<bool>,
     /// Local provenance of a message's contextual fragments, aligned by index with `content`.
     ///
     /// Each entry names the producer of the content item at the same index (for example the
@@ -1077,17 +1076,6 @@ pub struct ResponseItemMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub source_call_id: Option<String>,
-||||||| 413492cd6c
-=======
-    /// Whether the host recorded the complete ordered call inventory without losing calls or names.
-    /// Recorded arguments may be truncated independently of this claim.
-    /// For a direct tool output this covers its single invocation; with `cell_id`, it covers
-    /// the Code Mode cell across its outputs. Neither case describes tool success.
-    #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
-    #[schemars(skip)]
-    #[ts(skip)]
-    pub tool_calls_complete: Option<bool>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl InternalChatMessageMetadataPassthrough {

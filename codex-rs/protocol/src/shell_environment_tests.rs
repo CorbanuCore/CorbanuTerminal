@@ -1,7 +1,10 @@
-<<<<<<< HEAD
+use std::collections::HashMap;
+use std::process::Command;
+
+use pretty_assertions::assert_eq;
+
 use super::*;
 use crate::secretless_launch;
-use pretty_assertions::assert_eq;
 
 const CHILD_ENV: &str = "CODEX_PROTOCOL_KEYRING_ISOLATION_CHILD";
 
@@ -85,14 +88,7 @@ fn keyring_isolation_exemption_is_exact() {
         populate_env(vars, &policy, /*thread_id*/ None),
         HashMap::new()
     );
-||||||| 413492cd6c
-=======
-use std::collections::HashMap;
-use std::process::Command;
-
-use pretty_assertions::assert_eq;
-
-use super::*;
+}
 
 const CHILD_MODE_ENV_VAR: &str = "CODEX_SHELL_ENVIRONMENT_SCRUBBER_TEST_MODE";
 const TEST_NAME: &str =
@@ -255,5 +251,4 @@ fn environment_command() -> Command {
 #[cfg(not(windows))]
 fn environment_command() -> Command {
     Command::new("env")
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }

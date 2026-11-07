@@ -1664,16 +1664,10 @@ where
 // convert ModelInfo to ModelPreset
 impl From<ModelInfo> for ModelPreset {
     fn from(info: ModelInfo) -> Self {
-<<<<<<< HEAD
-        let supports_personality = info.supports_personality();
         let provider_id = info
             .orchestration
             .as_ref()
             .map(|metadata| metadata.provider_id().to_string());
-||||||| 413492cd6c
-        let supports_personality = info.supports_personality();
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         ModelPreset {
             id: info.slug.clone(),
             model: info.slug.clone(),
@@ -1773,7 +1767,6 @@ mod tests {
     use serde_json::from_str;
     use serde_json::to_string;
 
-<<<<<<< HEAD
     /// DeepSeek V4.1 Flash as published: off-peak half of peak; peak 01-04 and
     /// 06-10 UTC Monday-Friday; no peak on Chinese public holidays.
     #[test]
@@ -2086,10 +2079,6 @@ mod tests {
         );
     }
 
-    fn test_model(spec: Option<ModelMessages>) -> ModelInfo {
-||||||| 413492cd6c
-    fn test_model(spec: Option<ModelMessages>) -> ModelInfo {
-=======
     #[test]
     fn legacy_shell_model_metadata_deserializes_as_unified_exec() {
         for legacy_shell_type in ["default", "local", "shell_command"] {
@@ -2106,7 +2095,6 @@ mod tests {
     }
 
     pub(super) fn test_model(spec: Option<ModelMessages>) -> ModelInfo {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         ModelInfo {
             slug: "test-model".to_string(),
             display_name: "Test Model".to_string(),

@@ -57,6 +57,7 @@ fn skipped(path: FileSystemPath, access: FileSystemAccessMode) -> FileSystemSand
 fn deny_glob(pattern: &str) -> FileSystemSandboxEntry {
     FileSystemSandboxEntry::new(
         FileSystemPath::GlobPattern {
+            scan: None,
             pattern: pattern.into(),
         },
         Deny,

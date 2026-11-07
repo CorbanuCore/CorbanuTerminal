@@ -179,19 +179,6 @@
         "model": {
           "type": "string"
         },
-<<<<<<< HEAD
-        "orchestration": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/ModelOrchestrationMetadata"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Canonical provider, capability, and billing policy used for spawned work.\n\nThis field is always present on the wire. `null` means the route is not trusted for orchestration; clients must not infer eligibility from its display name."
-||||||| 413492cd6c
-=======
         "modelSpecialty": {
           "default": null,
           "type": [
@@ -209,7 +196,17 @@
             }
           ],
           "description": "Multi-agent runtime declared by this model, when available."
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        },
+        "orchestration": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ModelOrchestrationMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Canonical provider, capability, and billing policy used for spawned work.\n\nThis field is always present on the wire. `null` means the route is not trusted for orchestration; clients must not infer eligibility from its display name."
         },
         "serviceTiers": {
           "default": [],

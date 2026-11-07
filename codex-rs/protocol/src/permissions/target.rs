@@ -33,12 +33,7 @@ impl ReadDenyMatcher {
         validate_context_paths(policy, context)?;
         let prepared =
             policy.prepare_deny_read_matcher(context, InvalidDenyReadGlobBehavior::ReturnError)?;
-        Ok(Some(Self {
-            native_cwd: None,
-            user_home_dir: None,
-            temporary_directories: Vec::new(),
-            prepared,
-        }))
+        Ok(Some(Self::from_prepared(prepared)))
     }
 }
 
@@ -65,7 +60,7 @@ impl FileSystemSandboxPolicy {
                     }
                 ) || matches!(
                     &entry.path,
-                    FileSystemPath::GlobPattern { pattern }
+                    FileSystemPath::GlobPattern { pattern, .. }
                         if pattern.starts_with(PROJECT_ROOTS_GLOB_PATTERN_PREFIX)
                 )
             })
@@ -244,7 +239,7 @@ fn validate_context_paths(
             {
                 return Err(INVALID_PATH.into());
             }
-            FileSystemPath::GlobPattern { pattern }
+            FileSystemPath::GlobPattern { pattern, .. }
                 if (pattern.starts_with("~/")
                     || convention == PathConvention::Windows && pattern.starts_with("~\\"))
                     && !context.user_home_dir.is_some_and(valid) =>
