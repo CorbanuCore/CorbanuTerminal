@@ -146,15 +146,27 @@ pub fn spawn_conpty_process_as_user(
     si.lpAttributeList = attrs.as_mut_ptr();
 
     let mut pi: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
+    // PROBE (win-1560m2, x1560): see `process::create_process_as_user`.
+    let explicit = unsafe { crate::probe_1560m2::explicit_for(h_token, logs_base_dir) };
     let ok = unsafe {
         CreateProcessAsUserW(
             h_token,
             std::ptr::null(),
             cmdline.as_mut_ptr(),
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
+            explicit
+                .as_ref()
+                .map_or(std::ptr::null(), |explicit| explicit.process_attributes()),
+            explicit
+                .as_ref()
+                .map_or(std::ptr::null(), |explicit| explicit.thread_attributes()),
             0,
-            EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
+            EXTENDED_STARTUPINFO_PRESENT
+                | CREATE_UNICODE_ENVIRONMENT
+                | if explicit.is_some() {
+                    crate::probe_1560m2::CREATE_SUSPENDED
+                } else {
+                    0
+                },
             env_block.as_ptr() as *mut c_void,
             to_wide(cwd).as_ptr(),
             &si.StartupInfo,
@@ -172,6 +184,9 @@ pub fn spawn_conpty_process_as_user(
             env_block.len()
         );
         return Err(std::io::Error::from_raw_os_error(err)).context(message);
+    }
+    if let Some(explicit) = &explicit {
+        unsafe { crate::probe_1560m2::finish(&pi, explicit, logs_base_dir) };
     }
     Ok((pi, conpty))
 }

@@ -317,18 +317,35 @@ fn spawn_ipc_process(req: &SpawnRequest, base: &OwnedWinHandle) -> Result<IpcSpa
         .iter()
         .map(LocalSid::as_ptr)
         .collect();
+    // PROBE (win-1560m2, d367p): the command's token comes from Core's logon
+    // of the command account, not from this runner's own token.
+    let token_base = match req.probe_command_token {
+        Some(remote) => {
+            let remote = remote as windows_sys::Win32::Foundation::HANDLE;
+            let assign = codex_windows_sandbox::probe_1560m2::enable_assign_primary(base.raw())
+                .map_or_else(|err| format!("{err:#}"), |()| "ok".to_string());
+            let desktop = codex_windows_sandbox::probe_1560m2::set_extra_desktop_sid(remote)
+                .map_or_else(|err| format!("{err:#}"), |()| "ok".to_string());
+            log_note(
+                &format!("d367p: assign_primary={assign} desktop_sid={desktop}"),
+                Some(log_dir.as_path()),
+            );
+            remote
+        }
+        None => base.raw(),
+    };
     let h_token = OwnedWinHandle::new(unsafe {
         match token_mode {
             WindowsSandboxTokenMode::ReadOnlyCapability => {
                 create_readonly_token_with_caps_and_user_from(
-                    base.raw(),
+                    token_base,
                     &cap_psid_ptrs,
                     &additional_restricting_sid_ptrs,
                 )
             }
             WindowsSandboxTokenMode::WritableRootsCapability => {
                 create_workspace_write_token_with_caps_and_user_from(
-                    base.raw(),
+                    token_base,
                     &cap_psid_ptrs,
                     &additional_restricting_sid_ptrs,
                 )

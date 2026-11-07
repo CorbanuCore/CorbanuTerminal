@@ -74,6 +74,10 @@ pub struct SpawnRequest {
     pub stdin_open: bool,
     #[serde(default)]
     pub use_private_desktop: bool,
+    /// PROBE (win-1560m2, d367p): a handle, in the runner, to the logon token
+    /// of the account the command runs as.
+    #[serde(default)]
+    pub probe_command_token: Option<u64>,
 }
 
 /// Ack from runner after it spawns the child process.
@@ -236,6 +240,7 @@ mod tests {
                     tty: false,
                     stdin_open: false,
                     use_private_desktop: false,
+                    probe_command_token: None,
                 }),
             },
         };

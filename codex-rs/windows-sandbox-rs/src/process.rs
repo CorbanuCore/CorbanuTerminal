@@ -162,13 +162,27 @@ pub unsafe fn create_process_as_user(
     }
     si.lpAttributeList = attrs.as_mut_ptr();
 
-    let creation_flags = CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT | console_flags;
+    // PROBE (win-1560m2, x1560): explicit process/thread DACLs, suspended
+    // until the token has one too.
+    let explicit = crate::probe_1560m2::explicit_for(h_token, logs_base_dir);
+    let creation_flags = CREATE_UNICODE_ENVIRONMENT
+        | EXTENDED_STARTUPINFO_PRESENT
+        | console_flags
+        | if explicit.is_some() {
+            crate::probe_1560m2::CREATE_SUSPENDED
+        } else {
+            0
+        };
     let ok = CreateProcessAsUserW(
         h_token,
         std::ptr::null(),
         cmdline.as_mut_ptr(),
-        std::ptr::null_mut(),
-        std::ptr::null_mut(),
+        explicit
+            .as_ref()
+            .map_or(std::ptr::null(), |explicit| explicit.process_attributes()),
+        explicit
+            .as_ref()
+            .map_or(std::ptr::null(), |explicit| explicit.thread_attributes()),
         1,
         creation_flags,
         env_block.as_ptr() as *mut c_void,
@@ -190,6 +204,9 @@ pub unsafe fn create_process_as_user(
         );
         logging::debug_log(&msg, logs_base_dir);
         return Err(std::io::Error::from_raw_os_error(err)).context(msg);
+    }
+    if let Some(explicit) = &explicit {
+        crate::probe_1560m2::finish(&pi, explicit, logs_base_dir);
     }
 
     Ok(CreatedProcess {

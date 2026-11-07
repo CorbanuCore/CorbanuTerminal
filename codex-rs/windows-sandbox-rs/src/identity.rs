@@ -119,6 +119,18 @@ fn decode_password(record: &SandboxUserRecord) -> Result<String> {
     Ok(pwd)
 }
 
+/// PROBE (win-1560m2, d367p): the separate runner account setup made.
+pub(crate) fn probe_runner_creds(codex_home: &Path) -> Result<SandboxCreds> {
+    let users = load_users(codex_home)?.context("d367p: no sandbox users file")?;
+    let record = users
+        .probe_runner
+        .context("d367p: setup recorded no runner account; rerun setup")?;
+    Ok(SandboxCreds {
+        password: decode_password(&record)?,
+        username: record.username,
+    })
+}
+
 fn select_identity(
     network_identity: SandboxNetworkIdentity,
     codex_home: &Path,

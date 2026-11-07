@@ -82,13 +82,67 @@ pub fn provision_sandbox_users(
     let online_password = random_password();
     ensure_sandbox_user(offline_username, &offline_password, log)?;
     ensure_sandbox_user(online_username, &online_password, log)?;
+    // PROBE (win-1560m2, d367p): the runner's own account, which may start a
+    // process with a token it did not derive from its own.
+    let runner_password = random_password();
+    let runner = if codex_windows_sandbox::probe_1560m2::d367p() {
+        let name = codex_windows_sandbox::probe_1560m2::RUNNER_USERNAME;
+        ensure_sandbox_user(name, &runner_password, log)?;
+        let sid = resolve_sid(name)?;
+        let granted = grant_account_right(&sid, "SeAssignPrimaryTokenPrivilege");
+        super::log_line(log, &format!("d367p: runner account {name}: {granted:?}"))?;
+        granted?;
+        Some((name, runner_password.as_str()))
+    } else {
+        None
+    };
     write_secrets(
         codex_home,
         offline_username,
         &offline_password,
         online_username,
         &online_password,
+        runner,
     )?;
+    Ok(())
+}
+
+/// PROBE (win-1560m2, d367p): `LsaAddAccountRights(sid, right)`.
+fn grant_account_right(sid: &[u8], right: &str) -> Result<()> {
+    use windows_sys::Win32::Security::Authentication::Identity::LSA_OBJECT_ATTRIBUTES;
+    use windows_sys::Win32::Security::Authentication::Identity::LSA_UNICODE_STRING;
+    use windows_sys::Win32::Security::Authentication::Identity::LsaAddAccountRights;
+    use windows_sys::Win32::Security::Authentication::Identity::LsaClose;
+    use windows_sys::Win32::Security::Authentication::Identity::LsaNtStatusToWinError;
+    use windows_sys::Win32::Security::Authentication::Identity::LsaOpenPolicy;
+    use windows_sys::Win32::Security::Authentication::Identity::POLICY_CREATE_ACCOUNT;
+    use windows_sys::Win32::Security::Authentication::Identity::POLICY_LOOKUP_NAMES;
+    let mut name: Vec<u16> = right.encode_utf16().collect();
+    // SAFETY: zeroed POD with its size set; the policy handle is closed below.
+    unsafe {
+        let mut attributes: LSA_OBJECT_ATTRIBUTES = std::mem::zeroed();
+        attributes.Length = std::mem::size_of::<LSA_OBJECT_ATTRIBUTES>() as u32;
+        let mut policy = 0;
+        let status = LsaOpenPolicy(
+            std::ptr::null(),
+            &attributes,
+            (POLICY_CREATE_ACCOUNT | POLICY_LOOKUP_NAMES) as u32,
+            &mut policy,
+        );
+        if status != 0 {
+            anyhow::bail!("LsaOpenPolicy failed: {}", LsaNtStatusToWinError(status));
+        }
+        let rights = LSA_UNICODE_STRING {
+            Length: (name.len() * 2) as u16,
+            MaximumLength: (name.len() * 2) as u16,
+            Buffer: name.as_mut_ptr(),
+        };
+        let status = LsaAddAccountRights(policy, sid.as_ptr() as *mut c_void, &rights, 1);
+        LsaClose(policy);
+        if status != 0 {
+            anyhow::bail!("LsaAddAccountRights failed: {}", LsaNtStatusToWinError(status));
+        }
+    }
     Ok(())
 }
 
@@ -388,6 +442,8 @@ struct SandboxUsersFile {
     version: u32,
     offline: SandboxUserRecord,
     online: SandboxUserRecord,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    probe_runner: Option<SandboxUserRecord>,
 }
 
 #[derive(Serialize)]
@@ -408,6 +464,7 @@ fn write_secrets(
     offline_pwd: &str,
     online_user: &str,
     online_pwd: &str,
+    runner: Option<(&str, &str)>,
 ) -> Result<()> {
     let secrets_dir = sandbox_secrets_dir(codex_home);
     std::fs::create_dir_all(&secrets_dir).map_err(|err| {
@@ -440,6 +497,15 @@ fn write_secrets(
         online: SandboxUserRecord {
             username: online_user.to_string(),
             password: BASE64.encode(online_blob),
+        },
+        probe_runner: match runner {
+            Some((user, pwd)) => Some(SandboxUserRecord {
+                username: user.to_string(),
+                password: BASE64.encode(dpapi_protect(pwd.as_bytes()).map_err(|err| {
+                    anyhow::anyhow!("dpapi protect failed for the runner: {err}")
+                })?),
+            }),
+            None => None,
         },
     };
     let users_path = secrets_dir.join("sandbox_users.json");

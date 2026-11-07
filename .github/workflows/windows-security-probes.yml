@@ -1,12 +1,12 @@
 name: windows-security-probes
 
-# win-1560m: D367/D368 compatibility probes only (test branch, never merged).
+# win-1560m/win-1560m2: #1721 (a′) and #1560 explicit-DACL compatibility probes only (test branch, never merged).
 on:
   workflow_dispatch:
     inputs:
       variants:
         description: JSON list of probe variants
-        default: '["base", "d368", "d367a", "both"]'
+        default: '["base", "d367p", "x1560", "px"]'
       filter:
         description: Test name filters
         default: 'sec_win_1648_ command_identity::legacy_ probe_1560m_'

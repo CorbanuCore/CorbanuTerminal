@@ -455,6 +455,9 @@ pub struct SandboxUsersFile {
     pub version: u32,
     pub offline: SandboxUserRecord,
     pub online: SandboxUserRecord,
+    /// PROBE (win-1560m2, d367p): the runner's own account.
+    #[serde(default)]
+    pub probe_runner: Option<SandboxUserRecord>,
 }
 
 impl SandboxUsersFile {

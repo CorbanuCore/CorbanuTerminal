@@ -228,6 +228,7 @@ mod windows_impl {
                 tty: false,
                 stdin_open: false,
                 use_private_desktop,
+                probe_command_token: None,
             };
             let transport = retry_runner_spawn_once(
                 sandbox_creds,

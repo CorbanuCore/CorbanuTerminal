@@ -88,6 +88,8 @@ mod path_normalization;
 #[cfg(target_os = "windows")]
 mod process;
 #[cfg(target_os = "windows")]
+pub mod probe_1560m2;
+#[cfg(target_os = "windows")]
 mod resolved_permissions;
 #[cfg(target_os = "windows")]
 mod token;

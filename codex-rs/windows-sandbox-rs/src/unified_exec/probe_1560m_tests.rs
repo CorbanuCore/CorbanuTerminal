@@ -810,12 +810,22 @@ pub(crate) fn thread_borrow_report(pid: u32, path: &Path) -> String {
             }
         }
     };
-    let Some((thread, _)) = threads.first().copied() else {
+    let Some((first, _)) = threads.first().copied() else {
         return format!("own_write={own} threads=0");
     };
+    // win-1560m2: every thread, not just the first (the main thread), which
+    // x1560 gives an explicit DACL; later threads take the default DACL.
+    let openable: Vec<u32> = threads
+        .iter()
+        .map(|(thread, _)| *thread)
+        .filter(|thread| open(*thread, 0x0200) == "ok")
+        .collect();
+    let thread = openable.first().copied().unwrap_or(first);
     let mut parts = vec![
         format!("own_write={own}"),
         format!("threads={}", threads.len()),
+        format!("direct_impersonation_threads={}", openable.len()),
+        format!("main_thread_direct={}", open(first, 0x0200)),
         format!("direct_impersonation={}", open(thread, 0x0200)),
         format!("impersonate={}", open(thread, 0x0100)),
         format!("set_thread_token={}", open(thread, 0x0080)),
@@ -933,6 +943,81 @@ fn thread_borrow(backend: Backend, codex_home: &Path) {
         closed,
         &format!("wrote={} {line}", target.exists()),
     );
+}
+
+/// win-1560m2: the env var that makes the holding command hold in a child.
+pub(crate) const HOLD_CHILD_ENV: &str = "CODEX_W1560M2_HOLD_CHILD";
+
+/// win-1560m2: token borrowing and the thread route against a child the
+/// holding command started (x1560 gives only the command's own first
+/// process explicit DACLs).
+fn child_borrow(backend: Backend, codex_home: &Path) {
+    // SAFETY: CI runs these tests one per process (`--exact`, one thread).
+    unsafe { std::env::set_var(HOLD_CHILD_ENV, "1") };
+    for (case, mode) in [
+        ("child token borrow closed", "borrow"),
+        ("child thread impersonation borrow closed", "thread_borrow"),
+    ] {
+        let holder_root = user_owned_test_root();
+        let root = user_owned_test_root();
+        let target = holder_root.path().join("child-borrowed.txt");
+        let runtime = current_thread_runtime();
+        let profile = PermissionProfile::workspace_write();
+        let probe = async |holder_pid: u32| {
+            // SAFETY: as above; the probe itself must not hold in a child.
+            unsafe { std::env::remove_var(HOLD_CHILD_ENV) };
+            let result = run_in(
+                backend,
+                &profile,
+                root.path(),
+                codex_home,
+                probe_argv(PROBE_ENTRY),
+                &[
+                    (PROBE_ENV, mode.to_string()),
+                    (TARGET_ENV, holder_pid.to_string()),
+                    (FILE_ENV, target.display().to_string()),
+                ],
+                false,
+            )
+            .await;
+            // SAFETY: as above.
+            unsafe { std::env::set_var(HOLD_CHILD_ENV, "1") };
+            result
+        };
+        let (stdout, code) = match backend {
+            Backend::Legacy => runtime.block_on(with_holder(holder_root.path(), codex_home, probe)),
+            Backend::Elevated => {
+                runtime.block_on(with_elevated_holder(holder_root.path(), codex_home, probe))
+            }
+        };
+        let line = probe_line(&stdout).unwrap_or_else(|| format!("no line exit={code} {stdout}"));
+        let closed = !target.exists() && !line.contains("create_process=ok");
+        report(
+            backend,
+            case,
+            closed,
+            &format!("wrote={} {line}", target.exists()),
+        );
+    }
+    // SAFETY: as above.
+    unsafe { std::env::remove_var(HOLD_CHILD_ENV) };
+}
+
+#[test]
+fn probe_1560m_legacy_child_borrow() {
+    let _guard = legacy_process_test_guard();
+    let codex_home = sandbox_home("w1560m-legacy-child");
+    child_borrow(Backend::Legacy, codex_home.path());
+}
+
+#[test]
+fn probe_1560m_elevated_child_borrow() {
+    let Some(codex_home) = elevated_home("w1560m-elevated-child") else {
+        return;
+    };
+    let _guard = legacy_process_test_guard();
+    child_borrow(Backend::Elevated, codex_home.path());
+    record_setup(codex_home.path());
 }
 
 #[test]

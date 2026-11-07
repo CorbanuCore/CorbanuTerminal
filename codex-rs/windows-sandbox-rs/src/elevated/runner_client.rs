@@ -299,8 +299,17 @@ pub(crate) fn spawn_runner_transport(
     cwd: &Path,
     sandbox_creds: &SandboxCreds,
     log_dir: Option<&Path>,
-    spawn_request: SpawnRequest,
+    mut spawn_request: SpawnRequest,
 ) -> Result<RunnerTransport> {
+    // PROBE (win-1560m2, d367p): the runner runs as its own account; the
+    // command, as `sandbox_creds`.
+    let command_creds = sandbox_creds;
+    let runner_creds = if crate::probe_1560m2::d367p() {
+        Some(crate::identity::probe_runner_creds(codex_home)?)
+    } else {
+        None
+    };
+    let sandbox_creds = runner_creds.as_ref().unwrap_or(command_creds);
     let (pipe_in_name, pipe_out_name) = pipe_pair();
     let h_pipe_in =
         create_named_pipe(&pipe_in_name, PIPE_ACCESS_OUTBOUND, &sandbox_creds.username)?;
@@ -400,6 +409,26 @@ pub(crate) fn spawn_runner_transport(
         pipe_write: unsafe { File::from_raw_handle(h_pipe_in as _) },
         pipe_read: unsafe { File::from_raw_handle(h_pipe_out as _) },
     };
+    if runner_creds.is_some() {
+        match crate::probe_1560m2::command_token_for_runner(
+            &command_creds.username,
+            &command_creds.password,
+            runner_process,
+            log_dir,
+        ) {
+            Ok(remote) => spawn_request.probe_command_token = Some(remote),
+            Err(err) => {
+                unsafe {
+                    if runner_process != 0 {
+                        let _ = TerminateProcess(runner_process, 1);
+                        CloseHandle(runner_process);
+                    }
+                }
+                drop(transport);
+                return Err(err);
+            }
+        }
+    }
     let startup_result = (|| -> Result<SpawnReady> {
         // Keep the runner process HANDLE alive until the *entire* startup handshake finishes.
         // That way, a later `send_spawn_request` or `spawn_ready` failure can still terminate the

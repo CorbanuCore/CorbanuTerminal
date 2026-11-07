@@ -346,6 +346,21 @@ pub fn restrict_current_token_access() -> Result<()> {
     }
 }
 
+/// PROBE (win-1560m2).
+pub(crate) unsafe fn well_known_sid_bytes(kind: i32) -> Result<Vec<u8>> {
+    well_known_sid(kind)
+}
+
+/// PROBE (win-1560m2).
+pub(crate) unsafe fn acl_from_grants_pub(grants: &[(*mut c_void, u32)]) -> Result<*mut ACL> {
+    acl_from_grants(grants)
+}
+
+/// PROBE (win-1560m2).
+pub(crate) unsafe fn enable_single_privilege_pub(h_token: HANDLE, name: &str) -> Result<()> {
+    enable_single_privilege(h_token, name)
+}
+
 pub unsafe fn world_sid() -> Result<Vec<u8>> {
     well_known_sid(WIN_WORLD_SID)
 }
@@ -892,6 +907,24 @@ unsafe fn create_token(
     if let Err(err) = dacl {
         CloseHandle(new_token);
         return Err(err);
+    }
+    // PROBE (win-1560m2, x1560): remember which SIDs this command's objects grant.
+    match default_dacl {
+        DefaultDacl::Legacy { psid_command } => {
+            if let Ok(mut user) = get_user_sid_bytes(base_token) {
+                crate::probe_1560m2::register_command_token(
+                    new_token,
+                    psid_command,
+                    user.as_mut_ptr() as *mut c_void,
+                );
+            }
+        }
+        DefaultDacl::Elevated {
+            psid_group,
+            psid_command,
+            ..
+        } => crate::probe_1560m2::register_command_token(new_token, psid_command, psid_group),
+        DefaultDacl::Shared => {}
     }
 
     if let Err(err) = enable_single_privilege(new_token, "SeChangeNotifyPrivilege") {

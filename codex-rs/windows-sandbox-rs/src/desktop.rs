@@ -206,18 +206,27 @@ unsafe fn grant_desktop_access(handle: isize, logs_base_dir: Option<&Path>) -> R
     let mut logon_sid = get_logon_sid_bytes(token)?;
     CloseHandle(token);
 
-    let entries = [EXPLICIT_ACCESS_W {
-        grfAccessPermissions: DESKTOP_ALL_ACCESS,
-        grfAccessMode: GRANT_ACCESS,
-        grfInheritance: 0,
-        Trustee: TRUSTEE_W {
-            pMultipleTrustee: ptr::null_mut(),
-            MultipleTrusteeOperation: 0,
-            TrusteeForm: TRUSTEE_IS_SID,
-            TrusteeType: TRUSTEE_IS_UNKNOWN,
-            ptstrName: logon_sid.as_mut_ptr() as *mut c_void as *mut u16,
-        },
-    }];
+    // PROBE (win-1560m2, d367p): the command's own logon too.
+    let mut extra_sid = crate::probe_1560m2::extra_desktop_sid();
+    let mut sids = vec![logon_sid.as_mut_ptr()];
+    if let Some(extra) = extra_sid.as_mut() {
+        sids.push(extra.as_mut_ptr());
+    }
+    let entries: Vec<EXPLICIT_ACCESS_W> = sids
+        .into_iter()
+        .map(|sid| EXPLICIT_ACCESS_W {
+            grfAccessPermissions: DESKTOP_ALL_ACCESS,
+            grfAccessMode: GRANT_ACCESS,
+            grfInheritance: 0,
+            Trustee: TRUSTEE_W {
+                pMultipleTrustee: ptr::null_mut(),
+                MultipleTrusteeOperation: 0,
+                TrusteeForm: TRUSTEE_IS_SID,
+                TrusteeType: TRUSTEE_IS_UNKNOWN,
+                ptstrName: sid as *mut c_void as *mut u16,
+            },
+        })
+        .collect();
 
     let mut updated_dacl = ptr::null_mut();
     let set_entries_code = SetEntriesInAclW(

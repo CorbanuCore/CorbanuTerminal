@@ -274,6 +274,18 @@ fn command_identity_hold_entry() {
     let Some(dir) = std::env::var_os(HOLD_ENV).map(PathBuf::from) else {
         return;
     };
+    // PROBE (win-1560m2): hold in a child of this command instead, so the
+    // probe targets a process the command started itself.
+    if std::env::var_os(elevated::probe_1560m::HOLD_CHILD_ENV).is_some() {
+        let mut child = std::process::Command::new(std::env::current_exe().expect("test exe"))
+            .args(std::env::args().skip(1))
+            .env_remove(elevated::probe_1560m::HOLD_CHILD_ENV)
+            .spawn()
+            .expect("spawn holding child");
+        wait_for_path(&dir.join("hold.release"), Duration::from_secs(/*secs*/ 60));
+        let _ = child.wait();
+        return;
+    }
     fs::write(dir.join("hold.pid"), std::process::id().to_string()).expect("write hold pid");
     wait_for_path(&dir.join("hold.release"), Duration::from_secs(/*secs*/ 60));
 }
