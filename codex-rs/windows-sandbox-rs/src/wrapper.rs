@@ -103,7 +103,10 @@ pub fn create_windows_sandbox_command_args_for_permission_profile(
             .iter()
             .map(AbsolutePathBuf::to_path_buf)
             .collect::<Vec<_>>();
-        if windows_sandbox_level == WindowsSandboxLevel::Elevated {
+        // D355: a proxy-enforced session runs on the elevated backend (see
+        // `spawn_windows_sandbox_session_with_desktop`), so it gets that
+        // backend's desktop.
+        if proxy_enforced || windows_sandbox_level == WindowsSandboxLevel::Elevated {
             let common = prepare_spawn_context_common(
                 permission_profile,
                 workspace_roots,
