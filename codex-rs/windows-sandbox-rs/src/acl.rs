@@ -79,7 +79,6 @@ use windows_sys::Win32::Storage::FileSystem::OPEN_EXISTING;
 use windows_sys::Win32::Storage::FileSystem::READ_CONTROL;
 use windows_sys::Win32::Storage::FileSystem::WRITE_DAC;
 use windows_sys::Win32::Storage::FileSystem::VOLUME_NAME_NONE;
-use windows_sys::Win32::Storage::FileSystem::WRITE_DAC;
 use windows_sys::Win32::Storage::FileSystem::WRITE_OWNER;
 use windows_sys::Win32::System::SystemServices::MAXIMUM_ALLOWED;
 const SE_KERNEL_OBJECT: u32 = 6;
@@ -569,16 +568,9 @@ unsafe fn dacl_has_new_file_read_deny_for_sid(p_dacl: *mut ACL, psid: *mut c_voi
     false
 }
 
-pub unsafe fn dacl_has_read_deny_for_sid(p_dacl: *mut ACL, psid: *mut c_void) -> bool {
-    dacl_has_deny_mask(
-        p_dacl,
-        DenyAceScope::EffectiveForSid(psid),
-        FILE_GENERIC_READ | GENERIC_READ_MASK,
-    )
-}
-
+/// Upstream also matched one SID's effective denies; Corbanu's read check
+/// counts only its own entry (#304), so only `Any` remains.
 enum DenyAceScope {
-    EffectiveForSid(*mut c_void),
     Any,
 }
 
@@ -612,12 +604,7 @@ unsafe fn dacl_has_deny_mask(p_dacl: *mut ACL, scope: DenyAceScope, deny_mask: u
             continue; // ACCESS_DENIED_ACE_TYPE
         }
         let ace = &*(p_ace as *const ACCESS_DENIED_ACE);
-        if let DenyAceScope::EffectiveForSid(psid) = scope
-            && ((hdr.AceFlags & INHERIT_ONLY_ACE) != 0
-                || EqualSid(std::ptr::addr_of!(ace.SidStart) as *mut c_void, psid) == 0)
-        {
-            continue;
-        }
+        let DenyAceScope::Any = scope;
         let mut denied_mask = ace.Mask;
         MapGenericMask(&mut denied_mask, &mapping);
         if ((ace.Mask | denied_mask) & deny_mask) != 0 {
@@ -1248,7 +1235,7 @@ pub unsafe fn add_deny_read_ace_to_object(
         std::ptr::null_mut(),
         OPEN_EXISTING,
         FILE_FLAG_BACKUP_SEMANTICS,
-        0,
+        std::ptr::null_mut(),
     );
     if raw == INVALID_HANDLE_VALUE {
         return Err(std::io::Error::last_os_error())
@@ -1487,7 +1474,7 @@ unsafe fn open_exact(path: &Path, access: u32) -> Result<ExactHandle> {
         std::ptr::null_mut(),
         OPEN_EXISTING,
         FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
-        0,
+        std::ptr::null_mut(),
     );
     if raw == INVALID_HANDLE_VALUE {
         return Err(std::io::Error::last_os_error())

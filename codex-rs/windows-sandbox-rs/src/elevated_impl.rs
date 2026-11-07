@@ -225,7 +225,7 @@ mod windows_impl {
                     read_roots: read_roots_override.map(<[PathBuf]>::to_vec),
                     read_roots_include_platform_defaults,
                     write_roots: write_roots_override.map(<[PathBuf]>::to_vec),
-                    deny_read_paths: Some(deny_read_paths_override.clone()),
+                    deny_read: Some(deny_read_override.clone()),
                     deny_write_paths: Some(deny_write_paths_override.clone()),
                 },
                 &cap_sids,

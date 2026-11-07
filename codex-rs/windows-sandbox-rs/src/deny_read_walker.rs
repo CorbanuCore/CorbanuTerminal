@@ -17,6 +17,8 @@ use std::path::PathBuf;
 
 #[derive(Clone, Copy)]
 pub(super) enum DirectoryScanMode {
+    // Upstream's mode after a ripgrep file scan; Corbanu walks every file.
+    #[allow(dead_code)]
     DirectoriesOnly,
     IncludeAllFiles,
 }

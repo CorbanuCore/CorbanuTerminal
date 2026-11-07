@@ -603,6 +603,10 @@ mod backend {
         thread: Option<JoinHandle<()>>,
     }
 
+    // SAFETY: `stop` is an event handle owned by this value; Windows handles
+    // are process-wide, so moving the owner between threads is sound.
+    unsafe impl Send for FolderWatch {}
+
     /// One folder's handle, event, buffer and OVERLAPPED. Always boxed: the
     /// system writes to the OVERLAPPED and buffer addresses of a pending
     /// read, so they never move while one is pending.
@@ -655,7 +659,7 @@ mod backend {
                     let mut ignored = 0_u32;
                     GetOverlappedResult(self.dir, &self.overlapped, &mut ignored, 1);
                 }
-                if self.event != 0 {
+                if !self.event.is_null() {
                     CloseHandle(self.event);
                 }
                 CloseHandle(self.dir);
@@ -675,7 +679,7 @@ mod backend {
                     std::ptr::null(),
                     OPEN_EXISTING,
                     FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
-                    0,
+                    std::ptr::null_mut(),
                 )
             };
             if dir == INVALID_HANDLE_VALUE {
@@ -692,10 +696,10 @@ mod backend {
                 buffer: vec![0; BUFFER_WORDS],
                 pending: false,
             });
-            if event == 0 || stop == 0 {
+            if event.is_null() || stop.is_null() {
                 // SAFETY: closes what was created.
                 unsafe {
-                    if stop != 0 {
+                    if !stop.is_null() {
                         CloseHandle(stop);
                     }
                 }
@@ -710,11 +714,13 @@ mod backend {
                 return Err(err.to_string());
             }
             let root = root.to_path_buf();
+            // Handles are process-wide: the thread gets the event by value.
+            let stop_addr = stop as usize;
             // On failure the closure, and the boxed read with it, is dropped:
             // the pending read is cancelled and waited for.
             let thread = match std::thread::Builder::new()
                 .name("corbanu-credential-folder".to_string())
-                .spawn(move || run(read, stop, &root, &tx))
+                .spawn(move || run(read, stop_addr as HANDLE, &root, &tx))
             {
                 Ok(thread) => thread,
                 Err(err) => {

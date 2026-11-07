@@ -19,7 +19,6 @@ use std::sync::OnceLock;
 use crate::allow::AllowDenyPaths;
 use crate::allow::compute_allow_paths_for_permissions;
 use crate::app_package::registered_core_requested;
-use crate::deny_read_resolver::resolve_windows_deny_read_paths;
 use crate::helper_materialization::bundled_executable_path_for_exe;
 use crate::helper_materialization::helper_bin_dir;
 use crate::identity::sandbox_setup_is_complete;

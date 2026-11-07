@@ -28,9 +28,9 @@ use anyhow::Result;
 use std::fs::File;
 use std::os::windows::io::AsRawHandle;
 use std::os::windows::io::FromRawHandle;
+use std::os::windows::io::IntoRawHandle;
 use std::os::windows::io::OwnedHandle;
 use std::path::Path;
-use std::ptr;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -46,7 +46,6 @@ use windows_sys::Win32::Foundation::ERROR_SERVICE_ALREADY_RUNNING;
 use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::System::IO::CancelSynchronousIo;
-use windows_sys::Win32::System::Pipes::PeekNamedPipe;
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 use windows_sys::Win32::System::Threading::GetCurrentThread;
 use windows_sys::Win32::System::Threading::INFINITE;
@@ -56,7 +55,6 @@ use windows_sys::Win32::System::Threading::WaitForSingleObject;
 
 const RUNNER_SPAWN_READY_TIMEOUT: Duration = Duration::from_secs(15);
 const RUNNER_PIPE_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
-const RUNNER_SPAWN_READY_POLL_INTERVAL: Duration = Duration::from_millis(5);
 const WAIT_OBJECT_0: u32 = 0;
 
 struct NonOwningHandle(HANDLE);

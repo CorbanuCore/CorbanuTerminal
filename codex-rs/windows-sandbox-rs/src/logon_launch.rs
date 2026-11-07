@@ -210,7 +210,7 @@ pub fn create_process_with_logon(
         window_access: None,
         window_access_error: None,
     };
-    if started.thread == 0 {
+    if started.thread.is_null() {
         return Ok(launched);
     }
     // Ends the process if anything below panics before it runs.
@@ -325,7 +325,7 @@ struct OwnedHandle(HANDLE);
 
 impl Drop for OwnedHandle {
     fn drop(&mut self) {
-        if self.0 != 0 {
+        if !self.0.is_null() {
             // SAFETY: owned by this value.
             unsafe { CloseHandle(self.0) };
         }
@@ -335,7 +335,7 @@ impl Drop for OwnedHandle {
 /// A pipe whose `child` end the launcher gets. Neither end is inheritable
 /// here.
 fn launcher_pipe(child_reads: bool) -> anyhow::Result<(OwnedHandle, File)> {
-    let (mut read, mut write) = (0, 0);
+    let (mut read, mut write) = (ptr::null_mut(), ptr::null_mut());
     // SAFETY: creates an anonymous pipe; both ends are owned below.
     if unsafe { CreatePipe(&mut read, &mut write, ptr::null(), 0) } == 0 {
         return Err(std::io::Error::last_os_error()).context("create launcher pipe");
@@ -384,14 +384,14 @@ fn spawn_helper(
     // launcher is started as its child.
     let holder = HandleHolder::start(launcher_exe).context("start the launcher's handle holder")?;
     let held_stdin = holder
-        .hold(child_stdin.0)
-        .context("hand a launcher pipe to the holder")?;
+        .hold(child_stdin.0 as isize)
+        .map(|held| held as HANDLE).context("hand a launcher pipe to the holder")?;
     let held_stdout = holder
-        .hold(child_stdout.0)
-        .context("hand a launcher pipe to the holder")?;
+        .hold(child_stdout.0 as isize)
+        .map(|held| held as HANDLE).context("hand a launcher pipe to the holder")?;
     drop((child_stdin, child_stdout));
     let mut attributes = ProcThreadAttributeList::new(/*attr_count*/ 2)?;
-    attributes.set_parent_process(holder.raw())?;
+    attributes.set_parent_process(holder.raw() as HANDLE)?;
     attributes.set_handle_list(vec![held_stdin, held_stdout])?;
     // SAFETY: zeroed POD with its size set, as the API requires.
     let mut startup: STARTUPINFOEXW = unsafe { std::mem::zeroed() };
@@ -401,7 +401,7 @@ fn spawn_helper(
     startup.StartupInfo.hStdInput = held_stdin;
     startup.StartupInfo.hStdOutput = held_stdout;
     // No stderr: nothing but the reply may reach the reply pipe.
-    startup.StartupInfo.hStdError = 0;
+    startup.StartupInfo.hStdError = ptr::null_mut();
     startup.lpAttributeList = attributes.as_mut_ptr();
     // Never the workspace: the launcher runs in its own directory.
     let cwd = launcher_exe.parent().map(to_wide);
@@ -489,7 +489,7 @@ fn create_process_with_logon_via_launcher(
                     anyhow::bail!("logon launcher returned a handle to another process");
                 }
                 let local_thread = match (suspended, thread) {
-                    (false, _) => OwnedHandle(0),
+                    (false, _) => OwnedHandle(ptr::null_mut()),
                     (true, 0) => {
                         // SAFETY: `local.0` is the started process, checked above.
                         unsafe { TerminateProcess(local.0, 1) };
@@ -587,7 +587,7 @@ impl WindowAccessReaper {
             /*outlive_jobs*/ true,
         )?;
         let result = (|| -> anyhow::Result<()> {
-            let mut remote: HANDLE = 0;
+            let mut remote: HANDLE = ptr::null_mut();
             // SAFETY: `runner` is a live process handle; `reaper.0` is our own
             // child, opened with full access.
             if unsafe {
@@ -712,7 +712,7 @@ pub fn run_window_access_reaper() -> anyhow::Result<()> {
 /// Duplicates `handle`, a handle value in `launcher`'s table, into this
 /// process with the same access.
 fn duplicate_from(launcher: &OwnedHandle, handle: usize) -> anyhow::Result<OwnedHandle> {
-    let mut local: HANDLE = 0;
+    let mut local: HANDLE = ptr::null_mut();
     // SAFETY: `launcher` is our own child, opened with full access; `handle`
     // is a handle in its table that it keeps open until it reads our
     // acknowledgement.
@@ -776,7 +776,7 @@ pub fn run_logon_launcher() -> anyhow::Result<()> {
             TerminateProcess(launched.process, 1);
         }
         CloseHandle(launched.process);
-        if launched.thread != 0 {
+        if !launched.thread.is_null() {
             CloseHandle(launched.thread);
         }
     }
@@ -831,11 +831,11 @@ fn create_process_with_logon_here(
     let thread = if suspended {
         info.hThread
     } else {
-        if info.hThread != 0 {
+        if !info.hThread.is_null() {
             // SAFETY: returned by the call above and not used again.
             unsafe { CloseHandle(info.hThread) };
         }
-        0
+        ptr::null_mut()
     };
     Ok(Started {
         pid: info.dwProcessId,

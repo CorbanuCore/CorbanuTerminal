@@ -115,7 +115,7 @@ async fn spawn_runner_transport_task(
                         read_roots_include_platform_defaults: request
                             .read_roots_include_platform_defaults,
                         write_roots: request.write_roots_override.clone(),
-                        deny_read_paths: Some(request.deny_read_paths_override.clone()),
+                        deny_read: Some(request.deny_read_override.clone()),
                         deny_write_paths: Some(request.deny_write_paths_override.clone()),
                     },
                     &request.spawn_request.cap_sids,

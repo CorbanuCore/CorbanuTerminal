@@ -18,6 +18,7 @@ use crate::winutil::sid_bytes_from_string;
 use crate::winutil::string_from_sid_bytes;
 use crate::winutil::to_wide;
 use anyhow::Result;
+use codex_utils_absolute_path::AbsolutePathBuf;
 use rand::Rng;
 use rand::SeedableRng;
 use rand::rngs::SmallRng;

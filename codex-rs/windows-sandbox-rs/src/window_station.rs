@@ -128,8 +128,8 @@ pub(crate) fn current_desktop_name() -> Option<String> {
     object_name(unsafe { GetThreadDesktop(GetCurrentThreadId()) })
 }
 
-fn object_name(handle: isize) -> Option<String> {
-    if handle == 0 {
+fn object_name(handle: *mut c_void) -> Option<String> {
+    if handle.is_null() {
         return None;
     }
     let mut buffer = vec![0u16; 256];
@@ -213,6 +213,7 @@ impl WindowAccess {
     /// Gives the logon SID `sid` [`DESKTOP_ACCESS`] on this process's
     /// desktop, off the interactive window station: what commands need to
     /// start on it (`sandbox_private_desktop = false`).
+    #[cfg(test)]
     pub(crate) fn grant_desktop(sid: &[u8]) -> Result<Option<Self>> {
         let Some(mut access) = Self::off_interactive_station(sid)? else {
             return Ok(None);
@@ -261,7 +262,7 @@ impl WindowAccess {
             // SAFETY: opens a named window station kept as this process's.
             unsafe {
                 let station = OpenWindowStationW(name.as_ptr(), 0, MAXIMUM_ALLOWED);
-                if station != 0 {
+                if !station.is_null() {
                     SetProcessWindowStation(station);
                 }
             }
@@ -411,7 +412,7 @@ pub fn wait_for_console_host_start(
 
 /// The logon SID of `process`'s token (a process Core started).
 pub(crate) fn process_logon_sid(process: HANDLE) -> Result<Vec<u8>> {
-    let mut token: HANDLE = 0;
+    let mut token: HANDLE = ptr::null_mut();
     // SAFETY: `process` is a live process handle; the token is closed below.
     if unsafe { OpenProcessToken(process, TOKEN_QUERY, &mut token) } == 0 {
         return Err(std::io::Error::last_os_error()).context("open the process's token");
@@ -421,17 +422,6 @@ pub(crate) fn process_logon_sid(process: HANDLE) -> Result<Vec<u8>> {
     // SAFETY: opened above.
     unsafe { CloseHandle(token) };
     sid
-}
-
-/// The logon SID of this process's token.
-pub(crate) fn current_logon_sid() -> Result<Vec<u8>> {
-    // SAFETY: the token is closed right after reading its logon SID.
-    unsafe {
-        let token = get_current_token_for_restriction()?;
-        let sid = get_logon_sid_bytes(token);
-        CloseHandle(token);
-        sid
-    }
 }
 
 /// Serializes DACL edits on window objects, in this process and, through a
@@ -621,7 +611,7 @@ fn local_app_data() -> Option<PathBuf> {
     use windows_sys::Win32::UI::Shell::SHGetKnownFolderPath;
     let mut path: *mut u16 = ptr::null_mut();
     // SAFETY: `path` receives a string the call allocates, freed below.
-    let status = unsafe { SHGetKnownFolderPath(&FOLDERID_LocalAppData, 0, 0, &mut path) };
+    let status = unsafe { SHGetKnownFolderPath(&FOLDERID_LocalAppData, 0, std::ptr::null_mut(), &mut path) };
     let result = (status == 0 && !path.is_null()).then(|| {
         // SAFETY: a NUL-terminated string from the call.
         let len = (0..).take_while(|&i| unsafe { *path.add(i) } != 0).count();
@@ -654,7 +644,7 @@ fn edit_window_object(
             OpenDesktopW(wide.as_ptr(), 0, 0, READ_CONTROL | WRITE_DAC)
         },
     };
-    if handle == 0 {
+    if handle.is_null() {
         return Err(std::io::Error::last_os_error().into());
     }
     let result = rewrite_dacl(handle, sid, remove, add);
@@ -670,7 +660,7 @@ fn edit_window_object(
 
 /// True when `handle`'s DACL has an allow entry for `sid` with all of
 /// `access`, and no deny entry for `sid` that takes any of it away.
-pub(crate) fn object_grants(handle: isize, sid: &[u8], access: u32) -> Result<bool> {
+pub(crate) fn object_grants(handle: *mut c_void, sid: &[u8], access: u32) -> Result<bool> {
     Ok(object_access(handle, sid, access)? == AccessState::Granted)
 }
 
@@ -682,7 +672,7 @@ enum AccessState {
     Denied,
 }
 
-fn object_access(handle: isize, sid: &[u8], access: u32) -> Result<AccessState> {
+fn object_access(handle: *mut c_void, sid: &[u8], access: u32) -> Result<AccessState> {
     let (dacl, descriptor) = object_dacl(handle)?;
     // SAFETY: `dacl` belongs to `descriptor`, freed below.
     let state = unsafe { dacl_access(dacl, sid, access) };
@@ -750,7 +740,7 @@ unsafe fn dacl_access(dacl: *mut ACL, sid: &[u8], access: u32) -> AccessState {
     }
 }
 
-fn object_dacl(handle: isize) -> Result<(*mut ACL, *mut c_void)> {
+fn object_dacl(handle: *mut c_void) -> Result<(*mut ACL, *mut c_void)> {
     let mut dacl: *mut ACL = ptr::null_mut();
     let mut descriptor: *mut c_void = ptr::null_mut();
     // SAFETY: reads the DACL into a descriptor the caller frees.
@@ -778,7 +768,7 @@ fn object_dacl(handle: isize) -> Result<(*mut ACL, *mut c_void)> {
 /// placed before any inherited entries. Fails, writing nothing, if a deny
 /// entry for `sid` takes away any of `add`. Returns whether the access added
 /// (if any) was kept: another writer may have replaced the DACL meanwhile.
-fn rewrite_dacl(handle: isize, sid: &[u8], remove: Option<u32>, add: Option<u32>) -> Result<bool> {
+fn rewrite_dacl(handle: *mut c_void, sid: &[u8], remove: Option<u32>, add: Option<u32>) -> Result<bool> {
     let (dacl, descriptor) = object_dacl(handle)?;
     // SAFETY: `dacl` belongs to `descriptor`, freed right after.
     let rebuilt = unsafe { rebuild_dacl(dacl, sid, remove, add) };

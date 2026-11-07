@@ -555,7 +555,7 @@ impl Handle {
             std::ptr::null_mut(),
             OPEN_EXISTING,
             flags,
-            0,
+            std::ptr::null_mut(),
         );
         if handle == INVALID_HANDLE_VALUE {
             let err = std::io::Error::last_os_error();
@@ -661,7 +661,7 @@ impl Computed {
             std::ptr::null(),
             i32::from(is_dir),
             SEF_DACL_AUTO_INHERIT | SEF_AVOID_OWNER_CHECK | SEF_AVOID_PRIVILEGE_CHECK,
-            0,
+            std::ptr::null_mut(),
             &FILE_MAPPING,
         ) == 0
         {
