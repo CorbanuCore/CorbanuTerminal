@@ -179,10 +179,15 @@ fn repairs_children_when_runtime_root_already_has_read_execute_access() {
         ensure_runtime_tree_readable(runtime.path(), sandbox_sid.as_ptr())
             .expect("repair runtimes");
         for path in [&denied_directory, &denied_child] {
-            assert!(
-                !unsafe { add_deny_read_ace(path, sandbox_sid.as_ptr()) }
-                    .expect("read denial must survive repair")
-            );
+            // Main (#304): only an object's own read deny counts as present,
+            // so this is asked of the folder; the child's deny is inherited,
+            // and the mask check below covers both.
+            if path == &denied_directory {
+                assert!(
+                    !unsafe { add_deny_read_ace(path, sandbox_sid.as_ptr()) }
+                        .expect("read denial must survive repair")
+                );
+            }
             assert!(
                 !path_mask_allows(
                     path,

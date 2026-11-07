@@ -63,6 +63,7 @@ fn pf_27_s06_d1_hardened_process_starts_a_process_as_another_user() {
             application: &cmd,
             command_line: &format!("cmd.exe /D /C exit {EXIT_CODE}"),
             cwd: &system_root,
+            logon_flags: 0,
         },
         &command_runner().expect("build codex-command-runner first"),
     )
@@ -79,13 +80,14 @@ fn pf_27_s06_d1_hardened_process_starts_a_process_as_another_user() {
     // SAFETY: `launched.process` is a live process handle owned here.
     let exit_code = unsafe {
         assert_eq!(
-            WaitForSingleObject(launched.process, /*dwmilliseconds*/ 30_000),
+            // windows-sandbox's handle is a 0.61 pointer; this test's calls use 0.52.
+            WaitForSingleObject(launched.process as _, /*dwmilliseconds*/ 30_000),
             0,
             "wait"
         );
         let mut code = 0;
-        assert_ne!(GetExitCodeProcess(launched.process, &mut code), 0);
-        CloseHandle(launched.process);
+        assert_ne!(GetExitCodeProcess(launched.process as _, &mut code), 0);
+        CloseHandle(launched.process as _);
         code
     };
     assert_eq!(exit_code, EXIT_CODE);

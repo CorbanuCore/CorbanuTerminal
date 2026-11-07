@@ -228,6 +228,23 @@ impl LaunchDesktop {
         Ok(desktop.name.clone())
     }
 
+    /// A private desktop for a command started with `h_token`, labelled Low
+    /// when the token runs at Low integrity (#158), as main's launches were.
+    pub fn prepare_for_token(
+        h_token: windows_sys::Win32::Foundation::HANDLE,
+        logs_base_dir: Option<&Path>,
+    ) -> Result<Self> {
+        let private_desktop = PrivateDesktop::create(
+            crate::integrity::token_is_low_integrity(h_token),
+            logs_base_dir,
+        )?;
+        let startup_name = to_wide(format!("{}\\{}", launch_station(), private_desktop.name));
+        Ok(Self {
+            _private_desktop: private_desktop,
+            startup_name,
+        })
+    }
+
     pub fn prepare(logs_base_dir: Option<&Path>) -> Result<Self> {
         let private_desktop = PrivateDesktop::create(/*low_integrity*/ false, logs_base_dir)?;
         let startup_name = to_wide(format!("{}\\{}", launch_station(), private_desktop.name));

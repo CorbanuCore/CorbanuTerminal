@@ -558,13 +558,11 @@ impl SandboxManager {
             }
             #[cfg(target_os = "windows")]
             SandboxType::WindowsRestrictedToken => {
-                if enforce_managed_network && windows_sandbox_level != WindowsSandboxLevel::Elevated
-                {
-                    return Err(SandboxTransformError::WindowsSandboxPreparation(
-                        "managed networking requires the elevated Windows sandbox backend"
-                            .to_string(),
-                    ));
-                }
+                // D355 (main): a managed-network session runs on the elevated
+                // backend whatever the configured level (the wrapper and the
+                // session spawner pick it), so upstream's refusal here is not
+                // taken.
+                let _ = (enforce_managed_network, windows_sandbox_level);
                 let pending = pending_sandboxed_request?;
                 (argv, None, Some(pending))
             }

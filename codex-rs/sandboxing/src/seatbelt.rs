@@ -1074,7 +1074,10 @@ fn credential_name_in_any_case(regex: &str) -> String {
 fn escape_glob_literal(text: &str) -> String {
     text.chars()
         .map(|ch| match ch {
-            '*' | '?' | '[' | '{' | '}' => format!("[{ch}]"),
+            // The glob compiler takes `\<ch>` as a literal `<ch>`; that keeps
+            // a literal (no-wildcard) spelling literal, so it still gets the
+            // subtree match, and covers `\` itself (#651-style gap).
+            '*' | '?' | '[' | ']' | '{' | '}' | '\\' => format!("\\{ch}"),
             other => other.to_string(),
         })
         .collect()
@@ -1086,7 +1089,7 @@ fn canonicalize_glob_static_prefix_for_sandbox(pattern: &str) -> Option<String> 
         .find_map(|(index, ch)| matches!(ch, '*' | '?' | '[' | ']' | '{' | '\\').then_some(index));
     let Some(first_glob_index) = first_glob_index else {
         return normalize_path_for_sandbox(Path::new(pattern))
-            .map(|path| path.to_string_lossy().to_string());
+            .map(|path| escape_glob_literal(&path.to_string_lossy()));
     };
 
     let static_prefix = &pattern[..first_glob_index];
