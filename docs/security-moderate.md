@@ -366,3 +366,5 @@ the protected-file rules both levels share.
 
 Product requirement: [Product surface](corbanu-product-spec.md#product-surface) —
 "Add strong protection without making normal agent work painful."
+
+<!-- D314 throwaway (do not merge) -->
