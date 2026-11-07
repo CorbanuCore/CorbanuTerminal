@@ -43,6 +43,7 @@ jobs:
             run --exact "$t" --include-ignored --nocapture --test-threads=1 > t.log 2>&1
             code=$?
             cat t.log
+            cat t.log >> all-admin.log
             if grep -q 'test result: ok. 1 passed' t.log; then r=pass; else r="FAIL($code)"; fi
             echo "TESTRESULT|$CORBANU_PROBE_VARIANT|admin|$t|$r" | tee -a results.txt
             grep -E 'W1560M\||d324 (race|borrow)|d259 borrow' t.log >> results.txt || true
@@ -74,7 +75,8 @@ jobs:
               & $sandbox --exact 'unified_exec::tests::command_identity::elevated::sec_win_1648_elevated_command_keeps_write_access_to_its_own_processes' --nocapture --test-threads=1 | Out-Null
               $env:CODEX_SEC_WIN_1648_REQUIRE = '1'
             }
-            $out = & $medium -Program $sandbox -Arguments @('--exact', $t, '--include-ignored', '--nocapture', '--test-threads=1')
+            $out = & $medium -Program $sandbox -TimeoutMinutes 20 -Arguments @('--exact', $t, '--include-ignored', '--nocapture', '--test-threads=1')
+            $out | Out-File -Append -Encoding utf8 all-normal.log
             $code = $LASTEXITCODE
             if ($elevatedBackend) { Remove-Item Env:CODEX_SEC_WIN_1648_REQUIRE }
             $out
@@ -99,4 +101,8 @@ jobs:
         if: always()
         with:
           name: w1560m-${{ matrix.variant }}
-          path: results.txt
+          path: |
+            results.txt
+            all-admin.log
+            all-normal.log
+            suite.log

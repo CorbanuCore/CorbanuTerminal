@@ -37,15 +37,15 @@ fn session() -> &'static str {
 }
 
 fn report(backend: Backend, case: &str, ok: bool, detail: &str) {
-    let detail: String = detail
-        .replace(['\r', '\n'], " ")
-        .chars()
-        .rev()
-        .take(900)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .collect();
+    let flat: Vec<char> = detail.replace(['\r', '\n'], " ").chars().collect();
+    // Head and tail: Python and cargo put the cause first, tools the last word.
+    let detail: String = if flat.len() > 1400 {
+        let head: String = flat[..600].iter().collect();
+        let tail: String = flat[flat.len() - 800..].iter().collect();
+        format!("{head} [...] {tail}")
+    } else {
+        flat.into_iter().collect()
+    };
     println!(
         "\nW1560M|{}|{}|{}|{case}|{}|{detail}",
         crate::token::probe_variant(),
@@ -65,6 +65,12 @@ async fn run_in(
     tty: bool,
 ) -> (String, i32) {
     let mut env_map: HashMap<String, String> = std::env::vars().collect();
+    // CI sets TEMP/TMP with forward slashes (D:/tmp); users have backslashes.
+    for key in ["TEMP", "TMP"] {
+        if let Some(value) = env_map.get_mut(key) {
+            *value = value.replace('/', "\\");
+        }
+    }
     for (key, value) in env {
         env_map.insert((*key).to_string(), value.clone());
     }
@@ -76,7 +82,7 @@ async fn run_in(
             argv,
             root,
             env_map,
-            Some(240_000),
+            Some(60_000),
             &[],
             &[],
             tty,
@@ -94,7 +100,7 @@ async fn run_in(
             env_map,
             /*proxy_enforced*/ false,
             /*network_proxy_restricting_sid*/ None,
-            Some(240_000),
+            Some(60_000),
             /*read_roots_override*/ None,
             /*read_roots_include_platform_defaults*/ true,
             /*write_roots_override*/ None,
@@ -110,7 +116,7 @@ async fn run_in(
     match spawned {
         Ok(spawned) => {
             let (stdout, code) =
-                collect_stdout_and_exit(spawned, codex_home, Duration::from_secs(/*secs*/ 300))
+                collect_stdout_and_exit(spawned, codex_home, Duration::from_secs(/*secs*/ 90))
                     .await;
             (String::from_utf8_lossy(&stdout).into_owned(), code)
         }
@@ -216,12 +222,34 @@ fn workload_cases() -> Vec<(&'static str, Vec<String>, Vec<&'static str>, bool)>
         (
             "git bash",
             vec![
-                git_bash,
+                git_bash.clone(),
                 "-lc".to_string(),
                 "echo w-bash > b.txt && cat b.txt".to_string(),
             ],
             vec!["w-bash"],
             false,
+        ),
+        (
+            "git bash (ConPTY, stderr shown)",
+            vec![
+                git_bash.clone(),
+                "-lc".to_string(),
+                "echo w-bash > b2.txt && cat b2.txt".to_string(),
+            ],
+            vec!["w-bash"],
+            true,
+        ),
+        (
+            "git bash --norc -c (ConPTY)",
+            vec![
+                git_bash,
+                "--norc".to_string(),
+                "--noprofile".to_string(),
+                "-c".to_string(),
+                "echo w-bash; id; mktemp && echo w-mktemp".to_string(),
+            ],
+            vec!["w-bash", "w-mktemp"],
+            true,
         ),
         (
             "node",
@@ -299,7 +327,8 @@ fn workload_cases() -> Vec<(&'static str, Vec<String>, Vec<&'static str>, bool)>
         (
             "%TEMP% files",
             cmd_c(
-                "echo x> %TEMP%\\w1560m.txt && type %TEMP%\\w1560m.txt \
+                "echo TEMP=%TEMP% TMP=%TMP% && echo x> %TEMP%\\w1560m.txt && type %TEMP%\\w1560m.txt \
+                 && mkdir %TEMP%\\w1560m.d && rmdir %TEMP%\\w1560m.d \
                  && del %TEMP%\\w1560m.txt && echo w-temp",
             ),
             vec!["w-temp"],
@@ -345,12 +374,19 @@ fn workloads(backend: Backend, codex_home: &Path) {
             tty,
         ));
         let ok = code == 0 && expected.iter().all(|part| stdout.contains(part));
+        let log = if ok {
+            String::new()
+        } else {
+            let log = sandbox_log(codex_home);
+            let lines: Vec<&str> = log.lines().collect();
+            lines[lines.len().saturating_sub(6)..].join(" / ")
+        };
         report(
             backend,
             name,
             ok,
             &format!(
-                "exit={code} secs={} out={stdout}",
+                "exit={code} secs={} out={stdout} log={log}",
                 started.elapsed().as_secs()
             ),
         );
@@ -601,6 +637,30 @@ pub(crate) fn self_token_report() -> String {
                 CloseHandle(restricted);
                 parts.push(format!("{name}=ok"));
             }
+        }
+        // As Chromium does: restricting SIDs (Everyone here).
+        let mut everyone = crate::token::world_sid().expect("Everyone SID");
+        let restrict = windows_sys::Win32::Security::SID_AND_ATTRIBUTES {
+            Sid: everyone.as_mut_ptr().cast(),
+            Attributes: 0,
+        };
+        let mut restricted: HANDLE = 0;
+        if CreateRestrictedToken(
+            token,
+            0,
+            0,
+            std::ptr::null(),
+            0,
+            std::ptr::null(),
+            1,
+            &restrict,
+            &mut restricted,
+        ) == 0
+        {
+            parts.push(format!("create_restricted_sid=err{}", GetLastError()));
+        } else {
+            CloseHandle(restricted);
+            parts.push("create_restricted_sid=ok".to_string());
         }
         parts.push(format!("start_child_with_copy={}", primary_result(token)));
         CloseHandle(token);
