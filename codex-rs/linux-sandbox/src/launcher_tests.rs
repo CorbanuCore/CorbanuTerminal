@@ -15,12 +15,15 @@ fn prefers_system_bwrap_when_help_lists_argv0() {
             Some(SystemBwrapCapabilities {
                 supports_argv0: true,
                 supports_perms: true,
+                supports_bind_fd: true,
                 supports_ro_bind_fd: true,
             })
         }),
         Some(SystemBwrapLauncher {
+            apparmor_launcher: None,
             program: expected,
             supports_argv0: true,
+            supports_bind_fd: true,
             supports_ro_bind_fd: true,
         })
     );
@@ -36,12 +39,15 @@ fn prefers_system_bwrap_when_system_bwrap_lacks_argv0() {
             Some(SystemBwrapCapabilities {
                 supports_argv0: false,
                 supports_perms: true,
+                supports_bind_fd: true,
                 supports_ro_bind_fd: false,
             })
         }),
         Some(SystemBwrapLauncher {
+            apparmor_launcher: None,
             program: AbsolutePathBuf::from_absolute_path(fake_bwrap_path).expect("absolute"),
             supports_argv0: false,
+            supports_bind_fd: true,
             supports_ro_bind_fd: false,
         })
     );
@@ -56,10 +62,46 @@ fn ignores_system_bwrap_when_system_bwrap_lacks_perms() {
             Some(SystemBwrapCapabilities {
                 supports_argv0: false,
                 supports_perms: false,
+                supports_bind_fd: true,
                 supports_ro_bind_fd: false,
             })
         }),
         None
+    );
+}
+
+/// #536: a session's command needs `--bind-fd`: a system bubblewrap
+/// without it gives way to the bundled one, and without that the command
+/// cannot run.
+#[test]
+fn bind_fd_choice_falls_back_to_the_bundled_bubblewrap() {
+    let system = |supports_bind_fd| {
+        BubblewrapLauncher::System(SystemBwrapLauncher {
+            program: AbsolutePathBuf::from_absolute_path("/usr/bin/bwrap").expect("absolute"),
+            apparmor_launcher: None,
+            supports_argv0: false,
+            supports_bind_fd,
+            supports_ro_bind_fd: supports_bind_fd,
+        })
+    };
+    // Any launcher stands in for the bundled one here.
+    let bundled = || Some(BubblewrapLauncher::Unavailable);
+    assert_eq!(bind_fd_choice(system(true), bundled), system(true));
+    assert_eq!(
+        bind_fd_choice(system(false), bundled),
+        BubblewrapLauncher::Unavailable
+    );
+    assert_eq!(
+        bind_fd_choice(system(false), || Some(system(true))),
+        system(true)
+    );
+    assert_eq!(
+        bind_fd_choice(system(false), || None),
+        BubblewrapLauncher::Unavailable
+    );
+    assert_eq!(
+        bind_fd_choice(BubblewrapLauncher::Unavailable, bundled),
+        BubblewrapLauncher::Unavailable
     );
 }
 
@@ -78,6 +120,8 @@ fn detects_fd_backed_read_only_mount_support_in_system_bwrap_help() {
         Some(SystemBwrapCapabilities {
             supports_argv0: true,
             supports_perms: true,
+            // The fake help lists `--ro-bind-fd` only.
+            supports_bind_fd: false,
             supports_ro_bind_fd: true,
         })
     );

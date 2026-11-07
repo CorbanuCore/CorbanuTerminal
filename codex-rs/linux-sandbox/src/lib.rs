@@ -32,9 +32,9 @@ mod proxy_lifecycle;
 #[cfg(target_os = "linux")]
 mod proxy_routing;
 #[cfg(target_os = "linux")]
-mod supervisor;
-#[cfg(target_os = "linux")]
 mod seccomp;
+#[cfg(target_os = "linux")]
+mod supervisor;
 #[cfg(target_os = "linux")]
 mod wslg;
 

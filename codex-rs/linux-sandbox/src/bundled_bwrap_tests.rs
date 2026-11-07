@@ -2,7 +2,6 @@
 
 use super::*;
 use codex_install_context::CodexPackageLayout;
-use codex_install_context::InstallContext;
 use codex_install_context::InstallMethod;
 use pretty_assertions::assert_eq;
 use std::fs;
@@ -107,6 +106,41 @@ fn digest_verification_rejects_mismatched_digest() {
     let err = verify_digest(file.as_file(), Some([0xab; 32]), file.path())
         .expect_err("mismatched digest should fail");
     assert!(err.contains("bundled bubblewrap digest mismatch"));
+}
+
+/// #581: a copy whose digest does not match is never probed (so never
+/// run); one that matches is probed through its descriptor.
+#[test]
+fn a_copy_that_fails_verification_is_never_probed() {
+    let file = NamedTempFile::new().expect("temp file");
+    fs::write(file.path(), b"contents").expect("write file");
+    let program = AbsolutePathBuf::from_absolute_path(file.path()).expect("absolute");
+    let mut probed = false;
+    let launcher = apparmor_launcher_with(&program, Some([0xab; 32]), |_| {
+        probed = true;
+        None
+    });
+    assert_eq!(launcher, None);
+    assert!(!probed);
+    let expected: [u8; 32] = Sha256::digest(b"contents").into();
+    let mut probed_fd = None;
+    apparmor_launcher_with(&program, Some(expected), |fd| {
+        probed_fd = Some(fd);
+        None
+    });
+    assert!(probed_fd.is_some_and(|fd| fd > libc::STDERR_FILENO));
+}
+
+/// The digest is read by offset, so verifying a descriptor twice gives
+/// the same answer (#581 verifies again right before `aa-exec`).
+#[test]
+fn digest_verification_can_repeat_on_one_descriptor() {
+    let file = NamedTempFile::new().expect("temp file");
+    fs::write(file.path(), b"contents").expect("write file");
+    let expected: [u8; 32] = Sha256::digest(b"contents").into();
+    for _ in 0..2 {
+        verify_digest(file.as_file(), Some(expected), file.path()).expect("verifies");
+    }
 }
 
 #[test]

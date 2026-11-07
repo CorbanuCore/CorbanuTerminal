@@ -1350,29 +1350,6 @@ async fn sandbox_starts_with_denied_tmp_without_exposing_registry() {
                     value: FileSystemSpecialPath::SlashTmp,
                 }
             } else {
-<<<<<<< HEAD:codex-rs/linux-sandbox/tests/suite/landlock.rs
-                FileSystemPath::Path {
-                    path: AbsolutePathBuf::try_from(tmp_root.as_path())
-                        .expect("absolute temp root"),
-                }
-            };
-            let policy = FileSystemSandboxPolicy::restricted(vec![
-                FileSystemSandboxEntry::new(
-                    FileSystemPath::Special { value: read_root },
-                    FileSystemAccessMode::Read,
-                ),
-                FileSystemSandboxEntry::new(
-                    FileSystemPath::Path {
-                        path: helper_dir.clone(),
-                    },
-                    FileSystemAccessMode::Read,
-                ),
-                FileSystemSandboxEntry::new(
-                    FileSystemPath::Path { path: cwd.clone() },
-                    FileSystemAccessMode::Write,
-                ),
-||||||| 413492cd6c:codex-rs/linux-sandbox/tests/suite/landlock.rs
-=======
                 AbsolutePathBuf::try_from(tmp_root.as_path())
                     .expect("absolute temp root")
                     .into()
@@ -1384,7 +1361,6 @@ async fn sandbox_starts_with_denied_tmp_without_exposing_registry() {
                 ),
                 FileSystemSandboxEntry::new(helper_dir.clone().into(), FileSystemAccessMode::Read),
                 FileSystemSandboxEntry::new(cwd.clone().into(), FileSystemAccessMode::Write),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/linux-sandbox/tests/suite/sandbox.rs
                 FileSystemSandboxEntry::new(denied_path, FileSystemAccessMode::Deny),
             ]);
             let mut env = create_env_from_core_vars();
@@ -1595,7 +1571,6 @@ async fn sandbox_blocks_dev_tcp_redirection() {
     assert_network_blocked(&["bash", "-c", "echo hi > /dev/tcp/127.0.0.1/80"]).await;
 }
 
-<<<<<<< HEAD:codex-rs/linux-sandbox/tests/suite/landlock.rs
 /// PF-23-S02 on Linux, full-write profiles: what the protected-path rules
 /// hold (a read-only file stays read-only, also through a symlinked dotfile;
 /// since #587 its folder cannot be renamed either, as on macOS:
@@ -3222,8 +3197,5 @@ async fn the_helper_refuses_a_root_swapped_after_the_check() {
     assert!(stderr.contains("Refused to run the command"), "{stderr}");
     assert!(!outside.join("planted").exists(), "{stdout}\n{stderr}");
 }
-||||||| 413492cd6c:codex-rs/linux-sandbox/tests/suite/landlock.rs
-=======
 #[path = "daemon_sockets_tests.rs"]
 mod daemon_sockets_tests;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/linux-sandbox/tests/suite/sandbox.rs

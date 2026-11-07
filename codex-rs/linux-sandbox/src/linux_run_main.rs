@@ -12,16 +12,8 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::path::PathBuf;
-<<<<<<< HEAD
 use std::sync::Arc;
 use std::sync::OnceLock;
-use std::sync::atomic::AtomicBool;
-||||||| 413492cd6c
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-=======
-use std::sync::OnceLock;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use std::sync::atomic::AtomicI32;
 use std::sync::atomic::Ordering;
 
@@ -31,12 +23,8 @@ use crate::bwrap::WSL_INTEROP_DIR;
 use crate::bwrap::WSLG_DISTRO_ROOT;
 use crate::bwrap::create_bwrap_command_args;
 use crate::launcher::exec_bwrap;
-<<<<<<< HEAD
-use crate::launcher::preferred_bwrap_inherited_fd;
-||||||| 413492cd6c
-=======
 use crate::launcher::initialize_bwrap_launcher;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use crate::launcher::preferred_bwrap_inherited_fd;
 use crate::launcher::preferred_bwrap_supports_argv0;
 use crate::proxy_routing::activate_proxy_routes_in_netns;
 use crate::proxy_routing::prepare_host_proxy_route_spec;
@@ -60,16 +48,10 @@ const FORWARDED_SIGNALS: &[libc::c_int] =
 const LINUX_CAPABILITY_VERSION_3: u32 = 0x2008_0522;
 const SYNTHETIC_MOUNT_MARKER_SYNTHETIC: &[u8] = b"synthetic\n";
 const SYNTHETIC_MOUNT_MARKER_EXISTING: &[u8] = b"existing\n";
-<<<<<<< HEAD
-const PROTECTED_CREATE_MARKER: &[u8] = b"protected-create\n";
 /// #582: in a marker folder, what the placeholder is and where (`file` or
 /// `directory`, a newline, then the path), so a later run can remove it when
 /// its owner is gone without cleaning up (killed with SIGKILL).
 const SYNTHETIC_MOUNT_TARGET_RECORD: &str = "target";
-||||||| 413492cd6c
-const PROTECTED_CREATE_MARKER: &[u8] = b"protected-create\n";
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 #[derive(Debug)]
 struct SyntheticMountTargetRegistration {
@@ -133,7 +115,6 @@ pub struct LinuxSandboxCommand {
     #[arg(long = "proxy-route-spec", hide = true)]
     pub proxy_route_spec: Option<String>,
 
-<<<<<<< HEAD
     /// Internal (#536): the writable roots' real locations as the caller
     /// pinned them; each root is bound there, and the command is refused
     /// when a root no longer leads there.
@@ -149,12 +130,9 @@ pub struct LinuxSandboxCommand {
     /// removed later even when the temporary folder's registry is lost.
     #[arg(long = "placeholder-record-dir", hide = true)]
     pub placeholder_record_dir: Option<PathBuf>,
-||||||| 413492cd6c
-=======
     /// Inherited fallback mounts that must be authenticated before sandboxed code runs.
     #[arg(long = "verify-fd-mount", hide = true)]
     pub verify_fd_mounts: Vec<String>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     /// When set, skip mounting a fresh `/proc` even though PID isolation is
     /// still enabled. This is primarily intended for restrictive container
@@ -162,18 +140,14 @@ pub struct LinuxSandboxCommand {
     #[arg(long = "no-proc", default_value_t = false)]
     pub no_proc: bool,
 
-<<<<<<< HEAD
     /// Internal (#581): a descriptor the inner stage closes before running
     /// the command (the verified bundled bubblewrap that `aa-exec` ran).
     #[arg(long = "close-inherited-fd", hide = true)]
     pub close_inherited_fd: Option<i32>,
-||||||| 413492cd6c
-=======
     /// Reuse the caller's PID namespace and `/proc` together.
     /// Only trusted executor startup may select this mode.
     #[arg(long = "inherit-pid-namespace", hide = true)]
     pub inherit_pid_namespace: bool,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     /// Full command args to run under the Linux sandbox helper.
     #[arg(trailing_var_arg = true)]
@@ -196,20 +170,12 @@ pub fn run_main() -> ! {
         apply_seccomp_then_exec,
         managed_network,
         proxy_route_spec,
-<<<<<<< HEAD
         pinned_writable_roots,
         placeholder_record_dir,
-||||||| 413492cd6c
-=======
         verify_fd_mounts,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         no_proc,
-<<<<<<< HEAD
         close_inherited_fd,
-||||||| 413492cd6c
-=======
         inherit_pid_namespace,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         command,
     } = LinuxSandboxCommand::parse();
     let allow_network_for_proxy = managed_network.is_some();
@@ -226,12 +192,16 @@ pub fn run_main() -> ! {
         file_system_sandbox_policy,
         network_sandbox_policy,
     } = resolve_permission_profile(permission_profile).unwrap_or_else(|err| panic!("{err}"));
-    ensure_legacy_landlock_mode_supports_policy(use_legacy_landlock, &file_system_sandbox_policy);
+    ensure_legacy_landlock_mode_supports_policy(
+        use_legacy_landlock,
+        &file_system_sandbox_policy,
+        network_sandbox_policy,
+        &sandbox_policy_cwd,
+    );
 
     // Inner stage: apply seccomp/no_new_privs after bubblewrap has already
     // established the filesystem view.
     if apply_seccomp_then_exec {
-<<<<<<< HEAD
         // #581: first, so nothing started here (proxy bridges) inherits it.
         if let Some(fd) = close_inherited_fd.filter(|fd| *fd > libc::STDERR_FILENO) {
             // SAFETY: closes a descriptor this process does not use.
@@ -239,8 +209,6 @@ pub fn run_main() -> ! {
                 libc::close(fd);
             }
         }
-||||||| 413492cd6c
-=======
         if let Err(err) = crate::fd_mount::verify_fd_mounts(&verify_fd_mounts) {
             panic!("failed to verify descriptor-backed bubblewrap mount: {err}");
         }
@@ -269,7 +237,6 @@ pub fn run_main() -> ! {
             panic!("Linux sandbox retained effective or permitted capabilities");
         }
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         if allow_network_for_proxy {
             let spec = proxy_route_spec
                 .as_deref()
@@ -288,25 +255,13 @@ pub fn run_main() -> ! {
         ) {
             panic!("error applying Linux sandbox restrictions: {e:?}");
         }
-<<<<<<< HEAD
         if file_system_sandbox_policy.denies_user_namespaces() {
             mark_user_namespaces_denied();
-||||||| 413492cd6c
-        exec_or_panic(command);
-    }
-
-    if file_system_sandbox_policy.has_full_disk_write_access() && !allow_network_for_proxy {
-        if let Err(e) = apply_permission_profile_to_current_thread(
-            &permission_profile,
-            &sandbox_policy_cwd,
-            /*apply_landlock_fs*/ false,
-            allow_network_for_proxy,
-            /*proxy_routed_network*/ false,
-        ) {
-            panic!("error applying Linux sandbox restrictions: {e:?}");
-=======
+        }
 
         let signal_mask = ForwardedSignalMask::block();
+        // SAFETY: this helper is single-threaded here (the proxy bridges run
+        // in forked processes); the child only resets signals and execs.
         let command_pid = unsafe { libc::fork() };
         if command_pid < 0 {
             let err = std::io::Error::last_os_error();
@@ -323,6 +278,7 @@ pub fn run_main() -> ! {
         signal_mask.restore();
         loop {
             let mut status = 0;
+            // SAFETY: reaps this helper's children, including orphans.
             let reaped_pid = unsafe { libc::waitpid(-1, &mut status, 0) };
             if reaped_pid == command_pid {
                 let exit_signal_mask = ForwardedSignalMask::block();
@@ -342,27 +298,13 @@ pub fn run_main() -> ! {
     }
 
     if file_system_sandbox_policy.has_full_disk_write_access() && !allow_network_for_proxy {
-        if let Err(e) = apply_permission_profile_to_current_thread(
-            &permission_profile,
-            &sandbox_policy_cwd,
-            /*apply_landlock_fs*/ false,
-            managed_network.as_ref(),
-            /*proxy_routing_active*/ false,
-        ) {
-            panic!("error applying Linux sandbox restrictions: {e:?}");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-        }
-        exec_or_panic(command);
-    }
-
-    if file_system_sandbox_policy.has_full_disk_write_access() && !allow_network_for_proxy {
         run_supervised_without_bwrap(|| {
             if let Err(e) = apply_permission_profile_to_current_thread(
                 &permission_profile,
                 &sandbox_policy_cwd,
                 /*apply_landlock_fs*/ false,
-                allow_network_for_proxy,
-                /*proxy_routed_network*/ false,
+                managed_network.as_ref(),
+                /*proxy_routing_active*/ false,
             ) {
                 panic!("error applying Linux sandbox restrictions: {e:?}");
             }
@@ -425,6 +367,10 @@ pub fn run_main() -> ! {
             crate::wslg::ensure_supported_path(&executable)
                 .unwrap_or_else(|err| exit_with_bwrap_build_error(err));
         }
+        // Select the bubblewrap now: the inner command closes the descriptor
+        // a verified bundled copy passes on (#581), and the preflight's
+        // synthetic policy omits writable roots.
+        initialize_bwrap_launcher(&file_system_sandbox_policy, &sandbox_policy_cwd);
         let inner = build_inner_seccomp_command(InnerSeccompCommandArgs {
             sandbox_policy_cwd: &sandbox_policy_cwd,
             command_cwd: command_cwd.as_deref(),
@@ -444,15 +390,14 @@ pub fn run_main() -> ! {
         );
     }
 
-<<<<<<< HEAD
     // Legacy path: Landlock enforcement only, when bwrap sandboxing is not enabled.
     run_supervised_without_bwrap(|| {
         if let Err(e) = apply_permission_profile_to_current_thread(
             &permission_profile,
             &sandbox_policy_cwd,
             /*apply_landlock_fs*/ true,
-            allow_network_for_proxy,
-            /*proxy_routed_network*/ false,
+            managed_network.as_ref(),
+            /*proxy_routing_active*/ false,
         ) {
             panic!("error applying legacy Linux sandbox restrictions: {e:?}");
         }
@@ -613,27 +558,6 @@ fn user_namespace_creation_error() -> Option<i32> {
             (libc::WIFEXITED(status) && libc::WEXITSTATUS(status) != 0)
                 .then(|| libc::WEXITSTATUS(status))
         }
-||||||| 413492cd6c
-    // Legacy path: Landlock enforcement only, when bwrap sandboxing is not enabled.
-    if let Err(e) = apply_permission_profile_to_current_thread(
-        &permission_profile,
-        &sandbox_policy_cwd,
-        /*apply_landlock_fs*/ true,
-        allow_network_for_proxy,
-        /*proxy_routed_network*/ false,
-    ) {
-        panic!("error applying legacy Linux sandbox restrictions: {e:?}");
-=======
-    // Legacy pipeline: apply in-process restrictions without bubblewrap.
-    if let Err(e) = apply_permission_profile_to_current_thread(
-        &permission_profile,
-        &sandbox_policy_cwd,
-        /*apply_landlock_fs*/ true,
-        managed_network.as_ref(),
-        /*proxy_routing_active*/ false,
-    ) {
-        panic!("error applying legacy Linux sandbox restrictions: {e:?}");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 
@@ -699,9 +623,23 @@ fn ensure_inner_stage_mode_is_valid(apply_seccomp_then_exec: bool, use_legacy_la
 fn ensure_legacy_landlock_mode_supports_policy(
     use_legacy_landlock: bool,
     file_system_sandbox_policy: &FileSystemSandboxPolicy,
+    network_sandbox_policy: NetworkSandboxPolicy,
+    sandbox_policy_cwd: &Path,
 ) {
-    if use_legacy_landlock && !file_system_sandbox_policy.has_full_disk_write_access() {
+    if !use_legacy_landlock {
+        return;
+    }
+    if !file_system_sandbox_policy.has_full_disk_write_access() {
         panic!("filesystem-restricted execution requires bubblewrap to isolate app-server sockets");
+    }
+    // Full write access can still carry denials (PF-23 protected paths)
+    // that only bubblewrap enforces.
+    if file_system_sandbox_policy
+        .needs_direct_runtime_enforcement(network_sandbox_policy, sandbox_policy_cwd)
+    {
+        panic!(
+            "permission profiles requiring direct runtime enforcement are incompatible with --use-legacy-landlock"
+        );
     }
 }
 
@@ -733,16 +671,12 @@ fn run_bwrap_with_proc_fallback(
         options.mount_proc = false;
     }
 
-<<<<<<< HEAD
-    let options = BwrapOptions {
-        mount_proc,
-        network_mode,
-        pins: crate::pinned::get().map(|roots| crate::bwrap::WritableRootPins {
-            roots,
-            bind_fd: crate::launcher::bind_fd_available(),
-        }),
-        ..Default::default()
-    };
+    // #536: a session's command binds each writable root from the folder
+    // opened and checked at its pinned location.
+    options.pins = crate::pinned::get().map(|roots| crate::bwrap::WritableRootPins {
+        roots,
+        bind_fd: crate::launcher::bind_fd_available(),
+    });
     // #442: watch before the existing credential files are found and hidden,
     // so none created in between is missed.
     let credential_watcher = crate::credential_watch::CredentialWatcher::for_policy(
@@ -761,20 +695,12 @@ fn run_bwrap_with_proc_fallback(
                 file_system_sandbox_policy
                     .entries
                     .push(FileSystemSandboxEntry::new(
-                        FileSystemPath::Path { path },
+                        path.into(),
                         FileSystemAccessMode::Deny,
                     ));
             }
         }
     }
-||||||| 413492cd6c
-    let options = BwrapOptions {
-        mount_proc,
-        network_mode,
-        ..Default::default()
-    };
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut bwrap_args = build_bwrap_argv(
         inner,
         &file_system_sandbox_policy,
@@ -783,17 +709,13 @@ fn run_bwrap_with_proc_fallback(
         options,
     )
     .unwrap_or_else(|err| exit_with_bwrap_build_error(err));
-<<<<<<< HEAD
     if file_system_sandbox_policy.denies_user_namespaces() {
         add_user_namespace_seccomp_fds(&mut bwrap_args).unwrap_or_else(|err| {
             eprintln!("error building bubblewrap command: {err}");
             std::process::exit(1);
         });
     }
-||||||| 413492cd6c
-=======
     bwrap_args.preserved_files.extend(proxy_controls);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     apply_inner_command_argv0(&mut bwrap_args.args);
     run_or_exec_bwrap(bwrap_args, credential_watcher);
 }
@@ -806,7 +728,7 @@ fn run_bwrap_with_proc_fallback(
 /// create namespaces for a command that takes it over (`ptrace`,
 /// `/proc/1/mem`).
 fn add_user_namespace_seccomp_fds(bwrap_args: &mut crate::bwrap::BwrapArgs) -> Result<(), String> {
-    let programs = crate::landlock::user_namespace_seccomp_programs()
+    let programs = crate::seccomp::user_namespace_seccomp_programs()
         .map_err(|err| format!("cannot build the user-namespace seccomp programs: {err}"))?;
     let mut args = Vec::new();
     for program in programs {
@@ -892,13 +814,7 @@ fn build_bwrap_argv(
         args: argv,
         preserved_files: bwrap_args.preserved_files,
         synthetic_mount_targets: bwrap_args.synthetic_mount_targets,
-<<<<<<< HEAD
-        protected_create_targets: bwrap_args.protected_create_targets,
         registry_lock: bwrap_args.registry_lock,
-||||||| 413492cd6c
-        protected_create_targets: bwrap_args.protected_create_targets,
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     })
 }
 
@@ -985,7 +901,6 @@ fn resolve_true_command() -> String {
     "true".to_string()
 }
 
-<<<<<<< HEAD
 /// #935: bubblewrap always runs under the supervisor (`crate::supervisor`),
 /// so the sandbox cannot outlive this helper; also where there is nothing
 /// to clean up afterwards (this used to exec bubblewrap directly then).
@@ -994,21 +909,6 @@ fn run_or_exec_bwrap(
     credential_watcher: Option<crate::credential_watch::CredentialWatcher>,
 ) -> ! {
     run_bwrap_in_child_with_synthetic_mount_cleanup(bwrap_args, credential_watcher);
-||||||| 413492cd6c
-fn run_or_exec_bwrap(bwrap_args: crate::bwrap::BwrapArgs) -> ! {
-    if bwrap_args.synthetic_mount_targets.is_empty()
-        && bwrap_args.protected_create_targets.is_empty()
-    {
-        exec_bwrap(bwrap_args.args, bwrap_args.preserved_files);
-    }
-    run_bwrap_in_child_with_synthetic_mount_cleanup(bwrap_args);
-=======
-fn run_or_exec_bwrap(bwrap_args: crate::bwrap::BwrapArgs) -> ! {
-    if bwrap_args.synthetic_mount_targets.is_empty() {
-        exec_bwrap(bwrap_args.args, bwrap_args.preserved_files);
-    }
-    run_bwrap_in_child_with_synthetic_mount_cleanup(bwrap_args);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn run_bwrap_in_child_with_synthetic_mount_cleanup(
@@ -1019,13 +919,7 @@ fn run_bwrap_in_child_with_synthetic_mount_cleanup(
         args,
         preserved_files,
         synthetic_mount_targets,
-<<<<<<< HEAD
-        protected_create_targets,
         registry_lock,
-||||||| 413492cd6c
-        protected_create_targets,
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     } = bwrap_args;
     // #935: the supervisor is waited for; an ignored SIGCHLD (inherited
     // across exec) would reap it unseen.
@@ -1034,16 +928,9 @@ fn run_bwrap_in_child_with_synthetic_mount_cleanup(
         libc::signal(libc::SIGCHLD, libc::SIG_DFL);
     }
     let setup_signal_mask = ForwardedSignalMask::block();
-<<<<<<< HEAD
-    let (synthetic_mount_registrations, protected_create_registrations) = register_mount_targets(
-        &synthetic_mount_targets,
-        &protected_create_targets,
-        registry_lock,
-        &args,
-    );
-    let exec_start_pipe = create_exec_start_pipe(
-        !protected_create_targets.is_empty() || credential_watcher.is_some(),
-    );
+    let synthetic_mount_registrations =
+        register_mount_targets(&synthetic_mount_targets, registry_lock, &args);
+    let exec_start_pipe = create_exec_start_pipe(credential_watcher.is_some());
     let placeholders = synthetic_mount_targets
         .iter()
         .map(|target| target.path().to_path_buf())
@@ -1053,16 +940,6 @@ fn run_bwrap_in_child_with_synthetic_mount_cleanup(
     let parent_watch = crate::supervisor::ParentWatch::open(libc::SIGTERM);
     let (lifeline_read, lifeline) = crate::supervisor::lifeline();
     // `pid` is the supervisor, which runs bubblewrap and exits as it did.
-||||||| 413492cd6c
-    let synthetic_mount_registrations = register_synthetic_mount_targets(&synthetic_mount_targets);
-    let protected_create_registrations =
-        register_protected_create_targets(&protected_create_targets);
-    let exec_start_pipe = create_exec_start_pipe(!protected_create_targets.is_empty());
-    let parent_pid = unsafe { libc::getpid() };
-=======
-    let synthetic_mount_registrations = register_synthetic_mount_targets(&synthetic_mount_targets);
-    let parent_pid = unsafe { libc::getpid() };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let pid = unsafe { libc::fork() };
     if pid < 0 {
         let err = std::io::Error::last_os_error();
@@ -1079,7 +956,6 @@ fn run_bwrap_in_child_with_synthetic_mount_cleanup(
             let err = std::io::Error::last_os_error();
             panic!("failed to place bubblewrap child in its own process group: {err}");
         }
-<<<<<<< HEAD
         crate::supervisor::run(
             lifeline_read,
             FORWARDED_SIGNALS,
@@ -1092,17 +968,8 @@ fn run_bwrap_in_child_with_synthetic_mount_cleanup(
                 exec_bwrap(args, preserved_files);
             },
         );
-||||||| 413492cd6c
-        terminate_with_parent(parent_pid);
-        wait_for_parent_exec_start(exec_start_pipe[0], exec_start_pipe[1]);
-        exec_bwrap(args, preserved_files);
-=======
-        terminate_with_parent(parent_pid);
-        exec_bwrap(args, preserved_files);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
-<<<<<<< HEAD
     // Also here, so the group exists before any signal is forwarded to it.
     // SAFETY: plain syscall on this process's child, which never execs.
     unsafe {
@@ -1116,14 +983,11 @@ fn run_bwrap_in_child_with_synthetic_mount_cleanup(
         let lifeline = Arc::clone(&lifeline);
         watcher.start(move || lifeline.cut(), &placeholders)
     });
-    let protected_create_monitor = ProtectedCreateMonitor::start(&protected_create_targets);
-||||||| 413492cd6c
-    close_child_exec_start_read(exec_start_pipe[0]);
-    let protected_create_monitor = ProtectedCreateMonitor::start(&protected_create_targets);
-=======
-    drop(preserved_files);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let signal_forwarders = install_bwrap_signal_forwarders(pid);
+    release_child_exec_start(exec_start_pipe[1]);
+    // The child has its own copies (proxy bridge controls among them); the
+    // bridges must see them close when the sandbox ends.
+    drop(preserved_files);
     setup_signal_mask.restore();
     // Stop the credential watcher while the child is still unreaped, so a
     // late stop can never signal a reused pid.
@@ -1137,174 +1001,19 @@ fn run_bwrap_in_child_with_synthetic_mount_cleanup(
     BWRAP_CHILD_PID.store(0, Ordering::SeqCst);
     let status = wait_for_bwrap_child(pid);
     let cleanup_signal_mask = ForwardedSignalMask::block();
-<<<<<<< HEAD
-    let protected_create_monitor_violation = protected_create_monitor
-        .map(ProtectedCreateMonitor::stop)
-        .unwrap_or(false);
     // #348: this run no longer uses anything; then its cleanup.
     crate::placeholder_journal::leave();
-||||||| 413492cd6c
-    BWRAP_CHILD_PID.store(0, Ordering::SeqCst);
-    let protected_create_monitor_violation = protected_create_monitor
-        .map(ProtectedCreateMonitor::stop)
-        .unwrap_or(false);
-=======
-    BWRAP_CHILD_PID.store(0, Ordering::SeqCst);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     cleanup_synthetic_mount_targets(&synthetic_mount_registrations);
-<<<<<<< HEAD
-    let protected_create_violation = protected_create_monitor_violation
-        || cleanup_protected_create_targets(&protected_create_registrations);
     // #348: what this run made and another live run still holds stays
     // recorded (for a later sweep); the rest of its record goes.
     crate::placeholder_journal::finish();
-||||||| 413492cd6c
-    let protected_create_violation = protected_create_monitor_violation
-        || cleanup_protected_create_targets(&protected_create_registrations);
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     signal_forwarders.restore();
     cleanup_signal_mask.restore();
-<<<<<<< HEAD
     if let Some(found) = credential_stop {
         eprintln!("{}", crate::credential_watch::stopped_message(&found));
         std::process::exit(1);
     }
-    exit_with_wait_status_or_policy_violation(status, protected_create_violation);
-}
-
-impl ProtectedCreateMonitor {
-    fn start(targets: &[crate::bwrap::ProtectedCreateTarget]) -> Option<Self> {
-        if targets.is_empty() {
-            return None;
-        }
-
-        let targets = targets.to_vec();
-        let stop = Arc::new(AtomicBool::new(false));
-        let violation = Arc::new(AtomicBool::new(false));
-        let monitor_stop = Arc::clone(&stop);
-        let monitor_violation = Arc::clone(&violation);
-        let handle = thread::spawn(move || {
-            let watcher = ProtectedCreateWatcher::new(&targets);
-            while !monitor_stop.load(Ordering::SeqCst) {
-                for target in &targets {
-                    if remove_protected_create_target_best_effort(target).is_some() {
-                        monitor_violation.store(true, Ordering::SeqCst);
-                    }
-                }
-                if let Some(watcher) = &watcher {
-                    watcher.wait_for_create_event(&monitor_stop);
-                } else {
-                    thread::sleep(Duration::from_millis(1));
-                }
-            }
-        });
-
-        Some(Self {
-            stop,
-            violation,
-            handle,
-        })
-    }
-
-    fn stop(self) -> bool {
-        self.stop.store(true, Ordering::SeqCst);
-        self.handle
-            .join()
-            .unwrap_or_else(|_| panic!("protected create monitor thread panicked"));
-        self.violation.load(Ordering::SeqCst)
-    }
-}
-
-impl ProtectedCreateWatcher {
-    fn new(targets: &[crate::bwrap::ProtectedCreateTarget]) -> Option<Self> {
-        let fd = unsafe { libc::inotify_init1(libc::IN_NONBLOCK | libc::IN_CLOEXEC) };
-        if fd < 0 {
-            return None;
-        }
-
-        let mut watched_parents = Vec::<PathBuf>::new();
-        let mut watches = Vec::new();
-        for target in targets {
-            let Some(parent) = target.path().parent() else {
-                continue;
-            };
-            if watched_parents.iter().any(|watched| watched == parent) {
-                continue;
-            }
-            watched_parents.push(parent.to_path_buf());
-            let Ok(parent_cstr) = CString::new(parent.as_os_str().as_bytes()) else {
-                continue;
-            };
-            let mask =
-                libc::IN_CREATE | libc::IN_MOVED_TO | libc::IN_DELETE_SELF | libc::IN_MOVE_SELF;
-            let watch = unsafe { libc::inotify_add_watch(fd, parent_cstr.as_ptr(), mask) };
-            if watch >= 0 {
-                watches.push(watch);
-            }
-        }
-
-        if watches.is_empty() {
-            unsafe {
-                libc::close(fd);
-            }
-            return None;
-        }
-
-        Some(Self {
-            fd,
-            _watches: watches,
-        })
-    }
-
-    fn wait_for_create_event(&self, stop: &AtomicBool) {
-        let mut poll_fd = libc::pollfd {
-            fd: self.fd,
-            events: libc::POLLIN,
-            revents: 0,
-        };
-        while !stop.load(Ordering::SeqCst) {
-            let res = unsafe { libc::poll(&mut poll_fd, 1, 10) };
-            if res > 0 {
-                self.drain_events();
-                return;
-            }
-            if res == 0 {
-                return;
-            }
-            let err = std::io::Error::last_os_error();
-            if err.kind() == std::io::ErrorKind::Interrupted {
-                continue;
-            }
-            return;
-        }
-    }
-
-    fn drain_events(&self) {
-        let mut buf = [0_u8; 4096];
-        loop {
-            let read = unsafe { libc::read(self.fd, buf.as_mut_ptr().cast(), buf.len()) };
-            if read > 0 {
-                continue;
-            }
-            if read == 0 {
-                return;
-            }
-            let err = std::io::Error::last_os_error();
-            if err.kind() == std::io::ErrorKind::Interrupted {
-                continue;
-            }
-            return;
-        }
-    }
-}
-
-impl Drop for ProtectedCreateWatcher {
-    fn drop(&mut self) {
-        unsafe {
-            libc::close(self.fd);
-        }
-    }
+    exit_with_wait_status(status);
 }
 
 fn create_exec_start_pipe(enabled: bool) -> [libc::c_int; 2] {
@@ -1368,202 +1077,6 @@ fn release_child_exec_start(write_fd: libc::c_int) {
         libc::write(write_fd, byte.as_ptr().cast(), byte.len());
         libc::close(write_fd);
     }
-||||||| 413492cd6c
-    exit_with_wait_status_or_policy_violation(status, protected_create_violation);
-}
-
-impl ProtectedCreateMonitor {
-    fn start(targets: &[crate::bwrap::ProtectedCreateTarget]) -> Option<Self> {
-        if targets.is_empty() {
-            return None;
-        }
-
-        let targets = targets.to_vec();
-        let stop = Arc::new(AtomicBool::new(false));
-        let violation = Arc::new(AtomicBool::new(false));
-        let monitor_stop = Arc::clone(&stop);
-        let monitor_violation = Arc::clone(&violation);
-        let handle = thread::spawn(move || {
-            let watcher = ProtectedCreateWatcher::new(&targets);
-            while !monitor_stop.load(Ordering::SeqCst) {
-                for target in &targets {
-                    if remove_protected_create_target_best_effort(target).is_some() {
-                        monitor_violation.store(true, Ordering::SeqCst);
-                    }
-                }
-                if let Some(watcher) = &watcher {
-                    watcher.wait_for_create_event(&monitor_stop);
-                } else {
-                    thread::sleep(Duration::from_millis(1));
-                }
-            }
-        });
-
-        Some(Self {
-            stop,
-            violation,
-            handle,
-        })
-    }
-
-    fn stop(self) -> bool {
-        self.stop.store(true, Ordering::SeqCst);
-        self.handle
-            .join()
-            .unwrap_or_else(|_| panic!("protected create monitor thread panicked"));
-        self.violation.load(Ordering::SeqCst)
-    }
-}
-
-impl ProtectedCreateWatcher {
-    fn new(targets: &[crate::bwrap::ProtectedCreateTarget]) -> Option<Self> {
-        let fd = unsafe { libc::inotify_init1(libc::IN_NONBLOCK | libc::IN_CLOEXEC) };
-        if fd < 0 {
-            return None;
-        }
-
-        let mut watched_parents = Vec::<PathBuf>::new();
-        let mut watches = Vec::new();
-        for target in targets {
-            let Some(parent) = target.path().parent() else {
-                continue;
-            };
-            if watched_parents.iter().any(|watched| watched == parent) {
-                continue;
-            }
-            watched_parents.push(parent.to_path_buf());
-            let Ok(parent_cstr) = CString::new(parent.as_os_str().as_bytes()) else {
-                continue;
-            };
-            let mask =
-                libc::IN_CREATE | libc::IN_MOVED_TO | libc::IN_DELETE_SELF | libc::IN_MOVE_SELF;
-            let watch = unsafe { libc::inotify_add_watch(fd, parent_cstr.as_ptr(), mask) };
-            if watch >= 0 {
-                watches.push(watch);
-            }
-        }
-
-        if watches.is_empty() {
-            unsafe {
-                libc::close(fd);
-            }
-            return None;
-        }
-
-        Some(Self {
-            fd,
-            _watches: watches,
-        })
-    }
-
-    fn wait_for_create_event(&self, stop: &AtomicBool) {
-        let mut poll_fd = libc::pollfd {
-            fd: self.fd,
-            events: libc::POLLIN,
-            revents: 0,
-        };
-        while !stop.load(Ordering::SeqCst) {
-            let res = unsafe { libc::poll(&mut poll_fd, 1, 10) };
-            if res > 0 {
-                self.drain_events();
-                return;
-            }
-            if res == 0 {
-                return;
-            }
-            let err = std::io::Error::last_os_error();
-            if err.kind() == std::io::ErrorKind::Interrupted {
-                continue;
-            }
-            return;
-        }
-    }
-
-    fn drain_events(&self) {
-        let mut buf = [0_u8; 4096];
-        loop {
-            let read = unsafe { libc::read(self.fd, buf.as_mut_ptr().cast(), buf.len()) };
-            if read > 0 {
-                continue;
-            }
-            if read == 0 {
-                return;
-            }
-            let err = std::io::Error::last_os_error();
-            if err.kind() == std::io::ErrorKind::Interrupted {
-                continue;
-            }
-            return;
-        }
-    }
-}
-
-impl Drop for ProtectedCreateWatcher {
-    fn drop(&mut self) {
-        unsafe {
-            libc::close(self.fd);
-        }
-    }
-}
-
-fn create_exec_start_pipe(enabled: bool) -> [libc::c_int; 2] {
-    if !enabled {
-        return [-1, -1];
-    }
-    let mut pipe = [-1, -1];
-    if unsafe { libc::pipe2(pipe.as_mut_ptr(), libc::O_CLOEXEC) } < 0 {
-        let err = std::io::Error::last_os_error();
-        panic!("failed to create bubblewrap exec start pipe: {err}");
-    }
-    pipe
-}
-
-fn wait_for_parent_exec_start(read_fd: libc::c_int, write_fd: libc::c_int) {
-    if write_fd >= 0 {
-        unsafe {
-            libc::close(write_fd);
-        }
-    }
-    if read_fd < 0 {
-        return;
-    }
-
-    let mut byte = [0_u8; 1];
-    loop {
-        let read = unsafe { libc::read(read_fd, byte.as_mut_ptr().cast(), byte.len()) };
-        if read >= 0 {
-            break;
-        }
-        let err = std::io::Error::last_os_error();
-        if err.kind() != std::io::ErrorKind::Interrupted {
-            break;
-        }
-    }
-    unsafe {
-        libc::close(read_fd);
-    }
-}
-
-fn close_child_exec_start_read(read_fd: libc::c_int) {
-    if read_fd >= 0 {
-        unsafe {
-            libc::close(read_fd);
-        }
-    }
-}
-
-fn release_child_exec_start(write_fd: libc::c_int) {
-    if write_fd < 0 {
-        return;
-    }
-    let byte = [0_u8; 1];
-    unsafe {
-        libc::write(write_fd, byte.as_ptr().cast(), byte.len());
-        libc::close(write_fd);
-    }
-=======
-    exit_with_wait_status(status);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 struct ForwardedSignalMask {
@@ -1718,31 +1231,22 @@ fn wait_for_bwrap_child(pid: libc::pid_t) -> libc::c_int {
     }
 }
 
-/// Registers a run's placeholders and protected-create targets, then
-/// releases the registry lock its arguments were built under (#673,
-/// [`RegistryLock`]).
+/// Registers a run's placeholders, then releases the registry lock its
+/// arguments were built under (#673, [`RegistryLock`]).
 fn register_mount_targets(
     synthetic_mount_targets: &[crate::bwrap::SyntheticMountTarget],
-    protected_create_targets: &[crate::bwrap::ProtectedCreateTarget],
     registry_lock: Option<RegistryLock>,
     args: &[String],
-) -> (
-    Vec<SyntheticMountTargetRegistration>,
-    Vec<ProtectedCreateTargetRegistration>,
-) {
+) -> Vec<SyntheticMountTargetRegistration> {
     // #673: with nothing to register, no registry lock either.
-    let (synthetic, protected) =
-        if synthetic_mount_targets.is_empty() && protected_create_targets.is_empty() {
-            (Vec::new(), Vec::new())
-        } else {
-            (
-                register_synthetic_mount_targets(synthetic_mount_targets),
-                register_protected_create_targets(protected_create_targets),
-            )
-        };
+    let synthetic = if synthetic_mount_targets.is_empty() {
+        Vec::new()
+    } else {
+        register_synthetic_mount_targets(synthetic_mount_targets)
+    };
     record_mount_targets(&synthetic, args);
     drop(registry_lock);
-    (synthetic, protected)
+    synthetic
 }
 
 /// #348: records in the Corbanu home the placeholders this run makes (and
@@ -1867,73 +1371,6 @@ fn register_synthetic_mount_targets(
     })
 }
 
-<<<<<<< HEAD
-fn register_protected_create_targets(
-    targets: &[crate::bwrap::ProtectedCreateTarget],
-) -> Vec<ProtectedCreateTargetRegistration> {
-    with_synthetic_mount_registry_lock(|| {
-        targets
-            .iter()
-            .map(|target| {
-                let marker_dir = synthetic_mount_marker_dir(target.path());
-                fs::create_dir_all(&marker_dir).unwrap_or_else(|err| {
-                    panic!(
-                        "failed to create protected create marker directory {}: {err}",
-                        marker_dir.display()
-                    )
-                });
-                let marker_file = marker_dir.join(std::process::id().to_string());
-                crate::placeholder_registry::write_marker(&marker_file, PROTECTED_CREATE_MARKER)
-                    .unwrap_or_else(|err| {
-                        panic!(
-                            "failed to register protected create target {}: {err}",
-                            target.path().display()
-                        )
-                    });
-                ProtectedCreateTargetRegistration {
-                    target: target.clone(),
-                    marker_file,
-                    marker_dir,
-                }
-            })
-            .collect()
-    })
-}
-
-||||||| 413492cd6c
-fn register_protected_create_targets(
-    targets: &[crate::bwrap::ProtectedCreateTarget],
-) -> Vec<ProtectedCreateTargetRegistration> {
-    with_synthetic_mount_registry_lock(|| {
-        targets
-            .iter()
-            .map(|target| {
-                let marker_dir = synthetic_mount_marker_dir(target.path());
-                fs::create_dir_all(&marker_dir).unwrap_or_else(|err| {
-                    panic!(
-                        "failed to create protected create marker directory {}: {err}",
-                        marker_dir.display()
-                    )
-                });
-                let marker_file = marker_dir.join(std::process::id().to_string());
-                fs::write(&marker_file, PROTECTED_CREATE_MARKER).unwrap_or_else(|err| {
-                    panic!(
-                        "failed to register protected create target {}: {err}",
-                        target.path().display()
-                    )
-                });
-                ProtectedCreateTargetRegistration {
-                    target: target.clone(),
-                    marker_file,
-                    marker_dir,
-                }
-            })
-            .collect()
-    })
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 fn synthetic_mount_marker_contents(target: &crate::bwrap::SyntheticMountTarget) -> &'static [u8] {
     if target.preserves_pre_existing_path() {
         SYNTHETIC_MOUNT_MARKER_EXISTING
@@ -2076,241 +1513,6 @@ fn cleanup_synthetic_mount_targets(targets: &[SyntheticMountTargetRegistration])
             }
         }
     });
-}
-
-<<<<<<< HEAD
-fn cleanup_protected_create_targets(targets: &[ProtectedCreateTargetRegistration]) -> bool {
-    if targets.is_empty() {
-        return false;
-    }
-    with_synthetic_mount_registry_lock(|| {
-        for target in targets.iter().rev() {
-            match crate::placeholder_registry::remove_marker(&target.marker_file) {
-                Ok(()) => {}
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-                Err(err) => panic!(
-                    "failed to unregister protected create target {}: {err}",
-                    target.target.path().display()
-                ),
-            }
-        }
-
-        let mut violation = false;
-        for target in targets.iter().rev() {
-            violation |= remove_protected_create_target(&target.target);
-            match fs::remove_dir(&target.marker_dir) {
-                Ok(()) => {}
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-                Err(err) if err.kind() == std::io::ErrorKind::DirectoryNotEmpty => {}
-                Err(err) => panic!(
-                    "failed to remove protected create marker directory {}: {err}",
-                    target.marker_dir.display()
-                ),
-            }
-        }
-        violation
-    })
-}
-
-fn remove_protected_create_target(target: &crate::bwrap::ProtectedCreateTarget) -> bool {
-    for attempt in 0..100 {
-        match try_remove_protected_create_target(target) {
-            Ok(removal) => return removal.is_some(),
-            Err(err) if err.kind() == std::io::ErrorKind::DirectoryNotEmpty && attempt < 99 => {
-                thread::sleep(Duration::from_millis(1));
-            }
-            Err(err) => {
-                panic!(
-                    "failed to remove protected create target {}: {err}",
-                    target.path().display()
-                );
-            }
-        }
-    }
-    unreachable!("protected create removal retry loop should return or panic")
-}
-
-fn remove_protected_create_target_best_effort(
-    target: &crate::bwrap::ProtectedCreateTarget,
-) -> Option<ProtectedCreateRemoval> {
-    for _ in 0..100 {
-        match try_remove_protected_create_target(target) {
-            Ok(removal) => return removal,
-            Err(err) if err.kind() == std::io::ErrorKind::DirectoryNotEmpty => {
-                thread::sleep(Duration::from_millis(1));
-            }
-            Err(_) => return Some(ProtectedCreateRemoval::Other),
-        }
-    }
-    Some(ProtectedCreateRemoval::Other)
-}
-
-fn try_remove_protected_create_target(
-    target: &crate::bwrap::ProtectedCreateTarget,
-) -> std::io::Result<Option<ProtectedCreateRemoval>> {
-    let path = target.path();
-    let metadata = match fs::symlink_metadata(path) {
-        Ok(metadata) => metadata,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => return Err(err),
-    };
-
-    let removal = if metadata.is_dir() {
-        ProtectedCreateRemoval::Directory
-    } else {
-        ProtectedCreateRemoval::Other
-    };
-    let result = if removal == ProtectedCreateRemoval::Directory {
-        match fs::remove_dir_all(path) {
-            Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
-                make_directory_tree_writable(path)?;
-                fs::remove_dir_all(path)
-            }
-            result => result,
-        }
-    } else {
-        fs::remove_file(path)
-    };
-    match result {
-        Ok(()) => {}
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => return Err(err),
-    }
-    eprintln!(
-        "sandbox blocked creation of protected workspace metadata path {}",
-        path.display()
-    );
-    Ok(Some(removal))
-}
-
-fn make_directory_tree_writable(path: &Path) -> std::io::Result<()> {
-||||||| 413492cd6c
-fn cleanup_protected_create_targets(targets: &[ProtectedCreateTargetRegistration]) -> bool {
-    with_synthetic_mount_registry_lock(|| {
-        for target in targets.iter().rev() {
-            match fs::remove_file(&target.marker_file) {
-                Ok(()) => {}
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-                Err(err) => panic!(
-                    "failed to unregister protected create target {}: {err}",
-                    target.target.path().display()
-                ),
-            }
-        }
-
-        let mut violation = false;
-        for target in targets.iter().rev() {
-            if synthetic_mount_marker_dir_has_active_process(&target.marker_dir) {
-                if target.target.path().exists() {
-                    violation = true;
-                }
-                continue;
-            }
-            violation |= remove_protected_create_target(&target.target);
-            match fs::remove_dir(&target.marker_dir) {
-                Ok(()) => {}
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-                Err(err) if err.kind() == std::io::ErrorKind::DirectoryNotEmpty => {}
-                Err(err) => panic!(
-                    "failed to remove protected create marker directory {}: {err}",
-                    target.marker_dir.display()
-                ),
-            }
-        }
-        violation
-    })
-}
-
-fn remove_protected_create_target(target: &crate::bwrap::ProtectedCreateTarget) -> bool {
-    for attempt in 0..100 {
-        match try_remove_protected_create_target(target) {
-            Ok(removal) => return removal.is_some(),
-            Err(err) if err.kind() == std::io::ErrorKind::DirectoryNotEmpty && attempt < 99 => {
-                thread::sleep(Duration::from_millis(1));
-            }
-            Err(err) => {
-                panic!(
-                    "failed to remove protected create target {}: {err}",
-                    target.path().display()
-                );
-            }
-        }
-    }
-    unreachable!("protected create removal retry loop should return or panic")
-}
-
-fn remove_protected_create_target_best_effort(
-    target: &crate::bwrap::ProtectedCreateTarget,
-) -> Option<ProtectedCreateRemoval> {
-    for _ in 0..100 {
-        match try_remove_protected_create_target(target) {
-            Ok(removal) => return removal,
-            Err(err) if err.kind() == std::io::ErrorKind::DirectoryNotEmpty => {
-                thread::sleep(Duration::from_millis(1));
-            }
-            Err(_) => return Some(ProtectedCreateRemoval::Other),
-        }
-    }
-    Some(ProtectedCreateRemoval::Other)
-}
-
-fn try_remove_protected_create_target(
-    target: &crate::bwrap::ProtectedCreateTarget,
-) -> std::io::Result<Option<ProtectedCreateRemoval>> {
-    let path = target.path();
-    let metadata = match fs::symlink_metadata(path) {
-        Ok(metadata) => metadata,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => return Err(err),
-    };
-
-    let removal = if metadata.is_dir() {
-        ProtectedCreateRemoval::Directory
-    } else {
-        ProtectedCreateRemoval::Other
-    };
-    let result = if removal == ProtectedCreateRemoval::Directory {
-        fs::remove_dir_all(path)
-    } else {
-        fs::remove_file(path)
-    };
-    match result {
-        Ok(()) => {}
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => return Err(err),
-    }
-    eprintln!(
-        "sandbox blocked creation of protected workspace metadata path {}",
-        path.display()
-    );
-    Ok(Some(removal))
-}
-
-fn remove_synthetic_mount_target(target: &crate::bwrap::SyntheticMountTarget) {
-    let path = target.path();
-=======
-fn remove_synthetic_mount_target(target: &crate::bwrap::SyntheticMountTarget) {
-    let path = target.path();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-    let metadata = match fs::symlink_metadata(path) {
-        Ok(metadata) => metadata,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(err) => return Err(err),
-    };
-    if !metadata.is_dir() {
-        return Ok(());
-    }
-
-    let directory = OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_PATH | libc::O_DIRECTORY | libc::O_NOFOLLOW)
-        .open(path)?;
-    let directory_path = PathBuf::from(format!("/proc/self/fd/{}", directory.as_raw_fd()));
-    fs::set_permissions(&directory_path, fs::Permissions::from_mode(0o700))?;
-    for entry in fs::read_dir(directory_path)? {
-        make_directory_tree_writable(&entry?.path())?;
-    }
-    Ok(())
 }
 
 /// Removes `target` where it was registered, without following a link in
@@ -2489,7 +1691,7 @@ fn owned_by_this_user(path: &Path, file: bool) -> bool {
 /// A run that meets a recorded placeholder registers itself for it (under
 /// the [`RegistryLock`] it took before finding it, #673), so one with any
 /// live marker is left alone, as is a marker folder of another kind (a
-/// protected-create target). This never fails a run: without a usable
+/// protected-create target an older helper made). This never fails a run: without a usable
 /// registry it does nothing, and what cannot be removed keeps its record for
 /// a later run.
 fn remove_stale_synthetic_mount_targets() {
@@ -2901,29 +2103,11 @@ fn run_bwrap_in_child_capture_stderr(bwrap_args: crate::bwrap::BwrapArgs) -> Str
         args,
         preserved_files,
         synthetic_mount_targets,
-<<<<<<< HEAD
-        protected_create_targets,
         registry_lock,
-||||||| 413492cd6c
-        protected_create_targets,
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     } = bwrap_args;
     let setup_signal_mask = ForwardedSignalMask::block();
-<<<<<<< HEAD
-    let (synthetic_mount_registrations, protected_create_registrations) = register_mount_targets(
-        &synthetic_mount_targets,
-        &protected_create_targets,
-        registry_lock,
-        &args,
-    );
-||||||| 413492cd6c
-    let synthetic_mount_registrations = register_synthetic_mount_targets(&synthetic_mount_targets);
-    let protected_create_registrations =
-        register_protected_create_targets(&protected_create_targets);
-=======
-    let synthetic_mount_registrations = register_synthetic_mount_targets(&synthetic_mount_targets);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    let synthetic_mount_registrations =
+        register_mount_targets(&synthetic_mount_targets, registry_lock, &args);
 
     let mut pipe_fds = [0; 2];
     let pipe_res = unsafe { libc::pipe2(pipe_fds.as_mut_ptr(), libc::O_CLOEXEC) };
@@ -2974,13 +2158,7 @@ fn run_bwrap_in_child_capture_stderr(bwrap_args: crate::bwrap::BwrapArgs) -> Str
     BWRAP_CHILD_PID.store(0, Ordering::SeqCst);
     crate::placeholder_journal::leave();
     cleanup_synthetic_mount_targets(&synthetic_mount_registrations);
-<<<<<<< HEAD
-    cleanup_protected_create_targets(&protected_create_registrations);
     crate::placeholder_journal::finish();
-||||||| 413492cd6c
-    cleanup_protected_create_targets(&protected_create_registrations);
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     signal_forwarders.restore();
     cleanup_signal_mask.restore();
     if libc::WIFSIGNALED(status) {

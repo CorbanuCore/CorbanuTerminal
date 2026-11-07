@@ -913,7 +913,6 @@ async fn managed_proxy_mode_denies_af_unix_socket_but_allows_socketpair() {
     );
 }
 
-<<<<<<< HEAD
 /// #498: full disk write with proxy-only network wraps the command in
 /// `--bind / /`, which bubblewrap mounts `nodev`; a fresh minimal `/dev` keeps
 /// `/dev/null` usable.
@@ -955,8 +954,8 @@ async fn managed_proxy_full_write_keeps_dev_null_usable() {
         );
     }
     assert_eq!(std::fs::read_to_string(&other).expect("other"), "ok\n");
-||||||| 413492cd6c
-=======
+}
+
 /// Runs as the model-controlled command, after the trusted listener handoff.
 #[test]
 #[ignore = "invoked inside the managed proxy sandbox"]
@@ -1228,5 +1227,4 @@ async fn cancelling_sandbox_closes_active_proxy_connection() {
             "cancelling the sandbox must stop its host bridge"
         );
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
