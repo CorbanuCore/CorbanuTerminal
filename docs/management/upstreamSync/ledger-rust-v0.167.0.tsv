@@ -30,7 +30,7 @@ path	kind	code	area	slice	tier	owner	contributor	status	resolution	hunks	lines	t
 .github/workflows/v8-canary.yml	content	UU	CI/workflows	S0 manifests/locks/CI	0	integrator	no	resolved	ours	3	51	false	false	false	false	skeleton keeps main's file; port upstream changes in S4
 AGENTS.md	modify/delete	UD	other	S1d tooling/repo	1	unassigned	yes	open		0	0	false	false	false	false	deleted upstream; skeleton keeps ours
 CHANGELOG.md	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		1	249	false	false	false	false	
-MODULE.bazel	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	7	100	false	false	false	false	v8 crate archive from CorbanuCore/rusty_v8, same sha256 (D317)
+MODULE.bazel	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	7	100	false	false	false	false	v8 crate archive from CorbanuCore/rusty_v8, same sha256 (D317); voice crate annotations and the voice_sources extension are unused after D316: confirm Bazel tolerates them or drop them in S4
 MODULE.bazel.lock	content	UU	schemas/locks	S0 manifests/locks/CI	0	integrator	no	resolved	merged	30	461	false	false	false	false	regenerated from main's lock
 codex-cli/bin/codex.js	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		4	21	false	false	false	false	
 codex-rs/.cargo/audit.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	20	false	false	false	true	main's ignores; duplicate RUSTSEC-2024-0449 dropped
@@ -912,7 +912,7 @@ tools/argument-comment-lint/Cargo.lock	content	UU	schemas/locks	S0 manifests/loc
 tools/argument-comment-lint/Cargo.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	ours	2	7	false	false	false	false	skeleton keeps main's file; port upstream changes in S4
 tools/argument-comment-lint/README.md	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		5	15	false	false	false	false	
 tools/argument-comment-lint/argument-comment-lint	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		16	40	false	false	false	false	
-tools/argument-comment-lint/rust-toolchain	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		1	2	false	false	false	false	
+tools/argument-comment-lint/rust-toolchain	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		1	2	false	false	false	false	Tier 0 in spirit (the tool's Cargo files kept ours): resolve to ours (nightly-2026-08-08) unless S4 ports upstream's lint changes
 tools/argument-comment-lint/src/lib.rs	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		2	11	false	false	false	false	
 tools/argument-comment-lint/wrapper_common.py	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		2	16	false	false	false	false	
 .github/actions/build-bazel-package-binaries/action.yml	ci-review		CI/workflows	S0 manifests/locks/CI	S4	integrator	no	open		0	0	false	false	false	false	upstream change merged without conflict; review or port in S4
@@ -982,7 +982,7 @@ tools/argument-comment-lint/wrapper_common.py	content	UU	other	S1d tooling/repo	
 .github/scripts/watch_voice_bazel.py	ci-review		CI/workflows	S0 manifests/locks/CI	S4	integrator	no	open		0	0	false	false	false	false	upstream change merged without conflict; review or port in S4
 .github/scripts/windows_bazel_test_durations.tsv	ci-review		CI/workflows	S0 manifests/locks/CI	S4	integrator	no	open		0	0	false	false	false	false	upstream change merged without conflict; review or port in S4
 .github/workflows/blob-size-policy.yml	ci-review		CI/workflows	S0 manifests/locks/CI	S4	integrator	no	open		0	0	false	false	false	false	upstream change merged without conflict; review or port in S4
-.github/workflows/blocking-ci.yml	ci-review		CI/workflows	S0 manifests/locks/CI	S4	integrator	no	open		0	0	false	false	false	false	upstream change merged without conflict; review or port in S4
+.github/workflows/blocking-ci.yml	ci-review		CI/workflows	S0 manifests/locks/CI	S4	integrator	no	open		0	0	false	false	false	false	upstream removed bazel from the required job's needs (its BuildBuddy key was revoked); restore `- bazel` in S4 unless the owner decides otherwise; also review the rest of the upstream change
 .github/workflows/cargo-deny.yml	ci-review		CI/workflows	S0 manifests/locks/CI	S4	integrator	no	open		0	0	false	false	false	false	upstream change merged without conflict; review or port in S4
 .github/workflows/codespell.yml	ci-review		CI/workflows	S0 manifests/locks/CI	S4	integrator	no	open		0	0	false	false	false	false	upstream change merged without conflict; review or port in S4
 .github/workflows/issue-labeler.yml	ci-review		CI/workflows	S0 manifests/locks/CI	S4	integrator	no	open		0	0	false	false	false	false	upstream change merged without conflict; review or port in S4

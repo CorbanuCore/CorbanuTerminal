@@ -84,8 +84,11 @@
 /codex-rs/tui/src/**/*permission_popups* @IridiumMaster
 /codex-rs/tui/src/**/*windows_sandbox* @IridiumMaster
 /codex-rs/Cargo.toml @IridiumMaster
+/codex-rs/Cargo.lock @IridiumMaster
 /codex-rs/deny.toml @IridiumMaster
 /codex-rs/.cargo/audit.toml @IridiumMaster
 /MODULE.bazel @IridiumMaster
+/MODULE.bazel.lock @IridiumMaster
+/pnpm-lock.yaml @IridiumMaster
 /.github/workflows/cargo-deny.yml @IridiumMaster
 # END sync-branch security owners
