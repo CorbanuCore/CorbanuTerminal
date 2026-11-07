@@ -87,37 +87,23 @@ impl WriterLockCoordinator {
         })
     }
 
-<<<<<<< HEAD:codex-rs/thread-store/src/local/writer_lock.rs
-    fn lock_coordination(&self) -> ThreadStoreResult<CoordinationLock> {
-        fs::create_dir_all(&self.directory).map_err(|err| ThreadStoreError::Internal {
-            message: format!(
-                "failed to create thread writer lock directory {}: {err}",
-                self.directory.display()
-            ),
-        })?;
-        let path = self.directory.join(COORDINATION_LOCK_FILE);
-||||||| 413492cd6c:codex-rs/thread-store/src/local/writer_lock.rs
-    fn lock_coordination(&self) -> ThreadStoreResult<File> {
-        fs::create_dir_all(&self.directory).map_err(|err| ThreadStoreError::Internal {
-            message: format!(
-                "failed to create thread writer lock directory {}: {err}",
-                self.directory.display()
-            ),
-        })?;
-        let path = self.directory.join(COORDINATION_LOCK_FILE);
-=======
     /// Holds coordination through publication after probing that the thread is idle.
     /// Every writer takes coordination before opening its thread lock, so the probe
     /// itself can be released. Encoding and verification must finish before this call.
     pub(crate) fn try_acquire_for_publication(
         &self,
         thread_id: ThreadId,
-    ) -> io::Result<Option<File>> {
+    ) -> io::Result<Option<CoordinationLock>> {
         let coordination_lock = self.lock_coordination()?;
         let path = self.directory.join(format!("{thread_id}.lock"));
         match OpenOptions::new().read(true).write(true).open(path) {
             Ok(file) => match file.try_lock() {
-                Ok(()) => Ok(Some(coordination_lock)),
+                Ok(()) => {
+                    // #928: release the probe before close; a forked child's copy of the
+                    // descriptor would otherwise keep the thread locked.
+                    let _ = file.unlock();
+                    Ok(Some(coordination_lock))
+                }
                 Err(std::fs::TryLockError::WouldBlock) => Ok(None),
                 Err(std::fs::TryLockError::Error(err)) => Err(err),
             },
@@ -126,50 +112,18 @@ impl WriterLockCoordinator {
         }
     }
 
-    fn lock_coordination(&self) -> io::Result<File> {
+    fn lock_coordination(&self) -> io::Result<CoordinationLock> {
         fs::create_dir_all(&self.directory)?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/rollout/src/writer_lock.rs
         let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .truncate(false)
-<<<<<<< HEAD:codex-rs/thread-store/src/local/writer_lock.rs
-            .open(&path)
-            .map_err(|err| ThreadStoreError::Internal {
-                message: format!(
-                    "failed to open thread writer coordination lock {}: {err}",
-                    path.display()
-                ),
-            })?;
-        file.lock().map_err(|err| ThreadStoreError::Internal {
-            message: format!(
-                "failed to acquire thread writer coordination lock {}: {err}",
-                path.display()
-            ),
-        })?;
-        Ok(CoordinationLock(file))
-||||||| 413492cd6c:codex-rs/thread-store/src/local/writer_lock.rs
-            .open(&path)
-            .map_err(|err| ThreadStoreError::Internal {
-                message: format!(
-                    "failed to open thread writer coordination lock {}: {err}",
-                    path.display()
-                ),
-            })?;
-        file.lock().map_err(|err| ThreadStoreError::Internal {
-            message: format!(
-                "failed to acquire thread writer coordination lock {}: {err}",
-                path.display()
-            ),
-        })?;
-        Ok(file)
-=======
             .open(self.directory.join(COORDINATION_LOCK_FILE))?;
         let deadline = Instant::now() + Duration::from_secs(/*secs*/ 30);
         loop {
             match file.try_lock() {
-                Ok(()) => break,
+                Ok(()) => return Ok(CoordinationLock(file)),
                 Err(fs::TryLockError::WouldBlock) if Instant::now() < deadline => {
                     std::thread::sleep(Duration::from_millis(/*millis*/ 50));
                 }
@@ -182,8 +136,6 @@ impl WriterLockCoordinator {
                 Err(fs::TryLockError::Error(err)) => return Err(err),
             }
         }
-        Ok(file)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/rollout/src/writer_lock.rs
     }
 
     fn remove_stale_thread_locks(&self) -> io::Result<()> {
@@ -244,7 +196,7 @@ impl WriterLockCoordinator {
 }
 
 /// The held coordination lock, unlocked when dropped.
-struct CoordinationLock(File);
+pub(crate) struct CoordinationLock(File);
 
 impl Drop for CoordinationLock {
     fn drop(&mut self) {

@@ -176,6 +176,7 @@ async fn compaction_events_keep_authoritative_voice_session_across_consecutive_c
                         agent_path: None,
                         agent_nickname: None,
                         agent_role: None,
+                        agent_class: None,
                     }),
                     Some(AppServerThreadSource::Subagent),
                     Some(parent_thread_id.to_string()),

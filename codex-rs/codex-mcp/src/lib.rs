@@ -37,22 +37,14 @@ pub use sandbox_metadata::MCP_SANDBOX_STATE_CAPABILITY;
 pub use sandbox_metadata::MCP_SANDBOX_STATE_META_CAPABILITY;
 pub use sandbox_metadata::SandboxState;
 pub use tool_catalog_cache::McpToolCatalogCache;
-<<<<<<< HEAD
+pub use tool_request_meta::McpToolRequestMetaHook;
+pub use tool_request_meta::McpToolRequestMetaProvider;
 pub use tools::BUILTIN_TOOL_NAMESPACES;
 pub use tools::RESPONSES_RESERVED_NAMESPACES;
 pub use tools::ReservedMcpNamespace;
-||||||| 413492cd6c
-=======
-pub use tool_request_meta::McpToolRequestMetaHook;
-pub use tool_request_meta::McpToolRequestMetaProvider;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use tools::ToolInfo;
-<<<<<<< HEAD
 pub use tools::unprefixed_mcp_namespace_reservation;
-||||||| 413492cd6c
-=======
 pub use trusted_access::TrustedAccessContext;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 /// Backward-compatible name for the shared Codex Apps tools runtime.
 pub type CodexAppsToolsCache = codex_connectors::ConnectorRuntimeManager<ToolInfo>;

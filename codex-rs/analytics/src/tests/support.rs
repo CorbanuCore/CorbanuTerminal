@@ -235,6 +235,7 @@ pub(super) fn sample_thread_resume_response_with_source(
         initial_turns_page: None,
         turns_backwards_cursor: None,
         items_backwards_cursor: None,
+        provider_account: None,
     })
 }
 

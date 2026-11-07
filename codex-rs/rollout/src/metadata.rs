@@ -81,16 +81,12 @@ pub fn builder_from_items(
         | RolloutItem::Compacted(_)
         | RolloutItem::TurnContext(_)
         | RolloutItem::WorldState(_)
-<<<<<<< HEAD
-        | RolloutItem::SourceOrigin(_)
-||||||| 413492cd6c
-=======
         | RolloutItem::RealtimeItem(_)
         | RolloutItem::TokenUsageRecord(_)
         | RolloutItem::RetainedContext(_)
         | RolloutItem::DynamicToolsUpdated { .. }
         | RolloutItem::SecurityRiskScore(_)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        | RolloutItem::SourceOrigin(_)
         | RolloutItem::EventMsg(_) => None,
     }) && let Some(builder) = builder_from_session_meta(session_meta, rollout_path)
     {
@@ -184,16 +180,12 @@ pub async fn extract_metadata_from_rollout(
             | RolloutItem::Compacted(_)
             | RolloutItem::TurnContext(_)
             | RolloutItem::WorldState(_)
-<<<<<<< HEAD
-            | RolloutItem::SourceOrigin(_)
-||||||| 413492cd6c
-=======
             | RolloutItem::RealtimeItem(_)
             | RolloutItem::TokenUsageRecord(_)
             | RolloutItem::RetainedContext(_)
             | RolloutItem::DynamicToolsUpdated { .. }
             | RolloutItem::SecurityRiskScore(_)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            | RolloutItem::SourceOrigin(_)
             | RolloutItem::EventMsg(_) => None,
         }),
         parse_errors,

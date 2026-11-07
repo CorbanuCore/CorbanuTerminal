@@ -480,6 +480,7 @@ async fn collaborator_tool_events_keep_response_ids_when_completion_races_sampli
             model: None,
             reasoning_effort: None,
             agents_states: Default::default(),
+            provider_account: None,
         };
         reducer
             .ingest(

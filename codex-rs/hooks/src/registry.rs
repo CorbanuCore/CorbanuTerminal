@@ -36,6 +36,7 @@ use codex_protocol::ThreadId;
 use codex_protocol::protocol::HookEventName;
 use codex_protocol::protocol::HookExecutionMode;
 use codex_protocol::shell_environment::scrub_non_inheritable_env_vars;
+use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::future::Future;
 use std::sync::Arc;
@@ -414,26 +415,28 @@ pub(crate) fn command_from_argv(
     }
     let mut command = Command::from(codex_utils_process::background_command(program));
     command.args(args);
-<<<<<<< HEAD
-    apply_secretless_launch_env(&mut command);
-||||||| 413492cd6c
-=======
     command.env_clear();
-    command.envs(environment);
+    command.envs(
+        environment
+            .into_iter()
+            .filter(|(name, value)| secretless_launch_allows(name, value)),
+    );
     scrub_non_inheritable_env_vars(command.as_std_mut());
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     Some(command)
 }
 
 /// PF-27-S02: once secretless agent launch is armed, hook processes inherit
-/// only the launch allowlist (no provider keys, tokens or helper sockets).
-/// They still run outside the OS sandbox.
-pub(crate) fn apply_secretless_launch_env(command: &mut Command) {
+/// only the launch allowlist from the session environment (no provider keys,
+/// tokens or helper sockets). They still run outside the OS sandbox.
+pub(crate) fn secretless_launch_allows(name: &OsStr, value: &OsStr) -> bool {
     if !codex_protocol::secretless_launch::is_armed() {
-        return;
+        return true;
     }
-    let mut env = std::env::vars().collect::<std::collections::HashMap<_, _>>();
-    codex_protocol::secretless_launch::retain_launch_env(&mut env, |_| false);
-    command.env_clear();
-    command.envs(env);
+    match (name.to_str(), value.to_str()) {
+        (Some(name), Some(value)) => {
+            codex_protocol::secretless_launch::is_launch_env_name_allowed(name)
+                && !codex_protocol::secretless_launch::value_has_url_password(value)
+        }
+        _ => false,
+    }
 }

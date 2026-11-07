@@ -80,7 +80,8 @@ impl ModelReplayPlanner {
             | RolloutItem::TokenUsageRecord(_)
             | RolloutItem::RetainedContext(_)
             | RolloutItem::SecurityRiskScore(_)
-            | RolloutItem::WorldState(_) => return,
+            | RolloutItem::WorldState(_)
+            | RolloutItem::SourceOrigin(_) => return,
         };
         self.records.push(record);
     }

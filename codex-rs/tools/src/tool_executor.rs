@@ -71,16 +71,8 @@ pub enum ToolExposure {
     /// model tool while excluding it from the nested code-mode tool surface.
     DirectModelOnly,
 
-<<<<<<< HEAD
-    /// Omit this tool from the direct model tool list while exposing it as a
-    /// nested code-mode tool. This is useful for runtime-enforced operations
-    /// that must be reachable for an explained rejection without granting the
-    /// direct model surface the capability.
-||||||| 413492cd6c
-=======
     /// Expose this tool only to nested Code Mode calls, without including it in
     /// the initial model-visible tool list or making it available to tool search.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     CodeModeOnly,
 
     /// Keep this tool registered for dispatch without exposing it to the model.
@@ -101,14 +93,7 @@ impl ToolExposure {
     pub fn is_available_in_code_mode(self) -> bool {
         match self {
             Self::Direct | Self::Deferred | Self::CodeModeOnly => true,
-<<<<<<< HEAD
-            Self::DirectModelOnly | Self::Hidden => false,
-||||||| 413492cd6c
-            Self::Direct | Self::Deferred => true,
-            Self::DirectModelOnly | Self::Hidden => false,
-=======
             Self::DirectModelOnly | Self::DeferredModelOnly | Self::Hidden => false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 }

@@ -18,34 +18,21 @@ pub(crate) fn create_env_for_mcp_server(
     env_vars: &[McpServerEnvVar],
 ) -> Result<HashMap<OsString, OsString>> {
     let additional_env_vars = local_stdio_env_var_names(env_vars)?;
-<<<<<<< HEAD
     // PF-27-S02: with secretless agent launch armed, inherited variables
     // must pass the launch allowlist; literal `env` values from the server's
     // own config are still applied below.
     let armed = codex_protocol::secretless_launch::is_armed();
-    let env = DEFAULT_ENV_VARS
-||||||| 413492cd6c
-    let env = DEFAULT_ENV_VARS
-=======
     let mut env: HashMap<OsString, OsString> = DEFAULT_ENV_VARS
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         .iter()
         .copied()
         .chain(additional_env_vars)
         .filter(|var| !armed || codex_protocol::secretless_launch::is_launch_env_name_allowed(var))
         .filter_map(|var| env::var_os(var).map(|value| (OsString::from(var), value)))
-<<<<<<< HEAD
-        .chain(extra_env.unwrap_or_default())
-        .chain(
-            codex_protocol::shell_environment::keyring_isolation_env_var()
-                .map(|(name, value)| (OsString::from(name), OsString::from(value))),
-        )
-||||||| 413492cd6c
-        .chain(extra_env.unwrap_or_default())
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         .collect();
     for name in CUSTOM_CA_ENV_KEYS {
+        if armed && !codex_protocol::secretless_launch::is_launch_env_name_allowed(name) {
+            continue;
+        }
         let Some(value) = env::var_os(name) else {
             continue;
         };
@@ -76,6 +63,11 @@ pub(crate) fn create_env_for_mcp_server(
         name.to_str()
             .is_none_or(|name| !is_non_inheritable_env_var(name))
     });
+    // Test runs keep native keyrings out of MCP servers they start too.
+    env.extend(
+        codex_protocol::shell_environment::keyring_isolation_env_var()
+            .map(|(name, value)| (OsString::from(name), OsString::from(value))),
+    );
     Ok(env)
 }
 

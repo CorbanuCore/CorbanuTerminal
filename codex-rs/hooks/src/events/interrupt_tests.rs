@@ -126,5 +126,6 @@ fn run_result(exit_code: Option<i32>, stdout: &str, stderr: &str) -> HandlerRunR
         stdout: stdout.to_string(),
         stderr: stderr.to_string(),
         error: None,
+        start_failed: false,
     }
 }
