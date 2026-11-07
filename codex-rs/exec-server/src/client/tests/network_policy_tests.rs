@@ -12,37 +12,25 @@ use codex_http_client::OutboundProxyPolicy;
 use codex_network_proxy::NetworkDecision;
 use codex_network_proxy::NetworkPolicyDecider;
 use codex_network_proxy::NetworkPolicyRequest;
-<<<<<<< HEAD
+use codex_network_proxy::NetworkProxyAuditMetadata;
 use codex_network_proxy::NetworkProxyConfig;
 use codex_network_proxy::RemoteNetworkProxyConfig;
 use codex_network_proxy::RemoteNetworkProxyLaunchConfig;
-||||||| 413492cd6c
-=======
-use codex_network_proxy::NetworkProxyAuditMetadata;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_utils_path_uri::PathUri;
-<<<<<<< HEAD
 use futures::StreamExt;
-||||||| 413492cd6c
-=======
 use http::HeaderMap;
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_sdk::trace::InMemorySpanExporter;
 use opentelemetry_sdk::trace::SdkTracerProvider;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use pretty_assertions::assert_eq;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
-<<<<<<< HEAD
 use tokio_tungstenite::tungstenite::Message;
-||||||| 413492cd6c
-=======
 use tracing::instrument::WithSubscriber;
 use tracing_subscriber::filter::filter_fn;
 use tracing_subscriber::prelude::*;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 use super::super::ExecServerError;
 use super::super::LazyRemoteExecServerClient;
@@ -731,10 +719,12 @@ async fn denial_reports_must_match_the_observer() {
         launch.report_denials = report_denials;
         let params = ExecParams {
             process_id: process_id.clone(),
+            metadata: Default::default(),
             argv: vec!["true".to_string()],
             cwd: PathUri::from_host_native_path(std::env::current_dir().expect("cwd"))
                 .expect("cwd URI"),
             env_policy: None,
+            shell_snapshot: None,
             env: Default::default(),
             tty: false,
             pipe_stdin: false,
