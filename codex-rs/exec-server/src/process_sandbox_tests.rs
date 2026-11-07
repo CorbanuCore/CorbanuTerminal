@@ -6,8 +6,8 @@ use std::time::Duration;
 use codex_exec_server_protocol::JSONRPCErrorError;
 #[cfg(unix)]
 use codex_file_system::WindowsSandboxSelection;
-#[cfg(target_os = "macos")]
 use codex_network_proxy::BlockedRequestObserver;
+#[cfg(target_os = "macos")]
 use codex_network_proxy::ManagedNetworkSandboxContext;
 use codex_network_proxy::NetworkPolicyAuditObserver;
 use codex_network_proxy::NetworkPolicyDecider;

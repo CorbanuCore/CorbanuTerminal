@@ -719,10 +719,12 @@ async fn denial_reports_must_match_the_observer() {
         launch.report_denials = report_denials;
         let params = ExecParams {
             process_id: process_id.clone(),
+            metadata: Default::default(),
             argv: vec!["true".to_string()],
             cwd: PathUri::from_host_native_path(std::env::current_dir().expect("cwd"))
                 .expect("cwd URI"),
             env_policy: None,
+            shell_snapshot: None,
             env: Default::default(),
             tty: false,
             pipe_stdin: false,
