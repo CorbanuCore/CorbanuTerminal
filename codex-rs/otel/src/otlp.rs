@@ -295,7 +295,7 @@ mod tests {
     fn build_http_client_accepts_pem_client_identity() {
         let (_temp_dir, tls) = write_test_mtls_config();
 
-        build_http_client(&tls, OTEL_EXPORTER_OTLP_TIMEOUT)
+        build_http_client(Some(&tls), OTEL_EXPORTER_OTLP_TIMEOUT)
             .expect("blocking HTTP client should accept PEM client identity");
     }
 

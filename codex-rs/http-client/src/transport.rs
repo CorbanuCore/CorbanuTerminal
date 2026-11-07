@@ -101,6 +101,15 @@ impl ReqwestTransport {
             .contains_key(crate::MODEL_BROKER_FRAME_HEADER)
             && !self.is_broker_socket()
         {
+            // A managed application network policy would have to approve and
+            // be able to revoke the brokered destination; until the broker
+            // path does that, such requests are refused, not sent unchecked.
+            if self.network_policy_is_managed() {
+                return Err(TransportError::Build(
+                    "brokered model requests are not available under a managed network policy"
+                        .to_string(),
+                ));
+            }
             match crate::model_broker_route::model_broker_route().ok_or_else(|| {
                 if let Some(frame) = crate::model_broker_route::broker_frame(&prepared.headers) {
                     crate::model_broker_route::report(
@@ -166,6 +175,17 @@ impl ReqwestTransport {
                     .map(HttpResponse::from)
                     .map_err(|error| Self::map_error(error.into()))
             }
+        }
+    }
+
+    /// Whether the caller's routes are governed by a managed application network policy.
+    fn network_policy_is_managed(&self) -> bool {
+        match &self.client {
+            TransportClient::Fixed(client) => matches!(
+                &client.backend,
+                HttpClientBackend::Routed(pool) if pool.network_policy_is_managed()
+            ),
+            TransportClient::RouteAware(pool) => pool.network_policy_is_managed(),
         }
     }
 

@@ -69,8 +69,11 @@ impl std::fmt::Debug for TransportError {
             Self::Policy(denied) => f.debug_tuple("Policy").field(denied).finish(),
             Self::RetryLimit => f.write_str("RetryLimit"),
             Self::Timeout => f.write_str("Timeout"),
-            // The transport strips the URL before wrapping the error.
-            Self::Connection(error) => f.debug_tuple("Connection").field(error).finish(),
+            // The transport strips the URL before wrapping the error; redact anyway.
+            Self::Connection(error) => f
+                .debug_tuple("Connection")
+                .field(&error.redacted_message())
+                .finish(),
             Self::Network(message) => f.debug_tuple("Network").field(message).finish(),
             Self::Build(message) => f.debug_tuple("Build").field(message).finish(),
             Self::ResponseTooLarge { max_bytes } => f

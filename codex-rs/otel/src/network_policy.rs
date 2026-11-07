@@ -76,6 +76,9 @@ impl<E: PushMetricExporter> PushMetricExporter for PolicyExporter<E> {
     }
 }
 
+/// Same limit as the built-in `opentelemetry-http` clients.
+const MAX_RESPONSE_BODY_BYTES: usize = 4 * 1024 * 1024;
+
 /// Keeps blocking SDK worker threads from performing uncancellable HTTP I/O.
 #[derive(Debug)]
 pub(crate) struct RuntimeHttpClient {
@@ -107,13 +110,29 @@ impl opentelemetry_http::HttpClient for RuntimeHttpClient {
                         .body(body)
                         .timeout(timeout)
                         .send()
-                        .await?
-                        .error_for_status()?;
+                        .await
+                        .map_err(|error| Box::new(error.without_url()) as HttpError)?;
+                    // Like the opentelemetry-http clients (and main's adapter):
+                    // non-success statuses are responses for the exporter to
+                    // classify, and bodies over 4 MiB are refused.
                     let mut builder = http::Response::builder().status(response.status());
                     if let Some(headers) = builder.headers_mut() {
                         *headers = response.headers().clone();
                     }
-                    Ok::<_, HttpError>(builder.body(response.bytes().await?)?)
+                    let mut response = response;
+                    let mut body = bytes::BytesMut::new();
+                    while let Some(chunk) = response
+                        .chunk()
+                        .await
+                        .map_err(|error| Box::new(error.without_url()) as HttpError)?
+                    {
+                        if body.len() + chunk.len() > MAX_RESPONSE_BODY_BYTES {
+                            return Err(Box::new(opentelemetry_http::ResponseBodyTooLarge::new())
+                                as HttpError);
+                        }
+                        body.extend_from_slice(&chunk);
+                    }
+                    Ok::<_, HttpError>(builder.body(body.freeze())?)
                 },
                 &self.runtime,
             );

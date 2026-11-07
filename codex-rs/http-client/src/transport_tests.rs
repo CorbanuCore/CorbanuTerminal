@@ -279,6 +279,80 @@ async fn pf_27_s05_broker_frame_requests_go_only_to_the_broker_socket() {
     assert!(network.accept().is_err(), "nothing may reach the network");
 }
 
+/// PF-27-S05 on upstream's routed paths: a route-aware pool and a routed
+/// `HttpClient` refuse a frame-bearing request with no broker, send nothing,
+/// and refuse it under a managed application network policy.
+#[tokio::test]
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "the broker route is process-wide; tests that install one run one at a time"
+)]
+async fn pf_27_s05_routed_transports_never_send_broker_frames_to_the_network() {
+    let _route = crate::model_broker_route::ROUTE_TEST_LOCK.lock().await;
+    let _uninstall = UninstallRoute;
+
+    let network = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    network.set_nonblocking(true).expect("nonblocking");
+    let url = format!(
+        "http://127.0.0.1:{}/v1/responses",
+        network.local_addr().expect("addr").port()
+    );
+    let mut framed = Request::new(Method::POST, url);
+    framed.headers.insert(
+        crate::MODEL_BROKER_FRAME_HEADER,
+        http::HeaderValue::from_static("signed-frame"),
+    );
+
+    let unmanaged = || crate::HttpClientFactory::new(crate::OutboundProxyPolicy::ReqwestDefault);
+    let controller = crate::NetworkPolicyController::default();
+    let policy = controller.policy();
+    controller.publish(policy.revision(), crate::DestinationPolicy::Unrestricted);
+    let managed = unmanaged().with_network_policy(policy);
+    for (transport, expected) in [
+        (
+            ReqwestTransport::from_route_aware_client_pool(crate::RouteAwareClientPool::new(
+                unmanaged(),
+                crate::ClientRouteClass::Api,
+            )),
+            "credential broker is not running",
+        ),
+        (
+            ReqwestTransport::from_http_client(
+                crate::RouteAwareClientPool::new(unmanaged(), crate::ClientRouteClass::Api)
+                    .into_client(),
+            ),
+            "credential broker is not running",
+        ),
+        (
+            ReqwestTransport::from_route_aware_client_pool(crate::RouteAwareClientPool::new(
+                managed.clone(),
+                crate::ClientRouteClass::Api,
+            )),
+            "managed network policy",
+        ),
+        (
+            ReqwestTransport::from_http_client(
+                crate::RouteAwareClientPool::new(managed.clone(), crate::ClientRouteClass::Api)
+                    .into_client(),
+            ),
+            "managed network policy",
+        ),
+    ] {
+        let refused = transport.execute(framed.clone()).await;
+        assert!(
+            matches!(&refused, Err(TransportError::Build(message)) if message.contains(expected)),
+            "{refused:?}"
+        );
+        let refused = transport.stream(framed.clone()).await;
+        assert!(
+            matches!(&refused, Err(TransportError::Build(message)) if message.contains(expected)),
+            "{:?}",
+            refused.err()
+        );
+    }
+    assert!(network.accept().is_err(), "nothing may reach the network");
+}
+
 /// Removes the process-wide broker route when a test ends, even by panic.
 struct UninstallRoute;
 

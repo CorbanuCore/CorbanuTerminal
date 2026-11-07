@@ -568,6 +568,11 @@ impl RouteAwareClientPool {
         Ok((route, client, SelectedTlsBackend::TransportDefault))
     }
 
+    /// Whether this pool's destinations are governed by a managed application policy.
+    pub(crate) fn network_policy_is_managed(&self) -> bool {
+        self.http_client_factory.network_policy().is_managed()
+    }
+
     fn follows_redirects_manually(&self) -> bool {
         self.client_builder.follows_redirects()
             && (self.http_client_factory.outbound_proxy_policy()
