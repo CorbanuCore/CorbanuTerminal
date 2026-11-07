@@ -778,6 +778,7 @@ impl McpConnectionSet {
                         );
                         if pending {
                             let client = connection.client.clone();
+                            let startup_cancellation = connection.startup_cancellation.clone();
                             let publication_gate = publication_gate.clone();
                             join_set.spawn(async move {
                                 if !publication_gate.wait().await {
@@ -787,11 +788,9 @@ impl McpConnectionSet {
                                         /*report_cancellation*/ false,
                                     );
                                 }
-                                (
-                                    server_name,
-                                    client.client().await,
-                                    /*report_cancellation*/ true,
-                                )
+                                let outcome = client.client().await;
+                                // A reused startup reports its cancellation as its owner does.
+                                (server_name, outcome, startup_cancellation.should_report())
                             });
                         } else {
                             reused_ready.push(server_name);
@@ -849,8 +848,12 @@ impl McpConnectionSet {
                             })
                         }))
                 {
-                    let pending_client =
-                        reusable_pending_startup.then(|| connection.client.clone());
+                    let pending_client = reusable_pending_startup.then(|| {
+                        (
+                            connection.client.clone(),
+                            connection.startup_cancellation.clone(),
+                        )
+                    });
                     servers.insert(
                         server_name.clone(),
                         McpServerView {
@@ -906,7 +909,7 @@ impl McpConnectionSet {
                             }
                             (server_name, Err(error), /*report_cancellation*/ true)
                         });
-                    } else if let Some(client) = pending_client {
+                    } else if let Some((client, startup_cancellation)) = pending_client {
                         let publication_gate = publication_gate.clone();
                         join_set.spawn(async move {
                             if !publication_gate.wait().await {
@@ -916,11 +919,9 @@ impl McpConnectionSet {
                                     /*report_cancellation*/ false,
                                 );
                             }
-                            (
-                                server_name,
-                                client.client().await,
-                                /*report_cancellation*/ true,
-                            )
+                            let outcome = client.client().await;
+                            // A reused startup reports its cancellation as its owner does.
+                            (server_name, outcome, startup_cancellation.should_report())
                         });
                     } else {
                         reused_ready.push(server_name);

@@ -60,7 +60,6 @@ impl ToolSearchInfo {
         spec: Arc<ToolSpec>,
         source_info: Option<ToolSearchSourceInfo>,
     ) -> Option<Self> {
-        let search_text = combine_search_text(search_text, default_tool_search_text(&spec));
         match spec.as_ref() {
             ToolSpec::Function(_) | ToolSpec::Freeform(_) | ToolSpec::Namespace(_) => Some(Self {
                 entry: ToolSearchEntry { search_text, spec },

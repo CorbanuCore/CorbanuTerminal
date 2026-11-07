@@ -828,7 +828,7 @@ impl PluginsManager {
         if !config.plugins_enabled {
             return None;
         }
-        let auth = self.auth_manager.auth_cached();
+        let auth = self.auth_manager.session_auth_cached();
         let key = PluginLoadCacheKey::from_config(
             config,
             self.codex_home.as_path(),
@@ -863,7 +863,7 @@ impl PluginsManager {
         loop {
             let auth_revision = *auth_change_receiver.borrow();
             let remote_global_catalog_active = self.remote_global_catalog_active(config);
-            let auth = self.auth_manager.auth_cached();
+            let auth = self.auth_manager.session_auth_cached();
             let auth_mode = auth.as_ref().map(CodexAuth::api_auth_mode);
             let auth_identity = RemoteInstalledPluginsAuthIdentity::from_auth(auth.as_ref());
             let cache_key = PluginLoadCacheKey::from_config(
@@ -1182,7 +1182,7 @@ impl PluginsManager {
         &self,
         cache: &RemoteInstalledPluginsCache,
     ) -> bool {
-        let auth = self.auth_manager.auth_cached();
+        let auth = self.auth_manager.session_auth_cached();
         cache.auth_identity.as_ref()
             == Some(&RemoteInstalledPluginsAuthIdentity::from_auth(
                 auth.as_ref(),
@@ -1193,7 +1193,7 @@ impl PluginsManager {
         &self,
         auth_identity: &RemoteInstalledPluginsAuthIdentity,
     ) -> bool {
-        let auth = self.auth_manager.auth_cached();
+        let auth = self.auth_manager.session_auth_cached();
         RemoteInstalledPluginsAuthIdentity::from_auth(auth.as_ref()) == *auth_identity
     }
 
@@ -1289,7 +1289,7 @@ impl PluginsManager {
         visible_marketplaces: &[&str],
         display_assets: InstalledPluginDisplayAssets,
     ) -> Option<Vec<crate::remote::RemoteMarketplace>> {
-        let auth = self.auth_manager.auth_cached();
+        let auth = self.auth_manager.session_auth_cached();
         self.build_remote_installed_plugin_marketplaces_from_cache_for_auth(
             auth.as_ref(),
             visible_marketplaces,
@@ -1560,7 +1560,7 @@ impl PluginsManager {
 
     #[cfg(test)]
     fn write_remote_installed_plugins_cache(&self, plugins: Vec<RemoteInstalledPlugin>) -> bool {
-        let auth = self.auth_manager.auth_cached();
+        let auth = self.auth_manager.session_auth_cached();
         let generation = self
             .prepare_remote_installed_plugins_cache_generation(auth.as_ref())
             .expect("test cache identity should remain current");
