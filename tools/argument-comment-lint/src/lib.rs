@@ -14,14 +14,20 @@ use clippy_utils::diagnostics::span_lint_and_help;
 use clippy_utils::diagnostics::span_lint_and_sugg;
 use clippy_utils::fn_def_id;
 use clippy_utils::peel_blocks;
+<<<<<<< HEAD
 use clippy_utils::res::MaybeDef as _;
+||||||| 413492cd6c
+=======
+use clippy_utils::res::MaybeDef;
+use clippy_utils::res::MaybeQPath;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use clippy_utils::source::snippet;
 use rustc_ast::LitKind;
 use rustc_errors::Applicability;
 use rustc_hir::Expr;
 use rustc_hir::ExprKind;
-use rustc_hir::LangItem;
 use rustc_hir::UnOp;
+use rustc_hir::attrs::lang_items::LangItem;
 use rustc_hir::def::DefKind;
 use rustc_lint::LateContext;
 use rustc_lint::LateLintPass;
@@ -266,10 +272,21 @@ fn is_anonymous_literal_like(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
             LitKind::Str(..) | LitKind::ByteStr(..) | LitKind::CStr(..) | LitKind::Char(..)
         ),
         ExprKind::Unary(UnOp::Neg, inner) => matches!(peel_blocks(inner).kind, ExprKind::Lit(_)),
+<<<<<<< HEAD
         ExprKind::Path(qpath) => {
             let res = cx.qpath_res(&qpath, expr.hir_id);
             res.ctor_parent(cx).is_lang_item(cx, LangItem::OptionNone)
         }
+||||||| 413492cd6c
+        ExprKind::Path(qpath) => {
+            is_res_lang_ctor(cx, cx.qpath_res(&qpath, expr.hir_id), LangItem::OptionNone)
+        }
+=======
+        ExprKind::Path(_) => expr
+            .res(cx)
+            .ctor_parent(cx)
+            .is_lang_item(cx, LangItem::OptionNone),
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         _ => false,
     }
 }
@@ -279,11 +296,7 @@ fn is_meaningful_parameter_name(name: &str) -> bool {
 }
 
 fn is_workspace_crate_name(name: &str) -> bool {
-    name.starts_with("codex_")
-        || matches!(
-            name,
-            "app_test_support" | "core_test_support" | "mcp_test_support"
-        )
+    name.starts_with("codex_") || matches!(name, "app_test_support" | "core_test_support")
 }
 
 #[test]

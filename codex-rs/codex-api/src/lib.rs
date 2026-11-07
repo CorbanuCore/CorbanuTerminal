@@ -4,14 +4,19 @@ pub(crate) mod common;
 pub(crate) mod endpoint;
 pub(crate) mod error;
 pub(crate) mod files;
+mod guardian_assessment;
 pub(crate) mod images;
 pub(crate) mod provider;
 pub(crate) mod rate_limits;
 pub(crate) mod requests;
+mod responses_headers;
 pub(crate) mod safety_buffering;
 pub(crate) mod search;
 pub(crate) mod sse;
 pub(crate) mod telemetry;
+
+/// Path of the Responses endpoint, relative to a provider's base URL.
+pub const RESPONSES_PATH: &str = "/responses";
 
 pub use crate::requests::headers::build_session_headers;
 pub use codex_client::RequestTelemetry;
@@ -22,10 +27,13 @@ pub use crate::api_bridge::map_api_error;
 pub use crate::auth::AgentIdentityTelemetry;
 pub use crate::auth::AuthError;
 pub use crate::auth::AuthHeaderTelemetry;
+pub use crate::auth::AuthHeadersFuture;
 pub use crate::auth::AuthProvider;
 pub use crate::auth::AuthProviderFuture;
+pub use crate::auth::AuthRefreshFuture;
 pub use crate::auth::SharedAuthProvider;
 pub use crate::auth::auth_header_telemetry;
+<<<<<<< HEAD
 pub use crate::common::AnthropicMessagesRequest;
 pub use crate::common::ChatCacheControl;
 pub use crate::common::ChatCompletionsRequest;
@@ -37,6 +45,11 @@ pub use crate::common::ChatToolCall;
 pub use crate::common::ChatToolFunction;
 pub use crate::common::CompactionInput;
 pub use crate::common::CompletionFinishReason;
+||||||| 413492cd6c
+pub use crate::common::CompactionInput;
+=======
+pub use crate::common::AccessPrograms;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use crate::common::MemorySummarizeInput;
 pub use crate::common::MemorySummarizeOutput;
 pub use crate::common::OpenAiVerbosity;
@@ -47,6 +60,8 @@ pub use crate::common::ReasoningContext;
 pub use crate::common::ReasoningSummaryDelivery;
 pub use crate::common::ResponseCreateWsRequest;
 pub use crate::common::ResponseEvent;
+pub use crate::common::ResponseId;
+pub use crate::common::ResponseInterrupt;
 pub use crate::common::ResponseStream;
 pub use crate::common::ResponsesApiRequest;
 pub use crate::common::ResponsesApiTools;
@@ -57,11 +72,17 @@ pub use crate::common::WS_REQUEST_HEADER_TRACEPARENT_CLIENT_METADATA_KEY;
 pub use crate::common::WS_REQUEST_HEADER_TRACESTATE_CLIENT_METADATA_KEY;
 pub use crate::common::create_text_param_for_request;
 pub use crate::common::response_create_client_metadata;
+<<<<<<< HEAD
 pub use crate::endpoint::AnthropicMessagesClient;
 pub use crate::endpoint::AnthropicMessagesOptions;
 pub use crate::endpoint::ChatCompletionsClient;
 pub use crate::endpoint::ChatCompletionsOptions;
 pub use crate::endpoint::CompactClient;
+||||||| 413492cd6c
+pub use crate::endpoint::CompactClient;
+=======
+pub use crate::endpoint::ImageRequestError;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use crate::endpoint::ImagesClient;
 pub use crate::endpoint::MemoriesClient;
 pub use crate::endpoint::ModelsClient;
@@ -72,6 +93,7 @@ pub use crate::endpoint::RealtimeEventParser;
 pub use crate::endpoint::RealtimeOutputModality;
 pub use crate::endpoint::RealtimeSessionConfig;
 pub use crate::endpoint::RealtimeSessionMode;
+pub use crate::endpoint::RealtimeTranscriptState;
 pub use crate::endpoint::RealtimeWebsocketClient;
 pub use crate::endpoint::RealtimeWebsocketConnection;
 pub use crate::endpoint::RealtimeWebsocketEvents;
@@ -83,6 +105,8 @@ pub use crate::endpoint::ResponsesWebsocketClient;
 pub use crate::endpoint::ResponsesWebsocketClose;
 pub use crate::endpoint::ResponsesWebsocketConnection;
 pub use crate::endpoint::ResponsesWebsocketProbe;
+pub use crate::endpoint::ResponsesWebsocketProbeError;
+pub use crate::endpoint::ResponsesWebsocketProbeFailureStage;
 pub use crate::endpoint::SearchClient;
 pub use crate::endpoint::anthropic_messages::accounting::AnthropicTokenPresence;
 pub use crate::endpoint::anthropic_messages::accounting::AnthropicUsageObserver;
@@ -108,15 +132,16 @@ pub use crate::endpoint::responses_websocket::accounting::AdmissionFuture;
 pub use crate::endpoint::responses_websocket::accounting::ResponsesWebsocketAdmission;
 pub use crate::endpoint::session_update_session_json;
 pub use crate::error::ApiError;
+pub use crate::files::HostedFileUploadContext;
 pub use crate::files::OPENAI_FILE_UPLOAD_LIMIT_BYTES;
 pub use crate::files::upload_openai_file;
+pub use crate::guardian_assessment::GuardianAssessment;
 pub use crate::images::ImageBackground;
 pub use crate::images::ImageData;
 pub use crate::images::ImageEditRequest;
 pub use crate::images::ImageGenerationRequest;
 pub use crate::images::ImageQuality;
 pub use crate::images::ImageResponse;
-pub use crate::images::ImageUrl;
 pub use crate::provider::Provider;
 pub use crate::provider::RetryConfig;
 pub use crate::provider::is_azure_responses_provider;

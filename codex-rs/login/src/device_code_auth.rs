@@ -164,10 +164,11 @@ fn print_device_code_prompt(verification_url: &str, code: &str) {
 
 pub async fn request_device_code(opts: &ServerOptions) -> std::io::Result<DeviceCode> {
     let base_url = opts.issuer.trim_end_matches('/');
-    // The route selected for the issuer is reused for all device-auth endpoint paths; the endpoint
-    // paths are not resolved separately.
-    let client = create_raw_auth_client(base_url, &opts.auth_route_config)?;
     let api_base_url = format!("{base_url}/api/accounts");
+    let client = create_raw_auth_client(
+        &format!("{api_base_url}/deviceauth/usercode"),
+        &opts.auth_route_config,
+    )?;
     let uc = request_user_code(&client, &api_base_url, &opts.client_id).await?;
 
     Ok(DeviceCode {
@@ -195,8 +196,11 @@ pub async fn complete_device_code_login_with_persistence_guard(
     before_persist: impl FnOnce() -> std::io::Result<()>,
 ) -> std::io::Result<()> {
     let base_url = opts.issuer.trim_end_matches('/');
-    let client = create_raw_auth_client(base_url, &opts.auth_route_config)?;
     let api_base_url = format!("{base_url}/api/accounts");
+    let client = create_raw_auth_client(
+        &format!("{api_base_url}/deviceauth/token"),
+        &opts.auth_route_config,
+    )?;
 
     let code_resp = poll_for_token(
         &client,
@@ -213,7 +217,7 @@ pub async fn complete_device_code_login_with_persistence_guard(
     };
     let redirect_uri = format!("{base_url}/deviceauth/callback");
 
-    let tokens = crate::server::exchange_code_for_tokens(
+    let (tokens, _) = crate::server::exchange_code_for_tokens(
         base_url,
         &opts.client_id,
         &redirect_uri,
@@ -231,6 +235,7 @@ pub async fn complete_device_code_login_with_persistence_guard(
         return Err(io::Error::new(io::ErrorKind::PermissionDenied, message));
     }
 
+<<<<<<< HEAD
     before_persist()?;
     crate::server::persist_tokens_async(
         &opts.codex_home,
@@ -246,6 +251,20 @@ pub async fn complete_device_code_login_with_persistence_guard(
         &opts.auth_route_config,
     )
     .await
+||||||| 413492cd6c
+    crate::server::persist_tokens_async(
+        &opts.codex_home,
+        /*api_key*/ None,
+        tokens.id_token,
+        tokens.access_token,
+        tokens.refresh_token,
+        opts.cli_auth_credentials_store_mode,
+        opts.auth_keyring_backend_kind,
+    )
+    .await
+=======
+    crate::server::persist_tokens_async(&opts, /*api_key*/ None, &tokens).await
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 pub async fn run_device_code_login(opts: ServerOptions) -> std::io::Result<()> {

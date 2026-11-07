@@ -2,17 +2,22 @@ pub use codex_api::ResponseEvent;
 use codex_protocol::error::Result;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ContentItem;
+use codex_protocol::models::DEFAULT_IMAGE_DETAIL;
 use codex_protocol::models::FunctionCallOutputContentItem;
+use codex_protocol::models::ImageDetail;
 use codex_protocol::models::ResponseItem;
+use codex_protocol::openai_models::ModelInfo;
 use codex_tools::ToolSpec;
 use futures::Stream;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::Context;
 use std::task::Poll;
 use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
 /// API request payload for a single model turn
@@ -21,9 +26,8 @@ pub struct Prompt {
     /// Conversation context input items.
     pub input: Vec<ResponseItem>,
 
-    /// Tools available to the model, including additional tools sourced from
-    /// external MCP servers.
-    pub(crate) tools: Vec<ToolSpec>,
+    /// Tool definitions to inject into this request, empty when supplied by history.
+    pub(crate) tools: Arc<[ToolSpec]>,
 
     /// Whether parallel tool calls are permitted for this prompt.
     pub(crate) parallel_tool_calls: bool,
@@ -36,6 +40,7 @@ pub struct Prompt {
     /// Whether the Responses API should strictly validate `output_schema`.
     pub output_schema_strict: bool,
 
+<<<<<<< HEAD
     /// #578: the producer of this request's provider (see
     /// `TurnContext::output_producer`). Another producer's items lose their
     /// IDs on a Responses request, after source labelling looked them up by
@@ -46,19 +51,28 @@ pub struct Prompt {
     /// without namespaces, so recorded namespaced calls replay under exactly
     /// the name offered for them. Empty on wires with namespaces.
     pub(crate) flat_tool_names: crate::tools::flat_tool_names::FlatToolNames,
+||||||| 413492cd6c
+=======
+    pub(crate) cyber_access_program: Option<codex_protocol::turn_input::CyberAccessProgram>,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl Default for Prompt {
     fn default() -> Self {
         Self {
             input: Vec::new(),
-            tools: Vec::new(),
+            tools: Arc::default(),
             parallel_tool_calls: false,
             base_instructions: BaseInstructions::default(),
             output_schema: None,
             output_schema_strict: true,
+<<<<<<< HEAD
             producer: None,
             flat_tool_names: Default::default(),
+||||||| 413492cd6c
+=======
+            cyber_access_program: None,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 }
@@ -66,16 +80,15 @@ impl Default for Prompt {
 impl Prompt {
     pub(crate) fn get_formatted_input_for_request(
         &self,
-        use_responses_lite: bool,
+        model_info: &ModelInfo,
     ) -> Vec<ResponseItem> {
         let mut input = self.input.clone();
-        if use_responses_lite {
-            strip_image_details(&mut input);
-        }
+        normalize_image_details(&mut input, model_info);
         input
     }
 }
 
+<<<<<<< HEAD
 /// Keep only the newest version of each turn-scoped developer-context section.
 ///
 /// OpenAI models understand append-only contextual updates and benefit from the stable prompt
@@ -142,12 +155,17 @@ impl NewerSections {
 }
 
 pub(crate) fn strip_image_details(items: &mut [ResponseItem]) {
+||||||| 413492cd6c
+fn strip_image_details(items: &mut [ResponseItem]) {
+=======
+fn normalize_image_details(items: &mut [ResponseItem], model_info: &ModelInfo) {
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     for item in items {
         match item {
             ResponseItem::Message { content, .. } => {
                 for content_item in content {
                     if let ContentItem::InputImage { detail, .. } = content_item {
-                        *detail = None;
+                        normalize_image_detail(detail, model_info);
                     }
                 }
             }
@@ -158,7 +176,7 @@ pub(crate) fn strip_image_details(items: &mut [ResponseItem]) {
                         if let FunctionCallOutputContentItem::InputImage { detail, .. } =
                             content_item
                         {
-                            *detail = None;
+                            normalize_image_detail(detail, model_info);
                         }
                     }
                 }
@@ -174,6 +192,7 @@ pub(crate) fn strip_image_details(items: &mut [ResponseItem]) {
             | ResponseItem::WebSearchCall { .. }
             | ResponseItem::ImageGenerationCall { .. }
             | ResponseItem::Compaction { .. }
+            | ResponseItem::ConfigurationUpdate { .. }
             | ResponseItem::CompactionTrigger { .. }
             | ResponseItem::ContextCompaction { .. }
             | ResponseItem::Other => {}
@@ -181,8 +200,18 @@ pub(crate) fn strip_image_details(items: &mut [ResponseItem]) {
     }
 }
 
+fn normalize_image_detail(detail: &mut Option<ImageDetail>, model_info: &ModelInfo) {
+    if model_info.use_responses_lite {
+        *detail = None;
+    } else if *detail == Some(ImageDetail::Original) && !model_info.supports_image_detail_original {
+        *detail = Some(DEFAULT_IMAGE_DETAIL);
+    }
+}
+
 pub struct ResponseStream {
+    pub(crate) routing_affinity: Option<codex_http_client::ChatGptRoutingAffinity>,
     pub(crate) rx_event: mpsc::Receiver<Result<ResponseEvent>>,
+    pub(crate) interrupt: Option<oneshot::Sender<codex_api::ResponseInterrupt>>,
     /// Signals the mapper task that the consumer stopped polling before the
     /// provider stream reached its own terminal event.
     pub(crate) consumer_dropped: CancellationToken,

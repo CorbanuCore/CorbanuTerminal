@@ -6,6 +6,7 @@ before:
 / T R A N S C R I P T / / / / / / / / / / / / / / / / / / / / / / / / / / / / /
 /status
 
+<<<<<<< HEAD
 ╭───────────────────────────────────────────────────────────────────────────╮
 │  >_ Corbanu Terminal (v<V>)                                               │
 │                                                                           │
@@ -32,12 +33,68 @@ before:
 ───────────────────────────────────────────────────────────────────────── 100% ─
  ↑/↓ to scroll   pgup/pgdn to page   home/end to jump
  q to quit   esc to edit prev
+||||||| 413492cd6c
+╭──────────────────────────────────────────────────────────────────────────╮
+│  >_ OpenAI Codex (v0.0.0)                                                │
+│                                                                          │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date            │
+│ information on rate limits and credits                                   │
+│                                                                          │
+│  Model:         gpt-5.1-codex-max (reasoning none, summaries auto)       │
+│  Directory: [[workspace]]                                                │
+│  Permissions:   Custom (workspace with network access, Ask for approval) │
+│  Agents.md:     <none>                                                   │
+│                                                                          │
+│  Token usage:   0 total  (0 input + 0 output)                            │
+│  Limits:        refresh requested; run /status again shortly.            │
+╰──────────────────────────────────────────────────────────────────────────╯
+~
+~
+~
+~
+~
+~
+~
+~
+~
+───────────────────────────────────────────────────────────────────────── 100% ─
+ ↑/↓ to scroll   pgup/pgdn to page   home/end to jump
+ q to quit   esc to edit prev
+=======
+  >_ OpenAI Codex (v0.0.0)
+
+  Visit https://chatgpt.com/settings/usage for up-to-date
+  information on rate limits and credits
+
+  Model:        gpt-5.1-codex-max (reasoning none, summaries auto)
+  Directory:    [[workspace]]
+  Permissions:  Custom (workspace with network access, Ask for approval)
+  Agents.md:    <none>
+
+  Token usage:  0 total  (0 input + 0 output)
+  Limits:       refresh requested; run /status again shortly.
+
+
+
+
+
+
+
+
+
+
+
+⌃space select
+ ↑/↓ to scroll · pgup/pgdn to page · home/end to jump
+ q close · f3 find · esc browse prompts
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 
 after:
 / T R A N S C R I P T / / / / / / / / / / / / / / / / / / / / / / / / / / / / /
 /status
 
+<<<<<<< HEAD
 ╭────────────────────────────────────────────────────────────────────────────╮
 │  >_ Corbanu Terminal (v<V>)                                                │
 │                                                                            │
@@ -57,10 +114,65 @@ after:
 │  5h limit:       [███████████░░░░░░░░░] 55% left (resets soon)             │
 │  Weekly limit:   [██████████████░░░░░░] 70% left (resets later)            │
 ╰────────────────────────────────────────────────────────────────────────────╯
+||||||| 413492cd6c
+╭───────────────────────────────────────────────────────────────────────────╮
+│  >_ OpenAI Codex (v0.0.0)                                                 │
+│                                                                           │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date             │
+│ information on rate limits and credits                                    │
+│                                                                           │
+│  Model:          gpt-5.1-codex-max (reasoning none, summaries auto)       │
+│  Directory: [[workspace]]                                                 │
+│  Permissions:    Custom (workspace with network access, Ask for approval) │
+│  Agents.md:      <none>                                                   │
+│                                                                           │
+│  Token usage:    0 total  (0 input + 0 output)                            │
+│  spark limit:                                                             │
+│  5h limit:       [███████████░░░░░░░░░] 55% left (resets soon)            │
+│  Weekly limit:   [██████████████░░░░░░] 70% left (resets later)           │
+╰───────────────────────────────────────────────────────────────────────────╯
+=======
+  >_ OpenAI Codex (v0.0.0)
+
+  Visit https://chatgpt.com/settings/usage for up-to-date
+  information on rate limits and credits
+
+  Model:         gpt-5.1-codex-max (reasoning none, summaries auto)
+  Directory:     [[workspace]]
+  Permissions:   Custom (workspace with network access, Ask for approval)
+  Agents.md:     <none>
+
+  Token usage:   0 total  (0 input + 0 output)
+  spark limit:
+  5h limit:      [███████████░░░░░░░░░] 55% left (resets soon)
+  Weekly limit:  [██████████████░░░░░░] 70% left (resets later)
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 next message
+<<<<<<< HEAD
 ~
 ~
 ───────────────────────────────────────────────────────────────────────── 100% ─
  ↑/↓ to scroll   pgup/pgdn to page   home/end to jump
  q to quit   esc to edit prev
+||||||| 413492cd6c
+~
+~
+~
+~
+~
+───────────────────────────────────────────────────────────────────────── 100% ─
+ ↑/↓ to scroll   pgup/pgdn to page   home/end to jump
+ q to quit   esc to edit prev
+=======
+
+
+
+
+
+
+
+⌃space select
+ ↑/↓ to scroll · pgup/pgdn to page · home/end to jump
+ q close · f3 find · esc browse prompts
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

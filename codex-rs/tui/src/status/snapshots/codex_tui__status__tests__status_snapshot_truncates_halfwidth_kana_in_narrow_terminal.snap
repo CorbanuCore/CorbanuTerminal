@@ -4,6 +4,7 @@ expression: sanitized
 ---
 /status
 
+<<<<<<< HEAD
 ╭────────────────────────────────────────╮
 │  >_ Corbanu Terminal (v<V>)            │
 │                                        │
@@ -33,3 +34,50 @@ expression: sanitized
 │                                        │
 │  Limits:               data not availa │
 ╰────────────────────────────────────────╯
+||||||| 413492cd6c
+╭────────────────────────────────────────╮
+│  >_ OpenAI Codex (v0.0.0)              │
+│                                        │
+│ Visit                                  │
+│ https://chatgpt.com/codex/settings/usa │
+│ for up-to-date                         │
+│ information on rate limits and credits │
+│                                        │
+│  Model:                ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟｶﾞ  │
+│  Directory: [[workspace]]              │
+│  Permissions:          Custom (workspa │
+│  Agents.md:            <none>          │
+│  Account:              ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟ@ex │
+│  Thread name:          ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟｶﾞ  │
+│  Collaboration mode:   ｶﾞﾊﾟ collaborat │
+│                                        │
+│  Limits:               data not availa │
+╰────────────────────────────────────────╯
+=======
+  >_ OpenAI Codex (v0.0.0)
+
+  Visit https://chatgpt.com/settings/usage
+  for up-to-date
+  information on rate limits and credits
+
+  Model:               ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟｶﾞ
+                       ﾊﾟ-model (reasoning
+                       none, summaries
+                       auto)
+  Directory:           [[workspace]]
+  Permissions:         Custom (workspace
+                       with network
+                       access, Ask for
+                       approval)
+  Agents.md:           <none>
+  Account:             ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟ
+                       @example.com (ｶﾞﾊﾟ
+                       plan)
+  Thread name:         ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟ
+                       thread
+  Collaboration mode:  ｶﾞﾊﾟ collaboration
+                       mode
+
+  Limits:              data not available
+                       yet
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

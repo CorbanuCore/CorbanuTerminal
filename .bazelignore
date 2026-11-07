@@ -2,3 +2,5 @@
 # .git/sl/origbackups (which can be populated by Sapling SCM).
 .git
 codex-rs/target
+# D316 (upstream sync): codex-voice-host stays out of our build and test lanes; it is outside the Cargo workspace.
+codex-rs/voice-host

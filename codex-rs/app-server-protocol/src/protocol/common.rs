@@ -54,6 +54,11 @@ pub enum AuthMode {
     #[ts(rename = "bedrockApiKey")]
     #[strum(serialize = "bedrockApiKey")]
     BedrockApiKey,
+    /// Amazon Bedrock AWS access keys managed by Codex.
+    #[serde(rename = "bedrockAccessKeys")]
+    #[ts(rename = "bedrockAccessKeys")]
+    #[strum(serialize = "bedrockAccessKeys")]
+    BedrockAccessKeys,
 }
 
 impl AuthMode {
@@ -61,7 +66,11 @@ impl AuthMode {
     pub fn has_chatgpt_account(self) -> bool {
         match self {
             Self::Chatgpt | Self::ChatgptAuthTokens | Self::PersonalAccessToken => true,
-            Self::ApiKey | Self::Headers | Self::AgentIdentity | Self::BedrockApiKey => false,
+            Self::ApiKey
+            | Self::Headers
+            | Self::AgentIdentity
+            | Self::BedrockApiKey
+            | Self::BedrockAccessKeys => false,
         }
     }
 
@@ -73,7 +82,7 @@ impl AuthMode {
             | Self::Headers
             | Self::AgentIdentity
             | Self::PersonalAccessToken => true,
-            Self::ApiKey | Self::BedrockApiKey => false,
+            Self::ApiKey | Self::BedrockApiKey | Self::BedrockAccessKeys => false,
         }
     }
 }
@@ -139,9 +148,12 @@ macro_rules! serialization_scope_expr {
     ($actual_params:ident, global_shared_read($key:literal)) => {
         Some(ClientRequestSerializationScope::GlobalSharedRead($key))
     };
-    ($actual_params:ident, thread_id($params:ident . $field:ident)) => {
+    // Match one or more dot-separated fields, allowing both `params.thread_id`
+    // and nested paths like `params.start.thread_id`. The resolved ID selects
+    // the per-thread request queue, preserving ordering with other thread operations.
+    ($actual_params:ident, thread_id($params:ident . $($field:ident).+)) => {
         Some(ClientRequestSerializationScope::Thread {
-            thread_id: $actual_params.$field.clone(),
+            thread_id: $actual_params.$($field).+.clone(),
         })
     };
     ($actual_params:ident, optional_thread_id($params:ident . $field:ident)) => {
@@ -216,6 +228,7 @@ macro_rules! client_request_definitions {
     ) => {
         /// Request from the client to the server.
         #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+        #[allow(clippy::large_enum_variant)]
         #[serde(tag = "method", rename_all = "camelCase")]
         pub enum ClientRequest {
             $(
@@ -310,13 +323,14 @@ macro_rules! client_request_definitions {
             pub fn into_jsonrpc_parts(
                 self,
             ) -> std::result::Result<(RequestId, crate::Result), serde_json::Error> {
-                match self {
+                let (request_id, response) = match self {
                     $(
                         Self::$variant { request_id, response } => {
-                            serde_json::to_value(response).map(|result| (request_id, result))
+                            (request_id, ClientResponsePayload::$variant(response))
                         }
                     )*
-                }
+                };
+                serde_json::to_value(response).map(|result| (request_id, result))
             }
         }
 
@@ -354,16 +368,7 @@ macro_rules! client_request_definitions {
                 &self,
                 request_id: RequestId,
             ) -> std::result::Result<(RequestId, crate::Result), serde_json::Error> {
-                match self {
-                    $(
-                        Self::$variant(response) => {
-                            serde_json::to_value(response).map(|result| (request_id, result))
-                        }
-                    )*
-                    Self::InterruptConversation(response) => {
-                        serde_json::to_value(response).map(|result| (request_id, result))
-                    }
-                }
+                serde_json::to_value(self).map(|result| (request_id, result))
             }
         }
 
@@ -471,11 +476,77 @@ macro_rules! client_response_payload_from_impl {
     ($variant:ident, $response:ty, manual) => {};
 }
 
+/// Preserve explicit `undefined` accepted by the original stable usage request.
+///
+/// A Rust-based TypeScript proxy retains dependency discovery; a raw `#[ts(type = ...)]`
+/// override would silently omit the generated params import and schema fixture.
+#[allow(dead_code)]
+#[derive(TS)]
+#[ts(untagged)]
+enum GetAccountTokenUsageParamsTypeScript {
+    Params(v2::GetAccountTokenUsageParams),
+    #[ts(type = "undefined")]
+    Undefined,
+}
+
+/// Preserve omitted/undefined params while exporting the new usage capability type.
+#[allow(dead_code)]
+#[derive(TS)]
+#[ts(untagged)]
+enum GetAccountRateLimitsParamsTypeScript {
+    Params(v2::GetAccountRateLimitsParams),
+    #[ts(type = "undefined")]
+    Undefined,
+}
+
 client_request_definitions! {
     Initialize => "initialize" {
         params: v1::InitializeParams,
         serialization: None,
         response: v1::InitializeResponse,
+    },
+
+    #[experimental("server/diagnostics")]
+    /// Read content-free, process-local diagnostics.
+    ServerDiagnostics => "server/diagnostics" {
+        params: v2::ServerDiagnosticsParams,
+        serialization: None,
+        response: v2::ServerDiagnosticsResponse,
+    },
+
+    #[experimental("userVerification/status")]
+    UserVerificationStatus => "userVerification/status" {
+        params: v2::UserVerificationStatusParams,
+        serialization: None,
+        response: v2::UserVerificationStatusResponse,
+    },
+
+    #[experimental("userVerification/enroll")]
+    UserVerificationEnroll => "userVerification/enroll" {
+        params: v2::UserVerificationEnrollParams,
+        serialization: None,
+        response: v2::UserVerificationEnrollResponse,
+    },
+
+    #[experimental("userVerification/delete")]
+    UserVerificationDelete => "userVerification/delete" {
+        params: v2::UserVerificationDeleteParams,
+        serialization: None,
+        response: v2::UserVerificationDeleteResponse,
+    },
+
+    #[experimental("userVerification/verify")]
+    UserVerificationVerify => "userVerification/verify" {
+        params: v2::UserVerificationVerifyParams,
+        serialization: None,
+        response: v2::UserVerificationVerifyResponse,
+    },
+
+    #[experimental("userVerification/cancel")]
+    UserVerificationCancel => "userVerification/cancel" {
+        params: v2::UserVerificationCancelParams,
+        serialization: None,
+        response: v2::UserVerificationCancelResponse,
     },
 
     /// NEW APIs
@@ -512,6 +583,19 @@ client_request_definitions! {
         inspect_params: true,
         serialization: thread_or_path(params.thread_id, params.path),
         response: v2::ThreadForkResponse,
+    },
+    #[experimental("thread/sample")]
+    ThreadSample => "thread/sample" {
+        params: v2::ThreadSampleParams,
+        // Waiting for a sample must not block requests on its parent thread.
+        serialization: None,
+        response: v2::ThreadSampleResponse,
+    },
+    #[experimental("thread/sample/cancel")]
+    ThreadSampleCancel => "thread/sample/cancel" {
+        params: v2::ThreadSampleCancelParams,
+        serialization: None,
+        response: v2::ThreadSampleCancelResponse,
     },
     ThreadArchive => "thread/archive" {
         params: v2::ThreadArchiveParams,
@@ -552,6 +636,12 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadSetNameResponse,
     },
+    #[experimental("thread/prediction/request")]
+    ThreadPredictionRequest => "thread/prediction/request" {
+        params: v2::ThreadPredictionRequestParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadPredictionRequestResponse,
+    },
     ThreadGoalSet => "thread/goal/set" {
         params: v2::ThreadGoalSetParams,
         serialization: thread_id(params.thread_id),
@@ -567,10 +657,67 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadGoalClearResponse,
     },
+    #[experimental("thread/queue/add")]
+    ThreadQueueAdd => "thread/queue/add" {
+        params: v2::ThreadQueueAddParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadQueueAddResponse,
+    },
+    #[experimental("thread/queue/list")]
+    ThreadQueueList => "thread/queue/list" {
+        params: v2::ThreadQueueListParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadQueueListResponse,
+    },
+    #[experimental("thread/queue/update")]
+    ThreadQueueUpdate => "thread/queue/update" {
+        params: v2::ThreadQueueUpdateParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadQueueUpdateResponse,
+    },
+    #[experimental("thread/queue/delete")]
+    ThreadQueueDelete => "thread/queue/delete" {
+        params: v2::ThreadQueueDeleteParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadQueueDeleteResponse,
+    },
+    #[experimental("thread/queue/reorder")]
+    ThreadQueueReorder => "thread/queue/reorder" {
+        params: v2::ThreadQueueReorderParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadQueueReorderResponse,
+    },
+    #[experimental("thread/queue/start")]
+    ThreadQueueStart => "thread/queue/start" {
+        params: v2::ThreadQueueStartParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadQueueStartResponse,
+    },
     ThreadMetadataUpdate => "thread/metadata/update" {
         params: v2::ThreadMetadataUpdateParams,
+        inspect_params: true,
         serialization: thread_id(params.thread_id),
         response: v2::ThreadMetadataUpdateResponse,
+    },
+    ThreadAttachmentAdd => "thread/attachment/add" {
+        params: v2::ThreadAttachmentAddParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadAttachmentAddResponse,
+    },
+    ThreadAttachmentList => "thread/attachment/list" {
+        params: v2::ThreadAttachmentListParams,
+        serialization: None,
+        response: v2::ThreadAttachmentListResponse,
+    },
+    ThreadAttachmentOwnerList => "thread/attachmentOwner/list" {
+        params: v2::ThreadAttachmentOwnerListParams,
+        serialization: None,
+        response: v2::ThreadAttachmentOwnerListResponse,
+    },
+    ThreadAttachmentRemove => "thread/attachment/remove" {
+        params: v2::ThreadAttachmentRemoveParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadAttachmentRemoveResponse,
     },
     ThreadSectionMove => "thread/section/move" {
         params: v2::ThreadSectionMoveParams,
@@ -590,11 +737,30 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadMemoryModeSetResponse,
     },
+    #[experimental("thread/memory/read")]
+    ThreadMemoryRead => "thread/memory/read" {
+        params: v2::ThreadMemoryReadParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadMemoryReadResponse,
+    },
+    #[experimental("memory/status")]
+    MemoryStatus => "memory/status" {
+        params: v2::MemoryStatusParams,
+        serialization: global("memory"),
+        response: v2::MemoryStatusResponse,
+    },
     #[experimental("memory/reset")]
     MemoryReset => "memory/reset" {
         params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
         serialization: global("memory"),
         response: v2::MemoryResetResponse,
+    },
+    #[experimental("rollout/compress")]
+    /// Start a best-effort background compression pass for cold local rollouts.
+    RolloutCompress => "rollout/compress" {
+        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        serialization: None,
+        response: v2::RolloutCompressResponse,
     },
     ThreadUnarchive => "thread/unarchive" {
         params: v2::ThreadUnarchiveParams,
@@ -634,10 +800,10 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadBackgroundTerminalsTerminateResponse,
     },
-    ThreadRollback => "thread/rollback" {
-        params: v2::ThreadRollbackParams,
+    ThreadRevert => "thread/revert" {
+        params: v2::ThreadRevertParams,
         serialization: thread_id(params.thread_id),
-        response: v2::ThreadRollbackResponse,
+        response: v2::ThreadRevertResponse,
     },
     ThreadList => "thread/list" {
         params: v2::ThreadListParams,
@@ -645,10 +811,67 @@ client_request_definitions! {
         serialization: None,
         response: v2::ThreadListResponse,
     },
+    #[experimental("project/list")]
+    ProjectList => "project/list" {
+        params: v2::ProjectListParams,
+        serialization: global_shared_read("projects"),
+        response: v2::ProjectListResponse,
+    },
+    #[experimental("project/read")]
+    ProjectRead => "project/read" {
+        params: v2::ProjectReadParams,
+        serialization: global_shared_read("projects"),
+        response: v2::ProjectReadResponse,
+    },
+    #[experimental("project/create")]
+    ProjectCreate => "project/create" {
+        params: v2::ProjectCreateParams,
+        serialization: global("projects"),
+        response: v2::ProjectCreateResponse,
+    },
+    #[experimental("project/import")]
+    ProjectImport => "project/import" {
+        params: v2::ProjectImportParams,
+        serialization: global("projects"),
+        response: v2::ProjectImportResponse,
+    },
+    #[experimental("project/update")]
+    ProjectUpdate => "project/update" {
+        params: v2::ProjectUpdateParams,
+        serialization: global("projects"),
+        response: v2::ProjectUpdateResponse,
+    },
+    #[experimental("project/move")]
+    ProjectMove => "project/move" {
+        params: v2::ProjectMoveParams,
+        serialization: global("projects"),
+        response: v2::ProjectMoveResponse,
+    },
+    #[experimental("project/delete")]
+    ProjectDelete => "project/delete" {
+        params: v2::ProjectDeleteParams,
+        serialization: global("projects"),
+        response: v2::ProjectDeleteResponse,
+    },
     ThreadSectionList => "threadSection/list" {
         params: v2::ThreadSectionListParams,
-        serialization: None,
+        serialization: global_shared_read("thread-sections"),
         response: v2::ThreadSectionListResponse,
+    },
+    ThreadSectionCreate => "threadSection/create" {
+        params: v2::ThreadSectionCreateParams,
+        serialization: global("thread-sections"),
+        response: v2::ThreadSectionCreateResponse,
+    },
+    ThreadSectionUpdate => "threadSection/update" {
+        params: v2::ThreadSectionUpdateParams,
+        serialization: global("thread-sections"),
+        response: v2::ThreadSectionUpdateResponse,
+    },
+    ThreadSectionDelete => "threadSection/delete" {
+        params: v2::ThreadSectionDeleteParams,
+        serialization: global("thread-sections"),
+        response: v2::ThreadSectionDeleteResponse,
     },
     #[experimental("thread/search")]
     ThreadSearch => "thread/search" {
@@ -673,26 +896,47 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadReadResponse,
     },
-    #[experimental("thread/turns/list")]
+    #[experimental("thread/readState/update")]
+    ThreadReadStateUpdate => "thread/readState/update" {
+        params: v2::ThreadReadStateUpdateParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadReadStateUpdateResponse,
+    },
     ThreadTurnsList => "thread/turns/list" {
         params: v2::ThreadTurnsListParams,
         // Explicitly concurrent: this primarily reads append-only rollout storage.
         serialization: None,
         response: v2::ThreadTurnsListResponse,
     },
-    #[experimental("thread/items/list")]
     ThreadItemsList => "thread/items/list" {
         params: v2::ThreadItemsListParams,
         // Explicitly concurrent: this primarily reads append-only rollout storage.
         serialization: None,
         response: v2::ThreadItemsListResponse,
     },
+<<<<<<< HEAD
     #[experimental("thread/turns/items/list")]
     ThreadTurnsItemsList => "thread/turns/items/list" {
         params: v2::ThreadTurnsItemsListParams,
         // Compatibility alias over the same append-only item store.
         serialization: None,
         response: v2::ThreadTurnsItemsListResponse,
+||||||| 413492cd6c
+=======
+    #[experimental("thread/items/read")]
+    ThreadItemsRead => "thread/items/read" {
+        params: v2::ThreadItemsReadParams,
+        // Explicitly concurrent: this primarily reads append-only rollout storage.
+        serialization: None,
+        response: v2::ThreadItemsReadResponse,
+    },
+    #[experimental("thread/guardianReview")]
+    /// Review the idle thread's final injected exec_command without executing it.
+    ThreadGuardianReview => "thread/guardianReview" {
+        params: v2::ThreadGuardianReviewParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadGuardianReviewResponse,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     },
     /// Append raw Responses API items to the thread history without starting a user turn.
     ThreadInjectItems => "thread/inject_items" {
@@ -718,7 +962,7 @@ client_request_definitions! {
     },
     HooksList => "hooks/list" {
         params: v2::HooksListParams,
-        serialization: global("config"),
+        serialization: global_shared_read("config"),
         response: v2::HooksListResponse,
     },
     MarketplaceAdd => "marketplace/add" {
@@ -741,10 +985,21 @@ client_request_definitions! {
         serialization: None,
         response: v2::PluginListResponse,
     },
+    #[experimental("plugin/search")]
+    PluginSearch => "plugin/search" {
+        params: v2::PluginSearchParams,
+        serialization: None,
+        response: v2::PluginSearchResponse,
+    },
     PluginInstalled => "plugin/installed" {
         params: v2::PluginInstalledParams,
         serialization: None,
         response: v2::PluginInstalledResponse,
+    },
+    PluginReconcile => "plugin/reconcile" {
+        params: v2::PluginReconcileParams,
+        serialization: None,
+        response: v2::PluginReconcileResponse,
     },
     PluginRead => "plugin/read" {
         params: v2::PluginReadParams,
@@ -864,6 +1119,12 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::TurnStartResponse,
     },
+    #[experimental("turn/settings/update")]
+    TurnSettingsUpdate => "turn/settings/update" {
+        params: v2::TurnSettingsUpdateParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::TurnSettingsUpdateResponse,
+    },
     TurnSteer => "turn/steer" {
         params: v2::TurnSteerParams,
         inspect_params: true,
@@ -905,6 +1166,12 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadRealtimeStopResponse,
     },
+    #[experimental("thread/timeline/list")]
+    ThreadTimelineList => "thread/timeline/list" {
+        params: v2::ThreadTimelineListParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadTimelineListResponse,
+    },
     #[experimental("thread/realtime/listVoices")]
     ThreadRealtimeListVoices => "thread/realtime/listVoices" {
         params: v2::ThreadRealtimeListVoicesParams,
@@ -921,6 +1188,21 @@ client_request_definitions! {
         params: v2::ModelListParams,
         serialization: None,
         response: v2::ModelListResponse,
+    },
+    GatewayOAuthRead => "account/gatewayOAuth/read" {
+        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        serialization: None,
+        response: v2::GatewayOAuthReadResponse,
+    },
+    GatewayOAuthLogin => "account/gatewayOAuth/login" {
+        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        serialization: None,
+        response: v2::GatewayOAuthLoginResponse,
+    },
+    GatewayOAuthCancel => "account/gatewayOAuth/cancel" {
+        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        serialization: None,
+        response: v2::GatewayOAuthCancelResponse,
     },
     ModelProviderCapabilitiesRead => "modelProvider/capabilities/read" {
         params: v2::ModelProviderCapabilitiesReadParams,
@@ -1044,6 +1326,20 @@ client_request_definitions! {
         response: v2::McpResourceReadResponse,
     },
 
+    #[experimental("mcpServer/event/stream/start")]
+    McpServerEventStreamStart => "mcpServer/event/stream/start" {
+        params: v2::McpServerEventStreamStartParams,
+        serialization: None,
+        response: v2::McpServerEventStreamStartResponse,
+    },
+
+    #[experimental("mcpServer/event/stream/stop")]
+    McpServerEventStreamStop => "mcpServer/event/stream/stop" {
+        params: v2::McpServerEventStreamStopParams,
+        serialization: None,
+        response: v2::McpServerEventStreamStopResponse,
+    },
+
     McpServerToolCall => "mcpServer/tool/call" {
         params: v2::McpServerToolCallParams,
         serialization: thread_id(params.thread_id),
@@ -1068,10 +1364,54 @@ client_request_definitions! {
         response: v2::LoginAccountResponse,
     },
 
+    #[experimental("account/bedrock/discover")]
+    BedrockDiscover => "account/bedrock/discover" {
+        params: v2::BedrockDiscoverParams,
+        serialization: global_shared_read("account-auth"),
+        response: v2::BedrockDiscoverResponse,
+    },
+
+    #[experimental("account/bedrock/setup")]
+    BedrockSetup => "account/bedrock/setup" {
+        params: v2::BedrockSetupParams,
+        serialization: global("account-auth"),
+        response: v2::BedrockSetupResponse,
+    },
+
+    #[experimental("account/gcp/setup")]
+    GcpSetup => "account/gcp/setup" {
+        params: v2::GcpSetupParams,
+        serialization: global("account-auth"),
+        response: v2::GcpSetupResponse,
+    },
+
+    #[experimental("account/bedrock/checkGovCloudRequirements")]
+    BedrockCheckGovCloudRequirements => "account/bedrock/checkGovCloudRequirements" {
+        params: v2::BedrockCheckGovCloudRequirementsParams,
+        serialization: global("account-auth"),
+        response: v2::BedrockCheckGovCloudRequirementsResponse,
+    },
+
     CancelLoginAccount => "account/login/cancel" {
         params: v2::CancelLoginAccountParams,
         serialization: global("account-auth"),
         response: v2::CancelLoginAccountResponse,
+    },
+
+    #[experimental("accountSession/list")]
+    AccountSessionsList => "accountSession/list" {
+        params: v2::AccountSessionsListParams,
+        serialization: global("account-auth"),
+        manual_payload_conversion: manual,
+        response: v2::AccountSessionsResponse,
+    },
+
+    #[experimental("accountSession/switch")]
+    AccountSessionsSwitch => "accountSession/switch" {
+        params: v2::AccountSessionsSwitchParams,
+        serialization: global("account-auth"),
+        manual_payload_conversion: manual,
+        response: v2::AccountSessionsSwitchResponse,
     },
 
     LogoutAccount => "account/logout" {
@@ -1081,7 +1421,7 @@ client_request_definitions! {
     },
 
     GetAccountRateLimits => "account/rateLimits/read" {
-        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        params: #[ts(optional, as = "Option<GetAccountRateLimitsParamsTypeScript>", inline)] #[serde(default, skip_serializing_if = "Option::is_none")] v2::NullableGetAccountRateLimitsParams,
         serialization: None,
         response: v2::GetAccountRateLimitsResponse,
     },
@@ -1093,7 +1433,7 @@ client_request_definitions! {
     },
 
     GetAccountTokenUsage => "account/usage/read" {
-        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        params: #[ts(optional, as = "Option<GetAccountTokenUsageParamsTypeScript>", inline)] #[serde(default, skip_serializing_if = "Option::is_none")] v2::NullableGetAccountTokenUsageParams,
         serialization: None,
         response: v2::GetAccountTokenUsageResponse,
     },
@@ -1114,6 +1454,12 @@ client_request_definitions! {
         params: v2::FeedbackUploadParams,
         serialization: None,
         response: v2::FeedbackUploadResponse,
+    },
+
+    FeedbackSave => "feedback/save" {
+        params: v2::FeedbackSaveParams,
+        serialization: None,
+        response: v2::FeedbackSaveResponse,
     },
 
     /// Execute a standalone command (argv vector) under the server's sandbox.
@@ -1177,7 +1523,7 @@ client_request_definitions! {
     },
     ExternalAgentConfigDetect => "externalAgentConfig/detect" {
         params: v2::ExternalAgentConfigDetectParams,
-        serialization: global("config"),
+        serialization: global("external-agent-detect"),
         response: v2::ExternalAgentConfigDetectResponse,
     },
     ExternalAgentConfigImport => "externalAgentConfig/import" {
@@ -1210,7 +1556,7 @@ client_request_definitions! {
 
     ConfigRequirementsRead => "configRequirements/read" {
         params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
-        serialization: global("config"),
+        serialization: global_shared_read("config"),
         response: v2::ConfigRequirementsReadResponse,
     },
 
@@ -1692,14 +2038,27 @@ server_notification_definitions! {
     Error => "error" (v2::ErrorNotification),
     ThreadStarted => "thread/started" (v2::ThreadStartedNotification),
     ThreadStatusChanged => "thread/status/changed" (v2::ThreadStatusChangedNotification),
+    #[experimental("thread/readState/changed")]
+    ThreadReadStateChanged => "thread/readState/changed" (v2::ThreadReadStateChangedNotification),
     ThreadArchived => "thread/archived" (v2::ThreadArchivedNotification),
     ThreadDeleted => "thread/deleted" (v2::ThreadDeletedNotification),
     ThreadUnarchived => "thread/unarchived" (v2::ThreadUnarchivedNotification),
     ThreadClosed => "thread/closed" (v2::ThreadClosedNotification),
+    ThreadReverted => "thread/reverted" (v2::ThreadRevertedNotification),
     SkillsChanged => "skills/changed" (v2::SkillsChangedNotification),
     ThreadNameUpdated => "thread/name/updated" (v2::ThreadNameUpdatedNotification),
+    ThreadSectionChanged => "thread/section/changed" (v2::ThreadSectionChangedNotification),
+    ThreadAttachmentUpdated => "thread/attachment/updated" (v2::ThreadAttachmentUpdatedNotification),
     ThreadGoalUpdated => "thread/goal/updated" (v2::ThreadGoalUpdatedNotification),
+    #[experimental("thread/prediction/updated")]
+    ThreadPredictionUpdated => "thread/prediction/updated" (v2::ThreadPredictionUpdatedNotification),
     ThreadGoalCleared => "thread/goal/cleared" (v2::ThreadGoalClearedNotification),
+    #[experimental("thread/queue/changed")]
+    ThreadQueueChanged => "thread/queue/changed" (v2::ThreadQueueChangedNotification),
+    #[experimental("project/changed")]
+    ProjectChanged => "project/changed" (v2::ProjectChangedNotification),
+    #[experimental("thread/project/updated")]
+    ThreadProjectUpdated => "thread/project/updated" (v2::ThreadProjectUpdatedNotification),
     #[experimental("thread/environment/connected")]
     EnvironmentConnected => "thread/environment/connected" (v2::EnvironmentConnectionNotification),
     #[experimental("thread/environment/disconnected")]
@@ -1716,6 +2075,8 @@ server_notification_definitions! {
     ItemStarted => "item/started" (v2::ItemStartedNotification),
     ItemGuardianApprovalReviewStarted => "item/autoApprovalReview/started" (v2::ItemGuardianApprovalReviewStartedNotification),
     ItemGuardianApprovalReviewCompleted => "item/autoApprovalReview/completed" (v2::ItemGuardianApprovalReviewCompletedNotification),
+    #[experimental("autoApprovalReview/strictReviewRequired")]
+    StrictReviewRequired => "autoApprovalReview/strictReviewRequired" (v2::StrictReviewRequiredNotification),
     ItemCompleted => "item/completed" (v2::ItemCompletedNotification),
     /// This event is internal-only. Used by Codex Cloud.
     RawResponseItemCompleted => "rawResponseItem/completed" (v2::RawResponseItemCompletedNotification),
@@ -1741,7 +2102,10 @@ server_notification_definitions! {
     McpToolCallProgress => "item/mcpToolCall/progress" (v2::McpToolCallProgressNotification),
     McpServerOauthLoginCompleted => "mcpServer/oauthLogin/completed" (v2::McpServerOauthLoginCompletedNotification),
     McpServerStatusUpdated => "mcpServer/startupStatus/updated" (v2::McpServerStatusUpdatedNotification),
+    #[experimental("mcpServer/event/stream/notification")]
+    McpServerEventStream => "mcpServer/event/stream/notification" (v2::McpServerEventStreamNotification),
     AccountUpdated => "account/updated" (v2::AccountUpdatedNotification),
+    GatewayOAuthChanged => "account/gatewayOAuth/changed" (v2::GatewayOAuthChangedNotification),
     AccountRateLimitsUpdated => "account/rateLimits/updated" (v2::AccountRateLimitsUpdatedNotification),
     AppListUpdated => "app/list/updated" (v2::AppListUpdatedNotification),
     RemoteControlStatusChanged => "remoteControl/status/changed" (v2::RemoteControlStatusChangedNotification),
@@ -1755,6 +2119,8 @@ server_notification_definitions! {
     ContextCompacted => "thread/compacted" (v2::ContextCompactedNotification),
     ModelRerouted => "model/rerouted" (v2::ModelReroutedNotification),
     ModelVerification => "model/verification" (v2::ModelVerificationNotification),
+    AuthRecoveryStarted => "modelProvider/authRecoveryStarted" (v2::AuthRecoveryNotification),
+    AuthRecoveryCompleted => "modelProvider/authRecoveryCompleted" (v2::AuthRecoveryNotification),
     #[experimental("turn/moderationMetadata")]
     TurnModerationMetadata => "turn/moderationMetadata" (v2::TurnModerationMetadataNotification),
     ModelSafetyBufferingUpdated => "model/safetyBuffering/updated" (v2::ModelSafetyBufferingUpdatedNotification),
@@ -1768,6 +2134,12 @@ server_notification_definitions! {
     ThreadRealtimeStarted => "thread/realtime/started" (v2::ThreadRealtimeStartedNotification),
     #[experimental("thread/realtime/itemAdded")]
     ThreadRealtimeItemAdded => "thread/realtime/itemAdded" (v2::ThreadRealtimeItemAddedNotification),
+    #[experimental("thread/realtime/item/started")]
+    ThreadRealtimeItemStarted => "thread/realtime/item/started" (v2::ThreadRealtimeItemStartedNotification),
+    #[experimental("thread/realtime/item/transcript/delta")]
+    ThreadRealtimeItemTranscriptDelta => "thread/realtime/item/transcript/delta" (v2::ThreadRealtimeItemTranscriptDeltaNotification),
+    #[experimental("thread/realtime/item/completed")]
+    ThreadRealtimeItemCompleted => "thread/realtime/item/completed" (v2::ThreadRealtimeItemCompletedNotification),
     #[experimental("thread/realtime/transcript/delta")]
     ThreadRealtimeTranscriptDelta => "thread/realtime/transcript/delta" (v2::ThreadRealtimeTranscriptDeltaNotification),
     #[experimental("thread/realtime/transcript/done")]
@@ -2116,6 +2488,7 @@ mod tests {
             params: v2::PluginInstallParams {
                 marketplace_path: Some(absolute_path("/tmp/marketplace")),
                 remote_marketplace_name: None,
+                install_attempt_id: None,
                 plugin_name: "plugin-a".to_string(),
             },
         };
@@ -2133,6 +2506,15 @@ mod tests {
         };
         assert_eq!(
             skills_list.serialization_scope(),
+            Some(ClientRequestSerializationScope::GlobalSharedRead("config"))
+        );
+
+        let hooks_list = ClientRequest::HooksList {
+            request_id: request_id(),
+            params: v2::HooksListParams::default(),
+        };
+        assert_eq!(
+            hooks_list.serialization_scope(),
             Some(ClientRequestSerializationScope::GlobalSharedRead("config"))
         );
 
@@ -2192,6 +2574,7 @@ mod tests {
             params: v2::McpServerOauthLoginParams {
                 name: "server-a".to_string(),
                 thread_id: None,
+                client_registration: None,
                 scopes: None,
                 timeout_secs: None,
             },
@@ -2207,8 +2590,11 @@ mod tests {
             request_id: request_id(),
             params: v2::McpResourceReadParams {
                 thread_id: Some("thread-1".to_string()),
+                origin_call_id: None,
                 server: "server-a".to_string(),
                 uri: "file:///tmp/resource".to_string(),
+                connector_id: None,
+                target: None,
             },
         };
         assert_eq!(
@@ -2230,6 +2616,15 @@ mod tests {
             Some(ClientRequestSerializationScope::GlobalSharedRead("config"))
         );
 
+        let config_requirements_read = ClientRequest::ConfigRequirementsRead {
+            request_id: request_id(),
+            params: None,
+        };
+        assert_eq!(
+            config_requirements_read.serialization_scope(),
+            Some(ClientRequestSerializationScope::GlobalSharedRead("config"))
+        );
+
         let account_read = ClientRequest::GetAccount {
             request_id: request_id(),
             params: v2::GetAccountParams {
@@ -2244,6 +2639,7 @@ mod tests {
         let thread_goal_set = ClientRequest::ThreadGoalSet {
             request_id: request_id(),
             params: v2::ThreadGoalSetParams {
+                origin: None,
                 thread_id: "goal-thread".to_string(),
                 objective: Some("ship it".to_string()),
                 status: None,
@@ -2296,6 +2692,9 @@ mod tests {
         let environment_add = ClientRequest::EnvironmentAdd {
             request_id: request_id(),
             params: v2::EnvironmentAddParams {
+                skills: None,
+                auth_bearer_token: None,
+                websocket_request_id: None,
                 environment_id: "remote-a".to_string(),
                 exec_server_url: "ws://127.0.0.1:8765".to_string(),
                 connect_timeout_ms: None,
@@ -2385,8 +2784,11 @@ mod tests {
             request_id: request_id(),
             params: v2::McpResourceReadParams {
                 thread_id: None,
+                origin_call_id: None,
                 server: "server-a".to_string(),
                 uri: "file:///tmp/resource".to_string(),
+                connector_id: None,
+                target: None,
             },
         };
         assert_eq!(mcp_resource_read.serialization_scope(), None);
@@ -2471,6 +2873,8 @@ mod tests {
                     version: "0.1.0".to_string(),
                 },
                 capabilities: Some(v1::InitializeCapabilities {
+                    required_human_approval: false,
+                    explicit_gateway_oauth: false,
                     experimental_api: true,
                     request_attestation: true,
                     mcp_server_openai_form_elicitation: true,
@@ -2478,6 +2882,12 @@ mod tests {
                         "thread/started".to_string(),
                         "item/agentMessage/delta".to_string(),
                     ]),
+                    extensions: Some(std::collections::HashMap::from([(
+                        "io.modelcontextprotocol/ui".to_string(),
+                        json!({
+                            "mimeTypes": ["text/html;profile=mcp-app"],
+                        }),
+                    )])),
                 }),
             },
         };
@@ -2499,7 +2909,12 @@ mod tests {
                         "optOutNotificationMethods": [
                             "thread/started",
                             "item/agentMessage/delta"
-                        ]
+                        ],
+                        "extensions": {
+                            "io.modelcontextprotocol/ui": {
+                                "mimeTypes": ["text/html;profile=mcp-app"]
+                            }
+                        }
                     }
                 }
             }),
@@ -2526,7 +2941,12 @@ mod tests {
                     "optOutNotificationMethods": [
                         "thread/started",
                         "item/agentMessage/delta"
-                    ]
+                    ],
+                    "extensions": {
+                        "io.modelcontextprotocol/ui": {
+                            "mimeTypes": ["text/html;profile=mcp-app"]
+                        }
+                    }
                 }
             }
         }))?;
@@ -2542,6 +2962,8 @@ mod tests {
                         version: "0.1.0".to_string(),
                     },
                     capabilities: Some(v1::InitializeCapabilities {
+                        required_human_approval: false,
+                        explicit_gateway_oauth: false,
                         experimental_api: true,
                         request_attestation: true,
                         mcp_server_openai_form_elicitation: true,
@@ -2549,6 +2971,12 @@ mod tests {
                             "thread/started".to_string(),
                             "item/agentMessage/delta".to_string(),
                         ]),
+                        extensions: Some(std::collections::HashMap::from([(
+                            "io.modelcontextprotocol/ui".to_string(),
+                            json!({
+                                "mimeTypes": ["text/html;profile=mcp-app"],
+                            }),
+                        )])),
                     }),
                 },
             }
@@ -2749,7 +3177,9 @@ mod tests {
             turn_id: Some("turn_123".to_string()),
             server_name: "codex_apps".to_string(),
             request: v2::McpServerElicitationRequest::Form {
-                meta: None,
+                meta: Some(json!({
+                    "suggestion_id": "request_plugin_install_install-github"
+                })),
                 message: "Allow this request?".to_string(),
                 requested_schema,
             },
@@ -2768,7 +3198,9 @@ mod tests {
                     "turnId": "turn_123",
                     "serverName": "codex_apps",
                     "mode": "form",
-                    "_meta": null,
+                    "_meta": {
+                        "suggestion_id": "request_plugin_install_install-github"
+                    },
                     "message": "Allow this request?",
                     "requestedSchema": {
                         "type": "object",
@@ -2825,6 +3257,56 @@ mod tests {
     }
 
     #[test]
+    fn serialize_get_account_thread_usage() -> Result<()> {
+        let request = ClientRequest::GetAccountTokenUsage {
+            request_id: RequestId::Integer(1),
+            params: Some(v2::GetAccountTokenUsageParams {
+                thread_id: Some("thread-123".to_string()),
+            }),
+        };
+        assert_eq!(
+            json!({
+                "method": "account/usage/read",
+                "id": 1,
+                "params": { "threadId": "thread-123" },
+            }),
+            serde_json::to_value(&request)?,
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn deserialize_legacy_get_account_token_usage_response() -> Result<()> {
+        let response: v2::GetAccountTokenUsageResponse = serde_json::from_value(json!({
+            "summary": {
+                "lifetimeTokens": null,
+                "peakDailyTokens": null,
+                "longestRunningTurnSec": null,
+                "currentStreakDays": null,
+                "longestStreakDays": null,
+            },
+            "dailyUsageBuckets": null,
+        }))?;
+
+        assert_eq!(
+            response,
+            v2::GetAccountTokenUsageResponse {
+                summary: v2::AccountTokenUsageSummary {
+                    lifetime_tokens: None,
+                    peak_daily_tokens: None,
+                    longest_running_turn_sec: None,
+                    current_streak_days: None,
+                    longest_streak_days: None,
+                },
+                daily_usage_buckets: None,
+                thread_usage: None,
+            },
+        );
+        assert_eq!(serde_json::to_value(response)?["threadUsage"], json!(null));
+        Ok(())
+    }
+
+    #[test]
     fn serialize_get_workspace_messages() -> Result<()> {
         let request = ClientRequest::GetWorkspaceMessages {
             request_id: RequestId::Integer(1),
@@ -2847,7 +3329,10 @@ mod tests {
         let response = ClientResponse::ThreadStart {
             request_id: RequestId::Integer(7),
             response: v2::ThreadStartResponse {
+                disabled_plugin_ids: Vec::new(),
                 thread: v2::Thread {
+                    originator: None,
+                    environments: None,
                     id: "67e55044-10b1-426f-9247-bb680e5fe0c8".to_string(),
                     extra: None,
                     session_id: "67e55044-10b1-426f-9247-bb680e5fe0c7".to_string(),
@@ -2857,8 +3342,11 @@ mod tests {
                     ephemeral: true,
                     section: None,
                     section_entered_at: None,
+                    project_id: None,
                     history_mode: Default::default(),
                     model_provider: "openai".to_string(),
+                    model: None,
+                    reasoning_effort: None,
                     created_at: 1,
                     updated_at: 2,
                     recency_at: Some(3),
@@ -2873,6 +3361,7 @@ mod tests {
                     agent_role: None,
                     git_info: None,
                     name: None,
+                    daybreak_enabled: None,
                     turns: Vec::new(),
                 },
                 model: "gpt-5".to_string(),
@@ -2903,6 +3392,7 @@ mod tests {
                 "response": {
                     "thread": {
                         "id": "67e55044-10b1-426f-9247-bb680e5fe0c8",
+                        "environments": null,
                         "extra": null,
                         "sessionId": "67e55044-10b1-426f-9247-bb680e5fe0c7",
                         "forkedFromId": null,
@@ -2911,8 +3401,11 @@ mod tests {
                         "ephemeral": true,
                         "section": null,
                         "sectionEnteredAt": null,
+                        "projectId": null,
                         "historyMode": "legacy",
                         "modelProvider": "openai",
+                        "model": null,
+                        "reasoningEffort": null,
                         "createdAt": 1,
                         "updatedAt": 2,
                         "recencyAt": 3,
@@ -2922,6 +3415,7 @@ mod tests {
                         "path": null,
                         "cwd": absolute_path_string("tmp"),
                         "cliVersion": "0.0.0",
+                        "originator": null,
                         "source": "exec",
                         "canAcceptDirectInput": null,
                         "threadSource": null,
@@ -2929,11 +3423,13 @@ mod tests {
                         "agentRole": null,
                         "gitInfo": null,
                         "name": null,
+                        "daybreakEnabled": null,
                         "turns": []
                     },
                     "model": "gpt-5",
                     "modelProvider": "openai",
                     "serviceTier": null,
+                    "disabledPluginIds": [],
                     "cwd": absolute_path_string("tmp"),
                     "runtimeWorkspaceRoots": [],
                     "instructionSources": [absolute_path_string("tmp/AGENTS.md")],
@@ -2992,25 +3488,47 @@ mod tests {
 
     #[test]
     fn serialize_account_login_amazon_bedrock() -> Result<()> {
-        let request = ClientRequest::LoginAccount {
-            request_id: RequestId::Integer(2),
-            params: v2::LoginAccountParams::AmazonBedrock {
-                api_key: "secret".to_string(),
-                region: "us-west-2".to_string(),
-            },
-        };
-        assert_eq!(
-            json!({
-                "method": "account/login/start",
-                "id": 2,
-                "params": {
+        for (params, expected_params) in [
+            (
+                v2::LoginAccountParams::AmazonBedrock {
+                    api_key: "secret".to_string(),
+                    region: "us-west-2".to_string(),
+                },
+                json!({
                     "type": "amazonBedrock",
                     "apiKey": "secret",
                     "region": "us-west-2"
-                }
-            }),
-            serde_json::to_value(&request)?,
-        );
+                }),
+            ),
+            (
+                v2::LoginAccountParams::AmazonBedrockAccessKeys {
+                    access_key_id: "access-key-id".to_string(),
+                    secret_access_key: "secret-access-key".to_string(),
+                    session_token: Some("session-token".to_string()),
+                    region: "us-west-2".to_string(),
+                },
+                json!({
+                    "type": "amazonBedrockAccessKeys",
+                    "accessKeyId": "access-key-id",
+                    "secretAccessKey": "secret-access-key",
+                    "sessionToken": "session-token",
+                    "region": "us-west-2"
+                }),
+            ),
+        ] {
+            let request = ClientRequest::LoginAccount {
+                request_id: RequestId::Integer(2),
+                params,
+            };
+            assert_eq!(
+                json!({
+                    "method": "account/login/start",
+                    "id": 2,
+                    "params": expected_params,
+                }),
+                serde_json::to_value(&request)?,
+            );
+        }
         assert_eq!(
             json!({"type": "amazonBedrock"}),
             serde_json::to_value(v2::LoginAccountResponse::AmazonBedrock {})?,
@@ -3210,12 +3728,14 @@ mod tests {
         let chatgpt = v2::Account::Chatgpt {
             email: Some("user@example.com".to_string()),
             plan_type: PlanType::Plus,
+            workspace_name: None,
         };
         assert_eq!(
             json!({
                 "type": "chatgpt",
                 "email": "user@example.com",
                 "planType": "plus",
+                "workspaceName": null,
             }),
             serde_json::to_value(&chatgpt)?,
         );
@@ -3223,12 +3743,14 @@ mod tests {
         let chatgpt_without_email = v2::Account::Chatgpt {
             email: None,
             plan_type: PlanType::Pro,
+            workspace_name: None,
         };
         assert_eq!(
             json!({
                 "type": "chatgpt",
                 "email": null,
                 "planType": "pro",
+                "workspaceName": null,
             }),
             serde_json::to_value(&chatgpt_without_email)?,
         );
@@ -3416,6 +3938,7 @@ mod tests {
             request_id: RequestId::Integer(9),
             params: v2::AppsReadParams {
                 app_ids: vec!["app-a".to_string(), "app-b".to_string()],
+                thread_id: None,
                 include_tools: true,
             },
         };
@@ -3423,7 +3946,11 @@ mod tests {
             json!({
                 "method": "app/read",
                 "id": 9,
-                "params": { "appIds": ["app-a", "app-b"], "includeTools": true }
+                "params": {
+                    "appIds": ["app-a", "app-b"],
+                    "threadId": null,
+                    "includeTools": true
+                }
             }),
             serde_json::to_value(&request)?,
         );
@@ -3435,11 +3962,15 @@ mod tests {
         let request = ClientRequest::EnvironmentAdd {
             request_id: RequestId::Integer(9),
             params: v2::EnvironmentAddParams {
+                skills: None,
+                auth_bearer_token: Some("private-executor-token".into()),
+                websocket_request_id: Some("caller-sample-id".to_string()),
                 environment_id: "remote-a".to_string(),
                 exec_server_url: "ws://127.0.0.1:8765".to_string(),
                 connect_timeout_ms: Some(300_000),
             },
         };
+        assert!(!format!("{request:?}").contains("private-executor-token"));
         assert_eq!(
             json!({
                 "method": "environment/add",
@@ -3447,7 +3978,10 @@ mod tests {
                 "params": {
                     "environmentId": "remote-a",
                     "execServerUrl": "ws://127.0.0.1:8765",
-                    "connectTimeoutMs": 300000
+                    "connectTimeoutMs": 300000,
+                    "authBearerToken": "private-executor-token",
+                    "websocketRequestId": "caller-sample-id",
+                    "skills": null
                 }
             }),
             serde_json::to_value(&request)?,
@@ -3620,10 +4154,12 @@ mod tests {
             request_id: RequestId::Integer(9),
             params: v2::ThreadRealtimeStartParams {
                 client_managed_handoffs: Some(true),
+                delegation_ack_filler: Some(false),
                 flush_transcript_tail_on_session_end: Some(true),
                 codex_responses_as_items: None,
                 codex_response_item_prefix: None,
                 codex_response_handoff_mode: Some(CodexResponseHandoffMode::BemTags),
+                backend_reasoning_status: false,
                 codex_response_handoff_channel_prefixes: Some(std::collections::BTreeMap::from([
                     ("analysis".to_string(), vec!["[THINKING]".to_string()]),
                     (
@@ -3646,8 +4182,11 @@ mod tests {
                         text: "Understood.".to_string(),
                     },
                 ]),
+                realtime_start_instructions: Some("Use realtime output channels.".to_string()),
+                realtime_end_instructions: Some("Resume normal text responses.".to_string()),
                 prompt: Some(Some("You are on a call".to_string())),
                 realtime_session_id: Some("sess_456".to_string()),
+                voice_session_id: Some("voice_789".to_string()),
                 transport: None,
                 version: Some(RealtimeConversationVersion::V3),
                 voice: Some(RealtimeVoice::Marin),
@@ -3660,6 +4199,7 @@ mod tests {
                 "params": {
                     "threadId": "thr_123",
                     "clientManagedHandoffs": true,
+                    "delegationAckFiller": false,
                     "flushTranscriptTailOnSessionEnd": true,
                     "codexResponsesAsItems": null,
                     "codexResponseItemPrefix": null,
@@ -3682,8 +4222,11 @@ mod tests {
                             "text": "Understood."
                         }
                     ],
+                    "realtimeStartInstructions": "Use realtime output channels.",
+                    "realtimeEndInstructions": "Resume normal text responses.",
                     "prompt": "You are on a call",
                     "realtimeSessionId": "sess_456",
+                    "voiceSessionId": "voice_789",
                     "transport": null,
                     "version": "v3",
                     "voice": "marin"
@@ -3700,18 +4243,23 @@ mod tests {
             request_id: RequestId::Integer(9),
             params: v2::ThreadRealtimeStartParams {
                 client_managed_handoffs: None,
+                delegation_ack_filler: None,
                 flush_transcript_tail_on_session_end: None,
                 codex_responses_as_items: None,
                 codex_response_item_prefix: None,
                 codex_response_handoff_mode: None,
+                backend_reasoning_status: false,
                 codex_response_handoff_channel_prefixes: None,
                 thread_id: "thr_123".to_string(),
                 model: None,
                 output_modality: RealtimeOutputModality::Audio,
                 include_startup_context: None,
                 initial_items: None,
+                realtime_start_instructions: None,
+                realtime_end_instructions: None,
                 prompt: None,
                 realtime_session_id: None,
+                voice_session_id: None,
                 transport: None,
                 version: None,
                 voice: None,
@@ -3724,6 +4272,7 @@ mod tests {
                 "params": {
                     "threadId": "thr_123",
                     "clientManagedHandoffs": null,
+                    "delegationAckFiller": null,
                     "flushTranscriptTailOnSessionEnd": null,
                     "codexResponsesAsItems": null,
                     "codexResponseItemPrefix": null,
@@ -3733,7 +4282,10 @@ mod tests {
                     "outputModality": "audio",
                     "includeStartupContext": null,
                     "initialItems": null,
+                    "realtimeStartInstructions": null,
+                    "realtimeEndInstructions": null,
                     "realtimeSessionId": null,
+                    "voiceSessionId": null,
                     "transport": null,
                     "version": null,
                     "voice": null
@@ -3746,18 +4298,23 @@ mod tests {
             request_id: RequestId::Integer(9),
             params: v2::ThreadRealtimeStartParams {
                 client_managed_handoffs: None,
+                delegation_ack_filler: None,
                 flush_transcript_tail_on_session_end: None,
                 codex_responses_as_items: None,
                 codex_response_item_prefix: None,
                 codex_response_handoff_mode: None,
+                backend_reasoning_status: false,
                 codex_response_handoff_channel_prefixes: None,
                 thread_id: "thr_123".to_string(),
                 model: None,
                 output_modality: RealtimeOutputModality::Audio,
                 include_startup_context: None,
                 initial_items: None,
+                realtime_start_instructions: None,
+                realtime_end_instructions: None,
                 prompt: Some(None),
                 realtime_session_id: None,
+                voice_session_id: None,
                 transport: None,
                 version: None,
                 voice: None,
@@ -3770,6 +4327,7 @@ mod tests {
                 "params": {
                     "threadId": "thr_123",
                     "clientManagedHandoffs": null,
+                    "delegationAckFiller": null,
                     "flushTranscriptTailOnSessionEnd": null,
                     "codexResponsesAsItems": null,
                     "codexResponseItemPrefix": null,
@@ -3779,8 +4337,11 @@ mod tests {
                     "outputModality": "audio",
                     "includeStartupContext": null,
                     "initialItems": null,
+                    "realtimeStartInstructions": null,
+                    "realtimeEndInstructions": null,
                     "prompt": null,
                     "realtimeSessionId": null,
+                    "voiceSessionId": null,
                     "transport": null,
                     "version": null,
                     "voice": null
@@ -3937,20 +4498,13 @@ mod tests {
     }
 
     #[test]
-    fn mock_experimental_method_is_marked_experimental() {
-        let request = ClientRequest::MockExperimentalMethod {
-            request_id: RequestId::Integer(1),
-            params: v2::MockExperimentalMethodParams::default(),
-        };
-        let reason = crate::experimental_api::ExperimentalApi::experimental_reason(&request);
-        assert_eq!(reason, Some("mock/experimentalMethod"));
-    }
-
-    #[test]
     fn environment_add_is_marked_experimental() {
         let request = ClientRequest::EnvironmentAdd {
             request_id: RequestId::Integer(1),
             params: v2::EnvironmentAddParams {
+                skills: None,
+                auth_bearer_token: None,
+                websocket_request_id: None,
                 environment_id: "remote-a".to_string(),
                 exec_server_url: "ws://127.0.0.1:8765".to_string(),
                 connect_timeout_ms: None,
@@ -3987,37 +4541,11 @@ mod tests {
     }
 
     #[test]
-    fn thread_realtime_start_is_marked_experimental() {
-        let request = ClientRequest::ThreadRealtimeStart {
-            request_id: RequestId::Integer(1),
-            params: v2::ThreadRealtimeStartParams {
-                client_managed_handoffs: None,
-                flush_transcript_tail_on_session_end: None,
-                codex_responses_as_items: None,
-                codex_response_item_prefix: None,
-                codex_response_handoff_mode: None,
-                codex_response_handoff_channel_prefixes: None,
-                thread_id: "thr_123".to_string(),
-                model: None,
-                output_modality: RealtimeOutputModality::Audio,
-                include_startup_context: None,
-                initial_items: None,
-                prompt: Some(Some("You are on a call".to_string())),
-                realtime_session_id: None,
-                transport: None,
-                version: None,
-                voice: None,
-            },
-        };
-        let reason = crate::experimental_api::ExperimentalApi::experimental_reason(&request);
-        assert_eq!(reason, Some("thread/realtime/start"));
-    }
-
-    #[test]
     fn thread_goal_methods_are_not_marked_experimental() {
         let set_request = ClientRequest::ThreadGoalSet {
             request_id: RequestId::Integer(1),
             params: v2::ThreadGoalSetParams {
+                origin: None,
                 thread_id: "thr_123".to_string(),
                 objective: Some("ship goal mode".to_string()),
                 status: Some(v2::ThreadGoalStatus::Active),
@@ -4033,6 +4561,7 @@ mod tests {
         let clear_request = ClientRequest::ThreadGoalClear {
             request_id: RequestId::Integer(3),
             params: v2::ThreadGoalClearParams {
+                origin: None,
                 thread_id: "thr_123".to_string(),
             },
         };
@@ -4088,6 +4617,7 @@ mod tests {
             ServerNotification::ThreadSettingsUpdated(v2::ThreadSettingsUpdatedNotification {
                 thread_id: "thr_123".to_string(),
                 thread_settings: v2::ThreadSettings {
+                    disabled_plugin_ids: Vec::new(),
                     cwd: absolute_path("/tmp/repo"),
                     approval_policy: v2::AskForApproval::Never,
                     approvals_reviewer: v2::ApprovalsReviewer::User,
@@ -4165,6 +4695,7 @@ mod tests {
     #[test]
     fn command_execution_request_approval_additional_permissions_is_marked_experimental() {
         let params = v2::CommandExecutionRequestApprovalParams {
+            kind: Default::default(),
             thread_id: "thr_123".to_string(),
             turn_id: "turn_123".to_string(),
             item_id: "call_123".to_string(),

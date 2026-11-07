@@ -2,9 +2,14 @@
 // Unified entry point for the Codex CLI.
 
 import { spawn } from "node:child_process";
-import { existsSync, realpathSync } from "fs";
+import { existsSync, readFileSync, realpathSync } from "fs";
 import { createRequire } from "node:module";
+<<<<<<< HEAD
 import os from "node:os";
+||||||| 413492cd6c
+=======
+import { constants } from "node:os";
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -107,8 +112,18 @@ function findCorbanuExecutable() {
     packageManager === "bun"
       ? "bun install -g @corbanucore/terminal@latest"
       : packageManager === "pnpm"
+<<<<<<< HEAD
         ? "pnpm add -g @corbanucore/terminal@latest"
         : "npm install -g @corbanucore/terminal@latest";
+||||||| 413492cd6c
+        ? "pnpm add -g @openai/codex@latest"
+        : "npm install -g @openai/codex@latest";
+=======
+        ? "pnpm add -g @openai/codex@latest"
+        : packageManager === "vite-plus"
+          ? "vp install -g @openai/codex@latest"
+          : "npm install -g @openai/codex@latest";
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
   throw new Error(
     `Missing optional dependency ${platformPackage}. Reinstall Corbanu Terminal: ${updateCommand}`,
   );
@@ -116,6 +131,7 @@ function findCorbanuExecutable() {
 
 const binaryPath = findCorbanuExecutable();
 
+<<<<<<< HEAD
 // Use an asynchronous spawn instead of spawnSync so that Node is able to
 // respond to signals (e.g. Ctrl-C / SIGINT) while the native binary is
 // executing. This allows us to forward those signals to the child process
@@ -123,6 +139,17 @@ const binaryPath = findCorbanuExecutable();
 // receives a fatal signal, both processes exit in a predictable manner.
 
 function isPnpmOwnedCorbanuInstall(nodeModulesDir) {
+||||||| 413492cd6c
+// Use an asynchronous spawn instead of spawnSync so that Node is able to
+// respond to signals (e.g. Ctrl-C / SIGINT) while the native binary is
+// executing. This allows us to forward those signals to the child process
+// and guarantees that when either the child terminates or the parent
+// receives a fatal signal, both processes exit in a predictable manner.
+
+function isPnpmOwnedCodexInstall(nodeModulesDir) {
+=======
+function isPnpmOwnedCodexInstall(nodeModulesDir) {
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
   if (!existsSync(path.join(nodeModulesDir, ".modules.yaml"))) {
     return false;
   }
@@ -137,14 +164,52 @@ function isPnpmOwnedCorbanuInstall(nodeModulesDir) {
   }
 }
 
+function isVitePlusOwnedCodexInstall(packagesDir) {
+  if (path.basename(packagesDir) !== "packages") {
+    return false;
+  }
+
+  try {
+    const metadata = JSON.parse(
+      readFileSync(path.join(packagesDir, "@openai", "codex.json"), "utf8"),
+    );
+    if (metadata.name !== "@openai/codex") {
+      return false;
+    }
+
+    // Vite+ records the active global installation in packages/@openai/codex.json.
+    // Older installs have no ID or append a #-prefixed ID to the package name;
+    // newer installs put the ID in a subdirectory of the package prefix.
+    const installId = metadata.installId || "";
+    const installDir = installId.startsWith("#")
+      ? path.join(packagesDir, `@openai/codex${installId}`)
+      : path.join(packagesDir, "@openai/codex", installId);
+    for (const nodeModulesDir of [
+      path.join(installDir, "lib", "node_modules"),
+      path.join(installDir, "node_modules"),
+    ]) {
+      const packageRoot = path.join(nodeModulesDir, "@openai", "codex");
+      if (
+        existsSync(packageRoot) &&
+        realpathSync(packageRoot) === codexPackageRoot
+      ) {
+        return true;
+      }
+    }
+  } catch {
+    // Missing or unreadable ownership metadata must not prevent Codex starting.
+  }
+  return false;
+}
+
 /**
  * Use heuristics to detect the package manager that installed Corbanu Terminal
  * in order to give the user a hint about how to update it.
  */
 function detectPackageManager() {
-  // pnpm's owning node_modules directory can be several parents above the
-  // package in isolated global layouts. Search ancestors of both the canonical
-  // package root and lexical entrypoint because pnpm may link either path.
+  // Package-manager ownership metadata can be several parents above the package.
+  // Search ancestors of both the canonical package root and lexical entrypoint
+  // because the package manager may link either path.
   const entrypointDir = path.dirname(path.resolve(process.argv[1]));
   for (const startDir of new Set([codexPackageRoot, entrypointDir])) {
     const filesystemRoot = path.parse(startDir).root;
@@ -153,7 +218,16 @@ function detectPackageManager() {
       currentDir !== filesystemRoot;
       currentDir = path.dirname(currentDir)
     ) {
+<<<<<<< HEAD
       if (isPnpmOwnedCorbanuInstall(path.join(currentDir, "node_modules"))) {
+||||||| 413492cd6c
+      if (isPnpmOwnedCodexInstall(path.join(currentDir, "node_modules"))) {
+=======
+      if (isVitePlusOwnedCodexInstall(currentDir)) {
+        return "vite-plus";
+      }
+      if (isPnpmOwnedCodexInstall(path.join(currentDir, "node_modules"))) {
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         return "pnpm";
       }
     }
@@ -189,7 +263,9 @@ const packageManagerEnvVar =
     ? "CODEX_MANAGED_BY_BUN"
     : packageManager === "pnpm"
       ? "CODEX_MANAGED_BY_PNPM"
-      : "CODEX_MANAGED_BY_NPM";
+      : packageManager === "vite-plus"
+        ? "CODEX_MANAGED_BY_VITE_PLUS"
+        : "CODEX_MANAGED_BY_NPM";
 const env = {
   ...process.env,
   CODEX_MANAGED_PACKAGE_ROOT: codexPackageRoot,
@@ -197,8 +273,20 @@ const env = {
 delete env.CODEX_MANAGED_BY_NPM;
 delete env.CODEX_MANAGED_BY_BUN;
 delete env.CODEX_MANAGED_BY_PNPM;
+delete env.CODEX_MANAGED_BY_VITE_PLUS;
 env[packageManagerEnvVar] = "1";
 
+// Replace Node so the native binary receives signals and exits directly.
+// Node exposes execve on Windows too, but calling it there is unsupported.
+if (process.platform !== "win32" && typeof process.execve === "function") {
+  // Node ignores SIGXFSZ, and ignored signals survive execve. Installing a
+  // handler lets execve restore the default disposition in the native binary.
+  process.on("SIGXFSZ", () => {});
+  process.execve(binaryPath, [binaryPath, ...process.argv.slice(2)], env);
+}
+
+// Older Node versions and Windows need a child process. Spawn asynchronously
+// so Node can forward signals while the native binary is executing.
 const child = spawn(binaryPath, process.argv.slice(2), {
   stdio: "inherit",
   env,
@@ -248,8 +336,9 @@ const childResult = await new Promise((resolve) => {
 });
 
 if (childResult.type === "signal") {
-  // Re-emit the same signal so that the parent terminates with the expected
-  // semantics (this also sets the correct exit code of 128 + n).
+  // Preserve a failure exit code even if Node ignores the re-emitted signal.
+  process.exitCode = 128 + constants.signals[childResult.signal];
+  process.removeAllListeners(childResult.signal);
   process.kill(process.pid, childResult.signal);
 } else {
   process.exit(childResult.exitCode);

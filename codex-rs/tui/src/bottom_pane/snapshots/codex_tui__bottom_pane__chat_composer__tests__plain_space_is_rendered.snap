@@ -1,0 +1,19 @@
+---
+source: tui/src/bottom_pane/chat_composer.rs
+expression: terminal.backend()
+---
+"                                                                                                    "
+<<<<<<< HEAD:codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_mode_ctrl_c_interrupt.snap
+"› Ask Corbanu Terminal to do anything                                                               "
+||||||| 413492cd6c:codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__footer_mode_ctrl_c_interrupt.snap
+"› Ask Codex to do anything                                                                          "
+=======
+"› a b                                                                                               "
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__plain_space_is_rendered.snap
+"                                                                                                    "
+"                                                                                                    "
+"                                                                                                    "
+"                                                                                                    "
+"                                                                                                    "
+"                                                                                                    "
+"                                                                                 100% context left  "

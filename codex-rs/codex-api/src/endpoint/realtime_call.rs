@@ -411,11 +411,12 @@ mod tests {
     struct DummyAuth;
 
     impl AuthProvider for DummyAuth {
-        fn add_auth_headers(&self, headers: &mut HeaderMap) {
+        fn add_auth_headers(&self, headers: &mut HeaderMap) -> Result<(), crate::AuthError> {
             headers.insert(
                 http::header::AUTHORIZATION,
                 HeaderValue::from_static("Bearer test-token"),
             );
+            Ok(())
         }
     }
 
@@ -440,6 +441,7 @@ mod tests {
         RealtimeSessionConfig {
             instructions: "hi".to_string(),
             initial_items: Vec::new(),
+            delegation_ack_filler: None,
             model: Some("gpt-realtime".to_string()),
             session_id: Some(session_id.to_string()),
             event_parser: RealtimeEventParser::V1,

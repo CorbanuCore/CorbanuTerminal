@@ -1,18 +1,33 @@
 //! Shared retry and transport fallback decisions for Responses requests.
+//! Content-filter guidance is recorded for sampling requests before retry decisions.
+//! Server advice controls timing without extending configured retry limits.
 
 use std::time::Duration;
 
 use crate::client::ModelClientSession;
+use crate::context::ContentFilterGuidance;
+use crate::context::ContextualUserFragment;
 use crate::session::session::Session;
+use crate::session::step_context::StepContext;
 use crate::session::turn_context::TurnContext;
-use crate::util::backoff;
+use codex_client::RetryOperation;
+use codex_features::Feature;
+use codex_http_client::RetryAfter;
 use codex_protocol::error::CodexErr;
+use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::WarningEvent;
+use tokio::time::Instant;
 use tracing::warn;
 
+<<<<<<< HEAD
 const MAX_SAME_REQUEST_IDLE_FAILURES: u64 = 2;
 const SSE_IDLE_TIMEOUT_MESSAGE: &str = "idle timeout waiting for SSE";
+||||||| 413492cd6c
+=======
+const INITIAL_CONNECTION_RETRY_DELAY: Duration = Duration::from_secs(5);
+const MAX_CONNECTION_RETRY_DELAY: Duration = Duration::from_secs(60);
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ResponsesStreamRequest {
@@ -20,6 +35,7 @@ pub(crate) enum ResponsesStreamRequest {
     RemoteCompactionV2,
 }
 
+<<<<<<< HEAD
 pub(crate) fn guard_same_request_idle_retry(
     err: &CodexErr,
     same_request_idle_failures: &mut u64,
@@ -56,14 +72,50 @@ fn is_sse_idle_timeout(err: &CodexErr) -> bool {
 )]
 pub(crate) async fn handle_retryable_response_stream_error(
     retries: &mut u64,
+||||||| 413492cd6c
+/// Handles a retryable stream error and returns `Ok(())` when the caller should
+/// retry the request loop.
+pub(crate) async fn handle_retryable_response_stream_error(
+    retries: &mut u64,
+=======
+pub(crate) struct ResponsesStreamRetryState {
+    retries: u64,
+    connection_retries: u64,
+    connection_retry_delay: Duration,
+}
+
+impl Default for ResponsesStreamRetryState {
+    fn default() -> Self {
+        Self {
+            retries: 0,
+            connection_retries: 0,
+            connection_retry_delay: INITIAL_CONNECTION_RETRY_DELAY,
+        }
+    }
+}
+
+/// Server retry advice retained after stream retries are exhausted. The turn ID
+/// prevents a reused Guardian session from applying advice from an earlier review.
+pub(crate) struct ExhaustedResponseRetry {
+    pub(crate) turn_id: String,
+    pub(crate) retry_at: Option<tokio::time::Instant>,
+}
+
+/// Returns `Ok(())` when the caller should retry the request loop, or the original error when
+/// it is terminal or the retry budget is exhausted.
+#[tracing::instrument(level = "trace", skip_all, fields(request = ?request))]
+pub(crate) async fn handle_response_stream_error(
+    retry_state: &mut ResponsesStreamRetryState,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     max_retries: u64,
     err: CodexErr,
     client_session: &mut ModelClientSession,
     sess: &Session,
-    turn_context: &TurnContext,
+    step_context: &StepContext,
     request: ResponsesStreamRequest,
     attempt_elapsed: Duration,
 ) -> Result<(), CodexErr> {
+<<<<<<< HEAD
     ensure_gpu_runtime_provider_active(sess, turn_context).await?;
     let long_failure = attempt_elapsed
         >= turn_context
@@ -96,11 +148,74 @@ pub(crate) async fn handle_retryable_response_stream_error(
     }
 
     if *retries >= effective_max_retries
+||||||| 413492cd6c
+    if *retries >= max_retries
+=======
+    let turn_context = &step_context.turn;
+    if matches!(request, ResponsesStreamRequest::Sampling)
+        && matches!(err.details(), CodexErrorDetails::ContentFilter)
+    {
+        let model_info = &step_context.settings.model_info;
+        let guidance = ContentFilterGuidance {
+            text: codex_prompts::ResolvedModelMessages::from_model(model_info)
+                .content_filter_guidance()
+                .to_string(),
+        };
+        sess.record_conversation_items(
+            turn_context,
+            model_info,
+            &[ContextualUserFragment::into(guidance)],
+        )
+        .await;
+    }
+    let operation = match request {
+        ResponsesStreamRequest::Sampling => RetryOperation::Sampling,
+        ResponsesStreamRequest::RemoteCompactionV2 => RetryOperation::RemoteCompactionV2,
+    };
+    let retry_count = retry_state.retries.saturating_add(1);
+    let Some(delay) = err.retry_delay(retry_count) else {
+        return Err(err);
+    };
+    let retry_after = err.retry_after();
+
+    if turn_context
+        .config
+        .features
+        .enabled(Feature::UnboundedConnectionRetries)
+        && matches!(request, ResponsesStreamRequest::Sampling)
+        && matches!(err.details(), CodexErrorDetails::ConnectionFailed(_))
+        && !turn_context.session_source.is_internal()
+        && !turn_context.provider.info().is_amazon_bedrock()
+    {
+        let retry_delay = retry_state.connection_retry_delay;
+        warn!(
+            turn_id = %turn_context.sub_id,
+            error = %err,
+            ?retry_delay,
+            "stream connection failed; waiting to retry"
+        );
+        sess.notify_stream_error(turn_context, "Reconnecting... waiting for network", err)
+            .await;
+        retry_state.connection_retries = retry_state.connection_retries.saturating_add(1);
+        codex_client::record_retry!(retry_state.connection_retries, retry_delay, operation);
+        tokio::time::sleep(retry_delay).await;
+        retry_state.connection_retry_delay = retry_delay
+            .saturating_mul(2)
+            .min(MAX_CONNECTION_RETRY_DELAY);
+        return Ok(());
+    }
+
+    if retry_state.retries >= max_retries
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         && client_session.try_switch_fallback_transport(
             &turn_context.session_telemetry,
-            &turn_context.model_info,
+            turn_context.model_info(),
         )
     {
+        // Changing transport must not bypass the server's retry deadline.
+        if let Some(retry_after) = retry_after {
+            tokio::time::sleep_until(retry_after.deadline()).await;
+        }
         sess.send_event(
             turn_context,
             EventMsg::Warning(WarningEvent {
@@ -108,14 +223,24 @@ pub(crate) async fn handle_retryable_response_stream_error(
             }),
         )
         .await;
-        *retries = 0;
+        retry_state.retries = 0;
         return Ok(());
     }
 
+<<<<<<< HEAD
     if *retries < effective_max_retries {
         *retries += 1;
         let retry_count = *retries;
         let delay = err.retry_delay().unwrap_or_else(|| backoff(retry_count));
+||||||| 413492cd6c
+    if *retries < max_retries {
+        *retries += 1;
+        let retry_count = *retries;
+        let delay = err.retry_delay().unwrap_or_else(|| backoff(retry_count));
+=======
+    if retry_state.retries < max_retries {
+        retry_state.retries = retry_count;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         log_retry(request, turn_context, &err, retry_count, max_retries, delay);
 
         // In release builds, hide the first websocket retry notification to reduce noisy
@@ -133,10 +258,21 @@ pub(crate) async fn handle_retryable_response_stream_error(
             )
             .await;
         }
-        tokio::time::sleep(delay).await;
+        // Use one clock sample so local backoff telemetry retains the selected delay.
+        let now = Instant::now();
+        let retry_at = retry_after.map(RetryAfter::deadline).unwrap_or(now + delay);
+        let delay = retry_at.saturating_duration_since(now);
+        codex_client::record_retry!(retry_count, delay, operation);
+        tokio::time::sleep_until(retry_at).await;
         return Ok(());
     }
 
+    sess.services
+        .thread_extension_data
+        .insert(ExhaustedResponseRetry {
+            turn_id: turn_context.sub_id.clone(),
+            retry_at: retry_after.map(RetryAfter::deadline),
+        });
     Err(err)
 }
 

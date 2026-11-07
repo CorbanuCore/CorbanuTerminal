@@ -3,8 +3,14 @@ source: tui/src/chatwidget/tests/popups_and_settings.rs
 expression: popup
 ---
   Select Model and Effort
+<<<<<<< HEAD
   Access hidden models by running corbanu -m <model_name> or in your config.to
+||||||| 413492cd6c
+  Access legacy models by running codex -m <model_name> or in your config.toml
+=======
+
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 › 1. z-ai/glm-5.2 (current)  z-ai/glm-5.2 description
 
-  Press enter to confirm or esc to go back
+  enter default · s session · esc back

@@ -95,12 +95,18 @@ pub(crate) fn start_runner_stdout_reader(
     credential_watch: Option<crate::credential_watch::CredentialWatch>,
 ) {
     std::thread::spawn(move || {
+<<<<<<< HEAD
         let stopped_by_watch = || {
             credential_watch
                 .as_ref()
                 .and_then(crate::credential_watch::CredentialWatch::finish)
         };
         loop {
+||||||| 413492cd6c
+        loop {
+=======
+        let exit = loop {
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             let msg = match crate::ipc_framed::read_frame(&mut pipe_read) {
                 Ok(Some(v)) => v,
                 Ok(None) => {
@@ -109,8 +115,7 @@ pub(crate) fn start_runner_stdout_reader(
                         &stdout_tx,
                         stderr_tx.as_ref(),
                     );
-                    let _ = exit_tx.send(-1);
-                    break;
+                    break None;
                 }
                 Err(err) => {
                     send_runner_error(
@@ -118,8 +123,7 @@ pub(crate) fn start_runner_stdout_reader(
                         &stdout_tx,
                         stderr_tx.as_ref(),
                     );
-                    let _ = exit_tx.send(-1);
-                    break;
+                    break None;
                 }
             };
 
@@ -141,6 +145,7 @@ pub(crate) fn start_runner_stdout_reader(
                     }
                 }
                 Message::Exit { payload } => {
+<<<<<<< HEAD
                     let mut exit_code = payload.exit_code;
                     if let Some(found) = stopped_by_watch() {
                         let message =
@@ -160,11 +165,16 @@ pub(crate) fn start_runner_stdout_reader(
                     }
                     let _ = exit_tx.send(exit_code);
                     break;
+||||||| 413492cd6c
+                    let _ = exit_tx.send(payload.exit_code);
+                    break;
+=======
+                    break Some((payload.exit_code, payload.timed_out));
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 }
                 Message::Error { payload } => {
                     send_runner_error(&payload.message, &stdout_tx, stderr_tx.as_ref());
-                    let _ = exit_tx.send(-1);
-                    break;
+                    break None;
                 }
                 Message::SpawnReady { .. }
                 | Message::Stdin { .. }
@@ -173,7 +183,9 @@ pub(crate) fn start_runner_stdout_reader(
                 | Message::SpawnRequest { .. }
                 | Message::Terminate { .. } => {}
             }
-        }
+        };
+        crate::elevated::runner_metrics::record_command(exit);
+        let _ = exit_tx.send(exit.map_or(-1, |(code, _)| code));
     });
 }
 
@@ -207,3 +219,7 @@ fn send_runner_error(
         let _ = stdout_tx.send(formatted);
     }
 }
+
+#[cfg(test)]
+#[path = "windows_common_tests.rs"]
+mod tests;

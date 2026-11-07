@@ -1,6 +1,15 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
+    "CyberAccessProgram": {
+      "description": "Requested cyber treatment for an OpenAI model turn. Authorization and model-tier restrictions remain server-owned.",
+      "enum": [
+        "standard",
+        "daybreakBlue",
+        "daybreakRed"
+      ],
+      "type": "string"
+    },
     "InputModality": {
       "description": "Canonical user-input modality tags advertised by a model.",
       "oneOf": [
@@ -119,6 +128,18 @@
             }
           ]
         },
+        "availableAccessPrograms": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ModelAccessPrograms"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Null when the catalog does not provide access-program metadata."
+        },
         "defaultReasoningEffort": {
           "$ref": "#/definitions/ReasoningEffort"
         },
@@ -158,6 +179,7 @@
         "model": {
           "type": "string"
         },
+<<<<<<< HEAD
         "orchestration": {
           "anyOf": [
             {
@@ -168,6 +190,26 @@
             }
           ],
           "description": "Canonical provider, capability, and billing policy used for spawned work.\n\nThis field is always present on the wire. `null` means the route is not trusted for orchestration; clients must not infer eligibility from its display name."
+||||||| 413492cd6c
+=======
+        "modelSpecialty": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "multiAgentVersion": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MultiAgentVersion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Multi-agent runtime declared by this model, when available."
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         },
         "serviceTiers": {
           "default": [],
@@ -184,6 +226,7 @@
         },
         "supportsPersonality": {
           "default": false,
+          "description": "@deprecated Always false; models no longer support personality selection.",
           "type": "boolean"
         },
         "upgrade": {
@@ -212,6 +255,22 @@
         "isDefault",
         "model",
         "supportedReasoningEfforts"
+      ],
+      "type": "object"
+    },
+    "ModelAccessPrograms": {
+      "description": "Caller-specific explicit access programs advertised by model discovery.",
+      "properties": {
+        "cyber": {
+          "description": "Accepted explicit selections.",
+          "items": {
+            "$ref": "#/definitions/CyberAccessProgram"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "cyber"
       ],
       "type": "object"
     },
@@ -635,6 +694,14 @@
             "null"
           ]
         },
+        "retirementAt": {
+          "description": "Informational Unix timestamp for this upgrade's scheduled retirement, if known.",
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "upgradeCopy": {
           "type": [
             "string",
@@ -646,6 +713,15 @@
         "model"
       ],
       "type": "object"
+    },
+    "MultiAgentVersion": {
+      "description": "Multi-agent runtime supported by a model.",
+      "enum": [
+        "disabled",
+        "v1",
+        "v2"
+      ],
+      "type": "string"
     },
     "ReasoningEffort": {
       "description": "A non-empty reasoning effort value advertised by the model.",

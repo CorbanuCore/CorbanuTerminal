@@ -1,7 +1,14 @@
 ---
 source: tui/src/history_cell/tests.rs
+<<<<<<< HEAD
+||||||| 413492cd6c
+source: tui/src/history_cell.rs
+=======
+assertion_line: 1885
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 expression: rendered
 ---
+<<<<<<< HEAD
 ╭───────────────────────────────────────╮
 │ >_ Corbanu Terminal (vtest)           │
 │                                       │
@@ -9,3 +16,17 @@ expression: rendered
 │ directory:   /tmp/project             │
 │ permissions: YOLO mode                │
 ╰───────────────────────────────────────╯
+||||||| 413492cd6c
+╭───────────────────────────────────────╮
+│ >_ OpenAI Codex (vtest)               │
+│                                       │
+│ model:       gpt-5   /model to change │
+│ directory:   /tmp/project             │
+│ permissions: YOLO mode                │
+╰───────────────────────────────────────╯
+=======
+
+  >_ OpenAI Codex (vtest)
+     /tmp/project
+  permissions: YOLO mode
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

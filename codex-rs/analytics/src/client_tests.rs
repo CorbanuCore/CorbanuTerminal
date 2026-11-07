@@ -4,7 +4,6 @@ use super::AnalyticsEventsQueue;
 use super::AnalyticsEventsQueueMessage;
 #[cfg(debug_assertions)]
 use super::capture_track_events_request;
-#[cfg(debug_assertions)]
 use super::send_track_events;
 #[cfg(debug_assertions)]
 use super::send_track_events_request;
@@ -20,6 +19,10 @@ use crate::events::CodexMcpToolCallEventParams;
 #[cfg(debug_assertions)]
 use crate::events::CodexMcpToolCallEventRequest;
 #[cfg(debug_assertions)]
+use crate::events::CodexPluginMeasurementEventParams;
+#[cfg(debug_assertions)]
+use crate::events::CodexPluginMeasurementEventRequest;
+#[cfg(debug_assertions)]
 use crate::events::CodexPluginMetadata;
 #[cfg(debug_assertions)]
 use crate::events::CodexPluginUsedEventRequest;
@@ -34,10 +37,31 @@ use crate::events::FinalApprovalOutcome;
 use crate::events::SkillInvocationEventParams;
 use crate::events::SkillInvocationEventRequest;
 #[cfg(debug_assertions)]
+use crate::events::ThreadArchiveAction;
+#[cfg(debug_assertions)]
+use crate::events::ThreadArchiveEvent;
+#[cfg(debug_assertions)]
+use crate::events::ThreadArchiveEventParams;
+#[cfg(debug_assertions)]
 use crate::events::ToolItemTerminalStatus;
 use crate::events::TrackEventRequest;
+#[cfg(debug_assertions)]
+use crate::events::codex_artifact_operation_event_request;
 use crate::facts::AnalyticsFact;
+use crate::facts::AppInvocation;
+#[cfg(debug_assertions)]
+use crate::facts::ArtifactOperation;
+#[cfg(debug_assertions)]
+use crate::facts::ArtifactOperationLifecycle;
+use crate::facts::CustomAnalyticsFact;
+use crate::facts::ElicitationType;
 use crate::facts::InvocationType;
+use crate::facts::PluginMeasurementRow;
+use crate::facts::PluginMeasurementsInput;
+use crate::facts::TrackEventsContext;
+#[cfg(debug_assertions)]
+use crate::product_attribution::ThreadProducts;
+use crate::reducer::MAX_PLUGIN_MEASUREMENTS_PER_BATCH;
 use codex_app_server_protocol::ApprovalsReviewer as AppServerApprovalsReviewer;
 use codex_app_server_protocol::AskForApproval as AppServerAskForApproval;
 use codex_app_server_protocol::ClientRequest;
@@ -50,7 +74,11 @@ use codex_app_server_protocol::SessionSource as AppServerSessionSource;
 use codex_app_server_protocol::Thread;
 use codex_app_server_protocol::ThreadArchiveParams;
 use codex_app_server_protocol::ThreadArchiveResponse;
+use codex_app_server_protocol::ThreadArchivedNotification;
 use codex_app_server_protocol::ThreadForkResponse;
+use codex_app_server_protocol::ThreadRealtimeClosedNotification;
+use codex_app_server_protocol::ThreadRealtimeItemAddedNotification;
+use codex_app_server_protocol::ThreadRealtimeStartedNotification;
 use codex_app_server_protocol::ThreadResumeResponse;
 use codex_app_server_protocol::ThreadStartResponse;
 use codex_app_server_protocol::ThreadStatus as AppServerThreadStatus;
@@ -63,11 +91,16 @@ use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::TurnStatus as AppServerTurnStatus;
 use codex_app_server_protocol::TurnSteerParams;
 use codex_app_server_protocol::TurnSteerResponse;
+use codex_http_client::HttpClientFactory;
+use codex_http_client::OutboundProxyPolicy;
 #[cfg(debug_assertions)]
 use codex_login::AuthManager;
+use codex_model_provider::ChatgptBaseUrl;
+use codex_protocol::protocol::RealtimeConversationVersion;
 use codex_utils_absolute_path::test_support::PathBufExt;
 use codex_utils_absolute_path::test_support::test_path_buf;
 use pretty_assertions::assert_eq;
+use std::collections::BTreeMap;
 use std::collections::HashSet;
 #[cfg(debug_assertions)]
 use std::fs;
@@ -79,6 +112,9 @@ use std::sync::Mutex;
 use std::time::SystemTime;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TryRecvError;
+
+#[path = "client_product_tests.rs"]
+mod product_tests;
 
 #[cfg(debug_assertions)]
 impl AnalyticsEventsClient {
@@ -106,7 +142,7 @@ fn sample_accepted_line_fingerprint_event(thread_id: &str) -> TrackEventRequest 
                 repo_hash: None,
                 accepted_added_lines: 1,
                 accepted_deleted_lines: 0,
-                line_fingerprints: Vec::new(),
+                line_fingerprints: [],
             },
         },
     ))
@@ -122,13 +158,40 @@ fn sample_skill_track_event(thread_id: &str, plugin_id: Option<&str>) -> TrackEv
             skill_scope: None,
             plugin_id: plugin_id.map(str::to_string),
             remote_plugin_id: None,
-            repo_url: None,
             thread_id: Some(thread_id.to_string()),
             turn_id: Some("turn-1".to_string()),
+            voice_session_id: None,
             invoke_type: Some(InvocationType::Explicit),
             model_slug: Some("gpt-5.1-codex".to_string()),
         },
     })
+}
+
+#[cfg(debug_assertions)]
+fn sample_artifact_operation_event(thread_id: &str) -> TrackEventRequest {
+    TrackEventRequest::ArtifactOperation(codex_artifact_operation_event_request(
+        TrackEventsContext {
+            turn_metadata: None,
+            model_slug: "gpt-5.1-codex".to_string(),
+            thread_id: thread_id.to_string(),
+            turn_id: "turn-1".to_string(),
+            product_client_id: "codex_desktop".to_string(),
+        },
+        ArtifactOperation {
+            item_id: format!("item-{thread_id}"),
+            lifecycle: ArtifactOperationLifecycle::Started,
+            occurred_at_ms: 1,
+            plugin_id: "presentations@openai-primary-runtime".to_string(),
+            script_path: "skills/presentations/container_tools/mark_artifact_operation_started.mjs"
+                .to_string(),
+            skill: "presentations".to_string(),
+            artifact_type: "presentation".to_string(),
+            operation_kind: "create".to_string(),
+            expected_output_count: 1,
+            output_format: "pptx".to_string(),
+            execution_backend: "unified_exec".to_string(),
+        },
+    ))
 }
 
 fn sample_regular_track_event(thread_id: &str) -> TrackEventRequest {
@@ -144,7 +207,12 @@ fn sample_mcp_tool_call_event(thread_id: &str, plugin_id: Option<&str>) -> Track
                 thread_id: thread_id.to_string(),
                 session_id: format!("session-{thread_id}"),
                 turn_id: "turn-1".to_string(),
+                root_turn_id: None,
                 item_id: format!("item-{thread_id}"),
+                cell_id: None,
+                parent_call_id: None,
+                originating_response_id: None,
+                subsequent_response_id: None,
                 app_server_client: CodexAppServerClientMetadata {
                     product_client_id: "codex_desktop".to_string(),
                     client_name: None,
@@ -162,6 +230,7 @@ fn sample_mcp_tool_call_event(thread_id: &str, plugin_id: Option<&str>) -> Track
                 subagent_source: None,
                 parent_thread_id: None,
                 tool_name: "search".to_string(),
+                tool_event_type: None,
                 started_at_ms: 1,
                 completed_at_ms: 2,
                 duration_ms: Some(1),
@@ -180,6 +249,8 @@ fn sample_mcp_tool_call_event(thread_id: &str, plugin_id: Option<&str>) -> Track
             mcp_error_present: false,
             plugin_id: plugin_id.map(str::to_string),
             connector_id: None,
+            voice_session_id: None,
+            elicitation_type: None,
         },
     })
 }
@@ -226,7 +297,12 @@ fn client_with_receiver() -> (
     let (sender, receiver) = mpsc::channel(8);
     let queue = AnalyticsEventsQueue {
         sender,
+<<<<<<< HEAD
         auth_manager: None,
+||||||| 413492cd6c
+=======
+        product_generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         app_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
         plugin_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
     };
@@ -238,7 +314,7 @@ fn client_with_receiver() -> (
 fn analytics_destination_uses_explicit_capture_file() {
     let capture_path = unique_capture_path("destination");
     let destination = AnalyticsEventsDestination::from_base_url_and_capture_file(
-        "https://chatgpt.com/backend-api/".to_string(),
+        "https://chatgpt.com/backend-api/".into(),
         Some(capture_path.clone()),
     );
 
@@ -267,31 +343,53 @@ fn analytics_destination_uses_explicit_capture_file() {
 
 #[test]
 fn analytics_destination_uses_http_without_capture_file() {
-    let destination = AnalyticsEventsDestination::from_base_url_and_capture_file(
-        "https://chatgpt.com/backend-api/".to_string(),
-        /*capture_file*/ None,
-    );
+    let commercial_url = "https://chatgpt.com/backend-api/codex/analytics-events/events";
+    let gov_url = "https://gov.chatgpt.com/backend-api/codex/analytics-events/events";
+    for (base_url, expected_urls) in [
+        (
+            ChatgptBaseUrl::Default,
+            [commercial_url, gov_url, commercial_url],
+        ),
+        (
+            ChatgptBaseUrl::from("https://chatgpt.com/backend-api/"),
+            [commercial_url; 3],
+        ),
+        (
+            ChatgptBaseUrl::from("https://proxy.example/backend-api/"),
+            ["https://proxy.example/backend-api/codex/analytics-events/events"; 3],
+        ),
+    ] {
+        let destination = AnalyticsEventsDestination::from_base_url_and_capture_file(
+            base_url.clone(),
+            /*capture_file*/ None,
+        );
+        assert_eq!(destination, AnalyticsEventsDestination::Http { base_url });
 
-    assert_eq!(
-        destination,
-        AnalyticsEventsDestination::Http {
-            url: "https://chatgpt.com/backend-api/codex/analytics-events/events".to_string()
+        for (api_key, expected_url) in ["sk-test", "sk-proj-fedramp-test", "sk-test"]
+            .into_iter()
+            .zip(expected_urls)
+        {
+            let auth = codex_login::CodexAuth::from_api_key(api_key);
+            assert_eq!(
+                destination.url_for_auth(&auth).as_deref(),
+                Some(expected_url)
+            );
         }
-    );
+    }
 }
 
 #[test]
 #[cfg(not(debug_assertions))]
 fn analytics_destination_ignores_capture_file_in_release() {
     let destination = AnalyticsEventsDestination::from_base_url_and_capture_file(
-        "https://chatgpt.com/backend-api/".to_string(),
+        "https://chatgpt.com/backend-api/".into(),
         Some(std::path::PathBuf::from("ignored.jsonl")),
     );
 
     assert_eq!(
         destination,
         AnalyticsEventsDestination::Http {
-            url: "https://chatgpt.com/backend-api/codex/analytics-events/events".to_string()
+            base_url: "https://chatgpt.com/backend-api/".into()
         }
     );
 }
@@ -307,7 +405,15 @@ async fn capture_file_writes_exact_serialized_request() {
     let expected_event = serde_json::to_value(&event).expect("serialize expected event");
     let auth = codex_login::CodexAuth::create_dummy_chatgpt_auth_for_testing();
 
-    send_track_events_request(&auth, &destination, vec![event]).await;
+    let factory = HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault);
+    send_track_events_request(
+        &auth,
+        &destination,
+        vec![event],
+        &factory,
+        /*product_sku*/ None,
+    )
+    .await;
 
     let contents = fs::read_to_string(&capture_path).expect("read capture file");
     let lines = contents.lines().collect::<Vec<_>>();
@@ -334,7 +440,15 @@ async fn capture_file_writes_final_batches_as_separate_lines() {
     ];
 
     for batch in track_event_request_batches(events) {
-        send_track_events_request(&auth, &destination, batch).await;
+        let factory = HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault);
+        send_track_events_request(
+            &auth,
+            &destination,
+            batch,
+            &factory,
+            /*product_sku*/ None,
+        )
+        .await;
     }
 
     let contents = fs::read_to_string(&capture_path).expect("read capture file");
@@ -363,6 +477,25 @@ async fn api_key_auth_sends_only_plugin_events_to_codex_backend() {
     let auth_manager = codex_login::AuthManager::from_auth_for_testing(
         codex_login::CodexAuth::from_api_key("sk-test"),
     );
+    let plugin_measurement = |thread_id: &str, plugin_id: &str| {
+        TrackEventRequest::PluginMeasurement(CodexPluginMeasurementEventRequest {
+            event_type: "codex_plugin_measurement_event",
+            event_params: CodexPluginMeasurementEventParams {
+                model_slug: None,
+                reasoning_effort: None,
+                thread_id: thread_id.to_string(),
+                turn_id: "turn-1".to_string(),
+                item_id: "item-1".to_string(),
+                originator: "codex_cli_rs".to_string(),
+                plugin_id: plugin_id.to_string(),
+                execution_id: "execution-1".to_string(),
+                operation: "security_scan".to_string(),
+                measurement_name: "findings".to_string(),
+                number_value: 1.0,
+                dimensions: None,
+            },
+        })
+    };
 
     send_track_events(
         &auth_manager,
@@ -371,11 +504,27 @@ async fn api_key_auth_sends_only_plugin_events_to_codex_backend() {
             sample_regular_track_event("non-plugin-skill"),
             sample_mcp_tool_call_event("non-plugin-mcp", /*plugin_id*/ None),
             sample_plugin_used_track_event("non-plugin-used", /*plugin_id*/ None),
+            plugin_measurement("non-plugin-measurement", /*plugin_id*/ ""),
             sample_accepted_line_fingerprint_event("other-event"),
+            TrackEventRequest::ThreadArchive(ThreadArchiveEvent {
+                event_type: "codex_thread_archive_event",
+                event_params: ThreadArchiveEventParams {
+                    thread_id: "non-plugin-thread-archive".to_string(),
+                    action: ThreadArchiveAction::Archived,
+                    occurred_at_ms: 1,
+                    app_server_client: None,
+                    runtime: None,
+                    thread_source: None,
+                    parent_thread_id: None,
+                },
+            }),
             sample_plugin_used_track_event("plugin-used", Some("sample@test")),
             sample_skill_track_event("plugin-skill", Some("sample@test")),
             sample_mcp_tool_call_event("plugin-mcp", Some("sample@test")),
+            sample_artifact_operation_event("plugin-artifact"),
+            plugin_measurement("plugin-measurement", "sample@test"),
         ],
+        &ThreadProducts::default(),
     )
     .await;
 
@@ -424,6 +573,16 @@ async fn api_key_auth_sends_only_plugin_events_to_codex_backend() {
                 "plugin_id": "sample@test",
                 "thread_id": "plugin-mcp",
             }),
+            serde_json::json!({
+                "event_type": "codex_artifact_operation",
+                "plugin_id": "presentations@openai-primary-runtime",
+                "thread_id": "plugin-artifact",
+            }),
+            serde_json::json!({
+                "event_type": "codex_plugin_measurement_event",
+                "plugin_id": "sample@test",
+                "thread_id": "plugin-measurement",
+            }),
         ]
     );
 
@@ -463,6 +622,7 @@ fn sample_turn_steer_request() -> ClientRequest {
             client_user_message_id: None,
             input: Vec::new(),
             responsesapi_client_metadata: None,
+            responsesapi_client_metadata_patch: None,
             additional_context: None,
         },
     }
@@ -493,6 +653,8 @@ fn sample_thread_archive_request() -> ClientRequest {
 
 fn sample_thread(thread_id: &str) -> Thread {
     Thread {
+        originator: None,
+        environments: None,
         id: thread_id.to_string(),
         extra: None,
         session_id: format!("session-{thread_id}"),
@@ -502,8 +664,12 @@ fn sample_thread(thread_id: &str) -> Thread {
         ephemeral: false,
         section: None,
         section_entered_at: None,
+        project_id: None,
+        daybreak_enabled: None,
         history_mode: Default::default(),
         model_provider: "openai".to_string(),
+        model: None,
+        reasoning_effort: None,
         created_at: 1,
         updated_at: 2,
         recency_at: Some(2),
@@ -524,6 +690,7 @@ fn sample_thread(thread_id: &str) -> Thread {
 
 fn sample_thread_start_response() -> ClientResponsePayload {
     ClientResponsePayload::ThreadStart(ThreadStartResponse {
+        disabled_plugin_ids: Vec::new(),
         thread: sample_thread("thread-1"),
         model: "gpt-5".to_string(),
         model_provider: "openai".to_string(),
@@ -542,6 +709,7 @@ fn sample_thread_start_response() -> ClientResponsePayload {
 
 fn sample_thread_resume_response() -> ClientResponsePayload {
     ClientResponsePayload::ThreadResume(ThreadResumeResponse {
+        disabled_plugin_ids: Vec::new(),
         thread: sample_thread("thread-2"),
         model: "gpt-5".to_string(),
         model_provider: "openai".to_string(),
@@ -554,6 +722,7 @@ fn sample_thread_resume_response() -> ClientResponsePayload {
         sandbox: AppServerSandboxPolicy::DangerFullAccess,
         active_permission_profile: None,
         reasoning_effort: None,
+        collaboration_mode: None,
         multi_agent_mode: Default::default(),
         initial_turns_page: None,
         turns_backwards_cursor: None,
@@ -564,6 +733,7 @@ fn sample_thread_resume_response() -> ClientResponsePayload {
 
 fn sample_thread_fork_response() -> ClientResponsePayload {
     ClientResponsePayload::ThreadFork(ThreadForkResponse {
+        disabled_plugin_ids: Vec::new(),
         thread: sample_thread("thread-3"),
         model: "gpt-5".to_string(),
         model_provider: "openai".to_string(),
@@ -585,6 +755,7 @@ fn sample_turn_start_response() -> ClientResponsePayload {
     ClientResponsePayload::TurnStart(TurnStartResponse {
         turn: Turn {
             id: "turn-1".to_string(),
+            root_turn_id: None,
             items_view: codex_app_server_protocol::TurnItemsView::Full,
             items: Vec::new(),
             status: AppServerTurnStatus::InProgress,
@@ -600,6 +771,69 @@ fn sample_turn_steer_response() -> ClientResponsePayload {
     ClientResponsePayload::TurnSteer(TurnSteerResponse {
         turn_id: "turn-2".to_string(),
     })
+}
+
+#[test]
+fn track_plugin_measurements_rejects_unbounded_inputs_before_queueing() {
+    let (client, mut receiver) = client_with_receiver();
+    let measurements = |row_count| PluginMeasurementsInput {
+        thread_id: "thread-1".to_string(),
+        turn_id: "turn-1".to_string(),
+        item_id: "item-1".to_string(),
+        originator: "codex_cli_rs".to_string(),
+        model_slug: None,
+        reasoning_effort: None,
+        plugin_id: "sample@openai-curated".to_string(),
+        execution_id: "execution-1".to_string(),
+        operation: "security_scan".to_string(),
+        rows: vec![
+            PluginMeasurementRow {
+                measurement_name: "finding_count".to_string(),
+                number_value: 1.0,
+                dimensions: BTreeMap::new(),
+            };
+            row_count
+        ],
+    };
+
+    client.track_plugin_measurements(measurements(MAX_PLUGIN_MEASUREMENTS_PER_BATCH + 1));
+    assert!(matches!(receiver.try_recv(), Err(TryRecvError::Empty)));
+
+    let mut oversized_operation = measurements(1);
+    oversized_operation.operation = "o".repeat(65);
+    client.track_plugin_measurements(oversized_operation);
+    assert!(matches!(receiver.try_recv(), Err(TryRecvError::Empty)));
+
+    let mut mixed_rows = measurements(4);
+    mixed_rows.rows[0].measurement_name = "m".repeat(65);
+    mixed_rows.rows[1]
+        .dimensions
+        .insert("d".repeat(65), "valid".to_string());
+    mixed_rows.rows[2]
+        .dimensions
+        .insert("valid".to_string(), "v".repeat(65));
+    client.track_plugin_measurements(mixed_rows);
+    assert!(matches!(
+        receiver.try_recv(),
+        Ok(AnalyticsEventsQueueMessage::Fact(fact))
+            if matches!(
+                fact.as_ref(),
+                AnalyticsFact::Custom(CustomAnalyticsFact::PluginMeasurements(input))
+                    if input.rows.len() == 1
+                        && input.rows[0].measurement_name == "finding_count"
+            )
+    ));
+
+    client.track_plugin_measurements(measurements(MAX_PLUGIN_MEASUREMENTS_PER_BATCH));
+    assert!(matches!(
+        receiver.try_recv(),
+        Ok(AnalyticsEventsQueueMessage::Fact(fact))
+            if matches!(
+                fact.as_ref(),
+                AnalyticsFact::Custom(CustomAnalyticsFact::PluginMeasurements(input))
+                    if input.rows.len() == MAX_PLUGIN_MEASUREMENTS_PER_BATCH
+            )
+    ));
 }
 
 #[test]
@@ -728,7 +962,70 @@ async fn flush_waits_for_preceding_fact_delivery() {
 
 #[tokio::test]
 async fn flush_is_noop_when_analytics_is_disabled() {
-    AnalyticsEventsClient::disabled().flush().await;
+    let client = AnalyticsEventsClient::new(
+        codex_login::AuthManager::from_auth_for_testing(
+            codex_login::CodexAuth::create_dummy_chatgpt_auth_for_testing(),
+        ),
+        "https://chatgpt.com/backend-api".to_string(),
+        /*analytics_enabled*/ Some(false),
+    );
+    client.track_notification(&ServerNotification::ThreadArchived(
+        ThreadArchivedNotification {
+            thread_id: "thread-1".to_string(),
+        },
+    ));
+    assert!(client.queue.is_none());
+    client.flush().await;
+}
+
+#[test]
+fn app_used_preserves_first_classification_and_emits_again_next_turn() {
+    let (client, mut receiver) = client_with_receiver();
+    let tracking = TrackEventsContext {
+        turn_metadata: None,
+        model_slug: "gpt-5".to_string(),
+        thread_id: "thread-1".to_string(),
+        turn_id: "turn-1".to_string(),
+        product_client_id: "codex_desktop".to_string(),
+    };
+    for (turn_id, elicitation_type) in [
+        ("turn-1", Some(ElicitationType::AuthOrLink)),
+        ("turn-1", None),
+        ("turn-2", None),
+    ] {
+        client.track_app_used(
+            TrackEventsContext {
+                turn_id: turn_id.to_string(),
+                ..tracking.clone()
+            },
+            AppInvocation {
+                connector_id: Some("calendar".to_string()),
+                app_name: Some("Calendar".to_string()),
+                invocation_type: Some(InvocationType::Implicit),
+            },
+            elicitation_type,
+        );
+    }
+    for (turn_id, elicitation_type) in [
+        ("turn-1", Some(ElicitationType::AuthOrLink)),
+        ("turn-2", None),
+    ] {
+        let Ok(AnalyticsEventsQueueMessage::Fact(input)) = receiver.try_recv() else {
+            panic!("expected app-used analytics fact");
+        };
+        let AnalyticsFact::Custom(CustomAnalyticsFact::AppUsed(input)) = *input else {
+            panic!("expected app-used analytics fact");
+        };
+        assert_eq!(
+            (
+                input.tracking.turn_id.as_str(),
+                input.app.connector_id.as_deref(),
+                input.elicitation_type,
+            ),
+            (turn_id, Some("calendar"), elicitation_type)
+        );
+    }
+    assert!(matches!(receiver.try_recv(), Err(TryRecvError::Empty)));
 }
 
 #[test]
@@ -767,6 +1064,82 @@ fn track_notification_only_enqueues_analytics_relevant_notifications() {
 }
 
 #[test]
+fn track_notification_records_realtime_session_boundaries() {
+    let (client, mut receiver) = client_with_receiver();
+
+    client.track_notification(&ServerNotification::ThreadRealtimeStarted(
+        ThreadRealtimeStartedNotification {
+            thread_id: "thread-1".to_string(),
+            realtime_session_id: Some("voice-session-1".to_string()),
+            version: RealtimeConversationVersion::V2,
+        },
+    ));
+
+    let Ok(AnalyticsEventsQueueMessage::Fact(input)) = receiver.try_recv() else {
+        panic!("expected realtime session started fact");
+    };
+    let AnalyticsFact::RealtimeSessionStarted {
+        thread_id,
+        realtime_session_id,
+        started_at,
+    } = *input
+    else {
+        panic!("expected realtime session started fact");
+    };
+    assert_eq!(thread_id, "thread-1");
+    assert_eq!(realtime_session_id.as_deref(), Some("voice-session-1"));
+    assert!(started_at > 0);
+
+    client.track_notification(&ServerNotification::ThreadRealtimeClosed(
+        ThreadRealtimeClosedNotification {
+            thread_id: "thread-1".to_string(),
+            reason: Some("completed".to_string()),
+        },
+    ));
+
+    let Ok(AnalyticsEventsQueueMessage::Fact(input)) = receiver.try_recv() else {
+        panic!("expected realtime session closed fact");
+    };
+    let AnalyticsFact::RealtimeSessionClosed {
+        thread_id,
+        closed_at,
+    } = *input
+    else {
+        panic!("expected realtime session closed fact");
+    };
+    assert_eq!(thread_id, "thread-1");
+    assert!(closed_at >= started_at);
+}
+
+#[test]
+fn realtime_handoff_tracks_only_marker_without_transcript() {
+    let (client, mut receiver) = client_with_receiver();
+    client.track_notification(&ServerNotification::ThreadRealtimeItemAdded(
+        ThreadRealtimeItemAddedNotification {
+            thread_id: "thread-1".to_string(),
+            item: serde_json::json!({
+                "type": "handoff_request",
+                "input_transcript": "private speech",
+            }),
+        },
+    ));
+    let Ok(AnalyticsEventsQueueMessage::Fact(input)) = receiver.try_recv() else {
+        panic!("expected realtime handoff marker");
+    };
+    assert!(matches!(
+        *input,
+        AnalyticsFact::RealtimeHandoffRequested { thread_id } if thread_id == "thread-1"
+    ));
+    client.track_notification(&ServerNotification::ThreadRealtimeItemAdded(
+        ThreadRealtimeItemAddedNotification {
+            thread_id: "thread-1".to_string(),
+            item: serde_json::json!({"type": "input_transcript"}),
+        },
+    ));
+    assert!(matches!(receiver.try_recv(), Err(TryRecvError::Empty)));
+}
+
+#[test]
 fn track_event_request_batches_only_isolates_accepted_line_fingerprint_events() {
     let batches = track_event_request_batches(vec![
         sample_regular_track_event("thread-1"),
@@ -786,6 +1159,7 @@ fn track_event_request_batches_only_isolates_accepted_line_fingerprint_events() 
     assert!(batches[2][0].should_send_in_isolated_request());
 }
 
+<<<<<<< HEAD
 /// #658: a fact carries the sign-in the process's sessions used when it was
 /// recorded; none while they run on different accounts.
 #[test]
@@ -830,4 +1204,113 @@ fn issue_658_facts_carry_the_sign_in_they_were_recorded_under() {
     assert_eq!(record(3), Some(None));
     drop(default);
     let _ = std::fs::remove_dir_all(base.codex_home());
+||||||| 413492cd6c
+=======
+#[cfg(debug_assertions)]
+#[tokio::test]
+async fn account_switch_between_batches_does_not_send_old_credentials() {
+    use codex_http_client::DestinationPolicy;
+    use codex_http_client::NetworkPolicyController;
+    use codex_login::AuthCredentialsStoreMode as Store;
+    use tokio::io::AsyncReadExt;
+    use tokio::io::AsyncWriteExt;
+
+    let home = unique_capture_path("batch-account-switch");
+    fs::create_dir_all(&home).unwrap();
+    let mut stored: codex_login::AuthDotJson = serde_json::from_value(serde_json::json!({
+        "auth_mode": "chatgptAuthTokens",
+        "tokens": {
+            "id_token": "e30.e30.sig",
+            "access_token": "test-access-token-a",
+            "refresh_token": "",
+            "account_id": "account-a",
+        },
+    }))
+    .unwrap();
+    stored.last_refresh = Some(SystemTime::now().into());
+    codex_login::save_auth(&home, &stored, Store::File, Default::default()).unwrap();
+    let controller = NetworkPolicyController::default();
+    let policy = controller.policy();
+    let manager = Arc::new(
+        codex_login::AuthManager::new(
+            home.clone(),
+            /*enable_codex_api_key_env*/ false,
+            Store::File,
+            /*forced_chatgpt_workspace_id*/ None,
+            /*chatgpt_base_url*/ None,
+            Default::default(),
+            codex_login::AuthRouteConfig::from_http_client_factory(
+                HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault)
+                    .with_network_policy(policy.clone()),
+            ),
+        )
+        .await,
+    );
+    assert!(controller.publish(policy.revision(), DestinationPolicy::Unrestricted));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let destination = AnalyticsEventsDestination::Http {
+        base_url: format!("http://{}", listener.local_addr().unwrap()).into(),
+    };
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let captured = Arc::clone(&requests);
+    let server_manager = Arc::clone(&manager);
+    let server_home = home.clone();
+    let server = tokio::spawn(async move {
+        loop {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            loop {
+                let mut buffer = [0; 4096];
+                let count = stream.read(&mut buffer).await.unwrap();
+                assert!(count > 0);
+                request.extend_from_slice(&buffer[..count]);
+                if let Some(end) = request.windows(4).position(|part| part == b"\r\n\r\n") {
+                    let headers = String::from_utf8_lossy(&request[..end]).to_lowercase();
+                    let length: usize = headers
+                        .lines()
+                        .find_map(|line| line.strip_prefix("content-length: "))
+                        .unwrap()
+                        .parse()
+                        .unwrap();
+                    if request.len() >= end + 4 + length {
+                        break;
+                    }
+                }
+            }
+            let first = {
+                let mut requests = captured.lock().unwrap();
+                requests.push(String::from_utf8(request).unwrap());
+                requests.len() == 1
+            };
+            if first {
+                let tokens = stored.tokens.as_mut().unwrap();
+                tokens.account_id = Some("account-b".to_string());
+                tokens.access_token = "test-access-token-b".to_string();
+                codex_login::save_auth(&server_home, &stored, Store::File, Default::default())
+                    .unwrap();
+                server_manager.reload().await;
+                assert!(controller.publish(policy.revision(), DestinationPolicy::Unrestricted));
+            }
+            let _ = stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                .await;
+        }
+    });
+    let events = vec![
+        sample_accepted_line_fingerprint_event("one"),
+        sample_accepted_line_fingerprint_event("two"),
+    ];
+    send_track_events(&manager, &destination, events, &ThreadProducts::default()).await;
+    server.abort();
+    let _ = server.await;
+    let requests = requests.lock().unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(
+        requests[0]
+            .to_lowercase()
+            .contains("chatgpt-account-id: account-a")
+    );
+    assert!(requests[0].contains("test-access-token-a"));
+    fs::remove_dir_all(home).unwrap();
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }

@@ -3,13 +3,36 @@ source: tui/src/chatwidget/tests/permissions.rs
 assertion_line: 484
 expression: popup
 ---
+<<<<<<< HEAD
   Enable full access?
   When Corbanu runs with full access, it can edit any file on your computer
   and run commands with network, without your approval. Exercise caution when
   enabling full access. This significantly increases the risk of data loss,
   leaks, or unexpected behavior.
+||||||| 413492cd6c
+  Enable full access?
+  When Codex runs with full access, it can edit any file on your computer and
+  run commands with network, without your approval. Exercise caution when
+  enabling full access. This significantly increases the risk of data loss,
+  leaks, or unexpected behavior.
+=======
+      Enable full access?
+› As  When Codex runs with full access, it can edit any file on your
+      computer and run commands with network, without your approval.
+  GP  Exercise caution when enabling full access. This significantly
+      increases the risk of data loss, leaks, or unexpected behavior.
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
+<<<<<<< HEAD
   Yes, continue anyway  Apply full access for this session
 › Cancel                Go back without enabling full access
+||||||| 413492cd6c
+› 1. Yes, continue anyway  Apply full access for this session
+  2. Cancel                Go back without enabling full access
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
-  Press enter to confirm or esc to go back
+    › 1. Yes, continue anyway  Apply full access for this session
+      2. Cancel                Go back without enabling full access
+
+      enter select · esc back

@@ -27,6 +27,7 @@ use std::io::Write;
 use crossterm::cursor::MoveTo;
 use crossterm::cursor::SetCursorStyle;
 use crossterm::queue;
+use crossterm::style::Colored;
 use crossterm::style::Colors;
 use crossterm::style::Print;
 use crossterm::style::SetAttribute;
@@ -47,6 +48,12 @@ use ratatui::layout::Size;
 use ratatui::style::Color;
 use ratatui::style::Modifier;
 use ratatui::widgets::WidgetRef;
+
+mod cursor;
+
+#[cfg(test)]
+#[path = "custom_terminal_test_support.rs"]
+pub(crate) mod test_support;
 
 fn osc8_hyperlink_parts(symbol: &str) -> Option<(&str, &str)> {
     let content = symbol.strip_prefix("\x1b]8;;")?;
@@ -74,6 +81,9 @@ pub struct Frame<'a> {
 
     /// The buffer that is used to draw the current frame
     pub(crate) buffer: &'a mut Buffer,
+
+    /// Frame graphics to send after text, before the synchronized frame is committed.
+    pub(crate) image_placements: Vec<crate::transcript_image::ImagePlacement>,
 }
 
 impl Frame<'_> {
@@ -136,6 +146,8 @@ where
     current: usize,
     /// Whether the cursor is currently hidden
     pub hidden_cursor: bool,
+    /// Last cursor style sent successfully, so ordinary redraws do not repaint its repair anchor.
+    last_cursor_style: Option<SetCursorStyle>,
     /// Area of the viewport
     pub viewport_area: Rect,
     /// Last known size of the terminal. Used to detect if the internal buffers have to be resized.
@@ -215,6 +227,7 @@ where
             buffers: [Buffer::empty(Rect::ZERO), Buffer::empty(Rect::ZERO)],
             current: 0,
             hidden_cursor: false,
+            last_cursor_style: None,
             viewport_area: Rect::new(
                 /*x*/ 0,
                 cursor_pos.y,
@@ -244,6 +257,7 @@ where
     /// Get a Frame object which provides a consistent view into the terminal state for rendering.
     pub fn get_frame(&mut self) -> Frame<'_> {
         Frame {
+            image_placements: Vec::new(),
             cursor_position: None,
             cursor_style: SetCursorStyle::DefaultUserShape,
             viewport_area: self.viewport_area,
@@ -262,7 +276,7 @@ where
     }
 
     /// Gets the previous buffer as a reference.
-    fn previous_buffer(&self) -> &Buffer {
+    pub(crate) fn previous_buffer(&self) -> &Buffer {
         &self.buffers[1 - self.current]
     }
 
@@ -285,6 +299,10 @@ where
     /// current backend for drawing.
     pub fn flush(&mut self) -> io::Result<()> {
         let updates = diff_buffers(self.previous_buffer(), self.current_buffer());
+        self.flush_updates(updates)
+    }
+
+    fn flush_updates(&mut self, updates: Vec<DrawCommand>) -> io::Result<()> {
         let last_put_command = updates.iter().rfind(|command| command.is_put());
         if let Some(&DrawCommand::Put { x, y, .. }) = last_put_command {
             self.last_known_cursor_pos = Position { x, y };
@@ -303,31 +321,17 @@ where
 
     /// Sets the viewport area.
     pub fn set_viewport_area(&mut self, area: Rect) {
+        if self.viewport_area != area {
+            self.invalidate_cursor_state();
+        }
         self.current_buffer_mut().resize(area);
         self.previous_buffer_mut().resize(area);
         self.viewport_area = area;
         self.visible_history_rows = self.visible_history_rows.min(area.top());
     }
 
-    /// Queries the backend for size and resizes if it doesn't match the previous size.
-    pub fn autoresize(&mut self) -> io::Result<()> {
-        let screen_size = self.size()?;
-        if screen_size != self.last_known_screen_size {
-            self.resize(screen_size)?;
-        }
-        Ok(())
-    }
-
     /// Draws a single frame to the terminal.
-    ///
-    /// Returns a [`CompletedFrame`] if successful, otherwise a [`std::io::Error`].
-    ///
-    /// If the render callback passed to this method can fail, use [`try_draw`] instead.
-    ///
-    /// Applications should call `draw` or [`try_draw`] in a loop to continuously render the
-    /// terminal. These methods are the main entry points for drawing to the terminal.
-    ///
-    /// [`try_draw`]: Terminal::try_draw
+    /// Applications should call `draw` in a loop to continuously render the terminal.
     ///
     /// This method will:
     ///
@@ -345,75 +349,108 @@ where
     where
         F: FnOnce(&mut Frame),
     {
-        self.try_draw(|frame| {
-            render_callback(frame);
-            io::Result::Ok(())
+        let screen_size = self.size()?;
+        self.draw_with_size(screen_size, &mut Vec::new(), render_callback)
+    }
+
+    /// Remove graphics on the screen that owns them before switching buffers or yielding the terminal.
+    pub(crate) fn clear_frame_images(
+        &mut self,
+        images: &mut Vec<crate::transcript_image::ImagePlacement>,
+    ) -> io::Result<()> {
+        if images.is_empty() {
+            return Ok(());
+        }
+        let text = self.previous_buffer().clone();
+        let cursor = (!self.hidden_cursor).then_some(self.last_known_cursor_pos);
+        let style = self
+            .last_cursor_style
+            .unwrap_or(SetCursorStyle::DefaultUserShape);
+        self.draw_with_size(self.last_known_screen_size, images, |frame| {
+            *frame.buffer = text;
+            if let Some(cursor) = cursor {
+                frame.set_cursor_position(cursor);
+                frame.set_cursor_style(style);
+            }
         })
     }
 
-    /// Tries to draw a single frame to the terminal.
-    ///
-    /// Returns [`Result::Ok`] containing a [`CompletedFrame`] if successful, otherwise
-    /// [`Result::Err`] containing the [`std::io::Error`] that caused the failure.
-    ///
-    /// This is the equivalent of [`Terminal::draw`] but the render callback is a function or
-    /// closure that returns a `Result` instead of nothing.
-    ///
-    /// Applications should call `try_draw` or [`draw`] in a loop to continuously render the
-    /// terminal. These methods are the main entry points for drawing to the terminal.
-    ///
-    /// [`draw`]: Terminal::draw
-    ///
-    /// This method will:
-    ///
-    /// - autoresize the terminal if necessary
-    /// - call the render callback, passing it a [`Frame`] reference to render to
-    /// - flush the current internal state by copying the current buffer to the backend
-    /// - move the cursor to the last known position if it was set during the rendering closure
-    /// - return a [`CompletedFrame`] with the current buffer and the area of the terminal
-    ///
-    /// The render callback passed to `try_draw` can return any [`Result`] with an error type that
-    /// can be converted into an [`std::io::Error`] using the [`Into`] trait. This makes it possible
-    /// to use the `?` operator to propagate errors that occur during rendering. If the render
-    /// callback returns an error, the error will be returned from `try_draw` as an
-    /// [`std::io::Error`] and the terminal will not be updated.
-    ///
-    /// The [`CompletedFrame`] returned by this method can be useful for debugging or testing
-    /// purposes, but it is often not used in regular applicationss.
-    ///
-    /// The render callback should fully render the entire frame when called, including areas that
-    /// are unchanged from the previous frame. This is because each frame is compared to the
-    /// previous frame to determine what has changed, and only the changes are written to the
-    /// terminal. If the render function does not fully render the frame, the terminal will not be
-    /// in a consistent state.
-    pub fn try_draw<F, E>(&mut self, render_callback: F) -> io::Result<()>
+    /// Draws a single frame using a screen size already obtained by the caller.
+    pub(crate) fn draw_with_size<F>(
+        &mut self,
+        screen_size: Size,
+        retained_images: &mut Vec<crate::transcript_image::ImagePlacement>,
+        render_callback: F,
+    ) -> io::Result<()>
     where
-        F: FnOnce(&mut Frame) -> Result<(), E>,
-        E: Into<io::Error>,
+        F: FnOnce(&mut Frame),
     {
-        // Autoresize - otherwise we get glitches if shrinking or potential desync between widgets
-        // and the terminal (if growing), which may OOB.
-        self.autoresize()?;
-
+        if screen_size != self.last_known_screen_size {
+            self.resize(screen_size)?;
+        }
         let mut frame = self.get_frame();
 
-        render_callback(&mut frame).map_err(Into::into)?;
+        render_callback(&mut frame);
 
         // We can't change the cursor position right away because we have to flush the frame to
         // stdout first. But we also can't keep the frame around, since it holds a &mut to
         // Buffer. Thus, we're taking the important data out of the Frame and dropping it.
         let cursor_position = frame.cursor_position;
         let cursor_style = frame.cursor_style;
+        let images = std::mem::take(&mut frame.image_placements);
+        let changed = *retained_images != images;
+        if changed {
+            // Remove old graphics before text painting, including when switching to overlays.
+            for (index, placement) in retained_images.iter().enumerate() {
+                match placement.image.protocol {
+                    crate::pets::ImageProtocol::Kitty
+                    | crate::pets::ImageProtocol::KittyLocalFile => {
+                        let id = crate::transcript_image::FIRST_IMAGE_ID + index as u32;
+                        self.backend
+                            .write_all(crate::pets::kitty_delete_image(id).as_bytes())?;
+                    }
+                    crate::pets::ImageProtocol::Sixel => self.invalidate_viewport(),
+                }
+            }
+        }
 
-        // Draw to stdout
-        self.flush()?;
+        // Not every terminal or multiplexer hides intermediate cursor moves inside a
+        // synchronized update, especially when the frame spans multiple writes.
+        let updates = diff_buffers(self.previous_buffer(), self.current_buffer());
+        // A text clear, focus highlight, or full repaint may erase an otherwise stable image.
+        let repaint_images = changed
+            || updates.iter().any(|update| {
+                images.iter().any(|placement| match update {
+                    DrawCommand::Put { x, y, .. } => placement.area.contains((*x, *y).into()),
+                    DrawCommand::ClearToEnd { x, y, .. } => {
+                        *y >= placement.area.y
+                            && *y < placement.area.bottom()
+                            && *x < placement.area.right()
+                    }
+                })
+            });
+        if !updates.is_empty() && !self.hidden_cursor {
+            self.hide_cursor()?;
+        }
+        self.flush_updates(updates)?;
+        if repaint_images {
+            *retained_images = images;
+            for (index, placement) in retained_images.iter_mut().enumerate() {
+                let id = crate::transcript_image::FIRST_IMAGE_ID + index as u32;
+                placement.file = placement
+                    .image
+                    .draw(&mut self.backend, placement.area, placement.first_row, id)
+                    .map_err(io::Error::other)?;
+            }
+        }
 
         match cursor_position {
-            None => self.hide_cursor()?,
+            None if !self.hidden_cursor => self.hide_cursor()?,
+            None => {}
             Some(position) => {
-                self.set_cursor_style(cursor_style)?;
-                self.show_cursor()?;
+                self.set_cursor_style_with_repair(cursor_style)?;
                 self.set_cursor_position(position)?;
+                self.show_cursor()?;
             }
         }
 
@@ -440,7 +477,9 @@ where
 
     /// Sets the visible terminal cursor style.
     pub fn set_cursor_style(&mut self, style: SetCursorStyle) -> io::Result<()> {
-        queue!(self.backend, style)
+        queue!(self.backend, style)?;
+        self.last_cursor_style = Some(style);
+        Ok(())
     }
 
     /// Restores the user-configured terminal cursor style.
@@ -503,15 +542,20 @@ where
         queue!(self.backend, MoveTo(position.x, position.y))?;
         Write::flush(&mut self.backend)?;
         // Reset the back buffer to make sure the next update will redraw everything.
-        self.previous_buffer_mut().reset();
+        self.invalidate_viewport();
         Ok(())
     }
 
-    /// Force the next draw pass to repaint the entire viewport by resetting the
-    /// diff buffer. Call this after raw terminal operations that move screen
-    /// content outside ratatui's knowledge.
+    /// Force the next draw pass to repaint the entire viewport after raw terminal
+    /// operations move screen content outside ratatui's knowledge. Resetting the
+    /// diff buffer alone would leave default-style spaces equal to their previous
+    /// cells, allowing stale terminal content to show through those spaces.
     pub fn invalidate_viewport(&mut self) {
-        self.previous_buffer_mut().reset();
+        let previous_buffer = self.previous_buffer_mut();
+        previous_buffer.reset();
+        for cell in &mut previous_buffer.content {
+            cell.set_diff_option(CellDiffOption::AlwaysUpdate);
+        }
     }
 
     /// Clear the entire visible screen (not just the viewport) and force a full redraw.
@@ -525,7 +569,7 @@ where
         self.set_cursor_position(home)?;
         std::io::Write::flush(&mut self.backend)?;
         self.visible_history_rows = 0;
-        self.previous_buffer_mut().reset();
+        self.invalidate_viewport();
         Ok(())
     }
 
@@ -544,7 +588,7 @@ where
         std::io::Write::flush(&mut self.backend)?;
         self.last_known_cursor_pos = Position { x: 0, y: 0 };
         self.visible_history_rows = 0;
-        self.previous_buffer_mut().reset();
+        self.invalidate_viewport();
         Ok(())
     }
 
@@ -587,11 +631,13 @@ fn diff_buffers(a: &Buffer, b: &Buffer) -> Vec<DrawCommand> {
     for y in 0..a.area.height {
         let row_start = y as usize * a.area.width as usize;
         let row_end = row_start + a.area.width as usize;
+        let previous_row = &a.content[row_start..row_end];
         let row = &next_buffer[row_start..row_end];
         let bg = row.last().map(|cell| cell.bg).unwrap_or(Color::Reset);
 
         // Scan the row to find the rightmost column that still matters: any non-space glyph,
-        // any cell whose bg differs from the row’s trailing bg, or any cell with modifiers.
+        // any cell whose bg differs from the row’s trailing bg, any cell with modifiers,
+        // or any cell explicitly marked for updating.
         // Multi-width glyphs extend that region through their full displayed width.
         // After that point the rest of the row can be cleared with a single ClearToEnd, a perf win
         // versus emitting multiple space Put commands.
@@ -600,20 +646,44 @@ fn diff_buffers(a: &Buffer, b: &Buffer) -> Vec<DrawCommand> {
         while column < row.len() {
             let cell = &row[column];
             let width = usize::from(cell.cell_width());
-            if cell.symbol() != " " || cell.bg != bg || cell.modifier != Modifier::empty() {
+            // Keep AlwaysUpdate blanks in the drawable prefix; otherwise filtering the tail
+            // would discard the repaint explicitly requested by Ratatui.
+            if cell.symbol() != " "
+                || cell.bg != bg
+                || cell.modifier != Modifier::empty()
+                || cell.diff_option == CellDiffOption::AlwaysUpdate
+            {
                 last_nonblank_column = column + (width.saturating_sub(1));
             }
             column += width.max(1); // treat zero-width symbols as width 1
         }
 
-        if last_nonblank_column + 1 < row.len() {
-            let (x, y) = a.pos_of(row_start + last_nonblank_column + 1);
-            updates.push(DrawCommand::ClearToEnd { x, y, bg });
+        let clear_start = last_nonblank_column + 1;
+        if clear_start < row.len() {
+            // Equal cached tails need no clear when the buffers reflect the terminal.
+            // Viewport invalidation marks old cells, so out-of-band writes force inequality.
+            let tail_changed = previous_row[clear_start..] != row[clear_start..];
+
+            // Wide-glyph continuation cells look blank, so an equal tail can still overlap
+            // a glyph whose leader lies before the clear boundary.
+            let wide_char_overlaps_tail = previous_row[..clear_start]
+                .iter()
+                .enumerate()
+                .rev()
+                .find(|(_, cell)| cell.symbol() != " " || cell.cell_width() > 1)
+                .is_some_and(|(column, cell)| {
+                    column + usize::from(cell.cell_width()) > clear_start
+                });
+            if tail_changed || wide_char_overlaps_tail {
+                let (x, y) = a.pos_of(row_start + clear_start);
+                updates.push(DrawCommand::ClearToEnd { x, y, bg });
+            }
         }
 
         last_nonblank_columns[y as usize] = last_nonblank_column as u16;
     }
 
+    // Preserve Ratatui's native Skip, AlwaysUpdate, and multi-width diff semantics.
     let mut cell_updates = a.diff_iter(b).collect::<Vec<_>>();
     // Ratatui's ForcedWidth path skips trailing-cell invalidation when a styled wide cell shrinks.
     let visible_on_blank = Modifier::REVERSED
@@ -668,6 +738,8 @@ fn draw<I>(writer: &mut impl Write, commands: I) -> io::Result<()>
 where
     I: Iterator<Item = DrawCommand>,
 {
+    // Disabled crossterm colors emit an empty SGR that also resets non-color attributes.
+    let color_enabled = !Colored::ansi_color_disabled_memoized();
     let mut fg = Color::Reset;
     let mut bg = Color::Reset;
     let mut modifier = Modifier::empty();
@@ -702,7 +774,7 @@ where
                     diff.queue(writer)?;
                     modifier = cell.modifier;
                 }
-                if cell.fg != fg || cell.bg != bg {
+                if color_enabled && (cell.fg != fg || cell.bg != bg) {
                     queue!(
                         writer,
                         SetColors(Colors::new(
@@ -749,13 +821,13 @@ where
 /// The `ModifierDiff` struct is used to calculate the difference between two `Modifier`
 /// values. This is useful when updating the terminal display, as it allows for more
 /// efficient updates by only sending the necessary changes.
-struct ModifierDiff {
+pub(crate) struct ModifierDiff {
     pub from: Modifier,
     pub to: Modifier,
 }
 
 impl ModifierDiff {
-    fn queue<W: io::Write>(self, w: &mut W) -> io::Result<()> {
+    pub(crate) fn queue<W: io::Write>(self, w: &mut W) -> io::Result<()> {
         use crossterm::style::Attribute as CAttribute;
         let removed = self.from - self.to;
         if removed.contains(Modifier::REVERSED) {
@@ -813,11 +885,15 @@ impl ModifierDiff {
     }
 }
 
+// Keep nested #[path] modules discoverable by cargo-shear as well as rustc.
 #[cfg(test)]
+#[path = "custom_terminal/tests"]
 mod tests {
     use super::*;
     use std::num::NonZeroU16;
 
+    use crate::test_backend::VT100Backend;
+    use insta::assert_snapshot;
     use pretty_assertions::assert_eq;
     use ratatui::backend::WindowSize;
     use ratatui::layout::Rect;
@@ -828,6 +904,7 @@ mod tests {
     use ratatui::widgets::Widget;
     use ratatui::widgets::Wrap;
 
+<<<<<<< HEAD
     /// #1340: clearing from the home position must not be a whole-screen erase, which tmux
     /// (`scroll-on-clear`, default on) copies into scrollback; it still blanks every row.
     #[test]
@@ -899,11 +976,17 @@ mod tests {
         );
         assert_eq!(terminal.backend().scroll_on_clear_saves(), &[] as &[String]);
     }
+||||||| 413492cd6c
+=======
+    #[path = "cursor_tests.rs"]
+    mod cursor;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     struct CaptureBackend {
         output: Vec<u8>,
         size: Size,
         cursor: Position,
+        size_call_count: std::cell::Cell<usize>,
     }
 
     impl CaptureBackend {
@@ -912,6 +995,7 @@ mod tests {
                 output: Vec::new(),
                 size: Size { width, height },
                 cursor: Position { x: 0, y: 0 },
+                size_call_count: std::cell::Cell::new(/*value*/ 0),
             }
         }
 
@@ -931,6 +1015,77 @@ mod tests {
         }
     }
 
+    #[test]
+    fn transcript_images_survive_unrelated_redraws_and_are_removed_for_overlays() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("viewed.png");
+        image::RgbaImage::from_pixel(32, 32, image::Rgba([10, 110, 200, 255]))
+            .save(&path)
+            .unwrap();
+        for protocol in [
+            crate::pets::ImageProtocol::Kitty,
+            crate::pets::ImageProtocol::KittyLocalFile,
+        ] {
+            let image = std::sync::Arc::new(
+                crate::transcript_image::TranscriptImage::load(&path, /*width*/ 40, protocol)
+                    .unwrap(),
+            );
+            let mut terminal =
+                Terminal::with_options(CaptureBackend::new(/*width*/ 40, /*height*/ 12)).unwrap();
+            let size = terminal.last_known_screen_size;
+            terminal.set_viewport_area(Rect::new(
+                /*x*/ 0,
+                /*y*/ 0,
+                size.width,
+                size.height,
+            ));
+            let mut retained = Vec::new();
+            for (index, text) in ["", "a", "ab", "ab"].into_iter().enumerate() {
+                if index == 3 {
+                    assert_eq!(terminal.backend().output().matches("_Ga=T").count(), 1);
+                    terminal.clear().unwrap();
+                }
+                terminal
+                    .draw_with_size(size, &mut retained, |frame| {
+                        Line::from(text).render(
+                            Rect::new(
+                                /*x*/ 0, /*y*/ 10, /*width*/ 40, /*height*/ 1,
+                            ),
+                            frame.buffer_mut(),
+                        );
+                        frame
+                            .image_placements
+                            .push(crate::transcript_image::ImagePlacement {
+                                image: std::sync::Arc::clone(&image),
+                                area: Rect::new(
+                                    /*x*/ 2,
+                                    /*y*/ 2,
+                                    image.columns,
+                                    image.rows,
+                                ),
+                                first_row: 0,
+                                file: None,
+                            });
+                    })
+                    .unwrap();
+            }
+            let output = terminal.backend().output();
+            assert_eq!(output.matches("_Ga=T").count(), 2);
+            assert_eq!(output.matches("_Ga=d").count(), 0);
+            if protocol == crate::pets::ImageProtocol::KittyLocalFile {
+                assert!(output.contains("t=f") && output.contains("C=1"));
+                assert!(retained[0].file.as_ref().unwrap().path().exists());
+            } else {
+                assert!(retained[0].file.is_none());
+            }
+            terminal
+                .draw_with_size(size, &mut retained, |_| {})
+                .unwrap();
+            assert_eq!(terminal.backend().output().matches("_Ga=d").count(), 1);
+            assert!(retained.is_empty());
+        }
+    }
+
     impl Backend for CaptureBackend {
         type Error = io::Error;
 
@@ -942,11 +1097,11 @@ mod tests {
         }
 
         fn hide_cursor(&mut self) -> io::Result<()> {
-            Ok(())
+            queue!(self, crossterm::cursor::Hide)
         }
 
         fn show_cursor(&mut self) -> io::Result<()> {
-            Ok(())
+            queue!(self, crossterm::cursor::Show)
         }
 
         fn get_cursor_position(&mut self) -> io::Result<Position> {
@@ -955,6 +1110,8 @@ mod tests {
 
         fn set_cursor_position<P: Into<Position>>(&mut self, position: P) -> io::Result<()> {
             self.cursor = position.into();
+            let Position { x, y } = self.cursor;
+            queue!(self, MoveTo(x, y))?;
             Ok(())
         }
 
@@ -987,6 +1144,8 @@ mod tests {
         }
 
         fn size(&self) -> io::Result<Size> {
+            self.size_call_count
+                .set(self.size_call_count.get().saturating_add(/*rhs*/ 1));
             Ok(self.size)
         }
 
@@ -1000,6 +1159,210 @@ mod tests {
         fn flush(&mut self) -> io::Result<()> {
             Ok(())
         }
+    }
+
+    #[test]
+    fn invalidate_viewport_repaints_default_style_spaces_over_stale_terminal_cells() {
+        let width = 32;
+        let height = 2;
+        let area = Rect::new(/*x*/ 0, /*y*/ 0, width, height);
+        let mut terminal =
+            Terminal::with_options(VT100Backend::new(width, height)).expect("terminal");
+        terminal.set_viewport_area(area);
+
+        // History insertion writes directly to the terminal, leaving cells that are absent from
+        // the diff buffers. Interior default-style spaces must still overwrite those stale cells.
+        write!(
+            terminal.backend_mut(),
+            "probe-08tcleantwords stale\r\nprobe-09xcleanxwords stale"
+        )
+        .expect("prefill terminal");
+        assert!(
+            terminal
+                .backend()
+                .vt100()
+                .screen()
+                .contents()
+                .contains("probe-08tcleantwords")
+        );
+
+        terminal.invalidate_viewport();
+        terminal
+            .draw(|frame| {
+                Paragraph::new(vec![
+                    Line::from("probe-08 clean words"),
+                    Line::from("probe-09 clean words"),
+                ])
+                .render(area, frame.buffer_mut());
+            })
+            .expect("redraw invalidated viewport");
+
+        assert_snapshot!(terminal.backend().vt100().screen().contents(), @r"
+        probe-08 clean words
+        probe-09 clean words
+        ");
+    }
+
+    #[tokio::test]
+    async fn leaving_alternate_screen_repaints_restored_inline_viewport() {
+        let mut tui = crate::tui::test_support::make_test_tui().expect("test tui");
+        let size = tui.terminal.last_known_screen_size;
+        let inline = Rect::new(/*x*/ 0, /*y*/ 3, size.width, /*height*/ 6);
+        tui.terminal.set_viewport_area(inline);
+        tui.enter_alt_screen().expect("enter alternate screen");
+        tui.terminal
+            .draw(|frame| {
+                Paragraph::new(vec![
+                    Line::from(" Resume a previous session"),
+                    Line::default(),
+                    Line::from(" Type to search".dim()),
+                ])
+                .render(frame.area(), frame.buffer_mut());
+            })
+            .expect("draw picker");
+        tui.leave_alt_screen().expect("leave alternate screen");
+
+        let mut terminal = Terminal::with_options(VT100Backend::new(size.width, size.height))
+            .expect("physical terminal");
+        write!(terminal.backend_mut(), "Previous conversation").expect("write history");
+        terminal.set_viewport_area(inline);
+        terminal
+            .draw(|frame| {
+                Paragraph::new(vec![
+                    Line::default(),
+                    Line::default(),
+                    Line::from(vec!["›".bold(), " ".into(), "/resume".dim()]),
+                ])
+                .render(frame.area(), frame.buffer_mut());
+            })
+            .expect("draw submitted command");
+
+        // Apply the real Tui screen-return baseline to the unchanged physical main screen.
+        // Matching spaces and letters in the picker must not leave /resume cells behind.
+        *terminal.previous_buffer_mut() = tui.terminal.previous_buffer().clone();
+        for _ in 0..2 {
+            terminal
+                .draw(|frame| {
+                    Paragraph::new(vec![
+                        Line::default(),
+                        Line::default(),
+                        Line::from(vec![
+                            "›".bold(),
+                            " ".into(),
+                            "Ask Codex to do anything".dim(),
+                        ]),
+                    ])
+                    .render(frame.area(), frame.buffer_mut());
+                })
+                .expect("restore composer");
+        }
+
+        let visible = terminal
+            .backend()
+            .vt100()
+            .screen()
+            .contents()
+            .lines()
+            .map(str::trim_end)
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_snapshot!(visible.trim_end(), @r"
+        Previous conversation
+
+
+
+
+        › Ask Codex to do anything
+        ");
+    }
+
+    #[test]
+    fn ordinary_redraws_with_known_size_do_not_query_backend_size() {
+        let mut terminal =
+            Terminal::with_options(CaptureBackend::new(/*width*/ 80, /*height*/ 24))
+                .expect("terminal");
+        let screen_size = terminal.last_known_screen_size;
+
+        for _ in 0..3 {
+            terminal
+                .draw_with_size(screen_size, &mut Vec::new(), |_| {})
+                .expect("draw");
+        }
+
+        terminal.set_viewport_area(Rect::new(
+            /*x*/ 0, /*y*/ 23, /*width*/ 80, /*height*/ 1,
+        ));
+        crate::insert_history::insert_history_lines(&mut terminal, vec![Line::from("history")])
+            .expect("insert history");
+
+        assert_eq!(terminal.backend().size_call_count.get(), 1);
+    }
+
+    #[test]
+    fn resize_draw_applies_event_dimensions_without_querying_backend_size() {
+        let mut terminal =
+            Terminal::with_options(CaptureBackend::new(/*width*/ 12, /*height*/ 4))
+                .expect("terminal");
+        let mut snapshots = Vec::new();
+
+        for width in [12, 8] {
+            let size = Size::new(width, /*height*/ 4);
+            let area = Rect::new(/*x*/ 0, /*y*/ 0, size.width, size.height);
+            terminal.set_viewport_area(area);
+            terminal
+                .draw_with_size(size, &mut Vec::new(), |frame| {
+                    Paragraph::new("alpha beta")
+                        .wrap(Wrap { trim: false })
+                        .render(area, frame.buffer_mut());
+                })
+                .expect("draw resized frame");
+
+            let rendered = (0..size.height)
+                .map(|y| {
+                    (0..size.width)
+                        .map(|x| terminal.previous_buffer()[(x, y)].symbol())
+                        .collect::<String>()
+                        .trim_end()
+                        .to_string()
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            snapshots.push(rendered.trim_end().to_string());
+        }
+
+        assert_eq!(terminal.backend().size_call_count.get(), 1);
+        assert_eq!(
+            terminal.last_known_screen_size,
+            Size::new(/*width*/ 8, /*height*/ 4)
+        );
+        assert_snapshot!(snapshots.join("\n\n"), @r"
+        alpha beta
+
+        alpha
+        beta
+        ");
+    }
+
+    #[test]
+    fn diff_buffers_only_updates_changed_cells_when_row_tails_are_unchanged() {
+        let area = Rect::new(
+            /*x*/ 0, /*y*/ 0, /*width*/ 10, /*height*/ 2,
+        );
+        let mut previous = Buffer::empty(area);
+        previous.set_string(0, 0, "-", Style::default());
+        previous.set_string(0, 1, "中", Style::default());
+
+        assert_eq!(diff_buffers(&previous, &previous).len(), 0);
+
+        let mut next = previous.clone();
+        next.set_string(0, 0, "\\", Style::default());
+
+        let commands = diff_buffers(&previous, &next);
+        assert_eq!(commands.len(), 1, "unexpected draw commands: {commands:?}");
+        assert!(matches!(
+            commands.as_slice(),
+            [DrawCommand::Put { x: 0, y: 0, cell }] if cell.symbol() == "\\"
+        ));
     }
 
     #[test]
@@ -1033,19 +1396,31 @@ mod tests {
     #[test]
     fn diff_buffers_clear_to_end_starts_after_wide_char() {
         let area = Rect::new(0, 0, 10, 1);
-        let mut previous = Buffer::empty(area);
-        let mut next = Buffer::empty(area);
+        for (before, after) in [("中文", "中"), ("ｶﾞﾞ", "ｶﾞ")] {
+            let mut previous = Buffer::empty(area);
+            let mut next = Buffer::empty(area);
 
-        previous.set_string(0, 0, "中文", Style::default());
-        next.set_string(0, 0, "中", Style::default());
+            previous.set_string(0, 0, before, Style::default());
+            next.set_string(0, 0, after, Style::default());
 
-        let commands = diff_buffers(&previous, &next);
-        assert!(
-            commands
-                .iter()
-                .any(|command| matches!(command, DrawCommand::ClearToEnd { x: 2, y: 0, .. })),
-            "expected clear-to-end to start after the remaining wide char; commands: {commands:?}"
-        );
+            let commands = diff_buffers(&previous, &next);
+            assert!(
+                commands
+                    .iter()
+                    .any(|command| matches!(command, DrawCommand::ClearToEnd { x: 2, y: 0, .. })),
+                "expected clear-to-end after {before:?} became {after:?}; commands: {commands:?}"
+            );
+        }
+
+        let mut terminal =
+            Terminal::with_options(VT100Backend::new(area.width, area.height)).expect("terminal");
+        terminal.set_viewport_area(area);
+        for text in ["ｶﾞﾞ", "ｶﾞ"] {
+            terminal
+                .draw(|frame| Paragraph::new(text).render(area, frame.buffer_mut()))
+                .expect("draw");
+        }
+        assert_snapshot!(terminal.backend().vt100().screen().contents(), @"ｶﾞ");
     }
 
     #[test]
@@ -1087,18 +1462,20 @@ mod tests {
     fn diff_buffers_emits_always_update_cells() {
         use ratatui::buffer::CellDiffOption;
 
-        let mut previous = Buffer::with_lines(["abc"]);
-        let mut next = Buffer::with_lines(["abc"]);
-        previous[(1, 0)].set_diff_option(CellDiffOption::AlwaysUpdate);
-        next[(1, 0)].set_diff_option(CellDiffOption::AlwaysUpdate);
+        for text in ["abc", "a  "] {
+            let mut previous = Buffer::with_lines([text]);
+            let mut next = Buffer::with_lines([text]);
+            previous[(1, 0)].set_diff_option(CellDiffOption::AlwaysUpdate);
+            next[(1, 0)].set_diff_option(CellDiffOption::AlwaysUpdate);
 
-        let commands = diff_buffers(&previous, &next);
-        assert!(
-            commands
-                .iter()
-                .any(|command| matches!(command, DrawCommand::Put { x: 1, y: 0, .. })),
-            "expected the always-update cell to be emitted; commands: {commands:?}"
-        );
+            let commands = diff_buffers(&previous, &next);
+            assert!(
+                commands
+                    .iter()
+                    .any(|command| matches!(command, DrawCommand::Put { x: 1, y: 0, .. })),
+                "expected the always-update cell in {text:?} to be emitted; commands: {commands:?}"
+            );
+        }
     }
 
     #[test]
@@ -1132,27 +1509,36 @@ mod tests {
     }
 
     #[test]
-    fn terminal_draw_applies_requested_cursor_style() {
-        let mut output = Vec::new();
+    fn terminal_draw_moves_cursor_before_showing_it() {
+        let cursor_position = Position { x: 1, y: 0 };
         let mut terminal =
             Terminal::with_options(CaptureBackend::new(/*width*/ 2, /*height*/ 1))
                 .expect("terminal");
-        terminal.set_viewport_area(Rect::new(0, 0, 2, 1));
+        terminal.set_viewport_area(Rect::new(
+            /*x*/ 0, /*y*/ 0, /*width*/ 2, /*height*/ 1,
+        ));
 
         terminal
-            .try_draw(|frame| {
-                frame.set_cursor_style(SetCursorStyle::SteadyBar);
-                frame.set_cursor_position((0, 0));
-                io::Result::Ok(())
-            })
+            .draw(|frame| frame.set_cursor_position(cursor_position))
             .expect("draw");
 
-        queue!(output, SetCursorStyle::SteadyBar).expect("queue style");
-        let expected = String::from_utf8(output).expect("utf8");
+        let mut expected_move = Vec::new();
+        queue!(expected_move, MoveTo(cursor_position.x, cursor_position.y)).expect("queue move");
+        let expected_move = String::from_utf8(expected_move).expect("move utf8");
+        let mut expected_show = Vec::new();
+        queue!(expected_show, crossterm::cursor::Show).expect("queue show");
+        let expected_show = String::from_utf8(expected_show).expect("show utf8");
         let actual = terminal.backend().output();
+        let move_index = actual.find(&expected_move).expect("cursor move");
+        let show_index = actual.find(&expected_show).expect("cursor show");
+
         assert!(
-            actual.contains(&expected),
-            "expected terminal output to contain cursor style {expected:?}, got {actual:?}"
+            move_index < show_index,
+            "expected cursor move before show, got {actual:?}"
+        );
+        assert_snapshot!(
+            actual[move_index..].escape_debug().to_string(),
+            @r"\u{1b}[1;2H\u{1b}[?25h"
         );
     }
 

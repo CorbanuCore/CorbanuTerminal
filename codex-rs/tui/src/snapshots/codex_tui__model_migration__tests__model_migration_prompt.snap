@@ -3,16 +3,31 @@ source: tui/src/model_migration.rs
 expression: terminal.backend()
 ---
 
+<<<<<<< HEAD
 > Corbanu Terminal just got an upgrade. Introducing gpt-5.1-
+||||||| 413492cd6c
+> Codex just got an upgrade. Introducing gpt-5.1-codex-max.
+=======
+  Codex just got an upgrade. Introducing
+  gpt-5.1-codex-max.
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
   Upgrade to gpt-5.2-codex for the latest and greatest
   agentic coding model.
 
   You can continue using gpt-5.1-codex-mini if you prefer.
 
+<<<<<<< HEAD
   Choose how you'd like Corbanu Terminal to proceed.
 
 › 1. Try new model
+||||||| 413492cd6c
+  Choose how you'd like Codex to proceed.
+
+› 1. Try new model
+=======
+› 1. Try new model                                          
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
   2. Use existing model
 
-  Use ↑/↓ to move, press enter to confirm
+  enter/esc confirm · ⌃c quit

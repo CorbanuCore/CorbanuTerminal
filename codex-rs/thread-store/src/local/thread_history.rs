@@ -1,20 +1,24 @@
 use codex_app_server_protocol::ThreadHistoryChangeSet;
-use codex_app_server_protocol::ThreadItem;
+use codex_app_server_protocol::ThreadItemPayload;
 use codex_app_server_protocol::TurnStatus;
 use codex_protocol::ThreadId;
 use codex_protocol::models::MessagePhase;
+use codex_protocol::realtime::RealtimeItem;
+use codex_state::SqlitePoolWriteExt;
 
 use super::LocalThreadStore;
 use crate::ThreadStoreError;
 use crate::ThreadStoreResult;
 
 mod read;
+mod realtime;
 mod search;
 mod segment_paging;
 mod turn_lookup;
 
 pub(super) use read::list_items;
 pub(super) use read::list_turns;
+pub(super) use realtime::list_timeline;
 pub(super) use search::search_thread_occurrences;
 pub(super) use turn_lookup::find_source_turn;
 pub(super) use turn_lookup::find_visible_turn;
@@ -28,6 +32,7 @@ pub(super) struct ProjectedRolloutLine {
     pub end_byte_offset: u64,
     pub fallback_created_at_ms: Option<i64>,
     pub changes: ThreadHistoryChangeSet,
+    pub realtime_item: Option<RealtimeItem>,
 }
 
 /// One ordered update to apply while advancing a rollout projection checkpoint.
@@ -35,7 +40,7 @@ pub(super) struct ProjectedRolloutLine {
 /// Skipped ordinal ranges keep the byte and ordinal checkpoints describing the same durable
 /// prefix even when a complete rollout line cannot be projected.
 pub(super) enum RolloutProjectionStep {
-    Line(ProjectedRolloutLine),
+    Line(Box<ProjectedRolloutLine>),
     SkippedOrdinalRange {
         start_ordinal: u64,
         end_ordinal_exclusive: u64,
@@ -108,10 +113,7 @@ pub(super) async fn apply_projection(
     // Write the projected rows and advance the JSONL offset and ordinal in one transaction. If
     // SQLite fails, it stays behind the durable rollout instead of claiming data it did not
     // materialize.
-    let mut transaction = pool
-        .begin_with("BEGIN IMMEDIATE")
-        .await
-        .map_err(thread_history_error)?;
+    let mut transaction = pool.begin_immediate().await.map_err(thread_history_error)?;
     let thread_id = thread_id.to_string();
     let projection_state = sqlx::query_as::<_, (i64, i64)>(
         r#"
@@ -154,6 +156,35 @@ WHERE thread_id = ?
                     projection.changes,
                 )
                 .await?;
+                if let Some(item) = projection.realtime_item {
+                    let item_json = serde_json::to_string(&item).map_err(thread_history_error)?;
+                    sqlx::query(
+                        r#"
+INSERT INTO thread_realtime_items (
+    thread_id,
+    item_id,
+    rollout_ordinal,
+    created_at_ms,
+    item_type,
+    item_json
+) VALUES (?, ?, ?, ?, json_extract(?, '$.type'), ?)
+ON CONFLICT(thread_id, item_id) DO NOTHING
+                        "#,
+                    )
+                    .bind(thread_id.as_str())
+                    .bind(item.id.as_str())
+                    .bind(ordinal)
+                    .bind(projection.fallback_created_at_ms.ok_or_else(|| {
+                        ThreadStoreError::Internal {
+                            message: "realtime rollout item is missing its timestamp".to_string(),
+                        }
+                    })?)
+                    .bind(item_json.as_str())
+                    .bind(item_json.as_str())
+                    .execute(&mut *transaction)
+                    .await
+                    .map_err(thread_history_error)?;
+                }
                 next_ordinal =
                     next_ordinal
                         .checked_add(1)
@@ -222,11 +253,16 @@ pub(super) async fn delete_thread(
 
     let pool = store.thread_history_db().await?;
     let mut transaction = pool
-        .begin_with("BEGIN IMMEDIATE")
+        .begin_immediate()
         .await
         .map_err(thread_history_delete_error)?;
     let thread_id = thread_id.to_string();
     sqlx::query("DELETE FROM thread_items WHERE thread_id = ?")
+        .bind(thread_id.as_str())
+        .execute(&mut *transaction)
+        .await
+        .map_err(thread_history_delete_error)?;
+    sqlx::query("DELETE FROM thread_realtime_items WHERE thread_id = ?")
         .bind(thread_id.as_str())
         .execute(&mut *transaction)
         .await
@@ -278,6 +314,7 @@ async fn apply_change_set(
 INSERT INTO thread_turns (
     thread_id,
     turn_id,
+    root_turn_id,
     rollout_ordinal,
     rollout_byte_offset,
     rollout_end_ordinal,
@@ -287,8 +324,9 @@ INSERT INTO thread_turns (
     started_at,
     completed_at,
     duration_ms
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(thread_id, turn_id) DO UPDATE SET
+    root_turn_id = COALESCE(thread_turns.root_turn_id, excluded.root_turn_id),
     rollout_end_ordinal = excluded.rollout_end_ordinal,
     rollout_end_byte_offset = excluded.rollout_end_byte_offset,
     status = excluded.status,
@@ -302,6 +340,7 @@ WHERE thread_turns.rollout_end_ordinal IS NULL
         )
         .bind(thread_id)
         .bind(turn_id.as_str())
+        .bind(turn.root_turn_id)
         .bind(rollout_ordinal)
         .bind(rollout_byte_offset)
         .bind(terminal_ordinal)
@@ -328,7 +367,10 @@ SET
             FROM thread_items
             WHERE thread_id = ?
               AND turn_id = ?
-              AND json_extract(item_json, '$.type') = 'userMessage'
+              AND (
+                item_type = 'userMessage'
+                OR (item_type = '' AND json_extract(item_json, '$.type') = 'userMessage')
+              )
             ORDER BY rollout_ordinal
             LIMIT 1
         )
@@ -339,7 +381,10 @@ SET
             FROM thread_items
             WHERE thread_id = ?
               AND turn_id = ?
-              AND json_extract(item_json, '$.type') = 'agentMessage'
+              AND (
+                item_type = 'agentMessage'
+                OR (item_type = '' AND json_extract(item_json, '$.type') = 'agentMessage')
+              )
               AND json_extract(item_json, '$.phase') = 'final_answer'
             ORDER BY rollout_ordinal DESC
             LIMIT 1
@@ -350,7 +395,10 @@ SET
                 FROM thread_items
                 WHERE thread_id = ?
                   AND turn_id = ?
-                  AND json_extract(item_json, '$.type') = 'agentMessage'
+                  AND (
+                    item_type = 'agentMessage'
+                    OR (item_type = '' AND json_extract(item_json, '$.type') = 'agentMessage')
+                  )
                   AND json_extract(item_json, '$.phase') IS NULL
                 ORDER BY rollout_ordinal DESC
                 LIMIT 1
@@ -380,7 +428,8 @@ WHERE thread_id = ?
         .map_err(thread_history_error)?;
     }
 
-    for item in changes.changed_items {
+    for change in changes.changed_items {
+        let item = change.item;
         let created_at_ms =
             item.started_at_ms
                 .or(fallback_created_at_ms)
@@ -389,8 +438,8 @@ WHERE thread_id = ?
                         "thread history projection for {thread_id} is missing an item creation timestamp"
                     ),
                 })?;
-        let item_id = item.item.id().to_string();
-        let item_json = serde_json::to_string(&item.item).map_err(thread_history_error)?;
+        let item_id = item.id().to_string();
+        let item_json = serde_json::to_string(&item.payload).map_err(thread_history_error)?;
         // Completed items are immutable: local producers emit ItemCompleted exactly once per
         // item. Tolerate an unexpected duplicate defensively so it cannot poison materialization,
         // preserving the original creation ordinal and timestamp while updating its snapshot.
@@ -403,21 +452,27 @@ INSERT INTO thread_items (
     rollout_ordinal,
     updated_at_ordinal,
     created_at_ms,
+    started_at_ms,
+    completed_at_ms,
     item_type,
     item_json
-) VALUES (?, ?, ?, ?, ?, ?, json_extract(?, '$.type'), ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, json_extract(?, '$.type'), ?)
 ON CONFLICT(thread_id, turn_id, item_id) DO UPDATE SET
     updated_at_ordinal = excluded.updated_at_ordinal,
+    started_at_ms = COALESCE(thread_items.started_at_ms, excluded.started_at_ms),
+    completed_at_ms = COALESCE(thread_items.completed_at_ms, excluded.completed_at_ms),
     item_type = excluded.item_type,
     item_json = excluded.item_json
             "#,
         )
         .bind(thread_id)
-        .bind(item.turn_id.as_str())
+        .bind(change.turn_id.as_str())
         .bind(item_id.as_str())
         .bind(rollout_ordinal)
         .bind(rollout_ordinal)
         .bind(created_at_ms)
+        .bind(item.started_at_ms)
+        .bind(item.completed_at_ms)
         .bind(item_json.as_str())
         .bind(item_json)
         .execute(&mut **transaction)
@@ -426,8 +481,8 @@ ON CONFLICT(thread_id, turn_id, item_id) DO UPDATE SET
 
         // Keep summary item IDs on the turn row so reads do not need to scan every item in the
         // turn.
-        match item.item {
-            ThreadItem::UserMessage { .. } => {
+        match item.payload {
+            ThreadItemPayload::UserMessage { .. } => {
                 sqlx::query(
                     r#"
 UPDATE thread_turns
@@ -440,12 +495,12 @@ WHERE thread_id = ?
                 )
                 .bind(item_id.as_str())
                 .bind(thread_id)
-                .bind(item.turn_id.as_str())
+                .bind(change.turn_id.as_str())
                 .execute(&mut **transaction)
                 .await
                 .map_err(thread_history_error)?;
             }
-            ThreadItem::AgentMessage {
+            ThreadItemPayload::AgentMessage {
                 phase: Some(MessagePhase::FinalAnswer),
                 ..
             } => {
@@ -461,31 +516,32 @@ WHERE thread_id = ?
                 )
                 .bind(item_id.as_str())
                 .bind(thread_id)
-                .bind(item.turn_id.as_str())
+                .bind(change.turn_id.as_str())
                 .execute(&mut **transaction)
                 .await
                 .map_err(thread_history_error)?;
             }
-            ThreadItem::AgentMessage {
-                phase: Some(MessagePhase::Commentary) | None,
+            ThreadItemPayload::AgentMessage {
+                phase: Some(MessagePhase::Commentary | MessagePhase::PartialAnswer) | None,
                 ..
             }
-            | ThreadItem::HookPrompt { .. }
-            | ThreadItem::Plan { .. }
-            | ThreadItem::Reasoning { .. }
-            | ThreadItem::CommandExecution { .. }
-            | ThreadItem::FileChange { .. }
-            | ThreadItem::McpToolCall { .. }
-            | ThreadItem::DynamicToolCall { .. }
-            | ThreadItem::CollabAgentToolCall { .. }
-            | ThreadItem::SubAgentActivity { .. }
-            | ThreadItem::WebSearch(_)
-            | ThreadItem::ImageView { .. }
-            | ThreadItem::Sleep(_)
-            | ThreadItem::ImageGeneration(_)
-            | ThreadItem::EnteredReviewMode { .. }
-            | ThreadItem::ExitedReviewMode { .. }
-            | ThreadItem::ContextCompaction { .. } => {}
+            | ThreadItemPayload::HookPrompt { .. }
+            | ThreadItemPayload::FunctionCallOutput { .. }
+            | ThreadItemPayload::Plan { .. }
+            | ThreadItemPayload::Reasoning { .. }
+            | ThreadItemPayload::CommandExecution { .. }
+            | ThreadItemPayload::FileChange { .. }
+            | ThreadItemPayload::McpToolCall { .. }
+            | ThreadItemPayload::DynamicToolCall { .. }
+            | ThreadItemPayload::CollabAgentToolCall { .. }
+            | ThreadItemPayload::SubAgentActivity { .. }
+            | ThreadItemPayload::WebSearch(_)
+            | ThreadItemPayload::ImageView { .. }
+            | ThreadItemPayload::Sleep(_)
+            | ThreadItemPayload::ImageGeneration(_)
+            | ThreadItemPayload::EnteredReviewMode { .. }
+            | ThreadItemPayload::ExitedReviewMode { .. }
+            | ThreadItemPayload::ContextCompaction { .. } => {}
         }
     }
     Ok(())

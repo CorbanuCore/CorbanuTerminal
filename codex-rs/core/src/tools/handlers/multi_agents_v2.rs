@@ -2,9 +2,7 @@
 
 use crate::agent::AgentStatus;
 use crate::agent::agent_resolver::resolve_agent_target;
-use crate::context::ContextualUserFragment;
-use crate::context::InterAgentMessage;
-use crate::context::InterAgentMessageType;
+use crate::agent::types::AgentMessage;
 use crate::function_tool::FunctionCallError;
 use crate::session::turn_context::TurnContext;
 use crate::tools::context::ToolInvocation;
@@ -15,8 +13,13 @@ use crate::tools::handlers::multi_agents_common::*;
 use crate::tools::handlers::parse_arguments;
 use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::ToolExecutor;
+<<<<<<< HEAD
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_protocol::AgentPath;
+||||||| 413492cd6c
+use codex_protocol::AgentPath;
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::items::CollabAgentTool;
 use codex_protocol::items::CollabAgentToolCallItem;
 use codex_protocol::items::CollabAgentToolCallStatus;
@@ -24,7 +27,6 @@ use codex_protocol::items::SubAgentActivityItem;
 use codex_protocol::items::TurnItem;
 use codex_protocol::models::ResponseInputItem;
 use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::SubAgentActivityKind;
 use codex_tools::ToolName;
 use codex_tools::ToolSpec;
@@ -42,6 +44,7 @@ pub(crate) use spawn::Handler as SpawnAgentHandler;
 pub(crate) use spawn::PlaintextHandler as PlaintextSpawnAgentHandler;
 pub(crate) use wait::Handler as WaitAgentHandler;
 
+mod analytics;
 mod followup_task;
 mod interrupt_agent;
 mod list_agents;
@@ -210,11 +213,10 @@ pub(crate) async fn emit_sub_agent_activity(
     session.emit_turn_item_completed(turn, item).await;
 }
 
-fn communication_from_tool_message(
-    author: AgentPath,
-    recipient: AgentPath,
+fn agent_message_from_tool(
     message: String,
     source: &crate::tools::context::ToolCallSource,
+<<<<<<< HEAD
     provider_id: &str,
     trigger_turn: bool,
 ) -> InterAgentCommunication {
@@ -231,12 +233,35 @@ fn communication_from_tool_message(
     }
     let message_type = if trigger_turn {
         InterAgentMessageType::NewTask
+||||||| 413492cd6c
+    trigger_turn: bool,
+) -> InterAgentCommunication {
+    if !matches!(
+        source,
+        crate::tools::context::ToolCallSource::DirectPlaintextMessage
+    ) {
+        return InterAgentCommunication::new_encrypted(
+            author,
+            recipient,
+            Vec::new(),
+            message,
+            trigger_turn,
+        );
+    }
+    let message_type = if trigger_turn {
+        InterAgentMessageType::NewTask
+=======
+) -> AgentMessage {
+    if matches!(
+        source,
+        crate::tools::context::ToolCallSource::DirectPlaintextMessage
+            | crate::tools::context::ToolCallSource::CodeMode { .. }
+    ) {
+        AgentMessage::Plaintext(message)
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     } else {
-        InterAgentMessageType::Message
-    };
-    let content =
-        InterAgentMessage::new(message_type, recipient.clone(), author.clone(), message).render();
-    InterAgentCommunication::new(author, recipient, Vec::new(), content, trigger_turn)
+        AgentMessage::Encrypted(message)
+    }
 }
 
 pub(super) fn ensure_manager_tool_allowed(

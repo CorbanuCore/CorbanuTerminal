@@ -4,6 +4,7 @@ expression: sanitized
 ---
 /status
 
+<<<<<<< HEAD
 ╭──────────────────────────────────────────────────────────────────────────╮
 │  >_ Corbanu Terminal (v<V>)                                              │
 │                                                                          │
@@ -24,3 +25,38 @@ expression: sanitized
 │  Weekly limit:     [█████████████░░░░░░░] 65% left (resets 11:52)        │
 │  Warning:          limits may be stale - start new turn to refresh.      │
 ╰──────────────────────────────────────────────────────────────────────────╯
+||||||| 413492cd6c
+╭─────────────────────────────────────────────────────────────────────────────╮
+│  >_ OpenAI Codex (v0.0.0)                                                   │
+│                                                                             │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date               │
+│ information on rate limits and credits                                      │
+│                                                                             │
+│  Model:            gpt-5.1-codex (reasoning none, summaries auto)           │
+│  Directory: [[workspace]]                                                   │
+│  Permissions:      Custom (workspace with network access, Ask for approval) │
+│  Agents.md:        <none>                                                   │
+│                                                                             │
+│  Token usage:      1.05K total  (700 input + 350 output)                    │
+│  Context window:   100% left (1.45K used / 272K)                            │
+│  5h limit:         [████████░░░░░░░░░░░░] 40% left (resets 11:32)           │
+│  Weekly limit:     [█████████████░░░░░░░] 65% left (resets 11:52)           │
+│  Warning:          limits may be stale - start new turn to refresh.         │
+╰─────────────────────────────────────────────────────────────────────────────╯
+=======
+  >_ OpenAI Codex (v0.0.0)
+
+  Visit https://chatgpt.com/settings/usage for up-to-date
+  information on rate limits and credits
+
+  Model:           gpt-5.1-codex (reasoning none, summaries auto)
+  Directory:       [[workspace]]
+  Permissions:     Custom (workspace with network access, Ask for approval)
+  Agents.md:       <none>
+
+  Token usage:     1.05K total  (700 input + 350 output)
+  Context window:  100% left (1.45K used / 272K)
+  5h limit:        [████████░░░░░░░░░░░░] 40% left (resets 11:32)
+  Weekly limit:    [█████████████░░░░░░░] 65% left (resets 11:52)
+  Warning:         limits may be stale - start new turn to refresh.
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

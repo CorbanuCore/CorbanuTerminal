@@ -1,4 +1,5 @@
 use crate::function_tool::FunctionCallError;
+<<<<<<< HEAD
 use crate::security::protected_surface::Admission;
 use crate::security::protected_surface::Route;
 use crate::security::protected_surface::TypedWindow;
@@ -12,14 +13,22 @@ use crate::security::protected_surface::note_interrupt;
 use crate::security::tainted_action::ProtectedActionKind;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
+||||||| 413492cd6c
+=======
+use crate::tools::context::ToolEnvironments;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
 use crate::tools::context::boxed_tool_output;
 use crate::tools::handlers::parse_arguments_for_tool;
 use crate::tools::registry::CoreToolRuntime;
+use crate::tools::registry::LiveEnvironmentResolver;
 use crate::tools::registry::PostToolUsePayload;
 use crate::tools::registry::PreToolUsePayload;
 use crate::tools::registry::ToolExecutor;
+use crate::tools::sandboxing::ToolError;
+use crate::unified_exec::UnifiedExecContext;
+use crate::unified_exec::UnifiedExecError;
 use crate::unified_exec::WriteStdinInteractionEvent;
 use crate::unified_exec::WriteStdinRequest;
 use codex_tools::ToolName;
@@ -31,9 +40,15 @@ use super::post_unified_exec_tool_use_payload;
 
 #[derive(Debug, Deserialize)]
 struct WriteStdinArgs {
+<<<<<<< HEAD
     // The model is trained on `session_id`.
     #[serde(deserialize_with = "super::deserialize_integral_i32")]
     session_id: i32,
+||||||| 413492cd6c
+    // The model is trained on `session_id`.
+    session_id: i32,
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     #[serde(default)]
     chars: String,
     #[serde(
@@ -46,6 +61,17 @@ struct WriteStdinArgs {
         deserialize_with = "super::deserialize_optional_integral_usize"
     )]
     max_output_tokens: Option<usize>,
+}
+
+impl WriteStdinArgs {
+    fn parse(payload: &ToolPayload) -> Result<Self, FunctionCallError> {
+        let ToolPayload::Function { arguments } = payload else {
+            return Err(FunctionCallError::RespondToModel(
+                "write_stdin handler received unsupported payload".to_string(),
+            ));
+        };
+        parse_arguments(arguments)
+    }
 }
 
 pub struct WriteStdinHandler;
@@ -63,7 +89,10 @@ impl ToolExecutor<ToolInvocation> for WriteStdinHandler {
         true
     }
 
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle<'a>(&'a self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'a>
+    where
+        ToolInvocation: 'a,
+    {
         Box::pin(self.handle_call(invocation))
     }
 }
@@ -76,19 +105,25 @@ impl WriteStdinHandler {
         let ToolInvocation {
             session,
             turn,
-            payload,
+            step_context,
+            cancellation_token,
             call_id,
+            payload,
+<<<<<<< HEAD
+            call_id,
+||||||| 413492cd6c
+=======
+            environments,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             ..
         } = invocation;
 
-        let arguments = match payload {
-            ToolPayload::Function { arguments } => arguments,
-            _ => {
-                return Err(FunctionCallError::RespondToModel(
-                    "write_stdin handler received unsupported payload".to_string(),
-                ));
-            }
+        let ToolEnvironments::Terminal(terminal) = environments else {
+            return Err(FunctionCallError::Fatal(
+                "write_stdin requires a terminal session".to_string(),
+            ));
         };
+<<<<<<< HEAD
 
         let args: WriteStdinArgs = parse_arguments_for_tool("write_stdin", &arguments)?;
         if !args.chars.is_empty() && !is_interrupt(&args.chars) {
@@ -110,23 +145,48 @@ impl WriteStdinHandler {
             }
             Some(guard)
         };
+||||||| 413492cd6c
+
+        let args: WriteStdinArgs = parse_arguments(&arguments)?;
+=======
+        let args = WriteStdinArgs::parse(&payload)?;
+        let context =
+            UnifiedExecContext::new(session.clone(), step_context, cancellation_token, call_id);
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let response = session
             .services
             .unified_exec_manager
-            .write_stdin(WriteStdinRequest {
-                process_id: args.session_id,
-                input: &args.chars,
-                yield_time_ms: args.yield_time_ms,
-                max_output_tokens: args.max_output_tokens,
-                truncation_policy: turn.model_info.truncation_policy.into(),
-                interaction_event: Some(WriteStdinInteractionEvent {
-                    session: &session,
-                    turn: &turn,
-                }),
-            })
+            .write_stdin(
+                &context,
+                WriteStdinRequest {
+                    terminal: &terminal,
+                    input: &args.chars,
+                    yield_time_ms: args.yield_time_ms,
+                    max_output_tokens: args.max_output_tokens,
+                    truncation_policy: context
+                        .step_context
+                        .settings
+                        .model_info
+                        .truncation_policy
+                        .into(),
+                    interaction_event: Some(WriteStdinInteractionEvent {
+                        session: &session,
+                        turn: &turn,
+                    }),
+                },
+            )
             .await
             .map_err(|err| {
-                FunctionCallError::RespondToModel(format!("write_stdin failed: {err}"))
+                let message = match err {
+                    UnifiedExecError::StdinApproval(ToolError::Rejected(reason)) => {
+                        format!("write_stdin rejected: {reason}")
+                    }
+                    UnifiedExecError::StdinApproval(ToolError::Codex(err)) => {
+                        format!("write_stdin approval failed: {err}")
+                    }
+                    err => format!("write_stdin failed: {err}"),
+                };
+                FunctionCallError::RespondToModel(message)
             })?;
 
         Ok(boxed_tool_output(response))
@@ -291,9 +351,17 @@ async fn post_taint_check(
 const TYPED_TEXT_SHOWN: usize = 300;
 
 impl CoreToolRuntime for WriteStdinHandler {
+<<<<<<< HEAD
     fn repeated_identical_calls_are_polling(&self) -> bool {
         true
     }
+||||||| 413492cd6c
+=======
+    fn live_environment_resolver(&self) -> Option<LiveEnvironmentResolver> {
+        Some(super::terminal_session_for_input)
+    }
+
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     fn matches_kind(&self, payload: &ToolPayload) -> bool {
         matches!(payload, ToolPayload::Function { .. })
     }

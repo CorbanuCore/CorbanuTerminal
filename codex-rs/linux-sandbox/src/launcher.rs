@@ -11,8 +11,13 @@ use crate::bundled_bwrap;
 use crate::bundled_bwrap::BundledBwrapLauncher;
 use crate::exec_util::argv_to_cstrings;
 use crate::exec_util::make_files_inheritable;
+<<<<<<< HEAD
 use codex_sandboxing::APPARMOR_BWRAP_USERNS_PROFILE;
 use codex_sandboxing::find_apparmor_bwrap_launcher;
+||||||| 413492cd6c
+=======
+use codex_protocol::permissions::FileSystemSandboxPolicy;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_sandboxing::find_system_bwrap_in_path;
 use codex_utils_absolute_path::AbsolutePathBuf;
 
@@ -28,17 +33,28 @@ struct SystemBwrapLauncher {
     program: AbsolutePathBuf,
     apparmor_launcher: Option<AbsolutePathBuf>,
     supports_argv0: bool,
+<<<<<<< HEAD
     /// `--bind-fd` (bubblewrap 0.8+), needed for a session's command (#536).
     supports_bind_fd: bool,
+||||||| 413492cd6c
+=======
+    supports_ro_bind_fd: bool,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct SystemBwrapCapabilities {
     supports_argv0: bool,
     supports_perms: bool,
+<<<<<<< HEAD
     supports_bind_fd: bool,
+||||||| 413492cd6c
+=======
+    supports_ro_bind_fd: bool,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
+<<<<<<< HEAD
 pub(crate) fn exec_bwrap(argv: Vec<String>, preserved_files: Vec<File>) -> ! {
     // #536: arguments that bind checked writable folders need `--bind-fd`.
     let launcher = if argv.iter().any(|arg| arg == "--bind-fd") {
@@ -48,6 +64,33 @@ pub(crate) fn exec_bwrap(argv: Vec<String>, preserved_files: Vec<File>) -> ! {
     };
     match launcher {
         BubblewrapLauncher::System(launcher) => exec_system_bwrap(&launcher, argv, preserved_files),
+||||||| 413492cd6c
+pub(crate) fn exec_bwrap(argv: Vec<String>, preserved_files: Vec<File>) -> ! {
+    match preferred_bwrap_launcher() {
+        BubblewrapLauncher::System(launcher) => {
+            exec_system_bwrap(&launcher.program, argv, preserved_files)
+        }
+=======
+static LAUNCHER: OnceLock<BubblewrapLauncher> = OnceLock::new();
+
+pub(crate) fn exec_bwrap(mut argv: Vec<String>, preserved_files: Vec<File>) -> ! {
+    if argv
+        .iter()
+        .take_while(|arg| arg.as_str() != "--")
+        .any(|arg| arg == "--unshare-pid")
+    {
+        argv.insert(1, "--as-pid-1".to_string());
+    }
+
+    match preferred_bwrap_launcher() {
+        BubblewrapLauncher::System(launcher) => {
+            if !launcher.supports_ro_bind_fd {
+                translate_legacy_bwrap_fd_mounts(&mut argv)
+                    .unwrap_or_else(|error| panic!("invalid legacy bubblewrap fd mount: {error}"));
+            }
+            exec_system_bwrap(&launcher.program, argv, preserved_files)
+        }
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         BubblewrapLauncher::Bundled(launcher) => launcher.exec(argv, preserved_files),
         BubblewrapLauncher::Unavailable => exit_bwrap_unavailable(),
     }
@@ -87,22 +130,95 @@ fn write_all_to_stderr(mut bytes: &[u8]) {
     }
 }
 
-fn preferred_bwrap_launcher() -> BubblewrapLauncher {
-    static LAUNCHER: OnceLock<BubblewrapLauncher> = OnceLock::new();
-    LAUNCHER
-        .get_or_init(|| {
-            if let Some(path) = find_system_bwrap_in_path()
-                && let Some(launcher) = system_bwrap_launcher_for_path(&path)
-            {
-                return BubblewrapLauncher::System(launcher);
-            }
+fn translate_legacy_bwrap_fd_mounts(argv: &mut Vec<String>) -> Result<(), String> {
+    let command_separator = argv
+        .iter()
+        .position(|argument| argument == "--")
+        .ok_or_else(|| "bubblewrap argv is missing the command separator '--'".to_string())?;
+    let mut verification_args = Vec::new();
+    let mut verified_fds = Vec::new();
+    let mut argument_index = 0;
 
-            match bundled_bwrap::launcher() {
-                Some(launcher) => BubblewrapLauncher::Bundled(launcher),
-                None => BubblewrapLauncher::Unavailable,
-            }
-        })
-        .clone()
+    while argument_index < command_separator {
+        if argv[argument_index] != "--ro-bind-fd" {
+            argument_index += 1;
+            continue;
+        }
+
+        let fd_argument = argv
+            .get(argument_index + 1)
+            .filter(|_| argument_index + 1 < command_separator)
+            .ok_or_else(|| "--ro-bind-fd is missing its file descriptor".to_string())?;
+        let fd = fd_argument
+            .parse::<libc::c_int>()
+            .map_err(|_| format!("invalid --ro-bind-fd file descriptor: {fd_argument}"))?;
+        if fd <= libc::STDERR_FILENO {
+            return Err(format!(
+                "--ro-bind-fd file descriptor must not use standard descriptors: {fd}"
+            ));
+        }
+        if verified_fds.contains(&fd) {
+            return Err(format!("duplicate --ro-bind-fd file descriptor: {fd}"));
+        }
+
+        let destination = argv
+            .get(argument_index + 2)
+            .filter(|_| argument_index + 2 < command_separator)
+            .ok_or_else(|| "--ro-bind-fd is missing its mount destination".to_string())?;
+        if !Path::new(destination).is_absolute() {
+            return Err(format!(
+                "--ro-bind-fd mount destination must be absolute: {destination}"
+            ));
+        }
+
+        verification_args.push("--verify-fd-mount".to_string());
+        verification_args.push(format!("{fd}:{destination}"));
+        verified_fds.push(fd);
+        argv[argument_index] = "--ro-bind".to_string();
+        argv[argument_index + 1] = format!("/proc/self/fd/{fd}");
+        argument_index += 3;
+    }
+
+    if verification_args.is_empty() {
+        return Ok(());
+    }
+    let inner_command = command_separator + 1;
+    if argv.get(inner_command).is_none() {
+        return Err("bubblewrap argv is missing the inner command after '--'".to_string());
+    }
+    if !argv[inner_command + 1..]
+        .iter()
+        .take_while(|argument| argument.as_str() != "--")
+        .any(|argument| argument == "--apply-seccomp-then-exec")
+    {
+        return Err("descriptor-backed mounts require the trusted inner sandbox stage".to_string());
+    }
+    argv.splice(inner_command + 1..inner_command + 1, verification_args);
+    Ok(())
+}
+
+pub(crate) fn initialize_bwrap_launcher(
+    file_system_policy: &FileSystemSandboxPolicy,
+    sandbox_policy_cwd: &Path,
+) {
+    LAUNCHER.get_or_init(|| {
+        if let Some(path) = find_system_bwrap_in_path(file_system_policy, sandbox_policy_cwd)
+            && let Some(launcher) = system_bwrap_launcher_for_path(&path)
+        {
+            return BubblewrapLauncher::System(launcher);
+        }
+
+        match bundled_bwrap::launcher() {
+            Some(launcher) => BubblewrapLauncher::Bundled(launcher),
+            None => BubblewrapLauncher::Unavailable,
+        }
+    });
+}
+
+fn preferred_bwrap_launcher() -> &'static BubblewrapLauncher {
+    LAUNCHER.get().unwrap_or_else(|| {
+        panic!("bubblewrap launcher must be initialized with the command's permissions")
+    })
 }
 
 fn system_bwrap_launcher_for_path(system_bwrap_path: &Path) -> Option<SystemBwrapLauncher> {
@@ -120,7 +236,12 @@ fn system_bwrap_launcher_for_path_with_probe(
     let Some(SystemBwrapCapabilities {
         supports_argv0,
         supports_perms: true,
+<<<<<<< HEAD
         supports_bind_fd,
+||||||| 413492cd6c
+=======
+        supports_ro_bind_fd,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }) = system_bwrap_capabilities(system_bwrap_path)
     else {
         return None;
@@ -139,7 +260,12 @@ fn system_bwrap_launcher_for_path_with_probe(
         }),
         program: system_bwrap_path,
         supports_argv0,
+<<<<<<< HEAD
         supports_bind_fd,
+||||||| 413492cd6c
+=======
+        supports_ro_bind_fd,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     })
 }
 
@@ -198,11 +324,19 @@ fn system_bwrap_capabilities(system_bwrap_path: &Path) -> Option<SystemBwrapCapa
     };
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
+    if !stdout.contains("--as-pid-1") && !stderr.contains("--as-pid-1") {
+        return None;
+    }
     Some(SystemBwrapCapabilities {
         supports_argv0: stdout.contains("--argv0") || stderr.contains("--argv0"),
         supports_perms: stdout.contains("--perms") || stderr.contains("--perms"),
+<<<<<<< HEAD
         // bubblewrap added `--bind-fd` in v0.8.0.
         supports_bind_fd: stdout.contains("--bind-fd") || stderr.contains("--bind-fd"),
+||||||| 413492cd6c
+=======
+        supports_ro_bind_fd: stdout.contains("--ro-bind-fd") || stderr.contains("--ro-bind-fd"),
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     })
 }
 
@@ -258,6 +392,7 @@ fn exec_system_bwrap(
 }
 
 #[cfg(test)]
+<<<<<<< HEAD
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
@@ -366,3 +501,75 @@ mod tests {
         );
     }
 }
+||||||| 413492cd6c
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn prefers_system_bwrap_when_help_lists_argv0() {
+        let fake_bwrap = NamedTempFile::new().expect("temp file");
+        let fake_bwrap_path = fake_bwrap.path();
+        let expected = AbsolutePathBuf::from_absolute_path(fake_bwrap_path).expect("absolute");
+
+        assert_eq!(
+            system_bwrap_launcher_for_path_with_probe(fake_bwrap_path, |_| {
+                Some(SystemBwrapCapabilities {
+                    supports_argv0: true,
+                    supports_perms: true,
+                })
+            }),
+            Some(SystemBwrapLauncher {
+                program: expected,
+                supports_argv0: true,
+            })
+        );
+    }
+
+    #[test]
+    fn prefers_system_bwrap_when_system_bwrap_lacks_argv0() {
+        let fake_bwrap = NamedTempFile::new().expect("temp file");
+        let fake_bwrap_path = fake_bwrap.path();
+
+        assert_eq!(
+            system_bwrap_launcher_for_path_with_probe(fake_bwrap_path, |_| {
+                Some(SystemBwrapCapabilities {
+                    supports_argv0: false,
+                    supports_perms: true,
+                })
+            }),
+            Some(SystemBwrapLauncher {
+                program: AbsolutePathBuf::from_absolute_path(fake_bwrap_path).expect("absolute"),
+                supports_argv0: false,
+            })
+        );
+    }
+
+    #[test]
+    fn ignores_system_bwrap_when_system_bwrap_lacks_perms() {
+        let fake_bwrap = NamedTempFile::new().expect("temp file");
+
+        assert_eq!(
+            system_bwrap_launcher_for_path_with_probe(fake_bwrap.path(), |_| {
+                Some(SystemBwrapCapabilities {
+                    supports_argv0: false,
+                    supports_perms: false,
+                })
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn ignores_system_bwrap_when_system_bwrap_is_missing() {
+        assert_eq!(
+            system_bwrap_launcher_for_path(Path::new("/definitely/not/a/bwrap")),
+            None
+        );
+    }
+}
+=======
+#[path = "launcher_tests.rs"]
+mod tests;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

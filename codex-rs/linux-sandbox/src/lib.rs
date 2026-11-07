@@ -10,25 +10,53 @@ mod bundled_bwrap;
 #[cfg(target_os = "linux")]
 mod bwrap;
 #[cfg(target_os = "linux")]
+<<<<<<< HEAD
 mod credential_watch;
+||||||| 413492cd6c
+=======
+mod daemon_mounts;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[cfg(target_os = "linux")]
 mod exec_util;
 #[cfg(target_os = "linux")]
-mod landlock;
+mod fd_mount;
 #[cfg(target_os = "linux")]
 mod launcher;
 #[cfg(target_os = "linux")]
 mod linux_run_main;
 #[cfg(target_os = "linux")]
+<<<<<<< HEAD
 mod pinned;
 #[cfg(target_os = "linux")]
 mod placeholder_journal;
 #[cfg(target_os = "linux")]
 mod placeholder_registry;
+||||||| 413492cd6c
+=======
+mod proxy_lifecycle;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[cfg(target_os = "linux")]
 mod proxy_routing;
 #[cfg(target_os = "linux")]
+<<<<<<< HEAD
 mod supervisor;
+||||||| 413492cd6c
+=======
+mod seccomp;
+#[cfg(target_os = "linux")]
+mod wslg;
+
+#[cfg(target_os = "linux")]
+pub use bundled_bwrap::find_bundled_bwrap_for_exe;
+#[cfg(target_os = "linux")]
+pub use bwrap::GLOB_SCAN_PROGRAM;
+#[cfg(target_os = "linux")]
+pub use bwrap::expand_unreadable_globs_in_environment;
+
+/// Exit status returned when bundled bubblewrap fails digest verification.
+#[cfg(target_os = "linux")]
+pub const BUNDLED_BWRAP_DIGEST_VERIFICATION_FAILURE_EXIT_CODE: i32 = 8;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 #[cfg(target_os = "linux")]
 pub fn run_main() -> ! {

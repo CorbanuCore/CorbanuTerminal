@@ -1,10 +1,37 @@
+mod answered_question;
+pub use answered_question::AnsweredQuestion;
 mod additional_context;
+mod annotated_content;
 mod fragment;
+mod recap_prompt;
 
 pub use additional_context::AdditionalContextDeveloperFragment;
+pub use additional_context::AdditionalContextToolOutput;
 pub use additional_context::AdditionalContextUserFragment;
+<<<<<<< HEAD
+||||||| 413492cd6c
+=======
+pub use additional_context::MAX_ADDITIONAL_CONTEXT_VALUE_TOKENS;
+pub use annotated_content::AnnotatedContent;
+pub use annotated_content::message_from_parts;
+pub use annotated_content::set_annotated_content;
+pub use annotated_content::to_annotated_content;
+pub use annotated_content::truncate_annotated_text;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use fragment::AttributedFragment;
 pub use fragment::ContextualUserFragment;
+<<<<<<< HEAD
 pub use fragment::FragmentRegistration;
 pub use fragment::FragmentRegistrationProxy;
 pub use fragment::context_message;
+||||||| 413492cd6c
+pub use fragment::FragmentRegistration;
+pub use fragment::FragmentRegistrationProxy;
+=======
+pub use fragment::RenderedFragment;
+
+pub use recap_prompt::RecapPrompt;
+
+/// Shared classification for compaction summaries produced by core and filtered by Guardian.
+pub const COMPACTION_SUMMARY_KIND: &str = "compaction.summary";
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

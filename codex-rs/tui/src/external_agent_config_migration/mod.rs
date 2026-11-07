@@ -83,8 +83,14 @@ pub(crate) async fn run_external_agent_config_migration_prompt(
     items: &[ExternalAgentConfigMigrationItem],
     selected_items: &[ExternalAgentConfigMigrationItem],
     error: Option<&str>,
+<<<<<<< HEAD
     events: &mut tokio::sync::mpsc::UnboundedReceiver<TuiEvent>,
 ) -> ExternalAgentConfigMigrationOutcome {
+||||||| 413492cd6c
+) -> ExternalAgentConfigMigrationOutcome {
+=======
+) -> std::io::Result<ExternalAgentConfigMigrationOutcome> {
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut screen = ExternalAgentConfigMigrationScreen::new(
         tui.frame_requester(),
         items,
@@ -92,16 +98,37 @@ pub(crate) async fn run_external_agent_config_migration_prompt(
         error.map(str::to_owned),
     );
 
-    let _ = tui.draw(u16::MAX, |frame| {
+    if let Err(err) = tui.draw(u16::MAX, |frame| {
         frame.render_widget_ref(&screen, frame.area());
-    });
+    }) {
+        tracing::warn!("failed to draw config migration prompt: {err}");
+        return Ok(ExternalAgentConfigMigrationOutcome::Skip);
+    }
 
+<<<<<<< HEAD
+||||||| 413492cd6c
+    let events = tui.event_stream();
+    tokio::pin!(events);
+
+=======
+    tui.discard_pending_input_before_interactive_screen()?;
+    let events = tui.event_stream();
+    tokio::pin!(events);
+
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     while !screen.is_done() {
+<<<<<<< HEAD
         if let Some(event) = events.recv().await {
+||||||| 413492cd6c
+        if let Some(event) = events.next().await {
+=======
+        if let Some(event) = events.next().await {
+            let _ = tui.screen_size_for_event(&event);
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             match event {
                 TuiEvent::Key(key_event) => screen.handle_key(key_event),
-                TuiEvent::Paste(_) => {}
-                TuiEvent::Draw | TuiEvent::Resize => {
+                TuiEvent::Paste(_) | TuiEvent::FocusLost | TuiEvent::Mouse(_) => {}
+                TuiEvent::Draw | TuiEvent::Resume | TuiEvent::Resize(_) | TuiEvent::FocusGained => {
                     let _ = tui.draw(u16::MAX, |frame| {
                         frame.render_widget_ref(&screen, frame.area());
                     });
@@ -113,7 +140,7 @@ pub(crate) async fn run_external_agent_config_migration_prompt(
         }
     }
 
-    screen.outcome()
+    Ok(screen.outcome())
 }
 
 struct ExternalAgentConfigMigrationScreen {
@@ -705,6 +732,7 @@ fn is_ctrl_exit_combo(key_event: KeyEvent) -> bool {
 mod tests {
     use super::ExternalAgentConfigMigrationOutcome;
     use super::ExternalAgentConfigMigrationScreen;
+    use super::FocusArea;
     use super::MigrationView;
     use super::run_external_agent_config_migration_prompt;
     use crate::custom_terminal::Terminal;
@@ -861,9 +889,6 @@ mod tests {
         );
 
         let rendered = render_screen(&screen, /*width*/ 80, /*height*/ 24);
-        #[cfg(windows)]
-        assert_snapshot!("external_agent_config_migration_prompt_windows", rendered);
-        #[cfg(not(windows))]
         assert_snapshot!("external_agent_config_migration_prompt", rendered);
     }
 
@@ -933,6 +958,61 @@ mod tests {
         );
         #[cfg(not(windows))]
         assert_snapshot!("external_agent_config_migration_customize_action", rendered);
+    }
+
+    #[test]
+    fn action_rows_keep_single_line_allocation_and_focus_style() {
+        let items = sample_items();
+        let mut screen = ExternalAgentConfigMigrationScreen::new(
+            FrameRequester::test_dummy(),
+            &items,
+            &items,
+            /*error*/ None,
+        );
+        screen.customize();
+        screen.highlighted_action = screen.available_actions()[0];
+        for focus in [FocusArea::Items, FocusArea::Actions] {
+            screen.focus = focus;
+            for width in [30, 80] {
+                let area = Rect::new(/*x*/ 0, /*y*/ 0, width, /*height*/ 30);
+                let mut buf = ratatui::buffer::Buffer::empty(area);
+                ratatui::widgets::WidgetRef::render_ref(&&screen, area, &mut buf);
+                let mut action_rows = Vec::new();
+                for (idx, action) in screen.available_actions().iter().enumerate() {
+                    let marker =
+                        if focus == FocusArea::Actions && *action == screen.highlighted_action {
+                            '›'
+                        } else {
+                            ' '
+                        };
+                    let expected = format!("{marker} {}. {}", idx + 1, action.label());
+                    let y = (0..area.height)
+                        .find(|&y| {
+                            (0..width)
+                                .map(|x| buf[(x, y)].symbol())
+                                .collect::<String>()
+                                .contains(&expected)
+                        })
+                        .expect("action remains on one row");
+                    action_rows.push(y);
+                    assert_eq!(
+                        buf[(2, y)].modifier.contains(ratatui::style::Modifier::DIM),
+                        focus == FocusArea::Items
+                    );
+                    if marker == '›' {
+                        assert_eq!(
+                            buf[(2, y)].bg,
+                            crate::bottom_pane::selection_style().bg.unwrap()
+                        );
+                    }
+                }
+                assert!(
+                    action_rows
+                        .windows(/*size*/ 2)
+                        .all(|rows| rows[1] == rows[0] + 1)
+                );
+            }
+        }
     }
 
     #[test]

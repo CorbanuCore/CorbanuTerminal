@@ -38,6 +38,12 @@ expression: messages
     Plugins: 1 imported, 1 failed
   Run /import again to check for additional items.
 No compatible setup was found to import.
+<<<<<<< HEAD
 Import from other apps is unavailable in remote sessions. Start Corbanu Terminal locally and run /import.
 Import from other apps is unavailable while Corbanu Terminal is connected to the local app-server daemon. Stop the daemon, restart Corbanu Terminal, and run /import.
+||||||| 413492cd6c
+Import from other apps is unavailable in remote sessions. Start Codex locally and run /import.
+Import from other apps is unavailable while Codex is connected to the local app-server daemon. Stop the daemon, restart Codex, and run /import.
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 A previous external agent import is still running. Wait for it to finish before importing again.

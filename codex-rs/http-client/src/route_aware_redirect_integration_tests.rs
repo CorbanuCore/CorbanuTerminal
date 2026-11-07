@@ -98,8 +98,16 @@ fn spawn_response(
                 Err(error) => panic!("HTTP listener should accept: {error}"),
             }
         };
+<<<<<<< HEAD
         // Windows sockets inherit the listener's nonblocking mode.
         stream.set_nonblocking(false).expect("set blocking");
+||||||| 413492cd6c
+=======
+        // Accepted sockets inherit the listener's nonblocking mode on macOS.
+        stream
+            .set_nonblocking(false)
+            .expect("set accepted stream blocking");
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         stream
             .set_read_timeout(Some(Duration::from_secs(2)))
             .expect("read timeout");

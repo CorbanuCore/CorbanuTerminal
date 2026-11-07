@@ -20,7 +20,7 @@ use codex_app_server_protocol::TurnStatus;
 use codex_core::CodexThread;
 use codex_protocol::ThreadId;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::RolloutItem;
+use codex_rollout::RolloutItem;
 
 use crate::outgoing_message::ConnectionId;
 use crate::outgoing_message::OutgoingMessageSender;
@@ -39,6 +39,9 @@ pub(super) async fn send_thread_token_usage_update_to_connection(
     conversation: &CodexThread,
     token_usage_turn_id: String,
 ) {
+    if token_usage_turn_id.is_empty() {
+        return;
+    }
     let Some(info) = conversation.token_usage_info().await else {
         return;
     };
@@ -82,6 +85,10 @@ fn latest_token_usage_turn_id_from_rollout_items(
     let mut builder = ThreadHistoryBuilder::new();
     for item in &rollout_items[..token_count_index] {
         builder.handle_rollout_item(item);
+    }
+
+    if turns.is_empty() {
+        return builder.active_turn_id_if_explicit();
     }
 
     let active_turn_id = builder.active_turn_id()?;
@@ -143,6 +150,16 @@ mod tests {
     }
 
     #[test]
+    fn replay_attribution_rejects_suffix_generated_turn_ids() {
+        let rollout_items = token_usage_history();
+
+        assert_eq!(
+            latest_token_usage_turn_id_from_rollout_items(&rollout_items, /*turns*/ &[]),
+            None
+        );
+    }
+
+    #[test]
     fn replay_attribution_uses_latest_token_count_and_ignores_tail_turn() {
         let mut rollout_items = token_usage_history();
         rollout_items.extend(token_usage_history());
@@ -168,6 +185,8 @@ mod tests {
                 message: "first answer".to_string(),
                 phase: None,
                 memory_citation: None,
+                delivery: None,
+                questions: None,
             })),
             RolloutItem::EventMsg(EventMsg::TokenCount(TokenCountEvent {
                 info: None,

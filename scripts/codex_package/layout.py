@@ -12,7 +12,6 @@ from .targets import PackageInputs
 from .targets import PackageVariant
 from .targets import REPO_ROOT
 from .targets import TargetSpec
-from .zsh import ZSH_RESOURCE_PATH
 
 
 LAYOUT_VERSION = 1
@@ -68,6 +67,7 @@ def build_package_dir(
         bin_dir / f"codex-code-mode-host{spec.exe_suffix}",
         is_windows=spec.is_windows,
     )
+<<<<<<< HEAD
     strip_packaged_executable(
         bin_dir / f"codex-code-mode-host{spec.exe_suffix}",
         spec,
@@ -98,14 +98,15 @@ def build_package_dir(
                 symbols_dir=symbols_dir,
             )
             placed_binaries.append((source, destination))
+||||||| 413492cd6c
+=======
+    copy_executable(
+        inputs.exec_server_bin,
+        bin_dir / f"codex-exec-server{spec.exe_suffix}",
+        is_windows=spec.is_windows,
+    )
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     copy_executable(inputs.rg_bin, path_dir / spec.rg_name, is_windows=spec.is_windows)
-
-    if inputs.zsh_bin is not None:
-        copy_executable(
-            inputs.zsh_bin,
-            resources_dir / ZSH_RESOURCE_PATH,
-            is_windows=False,
-        )
 
     if inputs.bwrap_bin is not None:
         copy_executable(inputs.bwrap_bin, resources_dir / "bwrap", is_windows=False)
@@ -133,9 +134,14 @@ def build_package_dir(
         "target": spec.target,
         "variant": variant.name,
         "entrypoint": f"bin/{entrypoint_name}",
+<<<<<<< HEAD
         "extraBinaries": [
             f"bin/{extra.entrypoint_name(spec)}" for extra in variant.extra_binaries
         ],
+||||||| 413492cd6c
+=======
+        "execServer": f"bin/codex-exec-server{spec.exe_suffix}",
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         "resourcesDir": "codex-resources",
         "pathDir": "codex-path",
     }
@@ -148,8 +154,6 @@ def validate_package_dir(
     package_dir: Path,
     variant: PackageVariant,
     spec: TargetSpec,
-    *,
-    include_zsh: bool,
 ) -> None:
     required_dirs = [
         Path("bin"),
@@ -173,9 +177,14 @@ def validate_package_dir(
         "target": spec.target,
         "variant": variant.name,
         "entrypoint": f"bin/{variant.entrypoint_name(spec)}",
+<<<<<<< HEAD
         "extraBinaries": [
             f"bin/{extra.entrypoint_name(spec)}" for extra in variant.extra_binaries
         ],
+||||||| 413492cd6c
+=======
+        "execServer": f"bin/codex-exec-server{spec.exe_suffix}",
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         "resourcesDir": "codex-resources",
         "pathDir": "codex-path",
     }
@@ -191,6 +200,7 @@ def validate_package_dir(
     required_files = [
         Path("bin") / variant.entrypoint_name(spec),
         Path("bin") / f"codex-code-mode-host{spec.exe_suffix}",
+        Path("bin") / f"codex-exec-server{spec.exe_suffix}",
         Path("codex-path") / spec.rg_name,
     ]
     executable_files = list(required_files)
@@ -198,11 +208,6 @@ def validate_package_dir(
         extra_path = Path("bin") / extra.entrypoint_name(spec)
         required_files.append(extra_path)
         executable_files.append(extra_path)
-
-    if include_zsh:
-        zsh_path = Path("codex-resources") / ZSH_RESOURCE_PATH
-        required_files.append(zsh_path)
-        executable_files.append(zsh_path)
 
     if spec.is_linux:
         required_files.append(Path("codex-resources") / "bwrap")

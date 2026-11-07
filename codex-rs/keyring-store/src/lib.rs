@@ -14,6 +14,7 @@ use std::time::Duration;
 use std::time::Instant;
 use tracing::trace;
 
+<<<<<<< HEAD
 #[cfg(target_os = "macos")]
 mod macos_interaction;
 #[cfg(any(target_os = "macos", test))]
@@ -65,6 +66,10 @@ fn with_native_interaction<T>(
 const DEFAULT_KEYRING_OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug)]
+||||||| 413492cd6c
+#[derive(Debug)]
+=======
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub enum CredentialStoreError {
     Other(KeyringError),
     Message(String),
@@ -76,10 +81,18 @@ impl CredentialStoreError {
     }
 
     pub fn message(&self) -> String {
+<<<<<<< HEAD
         match self {
             Self::Other(error) => error.to_string(),
             Self::Message(message) => message.clone(),
         }
+||||||| 413492cd6c
+        match self {
+            Self::Other(error) => error.to_string(),
+        }
+=======
+        self.to_string()
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub fn into_error(self) -> KeyringError {
@@ -99,13 +112,42 @@ impl CredentialStoreError {
 impl fmt::Display for CredentialStoreError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Other(KeyringError::Ambiguous(items)) => {
+                write!(f, "Entry is matched by {} credentials", items.len())
+            }
             Self::Other(error) => write!(f, "{error}"),
             Self::Message(message) => write!(f, "{message}"),
         }
     }
 }
 
-impl Error for CredentialStoreError {}
+impl fmt::Debug for CredentialStoreError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
+impl Error for CredentialStoreError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            // Do not expose payload-bearing variants to error-chain formatters.
+            Self::Other(KeyringError::Ambiguous(_) | KeyringError::BadEncoding(_)) => None,
+            Self::Other(error) => Some(error),
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "error_display_tests.rs"]
+mod error_display_tests;
+
+mod error_kind;
+
+impl From<CredentialStoreError> for std::io::Error {
+    fn from(error: CredentialStoreError) -> Self {
+        Self::new(error_kind::classify(&error), error)
+    }
+}
 
 /// Shared credential store abstraction for keyring-backed implementations.
 pub trait KeyringStore: Debug + Send + Sync {
@@ -117,6 +159,7 @@ pub trait KeyringStore: Debug + Send + Sync {
 #[derive(Debug, Clone, Copy)]
 pub struct DefaultKeyringStore;
 
+<<<<<<< HEAD
 #[derive(Debug, Default)]
 struct KeyringOperationGate {
     state: Mutex<KeyringOperationState>,
@@ -138,13 +181,43 @@ impl KeyringOperationGate {
                 return Err(CredentialStoreError::from_message(format!(
                     "OS keyring {operation} unavailable because a prior keyring operation timed out"
                 )));
+||||||| 413492cd6c
+impl KeyringStore for DefaultKeyringStore {
+    fn load(&self, service: &str, account: &str) -> Result<Option<String>, CredentialStoreError> {
+        trace!("keyring.load start, service={service}, account={account}");
+        let entry = Entry::new(service, account).map_err(CredentialStoreError::new)?;
+        match entry.get_password() {
+            Ok(password) => {
+                trace!("keyring.load success, service={service}, account={account}");
+                Ok(Some(password))
+=======
+impl KeyringStore for DefaultKeyringStore {
+    fn load(&self, service: &str, account: &str) -> Result<Option<String>, CredentialStoreError> {
+        trace!("keyring.load start");
+        let entry = Entry::new(service, account).map_err(CredentialStoreError::new)?;
+        match entry.get_password() {
+            Ok(password) => {
+                trace!("keyring.load success");
+                Ok(Some(password))
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
+<<<<<<< HEAD
             if state.in_flight.is_none() {
                 state.next_generation = state.next_generation.wrapping_add(1);
                 let generation = state.next_generation;
                 state.in_flight = Some(generation);
                 return Ok(generation);
+||||||| 413492cd6c
+            Err(keyring::Error::NoEntry) => {
+                trace!("keyring.load no entry, service={service}, account={account}");
+                Ok(None)
+=======
+            Err(keyring::Error::NoEntry) => {
+                trace!("keyring.load no entry");
+                Ok(None)
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
+<<<<<<< HEAD
 
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
@@ -161,6 +234,15 @@ impl KeyringOperationGate {
                 return Err(CredentialStoreError::from_message(format!(
                     "OS keyring {operation} timed out waiting for another keyring operation"
                 )));
+||||||| 413492cd6c
+            Err(error) => {
+                trace!("keyring.load error, service={service}, account={account}, error={error}");
+                Err(CredentialStoreError::new(error))
+=======
+            Err(error) => {
+                trace!("keyring.load error");
+                Err(CredentialStoreError::new(error))
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
         }
     }
@@ -297,6 +379,7 @@ impl KeyringStore for DefaultKeyringStore {
     }
 
     fn save(&self, service: &str, account: &str, value: &str) -> Result<(), CredentialStoreError> {
+<<<<<<< HEAD
         reject_fixture_keyring_access()?;
         let service = service.to_string();
         let account = account.to_string();
@@ -328,9 +411,40 @@ impl KeyringStore for DefaultKeyringStore {
                 })
             },
         )
+||||||| 413492cd6c
+        trace!(
+            "keyring.save start, service={service}, account={account}, value_len={}",
+            value.len()
+        );
+        let entry = Entry::new(service, account).map_err(CredentialStoreError::new)?;
+        match entry.set_password(value) {
+            Ok(()) => {
+                trace!("keyring.save success, service={service}, account={account}");
+                Ok(())
+            }
+            Err(error) => {
+                trace!("keyring.save error, service={service}, account={account}, error={error}");
+                Err(CredentialStoreError::new(error))
+            }
+        }
+=======
+        trace!("keyring.save start");
+        let entry = Entry::new(service, account).map_err(CredentialStoreError::new)?;
+        match entry.set_password(value) {
+            Ok(()) => {
+                trace!("keyring.save success");
+                Ok(())
+            }
+            Err(error) => {
+                trace!("keyring.save error");
+                Err(CredentialStoreError::new(error))
+            }
+        }
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn delete(&self, service: &str, account: &str) -> Result<bool, CredentialStoreError> {
+<<<<<<< HEAD
         reject_fixture_keyring_access()?;
         let service = service.to_string();
         let account = account.to_string();
@@ -400,6 +514,37 @@ mod bounded_operation_tests {
                         .message()
                         .contains("isolated test fixture")
                 );
+||||||| 413492cd6c
+        trace!("keyring.delete start, service={service}, account={account}");
+        let entry = Entry::new(service, account).map_err(CredentialStoreError::new)?;
+        match entry.delete_credential() {
+            Ok(()) => {
+                trace!("keyring.delete success, service={service}, account={account}");
+                Ok(true)
+            }
+            Err(keyring::Error::NoEntry) => {
+                trace!("keyring.delete no entry, service={service}, account={account}");
+                Ok(false)
+            }
+            Err(error) => {
+                trace!("keyring.delete error, service={service}, account={account}, error={error}");
+                Err(CredentialStoreError::new(error))
+=======
+        trace!("keyring.delete start");
+        let entry = Entry::new(service, account).map_err(CredentialStoreError::new)?;
+        match entry.delete_credential() {
+            Ok(()) => {
+                trace!("keyring.delete success");
+                Ok(true)
+            }
+            Err(keyring::Error::NoEntry) => {
+                trace!("keyring.delete no entry");
+                Ok(false)
+            }
+            Err(error) => {
+                trace!("keyring.delete error");
+                Err(CredentialStoreError::new(error))
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
             return;
         }

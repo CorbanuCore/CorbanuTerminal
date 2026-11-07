@@ -1,25 +1,49 @@
+use super::super::env_value;
 use super::CredentialHostBinding;
 use super::CredentialProvider;
 use super::CredentialSource;
 use super::shaped_dummy_value;
+<<<<<<< HEAD
 use crate::credential_broker::resolver::OPENAI_API_HOST;
 use crate::credential_broker::resolver::OPENAI_API_KEY_ENV_VAR;
+||||||| 413492cd6c
+=======
+use crate::config::trusted_credential_broker_host;
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use rama_http::HeaderMap;
 use rama_http::HeaderValue;
 use rama_http::header::AUTHORIZATION;
 use std::collections::HashMap;
 
+<<<<<<< HEAD
 const OPENAI_API_KEY_ENV_VARS: &[&str] = &[OPENAI_API_KEY_ENV_VAR];
+||||||| 413492cd6c
+const OPENAI_API_KEY_ENV_VARS: &[&str] = &["OPENAI_API_KEY"];
+=======
+const OPENAI_API_KEY_ENV_VARS: &[&str] = &["OPENAI_API_KEY"];
+const OPENAI_API_KEY_PREFIXES: &[&str] = &["sk-proj-", "sk-svcacct-", "sk-admin-", "sk-"];
+const OPENAI_BASE_URL_ENV_VAR: &str = "OPENAI_BASE_URL";
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 const OPENAI_API_KEY_MIN_LEN: usize = 51;
 
 pub(super) static PROVIDER: CredentialProvider = CredentialProvider {
-    context_env_vars: &[],
+    context_env_vars: &[OPENAI_BASE_URL_ENV_VAR],
+    credential_prefixes: OPENAI_API_KEY_PREFIXES,
+    ignored_credential_prefixes: &["sk-ant-", "sk-or-"],
+    credential_watermark: Some("T3BlbkFJ"),
+    minimum_credential_len: OPENAI_API_KEY_MIN_LEN,
     sources: &[CredentialSource {
         env_vars: OPENAI_API_KEY_ENV_VARS,
+        binding_env_vars: &[OPENAI_BASE_URL_ENV_VAR],
+        invalidates_host_binding: |env| {
+            env_value(env, OPENAI_BASE_URL_ENV_VAR)
+                .is_some_and(|value| trusted_credential_broker_host(value).is_none())
+        },
         host_binding,
     }],
+    reset_on_configuration_change: true,
     dummy_value,
-    request_header,
+    translate_request_header,
     request_header_value,
     insert_request_header,
     allows_path,
@@ -37,8 +61,16 @@ fn dummy_value(real_value: &str) -> String {
     )
 }
 
-fn request_header(headers: &HeaderMap) -> Option<&HeaderValue> {
-    headers.get(AUTHORIZATION)
+fn translate_request_header(
+    headers: &HeaderMap,
+    expected_value: &str,
+    replacement_value: &str,
+) -> Option<HeaderValue> {
+    headers
+        .get(AUTHORIZATION)
+        .and_then(|header| header.to_str().ok())
+        .filter(|header| header.contains(expected_value))?;
+    request_header_value(replacement_value)
 }
 
 fn request_header_value(value: &str) -> Option<HeaderValue> {
@@ -49,17 +81,31 @@ fn insert_request_header(headers: &mut HeaderMap, value: HeaderValue) {
     headers.insert(AUTHORIZATION, value);
 }
 
-fn host_binding(_: &HashMap<String, String>) -> Option<CredentialHostBinding> {
-    Some(CredentialHostBinding::ExactHost(
-        OPENAI_API_HOST.to_string(),
-    ))
+fn host_binding(
+    env: &HashMap<String, String>,
+    configured_host: Option<&str>,
+) -> Option<CredentialHostBinding> {
+    let mut hosts = vec![OPENAI_API_HOST.to_string()];
+    for host in configured_host
+        .map(str::to_string)
+        .into_iter()
+        .chain(env_value(env, OPENAI_BASE_URL_ENV_VAR).and_then(trusted_credential_broker_host))
+    {
+        if !hosts.contains(&host) {
+            hosts.push(host);
+        }
+    }
+
+    Some(match hosts.as_slice() {
+        [host] => CredentialHostBinding::ExactHost(host.clone()),
+        _ => CredentialHostBinding::ExactHosts(hosts),
+    })
 }
 
 fn openai_api_key_prefix(value: &str) -> &str {
-    let Some(suffix) = value.strip_prefix("sk-") else {
-        return "sk-";
-    };
-    suffix
-        .find('-')
-        .map_or("sk-", |separator| &value[..separator + 4])
+    OPENAI_API_KEY_PREFIXES
+        .iter()
+        .copied()
+        .find(|prefix| value.starts_with(prefix))
+        .unwrap_or("sk-")
 }

@@ -40,7 +40,7 @@ use rmcp::model::Resource;
 use rmcp::model::ResourceContents;
 use rmcp::model::ResourceTemplate;
 use rmcp::model::ServerCapabilities;
-use rmcp::model::ServerInfo;
+use rmcp::model::ServerConfig;
 use rmcp::model::Tool;
 use rmcp::model::ToolAnnotations;
 use rmcp::transport::StreamableHttpServerConfig;
@@ -112,6 +112,31 @@ struct EchoArgs {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut args = std::env::args_os().skip(1);
+    match args.next().as_deref() {
+        Some(value) if value == std::ffi::OsStr::new("--http-headers-helper") => {
+            if std::env::var_os("MCP_TEST_AMBIENT_SECRET").is_some() {
+                return Err("helper inherited ambient secret".into());
+            }
+            if let Some(invocations) = args.next() {
+                let count = fs::read_to_string(&invocations).unwrap_or_default().len() + 1;
+                fs::write(invocations, "x".repeat(count))?;
+                let header =
+                    if args.next().as_deref() == Some(std::ffi::OsStr::new("--authorization")) {
+                        "Authorization"
+                    } else {
+                        "Proxy-Authorization"
+                    };
+                println!(
+                    r#"{{"{header}":"Bearer gateway-token","X-Helper-Generation":"{count}"}}"#
+                );
+            } else {
+                println!(r#"{{"Proxy-Authorization":"Bearer gateway-token"}}"#);
+            }
+            return Ok(());
+        }
+        _ => {}
+    }
     let bind_addr = parse_bind_addr()?;
     let post_failure_state = PostFailureState::default();
     const MAX_BIND_RETRIES: u32 = 20;
@@ -139,6 +164,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         fs::write(bound_addr_file, actual_bind_addr.to_string())?;
     }
     eprintln!("starting rmcp streamable http test server on http://{actual_bind_addr}/mcp");
+
+    let mut transport_config = StreamableHttpServerConfig::default();
+    if !actual_bind_addr.ip().is_loopback() {
+        transport_config
+            .allowed_hosts
+            .push(actual_bind_addr.to_string());
+        transport_config =
+            transport_config.with_allowed_origins([format!("http://{actual_bind_addr}")]);
+    }
 
     let router = Router::new()
         .route(
@@ -168,6 +202,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .header(CONTENT_TYPE, "application/json")
                         .body(Body::from(
                             serde_json::to_vec(&json!({
+                                "issuer": format!("{metadata_base}/mcp"),
                                 "authorization_endpoint": format!("{metadata_base}/oauth/authorize"),
                                 "token_endpoint": format!("{metadata_base}/oauth/token"),
                                 "scopes_supported": [""],
@@ -177,15 +212,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }),
         )
+        .route(
+            "/oauth/token",
+            post(|| async {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({
+                        "error": "invalid_grant",
+                        "error_description": "refresh token expired or revoked",
+                    })),
+                )
+            }),
+        )
         .nest_service(
             "/mcp",
             StreamableHttpService::new(
                 || Ok(TestToolServer::new()),
                 Arc::new(LocalSessionManager::default()),
+<<<<<<< HEAD
                 StreamableHttpServerConfig::default()
                     // The remote test lane reaches this server by container IP,
                     // not loopback, so accept any Host header.
                     .disable_allowed_hosts(),
+||||||| 413492cd6c
+                StreamableHttpServerConfig::default(),
+=======
+                transport_config,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             ),
         )
         .layer(middleware::from_fn_with_state(
@@ -200,6 +253,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         router
     };
+    let router = if let Ok(token) = std::env::var("MCP_EXPECT_GATEWAY_BEARER") {
+        let expected = Arc::new(format!("Bearer {token}"));
+        router.layer(middleware::from_fn_with_state(
+            expected,
+            require_gateway_bearer,
+        ))
+    } else {
+        router
+    };
 
     axum::serve(listener, router).await?;
     task::yield_now().await;
@@ -207,8 +269,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 impl ServerHandler for TestToolServer {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(
             ServerCapabilities::builder()
                 .enable_tools()
                 .enable_tool_list_changed()
@@ -389,12 +451,31 @@ async fn require_bearer(
     request: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    if request.uri().path().contains("/.well-known/") {
+    if request.uri().path().contains("/.well-known/") || request.uri().path() == "/oauth/token" {
         return Ok(next.run(request).await);
     }
     if request
         .headers()
         .get(AUTHORIZATION)
+        .is_some_and(|value| value.as_bytes() == expected.as_bytes())
+    {
+        Ok(next.run(request).await)
+    } else {
+        Err(StatusCode::UNAUTHORIZED)
+    }
+}
+
+async fn require_gateway_bearer(
+    State(expected): State<Arc<String>>,
+    request: Request<Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    if !request.uri().path().starts_with("/mcp") {
+        return Ok(next.run(request).await);
+    }
+    if request
+        .headers()
+        .get("proxy-authorization")
         .is_some_and(|value| value.as_bytes() == expected.as_bytes())
     {
         Ok(next.run(request).await)

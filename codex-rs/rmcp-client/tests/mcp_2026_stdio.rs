@@ -39,18 +39,35 @@ async fn exercise_stdio_server(
     } else {
         Arc::new(LocalStdioServerLauncher::new(std::env::current_dir()?))
     };
-    let env = opt_in.then(|| {
-        HashMap::from([(
+    let mut env = HashMap::new();
+    if opt_in {
+        env.insert(
             OsString::from("CODEX_MCP_PROTOCOL_VERSION"),
             OsString::from("2026-07-28"),
-        )])
-    });
+        );
+    }
+    let root = tempfile::tempdir()?;
+    let cwd = if use_executor {
+        std::env::current_dir()?
+    } else {
+        root.path().to_path_buf()
+    };
+    #[cfg(unix)]
+    let server = if use_executor {
+        server
+    } else {
+        let wrapper = root.path().join("server");
+        let script = "#!/bin/sh\nprintf '%s' \"$0\" > argv0\nexec \"$MCP_SERVER\" \"$@\"\n";
+        codex_utils_cargo_bin::write_executable(&wrapper, script)?;
+        env.insert(OsString::from("MCP_SERVER"), server.into_os_string());
+        std::path::PathBuf::from("./server")
+    };
     let client = RmcpClient::new_stdio_client_with_protocol_mode(
         server.into(),
         vec![OsString::from(server_mode)],
-        env,
+        Some(env),
         &[],
-        /*cwd*/ Some(std::env::current_dir()?.to_string_lossy().into_owned()),
+        Some(cwd.to_string_lossy().into_owned()),
         launcher,
         protocol_mode,
     )
@@ -69,7 +86,11 @@ async fn exercise_stdio_server(
                 Implementation::new("codex-mcp-client", "0.0.0-test"),
             )
             .with_protocol_version(ProtocolVersion::V_2025_06_18),
-            Some(Duration::from_secs(5)),
+            Some(Duration::from_secs(if server_mode.ends_with("-late") {
+                30
+            } else {
+                5
+            })),
             Box::new(move |_request_id, request| {
                 let observed_elicitations = Arc::clone(&observed_elicitations);
                 async move {
@@ -153,7 +174,7 @@ async fn exercise_stdio_server(
         .call_tool(
             "echo".to_owned(),
             Some(json!({"message": "hello stdio"})),
-            /*meta*/ None,
+            |_| Ok(None),
             Some(Duration::from_secs(5)),
         )
         .await?;
@@ -166,6 +187,13 @@ async fn exercise_stdio_server(
         })
     );
     assert_eq!(elicitation_count.load(Ordering::Relaxed), 1);
+    #[cfg(unix)]
+    if !use_executor {
+        assert_eq!(
+            std::fs::read_to_string(root.path().join("argv0"))?,
+            "./server"
+        );
+    }
     client.shutdown().await;
     Ok(())
 }
@@ -214,6 +242,29 @@ async fn rollout_flag_alone_preserves_legacy_stdio_and_sep1034_defaults() -> any
         /*use_executor*/ false,
     )
     .await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn unmarked_stdio_helpers_recover_from_failed_or_late_discovery() -> anyhow::Result<()> {
+    for mode in [
+        "legacy",
+        "legacy-init-first",
+        "legacy-reject-late-initialize",
+        "legacy-reject-and-exit",
+        "legacy-late",
+        "legacy-silent",
+        "legacy-versions",
+        "modern-late",
+    ] {
+        exercise_stdio_server(
+            mode,
+            McpProtocolMode::DiscoverLocalStdio,
+            /*opt_in*/ false,
+            /*use_executor*/ false,
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

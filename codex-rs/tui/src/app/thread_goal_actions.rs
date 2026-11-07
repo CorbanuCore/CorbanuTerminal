@@ -56,6 +56,10 @@ impl App {
         app_server: &mut AppServerSession,
         thread_id: ThreadId,
     ) {
+        if self.chat_widget.has_misalignment_policy_violation() {
+            return;
+        }
+
         let result = app_server.thread_goal_get(thread_id).await;
         if self.current_displayed_thread_id() != Some(thread_id) {
             return;
@@ -326,9 +330,15 @@ impl App {
             )),
             footer_hint: Some(standard_popup_hint_line()),
             items,
+<<<<<<< HEAD
             initial_selected_idx: Some(1),
             allow_number_shortcuts: false,
             ..Default::default()
+||||||| 413492cd6c
+            ..Default::default()
+=======
+            ..SelectionViewParams::confirmation()
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         });
     }
 
@@ -347,7 +357,7 @@ async fn cleanup_materialized_goal_files(
     output_dir: Option<goal_files::GoalFilePath>,
 ) {
     if let Some(output_dir) = output_dir
-        && let Err(err) = app_server.fs_remove_path(&output_dir).await
+        && let Err(err) = app_server.file_system().fs_remove_path(&output_dir).await
     {
         tracing::warn!("failed to clean up materialized goal files at {output_dir}: {err}");
     }

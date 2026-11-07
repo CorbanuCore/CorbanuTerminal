@@ -5,13 +5,30 @@ expression: "format!(\"{buf:?}\")"
 Buffer {
     area: Rect { x: 0, y: 0, width: 72, height: 2 },
     content: [
+<<<<<<< HEAD
         "  /app      continue this session in Corbanu Terminal Desktop           ",
+||||||| 413492cd6c
+        "  /app      continue this session in the Desktop app                    ",
+=======
+        "› /app      continue this session in the Desktop app                    ",
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         "  /approve  approve one retry of a recent auto-review denial            ",
     ],
     styles: [
+<<<<<<< HEAD
         x: 0, y: 0, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
         x: 2, y: 0, fg: Cyan, bg: Reset, underline: Reset, modifier: BOLD,
         x: 61, y: 0, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+||||||| 413492cd6c
+        x: 0, y: 0, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+        x: 2, y: 0, fg: Cyan, bg: Reset, underline: Reset, modifier: BOLD,
+        x: 52, y: 0, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+=======
+        x: 0, y: 0, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD | REVERSED,
+        x: 12, y: 0, fg: Reset, bg: Reset, underline: Reset, modifier: REVERSED,
+        x: 52, y: 0, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD | REVERSED,
+        x: 0, y: 1, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         x: 3, y: 1, fg: Reset, bg: Reset, underline: Reset, modifier: BOLD,
         x: 6, y: 1, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
         x: 12, y: 1, fg: Reset, bg: Reset, underline: Reset, modifier: DIM,

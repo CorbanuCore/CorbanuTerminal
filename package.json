@@ -11,10 +11,16 @@
     "prettier": "^3.5.3"
   },
   "resolutions": {
+<<<<<<< HEAD
     "@modelcontextprotocol/sdk": "1.26.0",
     "@eslint/eslintrc>ajv": "6.12.6",
     "ajv": "8.18.0",
     "eslint>ajv": "6.12.6",
+||||||| 413492cd6c
+    "@modelcontextprotocol/sdk": "1.26.0",
+=======
+    "@modelcontextprotocol/sdk": "1.32.0",
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     "braces": "^3.0.3",
     "esbuild": "0.28.1",
     "fast-uri": "3.1.1",
@@ -36,8 +42,8 @@
     "punycode": "^2.3.1"
   },
   "engines": {
-    "node": ">=22",
-    "pnpm": ">=10.33.0"
+    "node": ">=24.22.1",
+    "pnpm": ">=10.34.5"
   },
-  "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319"
+  "packageManager": "pnpm@10.34.5+sha512.a4ee05f2f73658255bd6a89859c065a45c28a57daefae2c893a168ee2b73168c37b91e83e57ea67654ad03f03031746430e8bce38e362e042605fb8abc80192e"
 }

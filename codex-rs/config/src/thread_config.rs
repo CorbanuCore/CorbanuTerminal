@@ -303,10 +303,12 @@ mod tests {
             account: None,
             name: name.to_string(),
             base_url: Some("http://127.0.0.1:8061/api/codex".to_string()),
+            model_catalog_url: None,
             env_key: None,
             env_key_instructions: None,
             experimental_bearer_token: None,
             auth: None,
+            gateway_oauth: None,
             aws: None,
             wire_api: WireApi::Responses,
             query_params: None,
@@ -323,8 +325,17 @@ mod tests {
             requires_openai_auth: false,
             supports_websockets: true,
             supports_standalone_web_search: true,
+<<<<<<< HEAD
             billing: None,
             runtime_policy: Default::default(),
+||||||| 413492cd6c
+=======
+            capabilities: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            include_internal_metadata: false,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 }

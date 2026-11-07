@@ -23,6 +23,7 @@ use crate::mcp::sanitize_responses_api_tool_name;
 
 const LEGACY_MCP_TOOL_NAME_PREFIX: &str = "mcp__";
 
+<<<<<<< HEAD
 /// Namespaces of built-in tools (the multi-agent V2 namespace is configurable;
 /// `collaboration` is its default). An MCP server exposed without the `mcp__`
 /// prefix must not take one: on the Responses wire its tools would clash with
@@ -118,6 +119,11 @@ fn warn_forced_prefix(server_name: &str, namespace: &str, reserved: ReservedMcpN
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+||||||| 413492cd6c
+#[derive(Debug, Clone, Serialize, Deserialize)]
+=======
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub struct ToolInfo {
     /// Raw MCP server name used for routing the tool call.
     pub server_name: String,
@@ -202,7 +208,7 @@ pub(crate) fn filter_tools(tools: Vec<ToolInfo>, filter: &ToolFilter) -> Vec<Too
 ///
 /// Raw MCP server/tool names are kept on each [`ToolInfo`] for protocol calls, while
 /// `callable_namespace` / `callable_name` are sanitized and, when necessary, hashed so
-/// every model-visible name is unique and <= 64 bytes.
+/// every model-visible name is unique and <= 128 bytes.
 ///
 /// When `prefix_mcp_tool_names` is true, the historical `mcp__` namespace
 /// prefix is added except for tools from `non_prefixed_mcp_tool_servers`.
@@ -330,7 +336,7 @@ struct CallableToolCandidate {
 }
 
 const MCP_TOOL_NAME_DELIMITER: &str = "__";
-const MAX_TOOL_NAME_LENGTH: usize = 64;
+const MAX_TOOL_NAME_LENGTH: usize = 128;
 const CALLABLE_NAME_HASH_LEN: usize = 12;
 fn callable_namespace_with_prefix(namespace: &str, prefix_mcp_tool_names: bool) -> String {
     if !prefix_mcp_tool_names || namespace.starts_with(LEGACY_MCP_TOOL_NAME_PREFIX) {

@@ -6,15 +6,33 @@ expression: terminal_title_popup_snapshot(&mut chat)
   Select which items to display in the terminal title.
 
   Type to search
-  >
+
 › [x] project-name   Project name (falls back to current directory name)
   [x] thread-title   Current thread title, or thread identifier when unnamed
   [x] task-progress  Latest task progress from update_plan (omitted until available)
+<<<<<<< HEAD
   [ ] app-name       Corbanu Terminal app name
+||||||| 413492cd6c
+  [ ] app-name       Codex app name
+=======
+  [x] daybreak       Whether Daybreak is enabled for this thread
+  [ ] app-name       Codex app name
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
   [ ] current-dir    Current working directory
-  [ ] activity       Spinner while working, action-required message while blocked.
+  [ ] activity       Spinner while working, action-required message while blocked
   [ ] run-state      Compact session run-state text (Ready, Working, Thinking)
+<<<<<<< HEAD
   [ ] git-branch     Current Git branch (omitted when unavailable)
 
   tmp | Mixed preview thread | Tasks 0/0
   Press space to toggle; ←/→ to move; enter to confirm and close; esc to close
+||||||| 413492cd6c
+  [ ] git-branch     Current Git branch (omitted when unavailable)
+
+  project | Mixed preview thread | Tasks 0/0
+  Press space to toggle; ←/→ to move; enter to confirm and close; esc to close
+=======
+↓
+  project | Mixed preview thread | Tasks 0/0 | Daybreak on
+  space toggle · ←/→ reorder · enter save · esc cancel
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

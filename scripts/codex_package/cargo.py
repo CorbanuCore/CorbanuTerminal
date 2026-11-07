@@ -18,7 +18,12 @@ CODEX_RS_ROOT = REPO_ROOT / "codex-rs"
 class SourceBuildOutputs:
     entrypoint_bin: Path
     code_mode_host_bin: Path
+<<<<<<< HEAD
     extra_bins: dict[str, Path]
+||||||| 413492cd6c
+=======
+    exec_server_bin: Path
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     bwrap_bin: Path | None
     codex_command_runner_bin: Path | None
     codex_windows_sandbox_setup_bin: Path | None
@@ -32,6 +37,7 @@ def build_source_binaries(
     profile: str,
     entrypoint_bin: Path | None,
     code_mode_host_bin: Path | None,
+    exec_server_bin: Path | None,
     bwrap_bin: Path | None,
     codex_command_runner_bin: Path | None,
     codex_windows_sandbox_setup_bin: Path | None,
@@ -56,6 +62,7 @@ def build_source_binaries(
         build_entrypoint=entrypoint_bin is None,
         extra_cargo_bins=missing_extra_binaries,
         build_code_mode_host=code_mode_host_bin is None,
+        build_exec_server=exec_server_bin is None,
         build_bwrap=spec.is_linux and bwrap_bin is None,
         build_codex_command_runner=spec.is_windows and codex_command_runner_bin is None,
         build_codex_windows_sandbox_setup=spec.is_windows
@@ -74,7 +81,11 @@ def build_source_binaries(
             cmd.extend(["--bin", binary])
 
         cargo_env = None
-        if entrypoint_bin is None or code_mode_host_bin is None:
+        if (
+            entrypoint_bin is None
+            or code_mode_host_bin is None
+            or exec_server_bin is None
+        ):
             codex_v8_env = resolve_codex_v8_cargo_env(spec)
             if codex_v8_env:
                 cargo_env = {**os.environ, **codex_v8_env}
@@ -115,7 +126,16 @@ def build_source_binaries(
             if code_mode_host_bin is not None
             else output_dir / f"codex-code-mode-host{spec.exe_suffix}"
         ),
+<<<<<<< HEAD
         extra_bins=resolved_extra_bins,
+||||||| 413492cd6c
+=======
+        exec_server_bin=(
+            exec_server_bin.resolve()
+            if exec_server_bin is not None
+            else output_dir / f"codex-exec-server{spec.exe_suffix}"
+        ),
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         bwrap_bin=resolve_output_path(
             bwrap_bin,
             output_dir / "bwrap" if spec.is_linux else None,
@@ -139,6 +159,7 @@ def source_binaries_for_target(
     *,
     build_entrypoint: bool,
     build_code_mode_host: bool,
+    build_exec_server: bool,
     build_bwrap: bool,
     build_codex_command_runner: bool,
     build_codex_windows_sandbox_setup: bool,
@@ -150,6 +171,8 @@ def source_binaries_for_target(
     binaries.extend(extra_cargo_bins)
     if build_code_mode_host:
         binaries.append("codex-code-mode-host")
+    if build_exec_server:
+        binaries.append("codex-exec-server")
     if build_bwrap:
         binaries.append("bwrap")
     if build_codex_command_runner:
@@ -233,7 +256,12 @@ def validate_source_outputs(outputs: SourceBuildOutputs) -> None:
     for path in [
         outputs.entrypoint_bin,
         outputs.code_mode_host_bin,
+<<<<<<< HEAD
         *outputs.extra_bins.values(),
+||||||| 413492cd6c
+=======
+        outputs.exec_server_bin,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         outputs.bwrap_bin,
         outputs.codex_command_runner_bin,
         outputs.codex_windows_sandbox_setup_bin,

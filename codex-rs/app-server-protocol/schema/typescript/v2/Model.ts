@@ -4,11 +4,14 @@
 import type { InputModality } from "../InputModality";
 import type { ModelOrchestrationMetadata } from "../ModelOrchestrationMetadata";
 import type { ReasoningEffort } from "../ReasoningEffort";
+import type { ModelAccessPrograms } from "./ModelAccessPrograms";
 import type { ModelAvailabilityNux } from "./ModelAvailabilityNux";
 import type { ModelServiceTier } from "./ModelServiceTier";
 import type { ModelUpgradeInfo } from "./ModelUpgradeInfo";
+import type { MultiAgentVersion } from "./MultiAgentVersion";
 import type { ReasoningEffortOption } from "./ReasoningEffortOption";
 
+<<<<<<< HEAD
 export type Model = { id: string, model: string, upgrade: string | null, upgradeInfo: ModelUpgradeInfo | null, availabilityNux: ModelAvailabilityNux | null, displayName: string, description: string,
 /**
  * Canonical provider, capability, and billing policy used for spawned work.
@@ -17,6 +20,19 @@ export type Model = { id: string, model: string, upgrade: string | null, upgrade
  * orchestration; clients must not infer eligibility from its display name.
  */
 orchestration: ModelOrchestrationMetadata | null, hidden: boolean, supportedReasoningEfforts: Array<ReasoningEffortOption>, defaultReasoningEffort: ReasoningEffort, inputModalities: Array<InputModality>, supportsPersonality: boolean,
+||||||| 413492cd6c
+export type Model = { id: string, model: string, upgrade: string | null, upgradeInfo: ModelUpgradeInfo | null, availabilityNux: ModelAvailabilityNux | null, displayName: string, description: string, hidden: boolean, supportedReasoningEfforts: Array<ReasoningEffortOption>, defaultReasoningEffort: ReasoningEffort, inputModalities: Array<InputModality>, supportsPersonality: boolean,
+=======
+export type Model = { id: string, model: string, upgrade: string | null, upgradeInfo: ModelUpgradeInfo | null, availabilityNux: ModelAvailabilityNux | null, displayName: string, description: string, modelSpecialty: string | null, hidden: boolean, supportedReasoningEfforts: Array<ReasoningEffortOption>, defaultReasoningEffort: ReasoningEffort, inputModalities: Array<InputModality>,
+/**
+ * @deprecated Always false; models no longer support personality selection.
+ */
+supportsPersonality: boolean,
+/**
+ * Multi-agent runtime declared by this model, when available.
+ */
+multiAgentVersion: MultiAgentVersion | null,
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 /**
  * Deprecated: use `serviceTiers` instead.
  */
@@ -24,4 +40,8 @@ additionalSpeedTiers: Array<string>, serviceTiers: Array<ModelServiceTier>,
 /**
  * Catalog default service tier id for this model, when one is configured.
  */
-defaultServiceTier: string | null, isDefault: boolean, };
+defaultServiceTier: string | null,
+/**
+ * Null when the catalog does not provide access-program metadata.
+ */
+availableAccessPrograms: ModelAccessPrograms | null, isDefault: boolean, };

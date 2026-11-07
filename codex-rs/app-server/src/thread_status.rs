@@ -224,17 +224,20 @@ impl ThreadWatchManager {
     where
         F: FnOnce(&mut ThreadWatchState) -> Option<ThreadStatusChangedNotification>,
     {
-        let (notification, running_turn_count) = {
+        let notification = {
             let mut state = self.state.lock().await;
             let notification = mutate(&mut state);
-            let running_turn_count = state
-                .runtime_by_thread_id
-                .values()
-                .filter(|runtime| runtime.running)
-                .count();
-            (notification, running_turn_count)
+            let running_turn_count = state.running_turn_count;
+            self.running_turn_count_tx.send_if_modified(|current| {
+                if *current == running_turn_count {
+                    false
+                } else {
+                    *current = running_turn_count;
+                    true
+                }
+            });
+            notification
         };
-        let _ = self.running_turn_count_tx.send(running_turn_count);
 
         if let Some(notification) = notification
             && let Some(outgoing) = &self.outgoing
@@ -245,11 +248,8 @@ impl ThreadWatchManager {
         }
     }
 
-    pub(crate) async fn subscribe(
-        &self,
-        thread_id: ThreadId,
-    ) -> Option<watch::Receiver<ThreadStatus>> {
-        Some(self.state.lock().await.subscribe(thread_id.to_string()))
+    pub(crate) async fn subscribe(&self, thread_id: ThreadId) -> watch::Receiver<ThreadStatus> {
+        self.state.lock().await.subscribe(thread_id.to_string())
     }
 
     async fn note_active_guard_released(
@@ -304,6 +304,7 @@ pub(crate) fn resolve_thread_status(
 struct ThreadWatchState {
     runtime_by_thread_id: HashMap<String, RuntimeFacts>,
     status_watcher_by_thread_id: HashMap<String, watch::Sender<ThreadStatus>>,
+    running_turn_count: usize,
 }
 
 impl ThreadWatchState {
@@ -328,8 +329,16 @@ impl ThreadWatchState {
 
     fn remove_thread(&mut self, thread_id: &str) -> Option<ThreadStatusChangedNotification> {
         let previous_status = self.status_for(thread_id);
-        self.runtime_by_thread_id.remove(thread_id);
-        self.update_status_watcher(thread_id, &ThreadStatus::NotLoaded);
+        if self
+            .runtime_by_thread_id
+            .remove(thread_id)
+            .is_some_and(|runtime| runtime.running)
+        {
+            self.running_turn_count -= 1;
+        }
+        if let Some(sender) = self.status_watcher_by_thread_id.remove(thread_id) {
+            sender.send_replace(ThreadStatus::NotLoaded);
+        }
         if previous_status.is_some() && previous_status != Some(ThreadStatus::NotLoaded) {
             Some(ThreadStatusChangedNotification {
                 thread_id: thread_id.to_string(),
@@ -353,8 +362,14 @@ impl ThreadWatchState {
             .runtime_by_thread_id
             .entry(thread_id.to_string())
             .or_default();
+        let was_running = runtime.running;
         runtime.is_loaded = true;
         mutate(runtime);
+        match (was_running, runtime.running) {
+            (false, true) => self.running_turn_count += 1,
+            (true, false) => self.running_turn_count -= 1,
+            (false, false) | (true, true) => {}
+        }
         self.update_status_watcher_for_thread(thread_id);
         self.status_changed_notification(thread_id.to_string(), previous_status)
     }
@@ -381,12 +396,7 @@ impl ThreadWatchState {
 
     fn update_status_watcher_for_thread(&mut self, thread_id: &str) {
         let status = self.loaded_status_for_thread(thread_id);
-        self.update_status_watcher(thread_id, &status);
-    }
-
-    fn update_status_watcher(&mut self, thread_id: &str, status: &ThreadStatus) {
         let remove_watcher = if let Some(sender) = self.status_watcher_by_thread_id.get(thread_id) {
-            let status = status.clone();
             let _ = sender.send_if_modified(|current| {
                 if *current == status {
                     false
@@ -696,6 +706,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn running_turn_watch_notifies_only_when_count_changes() {
+        let manager = ThreadWatchManager::new();
+        let mut count = manager.subscribe_running_turn_count();
+
+        manager.upsert_thread(INTERACTIVE_THREAD_ID).await;
+        manager.note_turn_started(INTERACTIVE_THREAD_ID).await;
+        assert!(count.has_changed().expect("watch remains open"));
+        assert_eq!(*count.borrow_and_update(), 1);
+
+        manager.note_turn_started(INTERACTIVE_THREAD_ID).await;
+        assert!(!count.has_changed().expect("watch remains open"));
+
+        manager.note_turn_started(NON_INTERACTIVE_THREAD_ID).await;
+        assert!(count.has_changed().expect("watch remains open"));
+        assert_eq!(*count.borrow_and_update(), 2);
+        assert_eq!(manager.running_turn_count().await, 2);
+
+        let _permission_guard = manager
+            .note_permission_requested(INTERACTIVE_THREAD_ID)
+            .await;
+        assert!(!count.has_changed().expect("watch remains open"));
+
+        manager.remove_thread(NON_INTERACTIVE_THREAD_ID).await;
+        assert!(count.has_changed().expect("watch remains open"));
+        assert_eq!(*count.borrow_and_update(), 1);
+        assert_eq!(manager.running_turn_count().await, 1);
+
+        manager.note_thread_shutdown(INTERACTIVE_THREAD_ID).await;
+        assert!(count.has_changed().expect("watch remains open"));
+        assert_eq!(*count.borrow_and_update(), 0);
+    }
+
+    #[tokio::test]
     async fn status_change_emits_notification() {
         let (outgoing_tx, mut outgoing_rx) = mpsc::channel(8);
         let manager = ThreadWatchManager::new_with_outgoing(Arc::new(OutgoingMessageSender::new(
@@ -769,6 +812,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn removing_a_thread_closes_its_status_watch() {
+        let manager = ThreadWatchManager::new();
+        let thread_id = ThreadId::from_string(INTERACTIVE_THREAD_ID).unwrap();
+        manager.upsert_thread(INTERACTIVE_THREAD_ID).await;
+        let status = manager.subscribe(thread_id).await;
+
+        manager.remove_thread(INTERACTIVE_THREAD_ID).await;
+        manager.upsert_thread(INTERACTIVE_THREAD_ID).await;
+
+        assert_eq!(*status.borrow(), ThreadStatus::NotLoaded);
+        assert!(status.has_changed().is_err());
+    }
+
+    #[tokio::test]
     async fn status_watchers_receive_only_their_thread_updates() {
         let manager = ThreadWatchManager::new();
         manager.upsert_thread(INTERACTIVE_THREAD_ID).await;
@@ -777,14 +834,8 @@ mod tests {
             .expect("interactive thread id should parse");
         let non_interactive_thread_id = ThreadId::from_string(NON_INTERACTIVE_THREAD_ID)
             .expect("non-interactive thread id should parse");
-        let mut interactive_rx = manager
-            .subscribe(interactive_thread_id)
-            .await
-            .expect("interactive status watcher should subscribe");
-        let mut non_interactive_rx = manager
-            .subscribe(non_interactive_thread_id)
-            .await
-            .expect("non-interactive status watcher should subscribe");
+        let mut interactive_rx = manager.subscribe(interactive_thread_id).await;
+        let mut non_interactive_rx = manager.subscribe(non_interactive_thread_id).await;
 
         manager.note_turn_started(INTERACTIVE_THREAD_ID).await;
 

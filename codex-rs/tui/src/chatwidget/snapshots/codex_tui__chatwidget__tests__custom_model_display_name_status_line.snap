@@ -1,0 +1,15 @@
+---
+source: tui/src/chatwidget/tests/model_display_name_tests.rs
+expression: normalized_backend_snapshot(terminal.backend())
+---
+"                                                                                "
+"                                                                                "
+"› Ask Corbanu Terminal to do anything                                           "
+"                                                                                "
+<<<<<<< HEAD:codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__image_generation_begin_restores_working_status.snap
+"  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -…"
+||||||| 413492cd6c:codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__image_generation_begin_restores_working_status.snap
+"  gpt-5.6-sol default · /tmp/project                                            "
+=======
+"  GPT-5.6 Luna · GPT-5.6 Luna high                                              "
+>>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__custom_model_display_name_status_line.snap
