@@ -634,3 +634,130 @@ fn legacy_command_tools_work_with_command_identity() {
         sandbox_log(home)
     );
 }
+
+/// Probe only (D291 follow-up): the same peer and borrow probes between two
+/// concurrent elevated-backend commands with different writable roots.
+async fn run_elevated(
+    root: &Path,
+    codex_home: &Path,
+    argv: Vec<String>,
+    env: &[(&str, String)],
+) -> (String, i32) {
+    let mut env_map: HashMap<String, String> = std::env::vars().collect();
+    for (key, value) in env {
+        env_map.insert((*key).to_string(), value.clone());
+    }
+    let spawned = spawn_windows_sandbox_session_elevated_for_permission_profile(
+        &PermissionProfile::workspace_write(),
+        workspace_roots_for(root).as_slice(),
+        codex_home,
+        argv,
+        root,
+        env_map,
+        /*proxy_enforced*/ false,
+        /*network_proxy_restricting_sid*/ None,
+        Some(90_000),
+        /*read_roots_override*/ None,
+        /*read_roots_include_platform_defaults*/ true,
+        /*write_roots_override*/ None,
+        &crate::DenyReadTargets::default(),
+        &[],
+        /*tty*/ false,
+        /*stdin_open*/ false,
+        /*use_private_desktop*/ true,
+    )
+    .await
+    .expect("spawn elevated command");
+    let (stdout, exit_code) =
+        collect_stdout_and_exit(spawned, codex_home, Duration::from_secs(/*secs*/ 120)).await;
+    (String::from_utf8_lossy(&stdout).into_owned(), exit_code)
+}
+
+#[test]
+#[ignore = "D291 probe: run explicitly, elevated"]
+fn elevated_probe_peer_and_borrow() {
+    crate::window_station::tests::stage_sandbox_helpers();
+    let _guard = legacy_process_test_guard();
+    let holder_root = user_owned_test_root();
+    let root = user_owned_test_root();
+    let runtime = current_thread_runtime();
+    let codex_home = sandbox_home("d291-elevated");
+    let target = holder_root.path().join("borrowed.txt");
+    let hold_dir = holder_root.path().join("hold");
+    fs::create_dir_all(&hold_dir).expect("create hold dir");
+    let (peer, borrow) = runtime.block_on(async {
+        let mut env_map: HashMap<String, String> = std::env::vars().collect();
+        env_map.insert(HOLD_ENV.to_string(), hold_dir.display().to_string());
+        let release = Release(hold_dir.join("hold.release"));
+        let holder = spawn_windows_sandbox_session_elevated_for_permission_profile(
+            &PermissionProfile::workspace_write(),
+            workspace_roots_for(holder_root.path()).as_slice(),
+            codex_home.path(),
+            probe_argv(HOLD_ENTRY),
+            holder_root.path(),
+            env_map,
+            /*proxy_enforced*/ false,
+            /*network_proxy_restricting_sid*/ None,
+            Some(120_000),
+            /*read_roots_override*/ None,
+            /*read_roots_include_platform_defaults*/ true,
+            /*write_roots_override*/ None,
+            &crate::DenyReadTargets::default(),
+            &[],
+            /*tty*/ false,
+            /*stdin_open*/ false,
+            /*use_private_desktop*/ true,
+        )
+        .await
+        .expect("spawn elevated holder");
+        let pid_path = hold_dir.join("hold.pid");
+        let deadline = Instant::now() + Duration::from_secs(/*secs*/ 60);
+        let holder_pid = loop {
+            if let Ok(pid) = fs::read_to_string(&pid_path)
+                && let Ok(pid) = pid.trim().parse::<u32>()
+            {
+                break pid;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "holder never started\n{}",
+                sandbox_log(codex_home.path())
+            );
+            tokio::time::sleep(Duration::from_millis(/*millis*/ 100)).await;
+        };
+        let peer = run_elevated(
+            root.path(),
+            codex_home.path(),
+            probe_argv(PROBE_ENTRY),
+            &[
+                (PROBE_ENV, "peer".to_string()),
+                (TARGET_ENV, holder_pid.to_string()),
+            ],
+        )
+        .await;
+        let borrow = run_elevated(
+            root.path(),
+            codex_home.path(),
+            probe_argv(PROBE_ENTRY),
+            &[
+                (PROBE_ENV, "borrow".to_string()),
+                (TARGET_ENV, holder_pid.to_string()),
+                (FILE_ENV, target.display().to_string()),
+            ],
+        )
+        .await;
+        drop(release);
+        let _ =
+            collect_stdout_and_exit(holder, codex_home.path(), Duration::from_secs(/*secs*/ 120))
+                .await;
+        (peer, borrow)
+    });
+    println!(
+        "\nd291 elevated peer: exit={} {:?}\nd291 elevated borrow: exit={} {:?} target_exists={}",
+        peer.1,
+        probe_line(&peer.0),
+        borrow.1,
+        probe_line(&borrow.0),
+        target.exists()
+    );
+}
