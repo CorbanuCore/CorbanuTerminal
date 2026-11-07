@@ -95,6 +95,21 @@ fn local_metadata_case_aliases_respect_filesystem_and_explicit_grants() -> anyho
         open.prepare_local_matching(&context)?
             .can_write_path(&root.join(".GIT/config")?)?
     );
+    // A denial this context cannot resolve (no temporary directory) still
+    // counts as a policy that denies reads.
+    let mut unresolved_denial = open;
+    unresolved_denial.entries.push(FileSystemSandboxEntry::new(
+        FileSystemPath::Special {
+            value: FileSystemSpecialPath::Tmpdir,
+        },
+        FileSystemAccessMode::Deny,
+    ));
+    assert_eq!(
+        unresolved_denial
+            .prepare_local_matching(&context)?
+            .can_write_path(&root.join(".GIT/config")?)?,
+        !case_insensitive,
+    );
     for relative in [
         ".GIT/config",
         ".CoDeX/config.toml",
