@@ -62,6 +62,37 @@ const WIN_CREATOR_OWNER_RIGHTS_SID: i32 = 71;
 const SE_GROUP_LOGON_ID: u32 = 0xC0000000;
 const SE_GROUP_ENABLED: u32 = 0x0000_0004;
 
+/// PROBE ONLY (win-1560m, never merged): the token change under test,
+/// chosen at build time by `CORBANU_PROBE_VARIANT`: `d368` (#1560: the
+/// shared normal SID gets read/write/execute, not `GENERIC_ALL`), `d367a`
+/// (#1721 (a): the sandbox account is no longer a restricting SID of
+/// elevated tokens), `both`, or unset (main's behaviour).
+const PROBE_VARIANT: Option<&str> = option_env!("CORBANU_PROBE_VARIANT");
+
+fn probe_d368() -> bool {
+    matches!(PROBE_VARIANT, Some("d368") | Some("both"))
+}
+
+fn probe_d367a() -> bool {
+    matches!(PROBE_VARIANT, Some("d367a") | Some("both"))
+}
+
+/// The probe variant this build carries (for test reports).
+#[allow(dead_code)]
+pub fn probe_variant() -> &'static str {
+    PROBE_VARIANT.unwrap_or("base")
+}
+
+/// The right the shared normal SID (legacy: the user; elevated: the sandbox
+/// users' group) gets in a command's default DACL.
+fn shared_normal_sid_access() -> u32 {
+    if probe_d368() {
+        GENERIC_READ | GENERIC_WRITE | GENERIC_EXECUTE
+    } else {
+        GENERIC_ALL
+    }
+}
+
 #[repr(C)]
 struct TokenDefaultDaclInfo {
     default_dacl: *mut ACL,
@@ -706,7 +737,9 @@ unsafe fn create_token_with_caps_user_and_additional_restrictions_from(
     let mut user_sid_bytes = get_user_sid_bytes(base_token)?;
     let psid_user = user_sid_bytes.as_mut_ptr() as *mut c_void;
     let mut extra_restricting_sids = Vec::with_capacity(additional_restricting_sids.len() + 1);
-    extra_restricting_sids.push(psid_user);
+    if !probe_d367a() {
+        extra_restricting_sids.push(psid_user);
+    }
     extra_restricting_sids.extend_from_slice(additional_restricting_sids);
     let mut group = sandbox_users_group_of(base_token)?;
     // The token copies the SID, so it can go once the token exists.
@@ -878,7 +911,7 @@ unsafe fn set_legacy_default_dacl(
     let mut system = well_known_sid(WIN_LOCAL_SYSTEM_SID)?;
     let read_execute = GENERIC_READ | GENERIC_EXECUTE;
     let mut grants = vec![
-        (user.as_mut_ptr() as *mut c_void, GENERIC_ALL),
+        (user.as_mut_ptr() as *mut c_void, shared_normal_sid_access()),
         (system.as_mut_ptr() as *mut c_void, GENERIC_ALL),
         (psid_command, GENERIC_ALL),
         (psid_logon, read_execute),
@@ -905,7 +938,7 @@ unsafe fn set_elevated_default_dacl(
     let read_execute = GENERIC_READ | GENERIC_EXECUTE;
     let mut grants = vec![
         (system.as_mut_ptr() as *mut c_void, GENERIC_ALL),
-        (psid_group, GENERIC_ALL),
+        (psid_group, shared_normal_sid_access()),
         (psid_command, GENERIC_ALL),
         (psid_logon, read_execute),
         (owner_rights.as_mut_ptr() as *mut c_void, read_execute),

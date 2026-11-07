@@ -336,6 +336,12 @@ fn command_identity_probe_entry() {
     } else if mode == "borrow_console" {
         let file = file();
         console_report(target(), |host| borrow_report(host, &file))
+    } else if mode == "files" {
+        elevated::probe_1560m::files_report()
+    } else if mode == "self_token" {
+        elevated::probe_1560m::self_token_report()
+    } else if mode == "thread_borrow" {
+        elevated::probe_1560m::thread_borrow_report(target(), &file())
     } else if mode == "race" {
         race_report(&PathBuf::from(
             std::env::var_os(CHILD_ENV).expect("race dir"),
