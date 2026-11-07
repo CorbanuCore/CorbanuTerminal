@@ -96,8 +96,9 @@ impl ReqwestTransport {
         // PF-27-S05: a broker-authorized request goes to the broker and
         // nowhere else, whichever client or route pool the caller built; with
         // no broker it is not sent.
-        // A managed application network policy approves the brokered request's
-        // real destination, and can revoke it, as for any other request.
+        // A managed application network policy (or an endpoint restriction)
+        // approves the brokered request's real destination, and can revoke it,
+        // as for any other request.
         let permit = match self.managed_network_policy() {
             Some(policy)
                 if prepared
@@ -199,7 +200,7 @@ impl ReqwestTransport {
         }
     }
 
-    /// The caller's managed application network policy, if its routes have one.
+    /// The caller's network policy, if its routes have one that can deny destinations.
     fn managed_network_policy(&self) -> Option<&crate::NetworkPolicy> {
         match &self.client {
             TransportClient::Fixed(client) => match &client.backend {

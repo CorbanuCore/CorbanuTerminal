@@ -381,6 +381,75 @@ async fn pf_27_s05_routed_transports_send_broker_frames_only_to_an_approved_brok
     assert!(network.accept().is_err(), "nothing may reach the network");
 }
 
+/// The unix-socket broker client under a managed policy: an approved request
+/// reaches the broker with its permit, and a denied one never connects.
+#[cfg(unix)]
+#[tokio::test]
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "the broker route is process-wide; tests that install one run one at a time"
+)]
+async fn pf_27_s05_managed_policy_governs_the_broker_socket_route() {
+    use tokio::io::AsyncReadExt as _;
+    use tokio::io::AsyncWriteExt as _;
+    let _route = crate::model_broker_route::ROUTE_TEST_LOCK.lock().await;
+    let _uninstall = UninstallRoute;
+
+    let dir = tempfile::Builder::new()
+        .prefix("pf27m")
+        .tempdir_in("/tmp")
+        .expect("dir");
+    let socket = dir.path().join("b.sock");
+    let listener = tokio::net::UnixListener::bind(&socket).expect("bind socket");
+    crate::install_model_broker_client(
+        HttpClient::unix_socket(&socket, http::HeaderMap::new()).expect("broker client"),
+    );
+    let pool_with = |destinations| {
+        let controller = crate::NetworkPolicyController::default();
+        let policy = controller.policy();
+        controller.publish(policy.revision(), destinations);
+        let factory = crate::HttpClientFactory::new(crate::OutboundProxyPolicy::ReqwestDefault)
+            .with_network_policy(policy);
+        (
+            controller,
+            ReqwestTransport::from_route_aware_client_pool(crate::RouteAwareClientPool::new(
+                factory,
+                crate::ClientRouteClass::Api,
+            )),
+        )
+    };
+    let mut framed = Request::new(Method::POST, "http://127.0.0.1:9/v1/responses".to_string());
+    framed.headers.insert(
+        crate::MODEL_BROKER_FRAME_HEADER,
+        http::HeaderValue::from_static("signed-frame"),
+    );
+
+    let (_denying, denied_transport) = pool_with(crate::DestinationPolicy::Restricted {
+        allowed_hosts: ["allowed.example".to_string()].into(),
+    });
+    let denied = denied_transport.execute(framed.clone()).await;
+    assert!(
+        matches!(&denied, Err(TransportError::Policy(_))),
+        "{denied:?}"
+    );
+
+    let (_allowing, transport) = pool_with(crate::DestinationPolicy::Unrestricted);
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.expect("accept");
+        let mut request = vec![0_u8; 4096];
+        let read = stream.read(&mut request).await.expect("read");
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nok")
+            .await
+            .expect("write");
+        String::from_utf8_lossy(&request[..read]).into_owned()
+    });
+    let response = transport.execute(framed).await.expect("brokered response");
+    assert_eq!(response.body.as_ref(), b"ok");
+    let seen = server.await.expect("server");
+    assert!(seen.starts_with("POST /v1/responses"), "{seen}");
+}
+
 /// A revoked permit ends a brokered stream with a policy error.
 #[tokio::test]
 #[expect(

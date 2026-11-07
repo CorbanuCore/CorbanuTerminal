@@ -568,10 +568,11 @@ impl RouteAwareClientPool {
         Ok((route, client, SelectedTlsBackend::TransportDefault))
     }
 
-    /// This pool's application network policy, when one is managed.
+    /// This pool's network policy, when it can deny destinations (managed, or
+    /// narrowed to exact endpoints).
     pub(crate) fn managed_network_policy(&self) -> Option<&crate::NetworkPolicy> {
         let policy = self.http_client_factory.network_policy();
-        policy.is_managed().then_some(policy)
+        policy.restricts_destinations().then_some(policy)
     }
 
     fn follows_redirects_manually(&self) -> bool {
