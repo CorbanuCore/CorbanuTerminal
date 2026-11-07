@@ -29,7 +29,6 @@ use crate::proc_thread_attr::ProcThreadAttributeList;
 use crate::winutil::quote_windows_arg;
 use crate::winutil::to_wide;
 use pretty_assertions::assert_eq;
-use windows_sys::Win32::Foundation::BOOL;
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::FILETIME;
 use windows_sys::Win32::Foundation::GetLastError;
@@ -59,6 +58,7 @@ use windows_sys::Win32::System::Threading::PROCESS_TERMINATE;
 use windows_sys::Win32::System::Threading::STARTUPINFOEXW;
 use windows_sys::Win32::System::Threading::STARTUPINFOW;
 use windows_sys::Win32::System::Threading::TerminateProcess;
+use windows_sys::core::BOOL;
 
 const REPORT_ENTRY: &str = "unified_exec::tests::launch_paths::launch_path_report_entry";
 const LAUNCHER_ENTRY: &str = "unified_exec::tests::launch_paths::launch_path_launcher_entry";
@@ -93,11 +93,13 @@ fn own_containment(launcher: u32, harness: Option<u32>) -> String {
     // SAFETY: the pseudo handle needs no closing; the token handle is closed below.
     unsafe {
         let mut in_job: BOOL = 0;
-        let in_any_job = IsProcessInJob(GetCurrentProcess(), 0, &mut in_job) != 0 && in_job != 0;
+        let in_any_job = IsProcessInJob(GetCurrentProcess(), std::ptr::null_mut(), &mut in_job)
+            != 0
+            && in_job != 0;
         // A null job handle queries the caller's innermost job.
         let mut buffer = vec![0usize; 1026];
         let in_launcher_job = QueryInformationJobObject(
-            0,
+            std::ptr::null_mut(),
             JobObjectBasicProcessIdList,
             buffer.as_mut_ptr().cast(),
             u32::try_from(buffer.len() * std::mem::size_of::<usize>()).unwrap_or(u32::MAX),
@@ -124,7 +126,7 @@ fn own_containment(launcher: u32, harness: Option<u32>) -> String {
 /// # Safety
 /// `process` must be a process handle with query access.
 unsafe fn token_state(process: HANDLE) -> (bool, bool) {
-    let mut token: HANDLE = 0;
+    let mut token: HANDLE = std::ptr::null_mut();
     // SAFETY: per the caller; the token handle is closed below.
     unsafe {
         if OpenProcessToken(process, TOKEN_QUERY, &mut token) == 0 {
@@ -148,11 +150,12 @@ fn inspect_pid(name: &str, pid: u32) -> String {
             0,
             pid,
         );
-        if process == 0 {
+        if process.is_null() {
             return format!("{name}:{pid} gone");
         }
         let mut in_job: BOOL = 0;
-        let in_any_job = IsProcessInJob(process, 0, &mut in_job) != 0 && in_job != 0;
+        let in_any_job =
+            IsProcessInJob(process, std::ptr::null_mut(), &mut in_job) != 0 && in_job != 0;
         let (low, restricted) = token_state(process);
         CloseHandle(process);
         format!("{name}:{pid} in_any_job={in_any_job} low={low} restricted={restricted}")
@@ -265,7 +268,7 @@ unsafe fn end_if_escaped(name: &str, pid: u32, since: u64, result: &mut SweepRes
     unsafe {
         let query = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         // Gone, or not this user's (so not a legacy command's).
-        if query == 0 {
+        if query.is_null() {
             return;
         }
         let query = OwnedHandle::from_raw_handle(query as _);
@@ -279,14 +282,14 @@ unsafe fn end_if_escaped(name: &str, pid: u32, since: u64, result: &mut SweepRes
             && ((u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime))
                 >= since
             && token_state(raw).0
-            && IsProcessInJob(raw, 0, &mut in_job) != 0
+            && IsProcessInJob(raw, std::ptr::null_mut(), &mut in_job) != 0
             && in_job == 0;
         if !ours {
             return;
         }
         let access = PROCESS_TERMINATE | windows_sys::Win32::System::Threading::PROCESS_SYNCHRONIZE;
         let process = OpenProcess(access, 0, pid);
-        if process == 0 {
+        if process.is_null() {
             result
                 .left
                 .push(format!("{name}:{pid} open error={}", GetLastError()));
@@ -372,11 +375,11 @@ fn launch_path_launcher_entry() {
     // SAFETY: every pointer refers to a live local; handles are closed below.
     let outcome = unsafe {
         let mut attributes = None;
-        let mut parent: HANDLE = 0;
+        let mut parent: HANDLE = std::ptr::null_mut();
         if let Some(pid) = parent_pid {
             parent =
                 windows_sys::Win32::System::Threading::OpenProcess(PROCESS_CREATE_PROCESS, 0, pid);
-            if parent == 0 {
+            if parent.is_null() {
                 let error = GetLastError();
                 println!("\n{LAUNCH_RESULT}started=false open_parent_error={error}");
                 return;
@@ -409,7 +412,7 @@ fn launch_path_launcher_entry() {
             &mut info,
         ) != 0;
         let error = GetLastError();
-        if parent != 0 {
+        if !parent.is_null() {
             CloseHandle(parent);
         }
         if started {
@@ -531,7 +534,6 @@ async fn run_launch(
         &[],
         /*tty*/ false,
         /*stdin_open*/ false,
-        /*use_private_desktop*/ true,
     )
     .await
     .expect("spawn legacy launcher");
@@ -674,7 +676,6 @@ fn legacy_launch_under_another_session_process_stays_in_session() {
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn holding session");

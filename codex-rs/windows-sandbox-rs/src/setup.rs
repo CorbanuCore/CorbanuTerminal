@@ -19,7 +19,6 @@ use std::sync::OnceLock;
 use crate::allow::AllowDenyPaths;
 use crate::allow::compute_allow_paths_for_permissions;
 use crate::app_package::registered_core_requested;
-use crate::deny_read_resolver::resolve_windows_deny_read_paths;
 use crate::helper_materialization::bundled_executable_path_for_exe;
 use crate::helper_materialization::helper_bin_dir;
 use crate::identity::sandbox_setup_is_complete;
@@ -240,8 +239,8 @@ pub fn run_setup_refresh(
         return Ok(());
     };
     permissions.validate_elevated_filesystem_policy(command_cwd)?;
-    let deny_read_paths =
-        setup_refresh_deny_read_paths(permission_profile, workspace_roots, command_cwd)?;
+    let deny_read =
+        setup_refresh_deny_read_targets(permission_profile, workspace_roots, command_cwd)?;
     run_setup_refresh_inner(
         SandboxSetupRequest {
             permissions: &permissions,
@@ -251,7 +250,7 @@ pub fn run_setup_refresh(
             proxy_enforced,
         },
         SetupRootOverrides {
-            deny_read_paths: Some(deny_read_paths),
+            deny_read: Some(deny_read),
             ..SetupRootOverrides::default()
         },
         /*offline_proxy_settings_override*/ None,
@@ -290,8 +289,8 @@ pub fn run_setup_refresh_with_extra_read_roots(
         return Ok(());
     };
     permissions.validate_elevated_filesystem_policy(command_cwd)?;
-    let deny_read_paths =
-        setup_refresh_deny_read_paths(permission_profile, workspace_roots, command_cwd)?;
+    let deny_read =
+        setup_refresh_deny_read_targets(permission_profile, workspace_roots, command_cwd)?;
     let runtime = current_setup_runtime();
     let mut read_roots = gather_read_roots(command_cwd, &permissions, env_map, codex_home, runtime);
     read_roots.extend(extra_read_roots);
@@ -307,13 +306,7 @@ pub fn run_setup_refresh_with_extra_read_roots(
             read_roots: Some(read_roots),
             read_roots_include_platform_defaults: false,
             write_roots: Some(Vec::new()),
-<<<<<<< HEAD
-            deny_read: None,
-||||||| 413492cd6c
-            deny_read_paths: None,
-=======
-            deny_read_paths: Some(deny_read_paths),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            deny_read: Some(deny_read),
             deny_write_paths: None,
         },
         /*offline_proxy_settings_override*/ None,
@@ -321,23 +314,16 @@ pub fn run_setup_refresh_with_extra_read_roots(
     )
 }
 
-fn setup_refresh_deny_read_paths(
+fn setup_refresh_deny_read_targets(
     permission_profile: &PermissionProfile,
     workspace_roots: &[AbsolutePathBuf],
     command_cwd: &Path,
-) -> Result<Vec<PathBuf>> {
+) -> Result<crate::DenyReadTargets> {
     let (mut file_system, _) = permission_profile.to_runtime_permissions();
     file_system.remove_skip_missing_path_entries();
     let file_system = file_system.materialize_project_roots_with_workspace_roots(workspace_roots);
     let command_cwd = AbsolutePathBuf::from_absolute_path(command_cwd)?;
-    resolve_windows_deny_read_paths(&file_system, &command_cwd)
-        .map(|paths| {
-            paths
-                .into_iter()
-                .map(AbsolutePathBuf::into_path_buf)
-                .collect()
-        })
-        .map_err(|err| anyhow!(err))
+    crate::resolve_windows_deny_read_targets(&file_system, &command_cwd).map_err(|err| anyhow!(err))
 }
 
 fn run_setup_refresh_inner(
@@ -346,24 +332,10 @@ fn run_setup_refresh_inner(
     offline_proxy_settings_override: Option<&OfflineProxySettings>,
     runtime: SetupRuntime,
 ) -> Result<()> {
-<<<<<<< HEAD
-    if !request.permissions.is_enforceable_by_windows_sandbox() {
-        anyhow::bail!("unsupported filesystem permissions for Windows sandbox setup");
-    }
-    let (read_roots, write_roots) = build_payload_roots(&request, &overrides);
-||||||| 413492cd6c
-    if !request.permissions.is_enforceable_by_windows_sandbox() {
-        anyhow::bail!("unsupported filesystem permissions for Windows sandbox setup");
-    }
-    let (read_roots, write_roots) = build_payload_roots(&request, &overrides);
-    let deny_read_paths = build_payload_deny_read_paths(overrides.deny_read_paths);
-=======
     request
         .permissions
         .validate_elevated_filesystem_policy(request.command_cwd)?;
     let (read_roots, write_roots) = build_payload_roots(&request, &overrides, runtime);
-    let deny_read_paths = build_payload_deny_read_paths(overrides.deny_read_paths);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let deny_write_paths = build_payload_deny_write_paths(&request, overrides.deny_write_paths);
     let offline_proxy_settings =
         offline_proxy_settings_for_request(&request, offline_proxy_settings_override);
@@ -1170,77 +1142,23 @@ fn run_elevated_setup_inner(
             format!("failed to create sandbox dir {}: {err}", sbx_dir.display()),
         )
     })?;
-<<<<<<< HEAD
-    let (read_roots, write_roots) = build_payload_roots(&request, &overrides);
-    let deny_write_paths = build_payload_deny_write_paths(&request, overrides.deny_write_paths);
-    let offline_proxy_settings =
-        offline_proxy_settings_for_request(&request, offline_proxy_settings_override);
-    let payload = ElevationPayload {
-        version: SETUP_VERSION,
-        offline_username: OFFLINE_USERNAME.to_string(),
-        online_username: ONLINE_USERNAME.to_string(),
-        codex_home: request.codex_home.to_path_buf(),
-        command_cwd: request.command_cwd.to_path_buf(),
-        read_roots,
-        write_roots,
-        deny_read_paths: payload_deny_read_paths(overrides.deny_read.as_ref()),
-        deny_read_sessions: payload_deny_read_sessions(
-            overrides.deny_read.as_ref(),
-            request.codex_home,
-        ),
-        deny_read: overrides.deny_read,
-        deny_write_paths,
-        proxy_ports: offline_proxy_settings.proxy_ports,
-        allow_local_binding: offline_proxy_settings.allow_local_binding,
-        real_user: std::env::var("USERNAME").unwrap_or_else(|_| "Administrators".to_string()),
-        otel: codex_otel::global_statsig_metrics_settings(),
-        mode: SetupMode::Full,
-        refresh_only: false,
-    };
-||||||| 413492cd6c
-    let (read_roots, write_roots) = build_payload_roots(&request, &overrides);
-    let deny_read_paths = build_payload_deny_read_paths(overrides.deny_read_paths);
-    let deny_write_paths = build_payload_deny_write_paths(&request, overrides.deny_write_paths);
-    let offline_proxy_settings =
-        offline_proxy_settings_for_request(&request, offline_proxy_settings_override);
-    let payload = ElevationPayload {
-        version: SETUP_VERSION,
-        offline_username: OFFLINE_USERNAME.to_string(),
-        online_username: ONLINE_USERNAME.to_string(),
-        codex_home: request.codex_home.to_path_buf(),
-        command_cwd: request.command_cwd.to_path_buf(),
-        read_roots,
-        write_roots,
-        deny_read_paths,
-        deny_write_paths,
-        proxy_ports: offline_proxy_settings.proxy_ports,
-        allow_local_binding: offline_proxy_settings.allow_local_binding,
-        real_user: std::env::var("USERNAME").unwrap_or_else(|_| "Administrators".to_string()),
-        otel: codex_otel::global_statsig_metrics_settings(),
-        mode: SetupMode::Full,
-        refresh_only: false,
-    };
-=======
     let payload = elevated_provisioning_payload(
         &request,
         offline_proxy_settings_override,
         crate::runtime_ownership::current_setup_user()?,
     );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let needs_elevation = !is_elevated().map_err(|err| {
         failure(
             SetupErrorCode::OrchestratorElevationCheckFailed,
             format!("failed to determine elevation state: {err}"),
         )
     })?;
-<<<<<<< HEAD
-    let rule_set = deny_read_rule_set(payload.deny_read.as_ref());
-    run_setup_exe(&payload, needs_elevation, request.codex_home)?;
-    // #323: the setup may just have created the session registry, which
-    // the payload's registration needed.
-    if rule_set.is_some_and(|rules| !rules.is_empty())
-        && let Err(err) =
-            crate::deny_read_sessions::register_this_process(crate::DENY_READ_SYNC_LOCK_WAIT)
+    run_setup_exe(&payload, needs_elevation, request.codex_home, &[])?;
+    // #323: the setup may just have created the session registry, which this
+    // process's registration needs (registering is idempotent and only keeps
+    // deny-read entries longer).
+    if let Err(err) =
+        crate::deny_read_sessions::register_this_process(crate::DENY_READ_SYNC_LOCK_WAIT)
     {
         log_note(
             &format!("deny-read sessions: not registered after setup: {err:#}"),
@@ -1248,10 +1166,6 @@ fn run_elevated_setup_inner(
         );
     }
     Ok(())
-||||||| 413492cd6c
-    run_setup_exe(&payload, needs_elevation, request.codex_home)
-=======
-    run_setup_exe(&payload, needs_elevation, request.codex_home, &[])
 }
 
 fn elevated_provisioning_payload(
@@ -1269,7 +1183,9 @@ fn elevated_provisioning_payload(
         command_cwd: request.codex_home.to_path_buf(),
         read_roots: Vec::new(),
         write_roots: Vec::new(),
+        deny_read: None,
         deny_read_paths: Vec::new(),
+        deny_read_sessions: crate::DenyReadSessions::default(),
         deny_write_paths: Vec::new(),
         proxy_ports: offline_proxy_settings.proxy_ports,
         allow_local_binding: offline_proxy_settings.allow_local_binding,
@@ -1280,7 +1196,6 @@ fn elevated_provisioning_payload(
         runtime: SetupRuntime::Legacy,
         refresh_only: false,
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 pub fn run_elevated_provisioning_setup(
@@ -1413,10 +1328,7 @@ pub(crate) fn build_payload_roots(
     read_roots = filter_user_profile_root_exclusions(read_roots);
     read_roots = filter_ssh_config_dependency_roots(read_roots);
     let write_root_set: HashSet<PathBuf> = write_roots.iter().cloned().collect();
-    let deny_read_keys: Vec<String> = overrides
-        .deny_read_paths
-        .as_deref()
-        .unwrap_or_default()
+    let deny_read_keys: Vec<String> = payload_deny_read_paths(overrides.deny_read.as_ref())
         .iter()
         .map(|path| canonical_path_key(path))
         .collect();
@@ -1968,6 +1880,7 @@ mod tests {
                     ),
                     FileSystemSandboxEntry::new(
                         FileSystemPath::GlobPattern {
+                            scan: None,
                             pattern: project_roots_glob_pattern(Path::new("**/*.env")),
                         },
                         FileSystemAccessMode::Deny,
@@ -1978,15 +1891,19 @@ mod tests {
             network: NetworkSandboxPolicy::Restricted,
         };
 
-        let deny_read_paths = super::setup_refresh_deny_read_paths(
+        let deny_read_paths = super::setup_refresh_deny_read_targets(
             &permission_profile,
             workspace_roots_for(&workspace_root).as_slice(),
             &command_cwd,
         )
-        .expect("resolve refresh deny-read paths");
+        .expect("resolve refresh deny-read paths")
+        .paths();
 
         assert_eq!(
-            deny_read_paths.into_iter().collect::<HashSet<_>>(),
+            deny_read_paths
+                .into_iter()
+                .map(AbsolutePathBuf::into_path_buf)
+                .collect::<HashSet<_>>(),
             [
                 dunce::canonicalize(&workspace_root)
                     .expect("canonicalize workspace root")
@@ -2008,6 +1925,7 @@ mod tests {
         let mut file_system = FileSystemSandboxPolicy::read_only();
         file_system.entries.push(FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
+                scan: None,
                 pattern: root.join("**").display().to_string(),
             },
             FileSystemAccessMode::Deny,
@@ -2057,6 +1975,7 @@ mod tests {
             file_system: ManagedFileSystemPermissions::Restricted {
                 entries: vec![FileSystemSandboxEntry::new(
                     FileSystemPath::GlobPattern {
+                        scan: None,
                         pattern: project_roots_glob_pattern(Path::new("[z-a]")),
                     },
                     FileSystemAccessMode::Deny,
@@ -2066,7 +1985,7 @@ mod tests {
             network: NetworkSandboxPolicy::Restricted,
         };
 
-        let err = super::setup_refresh_deny_read_paths(
+        let err = super::setup_refresh_deny_read_targets(
             &permission_profile,
             workspace_roots_for(&workspace_root).as_slice(),
             &workspace_root,

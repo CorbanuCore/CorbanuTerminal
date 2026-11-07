@@ -17,6 +17,8 @@ use std::path::PathBuf;
 
 #[derive(Clone, Copy)]
 pub(super) enum DirectoryScanMode {
+    // Upstream's mode after a ripgrep file scan; Corbanu walks every file.
+    #[allow(dead_code)]
     DirectoriesOnly,
     IncludeAllFiles,
 }
@@ -139,6 +141,15 @@ fn accessible_entry<T>(result: io::Result<T>, path: &Path) -> Result<Option<T>, 
         {
             Ok(None)
         }
+        // A link loop (a junction to its own folder, which a sandboxed command
+        // can plant) leads nowhere the walk doesn't reach through the real
+        // folder: skip it rather than refuse every later command (main
+        // skipped it too). ERROR_CANT_RESOLVE_FILENAME is Windows' loop error.
+        // ERROR_SHARING_VIOLATION / ERROR_LOCK_VIOLATION: a file another
+        // process holds open without sharing can't be opened by the command
+        // either; the persistent sync keeps an earlier entry for its rule
+        // (#304 S1), as main's walk did by skipping it.
+        Err(err) if matches!(err.raw_os_error(), Some(32 | 33 | 1921)) => Ok(None),
         Err(err) => Err(format!(
             "failed to enumerate unreadable glob paths under {}: {err}",
             path.display()

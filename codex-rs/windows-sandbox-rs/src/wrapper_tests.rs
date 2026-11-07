@@ -57,7 +57,7 @@ fn large_deny_list_uses_environment_without_changing_the_request() {
         /*read_roots_override*/ None,
         /*read_roots_include_platform_defaults*/ true,
         /*write_roots_override*/ None,
-        &paths,
+        &crate::DenyReadTargets::from_exact_paths(paths.clone()),
         &paths,
         temp.path(),
     )
@@ -72,7 +72,7 @@ fn large_deny_list_uses_environment_without_changing_the_request() {
     let desktop = crate::desktop::LaunchDesktop::open_private(&parsed.private_desktop_name)
         .expect("wrapper must receive a live private desktop");
     drop(desktop);
-    assert_eq!(parsed.deny_read_paths_override, paths);
+    assert_eq!(parsed.deny_read_override.paths(), paths);
     assert_eq!(parsed.deny_write_paths_override, paths);
     assert_eq!(parsed.env_map, expected_env);
     assert_eq!(parsed.permission_profile, profile);

@@ -1,8 +1,6 @@
 #![cfg(target_os = "windows")]
 
-use super::WindowsSandboxSessionRequest;
 use super::spawn_windows_sandbox_session_elevated_for_permission_profile;
-use super::spawn_windows_sandbox_session_for_level;
 use super::spawn_windows_sandbox_session_legacy;
 use crate::WindowsSandboxCancellationToken;
 use crate::ipc_framed::Message;
@@ -11,7 +9,6 @@ use crate::ipc_framed::read_frame;
 use crate::run_windows_sandbox_capture;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
-use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::models::PermissionProfile;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_pty::ProcessDriver;
@@ -284,41 +281,8 @@ async fn collect_stdout_and_exit(
     (stdout, exit_code)
 }
 
-#[test]
-fn restricted_token_rejects_managed_network_before_spawn() {
-    current_thread_runtime().block_on(async {
-        let cwd = sandbox_cwd();
-        let codex_home = sandbox_home("restricted-token-managed-network");
-        let permission_profile = PermissionProfile::workspace_write();
-        let error = spawn_windows_sandbox_session_for_level(WindowsSandboxSessionRequest {
-            permission_profile: &permission_profile,
-            workspace_roots: &[],
-            codex_home: codex_home.path(),
-            command: Vec::new(),
-            cwd: cwd.as_path(),
-            env_map: HashMap::new(),
-            windows_sandbox_level: WindowsSandboxLevel::RestrictedToken,
-            proxy_enforced: true,
-            network_proxy_restricting_sid: None,
-            proxy_settings_mode: crate::WindowsSandboxProxySettingsMode::Preserve,
-            timeout_ms: None,
-            read_roots_override: None,
-            read_roots_include_platform_defaults: false,
-            write_roots_override: None,
-            deny_read_paths_override: &[],
-            deny_write_paths_override: &[],
-            tty: false,
-            stdin_open: false,
-        })
-        .await
-        .expect_err("managed networking must fail before spawning an unelevated sandbox");
-
-        assert_eq!(
-            error.to_string(),
-            "managed networking requires the elevated Windows sandbox backend"
-        );
-    });
-}
+// Upstream's `restricted_token_rejects_managed_network_before_spawn` is not
+// carried: under D355 such a session runs on the elevated backend instead.
 
 #[test]
 fn legacy_non_tty_cmd_emits_output() {
@@ -445,7 +409,7 @@ fn registered_non_tty_cmd_forwards_env_output_and_exit() {
             /*read_roots_override*/ None,
             /*read_roots_include_platform_defaults*/ true,
             /*write_roots_override*/ None,
-            &[],
+            &crate::DenyReadTargets::default(),
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
@@ -862,7 +826,7 @@ fn low_integrity_can_open(path: &Path, access: u32, share: u32) -> bool {
     // SAFETY: token handles are opened and closed here; the impersonation is
     // reverted before returning.
     unsafe {
-        let mut process_token: HANDLE = 0;
+        let mut process_token: HANDLE = std::ptr::null_mut();
         assert_ne!(
             OpenProcessToken(
                 GetCurrentProcess(),
@@ -872,7 +836,7 @@ fn low_integrity_can_open(path: &Path, access: u32, share: u32) -> bool {
             0,
             "open the process token"
         );
-        let mut low: HANDLE = 0;
+        let mut low: HANDLE = std::ptr::null_mut();
         let duplicated = DuplicateTokenEx(
             process_token,
             TOKEN_ALL_ACCESS,
@@ -897,7 +861,7 @@ fn low_integrity_can_open(path: &Path, access: u32, share: u32) -> bool {
             std::ptr::null(),
             OPEN_EXISTING,
             FILE_FLAG_BACKUP_SEMANTICS,
-            0,
+            std::ptr::null_mut(),
         );
         RevertToSelf();
         CloseHandle(low);
@@ -1208,7 +1172,6 @@ fn legacy_workspace_write_cannot_delete_or_replace_protected_git_dir() {
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn legacy replace-git session");
@@ -1312,7 +1275,6 @@ fn legacy_workspace_write_cannot_move_ancestor_of_nested_carve_out() {
             &carve_outs,
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn legacy move-ancestor session");
@@ -1457,7 +1419,6 @@ fn run_legacy_script(
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn legacy session");
@@ -1828,7 +1789,6 @@ fn legacy_command_cannot_break_away_from_its_job() {
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn legacy breakaway probe");
@@ -1914,7 +1874,6 @@ fn sec_win_1507_elevated_command_cannot_break_away_from_its_job() {
                 // A ConPTY whose input closes ends its console's processes.
                 /*stdin_open*/
                 tty,
-                /*use_private_desktop*/ true,
             )
             .await
             .expect("spawn elevated breakaway probe");
@@ -2058,7 +2017,6 @@ fn sec_win_1507_elevated_tools_work_without_breakaway() {
                 &[],
                 tty,
                 /*stdin_open*/ tty,
-                /*use_private_desktop*/ true,
             )
             .await
             .unwrap_or_else(|err| {
@@ -2291,7 +2249,6 @@ fn legacy_delete_child_denies_are_removed_after_the_session() {
             &carve_outs,
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn legacy session");
@@ -2854,61 +2811,6 @@ fn legacy_tty_cmd_emits_output_and_accepts_input() {
         assert!(stdout.contains("second"), "stdout={stdout:?}");
     });
 }
-<<<<<<< HEAD
-
-#[test]
-#[ignore = "TODO: legacy ConPTY cmd.exe exits with STATUS_DLL_INIT_FAILED in CI"]
-fn legacy_tty_cmd_default_desktop_emits_output_and_accepts_input() {
-    let runtime = current_thread_runtime();
-    runtime.block_on(async move {
-        let cwd = sandbox_cwd();
-        let codex_home = sandbox_home("legacy-tty-cmd-default-desktop");
-        println!(
-            "tty cmd default desktop codex_home={}",
-            codex_home.path().display()
-        );
-        let permission_profile = PermissionProfile::workspace_write();
-        let spawned = spawn_windows_sandbox_session_legacy(
-            &permission_profile,
-            workspace_roots_for(cwd.as_path()).as_slice(),
-            codex_home.path(),
-            vec![
-                "C:\\Windows\\System32\\cmd.exe".to_string(),
-                "/K".to_string(),
-                "echo ready".to_string(),
-            ],
-            cwd.as_path(),
-            HashMap::new(),
-            Some(10_000),
-            &[],
-            &[],
-            /*tty*/ true,
-            /*stdin_open*/ true,
-            /*use_private_desktop*/ false,
-        )
-        .await
-        .expect("spawn legacy tty cmd session");
-        println!("tty cmd default desktop spawn returned");
-
-        let writer = spawned.session.writer_sender();
-        writer
-            .send(b"echo second\n".to_vec())
-            .await
-            .expect("send second command");
-        writer
-            .send(b"exit\n".to_vec())
-            .await
-            .expect("send exit command");
-        spawned.session.close_stdin();
-
-        let (stdout, exit_code) =
-            collect_stdout_and_exit(spawned, codex_home.path(), Duration::from_secs(15)).await;
-        let stdout = String::from_utf8_lossy(&stdout);
-        assert_eq!(exit_code, 0, "stdout={stdout:?}");
-        assert!(stdout.contains("ready"), "stdout={stdout:?}");
-        assert!(stdout.contains("second"), "stdout={stdout:?}");
-    });
-}
 
 /// Sentinel credentials for #398, typed into a sandboxed command line the
 /// way a model or user would: a bearer header, an API-key header, a
@@ -2969,7 +2871,6 @@ fn legacy_command_log_redacts_credentials() {
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn legacy credential command");
@@ -3012,7 +2913,6 @@ fn elevated_command_log_redacts_credentials() {
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn elevated credential command");
@@ -3045,7 +2945,6 @@ fn legacy_capture_command_log_redacts_credentials() {
         HashMap::new(),
         Some(10_000),
         /*cancellation*/ None,
-        /*use_private_desktop*/ true,
     )
     .expect("run legacy capture credential command");
     let stdout = String::from_utf8_lossy(&result.stdout);
@@ -3083,60 +2982,3 @@ mod carve_out_link;
 /// #1668: cloud-file placeholder folders at or above read-only paths.
 #[path = "cloud_placeholder_tests.rs"]
 mod cloud_placeholder;
-||||||| 413492cd6c
-
-#[test]
-#[ignore = "TODO: legacy ConPTY cmd.exe exits with STATUS_DLL_INIT_FAILED in CI"]
-fn legacy_tty_cmd_default_desktop_emits_output_and_accepts_input() {
-    let runtime = current_thread_runtime();
-    runtime.block_on(async move {
-        let cwd = sandbox_cwd();
-        let codex_home = sandbox_home("legacy-tty-cmd-default-desktop");
-        println!(
-            "tty cmd default desktop codex_home={}",
-            codex_home.path().display()
-        );
-        let permission_profile = PermissionProfile::workspace_write();
-        let spawned = spawn_windows_sandbox_session_legacy(
-            &permission_profile,
-            workspace_roots_for(cwd.as_path()).as_slice(),
-            codex_home.path(),
-            vec![
-                "C:\\Windows\\System32\\cmd.exe".to_string(),
-                "/K".to_string(),
-                "echo ready".to_string(),
-            ],
-            cwd.as_path(),
-            HashMap::new(),
-            Some(10_000),
-            &[],
-            &[],
-            /*tty*/ true,
-            /*stdin_open*/ true,
-            /*use_private_desktop*/ false,
-        )
-        .await
-        .expect("spawn legacy tty cmd session");
-        println!("tty cmd default desktop spawn returned");
-
-        let writer = spawned.session.writer_sender();
-        writer
-            .send(b"echo second\n".to_vec())
-            .await
-            .expect("send second command");
-        writer
-            .send(b"exit\n".to_vec())
-            .await
-            .expect("send exit command");
-        spawned.session.close_stdin();
-
-        let (stdout, exit_code) =
-            collect_stdout_and_exit(spawned, codex_home.path(), Duration::from_secs(15)).await;
-        let stdout = String::from_utf8_lossy(&stdout);
-        assert_eq!(exit_code, 0, "stdout={stdout:?}");
-        assert!(stdout.contains("ready"), "stdout={stdout:?}");
-        assert!(stdout.contains("second"), "stdout={stdout:?}");
-    });
-}
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

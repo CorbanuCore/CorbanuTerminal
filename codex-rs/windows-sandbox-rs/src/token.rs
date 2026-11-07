@@ -54,12 +54,23 @@ struct TokenDefaultDaclInfo {
     default_dacl: *mut ACL,
 }
 
-<<<<<<< HEAD
-/// Sets a permissive default DACL so sandboxed processes can create pipes/IPC objects
-/// without hitting ACCESS_DENIED when PowerShell builds pipelines.
-unsafe fn set_default_dacl(h_token: HANDLE, sids: &[*mut c_void]) -> Result<()> {
-    let grants: Vec<(*mut c_void, u32)> = sids.iter().map(|sid| (*sid, GENERIC_ALL)).collect();
-    set_default_dacl_grants(h_token, &grants)
+/// Keep child-process and IPC access within the runner's logon session.
+/// Elevated runners have distinct logon SIDs even when they use the same account.
+unsafe fn set_default_dacl(h_token: HANDLE, logon_sid: *mut c_void) -> Result<()> {
+    let owner_rights = LocalSid::from_string("S-1-3-4")?;
+    // The shared account also owns these objects. An OWNER RIGHTS ACE suppresses
+    // its implicit WRITE_DAC grant, which would otherwise let a different logon
+    // rewrite this DACL. The creating logon retains full access explicitly.
+    set_default_dacl_grants(
+        h_token,
+        &[
+            (logon_sid, GENERIC_ALL),
+            (
+                owner_rights.as_ptr(),
+                windows_sys::Win32::Storage::FileSystem::READ_CONTROL,
+            ),
+        ],
+    )
 }
 
 /// Sets the token's default DACL to exactly `grants` (SID, access mask).
@@ -82,56 +93,6 @@ unsafe fn set_default_dacl_grants(h_token: HANDLE, grants: &[(*mut c_void, u32)]
             },
         })
         .collect();
-||||||| 413492cd6c
-/// Sets a permissive default DACL so sandboxed processes can create pipes/IPC objects
-/// without hitting ACCESS_DENIED when PowerShell builds pipelines.
-unsafe fn set_default_dacl(h_token: HANDLE, sids: &[*mut c_void]) -> Result<()> {
-    if sids.is_empty() {
-        return Ok(());
-    }
-    let entries: Vec<EXPLICIT_ACCESS_W> = sids
-        .iter()
-        .map(|sid| EXPLICIT_ACCESS_W {
-            grfAccessPermissions: GENERIC_ALL,
-            grfAccessMode: GRANT_ACCESS,
-            grfInheritance: 0,
-            Trustee: TRUSTEE_W {
-                pMultipleTrustee: std::ptr::null_mut(),
-                MultipleTrusteeOperation: 0,
-                TrusteeForm: TRUSTEE_IS_SID,
-                TrusteeType: TRUSTEE_IS_UNKNOWN,
-                ptstrName: *sid as *mut u16,
-            },
-        })
-        .collect();
-=======
-/// Keep child-process and IPC access within the runner's logon session.
-/// Elevated runners have distinct logon SIDs even when they use the same account.
-unsafe fn set_default_dacl(h_token: HANDLE, logon_sid: *mut c_void) -> Result<()> {
-    let owner_rights = LocalSid::from_string("S-1-3-4")?;
-    // The shared account also owns these objects. An OWNER RIGHTS ACE suppresses
-    // its implicit WRITE_DAC grant, which would otherwise let a different logon
-    // rewrite this DACL. The creating logon retains full access explicitly.
-    let entries = [
-        (logon_sid, GENERIC_ALL),
-        (
-            owner_rights.as_ptr(),
-            windows_sys::Win32::Storage::FileSystem::READ_CONTROL,
-        ),
-    ]
-    .map(|(sid, access)| EXPLICIT_ACCESS_W {
-        grfAccessPermissions: access,
-        grfAccessMode: GRANT_ACCESS,
-        grfInheritance: 0,
-        Trustee: TRUSTEE_W {
-            pMultipleTrustee: std::ptr::null_mut(),
-            MultipleTrusteeOperation: 0,
-            TrusteeForm: TRUSTEE_IS_SID,
-            TrusteeType: TRUSTEE_IS_UNKNOWN,
-            ptstrName: sid as *mut u16,
-        },
-    });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut p_new_dacl: *mut ACL = std::ptr::null_mut();
     let res = SetEntriesInAclW(
         entries.len() as u32,
@@ -388,89 +349,7 @@ pub unsafe fn get_logon_sid_bytes(h_token: HANDLE) -> Result<Vec<u8>> {
     Err(anyhow!("Logon SID not present on token"))
 }
 
-<<<<<<< HEAD
-pub(crate) unsafe fn get_user_sid_bytes(h_token: HANDLE) -> Result<Vec<u8>> {
-    let mut needed: u32 = 0;
-    GetTokenInformation(h_token, TokenUser, std::ptr::null_mut(), 0, &mut needed);
-    if needed == 0 {
-        return Err(anyhow!("TokenUser size query returned 0"));
-    }
-    let mut user_buf: Vec<u8> = vec![0u8; needed as usize];
-    let ok = GetTokenInformation(
-        h_token,
-        TokenUser,
-        user_buf.as_mut_ptr() as *mut c_void,
-        needed,
-        &mut needed,
-    );
-    if ok == 0 || (needed as usize) < std::mem::size_of::<TOKEN_USER>() {
-        return Err(anyhow!(
-            "GetTokenInformation(TokenUser) failed: {}",
-            GetLastError()
-        ));
-    }
-    let token_user: TOKEN_USER = std::ptr::read_unaligned(user_buf.as_ptr() as *const TOKEN_USER);
-    let sid_len = GetLengthSid(token_user.User.Sid);
-    if sid_len == 0 {
-        return Err(anyhow!(
-            "GetLengthSid(TokenUser) failed: {}",
-            GetLastError()
-        ));
-    }
-    let mut user_sid_bytes = vec![0u8; sid_len as usize];
-    if CopySid(
-        sid_len,
-        user_sid_bytes.as_mut_ptr() as *mut c_void,
-        token_user.User.Sid,
-    ) == 0
-    {
-        return Err(anyhow!("CopySid(TokenUser) failed: {}", GetLastError()));
-    }
-    Ok(user_sid_bytes)
-}
-||||||| 413492cd6c
-unsafe fn get_user_sid_bytes(h_token: HANDLE) -> Result<Vec<u8>> {
-    let mut needed: u32 = 0;
-    GetTokenInformation(h_token, TokenUser, std::ptr::null_mut(), 0, &mut needed);
-    if needed == 0 {
-        return Err(anyhow!("TokenUser size query returned 0"));
-    }
-    let mut user_buf: Vec<u8> = vec![0u8; needed as usize];
-    let ok = GetTokenInformation(
-        h_token,
-        TokenUser,
-        user_buf.as_mut_ptr() as *mut c_void,
-        needed,
-        &mut needed,
-    );
-    if ok == 0 || (needed as usize) < std::mem::size_of::<TOKEN_USER>() {
-        return Err(anyhow!(
-            "GetTokenInformation(TokenUser) failed: {}",
-            GetLastError()
-        ));
-    }
-    let token_user: TOKEN_USER = std::ptr::read_unaligned(user_buf.as_ptr() as *const TOKEN_USER);
-    let sid_len = GetLengthSid(token_user.User.Sid);
-    if sid_len == 0 {
-        return Err(anyhow!(
-            "GetLengthSid(TokenUser) failed: {}",
-            GetLastError()
-        ));
-    }
-    let mut user_sid_bytes = vec![0u8; sid_len as usize];
-    if CopySid(
-        sid_len,
-        user_sid_bytes.as_mut_ptr() as *mut c_void,
-        token_user.User.Sid,
-    ) == 0
-    {
-        return Err(anyhow!("CopySid(TokenUser) failed: {}", GetLastError()));
-    }
-    Ok(user_sid_bytes)
-}
-=======
 pub(crate) use crate::token_user::get_user_sid_bytes;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 unsafe fn enable_single_privilege(h_token: HANDLE, name: &str) -> Result<()> {
     let mut luid = LUID {
@@ -670,8 +549,7 @@ unsafe fn create_token(
     entries[logon_idx + 1].Sid = psid_everyone;
     entries[logon_idx + 1].Attributes = 0;
 
-<<<<<<< HEAD
-    let mut new_token: HANDLE = 0;
+    let mut new_token: HANDLE = std::ptr::null_mut();
     // WRITE_RESTRICTED: restricting SIDs are only consulted for write accesses.
     // Observed on Windows (#158): generic-write rights, DELETE, and WRITE_DAC are
     // restricted, but FILE_DELETE_CHILD is not. NTFS lets a caller delete or move
@@ -680,11 +558,6 @@ unsafe fn create_token(
     // children that capability-SID ACEs protect. Legacy sessions close that route
     // with Low integrity outside writable roots (`integrity.rs`) and with
     // Everyone deny ACEs for protected paths inside them (`delete_child_route_denies`).
-||||||| 413492cd6c
-    let mut new_token: HANDLE = 0;
-=======
-    let mut new_token: HANDLE = std::ptr::null_mut();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let flags = DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED;
     let ok = CreateRestrictedToken(
         base_token,
@@ -701,7 +574,6 @@ unsafe fn create_token(
         return Err(anyhow!("CreateRestrictedToken failed: {}", GetLastError()));
     }
 
-<<<<<<< HEAD
     let dacl = if let Some(psid_command) = command_identity {
         set_legacy_default_dacl(
             new_token,
@@ -712,42 +584,16 @@ unsafe fn create_token(
             psid_capabilities,
         )
     } else {
-        // Additional restricting SIDs are identity markers, not capabilities. Deliberately
-        // exclude them from the default DACL so possessing a route identity cannot grant
-        // object access.
-        let mut dacl_sids: Vec<*mut c_void> = Vec::with_capacity(psid_capabilities.len() + 2);
-        dacl_sids.push(psid_logon);
-        dacl_sids.push(psid_everyone);
-        dacl_sids.extend_from_slice(psid_capabilities);
-        set_default_dacl(new_token, &dacl_sids)
+        // Upstream (#47361): filesystem and route capabilities may be shared
+        // between launches. They must not grant access to another launch's
+        // processes, threads, or IPC.
+        set_default_dacl(new_token, psid_logon)
     };
-    if let Err(err) = dacl {
-        CloseHandle(new_token);
-        return Err(err);
-    }
-
-    if let Err(err) = enable_single_privilege(new_token, "SeChangeNotifyPrivilege") {
-        CloseHandle(new_token);
-        return Err(err);
-||||||| 413492cd6c
-    // Additional restricting SIDs are identity markers, not capabilities. Deliberately exclude
-    // them from the default DACL so possessing a route identity cannot grant object access.
-    let mut dacl_sids: Vec<*mut c_void> = Vec::with_capacity(psid_capabilities.len() + 2);
-    dacl_sids.push(psid_logon);
-    dacl_sids.push(psid_everyone);
-    dacl_sids.extend_from_slice(psid_capabilities);
-    set_default_dacl(new_token, &dacl_sids)?;
-
-    enable_single_privilege(new_token, "SeChangeNotifyPrivilege")?;
-=======
-    // Filesystem and route capabilities may be shared between launches. They
-    // must not grant access to another launch's processes, threads, or IPC.
-    if let Err(error) = set_default_dacl(new_token, psid_logon)
-        .and_then(|()| enable_single_privilege(new_token, "SeChangeNotifyPrivilege"))
+    if let Err(error) =
+        dacl.and_then(|()| enable_single_privilege(new_token, "SeChangeNotifyPrivilege"))
     {
         CloseHandle(new_token);
         return Err(error);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
     Ok(new_token)
 }

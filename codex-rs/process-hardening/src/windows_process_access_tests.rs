@@ -776,36 +776,42 @@ fn probe_with_restricted_token(target: &Target) -> Report {
             codex_windows_sandbox::get_current_token_for_restriction().expect("current token");
         let restricted =
             codex_windows_sandbox::create_readonly_token_with_cap_from(base, capability.as_ptr());
-        CloseHandle(base);
+        CloseHandle(base as HANDLE);
         restricted.expect("restricted token").0
     };
+    // windows-sandbox uses windows-sys 0.61 (pointer handles); this crate's
+    // own calls stay on 0.52 (`isize`).
     let spawned = codex_windows_sandbox::spawn_process_with_pipes(
-        token,
+        // SAFETY: `token` stays open until it is closed below.
+        unsafe { std::os::windows::io::BorrowedHandle::borrow_raw(token) },
         &argv,
         &cwd,
         &env,
         StdinMode::Closed,
         StderrMode::MergeStdout,
         ConsoleMode::NoWindow,
-        /*use_private_desktop*/ false,
+        codex_windows_sandbox::LaunchDesktop::prepare_for_token(token, /*logs_base_dir*/ None)
+            .expect("desktop"),
         /*logs_base_dir*/ None,
     )
     .expect("spawn restricted probe");
     let (sender, receiver) = std::sync::mpsc::channel::<Vec<u8>>();
     // Not joined: EOF can come late (see `probe_as_same_user`).
-    let _reader = codex_windows_sandbox::read_handle_loop(spawned.stdout_read, move |chunk| {
+    // SAFETY: the spawn hands over the pipe's read end.
+    let stdout_read =
+        unsafe { std::os::windows::io::FromRawHandle::from_raw_handle(spawned.stdout_read) };
+    let _reader = codex_windows_sandbox::read_handle_loop(stdout_read, move |chunk| {
         let _ = sender.send(chunk.to_vec());
     });
     // SAFETY: the handles stay valid until closed below.
     unsafe {
-        if WaitForSingleObject(spawned.process.hProcess, CHILD_TIMEOUT.as_millis() as u32)
-            == WAIT_TIMEOUT
-        {
-            TerminateProcess(spawned.process.hProcess, 1);
+        let process = spawned.process.hProcess as HANDLE;
+        if WaitForSingleObject(process, CHILD_TIMEOUT.as_millis() as u32) == WAIT_TIMEOUT {
+            TerminateProcess(process, 1);
         }
-        CloseHandle(spawned.process.hThread);
-        CloseHandle(spawned.process.hProcess);
-        CloseHandle(token);
+        CloseHandle(spawned.process.hThread as HANDLE);
+        CloseHandle(process);
+        CloseHandle(token as HANDLE);
     }
     let deadline = Instant::now() + Duration::from_secs(10);
     let mut output = Vec::new();

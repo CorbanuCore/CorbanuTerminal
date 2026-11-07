@@ -125,16 +125,6 @@ pub fn spawn_conpty_process_as_user(
     si.StartupInfo.hStdInput = INVALID_HANDLE_VALUE;
     si.StartupInfo.hStdOutput = INVALID_HANDLE_VALUE;
     si.StartupInfo.hStdError = INVALID_HANDLE_VALUE;
-<<<<<<< HEAD
-    let desktop = LaunchDesktop::prepare(
-        use_private_desktop,
-        crate::integrity::token_is_low_integrity(h_token),
-        logs_base_dir,
-    )?;
-||||||| 413492cd6c
-    let desktop = LaunchDesktop::prepare(use_private_desktop, logs_base_dir)?;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     si.StartupInfo.lpDesktop = desktop.startup_info_desktop();
     let job = Arc::new(crate::process::sandbox_job().context("create process job")?);
 

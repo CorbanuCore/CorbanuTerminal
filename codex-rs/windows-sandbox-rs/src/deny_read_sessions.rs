@@ -144,7 +144,8 @@ fn program_data() -> Option<PathBuf> {
     use windows_sys::Win32::UI::Shell::SHGetKnownFolderPath;
     let mut path: *mut u16 = std::ptr::null_mut();
     // SAFETY: `path` receives a string the call allocates, freed below.
-    let status = unsafe { SHGetKnownFolderPath(&FOLDERID_ProgramData, 0, 0, &mut path) };
+    let status =
+        unsafe { SHGetKnownFolderPath(&FOLDERID_ProgramData, 0, std::ptr::null_mut(), &mut path) };
     let result = (status == 0 && !path.is_null()).then(|| {
         // SAFETY: a NUL-terminated string from the call.
         let len = (0..).take_while(|&i| unsafe { *path.add(i) } != 0).count();

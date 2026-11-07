@@ -50,10 +50,6 @@ use windows_sys::Win32::Security::SID_AND_ATTRIBUTES;
 use windows_sys::Win32::Security::SetTokenInformation;
 use windows_sys::Win32::Security::TOKEN_MANDATORY_LABEL;
 use windows_sys::Win32::Security::TokenIntegrityLevel;
-use windows_sys::Win32::Storage::FileSystem::READ_CONTROL;
-use windows_sys::Win32::Storage::FileSystem::WRITE_OWNER;
-use windows_sys::Win32::System::StationsAndDesktops::CloseDesktop;
-use windows_sys::Win32::System::StationsAndDesktops::OpenDesktopW;
 use windows_sys::Win32::System::SystemServices::SE_GROUP_INTEGRITY;
 use windows_sys::Win32::System::SystemServices::SYSTEM_MANDATORY_LABEL_ACE_TYPE;
 use windows_sys::Win32::System::SystemServices::SYSTEM_MANDATORY_LABEL_NO_EXECUTE_UP;
@@ -458,24 +454,6 @@ pub(crate) unsafe fn label_window_object_low(handle: HANDLE) -> Result<()> {
         return Err(anyhow!("SetSecurityInfo(label) failed for desktop: {code}"));
     }
     Ok(())
-}
-
-/// Labels this process's desktop `name` (of its own, non-interactive window
-/// station) Low, for a Low-integrity command started on it.
-pub(crate) fn label_desktop_low(name: &str) -> Result<()> {
-    let wide = to_wide(name);
-    // SAFETY: opens a desktop of this process's window station; closed below.
-    let handle = unsafe { OpenDesktopW(wide.as_ptr(), 0, 0, READ_CONTROL | WRITE_OWNER) };
-    if handle == 0 {
-        return Err(std::io::Error::last_os_error().into());
-    }
-    // SAFETY: `handle` was opened with WRITE_OWNER above.
-    let result = unsafe { label_window_object_low(handle) };
-    // SAFETY: opened above.
-    unsafe {
-        CloseDesktop(handle);
-    }
-    result
 }
 
 /// Whether `h_token` runs at Low integrity or below.

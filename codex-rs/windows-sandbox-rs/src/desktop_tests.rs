@@ -55,6 +55,7 @@ fn shared_desktop_survives_launch_handles_and_concurrent_requests() -> Result<()
         capability_sids: Default::default(),
         network_enabled: false,
         network_proxy_restricting_sid: None,
+        low_integrity: false,
         read_roots: Some(Default::default()),
         write_roots: Default::default(),
         deny_read_paths: Default::default(),
@@ -159,7 +160,10 @@ fn shared_desktop_reuses_only_equivalent_permissions() -> Result<()> {
         (
             "deny reads",
             SetupRootOverrides {
-                deny_read_paths: Some(vec![readable.clone()]),
+                deny_read: Some(crate::DenyReadTargets::from_exact_paths([
+                    codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(&readable)
+                        .expect("absolute"),
+                ])),
                 ..overrides()
             },
         ),
@@ -196,15 +200,16 @@ fn legacy_desktop_reuses_only_equivalent_permissions() -> Result<()> {
         legacy_session_capability_roots(&permissions, &workspace, &env, &codex_home),
     )?;
     let _token = unsafe { OwnedHandle::from_raw_handle(security.h_token as *mut _) };
+    // The wrapper's named legacy desktops are shared per policy (upstream).
     let desktop = |deny_write_paths| {
-        LaunchDesktop::prepare_legacy(
+        LaunchDesktop::open_private(&LaunchDesktop::shared_legacy_name(
             &permissions,
             &workspace,
             &env,
             &security,
             deny_write_paths,
             /*logs_base_dir*/ None,
-        )
+        )?)
     };
     let first = desktop(&[])?;
     let name = first.startup_name.clone();
@@ -215,6 +220,11 @@ fn legacy_desktop_reuses_only_equivalent_permissions() -> Result<()> {
         name
     );
     assert_eq!(desktop(&[])?.startup_name, name);
+    // A legacy command's own desktop is never shared (main, D259).
+    let own = LaunchDesktop::prepare_legacy(&security, /*logs_base_dir*/ None)?;
+    let other = LaunchDesktop::prepare_legacy(&security, /*logs_base_dir*/ None)?;
+    assert_ne!(own.startup_name, other.startup_name);
+    assert_ne!(own.startup_name, name);
     Ok(())
 }
 

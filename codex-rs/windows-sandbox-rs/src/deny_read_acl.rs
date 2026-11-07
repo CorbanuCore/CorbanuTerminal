@@ -1,16 +1,6 @@
-<<<<<<< HEAD
 use crate::acl::DenyReadObject;
 use crate::acl::add_deny_read_ace_to_object;
 use crate::acl::remove_deny_read_ace;
-use crate::path_normalization::canonicalize_path;
-||||||| 413492cd6c
-use crate::acl::add_deny_read_ace;
-use crate::acl::revoke_ace;
-use crate::path_normalization::canonicalize_path;
-=======
-use crate::acl::add_deny_read_ace;
-use crate::acl::revoke_ace;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use anyhow::Context;
 use anyhow::Result;
 use std::collections::BTreeSet;
@@ -76,7 +66,6 @@ pub(crate) fn lexical_path_key(path: &Path) -> String {
 /// # Safety
 /// Caller must pass a valid SID pointer for the sandbox principal being denied.
 pub unsafe fn apply_deny_read_acls(paths: &[PathBuf], psid: *mut c_void) -> Result<Vec<PathBuf>> {
-<<<<<<< HEAD
     let (applied, result) = unsafe { apply_deny_read_acls_tracked(paths, &HashMap::new(), psid) };
     if let Err(err) = result {
         for object in &applied.objects {
@@ -129,15 +118,14 @@ pub(crate) unsafe fn apply_deny_read_acls_tracked(
         paths: Vec::new(),
         objects: Vec::new(),
     };
-||||||| 413492cd6c
-    let planned = plan_deny_read_acl_paths(paths);
-    let mut applied = Vec::new();
-=======
-    let planned = plan_deny_read_acl_paths(paths)?;
-    let mut applied = Vec::new();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut seen = HashSet::new();
-    for path in plan_deny_read_acl_paths(paths) {
+    // Upstream: planning fails closed (a filesystem root, or a path that
+    // can't be canonicalized for a reason other than not existing).
+    let planned = match plan_deny_read_acl_paths(paths) {
+        Ok(planned) => planned,
+        Err(err) => return (applied, Err(err)),
+    };
+    for path in planned {
         let result = (|| -> Result<(bool, DenyReadObject)> {
             if !path.exists() {
                 std::fs::create_dir_all(&path)
@@ -146,29 +134,9 @@ pub(crate) unsafe fn apply_deny_read_acls_tracked(
             add_deny_read_ace_to_object(&path, psid)
                 .with_context(|| format!("apply deny-read ACE to {}", path.display()))
         })();
-<<<<<<< HEAD
         let (added, object) = match result {
             Ok(result) => result,
             Err(err) => return (applied, Err(err)),
-||||||| 413492cd6c
-        let added = match result {
-            Ok(added) => added,
-            Err(err) => {
-                for added_path in &added_in_this_call {
-                    revoke_ace(added_path, psid);
-                }
-                return Err(err);
-            }
-=======
-        let added = match result {
-            Ok(added) => added,
-            Err(err) => {
-                for added_path in &added_in_this_call {
-                    let _ = revoke_ace(added_path, psid);
-                }
-                return Err(err);
-            }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
         let key = lexical_path_key(&path);
         let direct = given.contains(&key) && lexical_path_key(&object.path) == key;

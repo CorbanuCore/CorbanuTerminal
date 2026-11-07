@@ -15,6 +15,7 @@ use crate::SetupFailure;
 use crate::SetupRuntime;
 use crate::acquire_sandbox_setup_lock;
 use crate::add_deny_write_ace;
+use crate::apply_deny_read_acls;
 use crate::convert_string_sid_to_sid;
 use crate::ensure_allow_mask_aces_with_inheritance;
 use crate::ensure_allow_write_aces;
@@ -48,59 +49,6 @@ use anyhow::Result;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use codex_otel::StatsigMetricsSettings;
-<<<<<<< HEAD:codex-rs/windows-sandbox-rs/src/bin/setup_main/win.rs
-use codex_windows_sandbox::SETUP_VERSION;
-use codex_windows_sandbox::SetupErrorCode;
-use codex_windows_sandbox::SetupErrorReport;
-use codex_windows_sandbox::SetupFailure;
-use codex_windows_sandbox::add_deny_write_ace;
-use codex_windows_sandbox::apply_deny_read_acls;
-use codex_windows_sandbox::convert_string_sid_to_sid;
-use codex_windows_sandbox::ensure_allow_mask_aces_with_inheritance;
-use codex_windows_sandbox::ensure_allow_write_aces;
-use codex_windows_sandbox::extract_setup_failure;
-use codex_windows_sandbox::hide_newly_created_users;
-use codex_windows_sandbox::install_wfp_filters;
-use codex_windows_sandbox::log_note;
-use codex_windows_sandbox::log_writer;
-use codex_windows_sandbox::path_mask_allows;
-use codex_windows_sandbox::path_write_aces_need_refresh;
-use codex_windows_sandbox::sandbox_bin_dir;
-use codex_windows_sandbox::sandbox_dir;
-use codex_windows_sandbox::sandbox_secrets_dir;
-use codex_windows_sandbox::string_from_sid_bytes;
-use codex_windows_sandbox::sync_persistent_deny_read_acls;
-use codex_windows_sandbox::to_wide;
-use codex_windows_sandbox::workspace_write_cap_sid_for_root;
-use codex_windows_sandbox::workspace_write_root_overlaps_path;
-use codex_windows_sandbox::write_setup_error_report;
-||||||| 413492cd6c:codex-rs/windows-sandbox-rs/src/bin/setup_main/win.rs
-use codex_windows_sandbox::SETUP_VERSION;
-use codex_windows_sandbox::SetupErrorCode;
-use codex_windows_sandbox::SetupErrorReport;
-use codex_windows_sandbox::SetupFailure;
-use codex_windows_sandbox::add_deny_write_ace;
-use codex_windows_sandbox::convert_string_sid_to_sid;
-use codex_windows_sandbox::ensure_allow_mask_aces_with_inheritance;
-use codex_windows_sandbox::ensure_allow_write_aces;
-use codex_windows_sandbox::extract_setup_failure;
-use codex_windows_sandbox::hide_newly_created_users;
-use codex_windows_sandbox::install_wfp_filters;
-use codex_windows_sandbox::log_note;
-use codex_windows_sandbox::log_writer;
-use codex_windows_sandbox::path_mask_allows;
-use codex_windows_sandbox::path_write_aces_need_refresh;
-use codex_windows_sandbox::sandbox_bin_dir;
-use codex_windows_sandbox::sandbox_dir;
-use codex_windows_sandbox::sandbox_secrets_dir;
-use codex_windows_sandbox::string_from_sid_bytes;
-use codex_windows_sandbox::sync_persistent_deny_read_acls;
-use codex_windows_sandbox::to_wide;
-use codex_windows_sandbox::workspace_write_cap_sid_for_root;
-use codex_windows_sandbox::workspace_write_root_overlaps_path;
-use codex_windows_sandbox::write_setup_error_report;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/windows-sandbox-rs/src/setup_provisioning.rs
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashSet;
@@ -172,7 +120,7 @@ struct Payload {
     /// `None`: this refresh carries no deny-read rules, so the sync adds and
     /// removes no entry.
     #[serde(default)]
-    deny_read: Option<codex_windows_sandbox::DenyReadTargets>,
+    deny_read: Option<crate::DenyReadTargets>,
     /// The same paths, flattened. Used alone only from a launcher that
     /// predates rules: applied, never recorded or removed.
     #[serde(default)]
@@ -180,7 +128,7 @@ struct Payload {
     /// #323: no entry is removed while another session listed here lives.
     /// From a launcher that predates it: nothing is removed.
     #[serde(default)]
-    deny_read_sessions: codex_windows_sandbox::DenyReadSessions,
+    deny_read_sessions: crate::DenyReadSessions,
     #[serde(default)]
     deny_write_paths: Vec<PathBuf>,
     proxy_ports: Vec<u16>,
@@ -848,6 +796,18 @@ fn provision_sandbox(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> 
             set_local_user_flags(username, flags & !UF_ACCOUNTDISABLE)?;
         }
     }
+    // #323: the registry of sessions that rely on deny-read entries.
+    // Without it, entries are kept and armed launches refused.
+    let registry = resolve_sandbox_users_group_sid()
+        .map_err(|err| anyhow::anyhow!("resolve sandbox users group SID failed: {err}"))
+        .and_then(|sid| string_from_sid_bytes(&sid).map_err(anyhow::Error::msg))
+        .and_then(|sid| crate::ensure_deny_read_session_registry(Some(&sid)));
+    if let Err(err) = registry {
+        log_line(
+            log,
+            &format!("deny-read session registry not set up: {err:#}"),
+        )?;
+    }
     Ok(())
 }
 
@@ -994,26 +954,6 @@ fn run_setup_full(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> Res
         string_from_sid_bytes(&sandbox_group_sid).map_err(anyhow::Error::msg)?;
 
     let mut refresh_errors: Vec<String> = Vec::new();
-<<<<<<< HEAD:codex-rs/windows-sandbox-rs/src/bin/setup_main/win.rs
-    if !refresh_only {
-        configure_offline_sandbox_network(payload, &offline_sid_str, log)?;
-        // #323: the registry of sessions that rely on deny-read entries.
-        // Without it, entries are kept and armed launches refused.
-        if let Err(err) =
-            codex_windows_sandbox::ensure_deny_read_session_registry(Some(&sandbox_group_sid_str))
-        {
-            log_line(
-                log,
-                &format!("deny-read session registry not set up: {err:#}"),
-            )?;
-        }
-    }
-||||||| 413492cd6c:codex-rs/windows-sandbox-rs/src/bin/setup_main/win.rs
-    if !refresh_only {
-        configure_offline_sandbox_network(payload, &offline_sid_str, log)?;
-    }
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/windows-sandbox-rs/src/setup_provisioning.rs
 
     // Deny-read ACEs must be present before the sandboxed command starts. Apply
     // them synchronously here instead of delegating them to the background

@@ -559,7 +559,7 @@ impl SecurityInfo {
                 std::ptr::null_mut(),
                 OPEN_EXISTING,
                 FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
-                0,
+                std::ptr::null_mut(),
             );
             assert_ne!(handle, INVALID_HANDLE_VALUE, "open {}", path.display());
             let mut sd: *mut c_void = std::ptr::null_mut();
