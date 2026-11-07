@@ -187,15 +187,15 @@ fn analytics_capture_file_from_env() -> Option<PathBuf> {
 impl AnalyticsEventsQueue {
     fn new(auth_manager: Arc<AuthManager>, destination: AnalyticsEventsDestination) -> Self {
         let (sender, mut receiver) = mpsc::channel(ANALYTICS_EVENTS_QUEUE_SIZE);
-        // #658: each fact resolves its sign-in when it is recorded; the worker's copy
-        // serves flushes and product updates, which use the sign-in at that time.
-        let queue_auth_manager = Arc::clone(&auth_manager);
         let product_generation = Arc::new(AtomicU64::new(0));
         let worker_product_generation = Arc::clone(&product_generation);
         tokio::spawn(async move {
             let mut reducer = AnalyticsReducer::default();
             let mut thread_products = ThreadProducts::default();
             let mut registered_generation = 0;
+            // #658: the sign-in the reducer's pending events were recorded under. They are
+            // sent with it, never with a sign-in resolved later.
+            let mut pending_sign_in: Option<Arc<AuthManager>> = None;
             while let Some(input) = receiver.recv().await {
                 let generation = worker_product_generation.load(Ordering::Acquire);
                 if generation != registered_generation {
@@ -204,7 +204,23 @@ impl AnalyticsEventsQueue {
                     registered_generation = generation;
                 }
                 let (input, sign_in) = match input {
-                    AnalyticsEventsQueueMessage::Fact(input, sign_in) => (*input, sign_in),
+                    AnalyticsEventsQueueMessage::Fact(input, sign_in) => {
+                        if !same_sign_in(pending_sign_in.as_ref(), sign_in.as_ref()) {
+                            // Events still pending from facts recorded under another sign-in
+                            // go out with that one before this fact is reduced.
+                            let mut events = Vec::new();
+                            reducer.flush(&mut events);
+                            send_track_events_as(
+                                pending_sign_in.take(),
+                                &destination,
+                                events,
+                                &thread_products,
+                            )
+                            .await;
+                        }
+                        pending_sign_in.clone_from(&sign_in);
+                        (*input, sign_in)
+                    }
                     AnalyticsEventsQueueMessage::ThreadProduct {
                         thread_id,
                         product_sku,
@@ -225,16 +241,26 @@ impl AnalyticsEventsQueue {
                         {
                             reducer.flush_thread(evicted, &mut events);
                         }
-                        send_track_events(&auth_manager, &destination, events, &thread_products)
-                            .await;
+                        send_track_events_as(
+                            pending_sign_in.clone(),
+                            &destination,
+                            events,
+                            &thread_products,
+                        )
+                        .await;
                         thread_products.register(thread_id, product_sku);
                         continue;
                     }
                     AnalyticsEventsQueueMessage::Flush(done_tx) => {
                         let mut events = Vec::new();
                         reducer.flush(&mut events);
-                        send_track_events(&auth_manager, &destination, events, &thread_products)
-                            .await;
+                        send_track_events_as(
+                            pending_sign_in.clone(),
+                            &destination,
+                            events,
+                            &thread_products,
+                        )
+                        .await;
                         let _ = done_tx.send(());
                         continue;
                     }
@@ -246,7 +272,7 @@ impl AnalyticsEventsQueue {
         });
         Self {
             sender,
-            auth_manager: Some(queue_auth_manager),
+            auth_manager: Some(auth_manager),
             product_generation,
             app_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
             plugin_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
@@ -987,8 +1013,8 @@ fn analytics_turn(turn_id: &str, status: TurnStatus) -> Turn {
     }
 }
 
-/// Sends `events` with the sign-in the process's user sessions run on now (#658):
-/// for flushed pending events and product updates, which carry no sign-in of their own.
+/// Sends `events` with the sign-in the process's user sessions run on now (#658).
+#[cfg(test)]
 async fn send_track_events(
     auth_manager: &Arc<AuthManager>,
     destination: &AnalyticsEventsDestination,
@@ -1002,6 +1028,15 @@ async fn send_track_events(
         thread_products,
     )
     .await;
+}
+
+/// Whether two recorded sign-ins are the same account (#658); `None` is its own value.
+fn same_sign_in(a: Option<&Arc<AuthManager>>, b: Option<&Arc<AuthManager>>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => Arc::ptr_eq(a, b) || a.named_account() == b.named_account(),
+        (None, None) => true,
+        (Some(_), None) | (None, Some(_)) => false,
+    }
 }
 
 /// Sends `events` with `sign_in`: the sign-in the process's user sessions ran
