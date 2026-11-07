@@ -423,7 +423,7 @@ fn io_result(op: std::io::Result<()>) -> String {
 }
 
 /// The `files` probe: `CODEX_W1560M_FILES` is `workspace|read_only|outside`.
-pub(super) fn files_report() -> String {
+pub(crate) fn files_report() -> String {
     let spec = std::env::var(FILES_ENV).expect("files spec");
     let mut parts = spec.split('|').map(PathBuf::from);
     let (workspace, read_only, outside) = (
@@ -496,7 +496,7 @@ pub(super) fn files_report() -> String {
 /// The `self_token` probe: what a Chromium/Electron-style sandbox does with
 /// its own token (open it for all access, restrict it, start a child with a
 /// primary copy).
-pub(super) fn self_token_report() -> String {
+pub(crate) fn self_token_report() -> String {
     use windows_sys::Win32::Security::CreateRestrictedToken;
     use windows_sys::Win32::Security::TOKEN_ALL_ACCESS;
     use windows_sys::Win32::Security::TOKEN_ASSIGN_PRIMARY;
@@ -549,7 +549,7 @@ pub(super) fn self_token_report() -> String {
 /// process `pid` (another workspace's command) for direct impersonation and
 /// impersonates it with `NtImpersonateThread`, then writes `path` (in that
 /// workspace) and opens that process for `PROCESS_CREATE_PROCESS`.
-pub(super) fn thread_borrow_report(pid: u32, path: &Path) -> String {
+pub(crate) fn thread_borrow_report(pid: u32, path: &Path) -> String {
     use windows_sys::Win32::Security::SECURITY_QUALITY_OF_SERVICE;
     use windows_sys::Win32::Security::TokenImpersonationLevel;
     use windows_sys::Win32::System::Threading::GetCurrentThread;

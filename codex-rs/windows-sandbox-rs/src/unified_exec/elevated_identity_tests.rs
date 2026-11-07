@@ -789,4 +789,4 @@ fn sec_win_1648_elevated_tools_work_with_command_identity() {
 }
 
 #[path = "probe_1560m_tests.rs"]
-mod probe_1560m;
+pub(crate) mod probe_1560m;
