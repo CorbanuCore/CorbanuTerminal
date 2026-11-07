@@ -503,3 +503,43 @@ async fn an_open_retries_only_the_shm_reset_race() {
     assert_eq!(code.as_deref(), Some("1546"));
     assert_eq!(attempts, SHM_RESET_RETRIES + 1);
 }
+
+/// The quick pool follows the main pool's journal handling: DELETE databases
+/// (NFS) get EXTRA syncs on its connections, WAL ones keep NORMAL.
+#[tokio::test]
+async fn quick_pool_connections_follow_the_database_journal_mode() -> anyhow::Result<()> {
+    for (journal_mode, set_journal_mode, expected_synchronous) in [
+        ("DELETE", "PRAGMA journal_mode = DELETE", 3_i64),
+        ("WAL", "PRAGMA journal_mode = WAL", 1_i64),
+    ] {
+        let sqlite_home = crate::runtime::test_support::unique_temp_dir();
+        tokio::fs::create_dir_all(&sqlite_home).await?;
+        let _cleanup = scopeguard::guard(sqlite_home.clone(), |sqlite_home| {
+            let _ = std::fs::remove_dir_all(sqlite_home);
+        });
+        let sqlite = crate::SqliteConfig::new_for_testing(sqlite_home.as_path().abs());
+        let path = sqlite.state_db_path();
+        let pool = sqlite.open_read_write_pool(&path).await?;
+        sqlx::query("CREATE TABLE t (v INTEGER)")
+            .execute(&pool)
+            .await?;
+        pool.close().await;
+        let pool = sqlite.open_read_write_pool(&path).await?;
+        let mut connection = pool.acquire().await?;
+        sqlx::query(set_journal_mode)
+            .execute(&mut *connection)
+            .await?;
+        drop(connection);
+        pool.close().await;
+
+        let quick = sqlite
+            .open_state_db_quick(Duration::from_millis(500))
+            .await?;
+        let synchronous: i64 = sqlx::query_scalar("PRAGMA synchronous")
+            .fetch_one(&quick)
+            .await?;
+        assert_eq!(synchronous, expected_synchronous, "{journal_mode}");
+        quick.close().await;
+    }
+    Ok(())
+}
