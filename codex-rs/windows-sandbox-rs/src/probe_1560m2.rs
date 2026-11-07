@@ -276,6 +276,7 @@ pub(crate) fn command_token_for_runner(
     username: &str,
     password: &str,
     runner: HANDLE,
+    commands_use_this_desktop: bool,
     log_dir: Option<&Path>,
 ) -> Result<(u64, Option<crate::window_station::WindowAccess>)> {
     let user = to_wide(username);
@@ -304,7 +305,10 @@ pub(crate) fn command_token_for_runner(
         let bno = grant_session_namespace(&logon);
         crate::logging::log_note(&format!("d367p: session namespace grant={bno}"), log_dir);
         // Removed once the runner exits (Core hands it to a reaper).
-        let access = match crate::window_station::WindowAccess::probe_grant_command_logon(&logon)
+        let access = match crate::window_station::WindowAccess::probe_grant_command_logon(
+            &logon,
+            commands_use_this_desktop,
+        )
         {
             Ok(access) => Some(access),
             Err(err) => {

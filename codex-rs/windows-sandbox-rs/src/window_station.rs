@@ -224,7 +224,7 @@ impl WindowAccess {
     /// PROBE (win-1560m2, d367p): what a command started on its own logon
     /// (not the runner's) needs on this window station and desktop, on any
     /// window station, interactive included.
-    pub(crate) fn probe_grant_command_logon(sid: &[u8]) -> Result<Self> {
+    pub(crate) fn probe_grant_command_logon(sid: &[u8], desktop_too: bool) -> Result<Self> {
         let station = current_window_station_name().context("read the window station's name")?;
         let desktop = current_desktop_name().context("read the desktop's name")?;
         let mut access = Self {
@@ -238,7 +238,9 @@ impl WindowAccess {
             log_dir: None,
         };
         access.set(WindowObject::Station, Some(COMMAND_STATION_ACCESS))?;
-        access.set(WindowObject::Desktop, Some(DESKTOP_ACCESS))?;
+        if desktop_too {
+            access.set(WindowObject::Desktop, Some(DESKTOP_ACCESS))?;
+        }
         Ok(access)
     }
 

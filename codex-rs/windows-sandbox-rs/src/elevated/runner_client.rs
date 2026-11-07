@@ -415,6 +415,7 @@ pub(crate) fn spawn_runner_transport(
             &command_creds.username,
             &command_creds.password,
             runner_process,
+            commands_use_this_desktop,
             log_dir,
         ) {
             Ok((remote, access)) => {
