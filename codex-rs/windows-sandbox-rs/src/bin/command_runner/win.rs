@@ -312,11 +312,12 @@ fn spawn_ipc_process(req: &SpawnRequest) -> Result<IpcSpawnedProcess> {
     }
 
     let effective_cwd = effective_cwd(&req.cwd, Some(log_dir.as_path()));
-    let desktop = LaunchDesktop::open_private(
-        req.private_desktop_name
-            .as_deref()
-            .context("runner: missing parent-owned private desktop")?,
-    )?;
+    // A desktop named by the caller (the `codex sandbox` wrapper), else this
+    // command's own private desktop, open only to this runner's logon.
+    let desktop = match req.private_desktop_name.as_deref() {
+        Some(name) => LaunchDesktop::open_private(name)?,
+        None => LaunchDesktop::prepare(Some(log_dir.as_path()))?,
+    };
 
     let mut conpty_owner = None;
     let mut hpc_handle: Option<HPCON> = None;

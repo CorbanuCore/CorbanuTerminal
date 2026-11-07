@@ -1,7 +1,5 @@
 use crate::app_package::registered_core_requested;
 use crate::app_package::verify_registered_core_runner;
-use crate::desktop::DesktopPolicy;
-use crate::desktop::shared_private_desktop_for_user;
 use crate::identity::SandboxCreds;
 use crate::ipc_framed::ErrorPayload;
 use crate::ipc_framed::ErrorStage;
@@ -334,8 +332,7 @@ pub(crate) fn spawn_runner_transport(
     cwd: &Path,
     sandbox_creds: &SandboxCreds,
     log_dir: Option<&Path>,
-    mut spawn_request: SpawnRequest,
-    desktop_policy: Option<&DesktopPolicy>,
+    spawn_request: SpawnRequest,
 ) -> Result<RunnerTransport> {
     let runner_exe = find_runner_exe(codex_home, log_dir)?;
     let registered_alias = if registered_core_requested() {
@@ -346,13 +343,12 @@ pub(crate) fn spawn_runner_transport(
     } else {
         None
     };
-    if let Some(policy) = desktop_policy {
-        spawn_request.private_desktop_name = Some(shared_private_desktop_for_user(
-            &sandbox_creds.username,
-            policy,
-            log_dir,
-        )?);
-    }
+    // Upstream (rust-v0.167.0) has Core create a private desktop shared by
+    // every command of the sandbox account with the same policy, open to that
+    // account. Corbanu keeps main's per-command desktop: the runner creates
+    // it, open only to its own logon (#345, and D324's per-command identity),
+    // so a command cannot reach another command's windows. A caller that
+    // names a desktop (the `codex sandbox` wrapper) still gets that one.
     let (pipe_in_name, pipe_out_name) = pipe_pair();
     let pipe_write = unsafe {
         File::from_raw_handle(create_named_pipe(
