@@ -145,6 +145,7 @@ async fn sandbox_request_wraps_native_argv_on_executor() {
                 HashMap::new(),
                 Some(&runtime_paths),
                 /*network_policy_decider*/ None,
+                /*network_denial_reporter*/ None,
                 /*network_policy_audit_observer*/ None,
             )
             .await
@@ -178,6 +179,7 @@ async fn sandbox_request_wraps_native_argv_on_executor() {
         HashMap::new(),
         Some(&runtime_paths),
         /*network_policy_decider*/ None,
+        /*network_denial_reporter*/ None,
         /*network_policy_audit_observer*/ None,
     )
     .await
@@ -361,6 +363,7 @@ async fn sandbox_request_only_allows_all_unix_sockets_when_configured() {
             HashMap::new(),
             Some(&runtime_paths),
             /*network_policy_decider*/ None,
+            /*network_denial_reporter*/ None,
             /*network_policy_audit_observer*/ None,
         )
         .await
@@ -425,6 +428,7 @@ async fn sandbox_request_preserves_executor_local_proxy_unix_socket_policy() {
         HashMap::new(),
         Some(&runtime_paths),
         /*network_policy_decider*/ None,
+        /*network_denial_reporter*/ None,
         /*network_policy_audit_observer*/ None,
     )
     .await
