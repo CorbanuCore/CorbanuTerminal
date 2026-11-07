@@ -23,15 +23,11 @@ use super::delete_oauth_tokens_from_secrets_keyring;
 use super::load_oauth_tokens_from_file;
 use super::load_oauth_tokens_from_file_with_lock_held;
 use super::load_oauth_tokens_from_keyring;
-<<<<<<< HEAD
-use super::output_gate;
-||||||| 413492cd6c
-=======
 use super::load_oauth_tokens_from_secrets_keyring_with_lock_held;
 use super::normalized_oauth_credentials;
+use super::output_gate;
 use super::read_fallback_file_unlocked;
 use super::save_oauth_tokens_to_direct_keyring;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use super::save_oauth_tokens_to_file;
 use super::save_oauth_tokens_to_secrets_keyring_with_lock_held;
 use super::save_oauth_tokens_with_keyring;
@@ -104,17 +100,9 @@ impl ResolvedOAuthCredentialStore {
         server_name: &str,
         url: &str,
     ) -> Result<Option<StoredOAuthTokens>> {
-<<<<<<< HEAD
-        let tokens = match self {
-            Self::File => load_oauth_tokens_from_file(server_name, url)
-||||||| 413492cd6c
-        match self {
-            Self::File => load_oauth_tokens_from_file(server_name, url)
-=======
         let mut observation = telemetry::resolved(self, Operation::Load);
         let result = match self.backend {
             Backend::File => load_oauth_tokens_from_file(server_name, url)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 .context("failed to reread OAuth tokens from resolved file storage"),
             Backend::Keyring(keyring_backend_kind) => load_oauth_tokens_from_keyring(
                 keyring_store,
@@ -126,12 +114,6 @@ impl ResolvedOAuthCredentialStore {
             .context(
                 "failed to reread OAuth tokens from resolved keyring storage; refusing file fallback",
             ),
-<<<<<<< HEAD
-        }?;
-        if let Some(tokens) = &tokens {
-            output_gate::protect(tokens)?;
-||||||| 413492cd6c
-=======
         };
         observation.record_load_attempt(telemetry::store(self), &result);
         if matches!(self.backend, Backend::Keyring(_))
@@ -139,7 +121,7 @@ impl ResolvedOAuthCredentialStore {
         {
             telemetry::record_secure_error(&mut observation, error.as_ref());
         }
-        result
+        protect_loaded(result)
     }
 
     /// Reads the selected authority without waiting for its aggregate-store lock.
@@ -149,7 +131,7 @@ impl ResolvedOAuthCredentialStore {
         server_name: &str,
         url: &str,
     ) -> Result<Option<StoredOAuthTokens>> {
-        match self.backend {
+        let result = match self.backend {
             Backend::File => {
                 let _store_lock = OAuthStoreLock::try_acquire_for_read(OAuthStore::File)?;
                 load_oauth_tokens_from_file_with_lock_held(server_name, url)
@@ -170,9 +152,8 @@ impl ResolvedOAuthCredentialStore {
                 )
                 .map_err(anyhow::Error::from)
             }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-        }
-        Ok(tokens)
+        };
+        protect_loaded(result)
     }
 
     /// Saves credentials only to this already-resolved authority.
@@ -182,21 +163,11 @@ impl ResolvedOAuthCredentialStore {
         server_name: &str,
         tokens: &StoredOAuthTokens,
     ) -> Result<()> {
-<<<<<<< HEAD
         output_gate::protect(tokens)?;
-        match self {
-            Self::File => save_oauth_tokens_to_file(tokens),
-            Self::Keyring(keyring_backend_kind) => save_oauth_tokens_with_keyring(
-||||||| 413492cd6c
-        match self {
-            Self::File => save_oauth_tokens_to_file(tokens),
-            Self::Keyring(keyring_backend_kind) => save_oauth_tokens_with_keyring(
-=======
         let mut observation = telemetry::resolved(self, Operation::Save);
         let result = match self.backend {
             Backend::File => save_oauth_tokens_to_file(tokens),
             Backend::Keyring(keyring_backend_kind) => save_oauth_tokens_with_keyring(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 keyring_store,
                 keyring_backend_kind,
                 server_name,
@@ -372,7 +343,6 @@ pub(crate) fn resolve_oauth_tokens_from_store_policy<K: KeyringStore + Clone + '
     store_mode: OAuthCredentialsStoreMode,
     keyring_backend_kind: AuthKeyringBackendKind,
 ) -> Result<Option<ResolvedOAuthTokens>> {
-<<<<<<< HEAD
     let resolved = resolve_from_store_policy(
         keyring_store,
         server_name,
@@ -393,10 +363,7 @@ fn resolve_from_store_policy<K: KeyringStore + Clone + 'static>(
     store_mode: OAuthCredentialsStoreMode,
     keyring_backend_kind: AuthKeyringBackendKind,
 ) -> Result<Option<ResolvedOAuthTokens>> {
-||||||| 413492cd6c
-=======
     let mut observation = telemetry::policy(store_mode, keyring_backend_kind, Operation::Load);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     match store_mode {
         OAuthCredentialsStoreMode::Auto => {
             // Auto remains keyring-first at lifecycle startup. The returned source is then pinned
@@ -520,4 +487,12 @@ pub(crate) fn try_resolve_oauth_tokens_from_store_policy<K: KeyringStore + Clone
             .with_context(|| format!("failed to read OAuth tokens from keyring: {error}")),
         },
     }
+}
+
+/// PF-28-S02: tokens a store loads enter the secret output gate before they are used.
+fn protect_loaded(result: Result<Option<StoredOAuthTokens>>) -> Result<Option<StoredOAuthTokens>> {
+    if let Ok(Some(tokens)) = &result {
+        output_gate::protect(tokens)?;
+    }
+    result
 }

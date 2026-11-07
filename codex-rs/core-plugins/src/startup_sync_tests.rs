@@ -512,35 +512,7 @@ fn has_plugins_clone_dirs(codex_home: &Path) -> bool {
 /// script then fails with ETXTBSY on Linux (#635).
 #[cfg(unix)]
 fn write_executable_script(path: &Path, contents: &str) {
-<<<<<<< HEAD
-    let mut writer = Command::new("/bin/sh")
-        .args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "sh"])
-        .arg(path)
-        .stdin(Stdio::piped())
-        .spawn()
-        .expect("spawn script writer");
-    writer
-        .stdin
-        .take()
-        .expect("script writer stdin")
-        .write_all(contents.as_bytes())
-        .expect("write script");
-    let status = writer.wait().expect("wait for script writer");
-    assert!(status.success(), "script writer failed: {status}");
-||||||| 413492cd6c
-    #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
-
-    std::fs::write(path, contents).expect("write script");
-    #[cfg(unix)]
-    {
-        let mut permissions = std::fs::metadata(path).expect("metadata").permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(path, permissions).expect("chmod");
-    }
-=======
     codex_utils_cargo_bin::write_executable(path, contents).expect("write script");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[cfg(unix)]

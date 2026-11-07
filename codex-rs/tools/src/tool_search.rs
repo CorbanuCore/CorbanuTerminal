@@ -60,6 +60,7 @@ impl ToolSearchInfo {
         spec: Arc<ToolSpec>,
         source_info: Option<ToolSearchSourceInfo>,
     ) -> Option<Self> {
+        let search_text = combine_search_text(search_text, default_tool_search_text(&spec));
         match spec.as_ref() {
             ToolSpec::Function(_) | ToolSpec::Freeform(_) | ToolSpec::Namespace(_) => Some(Self {
                 entry: ToolSearchEntry { search_text, spec },
@@ -82,59 +83,11 @@ impl ToolSearchInfo {
         spec: ToolSpec,
         source_info: Option<ToolSearchSourceInfo>,
     ) -> Option<Self> {
-<<<<<<< HEAD
         let spec_search_text = default_tool_search_text(&spec);
         let search_text = combine_search_text(search_text, spec_search_text);
-        let output = match spec {
-            ToolSpec::Function(mut tool) => {
-                tool.defer_loading = Some(true);
-                tool.output_schema = None;
-                LoadableToolSpec::Function(tool)
-            }
-            ToolSpec::Namespace(mut namespace) => {
-                if namespace.description.trim().is_empty() {
-                    namespace.description = default_namespace_description(&namespace.name);
-                }
-                for tool in &mut namespace.tools {
-                    let ResponsesApiNamespaceTool::Function(tool) = tool;
-                    tool.defer_loading = Some(true);
-                    tool.output_schema = None;
-                }
-                LoadableToolSpec::Namespace(namespace)
-            }
-            ToolSpec::ToolSearch { .. } | ToolSpec::WebSearch { .. } | ToolSpec::Freeform(_) => {
-                return None;
-            }
-        };
-
-||||||| 413492cd6c
-        let output = match spec {
-            ToolSpec::Function(mut tool) => {
-                tool.defer_loading = Some(true);
-                tool.output_schema = None;
-                LoadableToolSpec::Function(tool)
-            }
-            ToolSpec::Namespace(mut namespace) => {
-                if namespace.description.trim().is_empty() {
-                    namespace.description = default_namespace_description(&namespace.name);
-                }
-                for tool in &mut namespace.tools {
-                    let ResponsesApiNamespaceTool::Function(tool) = tool;
-                    tool.defer_loading = Some(true);
-                    tool.output_schema = None;
-                }
-                LoadableToolSpec::Namespace(namespace)
-            }
-            ToolSpec::ToolSearch { .. } | ToolSpec::WebSearch { .. } | ToolSpec::Freeform(_) => {
-                return None;
-            }
-        };
-
-=======
         // Dynamic-tool cache entries compare normalized specs by value.
         // Preserve that behavior; shared MCP specs normalize only when selected.
         let output = normalize_search_spec(spec)?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         Some(Self {
             entry: ToolSearchEntry {
                 search_text,
@@ -145,7 +98,6 @@ impl ToolSearchInfo {
     }
 }
 
-<<<<<<< HEAD
 fn combine_search_text(primary: String, fallback: String) -> String {
     let primary = primary.trim();
     let fallback = fallback.trim();
@@ -158,8 +110,8 @@ fn combine_search_text(primary: String, fallback: String) -> String {
         (false, true) => primary.to_string(),
         (false, false) => format!("{primary} {fallback}"),
     }
-||||||| 413492cd6c
-=======
+}
+
 fn normalize_search_spec(spec: ToolSpec) -> Option<LoadableToolSpec> {
     let mut namespace = match spec {
         ToolSpec::Function(tool) => ResponsesApiNamespace {
@@ -194,7 +146,6 @@ fn normalize_search_spec(spec: ToolSpec) -> Option<LoadableToolSpec> {
         }
     }
     Some(LoadableToolSpec::Namespace(namespace))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn default_tool_search_text(spec: &ToolSpec) -> String {

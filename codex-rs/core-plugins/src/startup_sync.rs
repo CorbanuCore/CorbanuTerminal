@@ -117,16 +117,8 @@ fn sync_openai_plugins_repo_with_transport_overrides(
     }
 
     let git_sync_result = match git_binary {
-<<<<<<< HEAD
         Some(binary) => sync_openai_plugins_repo_via_git(codex_home, Git { binary, cancel }),
-        None => Err("git executable is unavailable".to_string()),
-||||||| 413492cd6c
-        Some(git_binary) => sync_openai_plugins_repo_via_git(codex_home, git_binary),
-        None => Err("git executable is unavailable".to_string()),
-=======
-        Some(git_binary) => sync_openai_plugins_repo_via_git(codex_home, git_binary),
         None => Err("no Git executable found in trusted installation directories".to_string()),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
     if git_sync_result.is_err() && cancel.load(Ordering::SeqCst) {
         return Err(SYNC_CANCELLED.to_string());
@@ -212,16 +204,8 @@ fn lock_curated_plugins_startup_sync(codex_home: &Path) -> Result<File, String> 
 fn sync_openai_plugins_repo_via_git(codex_home: &Path, git: Git<'_>) -> Result<String, String> {
     let repo_path = curated_plugins_repo_path(codex_home);
     let sha_path = codex_home.join(CURATED_PLUGINS_SHA_FILE);
-<<<<<<< HEAD
-    let remote_sha = git_ls_remote_head_sha(git)?;
+    let remote_sha = git_ls_remote_head_sha(codex_home, git)?;
     let local_sha = read_local_git_or_sha_file(&repo_path, &sha_path, git);
-||||||| 413492cd6c
-    let remote_sha = git_ls_remote_head_sha(git_binary)?;
-    let local_sha = read_local_git_or_sha_file(&repo_path, &sha_path, git_binary);
-=======
-    let remote_sha = git_ls_remote_head_sha(codex_home, git_binary)?;
-    let local_sha = read_local_git_or_sha_file(&repo_path, &sha_path, git_binary);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     if local_sha.as_deref() == Some(remote_sha.as_str()) && repo_path.join(".git").is_dir() {
         return Ok(remote_sha);
@@ -298,13 +282,7 @@ fn fetch_curated_plugins_commit_from(
     context: &str,
 ) -> Result<(), String> {
     let fetch_refspec = format!("+{source_revision}:{CURATED_PLUGINS_FETCH_REF}");
-<<<<<<< HEAD
-    let mut command = git.command();
-||||||| 413492cd6c
-    let mut command = git_command(git_binary);
-=======
-    let mut command = git_command(git_binary)?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    let mut command = git.command()?;
     command
         .arg("-C")
         .arg(repo_path)
@@ -336,13 +314,7 @@ fn run_git_in_repo(
     args: &[&str],
     context: &str,
 ) -> Result<(), String> {
-<<<<<<< HEAD
-    let mut command = git.command();
-||||||| 413492cd6c
-    let mut command = git_command(git_binary);
-=======
-    let mut command = git_command(git_binary)?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    let mut command = git.command()?;
     command.arg("-C").arg(repo_path).args(args);
     let output = git.run(&mut command, context)?;
     ensure_git_success(&output, context)
@@ -647,17 +619,9 @@ fn read_local_git_or_sha_file(repo_path: &Path, sha_path: &Path, git: Git<'_>) -
     read_sha_file(sha_path)
 }
 
-<<<<<<< HEAD
-fn git_ls_remote_head_sha(git: Git<'_>) -> Result<String, String> {
-    let mut command = git.command();
-||||||| 413492cd6c
-fn git_ls_remote_head_sha(git_binary: &Path) -> Result<String, String> {
-    let mut command = git_command(git_binary);
-=======
-fn git_ls_remote_head_sha(codex_home: &Path, git_binary: &Path) -> Result<String, String> {
-    let mut command = git_command(git_binary)?;
+fn git_ls_remote_head_sha(codex_home: &Path, git: Git<'_>) -> Result<String, String> {
+    let mut command = git.command()?;
     let _trusted_repository = crate::configure_trusted_git_repository(&mut command, codex_home)?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     command
         .current_dir(codex_home)
         .arg("ls-remote")
@@ -681,17 +645,9 @@ fn git_ls_remote_head_sha(codex_home: &Path, git_binary: &Path) -> Result<String
     Ok(sha.to_string())
 }
 
-<<<<<<< HEAD
 fn git_head_sha(repo_path: &Path, git: Git<'_>) -> Result<String, String> {
     let output = git
-        .command()
-||||||| 413492cd6c
-fn git_head_sha(repo_path: &Path, git_binary: &Path) -> Result<String, String> {
-    let output = git_command(git_binary)
-=======
-fn git_head_sha(repo_path: &Path, git_binary: &Path) -> Result<String, String> {
-    let output = git_command(git_binary)?
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        .command()?
         .arg("-C")
         .arg(repo_path)
         .arg("rev-parse")
@@ -715,7 +671,6 @@ fn git_head_sha(repo_path: &Path, git_binary: &Path) -> Result<String, String> {
     Ok(sha)
 }
 
-<<<<<<< HEAD
 /// The `git` the sync runs, and the flag that cancels it.
 #[derive(Clone, Copy)]
 struct Git<'a> {
@@ -724,7 +679,7 @@ struct Git<'a> {
 }
 
 impl Git<'_> {
-    fn command(self) -> Command {
+    fn command(self) -> Result<Command, String> {
         git_command(self.binary)
     }
 
@@ -733,28 +688,10 @@ impl Git<'_> {
     }
 }
 
-fn git_command(git_binary: &Path) -> Command {
-    let mut command = Command::new(git_binary);
-    // In its own process group `git` must never wait on the terminal.
-    command
-        .env("GIT_OPTIONAL_LOCKS", "0")
-        .env("GIT_TERMINAL_PROMPT", "0");
-    for name in REPOSITORY_LOCAL_GIT_ENVIRONMENT_VARIABLES {
-        command.env_remove(name);
-    }
-||||||| 413492cd6c
-fn git_command(git_binary: &Path) -> Command {
-    let mut command = Command::new(git_binary);
-    command.env("GIT_OPTIONAL_LOCKS", "0");
-    for name in REPOSITORY_LOCAL_GIT_ENVIRONMENT_VARIABLES {
-        command.env_remove(name);
-    }
-=======
 fn git_command(git_binary: &Path) -> Result<Command, String> {
     let mut command = crate::PluginGitMode::Automatic.command(git_binary);
     // Git launches transports and credential helpers too. Selecting a trusted
     // main executable alone does not prevent a workspace PATH helper from running.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     command
         .env(
             "PATH",
@@ -1295,18 +1232,14 @@ fn extract_zipball_to_dir(bytes: &[u8], destination: &Path) -> Result<(), String
                 output_path.display()
             )
         })?;
-<<<<<<< HEAD
-        apply_zip_permissions(entry.unix_mode(), &output_path)?;
-||||||| 413492cd6c
-        apply_zip_permissions(&entry, &output_path)?;
-=======
         #[cfg(unix)]
         if let Some(mode) = entry.unix_mode() {
             use std::os::unix::fs::PermissionsExt;
 
-            // zip strips setuid, setgid, and sticky bits from the archive's Unix mode.
+            // zip strips setuid, setgid, and sticky bits from the archive's Unix mode; keep
+            // only the permission bits anyway. Set through the open file, not the path.
             output
-                .set_permissions(std::fs::Permissions::from_mode(mode))
+                .set_permissions(std::fs::Permissions::from_mode(mode & 0o777))
                 .map_err(|err| {
                     format!(
                         "failed to set permissions on curated plugins file {}: {err}",
@@ -1314,13 +1247,11 @@ fn extract_zipball_to_dir(bytes: &[u8], destination: &Path) -> Result<(), String
                     )
                 })?;
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     Ok(())
 }
 
-<<<<<<< HEAD
 // zip 9's `enclosed_name` strips a leading root, drive or UNC prefix and returns a
 // relative path. Refuse such names on every platform, as zip 2 did.
 fn zip_name_is_rooted(name: &str) -> bool {
@@ -1349,54 +1280,6 @@ fn checked_zip_path(destination: &Path, relative: &Path) -> Result<PathBuf, Stri
     Ok(output)
 }
 
-#[cfg(unix)]
-fn apply_zip_permissions(mode: Option<u32>, output_path: &Path) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
-
-    let Some(mode) = mode else {
-        return Ok(());
-    };
-    std::fs::set_permissions(output_path, std::fs::Permissions::from_mode(mode & 0o777)).map_err(
-        |err| {
-            format!(
-                "failed to set permissions on curated plugins file {}: {err}",
-                output_path.display()
-            )
-        },
-    )
-}
-
-#[cfg(not(unix))]
-fn apply_zip_permissions(_mode: Option<u32>, _output_path: &Path) -> Result<(), String> {
-    Ok(())
-}
-
-||||||| 413492cd6c
-#[cfg(unix)]
-fn apply_zip_permissions(entry: &zip::read::ZipFile<'_>, output_path: &Path) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
-
-    let Some(mode) = entry.unix_mode() else {
-        return Ok(());
-    };
-    std::fs::set_permissions(output_path, std::fs::Permissions::from_mode(mode)).map_err(|err| {
-        format!(
-            "failed to set permissions on curated plugins file {}: {err}",
-            output_path.display()
-        )
-    })
-}
-
-#[cfg(not(unix))]
-fn apply_zip_permissions(
-    _entry: &zip::read::ZipFile<'_>,
-    _output_path: &Path,
-) -> Result<(), String> {
-    Ok(())
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[cfg(test)]
 #[path = "startup_sync_tests.rs"]
 mod tests;

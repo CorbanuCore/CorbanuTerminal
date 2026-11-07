@@ -142,12 +142,8 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
-<<<<<<< HEAD
-use std::sync::PoisonError;
-||||||| 413492cd6c
-=======
 use std::sync::OnceLock;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use std::sync::PoisonError;
 use std::sync::RwLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
@@ -3004,13 +3000,7 @@ impl PluginsManager {
             let manager = Arc::clone(self);
             let on_effective_plugins_changed = on_effective_plugins_changed.clone();
             tokio::spawn(async move {
-<<<<<<< HEAD
-                let auth = auth_manager_for_remote_sync.session_auth().await;
-||||||| 413492cd6c
-                let auth = auth_manager_for_remote_sync.auth().await;
-=======
-                let auth = manager.auth_manager.auth().await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                let auth = manager.auth_manager.session_auth().await;
                 manager.maybe_start_remote_plugin_caches_refresh(
                     &config_for_remote_sync,
                     auth.clone(),
@@ -3047,22 +3037,6 @@ impl PluginsManager {
                     RemoteCatalogCacheRefreshMode::Force,
                     remote_catalog_refresh_requested_at,
                 );
-<<<<<<< HEAD
-            });
-
-            let config_for_featured_plugins = config.clone();
-            let manager = Arc::clone(self);
-            tokio::spawn(async move {
-                let auth = auth_manager.session_auth().await;
-||||||| 413492cd6c
-            });
-
-            let config_for_featured_plugins = config.clone();
-            let manager = Arc::clone(self);
-            tokio::spawn(async move {
-                let auth = auth_manager.auth().await;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 if let Err(err) = manager
                     .featured_plugin_ids_for_config(&config_for_remote_sync, auth.as_ref())
                     .await

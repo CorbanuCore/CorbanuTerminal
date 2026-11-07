@@ -612,6 +612,38 @@ async fn repo_ancestry_stops_at_project_root_and_preserves_root_to_cwd_order() {
     );
 }
 
+/// An empty `.git` directory (the Linux sandbox leaves them as mount targets in writable
+/// roots) does not mark the project root, so the search does not stop there.
+#[tokio::test]
+async fn incomplete_git_dir_does_not_mark_the_project_root() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let outer = absolute(temp_dir.path().join("outer"));
+    let repository = outer.join("repo");
+    let nested = repository.join("nested");
+    fs::create_dir_all(&nested).expect("create nested cwd");
+    fs::create_dir_all(outer.join(".git")).expect("create outer git dir");
+    fs::write(outer.join(".git/HEAD"), "ref: refs/heads/main\n").expect("write outer HEAD");
+    fs::create_dir_all(nested.join(".git")).expect("create empty git dir");
+    fs::create_dir_all(repository.join(".agents/skills")).expect("create repo skills");
+    let config_stack = stack(vec![ConfigLayerEntry::new(
+        ConfigLayerSource::SessionFlags,
+        toml::toml! { project_root_markers = [".git"] }.into(),
+    )]);
+
+    let roots = repo_agents_skill_roots(
+        Some(Arc::clone(&LOCAL_FS)),
+        &config_stack,
+        &nested,
+        /*empty_remote_roots*/ None,
+    )
+    .await
+    .into_iter()
+    .map(|root| root.path)
+    .collect::<Vec<_>>();
+
+    assert_eq!(roots, vec![repository.join(".agents/skills")]);
+}
+
 #[tokio::test]
 async fn resolved_project_layer_loads_skill_without_git_marker() {
     let temp_dir = TempDir::new().expect("temp dir");

@@ -74,6 +74,7 @@ impl Fixture {
             &self.config,
             &self.auth,
             RemotePluginScope::Global,
+            /*collection*/ None,
             mode,
         )
         .await
@@ -199,6 +200,8 @@ async fn a_download_started_before_invalidation_does_not_rewrite_the_cache() {
             &fixture.config,
             &fixture.auth,
             RemotePluginScope::Global,
+            /*collection*/ None,
+            RemotePluginCatalogCacheMode::PreferCache,
         )
         .is_none()
     );

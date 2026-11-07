@@ -51,20 +51,18 @@ pub(super) struct OAuthStoreLock {
     _file: File,
 }
 
-<<<<<<< HEAD
 impl Drop for OAuthStoreLock {
     fn drop(&mut self) {
         // On Unix a duplicate or inherited descriptor can outlive this guard. Release the
         // lock at this operation's scope boundary, even while that descriptor stays open.
         let _ = self._file.unlock();
     }
-||||||| 413492cd6c
-=======
+}
+
 #[derive(Clone, Copy, Debug)]
 enum OAuthStoreLockMode {
     Shared,
     Exclusive,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl OAuthStoreLock {
