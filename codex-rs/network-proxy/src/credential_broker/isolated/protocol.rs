@@ -51,12 +51,23 @@ impl HostBindingWire {
                 exact_hosts: vec![host.clone()],
                 suffixes: Vec::new(),
             },
+            CredentialHostBinding::ExactHosts(hosts) => Self {
+                exact_hosts: hosts.clone(),
+                suffixes: Vec::new(),
+            },
             CredentialHostBinding::HostPattern {
                 exact_hosts,
                 suffixes,
             } => Self {
                 exact_hosts: exact_hosts.iter().map(ToString::to_string).collect(),
                 suffixes: suffixes.iter().map(ToString::to_string).collect(),
+            },
+            // Upstream's configured destinations carry ports and paths the
+            // broker cannot enforce; an empty binding fails `validate`, so the
+            // credential is never registered (fail closed).
+            CredentialHostBinding::ConfiguredHosts(_) => Self {
+                exact_hosts: Vec::new(),
+                suffixes: Vec::new(),
             },
         }
     }

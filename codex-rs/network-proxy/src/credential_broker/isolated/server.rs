@@ -473,10 +473,14 @@ fn upstream_client(
 ) -> anyhow::Result<UpstreamClient> {
     let config = NetworkProxyConfig {
         enabled: true,
-        allow_local_binding,
+        allow_local_binding: Some(allow_local_binding),
         ..NetworkProxyConfig::default()
     };
-    let state = build_config_state(config, NetworkProxyConstraints::default())?;
+    let state = build_config_state(
+        config,
+        NetworkProxyConstraints::default(),
+        codex_utils_path_uri::Platform::native(),
+    )?;
     let state = Arc::new(NetworkProxyState::with_reloader(
         state,
         Arc::new(StaticConfigReloader),

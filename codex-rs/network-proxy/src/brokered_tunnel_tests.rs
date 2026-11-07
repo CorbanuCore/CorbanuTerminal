@@ -254,6 +254,7 @@ async fn read_headers(stream: &mut TcpStream) -> String {
 }
 
 #[tokio::test]
+#[ignore = "S3b: upstream's credential engine (configured providers, aliases, plaintext tunnels) is kept off; main's engine brokers every Corbanu proxy"]
 async fn plaintext_tunnels_translate_only_the_configured_url_prefix() {
     for transport in [Transport::Connect, Transport::Socks5] {
         let target = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
@@ -300,6 +301,7 @@ async fn plaintext_tunnels_translate_only_the_configured_url_prefix() {
 }
 
 #[tokio::test]
+#[ignore = "S3b: upstream's credential engine (configured providers, aliases, plaintext tunnels) is kept off; main's engine brokers every Corbanu proxy"]
 async fn plaintext_tunnels_accept_http2_clients() {
     use rama_core::Service;
     use rama_core::error::BoxError;
@@ -372,6 +374,7 @@ async fn plaintext_tunnels_accept_http2_clients() {
 }
 
 #[tokio::test]
+#[ignore = "S3b: upstream's credential engine (configured providers, aliases, plaintext tunnels) is kept off; main's engine brokers every Corbanu proxy"]
 async fn plaintext_tunnels_reject_retargeting_and_nested_connect() {
     for transport in [Transport::Connect, Transport::Socks5] {
         let target = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
@@ -405,6 +408,7 @@ async fn plaintext_tunnels_reject_retargeting_and_nested_connect() {
 }
 
 #[tokio::test]
+#[ignore = "S3b: upstream's credential engine (configured providers, aliases, plaintext tunnels) is kept off; main's engine brokers every Corbanu proxy"]
 async fn plaintext_tunnels_preserve_server_first_and_client_first_opaque_bytes() {
     for transport in [Transport::Connect, Transport::Socks5] {
         for server_first in [true, false] {
@@ -440,6 +444,7 @@ async fn plaintext_tunnels_preserve_server_first_and_client_first_opaque_bytes()
 }
 
 #[tokio::test]
+#[ignore = "S3b: upstream's credential engine (configured providers, aliases, plaintext tunnels) is kept off; main's engine brokers every Corbanu proxy"]
 async fn plaintext_tunnels_preserve_http_upgrades() {
     for (transport, protocol) in [Transport::Connect, Transport::Socks5]
         .into_iter()
@@ -501,6 +506,7 @@ async fn plaintext_tunnels_preserve_http_upgrades() {
 }
 
 #[tokio::test]
+#[ignore = "S3b: upstream's credential engine (configured providers, aliases, plaintext tunnels) is kept off; main's engine brokers every Corbanu proxy"]
 async fn limited_plaintext_tunnels_allow_reads_but_reject_writes_and_opaque_traffic() {
     for transport in [Transport::Connect, Transport::Socks5] {
         let target = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();

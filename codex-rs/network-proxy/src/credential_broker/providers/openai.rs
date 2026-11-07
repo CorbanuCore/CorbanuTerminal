@@ -3,27 +3,17 @@ use super::CredentialHostBinding;
 use super::CredentialProvider;
 use super::CredentialSource;
 use super::shaped_dummy_value;
-<<<<<<< HEAD
+use crate::config::trusted_credential_broker_host;
 use crate::credential_broker::resolver::OPENAI_API_HOST;
 use crate::credential_broker::resolver::OPENAI_API_KEY_ENV_VAR;
-||||||| 413492cd6c
-=======
-use crate::config::trusted_credential_broker_host;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use rama_http::HeaderMap;
 use rama_http::HeaderValue;
 use rama_http::header::AUTHORIZATION;
 use std::collections::HashMap;
 
-<<<<<<< HEAD
 const OPENAI_API_KEY_ENV_VARS: &[&str] = &[OPENAI_API_KEY_ENV_VAR];
-||||||| 413492cd6c
-const OPENAI_API_KEY_ENV_VARS: &[&str] = &["OPENAI_API_KEY"];
-=======
-const OPENAI_API_KEY_ENV_VARS: &[&str] = &["OPENAI_API_KEY"];
 const OPENAI_API_KEY_PREFIXES: &[&str] = &["sk-proj-", "sk-svcacct-", "sk-admin-", "sk-"];
 const OPENAI_BASE_URL_ENV_VAR: &str = "OPENAI_BASE_URL";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 const OPENAI_API_KEY_MIN_LEN: usize = 51;
 
 pub(super) static PROVIDER: CredentialProvider = CredentialProvider {
