@@ -59,12 +59,19 @@ async fn disabled_request_logging_suppresses_transport_url_and_body() {
         .with_network_policy(policy);
     let client =
         crate::RouteAwareClientPool::new(factory, crate::ClientRouteClass::Api).into_client();
+    // Routed clients log like fixed ones: the URL with its query values redacted.
     let logs = capture_transport_logs(client.clone()).await;
-    assert!(logs.contains("url-secret"));
+    assert!(logs.contains("/request?token=REDACTED"), "{logs}");
+    assert!(!logs.contains("url-secret"), "{logs}");
     let logs = capture_transport_logs(client.clone().without_request_logging()).await;
     assert!(!logs.contains("url-secret"), "{logs}");
+    assert!(!logs.contains("/request?token="), "{logs}");
     assert!(!logs.contains("body-secret"));
-    assert!(capture_transport_logs(client).await.contains("url-secret"));
+    assert!(
+        capture_transport_logs(client)
+            .await
+            .contains("/request?token=REDACTED")
+    );
 }
 
 #[tokio::test]

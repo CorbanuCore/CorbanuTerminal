@@ -9,12 +9,8 @@ mod agent_response;
 mod guardian_assessment;
 mod network_policy;
 mod otlp;
-<<<<<<< HEAD
 mod otlp_http_client;
-||||||| 413492cd6c
-=======
 mod skill_invocation;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod targets;
 mod tool_result;
 

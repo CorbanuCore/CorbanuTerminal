@@ -57,17 +57,26 @@ impl std::fmt::Debug for TransportError {
                 url,
                 headers,
                 body,
+                retry_after,
             } => f
                 .debug_struct("Http")
                 .field("status", status)
                 .field("url", &url.as_deref().map(crate::redact_url))
                 .field("headers", &headers.as_ref().map(crate::redact_headers))
                 .field("body", body)
+                .field("retry_after", retry_after)
                 .finish(),
+            Self::Policy(denied) => f.debug_tuple("Policy").field(denied).finish(),
             Self::RetryLimit => f.write_str("RetryLimit"),
             Self::Timeout => f.write_str("Timeout"),
+            // The transport strips the URL before wrapping the error.
+            Self::Connection(error) => f.debug_tuple("Connection").field(error).finish(),
             Self::Network(message) => f.debug_tuple("Network").field(message).finish(),
             Self::Build(message) => f.debug_tuple("Build").field(message).finish(),
+            Self::ResponseTooLarge { max_bytes } => f
+                .debug_struct("ResponseTooLarge")
+                .field("max_bytes", max_bytes)
+                .finish(),
         }
     }
 }

@@ -1317,60 +1317,6 @@ impl SessionTelemetry {
         result
     }
 
-<<<<<<< HEAD
-    pub fn log_tool_failed(&self, tool_name: &str, error: &str) {
-        let gated_error = trace_gated(error);
-        let error = gated_error.as_deref().unwrap_or(error);
-        log_event!(
-            self,
-            event.name = "codex.tool_result",
-            tool_name = %tool_name,
-            duration_ms = %Duration::ZERO.as_millis(),
-            success = %false,
-            output = %error,
-            mcp_server = "",
-            mcp_server_origin = "",
-        );
-        trace_event!(
-            self,
-            event.name = "codex.tool_result",
-            tool_name = %tool_name,
-            duration_ms = %Duration::ZERO.as_millis(),
-            success = %false,
-            output_length = error.len() as i64,
-            output_line_count = error.lines().count() as i64,
-            tool_origin = %"builtin",
-            error.message = %error,
-        );
-    }
-
-||||||| 413492cd6c
-    pub fn log_tool_failed(&self, tool_name: &str, error: &str) {
-        log_event!(
-            self,
-            event.name = "codex.tool_result",
-            tool_name = %tool_name,
-            duration_ms = %Duration::ZERO.as_millis(),
-            success = %false,
-            output = %error,
-            mcp_server = "",
-            mcp_server_origin = "",
-        );
-        trace_event!(
-            self,
-            event.name = "codex.tool_result",
-            tool_name = %tool_name,
-            duration_ms = %Duration::ZERO.as_millis(),
-            success = %false,
-            output_length = error.len() as i64,
-            output_line_count = error.lines().count() as i64,
-            tool_origin = %"builtin",
-            error.message = %error,
-        );
-    }
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     #[allow(clippy::too_many_arguments)]
     pub fn tool_result_with_tags(
         &self,
@@ -1383,16 +1329,12 @@ impl SessionTelemetry {
         extra_tags: &[(&str, &str)],
         extra_trace_fields: &[(&str, &str)],
     ) {
-<<<<<<< HEAD
         // PF-28-S01: tool output and arguments are exported; gate them.
         let gated_arguments = trace_gated(arguments);
         let arguments = gated_arguments.as_deref().unwrap_or(arguments);
         let gated_output = trace_gated(output);
         let output = gated_output.as_deref().unwrap_or(output);
-||||||| 413492cd6c
-=======
         let flat_tool_name = tool_name.to_string();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let success_str = if success { "true" } else { "false" };
         let mut tags = Vec::with_capacity(3 + extra_tags.len());
         tags.push(("tool", flat_tool_name.as_str()));

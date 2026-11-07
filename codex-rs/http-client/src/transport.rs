@@ -72,11 +72,6 @@ impl ReqwestTransport {
         }
     }
 
-<<<<<<< HEAD
-    fn build(&self, req: Request) -> Result<Prepared, TransportError> {
-||||||| 413492cd6c
-    fn build(&self, req: Request) -> Result<RequestBuilder, TransportError> {
-=======
     /// Uses the pool to resolve the route for every request and redirect URL.
     pub fn from_route_aware_client_pool(client: RouteAwareClientPool) -> Self {
         Self {
@@ -84,8 +79,7 @@ impl ReqwestTransport {
         }
     }
 
-    async fn send(&self, req: Request) -> Result<HttpResponse, TransportError> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    async fn send(&self, req: Request) -> Result<Sent, TransportError> {
         let prepared = req.prepare_body_for_send().map_err(TransportError::Build)?;
 
         let Request {
@@ -97,15 +91,15 @@ impl ReqwestTransport {
             timeout,
             response_body_limit_bytes: _,
         } = req;
+        let method = Method::from_bytes(method.as_str().as_bytes()).unwrap_or(Method::GET);
 
-<<<<<<< HEAD
         // PF-27-S05: a broker-authorized request goes to the broker and
-        // nowhere else; with no broker it is not sent.
-        let broker;
-        let client = if prepared
+        // nowhere else, whichever client or route pool the caller built; with
+        // no broker it is not sent.
+        let broker = if prepared
             .headers
             .contains_key(crate::MODEL_BROKER_FRAME_HEADER)
-            && !self.client.is_broker_socket()
+            && !self.is_broker_socket()
         {
             match crate::model_broker_route::model_broker_route().ok_or_else(|| {
                 if let Some(frame) = crate::model_broker_route::broker_frame(&prepared.headers) {
@@ -116,17 +110,13 @@ impl ReqwestTransport {
                 }
                 TransportError::Build("the credential broker is not running".to_string())
             })? {
-                ModelBrokerRoute::Client(client) => {
-                    broker = client;
-                    &broker
-                }
+                ModelBrokerRoute::Client(client) => Some(client),
                 // PF-27-S09: the Windows broker's checked data pipe.
                 ModelBrokerRoute::Sender(sender) => {
-                    return Ok(Prepared::Broker {
+                    return Ok(Sent::Broker {
                         sender,
                         request: ModelBrokerRequest {
-                            method: Method::from_bytes(method.as_str().as_bytes())
-                                .unwrap_or(Method::GET),
+                            method,
                             url,
                             headers: prepared.headers,
                             body: prepared.body.unwrap_or_default(),
@@ -136,64 +126,55 @@ impl ReqwestTransport {
                 }
             }
         } else {
-            &self.client
+            None
         };
-        let mut builder = client.request(
-            Method::from_bytes(method.as_str().as_bytes()).unwrap_or(Method::GET),
-            &url,
-        );
-||||||| 413492cd6c
-        let mut builder = self.client.request(
-            Method::from_bytes(method.as_str().as_bytes()).unwrap_or(Method::GET),
-            &url,
-        );
-=======
-        let method = Method::from_bytes(method.as_str().as_bytes()).unwrap_or(Method::GET);
+
         let mut request =
             RequestDraft::new(method, url).map_err(|error| Self::map_error(error.into()))?;
         request.extend_headers(prepared.headers);
         *request.request.timeout_mut() = timeout;
         *request.request.body_mut() = prepared.body.map(Into::into);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
-        match &self.client {
-            TransportClient::Fixed(client) => match &client.backend {
-                HttpClientBackend::Routed(pool) => pool
-                    .send(request)
-                    .await
-                    .map_err(Self::map_route_aware_error),
-                HttpClientBackend::Direct(client) => {
-                    let request = request
-                        .build(client)
-                        .map_err(|error| Self::map_error(error.into()))?;
-                    client
-                        .execute(request)
-                        .await
-                        .map(HttpResponse::from)
-                        .map_err(|error| Self::map_error(error.into()))
-                }
-            },
-            TransportClient::RouteAware(client) => client
+        let response = match (&broker, &self.client) {
+            (Some(client), _) | (None, TransportClient::Fixed(client)) => {
+                Self::send_with_client(client, request).await
+            }
+            (None, TransportClient::RouteAware(client)) => client
                 .send(request)
                 .await
                 .map_err(Self::map_route_aware_error),
-        }
-<<<<<<< HEAD
+        }?;
+        Ok(Sent::Response(response))
+    }
 
-        builder = builder.headers(prepared.headers);
-        if let Some(body) = prepared.body {
-            builder = builder.body(body);
+    async fn send_with_client(
+        client: &HttpClient,
+        request: RequestDraft,
+    ) -> Result<HttpResponse, TransportError> {
+        match &client.backend {
+            HttpClientBackend::Routed(pool) => pool
+                .send(request)
+                .await
+                .map_err(Self::map_route_aware_error),
+            HttpClientBackend::Direct(client) => {
+                let request = request
+                    .build(client)
+                    .map_err(|error| Self::map_error(error.into()))?;
+                client
+                    .execute(request)
+                    .await
+                    .map(HttpResponse::from)
+                    .map_err(|error| Self::map_error(error.into()))
+            }
         }
-        Ok(Prepared::Reqwest(builder))
-||||||| 413492cd6c
+    }
 
-        builder = builder.headers(prepared.headers);
-        if let Some(body) = prepared.body {
-            builder = builder.body(body);
+    /// Whether this transport connects only to the credential broker's socket.
+    fn is_broker_socket(&self) -> bool {
+        match &self.client {
+            TransportClient::Fixed(client) => client.is_broker_socket(),
+            TransportClient::RouteAware(_) => false,
         }
-        Ok(builder)
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn map_error(err: crate::HttpError) -> TransportError {
@@ -205,7 +186,7 @@ impl ReqwestTransport {
         } else if err.is_timeout() {
             TransportError::Timeout
         } else {
-            TransportError::Network(crate::redact_reqwest_error(&err))
+            TransportError::Network(err.redacted_message())
         }
     }
 
@@ -272,23 +253,24 @@ impl ReqwestTransport {
         self.trace_request(&req);
 
         let url = req.url.clone();
-<<<<<<< HEAD
-        let builder = match self.build(req)? {
-            Prepared::Reqwest(builder) => builder,
-            Prepared::Broker {
+        let response_body_limit_bytes = req.response_body_limit_bytes;
+        let resp = match self.send(req).await? {
+            Sent::Response(resp) => resp,
+            Sent::Broker {
                 sender,
                 request,
                 timeout,
-            } => return execute_via_broker(sender.as_ref(), request, timeout, &url).await,
+            } => {
+                return execute_via_broker(
+                    sender.as_ref(),
+                    request,
+                    timeout,
+                    response_body_limit_bytes,
+                    &url,
+                )
+                .await;
+            }
         };
-        let resp = builder.send().await.map_err(Self::map_error)?;
-||||||| 413492cd6c
-        let builder = self.build(req)?;
-        let resp = builder.send().await.map_err(Self::map_error)?;
-=======
-        let response_body_limit_bytes = req.response_body_limit_bytes;
-        let resp = self.send(req).await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let status = resp.status();
         let headers = resp.headers().clone();
         let retry_after = RetryAfter::from_headers(&headers);
@@ -329,23 +311,24 @@ impl ReqwestTransport {
         self.trace_request(&req);
 
         let url = req.url.clone();
-<<<<<<< HEAD
-        let builder = match self.build(req)? {
-            Prepared::Reqwest(builder) => builder,
-            Prepared::Broker {
+        let response_body_limit_bytes = req.response_body_limit_bytes;
+        let resp = match self.send(req).await? {
+            Sent::Response(resp) => resp,
+            Sent::Broker {
                 sender,
                 request,
                 timeout,
-            } => return stream_via_broker(sender.as_ref(), request, timeout, &url).await,
+            } => {
+                return stream_via_broker(
+                    sender.as_ref(),
+                    request,
+                    timeout,
+                    response_body_limit_bytes,
+                    &url,
+                )
+                .await;
+            }
         };
-        let resp = builder.send().await.map_err(Self::map_error)?;
-||||||| 413492cd6c
-        let builder = self.build(req)?;
-        let resp = builder.send().await.map_err(Self::map_error)?;
-=======
-        let response_body_limit_bytes = req.response_body_limit_bytes;
-        let resp = self.send(req).await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let status = resp.status();
         let headers = resp.headers().clone();
         if !status.is_success() {
@@ -396,11 +379,10 @@ impl ReqwestTransport {
     }
 }
 
-<<<<<<< HEAD
 /// A request ready to send: through reqwest, or to the credential broker's
 /// sender (PF-27-S09).
-enum Prepared {
-    Reqwest(RequestBuilder),
+enum Sent {
+    Response(HttpResponse),
     Broker {
         sender: Arc<dyn ModelBrokerSender>,
         request: ModelBrokerRequest,
@@ -432,6 +414,7 @@ async fn send_via_broker(
     sender: &dyn ModelBrokerSender,
     request: ModelBrokerRequest,
     deadline: Option<tokio::time::Instant>,
+    response_body_limit_bytes: Option<usize>,
     url: &str,
 ) -> Result<ModelBrokerResponse, TransportError> {
     let response = before(deadline, sender.send(request)).await?;
@@ -443,32 +426,62 @@ async fn send_via_broker(
         headers,
         bytes,
     } = response;
-    let body = before(deadline, collect(bytes)).await.ok();
+    let body = match before(deadline, collect(bytes, response_body_limit_bytes)).await {
+        Ok(body) => String::from_utf8(body.to_vec()).ok(),
+        Err(error @ TransportError::ResponseTooLarge { .. }) => return Err(error),
+        Err(_) => None,
+    };
+    let retry_after = RetryAfter::from_headers(&headers);
     Err(TransportError::Http {
         status,
         url: Some(crate::redact_url(url)),
         headers: Some(headers),
-        body: body.and_then(|body| String::from_utf8(body.to_vec()).ok()),
+        body,
+        retry_after,
     })
 }
 
-async fn collect(mut bytes: ByteStream) -> Result<Bytes, TransportError> {
-    let mut body = Vec::new();
+/// The brokered body, held to the request's response limit like the reqwest path.
+async fn collect(bytes: ByteStream, max_bytes: Option<usize>) -> Result<Bytes, TransportError> {
+    let mut bytes = limit_stream(bytes, max_bytes);
+    let mut body = BytesMut::new();
     while let Some(chunk) = bytes.next().await {
         body.extend_from_slice(&chunk?);
     }
-    Ok(Bytes::from(body))
+    Ok(body.freeze())
+}
+
+fn limit_stream(bytes: ByteStream, max_bytes: Option<usize>) -> ByteStream {
+    let Some(max_bytes) = max_bytes else {
+        return bytes;
+    };
+    futures::stream::try_unfold(
+        (bytes, max_bytes),
+        move |(mut bytes, remaining)| async move {
+            match bytes.next().await.transpose()? {
+                Some(chunk) if chunk.len() <= remaining => {
+                    let remaining = remaining - chunk.len();
+                    Ok(Some((chunk, (bytes, remaining))))
+                }
+                Some(_) => Err(TransportError::ResponseTooLarge { max_bytes }),
+                None => Ok(None),
+            }
+        },
+    )
+    .boxed()
 }
 
 async fn execute_via_broker(
     sender: &dyn ModelBrokerSender,
     request: ModelBrokerRequest,
     timeout: Option<Duration>,
+    response_body_limit_bytes: Option<usize>,
     url: &str,
 ) -> Result<Response, TransportError> {
     let deadline = deadline(timeout);
-    let response = send_via_broker(sender, request, deadline, url).await?;
-    let body = before(deadline, collect(response.bytes)).await?;
+    let response =
+        send_via_broker(sender, request, deadline, response_body_limit_bytes, url).await?;
+    let body = before(deadline, collect(response.bytes, response_body_limit_bytes)).await?;
     Ok(Response {
         status: response.status,
         headers: response.headers,
@@ -480,13 +493,16 @@ async fn stream_via_broker(
     sender: &dyn ModelBrokerSender,
     request: ModelBrokerRequest,
     timeout: Option<Duration>,
+    response_body_limit_bytes: Option<usize>,
     url: &str,
 ) -> Result<StreamResponse, TransportError> {
     let deadline = deadline(timeout);
-    let response = send_via_broker(sender, request, deadline, url).await?;
+    let response =
+        send_via_broker(sender, request, deadline, response_body_limit_bytes, url).await?;
+    let response_bytes = limit_stream(response.bytes, response_body_limit_bytes);
     let bytes = match deadline {
         // The stream ends with a timeout error once the deadline passes.
-        Some(deadline) => futures::stream::unfold(Some(response.bytes), move |bytes| async move {
+        Some(deadline) => futures::stream::unfold(Some(response_bytes), move |bytes| async move {
             let mut bytes = bytes?;
             match tokio::time::timeout_at(deadline, bytes.next()).await {
                 Ok(Some(chunk)) => Some((chunk, Some(bytes))),
@@ -495,15 +511,15 @@ async fn stream_via_broker(
             }
         })
         .boxed(),
-        None => response.bytes,
+        None => response_bytes,
     };
     Ok(StreamResponse {
         status: response.status,
         headers: response.headers,
         bytes,
     })
-||||||| 413492cd6c
-=======
+}
+
 fn bounded_response_stream(
     response: HttpResponse,
     max_bytes: usize,
@@ -545,7 +561,6 @@ async fn bounded_response_bytes(
         body.extend_from_slice(&chunk?);
     }
     Ok(body.freeze())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[cfg(test)]

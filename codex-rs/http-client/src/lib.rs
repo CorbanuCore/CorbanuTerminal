@@ -9,16 +9,12 @@ mod client_builder;
 mod client_tls;
 mod custom_ca;
 mod error;
-<<<<<<< HEAD
 mod log_redaction;
 mod model_broker_route;
-||||||| 413492cd6c
-=======
 mod native_roots;
 mod network_policy;
 mod openai_endpoints;
 mod openai_headers;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod outbound_proxy;
 mod request;
 mod request_builder;
@@ -50,7 +46,6 @@ pub use crate::custom_ca::build_rustls_client_config_with_custom_ca;
 pub use crate::custom_ca::maybe_build_rustls_client_config_with_custom_ca;
 pub use crate::error::StreamError;
 pub use crate::error::TransportError;
-<<<<<<< HEAD
 pub use crate::log_redaction::RedactedHeaders;
 pub use crate::log_redaction::redact_headers;
 pub use crate::log_redaction::redact_reqwest_error;
@@ -66,8 +61,6 @@ pub use crate::model_broker_route::ModelBrokerSender;
 pub use crate::model_broker_route::install_model_broker_client;
 pub use crate::model_broker_route::install_model_broker_observer;
 pub use crate::model_broker_route::install_model_broker_sender;
-||||||| 413492cd6c
-=======
 pub use crate::network_policy::DestinationPolicy;
 pub use crate::network_policy::NetworkPermit;
 pub use crate::network_policy::NetworkPolicy;
@@ -80,7 +73,6 @@ pub use crate::openai_endpoints::is_openai_api_url;
 pub use crate::openai_headers::CHATGPT_ACCOUNT_ID_HEADER;
 pub use crate::openai_headers::OPENAI_ORGANIZATION_HEADER;
 pub use crate::openai_headers::OPENAI_PROJECT_HEADER;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use crate::outbound_proxy::BuildRouteAwareHttpClientError;
 pub use crate::outbound_proxy::ClientRouteClass;
 pub use crate::outbound_proxy::HttpClientFactory;
