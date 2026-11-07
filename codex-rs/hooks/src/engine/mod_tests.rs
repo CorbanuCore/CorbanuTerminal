@@ -3045,6 +3045,7 @@ async fn mcp_tool_hooks_expand_event_input_and_apply_pre_tool_decisions() {
         matcher_aliases: Vec::new(),
         tool_use_id: "tool-1".to_string(),
         tool_input: serde_json::json!({ "command": "rm important.txt" }),
+        block_if_hook_cannot_start: false,
     };
     let calls = Arc::new(Mutex::new(Vec::new()));
     let executor = StaticMcpExecutor {
