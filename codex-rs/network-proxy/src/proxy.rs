@@ -467,29 +467,15 @@ impl NetworkProxyRuntimeSettings {
         // port 53) and Unix-socket grants would be egress around the proxy.
         let guarded = config.url_destination_policy;
         Ok(Self {
-<<<<<<< HEAD
-            allow_local_binding: config.allow_local_binding && !guarded,
-            allow_unix_sockets: if guarded {
-                Arc::from([])
-            } else {
-                config.allow_unix_sockets().into()
-            },
-            dangerously_allow_all_unix_sockets: config.dangerously_allow_all_unix_sockets
-                && !guarded,
-||||||| 413492cd6c
-            allow_local_binding: config.allow_local_binding,
-            allow_unix_sockets: config.allow_unix_sockets().into(),
-            dangerously_allow_all_unix_sockets: config.dangerously_allow_all_unix_sockets,
-=======
-            allow_local_binding: config.allow_local_binding(),
-            allow_unix_sockets: if cfg!(target_os = "windows") {
+            allow_local_binding: config.allow_local_binding() && !guarded,
+            allow_unix_sockets: if guarded || cfg!(target_os = "windows") {
                 Arc::default()
             } else {
                 config.allow_unix_sockets().into()
             },
             dangerously_allow_all_unix_sockets: !cfg!(target_os = "windows")
-                && config.dangerously_allow_all_unix_sockets.unwrap_or(false),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                && config.dangerously_allow_all_unix_sockets.unwrap_or(false)
+                && !guarded,
             mitm_ca_trust_bundle,
         })
     }
@@ -909,17 +895,15 @@ impl NetworkProxy {
         self.http_addr
     }
 
-<<<<<<< HEAD
     /// PF-23-S03: revoke every isolated-broker reference and close its open
     /// channels (a restrictive security transition, the kill switch or run
     /// end). Returns false when isolation is inactive.
     pub fn revoke_brokered_credentials(&self) -> bool {
         self.state.revoke_brokered_credentials()
-||||||| 413492cd6c
-=======
+    }
+
     pub fn managed_proxy_routing(&self) -> ManagedProxyRouting {
         self.managed_proxy_routing
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub fn socks_addr(&self) -> SocketAddr {
@@ -1076,7 +1060,6 @@ impl NetworkProxy {
         })
     }
 
-<<<<<<< HEAD
     /// Records a request the executor's own proxy denied (#722, D278) for this
     /// execution, as this proxy's own blocks are, so its observer ends the
     /// command as failed. It can only add a denial.
@@ -1093,18 +1076,11 @@ impl NetworkProxy {
         }))
     }
 
-    /// Returns the policy decider with trusted execution attribution restored.
-    pub fn remote_policy_decider(&self) -> Option<Arc<dyn NetworkPolicyDecider>> {
-||||||| 413492cd6c
-    /// Returns the policy decider with trusted execution attribution restored.
-    pub fn remote_policy_decider(&self) -> Option<Arc<dyn NetworkPolicyDecider>> {
-=======
     /// Returns the policy decider with executor local-binding policy and trusted attribution.
     pub fn remote_policy_decider(
         &self,
         allow_local_binding: bool,
     ) -> Option<Arc<dyn NetworkPolicyDecider>> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let scope = self.execution_scope.as_ref()?;
         let scoped_state = self.state.for_execution_token(&scope.attribution_token)?;
         let decider = Arc::clone(self.policy_decider.as_ref()?);
@@ -2199,7 +2175,7 @@ mod tests {
         let blocked = Arc::new(Mutex::new(Vec::new()));
         let observed = Arc::clone(&blocked);
         let config = NetworkProxyConfig {
-            allow_local_binding: true,
+            allow_local_binding: Some(true),
             ..NetworkProxyConfig::default()
         };
         let proxy = NetworkProxy::builder()
@@ -2219,9 +2195,15 @@ mod tests {
             .managed_by_codex(/*managed_by_codex*/ false)
             .build()
             .await?;
-        let scoped = proxy.for_execution("remote", "execution-1", "token-1".to_string())?;
+        let scoped = proxy.for_execution(
+            "remote",
+            "execution-1",
+            "token-1".to_string(),
+            /*environment_policy*/ None,
+            /*fallback_policy_decider*/ None,
+        )?;
         let decider = scoped
-            .remote_policy_decider()
+            .remote_policy_decider(/*allow_local_binding*/ false)
             .expect("execution-scoped proxy should expose its policy decider");
 
         // An allowlist miss goes to the decider, which reports its own denials.
@@ -2290,7 +2272,13 @@ mod tests {
             proxy.remote_denial_recorder().is_none(),
             "only an execution-scoped proxy can attribute a remote denial"
         );
-        let scoped = proxy.for_execution("remote", "execution-1", "token-1".to_string())?;
+        let scoped = proxy.for_execution(
+            "remote",
+            "execution-1",
+            "token-1".to_string(),
+            /*environment_policy*/ None,
+            /*fallback_policy_decider*/ None,
+        )?;
         let recorder = scoped
             .remote_denial_recorder()
             .expect("execution-scoped proxy should expose its denial recorder");
@@ -2650,15 +2638,14 @@ mod tests {
     }
 
     #[tokio::test]
-<<<<<<< HEAD
     async fn pf_33_s02_guard_limits_sandbox_egress_to_proxy_ports() -> Result<()> {
         #[cfg(target_os = "windows")]
         let _permit = WINDOWS_INGRESS_TEST_LOCK.acquire().await.unwrap();
         let config = |guarded: bool| {
             let mut config = NetworkProxyConfig {
                 enabled: true,
-                allow_local_binding: true,
-                dangerously_allow_all_unix_sockets: true,
+                allow_local_binding: Some(true),
+                dangerously_allow_all_unix_sockets: Some(true),
                 ..NetworkProxyConfig::default()
             };
             config.set_allow_unix_sockets(vec!["/tmp/pf-33-s02.sock".to_string()]);
@@ -2696,8 +2683,11 @@ mod tests {
         );
         assert!(!prepared.sandbox_context.allow_local_binding);
         assert!(!prepared.sandbox_context.loopback_ports.is_empty());
-||||||| 413492cd6c
-=======
+        handle.shutdown().await?;
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn private_credential_context_prepares_spawn_ready_env() -> Result<()> {
         #[cfg(target_os = "windows")]
         let _permit = WINDOWS_INGRESS_TEST_LOCK.acquire().await.unwrap();
@@ -2745,7 +2735,6 @@ mod tests {
                 );
             }
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         handle.shutdown().await?;
         Ok(())
     }

@@ -6,12 +6,8 @@ use rama_http::HeaderMap;
 use rama_http::HeaderValue;
 use rand::Rng as _;
 use std::collections::HashMap;
-<<<<<<< HEAD
-use zeroize::Zeroizing;
-||||||| 413492cd6c
-=======
 use url::Url;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use zeroize::Zeroizing;
 
 const DUMMY_ALPHANUMERIC: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -76,6 +72,12 @@ impl CredentialProvider {
         replacement_value: &str,
     ) -> Option<HeaderValue> {
         (self.translate_request_header)(headers, expected_value, replacement_value)
+    }
+
+    /// The header a builtin provider's credential travels in (both use
+    /// `Authorization`); used by the hardened engine as on `main`.
+    pub(super) fn request_header<'a>(&self, headers: &'a HeaderMap) -> Option<&'a HeaderValue> {
+        headers.get(rama_http::header::AUTHORIZATION)
     }
 
     pub(super) fn request_header_value(&self, value: &str) -> Option<HeaderValue> {
@@ -244,11 +246,41 @@ pub(super) fn credential_env_keys() -> impl Iterator<Item = &'static str> {
         .flat_map(|source| source.env_vars.iter().copied())
 }
 
+/// Every variable the builtin providers read (tokens and host context), as
+/// `main`'s isolated broker and secretless launch expect.
+pub(super) fn credential_broker_env_keys() -> impl Iterator<Item = &'static str> {
+    credential_providers()
+        .flat_map(|provider| provider.context_env_vars.iter().copied())
+        .chain(credential_env_keys())
+}
+
+/// Host binding for the hardened engine, exactly as on `main`: OpenAI keys go
+/// to `api.openai.com` only (no `OPENAI_BASE_URL` host), GitHub cloud tokens
+/// to `main`'s cloud hosts, GitHub Enterprise tokens to the `GH_HOST` host.
+pub(super) fn hardened_host_binding(
+    provider: &'static CredentialProvider,
+    source: &CredentialSource,
+    env: &HashMap<String, String>,
+) -> Option<CredentialHostBinding> {
+    if std::ptr::eq(provider, &openai::PROVIDER) {
+        return Some(CredentialHostBinding::ExactHost(
+            super::resolver::OPENAI_API_HOST.to_string(),
+        ));
+    }
+    match (source.host_binding)(env, /*configured_host*/ None)? {
+        CredentialHostBinding::HostPattern { .. } => Some(CredentialHostBinding::HostPattern {
+            exact_hosts: github::MAIN_CLOUD_HOSTS,
+            suffixes: github::CLOUD_HOST_SUFFIXES,
+        }),
+        binding @ CredentialHostBinding::ExactHost(_) => Some(binding),
+        CredentialHostBinding::ExactHosts(_) | CredentialHostBinding::ConfiguredHosts(_) => None,
+    }
+}
+
 pub(super) fn credential_providers() -> impl Iterator<Item = &'static CredentialProvider> {
     CREDENTIAL_PROVIDERS.iter().copied()
 }
 
-<<<<<<< HEAD
 pub(super) fn openai_provider() -> &'static CredentialProvider {
     &openai::PROVIDER
 }
@@ -286,15 +318,14 @@ pub(super) fn scoped_openai_header_value(value: &str) -> Option<HeaderValue> {
     let mut header = HeaderValue::from_str(&bearer).ok()?;
     header.set_sensitive(true);
     Some(header)
-||||||| 413492cd6c
-=======
+}
+
 pub(super) fn translate_standard_request_header(
     headers: &HeaderMap,
     expected_value: &str,
     replacement_value: &str,
 ) -> Option<HeaderValue> {
     github::translate_request_header(headers, expected_value, replacement_value)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn shaped_dummy_value(real_value: &str, prefix: &str, minimum_len: usize) -> String {

@@ -1,16 +1,12 @@
 use crate::attribution::BindConnectionAttribution;
 use crate::config::NetworkMode;
 use crate::connect_policy::TargetCheckedTcpConnector;
-<<<<<<< HEAD
+use crate::connection_lifecycle::CancelOnShutdown;
 use crate::destination;
 use crate::destination::DenialSite;
 use crate::destination::DestinationDenial;
 use crate::destination::DestinationGuard;
 use crate::destination::SystemResolver;
-||||||| 413492cd6c
-=======
-use crate::connection_lifecycle::CancelOnShutdown;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::mitm;
 use crate::network_policy::BlockDecisionAuditEventArgs;
 use crate::network_policy::NetworkDecision;
@@ -380,7 +376,6 @@ async fn handle_socks5_tcp(
         }
     }
 
-<<<<<<< HEAD
     // PF-33-S01: SOCKS exposes only the authority; it must still pass the
     // destination policy against current DNS answers.
     let destination_guard = destination::guard_enabled(&app_state)
@@ -410,23 +405,6 @@ async fn handle_socks5_tcp(
         .into());
     }
 
-    let host_mitm_requirement = match app_state.host_mitm_requirement(&host).await {
-        Ok(requirement) => requirement,
-        Err(err) => {
-            error!("failed to inspect MITM requirements for {host}: {err}");
-            return Err(io::Error::other("proxy error").into());
-        }
-    };
-||||||| 413492cd6c
-    let host_mitm_requirement = match app_state.host_mitm_requirement(&host).await {
-        Ok(requirement) => requirement,
-        Err(err) => {
-            error!("failed to inspect MITM requirements for {host}: {err}");
-            return Err(io::Error::other("proxy error").into());
-        }
-    };
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mitm_state = match app_state.mitm_state().await {
         Ok(state) => state,
         Err(err) => {
@@ -1262,7 +1240,7 @@ mod tests {
             mode: NetworkMode::Full,
             mitm: true,
             // Keep this hook-routing test independent of runner-specific DNS interception.
-            allow_local_binding: true,
+            allow_local_binding: Some(true),
             mitm_hooks: vec![MitmHookConfig {
                 host: "api.github.com".to_string(),
                 matcher: MitmHookMatchConfig {
@@ -1299,7 +1277,7 @@ mod tests {
             mode: NetworkMode::Full,
             mitm: true,
             // Keep this hook-routing test independent of runner-specific DNS interception.
-            allow_local_binding: true,
+            allow_local_binding: Some(true),
             mitm_hooks: vec![MitmHookConfig {
                 host: "api.github.com".to_string(),
                 matcher: MitmHookMatchConfig {

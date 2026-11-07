@@ -18,6 +18,10 @@ const GITHUB_ENTERPRISE_TOKEN_ENV_VARS: &[&str] =
     &["GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"];
 const GITHUB_CLOUD_HOSTS: &[&str] = &["api.github.com", "github.com", "uploads.github.com"];
 const GITHUB_CLOUD_HOST_SUFFIXES: &[&str] = &[".ghe.com"];
+/// `main`'s cloud host list, kept for the hardened engine (upstream added
+/// `uploads.github.com`).
+pub(super) const MAIN_CLOUD_HOSTS: &[&str] = &["api.github.com", "github.com"];
+pub(super) const CLOUD_HOST_SUFFIXES: &[&str] = GITHUB_CLOUD_HOST_SUFFIXES;
 
 pub(super) static PROVIDER: CredentialProvider = CredentialProvider {
     context_env_vars: &[GH_HOST_ENV_VAR],
