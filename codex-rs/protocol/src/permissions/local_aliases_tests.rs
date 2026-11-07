@@ -79,11 +79,22 @@ fn local_metadata_case_aliases_respect_filesystem_and_explicit_grants() -> anyho
         user_home_dir: None,
         temporary_directories: None,
     };
-    let policy = FileSystemSandboxPolicy::restricted(vec![
+    // Corbanu #606: the aliases are refused once the policy denies reads.
+    let open = FileSystemSandboxPolicy::restricted(vec![
         FileSystemSandboxEntry::new(parent.clone().into(), FileSystemAccessMode::Write),
         FileSystemSandboxEntry::new(root.clone().into(), FileSystemAccessMode::Write),
     ]);
+    let mut policy = open.clone();
+    policy.entries.push(FileSystemSandboxEntry::new(
+        parent.join("denied")?.into(),
+        FileSystemAccessMode::Deny,
+    ));
     let matching = policy.prepare_local_matching(&context)?;
+    // A policy without denied paths keeps today's answers.
+    assert!(
+        open.prepare_local_matching(&context)?
+            .can_write_path(&root.join(".GIT/config")?)?
+    );
     for relative in [
         ".GIT/config",
         ".CoDeX/config.toml",
@@ -148,10 +159,10 @@ fn local_metadata_case_aliases_respect_filesystem_and_explicit_grants() -> anyho
         }
     }
     let missing_root = root.join("missing")?;
-    let missing_policy = FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry::new(
-        missing_root.clone().into(),
-        FileSystemAccessMode::Write,
-    )]);
+    let missing_policy = FileSystemSandboxPolicy::restricted(vec![
+        FileSystemSandboxEntry::new(missing_root.clone().into(), FileSystemAccessMode::Write),
+        FileSystemSandboxEntry::new(parent.join("denied")?.into(), FileSystemAccessMode::Deny),
+    ]);
     assert_eq!(
         missing_policy
             .prepare_local_matching(&context)?

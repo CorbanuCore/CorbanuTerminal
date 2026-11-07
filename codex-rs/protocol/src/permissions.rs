@@ -289,10 +289,20 @@ pub fn forbidden_agent_metadata_write(
         return None;
     }
 
+    // #606: on macOS, once the policy denies reads, a protected name in any
+    // case (`.GIT`) is refused too; the local matcher decides whether that
+    // spelling reaches the protected folder on this volume.
+    let any_case =
+        cfg!(target_os = "macos") && file_system_sandbox_policy.has_denied_read_restrictions();
     with_local_policy_context(path, cwd, |path, context| {
         file_system_sandbox_policy
-            .metadata_write_denial(path, context)
-            .filter(|_| !file_system_sandbox_policy.can_write_path(path, context))
+            .metadata_write_denial(path, context, any_case)
+            .filter(|_| {
+                !file_system_sandbox_policy
+                    .prepare_local_matching(context)
+                    .and_then(|matching| matching.can_write_path(path))
+                    .unwrap_or(false)
+            })
     })?
 }
 
@@ -1771,23 +1781,26 @@ impl FileSystemSandboxPolicy {
             return false;
         }
         self.has_full_disk_write_access_with_context(context)
-            || self.metadata_write_denial(path, context).is_none()
+            || self
+                .metadata_write_denial(path, context, /*any_case*/ false)
+                .is_none()
     }
 
+    /// The protected metadata name a write to `path` would touch below a
+    /// writable root. With `any_case` (#606), also a name in another case,
+    /// as spelled; executor-independent checks pass `false`.
     fn metadata_write_denial(
         &self,
         path: &PathUri,
         context: &FileSystemSandboxPolicyContext<'_>,
+        any_case: bool,
     ) -> Option<&'static str> {
         if !matches!(self.kind, FileSystemSandboxKind::Restricted) {
             return None;
         }
         // #606: macOS volumes ignore case, so a `.GIT` made where `.git` is
         // missing is the folder git opens as `.git`, and Seatbelt refuses it
-        // (its rules match without regard to case there). Approvals agree once
-        // the policy denies reads (Moderate and Aggressive); a policy without
-        // denied paths keeps today's answers.
-        let any_case = cfg!(target_os = "macos") && self.has_denied_read_restrictions();
+        // (its rules match without regard to case there).
         let entries = self.resolved_entries(context);
         let (protected, metadata_name) = entries
             .iter()
@@ -4278,7 +4291,11 @@ mod tests {
         }
         assert!(!policy.can_write_path(&path("file:///C:/workspace/.codex/config"), &context));
         assert_eq!(
-            policy.metadata_write_denial(&path("file:///C:/workspace/.codex/config"), &context),
+            policy.metadata_write_denial(
+                &path("file:///C:/workspace/.codex/config"),
+                &context,
+                /*any_case*/ false
+            ),
             Some(".codex"),
         );
     }
@@ -5258,9 +5275,10 @@ mod tests {
             assert!(!later.can_read_effective_path_with_cwd(&logical.join("later.key"), cwd));
             assert!(policy.can_read_effective_path_with_cwd(&logical.join("other"), cwd));
         }
-        // The literal check is what #467 reported.
+        // #467 reported the literal check; upstream's local check now
+        // normalizes top-level aliases too, so it agrees.
         let policy = deny_in_workspace(&physical.join(".env"));
-        assert!(policy.can_read_local_path_with_cwd(&logical.join(".env"), &logical));
+        assert!(!policy.can_read_local_path_with_cwd(&logical.join(".env"), &logical));
     }
 
     /// #619: a writable root spelled `/tmp` holds `/private/tmp/x` for the
@@ -5275,7 +5293,9 @@ mod tests {
         assert!(physical.starts_with("/private/tmp"), "{physical:?}");
         let entry = |path: &Path, access| FileSystemSandboxEntry {
             path: FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+                path: AbsolutePathBuf::from_absolute_path(path)
+                    .expect("absolute")
+                    .into(),
             },
             access,
             missing_path_behavior: None,
@@ -5291,7 +5311,9 @@ mod tests {
             entry(&logical, FileSystemAccessMode::Write),
         ]);
         let target = physical.join("home/AGENTS.md");
-        assert!(!policy.can_write_local_path_with_cwd(&target, &physical));
+        // Upstream's local check now normalizes top-level aliases as Seatbelt
+        // does, so it agrees with the effective check (which main added).
+        assert!(policy.can_write_local_path_with_cwd(&target, &physical));
         assert!(policy.can_write_effective_path_with_cwd(&target, &physical));
         assert!(policy.can_write_effective_path_with_cwd(&logical.join("x"), &physical));
         for read_only in [physical.join("home"), logical.join("home")] {
@@ -5326,7 +5348,9 @@ mod tests {
         let physical = logical.canonicalize().expect("canonical");
         let entry = |path: &Path, access| FileSystemSandboxEntry {
             path: FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+                path: AbsolutePathBuf::from_absolute_path(path)
+                    .expect("absolute")
+                    .into(),
             },
             access,
             missing_path_behavior: None,
@@ -6726,7 +6750,7 @@ mod tests {
             ),
             FileSystemSandboxEntry::new(
                 FileSystemPath::Path {
-                    path: absolute(&workspace),
+                    path: absolute(&workspace).into(),
                 },
                 FileSystemAccessMode::Write,
             ),
@@ -6735,7 +6759,7 @@ mod tests {
         let mut denying = entries;
         denying.push(FileSystemSandboxEntry::new(
             FileSystemPath::Path {
-                path: absolute(&dir.path().join("denied")),
+                path: absolute(&dir.path().join("denied")).into(),
             },
             FileSystemAccessMode::Deny,
         ));

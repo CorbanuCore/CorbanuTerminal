@@ -116,8 +116,13 @@ impl LocalFileSystemPolicyMatcher<'_> {
     pub fn can_write_path(&self, path: &PathUri) -> io::Result<bool> {
         self.with_path(path, |path| -> io::Result<bool> {
             let writable = self.policy.can_write_path(path, &self.context);
+            // #606 (Corbanu): case aliases of protected metadata names are
+            // refused once the policy denies reads (Moderate and Aggressive);
+            // a policy without denied paths keeps today's answers. Seatbelt
+            // already matches those names in any case.
             #[cfg(target_os = "macos")]
             if writable
+                && self.policy.has_denied_read_restrictions()
                 && !self
                     .policy
                     .has_full_disk_write_access_with_context(&self.context)
