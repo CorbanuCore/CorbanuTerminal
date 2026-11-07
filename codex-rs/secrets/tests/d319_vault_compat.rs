@@ -73,15 +73,15 @@ fn namespace_for(file: &str) -> LocalSecretsNamespace {
     }
 }
 
-fn parse_canonical_key(key: &str) -> (SecretScope, SecretName) {
+fn parse_canonical_key(key: &str) -> Result<(SecretScope, SecretName)> {
     let parts: Vec<&str> = key.split('/').collect();
     match parts.as_slice() {
-        ["global", name] => (SecretScope::Global, SecretName::new(name).expect("name")),
-        ["env", environment, name] => (
+        ["global", name] => Ok((SecretScope::Global, SecretName::new(name)?)),
+        ["env", environment, name] => Ok((
             SecretScope::Environment((*environment).to_string()),
-            SecretName::new(name).expect("name"),
-        ),
-        _ => panic!("unexpected canonical key {key}"),
+            SecretName::new(name)?,
+        )),
+        _ => anyhow::bail!("unexpected canonical key {key}"),
     }
 }
 
@@ -107,7 +107,7 @@ fn assert_contents(
     expected: &serde_json::Map<String, Value>,
 ) -> Result<()> {
     for (key, value) in expected {
-        let (scope, name) = parse_canonical_key(key);
+        let (scope, name) = parse_canonical_key(key)?;
         let expected_value = value.as_str().context("expected value is a string")?;
         assert_eq!(
             backend.get(&scope, &name)?.as_deref(),
