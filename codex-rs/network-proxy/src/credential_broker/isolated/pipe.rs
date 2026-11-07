@@ -369,7 +369,7 @@ impl SinglePipeListener {
 fn connect_blocking(pipe: HANDLE) -> io::Result<bool> {
     // SAFETY: a manual-reset event for this operation; closed below.
     let event = unsafe { CreateEventW(std::ptr::null(), 1, 0, std::ptr::null()) };
-    if event == 0 {
+    if event.is_null() {
         return Err(io::Error::last_os_error());
     }
     // SAFETY: zeroed POD with the event set.
@@ -597,7 +597,7 @@ impl ControlPipe {
         let len = u32::try_from(len).unwrap_or(u32::MAX);
         // SAFETY: a manual-reset event for this operation; closed below.
         let event = unsafe { CreateEventW(std::ptr::null(), 1, 0, std::ptr::null()) };
-        if event == 0 {
+        if event.is_null() {
             return Err(io::Error::last_os_error());
         }
         // SAFETY: zeroed POD with the event set.
@@ -855,13 +855,17 @@ impl ParentProcess {
                 pid,
             )
         };
-        if handle == 0 {
+        if handle.is_null() {
             return Err(io::Error::last_os_error());
         }
-        let parent = Self { pid, handle };
+        // Kept as an integer so the handle can move to the blocking task.
+        let parent = Self {
+            pid,
+            handle: handle as isize,
+        };
         // SAFETY: the pseudo-handle is always valid.
         let own = creation_time(unsafe { GetCurrentProcess() })?;
-        if creation_time(parent.handle)? > own {
+        if creation_time(parent.handle as HANDLE)? > own {
             return Err(io::Error::other("parent process id was reused"));
         }
         Ok(parent)
