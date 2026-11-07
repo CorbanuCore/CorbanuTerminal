@@ -980,27 +980,13 @@ include_local = false
             environment_provider_from_codex_home(codex_home.path()).expect("environment provider");
 
         let snapshot = provider.snapshot().await.expect("environments");
-<<<<<<< HEAD
-||||||| 413492cd6c
-        let environment_ids: Vec<_> = snapshot
-            .environments
-            .into_iter()
-            .map(|(id, _environment)| id)
-            .collect();
-=======
-        let environment_ids: Vec<_> = snapshot
-            .environments
-            .into_iter()
-            .map(|entry| entry.id)
-            .collect();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         assert!(!snapshot.include_local);
         assert!(
             !snapshot
                 .environments
                 .iter()
-                .any(|(id, _environment)| id == LOCAL_ENVIRONMENT_ID)
+                .any(|entry| entry.id == LOCAL_ENVIRONMENT_ID)
         );
         assert_eq!(snapshot.default, EnvironmentDefault::Disabled);
     }
@@ -1013,27 +999,13 @@ include_local = false
             environment_provider_from_codex_home(codex_home.path()).expect("environment provider");
 
         let snapshot = provider.snapshot().await.expect("environments");
-<<<<<<< HEAD
-||||||| 413492cd6c
-        let environment_ids: Vec<_> = snapshot
-            .environments
-            .into_iter()
-            .map(|(id, _environment)| id)
-            .collect();
-=======
-        let environment_ids: Vec<_> = snapshot
-            .environments
-            .into_iter()
-            .map(|entry| entry.id)
-            .collect();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         assert!(snapshot.include_local);
         assert!(
             !snapshot
                 .environments
                 .iter()
-                .any(|(id, _environment)| id == LOCAL_ENVIRONMENT_ID)
+                .any(|entry| entry.id == LOCAL_ENVIRONMENT_ID)
         );
         assert_eq!(
             snapshot.default,

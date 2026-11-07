@@ -76,7 +76,6 @@ fn network_policy_request_uses_stable_json_shapes() {
 }
 
 #[test]
-<<<<<<< HEAD
 fn network_denied_notification_uses_a_stable_json_shape() {
     let notification = super::NetworkDeniedNotification {
         process_id: ProcessId::from("process-1"),
@@ -99,8 +98,11 @@ fn network_denied_notification_uses_a_stable_json_shape() {
     assert_eq!(
         serde_json::from_value::<super::NetworkDeniedNotification>(json)
             .expect("deserialize denial"),
-||||||| 413492cd6c
-=======
+        notification
+    );
+}
+
+#[test]
 fn network_policy_decision_notification_uses_stable_json_shape() {
     let notification = NetworkPolicyDecisionNotification {
         process_id: ProcessId::from("process-1"),
@@ -138,7 +140,6 @@ fn network_policy_decision_notification_uses_stable_json_shape() {
     assert_eq!(
         serde_json::from_value::<NetworkPolicyDecisionNotification>(expected)
             .expect("deserialize policy decision notification"),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         notification
     );
 }

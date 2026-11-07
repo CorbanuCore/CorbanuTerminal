@@ -4,7 +4,6 @@ use codex_protocol::permissions::FileSystemPath;
 use codex_protocol::permissions::FileSystemSandboxEntry;
 use codex_utils_path_uri::PathUri;
 use pretty_assertions::assert_eq;
-use std::io;
 
 fn database_entry_wire(directory: &str, pattern: &str) -> serde_json::Value {
     serde_json::json!({
@@ -30,8 +29,11 @@ fn database_scan_wire_forwards_windows_and_posix_directories_without_native_conv
     }
 }
 
+/// Only the receiving host's path convention keeps the scan hint. Upstream's conversion cannot
+/// fail, so a foreign directory keeps the deny glob without the hint (main refused the entry):
+/// the database it names is not on this host.
 #[test]
-fn database_scan_native_conversion_accepts_only_the_receiving_hosts_path_convention() {
+fn database_scan_native_conversion_keeps_the_hint_only_for_the_receiving_hosts_path_convention() {
     for (directory, pattern, native) in [
         (
             "file:///C:/database",
@@ -46,7 +48,7 @@ fn database_scan_native_conversion_accepts_only_the_receiving_hosts_path_convent
     ] {
         let wire = database_entry_wire(directory, pattern);
         let decoded: ExecFileSystemSandboxEntry = serde_json::from_value(wire.clone()).unwrap();
-        let converted = FileSystemSandboxEntry::try_from(decoded);
+        let converted = FileSystemSandboxEntry::from(decoded);
         if native {
             let expected = FileSystemSandboxEntry::new(
                 FileSystemPath::database_entries(
@@ -54,13 +56,22 @@ fn database_scan_native_conversion_accepts_only_the_receiving_hosts_path_convent
                 ),
                 FileSystemAccessMode::Deny,
             );
-            assert_eq!(converted.unwrap(), expected);
+            assert_eq!(converted, expected);
             assert_eq!(
                 serde_json::to_value(ExecFileSystemSandboxEntry::from(expected)).unwrap(),
                 wire
             );
         } else {
-            assert_eq!(converted.unwrap_err().kind(), io::ErrorKind::InvalidInput);
+            assert_eq!(
+                converted,
+                FileSystemSandboxEntry::new(
+                    FileSystemPath::GlobPattern {
+                        pattern: pattern.to_string(),
+                        scan: None,
+                    },
+                    FileSystemAccessMode::Deny,
+                )
+            );
         }
     }
 }
@@ -80,7 +91,7 @@ fn ordinary_exec_glob_without_scan_remains_opaque_on_every_host() {
             },
             FileSystemAccessMode::Deny,
         );
-        assert_eq!(FileSystemSandboxEntry::try_from(decoded).unwrap(), expected);
+        assert_eq!(FileSystemSandboxEntry::from(decoded), expected);
         assert_eq!(
             serde_json::to_value(ExecFileSystemSandboxEntry::from(expected)).unwrap(),
             wire

@@ -2296,7 +2296,6 @@ fn plugin_hook_load_warnings_are_startup_warnings() {
     assert_eq!(engine.warnings(), &["failed plugin hook".to_string()]);
 }
 
-<<<<<<< HEAD
 fn managed_pre_tool_use_engine(
     managed_dir: &Path,
     command: &str,
@@ -2334,10 +2333,15 @@ fn managed_pre_tool_use_engine(
         Some(&config_layer_stack),
         Vec::new(),
         Vec::new(),
-        CommandShell {
+        command_runtime(CommandShell {
             program: String::new(),
             args: Vec::new(),
-        },
+        }),
+        Arc::new(StaticMcpExecutor {
+            calls: Arc::new(Mutex::new(Vec::new())),
+            output: String::new(),
+            outputs_by_tool: HashMap::new(),
+        }),
     )
 }
 
@@ -2350,6 +2354,7 @@ fn bash_pre_tool_use_request(
         turn_id: "turn-1".to_string(),
         subagent: None,
         cwd,
+        tool_cwd: None,
         transcript_path: None,
         model: "gpt-test".to_string(),
         permission_mode: "default".to_string(),
@@ -2457,8 +2462,8 @@ async fn pre_tool_use_hook_that_ran_and_failed_does_not_block_when_fail_closed()
     assert!(!outcome.should_block);
     assert_eq!(outcome.block_reason, None);
     assert_eq!(outcome.hook_events[0].run.status, HookRunStatus::Failed);
-||||||| 413492cd6c
-=======
+}
+
 struct StaticMcpExecutor {
     calls: Arc<Mutex<Vec<HookMcpCall>>>,
     output: String,
@@ -3199,5 +3204,4 @@ async fn mcp_interrupt_hooks_expand_event_input_and_bound_timeout() {
             timeout: Duration::from_secs(3),
         }]
     );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }

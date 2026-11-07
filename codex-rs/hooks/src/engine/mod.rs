@@ -169,6 +169,9 @@ pub(crate) struct HandlerRunResult {
     pub stdout: String,
     pub stderr: String,
     pub error: Option<String>,
+    /// The hook command never received its input: the process could not be
+    /// spawned or its stdin could not be written (#722, D245).
+    pub start_failed: bool,
 }
 
 impl ConfiguredHandler {
