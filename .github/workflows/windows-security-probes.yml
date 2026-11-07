@@ -27,7 +27,11 @@ jobs:
           bin_dir="${CARGO_TARGET_DIR}/debug"
           export CARGO_BIN_EXE_codex_windows_sandbox_setup="$(cygpath -w "${bin_dir}/codex-windows-sandbox-setup.exe")"
           export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib sec_win_1648_ -- --nocapture --test-threads=1
+          failed=0
+          for t in $(cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- --list --format terse sec_win_1648_ | sed -n 's/: test$//p'); do
+            cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- --exact "$t" --nocapture --test-threads=1 || failed=$((failed+1))
+          done
+          test "$failed" = 0
       - name: D324 normal session
         if: ${{ !cancelled() }}
         shell: powershell
