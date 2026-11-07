@@ -116,6 +116,7 @@ async fn tls_origin_with_hook(
         upstream_tls_root_store: roots,
         inspect: false,
         max_body_bytes: MITM_MAX_BODY_BYTES,
+        redirects: Default::default(),
     });
     let context = MitmRequestContext {
         policy: MitmPolicyContext {

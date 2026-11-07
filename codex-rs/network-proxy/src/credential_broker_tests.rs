@@ -1,6 +1,7 @@
 use super::*;
 
-<<<<<<< HEAD
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD;
 use codex_security_policy::ActorChain;
 use codex_security_policy::AuthorizationContext;
 use codex_security_policy::AuthorizationRequest;
@@ -19,11 +20,6 @@ use codex_security_policy::PrincipalKind;
 use codex_security_policy::ProtectedResource;
 use codex_security_policy::ResourceKind;
 use codex_security_policy::RevocationState;
-||||||| 413492cd6c
-=======
-use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use pretty_assertions::assert_eq;
 use rama_http::HeaderValue;
 use rama_http::header::AUTHORIZATION;
@@ -1972,7 +1968,7 @@ fn scoped_openai_route_injects_once_and_passes_complete_context() {
     let (broker, env, resolver) = scoped_broker(ResolverOutcome::Success);
     let dummy = env.get("OPENAI_API_KEY").expect("scoped dummy").to_string();
     assert_ne!(dummy, "sk-raw-value-must-not-be-retained");
-    assert!(broker.host_requires_mitm("api.openai.com"));
+    assert!(broker.host_requires_mitm("api.openai.com", 443));
 
     let mut headers = headers_with_bearer(&dummy);
     broker
@@ -2425,7 +2421,10 @@ fn pf_28_s02_legacy_route_returns_a_gate_for_the_injected_value() {
 
 #[test]
 fn pf_28_s02_legacy_route_is_unchanged_without_the_gate() {
-    let broker = CredentialBroker::new(/*enabled*/ true);
+    // Every Corbanu proxy uses main's engine; with no hardening armed its
+    // in-process route injects on any path of the bound host, as on main.
+    let broker = CredentialBroker::new(/*enabled*/ true).with_main_engine();
+    assert!(!broker.protections_armed());
     let mut env = env_map([("GH_TOKEN", PF28_S02_TOKEN)]);
     broker.virtualize_child_env(&mut env);
     let mut headers = headers_with_bearer(&env["GH_TOKEN"]);
@@ -2441,5 +2440,27 @@ fn pf_28_s02_legacy_route_is_unchanged_without_the_gate() {
     assert_eq!(
         authorization(&headers),
         Some(format!("Bearer {PF28_S02_TOKEN}").as_str())
+    );
+}
+
+#[test]
+fn main_engine_never_injects_raw_values_over_plain_http() {
+    let broker = CredentialBroker::new(/*enabled*/ true).with_main_engine();
+    let mut env = env_map([("GH_TOKEN", PF28_S02_TOKEN)]);
+    broker.virtualize_child_env(&mut env);
+    let dummy = env["GH_TOKEN"].clone();
+    let mut headers = headers_with_bearer(&dummy);
+    let routing = broker.route_request_credentials(
+        "http",
+        "github.com",
+        /*port*/ 80,
+        "GET",
+        "/settings/tokens",
+        &mut headers,
+    );
+    assert!(matches!(routing, Ok(CredentialRouting::Direct(None))));
+    assert_eq!(
+        authorization(&headers),
+        Some(format!("Bearer {dummy}").as_str())
     );
 }

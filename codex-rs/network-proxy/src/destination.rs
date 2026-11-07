@@ -28,12 +28,12 @@ use crate::destination_contract::evaluate_destination;
 use crate::destination_contract::evaluate_redirect;
 use crate::destination_contract::is_intrinsically_private_name;
 use crate::destination_contract::normalize_destination;
-use crate::policy::compile_allowlist_globset;
-use crate::policy::compile_denylist_globset;
+use crate::domain_matcher::DomainPatternSet;
+use crate::policy::compile_allowlist;
+use crate::policy::compile_denylist;
 use crate::state::BlockedRequest;
 use crate::state::BlockedRequestArgs;
 use crate::state::NetworkProxyState;
-use globset::GlobSet;
 use rama_http::Body;
 use rama_http::HeaderMap;
 use rama_http::HeaderValue;
@@ -293,15 +293,15 @@ pub(crate) struct RedirectScope<'a> {
 /// Host allow/deny patterns, checked before a redirect target is resolved so
 /// a denied or unlisted name never reaches a resolver.
 pub(crate) struct HostPatterns {
-    allow: GlobSet,
-    deny: GlobSet,
+    allow: DomainPatternSet,
+    deny: DomainPatternSet,
 }
 
 impl HostPatterns {
     pub(crate) fn compile(allowed: &[String], denied: &[String]) -> anyhow::Result<Self> {
         Ok(Self {
-            allow: compile_allowlist_globset(allowed)?,
-            deny: compile_denylist_globset(denied)?,
+            allow: compile_allowlist(allowed)?,
+            deny: compile_denylist(denied)?,
         })
     }
 
