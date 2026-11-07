@@ -540,8 +540,14 @@ fn copied_vault_in_another_home_cannot_use_the_original_keyring_account() {
     std::fs::create_dir(copied.path().join("secrets")).expect("copied secrets directory");
     std::fs::write(&copied_file, &ciphertext).expect("copy ciphertext, not keyring material");
     assert_ne!(
-        codex_secrets::compute_keyring_account(original.path()),
-        codex_secrets::compute_keyring_account(copied.path())
+        codex_secrets::compute_keyring_account(
+            original.path(),
+            codex_secrets::LocalSecretsNamespace::ManagedSecrets,
+        ),
+        codex_secrets::compute_keyring_account(
+            copied.path(),
+            codex_secrets::LocalSecretsNamespace::ManagedSecrets,
+        )
     );
     let copied_vault = Vault::new_with_keyring_store(copied.path().to_path_buf(), keyring.clone());
     assert!(
@@ -574,8 +580,14 @@ fn canonical_home_alias_preserves_keyring_identity_and_label_case() {
     let alias = home.path().join(".");
     let reopened = Vault::new_with_keyring_store(alias.clone(), keyring);
     assert_eq!(
-        codex_secrets::compute_keyring_account(&alias),
-        codex_secrets::compute_keyring_account(home.path())
+        codex_secrets::compute_keyring_account(
+            &alias,
+            codex_secrets::LocalSecretsNamespace::ManagedSecrets,
+        ),
+        codex_secrets::compute_keyring_account(
+            home.path(),
+            codex_secrets::LocalSecretsNamespace::ManagedSecrets,
+        )
     );
     assert_eq!(
         reopened

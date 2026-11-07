@@ -5,17 +5,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use codex_apply_patch::CODEX_CORE_APPLY_PATCH_ARG1;
-<<<<<<< HEAD
-||||||| 413492cd6c
-#[cfg(unix)]
-use codex_exec_server::CODEX_ARG0_EXEC_HELPER_ARG1;
-use codex_exec_server::CODEX_FS_HELPER_ARG1;
-=======
 use codex_async_utils::THREAD_STACK_SIZE_BYTES;
-#[cfg(unix)]
-use codex_exec_server::CODEX_ARG0_EXEC_HELPER_ARG1;
-use codex_exec_server::CODEX_FS_HELPER_ARG1;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_install_context::InstallContext;
 use codex_sandboxing::landlock::CODEX_LINUX_SANDBOX_ARG0;
 use codex_utils_home_dir::find_codex_home;
@@ -55,18 +45,10 @@ pub struct Arg0DispatchPaths {
 
 /// Keeps the per-session PATH entry alive and locked for the process lifetime.
 pub struct Arg0PathEntryGuard {
-<<<<<<< HEAD
-    _temp_dir: TempDir,
-    _lock_file: Arg0FileLock,
-||||||| 413492cd6c
-    _temp_dir: TempDir,
-    _lock_file: File,
-=======
     // Fields drop in declaration order. Close the lock before removing its
     // directory so NFS does not retain the open file as a `.nfs*` entry.
-    _lock_file: File,
+    _lock_file: Arg0FileLock,
     _temp_dir: TempDir,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     paths: Arg0DispatchPaths,
 }
 
@@ -103,8 +85,8 @@ pub fn arg0_dispatch() -> Option<Arg0PathEntryGuard> {
     }
 
     let argv1 = args.next().unwrap_or_default();
-<<<<<<< HEAD
     match PrivateHelper::from_argv1(&argv1) {
+        Some(PrivateHelper::WindowsMxc) => codex_sandboxing::run_windows_mxc_main(),
         #[cfg(any(unix, windows))]
         Some(PrivateHelper::CredentialBroker) => {
             // PF-27-S04 isolated credential broker; never returns. PF-27-S05:
@@ -121,107 +103,11 @@ pub fn arg0_dispatch() -> Option<Arg0PathEntryGuard> {
             codex_windows_sandbox::run_windows_sandbox_wrapper_main();
         }
         Some(PrivateHelper::ApplyPatch) => run_apply_patch_helper(args.next()),
+        // `codex_utils_pty::init_spawn_helper` above already ran this helper and
+        // never returns for its marker; it is classified for the CLI preflight.
+        #[cfg(target_os = "linux")]
+        Some(PrivateHelper::PtyProcessSetup) => {}
         None => {}
-||||||| 413492cd6c
-    #[cfg(unix)]
-    if argv1 == CODEX_ARG0_EXEC_HELPER_ARG1 {
-        codex_exec_server::run_arg0_exec_helper_main();
-    }
-    if argv1 == CODEX_FS_HELPER_ARG1 {
-        codex_exec_server::run_fs_helper_main();
-    }
-    #[cfg(target_os = "windows")]
-    if argv1 == CODEX_WINDOWS_SANDBOX_ARG1 {
-        codex_windows_sandbox::run_windows_sandbox_wrapper_main();
-    }
-    if argv1 == CODEX_CORE_APPLY_PATCH_ARG1 {
-        let patch_arg = args.next().and_then(|s| s.to_str().map(str::to_owned));
-        let exit_code = match patch_arg {
-            Some(patch_arg) => {
-                let mut stdout = std::io::stdout();
-                let mut stderr = std::io::stderr();
-                let cwd = match codex_utils_absolute_path::AbsolutePathBuf::current_dir() {
-                    Ok(cwd) => cwd,
-                    Err(_) => std::process::exit(1),
-                };
-                let runtime = match tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                {
-                    Ok(runtime) => runtime,
-                    Err(_) => std::process::exit(1),
-                };
-                let cwd = cwd.into();
-                match runtime.block_on(codex_apply_patch::apply_patch(
-                    &patch_arg,
-                    &cwd,
-                    &mut stdout,
-                    &mut stderr,
-                    codex_exec_server::LOCAL_FS.as_ref(),
-                    /*sandbox*/ None,
-                )) {
-                    Ok(_) => 0,
-                    Err(_) => 1,
-                }
-            }
-            None => {
-                eprintln!("Error: {CODEX_CORE_APPLY_PATCH_ARG1} requires a UTF-8 PATCH argument.");
-                1
-            }
-        };
-        std::process::exit(exit_code);
-=======
-    if argv1 == codex_sandboxing::CODEX_WINDOWS_MXC_ARG1 {
-        codex_sandboxing::run_windows_mxc_main();
-    }
-    #[cfg(unix)]
-    if argv1 == CODEX_ARG0_EXEC_HELPER_ARG1 {
-        codex_exec_server::run_arg0_exec_helper_main();
-    }
-    if argv1 == CODEX_FS_HELPER_ARG1 {
-        codex_exec_server::run_fs_helper_main();
-    }
-    #[cfg(target_os = "windows")]
-    if argv1 == CODEX_WINDOWS_SANDBOX_ARG1 {
-        codex_windows_sandbox::run_windows_sandbox_wrapper_main();
-    }
-    if argv1 == CODEX_CORE_APPLY_PATCH_ARG1 {
-        let patch_arg = args.next().and_then(|s| s.to_str().map(str::to_owned));
-        let exit_code = match patch_arg {
-            Some(patch_arg) => {
-                let mut stdout = std::io::stdout();
-                let mut stderr = std::io::stderr();
-                let cwd = match codex_utils_absolute_path::AbsolutePathBuf::current_dir() {
-                    Ok(cwd) => cwd,
-                    Err(_) => std::process::exit(1),
-                };
-                let runtime = match tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                {
-                    Ok(runtime) => runtime,
-                    Err(_) => std::process::exit(1),
-                };
-                let cwd = cwd.into();
-                match runtime.block_on(codex_apply_patch::apply_patch(
-                    &patch_arg,
-                    &cwd,
-                    &mut stdout,
-                    &mut stderr,
-                    codex_exec_server::LOCAL_FS.as_ref(),
-                    /*sandbox*/ None,
-                )) {
-                    Ok(_) => 0,
-                    Err(_) => 1,
-                }
-            }
-            None => {
-                eprintln!("Error: {CODEX_CORE_APPLY_PATCH_ARG1} requires a UTF-8 PATCH argument.");
-                1
-            }
-        };
-        std::process::exit(exit_code);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     // This modifies the environment, which is not thread-safe, so do this
@@ -603,7 +489,6 @@ fn prepare_aliases_in_home(
     ))
 }
 
-<<<<<<< HEAD
 fn create_corbanu_alias(alias_dir: &Path, exe: &Path) -> std::io::Result<()> {
     let Some(exe) = corbanu_cli_from_runtime_executable(exe) else {
         return Ok(());
@@ -638,15 +523,14 @@ fn corbanu_cli_from_runtime_executable(exe: &Path) -> Option<PathBuf> {
         "corbanu"
     });
     sibling.is_file().then_some(sibling)
-||||||| 413492cd6c
-=======
+}
+
 #[cfg(windows)]
 fn windows_batch_executable_path(executable: &Path, alias_directory: &Path) -> String {
     pathdiff::diff_paths(executable, alias_directory)
         .filter(|relative_path| relative_path.is_relative())
         .map(|relative_path| format!("%~dp0{}", relative_path.display()))
         .unwrap_or_else(|| executable.display().to_string())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn path_env_with_package_path_dir(
