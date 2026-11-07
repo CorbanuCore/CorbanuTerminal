@@ -47,7 +47,7 @@ fn elevated_non_write_temp_never_grants_write_access() {
         assert!(write_roots.is_none_or(Vec::is_empty));
         if access == FileSystemAccessMode::Deny {
             assert_eq!(
-                overrides.unwrap().additional_deny_read_paths,
+                overrides.unwrap().additional_deny_read.paths(),
                 vec![
                     AbsolutePathBuf::from_absolute_path(dunce::canonicalize(&temp).unwrap())
                         .unwrap(),

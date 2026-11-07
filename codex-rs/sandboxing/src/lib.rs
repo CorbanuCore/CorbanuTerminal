@@ -9,14 +9,14 @@ mod sandbox_integrity;
 #[cfg(target_os = "macos")]
 pub mod seatbelt;
 mod spawn;
-pub mod user_namespaces;
 mod terminal_queries;
+pub mod user_namespaces;
 mod violation;
 mod windows;
 mod windows_legacy_warning;
-pub mod writable_root_ledger;
 #[cfg(windows)]
 mod windows_mxc;
+pub mod writable_root_ledger;
 
 #[cfg(target_os = "linux")]
 pub use bwrap::APPARMOR_BWRAP_USERNS_PROFILE;

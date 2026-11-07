@@ -33,7 +33,6 @@ const MACOS_RESTRICTED_READ_ONLY_PLATFORM_DEFAULTS: &str =
 #[path = "seatbelt_daemon.rs"]
 mod daemon;
 
-
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) enum MacosSeatbeltProfile {
     #[default]
@@ -472,7 +471,9 @@ impl SeatbeltClause {
     /// root at its real location. Excluded paths also get upstream's logical
     /// spelling (top-level aliases only), so a link inside the root can't
     /// move a protected path out from under its exclusion.
-    fn for_writable_root(access_root: SeatbeltAccessRoot) -> Result<Self, SeatbeltPreparationError> {
+    fn for_writable_root(
+        access_root: SeatbeltAccessRoot,
+    ) -> Result<Self, SeatbeltPreparationError> {
         let excluded_subpaths = access_root.excluded_subpaths.clone();
         let mut clause = Self::new(access_root);
         if std::fs::metadata(clause.root.as_path()).is_ok_and(|metadata| !metadata.is_dir()) {
@@ -1329,7 +1330,10 @@ pub(crate) fn create_seatbelt_command_args_with_profile(
             .get_writable_roots_with_cwd_preserving_mutable_paths(sandbox_policy_cwd);
         for root in &mut writable_roots {
             let key = root_key(&root.root);
-            for other in preserving.iter().filter(|other| root_key(&other.root) == key) {
+            for other in preserving
+                .iter()
+                .filter(|other| root_key(&other.root) == key)
+            {
                 for path in &other.read_only_subpaths {
                     if !root.read_only_subpaths.contains(path) {
                         root.read_only_subpaths.push(path.clone());

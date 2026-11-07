@@ -355,7 +355,13 @@ fn materialize_additional_permissions_preserves_authority_and_constraints() {
         value: FileSystemSpecialPath::project_roots(Some(subpath.to_owned())),
     };
     let deny_glob = |pattern: String| {
-        FileSystemSandboxEntry::new(FileSystemPath::GlobPattern { pattern, scan: None }, Deny)
+        FileSystemSandboxEntry::new(
+            FileSystemPath::GlobPattern {
+                pattern,
+                scan: None,
+            },
+            Deny,
+        )
     };
     let profile = |entries| PermissionProfile {
         file_system: Some(FileSystemPermissions {

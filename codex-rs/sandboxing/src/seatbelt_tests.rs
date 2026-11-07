@@ -1243,7 +1243,10 @@ fn unreadable_glob_policy_includes_canonicalized_static_prefix() {
             .expect("canonical glob should compile");
         let mut policy = FileSystemSandboxPolicy::default();
         policy.entries.push(FileSystemSandboxEntry {
-            path: FileSystemPath::GlobPattern { pattern, scan: None },
+            path: FileSystemPath::GlobPattern {
+                pattern,
+                scan: None,
+            },
             access: FileSystemAccessMode::Deny,
             missing_path_behavior: None,
         });
@@ -3267,7 +3270,9 @@ fn a_writable_root_inside_a_read_only_folder_cannot_be_moved() {
     fs::create_dir_all(home.join("worktrees")).expect("worktrees");
     let entry = |path: &Path, access| FileSystemSandboxEntry {
         path: FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute").into(),
+            path: AbsolutePathBuf::from_absolute_path(path)
+                .expect("absolute")
+                .into(),
         },
         access,
         missing_path_behavior: None,
@@ -3341,7 +3346,9 @@ fn renaming_a_folder_above_a_protected_path_is_denied() {
     std::os::unix::fs::symlink(base.join("dotfiles/zshrc"), base.join(".zshrc")).expect("link");
     let entry = |path: &Path, access| FileSystemSandboxEntry {
         path: FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute").into(),
+            path: AbsolutePathBuf::from_absolute_path(path)
+                .expect("absolute")
+                .into(),
         },
         access,
         missing_path_behavior: None,
@@ -3417,7 +3424,9 @@ fn full_write_profile_with_denial_keeps_dev_null_usable() {
         },
         FileSystemSandboxEntry {
             path: FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path(&secret).expect("absolute").into(),
+                path: AbsolutePathBuf::from_absolute_path(&secret)
+                    .expect("absolute")
+                    .into(),
             },
             access: FileSystemAccessMode::Deny,
             missing_path_behavior: None,
@@ -3488,12 +3497,16 @@ fn workspace_policy_denying(denied: &[PathBuf]) -> FileSystemSandboxPolicy {
             missing_path_behavior: None,
         },
     ];
-    entries.extend(denied.iter().map(|path| FileSystemSandboxEntry {
-        path: FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute").into(),
-        },
-        access: FileSystemAccessMode::Deny,
-        missing_path_behavior: None,
+    entries.extend(denied.iter().map(|path| {
+        FileSystemSandboxEntry {
+            path: FileSystemPath::Path {
+                path: AbsolutePathBuf::from_absolute_path(path)
+                    .expect("absolute")
+                    .into(),
+            },
+            access: FileSystemAccessMode::Deny,
+            missing_path_behavior: None,
+        }
     }));
     FileSystemSandboxPolicy::restricted(entries)
 }
@@ -3705,7 +3718,9 @@ fn allows_inside_denied_folders_survive_across_links() {
     std::os::unix::fs::symlink(&real, &link).expect("link");
     let entry = |path: PathBuf, access| FileSystemSandboxEntry {
         path: FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute").into(),
+            path: AbsolutePathBuf::from_absolute_path(path)
+                .expect("absolute")
+                .into(),
         },
         access,
         missing_path_behavior: None,
@@ -3831,7 +3846,9 @@ fn sandboxed_commands_cannot_read_denied_files_through_a_nested_link() {
 fn path_entry(path: &Path, access: FileSystemAccessMode) -> FileSystemSandboxEntry {
     FileSystemSandboxEntry {
         path: FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute").into(),
+            path: AbsolutePathBuf::from_absolute_path(path)
+                .expect("absolute")
+                .into(),
         },
         access,
         missing_path_behavior: None,
@@ -4200,7 +4217,9 @@ fn credential_templates_stay_usable() {
         ),
         FileSystemSandboxEntry::new(
             FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path(&work).expect("absolute").into(),
+                path: AbsolutePathBuf::from_absolute_path(&work)
+                    .expect("absolute")
+                    .into(),
             },
             FileSystemAccessMode::Write,
         ),
@@ -4365,7 +4384,9 @@ fn credential_names_cannot_be_read_created_or_planted() {
         ),
         FileSystemSandboxEntry::new(
             FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path(&work).expect("absolute").into(),
+                path: AbsolutePathBuf::from_absolute_path(&work)
+                    .expect("absolute")
+                    .into(),
             },
             FileSystemAccessMode::Write,
         ),
@@ -5308,5 +5329,8 @@ fn keychain_services_are_denied_only_with_the_entry() {
     let text = seatbelt_policy_arg(&args);
     assert!(text.contains("(global-name \"com.apple.SecurityServer\")"));
     // Upstream's blanket XPC-service deny is unrelated to #758.
-    assert!(!text.contains(MACOS_KEYCHAIN_SERVICES_DENY_POLICY), "{text}");
+    assert!(
+        !text.contains(MACOS_KEYCHAIN_SERVICES_DENY_POLICY),
+        "{text}"
+    );
 }

@@ -683,7 +683,9 @@ fn wrap_windows_sandbox_exec_request_for_direct_spawn(
                 })
         })
         .transpose()?;
-    let use_elevated = windows_sandbox_uses_elevated_backend(request.windows_sandbox_level);
+    // D355: a proxy-enforced session uses the elevated backend.
+    let use_elevated =
+        windows_sandbox_uses_elevated_backend(request.windows_sandbox_level, proxy_enforced);
     let overrides = if use_elevated {
         resolve_windows_elevated_filesystem_overrides(
             request.sandbox,
