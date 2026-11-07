@@ -1223,6 +1223,40 @@ fn apply_seccomp_then_exec_with_legacy_landlock_panics() {
     assert!(result.is_err());
 }
 
+/// What main refused (a root-write profile with a denial, which needs
+/// direct runtime enforcement) legacy Landlock still refuses (S3a review
+/// L2): such a profile is not full write, so upstream's check refuses it
+/// first; main's check stays behind it.
+#[test]
+#[should_panic(expected = "filesystem-restricted execution requires bubblewrap")]
+fn legacy_landlock_rejects_root_write_with_denials() {
+    let policy = FileSystemSandboxPolicy::restricted(vec![
+        codex_protocol::permissions::FileSystemSandboxEntry::new(
+            codex_protocol::permissions::FileSystemPath::Special {
+                value: codex_protocol::permissions::FileSystemSpecialPath::Root,
+            },
+            codex_protocol::permissions::FileSystemAccessMode::Write,
+        ),
+        codex_protocol::permissions::FileSystemSandboxEntry::new(
+            codex_protocol::permissions::FileSystemPath::GlobPattern {
+                pattern: "/tmp/s3a-l2/**/*.env".to_string(),
+                scan: None,
+            },
+            codex_protocol::permissions::FileSystemAccessMode::Deny,
+        ),
+    ]);
+    assert!(
+        policy
+            .needs_direct_runtime_enforcement(NetworkSandboxPolicy::Restricted, Path::new("/tmp"))
+    );
+    ensure_legacy_landlock_mode_supports_policy(
+        /*use_legacy_landlock*/ true,
+        &policy,
+        NetworkSandboxPolicy::Restricted,
+        Path::new("/tmp"),
+    );
+}
+
 #[test]
 #[should_panic(expected = "filesystem-restricted execution requires bubblewrap")]
 fn legacy_landlock_cannot_bypass_daemon_socket_isolation() {

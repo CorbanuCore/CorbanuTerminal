@@ -1661,6 +1661,42 @@ fn read_only_tmp_carveout_keeps_daemon_sockets_masked() {
     );
 }
 
+/// S3a review L1: a missing denied path below a read-only `/tmp` makes
+/// `/tmp` a #473 snapshot, whose entries are bound back from the host; the
+/// app-server socket folder among them is masked again afterwards.
+#[test]
+fn read_only_tmp_snapshot_masks_daemon_sockets_again() {
+    let missing = std::env::temp_dir().join(format!("s3a-l1-missing-{}", std::process::id()));
+    let policy = FileSystemSandboxPolicy::restricted(
+        [
+            (Path::new("/"), FileSystemAccessMode::Write),
+            (Path::new("/tmp"), FileSystemAccessMode::Read),
+            (missing.as_path(), FileSystemAccessMode::Deny),
+        ]
+        .into_iter()
+        .map(|(path, access)| {
+            FileSystemSandboxEntry::new(
+                AbsolutePathBuf::from_absolute_path(path).unwrap().into(),
+                access,
+            )
+        })
+        .collect(),
+    );
+    let args = create_filesystem_args(&policy, Path::new("/"), BwrapOptions::default())
+        .expect("filesystem args")
+        .args;
+    let daemon_directory = path_to_string(&codex_uds::shared_daemon_socket_directory().unwrap());
+    let last_rebind = args
+        .windows(2)
+        .rposition(|window| window[0] == "--ro-bind-try" && window[1] == daemon_directory)
+        .expect("the /tmp snapshot binds the socket folder back");
+    let last_mask = args
+        .windows(2)
+        .rposition(|window| window == ["--tmpfs", daemon_directory.as_str()])
+        .expect("daemon socket mask");
+    assert!(last_rebind < last_mask, "{args:?}");
+}
+
 #[test]
 fn restricted_read_only_uses_scoped_read_roots_instead_of_erroring() {
     let temp_dir = TempDir::new().expect("temp dir");

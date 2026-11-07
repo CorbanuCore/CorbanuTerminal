@@ -804,6 +804,13 @@ fn create_filesystem_args(
                 /*writable*/ false,
             )?;
             unlisted.push(unlistable.target.clone());
+            // #506 puts the folder's host entries back: mask the app-server
+            // sockets below it again.
+            remask_daemon_sockets(
+                &mut bwrap_args.args,
+                &unlistable.target,
+                &daemon_directories,
+            )?;
         }
     }
     // Mask only the unreadable ancestors that sit outside every writable root.
@@ -1039,6 +1046,7 @@ fn create_filesystem_args(
                 (*unlistable, read_only)
             })
             .collect();
+        let rebinds_from = bwrap_args.args.len();
         if pin_protected_folders || !unmovable.is_empty() {
             let protected: Vec<&Path> = read_only_subpaths
                 .iter()
@@ -1119,6 +1127,16 @@ fn create_filesystem_args(
                 /*writable*/ false,
             )?;
             unlisted.push(unlistable.target.clone());
+        }
+        // The pass's folder pins (#587), rebuilt unlistable folders (#506)
+        // and read-only snapshots (#473) bind host entries back over the
+        // app-server socket masks applied after its bind: mask them again,
+        // before the pass's deny masks.
+        if bwrap_args.args[rebinds_from..]
+            .iter()
+            .any(|arg| arg == "--bind-try" || arg == "--ro-bind-try")
+        {
+            remask_daemon_sockets(&mut bwrap_args.args, mount_root, &daemon_directories)?;
         }
         // Protect the registry only where a writable bind exposes it. Apply
         // this before deny masks so a denied parent stays hidden, rather than
@@ -1518,6 +1536,24 @@ fn append_daemon_socket_masks(
                 destination,
             ]);
         }
+    }
+    Ok(())
+}
+
+/// [`append_daemon_socket_masks`] again for `path` after a step that binds
+/// host entries back below it; nothing when no socket folder is below it.
+fn remask_daemon_sockets(
+    args: &mut Vec<String>,
+    path: &Path,
+    daemon_directories: &BTreeSet<PathBuf>,
+) -> Result<()> {
+    let Ok(source) = fs::canonicalize(path) else {
+        return Ok(());
+    };
+    if daemon_directories.iter().any(|daemon_directory| {
+        daemon_directory.starts_with(&source) && *daemon_directory != source
+    }) {
+        append_daemon_socket_masks(args, path, daemon_directories)?;
     }
     Ok(())
 }
