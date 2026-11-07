@@ -59,9 +59,13 @@ impl ConfigReloader for StaticConfigReloader {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
+    // Corbanu: global subscribers go through the credential-redacting guard.
+    codex_log_guard::guard(
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .finish(),
+    )
+    .init();
     let args = Args::parse();
     let mut bytes = Vec::new();
     std::fs::File::open(&args.config)
