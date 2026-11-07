@@ -38,19 +38,11 @@ use seccompiler::apply_filter;
 /// them, not the entire CLI process.
 ///
 /// This function is responsible for:
-<<<<<<< HEAD:codex-rs/linux-sandbox/src/landlock.rs
 /// - enabling `PR_SET_NO_NEW_PRIVS` when restrictions apply,
-/// - installing the network seccomp filter when network access is disabled,
+/// - installing seccomp restrictions for network isolation and VM sockets,
 ///   and
 /// - installing the user-namespace seccomp filter when the policy denies
 ///   user namespaces (#826).
-||||||| 413492cd6c:codex-rs/linux-sandbox/src/landlock.rs
-/// - enabling `PR_SET_NO_NEW_PRIVS` when restrictions apply, and
-/// - installing the network seccomp filter when network access is disabled.
-=======
-/// - enabling `PR_SET_NO_NEW_PRIVS` when restrictions apply, and
-/// - installing seccomp restrictions for network isolation and VM sockets.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/linux-sandbox/src/seccomp.rs
 ///
 /// Filesystem restrictions are normally handled by bubblewrap. The legacy
 /// Landlock implementation is only selected by `apply_landlock_fs`.
