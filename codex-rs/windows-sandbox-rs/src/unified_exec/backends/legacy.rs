@@ -10,7 +10,6 @@ use crate::process::StderrMode;
 use crate::process::StdinMode;
 use crate::process::read_handle_loop;
 use crate::process::spawn_process_with_pipes;
-use crate::resolved_permissions::ResolvedWindowsSandboxPermissions;
 use crate::spawn_prep::LegacyAclSids;
 use crate::spawn_prep::LegacySessionSecurity;
 use crate::spawn_prep::SpawnPrepOptions;
@@ -80,8 +79,6 @@ struct LegacyProcessHandles {
 #[allow(clippy::too_many_arguments)]
 fn spawn_legacy_process(
     security: &LegacySessionSecurity,
-    permissions: &ResolvedWindowsSandboxPermissions,
-    additional_deny_write_paths: &[std::path::PathBuf],
     command: &[String],
     cwd: &Path,
     env_map: &HashMap<String, String>,
@@ -98,14 +95,7 @@ fn spawn_legacy_process(
     let token = unsafe { BorrowedHandle::borrow_raw(h_token) };
     let launch_desktop = match private_desktop_name {
         Some(name) => LaunchDesktop::open_private(name)?,
-        None => LaunchDesktop::prepare_legacy(
-            permissions,
-            cwd,
-            env_map,
-            security,
-            additional_deny_write_paths,
-            logs_base_dir,
-        )?,
+        None => LaunchDesktop::prepare_legacy(security, logs_base_dir)?,
     };
     let (pi, job, output_join, writer_handle, hpc, conpty_owner, desktop) = if tty {
         let (pi, mut conpty) =
@@ -425,8 +415,6 @@ pub(crate) async fn spawn_windows_sandbox_session_legacy(
         desktop,
     } = match spawn_legacy_process(
         &security,
-        &common.permissions,
-        &additional_deny_write_paths,
         &command,
         cwd,
         &env_map,

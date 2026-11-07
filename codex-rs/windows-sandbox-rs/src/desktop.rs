@@ -162,22 +162,24 @@ pub struct LaunchDesktop {
 }
 
 impl LaunchDesktop {
+    /// A legacy command's own private desktop, as on main: never shared with
+    /// another command (D259 keeps legacy commands apart), open to this
+    /// process's logon, Low-labelled for a Low-integrity token (#158).
+    /// Upstream shares one desktop per policy; only the `codex sandbox`
+    /// wrapper's named desktops still do ([`Self::shared_legacy_name`]).
     pub(crate) fn prepare_legacy(
-        permissions: &ResolvedWindowsSandboxPermissions,
-        cwd: &Path,
-        env: &HashMap<String, String>,
         security: &LegacySessionSecurity,
-        additional_deny_write_paths: &[PathBuf],
         logs_base_dir: Option<&Path>,
     ) -> Result<Self> {
-        Self::open_private(&Self::shared_legacy_name(
-            permissions,
-            cwd,
-            env,
-            security,
-            additional_deny_write_paths,
+        let private_desktop = PrivateDesktop::create(
+            crate::integrity::token_is_low_integrity(security.h_token),
             logs_base_dir,
-        )?)
+        )?;
+        let startup_name = to_wide(format!("{}\\{}", launch_station(), private_desktop.name));
+        Ok(Self {
+            _private_desktop: private_desktop,
+            startup_name,
+        })
     }
 
     pub(crate) fn shared_legacy_name(

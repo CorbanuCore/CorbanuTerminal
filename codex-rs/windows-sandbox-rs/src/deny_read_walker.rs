@@ -141,6 +141,11 @@ fn accessible_entry<T>(result: io::Result<T>, path: &Path) -> Result<Option<T>, 
         {
             Ok(None)
         }
+        // A link loop (a junction to its own folder, which a sandboxed command
+        // can plant) leads nowhere the walk doesn't reach through the real
+        // folder: skip it rather than refuse every later command (main
+        // skipped it too). ERROR_CANT_RESOLVE_FILENAME is Windows' loop error.
+        Err(err) if err.raw_os_error() == Some(1921) => Ok(None),
         Err(err) => Err(format!(
             "failed to enumerate unreadable glob paths under {}: {err}",
             path.display()

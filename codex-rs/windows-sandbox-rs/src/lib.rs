@@ -863,26 +863,20 @@ mod windows_impl {
         };
         let (stdin_pair, stdout_pair, stderr_pair) = unsafe { setup_stdio_pipes()? };
         let ((in_r, in_w), (out_r, out_w), (err_r, err_w)) = (stdin_pair, stdout_pair, stderr_pair);
-        let spawn_res = crate::LaunchDesktop::prepare_legacy(
-            &permissions,
-            &current_dir,
-            &env_map,
-            &security,
-            &additional_deny_write_paths,
-            logs_base_dir,
-        )
-        .and_then(|desktop| unsafe {
-            create_process_as_user(
-                security.h_token,
-                &command,
-                cwd,
-                &env_map,
-                logs_base_dir,
-                Some((in_r, out_w, err_w)),
-                ConsoleMode::NoWindow,
-                desktop,
-            )
-        });
+        let spawn_res = crate::LaunchDesktop::prepare_legacy(&security, logs_base_dir).and_then(
+            |desktop| unsafe {
+                create_process_as_user(
+                    security.h_token,
+                    &command,
+                    cwd,
+                    &env_map,
+                    logs_base_dir,
+                    Some((in_r, out_w, err_w)),
+                    ConsoleMode::NoWindow,
+                    desktop,
+                )
+            },
+        );
         let created = match spawn_res {
             Ok(v) => v,
             Err(err) => {
