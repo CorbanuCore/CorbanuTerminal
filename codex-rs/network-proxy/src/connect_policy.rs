@@ -132,31 +132,21 @@ where
     type Error = BoxError;
 
     async fn serve(&self, input: Input) -> Result<Self::Output, Self::Error> {
-<<<<<<< HEAD
         // A pin is honoured even where the guard is off: the isolated broker
         // has no guard of its own and dials the answers Core checked.
         let pin = input.extensions().get::<PinnedPeers>().cloned();
         let guarded = pin.is_some() || guard_enabled(&self.state).await?;
-||||||| 413492cd6c
-=======
         let connector = TcpConnector::new();
         #[cfg(target_os = "macos")]
         let connector = connector.with_dns(SystemDnsResolver);
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         if input.extensions().get::<ProxyAddress>().is_some() {
-<<<<<<< HEAD
             // PF-33-S02: an upstream proxy resolves and connects on its own, so
             // the checked answers could not be pinned. The guard refuses it.
             if guarded {
                 return Err(pinning_refused("upstream proxy"));
             }
-            return TcpConnector::new().serve(input).await;
-||||||| 413492cd6c
-            return TcpConnector::new().serve(input).await;
-=======
             return connector.serve(input).await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
 
         let target = input
@@ -165,7 +155,6 @@ where
             .host_with_port()
             .ok_or_else(|| OpaqueError::from_display("network target is missing a port"))?;
 
-<<<<<<< HEAD
         if guarded {
             // Every guarded dial carries the guard's checked answers for its
             // exact authority; anything else is refused, never re-resolved.
@@ -177,21 +166,8 @@ where
             return dial_pinned(input, &pin, &connector).await;
         }
 
-        TcpConnector::new()
-            .with_connector(self.stream_connector(target))
-||||||| 413492cd6c
-        TcpConnector::new()
-            .with_connector(TargetCheckedStreamConnector {
-                state: self.state.clone(),
-                target,
-            })
-=======
         connector
-            .with_connector(TargetCheckedStreamConnector {
-                state: self.state.clone(),
-                target,
-            })
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            .with_connector(self.stream_connector(target))
             .serve(input)
             .await
     }
@@ -406,7 +382,7 @@ mod tests {
             .expect("bind local listener");
         let target = listener.local_addr().expect("local addr");
         let mut config = NetworkProxyConfig {
-            allow_local_binding: true,
+            allow_local_binding: Some(true),
             ..NetworkProxyConfig::default()
         };
         config.set_allowed_domains(vec![target.ip().to_string()]);
@@ -635,7 +611,7 @@ mod tests {
         // No test seam: a pin naming a loopback answer is still refused by the
         // peer check, even with local binding configured.
         let mut config = NetworkProxyConfig {
-            allow_local_binding: true,
+            allow_local_binding: Some(true),
             ..NetworkProxyConfig::default()
         };
         config.set_url_destination_policy(/*enabled*/ true);
@@ -661,7 +637,7 @@ mod tests {
         let target = listener.local_addr().expect("local addr");
         let connector = TargetCheckedTcpConnector::new(Arc::new(network_proxy_state_for_policy(
             NetworkProxyConfig {
-                allow_local_binding: true,
+                allow_local_binding: Some(true),
                 ..NetworkProxyConfig::default()
             },
         )));
