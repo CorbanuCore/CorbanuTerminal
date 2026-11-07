@@ -183,13 +183,7 @@ async fn execute_waits_for_nested_tool_during_yield_grace() {
 }
 
 #[tokio::test(start_paused = true)]
-<<<<<<< HEAD
-async fn wait_waits_for_nested_tool_during_yield_grace() {
-||||||| 413492cd6c
-async fn wait_waits_for_nested_tool_during_yield_grace() {
-=======
 async fn execute_and_wait_clamp_yield_grace_without_stopping_the_cell() {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let _time_guard = hold_virtual_time();
     let delegate = Arc::new(ReleasableToolDelegate::default());
     let service = InProcessCodeModeSession::with_limits(CodeModeSessionCellExecutionLimits {
@@ -326,26 +320,6 @@ async fn wait_waits_for_nested_tool_during_yield_grace() {
     );
 }
 
-<<<<<<< HEAD
-fn hold_virtual_time() -> oneshot::Sender<()> {
-    // A live blocking task prevents Tokio's paused clock from auto-advancing while
-    // we await the V8 thread. Tests advance time explicitly; dropping the guard
-    // releases the task even if the test panics or is cancelled.
-    let (guard, released) = oneshot::channel();
-    tokio::task::spawn_blocking(move || {
-        let _ = released.blocking_recv();
-    });
-    guard
-||||||| 413492cd6c
-async fn wait_until_finished<T>(task: &tokio::task::JoinHandle<T>) {
-    for _ in 0..10_000 {
-        if task.is_finished() {
-            return;
-        }
-        tokio::task::yield_now().await;
-    }
-    panic!("code-mode response did not finish while virtual time was held in the grace period");
-=======
 #[tokio::test(start_paused = true)]
 async fn zero_yield_limit_is_immediate_and_scoped_to_its_session() {
     let _time_guard = hold_virtual_time();
@@ -424,18 +398,8 @@ async fn zero_yield_limit_is_immediate_and_scoped_to_its_session() {
 
     zero_session.shutdown().await.unwrap();
     limited_session.shutdown().await.unwrap();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
-<<<<<<< HEAD
-||||||| 413492cd6c
-async fn wait_until_tool_started(delegate: &ReleasableToolDelegate) {
-    for _ in 0..10_000 {
-        if delegate.tool_started.load(Ordering::Acquire) {
-            return;
-        }
-        tokio::task::yield_now().await;
-=======
 #[tokio::test(start_paused = true)]
 async fn tool_start_acknowledgement_reports_error_before_invocation() {
     let _time_guard = hold_virtual_time();
@@ -506,7 +470,6 @@ fn hold_virtual_time() -> oneshot::Sender<()> {
     guard
 }
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 async fn wait_until_tool_started(delegate: &ReleasableToolDelegate) -> Result<(), &'static str> {
     tokio::select! {
         biased;

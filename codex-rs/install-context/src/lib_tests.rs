@@ -367,6 +367,32 @@ fn npm_managed_package_keeps_package_layout() -> std::io::Result<()> {
 }
 
 #[test]
+fn standalone_layout_wins_over_inherited_package_manager_marker() -> std::io::Result<()> {
+    let codex_home = tempfile::tempdir()?;
+    let release_dir = codex_home
+        .path()
+        .join("packages/standalone/releases/1.2.3-x86_64-unknown-linux-musl");
+    fs::create_dir_all(&release_dir)?;
+    let exe_path = release_dir.join(if cfg!(windows) {
+        "corbanu.exe"
+    } else {
+        "corbanu"
+    });
+    fs::write(&exe_path, "")?;
+
+    for inherited_method in [InstallMethod::Npm, InstallMethod::Bun, InstallMethod::Pnpm] {
+        let context = InstallContext::from_exe_with_codex_home(
+            /*is_macos*/ false,
+            /*current_exe*/ Some(&exe_path),
+            /*method_override*/ Some(inherited_method),
+            /*codex_home*/ Some(codex_home.path()),
+        );
+        assert!(matches!(context.method, InstallMethod::Standalone { .. }));
+    }
+    Ok(())
+}
+
+#[test]
 fn standalone_package_rg_falls_back_when_codex_path_is_missing() -> std::io::Result<()> {
     let package_dir = tempfile::tempdir()?;
     let bin_dir = package_dir.path().join(BIN_DIRNAME);

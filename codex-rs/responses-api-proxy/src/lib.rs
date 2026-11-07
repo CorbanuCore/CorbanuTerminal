@@ -32,15 +32,11 @@ mod auth;
 mod dump;
 mod github_oidc;
 mod read_api_key;
-<<<<<<< HEAD
 mod synthetic;
 mod synthetic_exchange;
 mod synthetic_io;
 mod synthetic_policy;
-||||||| 413492cd6c
-=======
 use auth::Auth;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use dump::ExchangeDumper;
 use github_oidc::GithubOidc;
 use read_api_key::read_auth_header_from_stdin;
@@ -139,21 +135,15 @@ struct ForwardConfig {
 
 /// Entry point for the library main, for parity with other crates.
 pub fn run_main(args: Args) -> Result<()> {
-<<<<<<< HEAD
     if let Some(upstream) = args.synthetic_loopback_upstream {
         return synthetic::run(&args, upstream);
     }
-    let auth_header = read_auth_header_from_stdin()?;
-||||||| 413492cd6c
-    let auth_header = read_auth_header_from_stdin()?;
-=======
     let auth = Arc::new(args.auth()?);
     if args.github_oidc {
         // Complete the initial exchange before publishing server info.
         // API keys have already been validated when read from stdin.
         auth.header()?;
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     let upstream_url = Url::parse(&args.upstream_url).context("parsing --upstream-url")?;
     let host = match (upstream_url.host_str(), upstream_url.port()) {

@@ -117,123 +117,6 @@ impl PermissionsInstructions {
     fn from_resolved(
         context: PermissionsRenderContext<'_>,
         approval_context: ApprovalPromptContext<'_>,
-<<<<<<< HEAD
-        exec_policy: &Policy,
-        cwd: &Path,
-        exec_permission_approvals_enabled: bool,
-        request_permissions_tool_enabled: bool,
-    ) -> Self {
-        let file_system_sandbox_policy = permission_profile.file_system_sandbox_policy();
-        let (sandbox_mode, writable_roots) =
-            sandbox_prompt_from_policy(&file_system_sandbox_policy, cwd);
-
-        Self::from_permissions_with_network_and_denied_reads(
-            sandbox_mode,
-            network_access_from_policy(permission_profile.network_sandbox_policy()),
-            PermissionsPromptConfig {
-                approval_policy,
-                approvals_reviewer: approval_context.reviewer,
-                approval_messages: approval_context.messages,
-                permission_messages: approval_context.permission_messages,
-                exec_policy,
-                exec_permission_approvals_enabled,
-                request_permissions_tool_enabled,
-            },
-            writable_roots,
-            denied_reads_text(&file_system_sandbox_policy, cwd),
-        )
-    }
-
-    pub fn body(&self) -> String {
-        self.text.clone()
-    }
-
-    /// Appends one more section, e.g. what a security level blocks (#439).
-    pub fn with_note(mut self, note: &str) -> Self {
-        append_section(&mut self.text, note);
-        if !self.text.ends_with('\n') {
-            self.text.push('\n');
-        }
-        self
-    }
-
-    #[cfg(test)]
-    fn from_permissions_with_network(
-        sandbox_mode: SandboxMode,
-        network_access: NetworkAccess,
-        config: PermissionsPromptConfig<'_>,
-        writable_roots: Option<Vec<WritableRoot>>,
-    ) -> Self {
-        Self::from_permissions_with_network_and_denied_reads(
-            sandbox_mode,
-            network_access,
-            config,
-            writable_roots,
-            /*denied_reads*/ None,
-        )
-    }
-
-    fn from_permissions_with_network_and_denied_reads(
-        sandbox_mode: SandboxMode,
-        network_access: NetworkAccess,
-        config: PermissionsPromptConfig<'_>,
-        writable_roots: Option<Vec<WritableRoot>>,
-        denied_reads: Option<String>,
-||||||| 413492cd6c
-        exec_policy: &Policy,
-        cwd: &Path,
-        exec_permission_approvals_enabled: bool,
-        request_permissions_tool_enabled: bool,
-    ) -> Self {
-        let file_system_sandbox_policy = permission_profile.file_system_sandbox_policy();
-        let (sandbox_mode, writable_roots) =
-            sandbox_prompt_from_policy(&file_system_sandbox_policy, cwd);
-
-        Self::from_permissions_with_network_and_denied_reads(
-            sandbox_mode,
-            network_access_from_policy(permission_profile.network_sandbox_policy()),
-            PermissionsPromptConfig {
-                approval_policy,
-                approvals_reviewer: approval_context.reviewer,
-                approval_messages: approval_context.messages,
-                permission_messages: approval_context.permission_messages,
-                exec_policy,
-                exec_permission_approvals_enabled,
-                request_permissions_tool_enabled,
-            },
-            writable_roots,
-            denied_reads_text(&file_system_sandbox_policy, cwd),
-        )
-    }
-
-    pub fn body(&self) -> String {
-        self.text.clone()
-    }
-
-    #[cfg(test)]
-    fn from_permissions_with_network(
-        sandbox_mode: SandboxMode,
-        network_access: NetworkAccess,
-        config: PermissionsPromptConfig<'_>,
-        writable_roots: Option<Vec<WritableRoot>>,
-    ) -> Self {
-        Self::from_permissions_with_network_and_denied_reads(
-            sandbox_mode,
-            network_access,
-            config,
-            writable_roots,
-            /*denied_reads*/ None,
-        )
-    }
-
-    fn from_permissions_with_network_and_denied_reads(
-        sandbox_mode: SandboxMode,
-        network_access: NetworkAccess,
-        config: PermissionsPromptConfig<'_>,
-        writable_roots: Option<Vec<WritableRoot>>,
-        denied_reads: Option<String>,
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     ) -> Self {
         let mut remaining_path_bytes =
             MAX_PERMISSION_PATH_BYTES - OMITTED_PERMISSION_PATHS.len() - 1;
@@ -393,6 +276,15 @@ impl PermissionsInstructions {
             },
             approval_context,
         )
+    }
+
+    /// Appends one more section, e.g. what a security level blocks (#439).
+    pub fn with_note(mut self, note: &str) -> Self {
+        append_section(&mut self.text, note);
+        if !self.text.ends_with('\n') {
+            self.text.push('\n');
+        }
+        self
     }
 }
 

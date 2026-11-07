@@ -333,7 +333,6 @@ async fn no_proxy_subprocess_probe() {
         } else {
             test_tls_configs().0
         };
-<<<<<<< HEAD
     // A bypassed target that is routed through the proxy anyway would wait on a
     // proxy nobody serves; fail instead of hanging.
     let (inner, _) = tokio::time::timeout(
@@ -351,29 +350,8 @@ async fn no_proxy_subprocess_probe() {
                 }
             },
             TcpNodelay::Enabled,
+            /*loopback_direct*/ false,
         ),
-||||||| 413492cd6c
-    let (inner, _) = connect(
-        request,
-        WebSocketConfig::default(),
-        Some(tls_config),
-        OutboundProxyRoute::Proxy {
-            url: proxy_url,
-            no_proxy: Some(no_proxy),
-        },
-        TcpNodelay::Enabled,
-=======
-    let (inner, _) = connect(
-        request,
-        WebSocketConfig::default(),
-        Some(tls_config),
-        OutboundProxyRoute::Proxy {
-            url: proxy_url,
-            no_proxy: Some(no_proxy),
-        },
-        TcpNodelay::Enabled,
-        /*loopback_direct*/ false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     )
     .await
     .expect("websocket handshake should not wait on an unserved proxy")
