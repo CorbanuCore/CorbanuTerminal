@@ -361,7 +361,10 @@ mod windows_env {
         const PROCESS_HEAP_REGION: u16 = 0x1;
         // SAFETY: a size query, then a fill of at most `heaps.len()` handles.
         let mut heaps: Vec<windows_sys::Win32::Foundation::HANDLE> =
-            vec![std::ptr::null_mut(); unsafe { GetProcessHeaps(0, std::ptr::null_mut()) } as usize + 8];
+            vec![
+                std::ptr::null_mut();
+                unsafe { GetProcessHeaps(0, std::ptr::null_mut()) } as usize + 8
+            ];
         let count = unsafe { GetProcessHeaps(heaps.len() as u32, heaps.as_mut_ptr()) } as usize;
         heaps.truncate(count.min(heaps.len()));
         // Filled while a heap is locked, so nothing is allocated meanwhile.
@@ -540,8 +543,8 @@ mod windows_env {
         let process = unsafe { GetCurrentProcess() };
         // Everything the scan uses is allocated by now.
         // SAFETY: a heap of this process, unlocked below if locked here.
-        let locked = heap.filter(|heap| {
-            unsafe { HeapLock(*heap as windows_sys::Win32::Foundation::HANDLE) } != 0
+        let locked = heap.filter(|heap| unsafe {
+            HeapLock(*heap as windows_sys::Win32::Foundation::HANDLE) != 0
         });
         for (base, end) in regions {
             let mut offset = base;
@@ -686,7 +689,10 @@ mod windows_env {
         }
         // SAFETY: a size query, then a fill of at most `heaps.len()` handles.
         let mut heaps: Vec<windows_sys::Win32::Foundation::HANDLE> =
-            vec![std::ptr::null_mut(); unsafe { GetProcessHeaps(0, std::ptr::null_mut()) } as usize + 8];
+            vec![
+                std::ptr::null_mut();
+                unsafe { GetProcessHeaps(0, std::ptr::null_mut()) } as usize + 8
+            ];
         let count = unsafe { GetProcessHeaps(heaps.len() as u32, heaps.as_mut_ptr()) } as usize;
         heaps.truncate(count.min(heaps.len()));
         let mut committed = CommittedPages::default();
