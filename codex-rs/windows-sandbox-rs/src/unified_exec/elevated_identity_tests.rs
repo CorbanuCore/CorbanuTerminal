@@ -787,3 +787,85 @@ fn sec_win_1648_elevated_tools_work_with_command_identity() {
         sandbox_log(codex_home.path())
     );
 }
+
+/// #1766 MEASUREMENT ONLY (never merged): the elevated backend, same shape.
+#[test]
+#[ignore = "#1766 measurement; run on request"]
+fn measure_1766_elevated_read_only_by_real_path_under_linked_cwd() {
+    let Some(codex_home) = elevated_home("m1766") else {
+        println!("| elevated | skipped: no elevated setup | | | |");
+        return;
+    };
+    let _guard = legacy_process_test_guard();
+    let test_root = user_owned_test_root();
+    let real = test_root.path().join("real");
+    fs::create_dir_all(real.join("docs")).expect("create docs");
+    let cmd = system32_exe("cmd.exe").display().to_string();
+    let runtime = current_thread_runtime();
+    for (kind, flag) in [("junction", "/J"), ("dir symlink", "/D")] {
+        let linked = test_root
+            .path()
+            .join(format!("linked-{}", flag.trim_start_matches('/')));
+        if !super::super::measure_1766::link(flag, &linked, &real) {
+            println!("| elevated | {kind} | could not make the link | | |");
+            continue;
+        }
+        for (spelling, docs) in [
+            ("real path", real.join("docs")),
+            ("through the link", linked.join("docs")),
+        ] {
+            let target = real.join("docs").join("probe.txt");
+            let script = format!(
+                "(echo x> \"{}\") & (echo y> \"{}\")",
+                target.display(),
+                linked.join("ok.txt").display()
+            );
+            let profile = super::super::measure_1766::profile_with_read_only(&docs);
+            let env_map: HashMap<String, String> = std::env::vars().collect();
+            let exit = runtime.block_on(async {
+                match spawn_windows_sandbox_session_elevated_for_permission_profile(
+                    &profile,
+                    workspace_roots_for(&linked).as_slice(),
+                    codex_home.path(),
+                    vec![cmd.clone(), "/d".to_string(), "/c".to_string(), script],
+                    &linked,
+                    env_map,
+                    false,
+                    None,
+                    Some(60_000),
+                    None,
+                    true,
+                    None,
+                    &crate::DenyReadTargets::default(),
+                    &[],
+                    false,
+                    false,
+                    true,
+                )
+                .await
+                {
+                    Ok(spawned) => format!(
+                        "exit={}",
+                        collect_stdout_and_exit(
+                            spawned,
+                            codex_home.path(),
+                            Duration::from_secs(60)
+                        )
+                        .await
+                        .1
+                    ),
+                    Err(err) => format!("start error: {err:#}"),
+                }
+            });
+            println!(
+                "| elevated | cwd via {kind} | read-only docs by {spelling} | {exit} | docs written={} | workspace written={} |",
+                target.exists(),
+                real.join("ok.txt").exists()
+            );
+            let _ = fs::remove_file(&target);
+            let _ = fs::remove_file(real.join("ok.txt"));
+        }
+        let _ = fs::remove_dir(&linked);
+    }
+    record_setup(codex_home.path());
+}

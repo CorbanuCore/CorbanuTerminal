@@ -2999,3 +2999,7 @@ mod carve_out_link;
 /// #1668: cloud-file placeholder folders at or above read-only paths.
 #[path = "cloud_placeholder_tests.rs"]
 pub(crate) mod cloud_placeholder;
+
+/// #1766 MEASUREMENT ONLY (never merged).
+#[path = "measure_1766_tests.rs"]
+mod measure_1766;

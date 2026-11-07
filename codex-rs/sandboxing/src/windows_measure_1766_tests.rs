@@ -25,13 +25,17 @@ fn run(program: &str, args: &[&str]) -> (bool, String) {
 
 fn short_name(path: &Path) -> Option<PathBuf> {
     let (ok, out) = run(
-        "cmd",
+        "powershell",
         &[
-            "/d",
-            "/c",
-            &format!("for %I in (\"{}\") do @echo %~sI", path.display()),
+            "-NoProfile",
+            "-Command",
+            &format!(
+                "(New-Object -ComObject Scripting.FileSystemObject).GetFolder('{}').ShortPath",
+                path.display()
+            ),
         ],
     );
+    println!("short name of {}: ok={ok} {out:?}", path.display());
     let short = PathBuf::from(out.lines().next()?.trim());
     (ok && short != path).then_some(short)
 }
@@ -106,7 +110,22 @@ fn measure_1766_non_canonical_cwd() {
         ok.then(|| PathBuf::from("W:\\Workspace Folder")),
         out,
     ));
-    let short = short_name(&real);
+    // 8.3 names: D: has them off; make a folder on the system drive with
+    // them on for that volume (the runner is throwaway).
+    println!(
+        "8dot3 query C: {:?}",
+        run("fsutil", &["8dot3name", "query", "C:"])
+    );
+    println!(
+        "8dot3 set C: 0 {:?}",
+        run("fsutil", &["8dot3name", "set", "C:", "0"])
+    );
+    let c_real = PathBuf::from(format!(
+        "C:\\m1766-{}\\Long Parent Folder\\Workspace Folder",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(c_real.join("docs")).expect("create C: dirs");
+    let short = short_name(&c_real);
     forms.push(("8.3 short name", short.clone(), format!("{short:?}")));
     let share_path = format!(
         "\\\\localhost\\{}$\\{}",
@@ -128,6 +147,26 @@ fn measure_1766_non_canonical_cwd() {
     forms.push((
         "lower-case spelling",
         Some(PathBuf::from(real.display().to_string().to_lowercase())),
+        String::new(),
+    ));
+    let real_str = real.display().to_string();
+    forms.push((
+        "lower-case drive letter only",
+        Some(PathBuf::from(format!(
+            "{}{}",
+            real_str[..1].to_lowercase(),
+            &real_str[1..]
+        ))),
+        String::new(),
+    ));
+    forms.push((
+        "forward slashes",
+        Some(PathBuf::from(real_str.replace('\\', "/"))),
+        String::new(),
+    ));
+    forms.push((
+        "canonical C: (8.3 control)",
+        Some(c_real.clone()),
         String::new(),
     ));
     forms.push((
