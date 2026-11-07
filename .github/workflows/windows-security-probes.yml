@@ -33,6 +33,7 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: |
+          set +e +o pipefail
           bin_dir="${CARGO_TARGET_DIR}/debug"
           export CARGO_BIN_EXE_codex_windows_sandbox_setup="$(cygpath -w "${bin_dir}/codex-windows-sandbox-setup.exe")"
           export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
@@ -44,13 +45,13 @@ jobs:
             cat t.log
             if grep -q 'test result: ok. 1 passed' t.log; then r=pass; else r="FAIL($code)"; fi
             echo "TESTRESULT|$CORBANU_PROBE_VARIANT|admin|$t|$r" | tee -a results.txt
-            grep -E '^(W1560M|d324 |d259 )' t.log >> results.txt || true
+            grep -E 'W1560M\||d324 (race|borrow)|d259 borrow' t.log >> results.txt || true
           done
           # The rest of the existing P1 hardening suite, as main's CI runs it.
           run sec_win_ --nocapture --test-threads=1 > suite.log 2>&1
-          tail -n 40 suite.log
+          tail -n 60 suite.log
           echo "SUITE|$CORBANU_PROBE_VARIANT|admin|sec_win_|$(grep -E '^test result' suite.log | tail -n1)" | tee -a results.txt
-          grep -E '^test .* FAILED$' suite.log | sed "s/^/SUITEFAIL|$CORBANU_PROBE_VARIANT|admin|/" >> results.txt || true
+          grep -E 'test .* \.\.\. FAILED' suite.log | sed "s/^/SUITEFAIL|$CORBANU_PROBE_VARIANT|admin|/" >> results.txt || true
       - name: Normal session
         if: ${{ !cancelled() }}
         shell: powershell
@@ -78,13 +79,17 @@ jobs:
             if ($elevatedBackend) { Remove-Item Env:CODEX_SEC_WIN_1648_REQUIRE }
             $out
             $r = if (($out -join "`n") -match 'test result: ok\. 1 passed') { 'pass' } else { "FAIL($code)" }
-            "TESTRESULT|$($env:CORBANU_PROBE_VARIANT)|normal|$t|$r" | Tee-Object -Append -FilePath results.txt
-            $out | Where-Object { $_ -match '^(W1560M|d324 |d259 )' } | Out-File -Append -Encoding utf8 results.txt
+            $line = "TESTRESULT|$($env:CORBANU_PROBE_VARIANT)|normal|$t|$r"
+            $line
+            Add-Content -Encoding ascii results.txt $line
+            $out | Where-Object { $_ -match 'W1560M\||d324 (race|borrow)|d259 borrow' } | ForEach-Object { Add-Content -Encoding ascii results.txt $_ }
           }
           $suite = & $medium -Program $sandbox -Arguments @('sec_win_', '--nocapture', '--test-threads=1')
-          $suite | Select-Object -Last 40
-          "SUITE|$($env:CORBANU_PROBE_VARIANT)|normal|sec_win_|$(($suite | Where-Object { $_ -match '^test result' } | Select-Object -Last 1))" | Tee-Object -Append -FilePath results.txt
-          $suite | Where-Object { $_ -match '^test .* FAILED$' } | ForEach-Object { "SUITEFAIL|$($env:CORBANU_PROBE_VARIANT)|normal|$_" } | Out-File -Append -Encoding utf8 results.txt
+          $suite | Select-Object -Last 60
+          $joined = $suite -join "`n"
+          $summary = [regex]::Matches($joined, 'test result: [^\r\n]*') | Select-Object -Last 1
+          Add-Content -Encoding ascii results.txt "SUITE|$($env:CORBANU_PROBE_VARIANT)|normal|sec_win_|$summary"
+          [regex]::Matches($joined, 'test \S+ \.\.\. FAILED') | ForEach-Object { Add-Content -Encoding ascii results.txt "SUITEFAIL|$($env:CORBANU_PROBE_VARIANT)|normal|$($_.Value)" }
       - name: Summary
         if: always()
         shell: bash

@@ -41,7 +41,7 @@ fn report(backend: Backend, case: &str, ok: bool, detail: &str) {
         .replace(['\r', '\n'], " ")
         .chars()
         .rev()
-        .take(400)
+        .take(900)
         .collect::<Vec<_>>()
         .into_iter()
         .rev()
@@ -138,9 +138,23 @@ fn workload_cases() -> Vec<(&'static str, Vec<String>, Vec<&'static str>, bool)>
     let powershell = system32_exe("WindowsPowerShell\\v1.0\\powershell.exe")
         .display()
         .to_string();
-    let pwsh = on_path("pwsh.exe")
-        .map(|path| path.display().to_string())
-        .unwrap_or_else(|| "pwsh-missing".to_string());
+    let found = |name: &str| {
+        on_path(name)
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| format!("{name}-missing"))
+    };
+    let pwsh = found("pwsh.exe");
+    let node = found("node.exe");
+    let python = found("python.exe");
+    let git_bash = PathBuf::from(std::env::var_os("ProgramFiles").unwrap_or_default())
+        .join("Git\\bin\\bash.exe")
+        .display()
+        .to_string();
+    let sysroot = std::process::Command::new("rustc")
+        .args(["--print", "sysroot"])
+        .output()
+        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
+        .unwrap_or_default();
     let ps = |exe: &str, script: &str| {
         vec![
             exe.to_string(),
@@ -152,6 +166,12 @@ fn workload_cases() -> Vec<(&'static str, Vec<String>, Vec<&'static str>, bool)>
     let ps_script = "$x = & cmd /c echo w-ps; $x | Select-String w-ps | ForEach-Object { $_.Line }; \
                      Get-ChildItem | Out-Null; $t = [IO.Path]::GetTempFileName(); \
                      Set-Content $t 'x'; Remove-Item $t; 'w-ps-done'";
+    let direct_cargo = |dir: &str, extra: &str| {
+        cmd_c(&format!(
+            "set CARGO_TARGET_DIR=&& {extra}set RUSTC={sysroot}\\bin\\rustc.exe&& cd {dir} \
+             && {sysroot}\\bin\\cargo.exe build --offline && target\\debug\\tinyc.exe"
+        ))
+    };
     vec![
         (
             "cmd pipeline",
@@ -195,15 +215,21 @@ fn workload_cases() -> Vec<(&'static str, Vec<String>, Vec<&'static str>, bool)>
         ),
         (
             "git bash",
-            cmd_c(
-                "\"%ProgramFiles%\\Git\\bin\\bash.exe\" -lc \"echo w-bash > b.txt && cat b.txt\"",
-            ),
+            vec![
+                git_bash,
+                "-lc".to_string(),
+                "echo w-bash > b.txt && cat b.txt".to_string(),
+            ],
             vec!["w-bash"],
             false,
         ),
         (
             "node",
-            cmd_c("node -e \"require('fs').writeFileSync('n.txt','x');console.log('w-node')\""),
+            vec![
+                node,
+                "-e".to_string(),
+                "require('fs').writeFileSync('n.txt','x');console.log('w-node')".to_string(),
+            ],
             vec!["w-node"],
             false,
         ),
@@ -215,10 +241,13 @@ fn workload_cases() -> Vec<(&'static str, Vec<String>, Vec<&'static str>, bool)>
         ),
         (
             "python + tempfile",
-            cmd_c(
-                "python -c \"import tempfile;f=tempfile.NamedTemporaryFile(delete=False);\
-                 f.write(b'x');f.close();open('p.txt','w').write('x');print('w-py')\"",
-            ),
+            vec![
+                python,
+                "-c".to_string(),
+                "import tempfile;f=tempfile.NamedTemporaryFile(delete=False);f.write(b'x');\
+                 f.close();open('p.txt','w').write('x');print('w-py')"
+                    .to_string(),
+            ],
             vec!["w-py"],
             false,
         ),
@@ -229,21 +258,33 @@ fn workload_cases() -> Vec<(&'static str, Vec<String>, Vec<&'static str>, bool)>
             false,
         ),
         (
-            "cargo build",
+            "python venv (no pip) + ensurepip",
             cmd_c(
-                "set CARGO_TARGET_DIR=&& cargo new -q --vcs none tinyc && cd tinyc \
-                 && cargo build -q --offline && target\\debug\\tinyc.exe",
+                "python -m venv --without-pip v3 && echo w-venv-nopip \
+                 && v3\\Scripts\\python -m ensurepip --default-pip && echo w-ensurepip",
             ),
-            vec!["Hello, world!"],
+            vec!["w-venv-nopip", "w-ensurepip"],
             false,
         ),
         (
-            "cargo build (CARGO_HOME in workspace)",
+            "cargo build (rustup proxy)",
             cmd_c(
-                "set CARGO_TARGET_DIR=&& set CARGO_HOME=%CD%\\ch&& cargo new -q --vcs none tinyd && cd tinyd \
-                 && cargo build -q --offline && target\\debug\\tinyd.exe",
+                "set CARGO_TARGET_DIR=&& cd tinyc && cargo build --offline \
+                 && target\\debug\\tinyc.exe",
             ),
-            vec!["Hello, world!"],
+            vec!["w-cargo"],
+            false,
+        ),
+        (
+            "cargo build (toolchain cargo)",
+            direct_cargo("tinyd", ""),
+            vec!["w-cargo"],
+            false,
+        ),
+        (
+            "cargo build (toolchain cargo, CARGO_HOME in workspace)",
+            direct_cargo("tinye", "set CARGO_HOME=%CD%\\ch&& "),
+            vec!["w-cargo"],
             false,
         ),
         (
@@ -258,7 +299,8 @@ fn workload_cases() -> Vec<(&'static str, Vec<String>, Vec<&'static str>, bool)>
         (
             "%TEMP% files",
             cmd_c(
-                "echo x> \"%TEMP%\\w1560m.txt\" && type \"%TEMP%\\w1560m.txt\" && del \"%TEMP%\\w1560m.txt\" && echo w-temp",
+                "echo x> %TEMP%\\w1560m.txt && type %TEMP%\\w1560m.txt \
+                 && del %TEMP%\\w1560m.txt && echo w-temp",
             ),
             vec!["w-temp"],
             false,
@@ -276,6 +318,21 @@ fn workloads(backend: Backend, codex_home: &Path) {
     let root = user_owned_test_root();
     let runtime = current_thread_runtime();
     let profile = PermissionProfile::workspace_write();
+    // Tiny crates, each its own workspace (the test root sits inside ours).
+    for name in ["tinyc", "tinyd", "tinye"] {
+        let dir = root.path().join(name);
+        fs::create_dir_all(dir.join("src")).expect("crate dir");
+        fs::write(
+            dir.join("Cargo.toml"),
+            "[package]\nname = \"tinyc\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n",
+        )
+        .expect("Cargo.toml");
+        fs::write(
+            dir.join("src").join("main.rs"),
+            "fn main() { println!(\"w-cargo\"); }\n",
+        )
+        .expect("main.rs");
+    }
     for (name, argv, expected, tty) in workload_cases() {
         let started = Instant::now();
         let (stdout, code) = runtime.block_on(run_in(
@@ -521,23 +578,29 @@ pub(crate) fn self_token_report() -> String {
             return parts.join(" ");
         }
         parts.push("open_duplicate=ok".to_string());
-        let mut restricted: HANDLE = 0;
-        if CreateRestrictedToken(
-            token,
-            0,
-            0,
-            std::ptr::null(),
-            0,
-            std::ptr::null(),
-            0,
-            std::ptr::null(),
-            &mut restricted,
-        ) == 0
-        {
-            parts.push(format!("create_restricted=err{}", GetLastError()));
-        } else {
-            CloseHandle(restricted);
-            parts.push("create_restricted=ok".to_string());
+        // DISABLE_MAX_PRIVILEGE, then also WRITE_RESTRICTED (the source token is).
+        for (name, flags) in [
+            ("create_restricted", 0x1u32),
+            ("create_write_restricted", 0x9u32),
+        ] {
+            let mut restricted: HANDLE = 0;
+            if CreateRestrictedToken(
+                token,
+                flags,
+                0,
+                std::ptr::null(),
+                0,
+                std::ptr::null(),
+                0,
+                std::ptr::null(),
+                &mut restricted,
+            ) == 0
+            {
+                parts.push(format!("{name}=err{}", GetLastError()));
+            } else {
+                CloseHandle(restricted);
+                parts.push(format!("{name}=ok"));
+            }
         }
         parts.push(format!("start_child_with_copy={}", primary_result(token)));
         CloseHandle(token);
