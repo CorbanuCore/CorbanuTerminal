@@ -5334,3 +5334,22 @@ fn keychain_services_are_denied_only_with_the_entry() {
         "{text}"
     );
 }
+
+/// A literal path spelled through `escape_glob_literal` (the resolved
+/// spelling of a deny glob) matches exactly that path and what is below it,
+/// also with glob metacharacters and `\` in its name.
+#[test]
+fn escaped_literal_globs_match_the_path_and_its_subtree() {
+    for name in ["db[1]", "a{b}", r"back\slash", "star*", "q?"] {
+        let path = format!("/tmp/codex-escape-test/{name}");
+        let regex = super::seatbelt_regex_for_unreadable_glob(&super::escape_glob_literal(&path))
+            .expect("compiles");
+        let regex = regex_lite::Regex::new(&regex).expect("valid regex");
+        assert!(regex.is_match(&path), "{name}: {regex}");
+        assert!(regex.is_match(&format!("{path}/inside")), "{name}: {regex}");
+        assert!(
+            !regex.is_match("/tmp/codex-escape-test/other"),
+            "{name}: {regex}"
+        );
+    }
+}

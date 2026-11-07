@@ -1074,9 +1074,10 @@ fn credential_name_in_any_case(regex: &str) -> String {
 fn escape_glob_literal(text: &str) -> String {
     text.chars()
         .map(|ch| match ch {
-            '*' | '?' | '[' | '{' | '}' => format!("[{ch}]"),
-            // The glob syntax treats `\` as an escape too.
-            '\\' => "[\\\\]".to_string(),
+            // The glob compiler takes `\<ch>` as a literal `<ch>`; that keeps
+            // a literal (no-wildcard) spelling literal, so it still gets the
+            // subtree match, and covers `\` itself (#651-style gap).
+            '*' | '?' | '[' | ']' | '{' | '}' | '\\' => format!("\\{ch}"),
             other => other.to_string(),
         })
         .collect()
