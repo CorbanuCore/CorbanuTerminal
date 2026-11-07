@@ -83,6 +83,12 @@ impl AgentResponseLogger {
             .collect::<String>();
         // Keep plan content, stripping memory citations only from the exported copy.
         let (text, _) = strip_citations(&text);
+        // PF-28-S01: exported text passes the secret output gate when it is armed.
+        let text = codex_secret_broker::output_gate::scrub_if_armed(
+            codex_secret_broker::output_gate::OutputSink::Trace,
+            &text,
+        )
+        .unwrap_or(text);
         if text.trim().is_empty()
             || !self
                 .logged

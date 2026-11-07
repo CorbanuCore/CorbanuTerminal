@@ -697,23 +697,7 @@ fn build_otlp_metric_exporter(
                 .with_protocol(protocol)
                 .with_headers(headers);
 
-<<<<<<< HEAD
-            let client =
-                crate::otlp::build_http_client(tls.as_ref(), OTEL_EXPORTER_OTLP_METRICS_TIMEOUT)
-                    .map_err(|err| MetricsError::InvalidConfig {
-                        message: err.to_string(),
-                    })?;
-||||||| 413492cd6c
-            if let Some(tls) = tls.as_ref() {
-                let client =
-                    crate::otlp::build_http_client(tls, OTEL_EXPORTER_OTLP_METRICS_TIMEOUT)
-                        .map_err(|err| MetricsError::InvalidConfig {
-                            message: err.to_string(),
-                        })?;
-                exporter_builder = exporter_builder.with_http_client(client);
-            }
-=======
-            if factory.network_policy().is_managed() {
+            let exporter_builder = if factory.network_policy().is_managed() {
                 let client = crate::otlp::build_async_http_client(
                     factory,
                     tls.as_ref(),
@@ -722,19 +706,21 @@ fn build_otlp_metric_exporter(
                 .map_err(|err| MetricsError::InvalidConfig {
                     message: err.to_string(),
                 })?;
-                exporter_builder = exporter_builder.with_http_client(client);
-            } else if let Some(tls) = tls.as_ref() {
-                let client =
-                    crate::otlp::build_http_client(tls, OTEL_EXPORTER_OTLP_METRICS_TIMEOUT)
-                        .map_err(|err| MetricsError::InvalidConfig {
-                            message: err.to_string(),
-                        })?;
-                exporter_builder = exporter_builder.with_http_client(client);
-            }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                exporter_builder.with_http_client(client)
+            } else {
+                // The exporter has no HTTP client of its own (default features
+                // off), so it always gets ours.
+                let client = crate::otlp::build_http_client(
+                    tls.as_ref(),
+                    OTEL_EXPORTER_OTLP_METRICS_TIMEOUT,
+                )
+                .map_err(|err| MetricsError::InvalidConfig {
+                    message: err.to_string(),
+                })?;
+                exporter_builder.with_http_client(client)
+            };
 
             exporter_builder
-                .with_http_client(client)
                 .build()
                 .map_err(|source| MetricsError::ExporterBuild { source })
         }

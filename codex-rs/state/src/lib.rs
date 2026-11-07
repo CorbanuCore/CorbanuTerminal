@@ -25,14 +25,10 @@ mod runtime;
 mod sqlite;
 mod telemetry;
 
-<<<<<<< HEAD
+pub use log_db::LogWriteFailureReporter;
 pub use log_scrub::scrub_log_file_once;
 pub use log_scrub::scrub_sandbox_logs_once;
-||||||| 413492cd6c
-=======
-pub use log_db::LogWriteFailureReporter;
 pub use model::CreatedProject;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use model::LogEntry;
 pub use model::LogQuery;
 pub use model::LogRow;
@@ -56,12 +52,8 @@ pub use runtime::QUICK_BUSY_TIMEOUT;
 pub use runtime::StateRuntime;
 pub use runtime::is_state_db_busy;
 pub use sqlite::SqliteConfig;
-<<<<<<< HEAD
-pub use sqlite::runtime_database_filenames;
-||||||| 413492cd6c
-=======
 pub use sqlite::SqlitePoolWriteExt;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+pub use sqlite::runtime_database_filenames;
 
 pub use audit::ThreadStateAuditRow;
 pub use audit::read_thread_rollout_paths;
@@ -82,7 +74,6 @@ pub use model::BackfillStats;
 pub use model::BackfillStatus;
 pub use model::DirectionalThreadSpawnEdgeStatus;
 pub use model::ExtractionOutcome;
-<<<<<<< HEAD
 pub use model::GpuLimitEnforcement;
 pub use model::GpuOperationKind;
 pub use model::GpuProvisionStep;
@@ -93,10 +84,7 @@ pub use model::GpuRentalState;
 pub use model::GpuRentalUpdate;
 pub use model::GpuRuntimeProvider;
 pub use model::GpuRuntimeProviderUpsert;
-||||||| 413492cd6c
-=======
 pub use model::RemoveThreadAttachmentOutcome;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use model::SortDirection;
 pub use model::SortKey;
 pub use model::Stage1JobClaim;
@@ -129,7 +117,6 @@ pub use runtime::GoalAccountingOutcome;
 pub use runtime::GoalStore;
 pub use runtime::GoalUpdate;
 pub use runtime::MemoryStore;
-<<<<<<< HEAD
 pub use runtime::ProviderRequestBlock;
 pub use runtime::ProviderRequestBlockReason;
 pub use runtime::ProviderRequestKey;
@@ -138,21 +125,12 @@ pub use runtime::ProviderRequestLeaseDecision;
 pub use runtime::ProviderRequestPreflight;
 pub use runtime::ProviderRequestResult;
 pub use runtime::ProviderRequestThrottled;
-||||||| 413492cd6c
-=======
 pub use runtime::ReadStateOperation;
 pub use runtime::ReadStateUpdate;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use runtime::RemoteControlEnrollmentRecord;
-<<<<<<< HEAD
-pub use runtime::RuntimeDbBackup;
-pub use runtime::StateDbFallback;
-||||||| 413492cd6c
-pub use runtime::RuntimeDbBackup;
-=======
 pub use runtime::SqliteIntegrityCheck;
 pub use runtime::SqliteQueueStore;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+pub use runtime::StateDbFallback;
 pub use runtime::ThreadFilterOptions;
 pub use runtime::ThreadReadState;
 pub use runtime::backup_runtime_db_for_fresh_start;

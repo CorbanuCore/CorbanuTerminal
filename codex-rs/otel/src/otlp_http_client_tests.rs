@@ -60,20 +60,6 @@ fn blocking_send(url: String) -> Result<Response<Bytes>, String> {
     .expect("blocking client thread")
 }
 
-fn async_send(url: String) -> Result<Response<Bytes>, String> {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("runtime");
-    runtime.block_on(async move {
-        let client = AsyncOtlpHttpClient::new(reqwest::Client::new());
-        client
-            .send_bytes(request(&url))
-            .await
-            .map_err(|error| error.to_string())
-    })
-}
-
 fn assert_error_status_is_returned(send: fn(String) -> Result<Response<Bytes>, String>) {
     let (url, server) = serve_once("503 Service Unavailable", b"busy".to_vec());
     let response = send(url).expect("non-success statuses are responses, not errors");
@@ -104,16 +90,6 @@ fn blocking_client_returns_error_status_as_response() {
 }
 
 #[test]
-fn async_client_returns_error_status_as_response() {
-    assert_error_status_is_returned(async_send);
-}
-
-#[test]
 fn blocking_client_rejects_oversized_response_body() {
     assert_oversized_body_is_rejected(blocking_send);
-}
-
-#[test]
-fn async_client_rejects_oversized_response_body() {
-    assert_oversized_body_is_rejected(async_send);
 }

@@ -102,15 +102,15 @@ pub enum RouteAwareRequestError {
 }
 
 impl RouteAwareRequestError {
-<<<<<<< HEAD
     /// The error message with the request URL's query values and userinfo
     /// redacted, for text shown to users.
     pub fn redacted_message(&self) -> String {
         match self {
             Self::Request(error) => crate::redact_reqwest_error(error),
             error => error.to_string(),
-||||||| 413492cd6c
-=======
+        }
+    }
+
     /// Classifies transport, proxy, and certificate failures without exposing request details.
     pub fn failure_class(&self) -> Option<RouteFailureClass> {
         if self.is_timeout() {
@@ -157,7 +157,6 @@ impl RouteAwareRequestError {
             | Self::UnsupportedRedirectScheme(_)
             | Self::TooManyRedirects
             | Self::Timeout => None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 
@@ -567,6 +566,13 @@ impl RouteAwareClientPool {
         .await
         .map_err(RouteAwareClientPoolError::BuildTask)??;
         Ok((route, client, SelectedTlsBackend::TransportDefault))
+    }
+
+    /// This pool's network policy, when it can deny destinations (managed, or
+    /// narrowed to exact endpoints).
+    pub(crate) fn managed_network_policy(&self) -> Option<&crate::NetworkPolicy> {
+        let policy = self.http_client_factory.network_policy();
+        policy.restricts_destinations().then_some(policy)
     }
 
     fn follows_redirects_manually(&self) -> bool {

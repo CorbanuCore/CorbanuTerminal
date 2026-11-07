@@ -1,21 +1,21 @@
-//! `opentelemetry_http::HttpClient` adapters for the workspace's reqwest 0.12
-//! clients.
+//! `opentelemetry_http::HttpClient` adapter for the workspace's reqwest 0.12
+//! blocking client. Async exporters use the policy-aware
+//! `crate::network_policy::RuntimeHttpClient` instead.
 //!
 //! `opentelemetry-http` 0.33 only implements `HttpClient` for reqwest 0.13,
 //! whose rustls backend is aws-lc-rs with the platform verifier. Wrapping our
 //! own reqwest 0.12 clients keeps the OTLP/HTTP TLS stack, custom CA and mTLS
 //! handling exactly as before.
 //!
-//! Like the upstream adapters, these return non-success HTTP statuses as
-//! `Ok(response)` so the exporter can classify them, and reject response bodies
+//! Like the upstream adapters, this returns non-success HTTP statuses as
+//! `Ok(response)` so the exporter can classify them, and rejects response bodies
 //! larger than 4 MiB.
 //!
-//! `HttpClient` is declared with `#[async_trait]`; the impls below spell out
+//! `HttpClient` is declared with `#[async_trait]`; the impl below spells out
 //! the expanded signature because the workspace bans depending on
 //! `async-trait` directly.
 
 use bytes::Bytes;
-use bytes::BytesMut;
 use http::Request;
 use http::Response;
 use opentelemetry_http::HttpClient;
@@ -64,43 +64,6 @@ impl HttpClient for BlockingOtlpHttpClient {
         Self: 'async_trait,
     {
         Box::pin(async move { self.send_blocking(request) })
-    }
-}
-
-/// Async client for the Tokio batch span processor.
-#[derive(Debug)]
-pub(crate) struct AsyncOtlpHttpClient(reqwest::Client);
-
-impl AsyncOtlpHttpClient {
-    pub(crate) fn new(client: reqwest::Client) -> Self {
-        Self(client)
-    }
-
-    async fn send_async(&self, request: Request<Bytes>) -> Result<Response<Bytes>, HttpError> {
-        let mut response = self.0.execute(request.try_into()?).await?;
-        let status = response.status();
-        let headers = std::mem::take(response.headers_mut());
-        let mut body = BytesMut::with_capacity(body_capacity(response.content_length()));
-        while let Some(chunk) = response.chunk().await? {
-            if body.len() + chunk.len() > MAX_RESPONSE_BODY_BYTES {
-                return Err(Box::new(ResponseBodyTooLarge::new()));
-            }
-            body.extend_from_slice(&chunk);
-        }
-        build_response(status, headers, body.freeze())
-    }
-}
-
-impl HttpClient for AsyncOtlpHttpClient {
-    fn send_bytes<'life0, 'async_trait>(
-        &'life0 self,
-        request: Request<Bytes>,
-    ) -> SendFuture<'async_trait>
-    where
-        'life0: 'async_trait,
-        Self: 'async_trait,
-    {
-        Box::pin(self.send_async(request))
     }
 }
 

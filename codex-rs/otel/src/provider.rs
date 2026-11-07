@@ -513,32 +513,22 @@ fn build_logger(
                 .with_protocol(protocol)
                 .with_headers(headers);
 
-<<<<<<< HEAD
-            let client =
-                crate::otlp::build_http_client(tls.as_ref(), OTEL_EXPORTER_OTLP_LOGS_TIMEOUT)?;
-            let exporter = exporter_builder.with_http_client(client).build()?;
-||||||| 413492cd6c
-            if let Some(tls) = tls.as_ref() {
-                let client = crate::otlp::build_http_client(tls, OTEL_EXPORTER_OTLP_LOGS_TIMEOUT)?;
-                exporter_builder = exporter_builder.with_http_client(client);
-            }
-
-            let exporter = exporter_builder.build()?;
-=======
-            if factory.network_policy().is_managed() {
+            let exporter_builder = if factory.network_policy().is_managed() {
                 let client = crate::otlp::build_async_http_client(
                     factory,
                     tls.as_ref(),
                     OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,
                 )?;
-                exporter_builder = exporter_builder.with_http_client(client);
-            } else if let Some(tls) = tls.as_ref() {
-                let client = crate::otlp::build_http_client(tls, OTEL_EXPORTER_OTLP_LOGS_TIMEOUT)?;
-                exporter_builder = exporter_builder.with_http_client(client);
-            }
+                exporter_builder.with_http_client(client)
+            } else {
+                // The exporter has no HTTP client of its own (default features
+                // off), so it always gets ours.
+                let client =
+                    crate::otlp::build_http_client(tls.as_ref(), OTEL_EXPORTER_OTLP_LOGS_TIMEOUT)?;
+                exporter_builder.with_http_client(client)
+            };
 
             let exporter = exporter_builder.build()?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
             builder = builder.with_batch_exporter(crate::network_policy::PolicyExporter {
                 exporter,
@@ -639,34 +629,24 @@ fn build_tracer_provider(
                 .with_protocol(protocol)
                 .with_headers(headers);
 
-<<<<<<< HEAD
-            let client =
-                crate::otlp::build_http_client(tls.as_ref(), OTEL_EXPORTER_OTLP_TRACES_TIMEOUT)?;
-            exporter_builder.with_http_client(client).build()?
-||||||| 413492cd6c
-            if let Some(tls) = tls.as_ref() {
-                let client =
-                    crate::otlp::build_http_client(tls, OTEL_EXPORTER_OTLP_TRACES_TIMEOUT)?;
-                exporter_builder = exporter_builder.with_http_client(client);
-            }
-
-            exporter_builder.build()?
-=======
-            if factory.network_policy().is_managed() {
+            let exporter_builder = if factory.network_policy().is_managed() {
                 let client = crate::otlp::build_async_http_client(
                     factory,
                     tls.as_ref(),
                     OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
                 )?;
-                exporter_builder = exporter_builder.with_http_client(client);
-            } else if let Some(tls) = tls.as_ref() {
-                let client =
-                    crate::otlp::build_http_client(tls, OTEL_EXPORTER_OTLP_TRACES_TIMEOUT)?;
-                exporter_builder = exporter_builder.with_http_client(client);
-            }
+                exporter_builder.with_http_client(client)
+            } else {
+                // The exporter has no HTTP client of its own (default features
+                // off), so it always gets ours.
+                let client = crate::otlp::build_http_client(
+                    tls.as_ref(),
+                    OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
+                )?;
+                exporter_builder.with_http_client(client)
+            };
 
             exporter_builder.build()?
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     };
 

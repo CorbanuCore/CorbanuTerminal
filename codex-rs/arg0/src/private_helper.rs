@@ -11,6 +11,12 @@ use codex_exec_server::CODEX_FS_HELPER_ARG1;
 #[cfg(target_os = "windows")]
 use codex_windows_sandbox::CODEX_WINDOWS_SANDBOX_ARG1;
 
+/// `codex_utils_pty`'s Linux process-setup helper marker (its private
+/// `HELPER_ARG`). `crate::arg0_dispatch` hands it to
+/// `codex_utils_pty::init_spawn_helper` before anything else.
+#[cfg(target_os = "linux")]
+const PTY_PROCESS_SETUP_ARG1: &str = "--codex-run-as-process-setup";
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PrivateHelper {
     #[cfg(any(unix, windows))]
@@ -20,6 +26,11 @@ pub(crate) enum PrivateHelper {
     FsHelper,
     #[cfg(target_os = "windows")]
     WindowsSandbox,
+    /// Upstream's Windows MXC launcher; it exits with an error elsewhere.
+    WindowsMxc,
+    /// Upstream's Linux PTY/pipe process-setup helper.
+    #[cfg(target_os = "linux")]
+    PtyProcessSetup,
     ApplyPatch,
 }
 
@@ -37,6 +48,13 @@ impl PrivateHelper {
         if argv1 == CODEX_FS_HELPER_ARG1 {
             return Some(Self::FsHelper);
         }
+        if argv1 == codex_sandboxing::CODEX_WINDOWS_MXC_ARG1 {
+            return Some(Self::WindowsMxc);
+        }
+        #[cfg(target_os = "linux")]
+        if argv1 == PTY_PROCESS_SETUP_ARG1 {
+            return Some(Self::PtyProcessSetup);
+        }
         #[cfg(target_os = "windows")]
         if argv1 == CODEX_WINDOWS_SANDBOX_ARG1 {
             return Some(Self::WindowsSandbox);
@@ -53,7 +71,9 @@ impl PrivateHelper {
     /// The credential broker is started by Core, outside any sandbox Core
     /// does not already run in, and confines itself only later. Its view of
     /// the home is Core's, which Core's own preflight has just read, so an
-    /// unreadable home there is a real failure worth reporting.
+    /// unreadable home there is a real failure worth reporting. The MXC
+    /// launcher is the same: it is started outside the sandbox and creates
+    /// the sandbox for its child itself, so it keeps the preflight.
     fn runs_sandboxed(self) -> bool {
         match self {
             #[cfg(unix)]
@@ -61,8 +81,13 @@ impl PrivateHelper {
             #[cfg(target_os = "windows")]
             Self::WindowsSandbox => true,
             Self::FsHelper | Self::ApplyPatch => true,
+            // It starts with an empty environment (so the home lookup would
+            // not be this process's) and only sets up its target's exec.
+            #[cfg(target_os = "linux")]
+            Self::PtyProcessSetup => true,
             #[cfg(any(unix, windows))]
             Self::CredentialBroker => false,
+            Self::WindowsMxc => false,
         }
     }
 }
@@ -90,6 +115,11 @@ mod tests {
                 Some(PrivateHelper::ApplyPatch),
                 true,
             ),
+            (
+                codex_sandboxing::CODEX_WINDOWS_MXC_ARG1,
+                Some(PrivateHelper::WindowsMxc),
+                false,
+            ),
             ("--version", None, false),
             ("exec", None, false),
             ("", None, false),
@@ -105,6 +135,12 @@ mod tests {
         markers.push((
             CODEX_ARG0_EXEC_HELPER_ARG1,
             Some(PrivateHelper::Arg0Exec),
+            true,
+        ));
+        #[cfg(target_os = "linux")]
+        markers.push((
+            PTY_PROCESS_SETUP_ARG1,
+            Some(PrivateHelper::PtyProcessSetup),
             true,
         ));
         #[cfg(target_os = "windows")]

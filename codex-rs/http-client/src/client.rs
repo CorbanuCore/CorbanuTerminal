@@ -22,15 +22,6 @@ pub type HttpError = crate::RouteAwareRequestError;
 /// destination or use [`crate::RouteAwareClientPool`] when request and redirect URLs can vary.
 #[derive(Clone, Debug)]
 pub struct HttpClient {
-<<<<<<< HEAD
-    inner: reqwest::Client,
-    request_logging: RequestLogging,
-    /// PF-27-S05: every connection goes to the credential broker's socket.
-    broker_socket: bool,
-||||||| 413492cd6c
-    inner: reqwest::Client,
-    request_logging: RequestLogging,
-=======
     pub(crate) backend: HttpClientBackend,
 }
 
@@ -46,6 +37,8 @@ pub(crate) struct TransportClient {
     pub(crate) inner: reqwest::Client,
     pub(crate) request_logging: RequestLogging,
     default_headers: Arc<HeaderMap>,
+    /// PF-27-S05: every connection goes to the credential broker's socket.
+    broker_socket: bool,
 }
 
 impl std::fmt::Debug for TransportClient {
@@ -53,23 +46,20 @@ impl std::fmt::Debug for TransportClient {
         formatter
             .debug_struct("TransportClient")
             .field("request_logging", &self.request_logging)
+            .field("broker_socket", &self.broker_socket)
             .finish_non_exhaustive()
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl HttpClient {
     pub fn new(inner: reqwest::Client) -> Self {
-<<<<<<< HEAD
-        Self::from_parts(inner, RequestLogging::Enabled)
-    }
-
-    /// Creates a client that suppresses request URL and response-header diagnostics.
-    ///
-    /// Use this for endpoints whose URLs or headers may contain credentials that are redacted by
-    /// the caller above the HTTP transport boundary.
-    pub fn new_without_request_logging(inner: reqwest::Client) -> Self {
-        Self::from_parts(inner, RequestLogging::Disabled)
+        Self {
+            backend: HttpClientBackend::Direct(TransportClient::new(
+                inner,
+                RequestLogging::Enabled,
+                HeaderMap::new(),
+            )),
+        }
     }
 
     /// A client whose every connection goes to the Unix socket `path` (plain
@@ -80,54 +70,21 @@ impl HttpClient {
         path: &std::path::Path,
         default_headers: HeaderMap,
     ) -> Result<Self, HttpError> {
-        reqwest::Client::builder()
+        let inner = reqwest::Client::builder()
             .default_headers(default_headers)
             .redirect(reqwest::redirect::Policy::none())
             .unix_socket(path.to_path_buf())
-            .build()
-            .map(|inner| Self {
-                broker_socket: true,
-                ..Self::new(inner)
-            })
+            .build()?;
+        let mut client = TransportClient::new(inner, RequestLogging::Enabled, HeaderMap::new());
+        client.broker_socket = true;
+        Ok(Self {
+            backend: HttpClientBackend::Direct(client),
+        })
     }
 
     /// Whether this client connects only to the credential broker's socket.
-    pub(crate) const fn is_broker_socket(&self) -> bool {
-        self.broker_socket
-    }
-
-    pub(crate) fn from_parts(inner: reqwest::Client, request_logging: RequestLogging) -> Self {
-||||||| 413492cd6c
-        Self::from_parts(inner, RequestLogging::Enabled)
-    }
-
-    /// Creates a client that suppresses request URL and response-header diagnostics.
-    ///
-    /// Use this for endpoints whose URLs or headers may contain credentials that are redacted by
-    /// the caller above the HTTP transport boundary.
-    pub fn new_without_request_logging(inner: reqwest::Client) -> Self {
-        Self::from_parts(inner, RequestLogging::Disabled)
-    }
-
-    pub(crate) fn from_parts(inner: reqwest::Client, request_logging: RequestLogging) -> Self {
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-        Self {
-<<<<<<< HEAD
-            inner,
-            request_logging,
-            broker_socket: false,
-||||||| 413492cd6c
-            inner,
-            request_logging,
-=======
-            backend: HttpClientBackend::Direct(TransportClient {
-                inner,
-                request_logging: RequestLogging::Enabled,
-                default_headers: Arc::new(HeaderMap::new()),
-            }),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-        }
+    pub(crate) fn is_broker_socket(&self) -> bool {
+        matches!(&self.backend, HttpClientBackend::Direct(client) if client.broker_socket)
     }
 
     /// Suppresses diagnostics for endpoints whose URLs or headers may contain credentials.
@@ -215,6 +172,7 @@ impl TransportClient {
             inner,
             request_logging,
             default_headers: Arc::new(default_headers),
+            broker_socket: false,
         }
     }
 
@@ -292,238 +250,6 @@ pub(crate) enum RequestLogging {
     Disabled,
 }
 
-<<<<<<< HEAD
-#[must_use = "requests are not sent unless `send` is awaited"]
-#[derive(Debug)]
-pub struct RequestBuilder {
-    builder: reqwest::RequestBuilder,
-    method: Method,
-    url: String,
-    request_logging: RequestLogging,
-}
-
-impl RequestBuilder {
-    fn new(
-        builder: reqwest::RequestBuilder,
-        method: Method,
-        url: String,
-        request_logging: RequestLogging,
-    ) -> Self {
-        Self {
-            builder,
-            method,
-            url,
-            request_logging,
-        }
-    }
-
-    fn map(self, f: impl FnOnce(reqwest::RequestBuilder) -> reqwest::RequestBuilder) -> Self {
-        Self {
-            builder: f(self.builder),
-            method: self.method,
-            url: self.url,
-            request_logging: self.request_logging,
-        }
-    }
-
-    pub fn headers(self, headers: HeaderMap) -> Self {
-        self.map(|builder| builder.headers(headers))
-    }
-
-    pub fn header<K, V>(self, key: K, value: V) -> Self
-    where
-        HeaderName: TryFrom<K>,
-        <HeaderName as TryFrom<K>>::Error: Into<HttpRequestBuildError>,
-        HeaderValue: TryFrom<V>,
-        <HeaderValue as TryFrom<V>>::Error: Into<HttpRequestBuildError>,
-    {
-        self.map(|builder| builder.header(key, value))
-    }
-
-    pub fn bearer_auth<T>(self, token: T) -> Self
-    where
-        T: Display,
-    {
-        self.map(|builder| builder.bearer_auth(token))
-    }
-
-    pub fn timeout(self, timeout: Duration) -> Self {
-        self.map(|builder| builder.timeout(timeout))
-    }
-
-    pub fn json<T>(self, value: &T) -> Self
-    where
-        T: ?Sized + Serialize,
-    {
-        self.map(|builder| builder.json(value))
-    }
-
-    pub fn query<T>(self, query: &T) -> Self
-    where
-        T: ?Sized + Serialize,
-    {
-        self.map(|builder| builder.query(query))
-    }
-
-    pub fn body<B>(self, body: B) -> Self
-    where
-        B: Into<reqwest::Body>,
-    {
-        self.map(|builder| builder.body(body))
-    }
-
-    pub async fn send(self) -> Result<HttpResponse, HttpError> {
-        let headers = trace_headers();
-
-        match self.builder.headers(headers).send().await {
-            Ok(response) => {
-                if self.request_logging == RequestLogging::Enabled {
-                    tracing::debug!(
-                        method = %self.method,
-                        url = %crate::redact_url(&self.url),
-                        status = %response.status(),
-                        headers = ?crate::redact_headers(response.headers()),
-                        version = ?response.version(),
-                        "Request completed"
-                    );
-                }
-
-                Ok(response)
-            }
-            Err(error) => {
-                if self.request_logging == RequestLogging::Enabled {
-                    let status = error.status();
-                    tracing::debug!(
-                        method = %self.method,
-                        url = %crate::redact_url(&self.url),
-                        status = status.map(|s| s.as_u16()),
-                        error = %crate::redact_reqwest_error(&error),
-                        "Request failed"
-                    );
-                }
-                Err(error)
-            }
-        }
-    }
-}
-
-||||||| 413492cd6c
-#[must_use = "requests are not sent unless `send` is awaited"]
-#[derive(Debug)]
-pub struct RequestBuilder {
-    builder: reqwest::RequestBuilder,
-    method: Method,
-    url: String,
-    request_logging: RequestLogging,
-}
-
-impl RequestBuilder {
-    fn new(
-        builder: reqwest::RequestBuilder,
-        method: Method,
-        url: String,
-        request_logging: RequestLogging,
-    ) -> Self {
-        Self {
-            builder,
-            method,
-            url,
-            request_logging,
-        }
-    }
-
-    fn map(self, f: impl FnOnce(reqwest::RequestBuilder) -> reqwest::RequestBuilder) -> Self {
-        Self {
-            builder: f(self.builder),
-            method: self.method,
-            url: self.url,
-            request_logging: self.request_logging,
-        }
-    }
-
-    pub fn headers(self, headers: HeaderMap) -> Self {
-        self.map(|builder| builder.headers(headers))
-    }
-
-    pub fn header<K, V>(self, key: K, value: V) -> Self
-    where
-        HeaderName: TryFrom<K>,
-        <HeaderName as TryFrom<K>>::Error: Into<HttpRequestBuildError>,
-        HeaderValue: TryFrom<V>,
-        <HeaderValue as TryFrom<V>>::Error: Into<HttpRequestBuildError>,
-    {
-        self.map(|builder| builder.header(key, value))
-    }
-
-    pub fn bearer_auth<T>(self, token: T) -> Self
-    where
-        T: Display,
-    {
-        self.map(|builder| builder.bearer_auth(token))
-    }
-
-    pub fn timeout(self, timeout: Duration) -> Self {
-        self.map(|builder| builder.timeout(timeout))
-    }
-
-    pub fn json<T>(self, value: &T) -> Self
-    where
-        T: ?Sized + Serialize,
-    {
-        self.map(|builder| builder.json(value))
-    }
-
-    pub fn query<T>(self, query: &T) -> Self
-    where
-        T: ?Sized + Serialize,
-    {
-        self.map(|builder| builder.query(query))
-    }
-
-    pub fn body<B>(self, body: B) -> Self
-    where
-        B: Into<reqwest::Body>,
-    {
-        self.map(|builder| builder.body(body))
-    }
-
-    pub async fn send(self) -> Result<HttpResponse, HttpError> {
-        let headers = trace_headers();
-
-        match self.builder.headers(headers).send().await {
-            Ok(response) => {
-                if self.request_logging == RequestLogging::Enabled {
-                    tracing::debug!(
-                        method = %self.method,
-                        url = %self.url,
-                        status = %response.status(),
-                        headers = ?response.headers(),
-                        version = ?response.version(),
-                        "Request completed"
-                    );
-                }
-
-                Ok(response)
-            }
-            Err(error) => {
-                if self.request_logging == RequestLogging::Enabled {
-                    let status = error.status();
-                    tracing::debug!(
-                        method = %self.method,
-                        url = %self.url,
-                        status = status.map(|s| s.as_u16()),
-                        error = %error,
-                        "Request failed"
-                    );
-                }
-                Err(error)
-            }
-        }
-    }
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 struct HeaderMapInjector<'a>(&'a mut HeaderMap);
 
 impl<'a> Injector for HeaderMapInjector<'a> {

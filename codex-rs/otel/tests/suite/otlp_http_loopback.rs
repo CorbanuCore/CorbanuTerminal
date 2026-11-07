@@ -146,7 +146,6 @@ fn write_http_response(stream: &mut TcpStream, status: &str) -> std::io::Result<
     stream.flush()
 }
 
-<<<<<<< HEAD
 /// Serves the collector until a request for `expected_path` has been captured.
 /// The exporter sends it on shutdown, which can take several seconds on a
 /// loaded runner, so this doesn't stop at a short fixed window (it once had
@@ -159,46 +158,6 @@ fn spawn_collector(
     thread::spawn(move || {
         let mut captured: Vec<CapturedRequest> = Vec::new();
         let deadline = Instant::now() + COLLECTOR_DEADLINE;
-||||||| 413492cd6c
-#[test]
-fn otlp_http_exporter_sends_metrics_to_collector() -> Result<()> {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
-    let addr = listener.local_addr().expect("local_addr");
-    listener.set_nonblocking(true).expect("set_nonblocking");
-=======
-#[test]
-fn otlp_http_exporter_honors_cumulative_temporality_env() -> Result<()> {
-    // Isolate the environment setting from other tests, including under Bazel/libtest.
-    const CHILD_ENV: &str = "CODEX_OTEL_TEMPORALITY_TEST_CHILD";
-    if std::env::var_os(CHILD_ENV).is_none() {
-        let current_thread = thread::current();
-        let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
-            .args([
-                "--exact",
-                current_thread.name().expect("test name"),
-                "--nocapture",
-            ])
-            .env(CHILD_ENV, "1")
-            .env(
-                "OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE",
-                "cumulative",
-            )
-            .env("OTEL_METRIC_EXPORT_INTERVAL", "60000")
-            .output()
-            .expect("run test with cumulative temporality configured");
-        assert!(
-            output.status.success(),
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        );
-        return Ok(());
-    }
-
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
-    let addr = listener.local_addr().expect("local_addr");
-    listener.set_nonblocking(true).expect("set_nonblocking");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         while Instant::now() < deadline
             && !captured.iter().any(|request| request.path == expected_path)
@@ -236,7 +195,34 @@ fn otlp_http_exporter_honors_cumulative_temporality_env() -> Result<()> {
 }
 
 #[test]
-fn otlp_http_exporter_sends_metrics_to_collector() -> Result<()> {
+fn otlp_http_exporter_honors_cumulative_temporality_env() -> Result<()> {
+    // Isolate the environment setting from other tests, including under Bazel/libtest.
+    const CHILD_ENV: &str = "CODEX_OTEL_TEMPORALITY_TEST_CHILD";
+    if std::env::var_os(CHILD_ENV).is_none() {
+        let current_thread = thread::current();
+        let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
+            .args([
+                "--exact",
+                current_thread.name().expect("test name"),
+                "--nocapture",
+            ])
+            .env(CHILD_ENV, "1")
+            .env(
+                "OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE",
+                "cumulative",
+            )
+            .env("OTEL_METRIC_EXPORT_INTERVAL", "60000")
+            .output()
+            .expect("run test with cumulative temporality configured");
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        return Ok(());
+    }
+
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
     let addr = listener.local_addr().expect("local_addr");
     listener.set_nonblocking(true).expect("set_nonblocking");
@@ -334,12 +320,12 @@ fn otlp_http_exporter_sends_metrics_to_collector() -> Result<()> {
     assert!(
         body.contains("codex.turns"),
         "expected metric name not found; body prefix: {}",
-        body.chars().take(2000).collect::<String>()
+        &body.chars().take(2000).collect::<String>()
     );
     assert!(
         body.contains("codex.active"),
         "expected gauge not found; body prefix: {}",
-        body.chars().take(2000).collect::<String>()
+        &body.chars().take(2000).collect::<String>()
     );
     assert!(
         body.contains("\"codex.api_request\""),
@@ -378,7 +364,7 @@ fn otlp_http_exporter_sends_metrics_to_collector() -> Result<()> {
     assert!(
         body.contains("\"codex.tool.call\""),
         "expected tool-call counter not found; body prefix: {}",
-        body.chars().take(2000).collect::<String>()
+        &body.chars().take(2000).collect::<String>()
     );
     assert!(
         body.contains("\"codex.turn.token_usage\""),
@@ -388,12 +374,12 @@ fn otlp_http_exporter_sends_metrics_to_collector() -> Result<()> {
     assert!(
         body.contains("\"codex.tool.call.duration_ms\""),
         "expected tool-call duration not found; body prefix: {}",
-        body.chars().take(2000).collect::<String>()
+        &body.chars().take(2000).collect::<String>()
     );
     assert!(
         body.contains("component") && body.contains("test"),
         "expected gauge tag not found; body prefix: {}",
-        body.chars().take(2000).collect::<String>()
+        &body.chars().take(2000).collect::<String>()
     );
 
     Ok(())
@@ -460,7 +446,7 @@ fn otlp_http_exporter_sends_logs_to_collector()
     assert!(
         body.contains("codex.test.log_exported"),
         "expected exported log event not found; body prefix: {}",
-        body.chars().take(2000).collect::<String>()
+        &body.chars().take(2000).collect::<String>()
     );
     Ok(())
 }
@@ -593,22 +579,22 @@ fn otlp_http_exporter_sends_traces_to_collector()
     assert!(
         body.contains("trace-loopback"),
         "expected span name not found; body prefix: {}",
-        body.chars().take(2000).collect::<String>()
+        &body.chars().take(2000).collect::<String>()
     );
     assert!(
         body.contains("codex-cli"),
         "expected service name not found; body prefix: {}",
-        body.chars().take(2000).collect::<String>()
+        &body.chars().take(2000).collect::<String>()
     );
     assert!(
         body.contains("test.configured_attribute") && body.contains("configured-value"),
         "expected configured span attribute not found; body prefix: {}",
-        body.chars().take(2000).collect::<String>()
+        &body.chars().take(2000).collect::<String>()
     );
     assert!(
         body.contains("codex.test.trace_event"),
         "expected trace event not found; body prefix: {}",
-        body.chars().take(2000).collect::<String>()
+        &body.chars().take(2000).collect::<String>()
     );
 
     Ok(())
@@ -624,75 +610,6 @@ async fn otlp_http_exporter_sends_traces_to_collector_with_bounded_shutdown_in_t
     let addr = listener.local_addr().expect("local_addr");
     listener.set_nonblocking(true).expect("set_nonblocking");
 
-<<<<<<< HEAD
-    let server = spawn_collector(listener, "/v1/traces");
-
-    let otel = OtelProvider::from(&OtelSettings {
-        environment: "test".to_string(),
-        service_name: "codex-cli".to_string(),
-        service_version: env!("CARGO_PKG_VERSION").to_string(),
-        codex_home: PathBuf::from("."),
-        exporter: OtelExporter::None,
-        trace_exporter: OtelExporter::OtlpHttp {
-            endpoint: format!("http://{addr}/v1/traces"),
-            headers: HashMap::new(),
-            protocol: OtelHttpProtocol::Json,
-            tls: None,
-        },
-        metrics_exporter: OtelExporter::None,
-        runtime_metrics: false,
-        span_attributes: BTreeMap::new(),
-        tracestate: BTreeMap::new(),
-    })?
-    .expect("otel provider");
-||||||| 413492cd6c
-    let (tx, rx) = mpsc::channel::<Vec<CapturedRequest>>();
-    let server = thread::spawn(move || {
-        let mut captured = Vec::new();
-        let deadline = Instant::now() + Duration::from_secs(3);
-
-        while Instant::now() < deadline {
-            match listener.accept() {
-                Ok((mut stream, _)) => {
-                    let result = read_http_request(&mut stream);
-                    let _ = write_http_response(&mut stream, "202 Accepted");
-                    if let Ok((path, headers, body)) = result {
-                        captured.push(CapturedRequest {
-                            path,
-                            content_type: headers.get("content-type").cloned(),
-                            body,
-                        });
-                    }
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    thread::sleep(Duration::from_millis(10));
-                }
-                Err(_) => break,
-            }
-        }
-
-        let _ = tx.send(captured);
-    });
-
-    let otel = OtelProvider::from(&OtelSettings {
-        environment: "test".to_string(),
-        service_name: "codex-cli".to_string(),
-        service_version: env!("CARGO_PKG_VERSION").to_string(),
-        codex_home: PathBuf::from("."),
-        exporter: OtelExporter::None,
-        trace_exporter: OtelExporter::OtlpHttp {
-            endpoint: format!("http://{addr}/v1/traces"),
-            headers: HashMap::new(),
-            protocol: OtelHttpProtocol::Json,
-            tls: None,
-        },
-        metrics_exporter: OtelExporter::None,
-        runtime_metrics: false,
-        span_attributes: BTreeMap::new(),
-        tracestate: BTreeMap::new(),
-    })?
-    .expect("otel provider");
-=======
     let otel = OtelProvider::try_new(&OtelSettings {
         http_client_factory: HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
         environment: "test".to_string(),
@@ -716,7 +633,7 @@ async fn otlp_http_exporter_sends_traces_to_collector_with_bounded_shutdown_in_t
     let (stop_tx, stop_rx) = mpsc::channel();
     let server = thread::spawn(move || {
         let mut captured = Vec::new();
-        let deadline = Instant::now() + Duration::from_secs(3);
+        let deadline = Instant::now() + COLLECTOR_DEADLINE;
 
         while Instant::now() < deadline {
             match stop_rx.try_recv() {
@@ -745,7 +662,6 @@ async fn otlp_http_exporter_sends_traces_to_collector_with_bounded_shutdown_in_t
 
         let _ = tx.send(captured);
     });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let tracing_layer = otel.tracing_layer().expect("tracing layer");
     let subscriber = tracing_subscriber::registry().with(tracing_layer);
 
@@ -765,17 +681,10 @@ async fn otlp_http_exporter_sends_traces_to_collector_with_bounded_shutdown_in_t
             .block_on(otel.shutdown_with_timeout(Duration::from_secs(/*secs*/ 2)))
     });
 
-<<<<<<< HEAD
-    let captured = server.join().expect("server join");
-||||||| 413492cd6c
-    server.join().expect("server join");
-    let captured = rx.recv_timeout(Duration::from_secs(1)).expect("captured");
-=======
     let _ = stop_tx.send(());
     server.join().expect("server join");
     shutdown_result?;
     let captured = rx.recv_timeout(Duration::from_secs(1)).expect("captured");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     let request = captured
         .iter()
@@ -794,12 +703,12 @@ async fn otlp_http_exporter_sends_traces_to_collector_with_bounded_shutdown_in_t
     assert!(
         body.contains("trace-loopback-tokio"),
         "expected span name not found; body prefix: {}",
-        body.chars().take(2000).collect::<String>()
+        &body.chars().take(2000).collect::<String>()
     );
     assert!(
         body.contains("codex-cli"),
         "expected service name not found; body prefix: {}",
-        body.chars().take(2000).collect::<String>()
+        &body.chars().take(2000).collect::<String>()
     );
 
     Ok(())
@@ -945,7 +854,7 @@ fn otlp_http_exporter_sends_traces_to_collector_in_current_thread_tokio_runtime(
     });
 
     runtime_result_rx
-        .recv_timeout(COLLECTOR_DEADLINE)
+        .recv_timeout(Duration::from_secs(5))
         .expect("current-thread runtime should complete")
         .map_err(std::io::Error::other)?;
     runtime_thread.join().expect("runtime thread");
@@ -969,12 +878,12 @@ fn otlp_http_exporter_sends_traces_to_collector_in_current_thread_tokio_runtime(
     assert!(
         body.contains("trace-loopback-current-thread"),
         "expected span name not found; body prefix: {}",
-        body.chars().take(2000).collect::<String>()
+        &body.chars().take(2000).collect::<String>()
     );
     assert!(
         body.contains("codex-cli"),
         "expected service name not found; body prefix: {}",
-        body.chars().take(2000).collect::<String>()
+        &body.chars().take(2000).collect::<String>()
     );
 
     Ok(())

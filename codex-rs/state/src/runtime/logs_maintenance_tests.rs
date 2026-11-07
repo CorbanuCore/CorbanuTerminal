@@ -104,7 +104,11 @@ async fn periodic_cleanup_prunes_without_new_log_writes_or_restart() {
     .unwrap();
     // An older process can create the legacy database after the new runtime starts.
     let legacy_pool = sqlite
-        .open_logs_db(&LOGS_MIGRATOR, /*telemetry_override*/ None)
+        .open_logs_db(
+            &LOGS_MIGRATOR,
+            /*telemetry_override*/ None,
+            /*init_lock*/ None,
+        )
         .await
         .unwrap();
     runtime.start_periodic_logs_maintenance(Duration::from_millis(10));
@@ -157,7 +161,11 @@ async fn legacy_cleanup_skips_missing_and_shared_databases() -> anyhow::Result<(
         assert!(!legacy_path.exists());
     }
     let pool = sqlite
-        .open_logs_db(&LOGS_MIGRATOR, /*telemetry_override*/ None)
+        .open_logs_db(
+            &LOGS_MIGRATOR,
+            /*telemetry_override*/ None,
+            /*init_lock*/ None,
+        )
         .await?;
     assert!(sqlite.open_legacy_logs_for_cleanup().await?.is_none());
     pool.close().await;
@@ -171,7 +179,11 @@ async fn legacy_writer_does_not_block_current_cleanup_and_is_retried() -> anyhow
     tokio::fs::create_dir_all(&directory).await?;
     let sqlite = SqliteConfig::new_for_testing(directory.as_path().abs());
     let legacy_pool = sqlite
-        .open_logs_db(&LOGS_MIGRATOR, /*telemetry_override*/ None)
+        .open_logs_db(
+            &LOGS_MIGRATOR,
+            /*telemetry_override*/ None,
+            /*init_lock*/ None,
+        )
         .await?;
     sqlx::query("INSERT INTO logs (ts, ts_nanos, level, target) VALUES (0, 0, 'INFO', 'test')")
         .execute(&legacy_pool)
@@ -229,7 +241,11 @@ async fn startup_cleanup_runs_without_waiting_for_the_period() {
         let sqlite = SqliteConfig::new_for_testing(directory.as_path().abs());
         let legacy_path = sqlite.logs_db_path();
         let legacy_pool = sqlite
-            .open_logs_db(&LOGS_MIGRATOR, /*telemetry_override*/ None)
+            .open_logs_db(
+                &LOGS_MIGRATOR,
+                /*telemetry_override*/ None,
+                /*init_lock*/ None,
+            )
             .await
             .unwrap();
         let sqlite = if separate_logs {
@@ -238,7 +254,11 @@ async fn startup_cleanup_runs_without_waiting_for_the_period() {
             sqlite
         };
         let pool = sqlite
-            .open_logs_db(&LOGS_MIGRATOR, /*telemetry_override*/ None)
+            .open_logs_db(
+                &LOGS_MIGRATOR,
+                /*telemetry_override*/ None,
+                /*init_lock*/ None,
+            )
             .await
             .unwrap();
         for pool in [&pool, &legacy_pool] {
