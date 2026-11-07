@@ -3,6 +3,8 @@ use std::io;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::Weak;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use tokio::sync::oneshot;
 
 use codex_config::ConfigLayerSource;
@@ -27,6 +29,16 @@ use crate::loader::HostSkillRoot;
 const AGENTS_DIR_NAME: &str = ".agents";
 const SKILLS_DIR_NAME: &str = "skills";
 const MAX_CONCURRENT_ANCESTOR_PROBES: usize = 256;
+
+/// When set, discovery skips the user-home root (`$HOME/.agents/skills`).
+static IGNORE_USER_HOME_SKILLS: AtomicBool = AtomicBool::new(false);
+
+/// Test harnesses call this so the developer's own `$HOME/.agents/skills` never
+/// reaches a test (#888). It is process-wide and in memory only: nothing changes
+/// `HOME`, and child processes are unaffected. Production code must not call it.
+pub fn ignore_user_home_skills_for_tests(ignore: bool) {
+    IGNORE_USER_HOME_SKILLS.store(ignore, Ordering::Relaxed);
+}
 
 #[derive(Default)]
 pub(crate) struct EmptyRemoteRootsCache {
@@ -61,8 +73,11 @@ pub(crate) async fn resolve_skill_roots(
     extra_skill_roots: Vec<AbsolutePathBuf>,
     empty_remote_roots: Option<&Mutex<EmptyRemoteRootsCache>>,
 ) -> Vec<HostSkillRoot> {
-    let home_dir =
-        home_dir().and_then(|path| AbsolutePathBuf::from_absolute_path_checked(path).ok());
+    let home_dir = if IGNORE_USER_HOME_SKILLS.load(Ordering::Relaxed) {
+        None
+    } else {
+        home_dir().and_then(|path| AbsolutePathBuf::from_absolute_path_checked(path).ok())
+    };
     resolve_skill_roots_with_home_dir(
         repository_file_system,
         config_layer_stack,
@@ -115,6 +130,9 @@ fn roots_from_layer_stack(
     repository_file_system: Option<Arc<dyn ExecutorFileSystem>>,
 ) -> Vec<HostSkillRoot> {
     let mut roots = Vec::new();
+    // #1506 item 2 (D262): no skills from a folder a sandboxed command may
+    // have planted, until the user confirms it.
+    let planted = codex_config::planted_project_metadata();
 
     for layer in config_layer_stack.all_layers_high_to_low() {
         let Some(config_folder) = layer.config_folder() else {
@@ -123,7 +141,9 @@ fn roots_from_layer_stack(
 
         match &layer.name {
             ConfigLayerSource::Project { .. } => {
-                if let Some(repository_file_system) = &repository_file_system {
+                if let Some(repository_file_system) = &repository_file_system
+                    && !planted.contains(config_folder.as_path())
+                {
                     roots.push(HostSkillRoot::host(
                         config_folder.join(SKILLS_DIR_NAME),
                         SkillScope::Repo,
@@ -215,7 +235,12 @@ async fn repo_agents_skill_roots(
     };
     let (project_root, marker, mut complete) =
         find_project_root(repository_file_system.as_ref(), cwd, &project_root_markers).await;
-    let directories = dirs_between_project_root_and_cwd(cwd, &project_root);
+    // #1506 item 2 (D262): skip `.agents` folders a sandboxed command may have planted.
+    let planted = codex_config::planted_project_metadata();
+    let directories: Vec<_> = dirs_between_project_root_and_cwd(cwd, &project_root)
+        .into_iter()
+        .filter(|directory| !planted.contains(directory.join(AGENTS_DIR_NAME).as_path()))
+        .collect();
     let mut roots = Vec::new();
     let mut missing = Vec::new();
     let mut results = futures::stream::iter(directories)
@@ -351,11 +376,27 @@ async fn find_project_root(
                     /*sandbox*/ None,
                 )
                 .await;
-            (ancestor, marker_path, result)
+            // A `.git` directory only marks a checkout when it contains `HEAD`;
+            // the Linux sandbox leaves empty `.git` mount targets in writable roots.
+            let is_incomplete_git_dir = match &result {
+                Ok(metadata) if metadata.is_directory && marker_path.ends_with(".git") => {
+                    repository_file_system
+                        .get_metadata(
+                            &PathUri::from_abs_path(&marker_path.join("HEAD")),
+                            GetMetadataOptions::default(),
+                            /*sandbox*/ None,
+                        )
+                        .await
+                        .is_err()
+                }
+                _ => false,
+            };
+            (ancestor, marker_path, result, is_incomplete_git_dir)
         })
         .buffered(MAX_CONCURRENT_ANCESTOR_PROBES);
-    while let Some((ancestor, marker_path, result)) = results.next().await {
+    while let Some((ancestor, marker_path, result, is_incomplete_git_dir)) = results.next().await {
         match result {
+            Ok(_) if is_incomplete_git_dir => {}
             Ok(_) => return (ancestor, Some(marker_path), complete),
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => {

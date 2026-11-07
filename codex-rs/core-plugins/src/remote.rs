@@ -52,12 +52,8 @@ use tracing::instrument;
 use url::Url;
 
 mod catalog_cache;
-<<<<<<< HEAD
 mod catalog_flight;
-||||||| 413492cd6c
-=======
 mod plugin_capabilities;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod remote_installed_plugin_sync;
 mod search;
 mod share;
@@ -1001,25 +997,16 @@ pub(crate) async fn fetch_and_cache_remote_plugin_catalog(
     requested_at: Instant,
 ) -> Result<(), RemotePluginCatalogError> {
     let auth = ensure_chatgpt_auth(auth)?;
-<<<<<<< HEAD
     // A download that started after this refresh was requested is as fresh as a new one.
     catalog_flight::fetch_directory_plugins_shared(
         Some(codex_home),
         config,
         auth,
         scope,
+        /*collection*/ None,
         catalog_flight::CatalogFetchReuse::started_since(requested_at),
     )
     .await?;
-||||||| 413492cd6c
-    let plugins = fetch_directory_plugins_for_scope(config, auth, scope).await?;
-    catalog_cache::write_cached_directory_plugins(codex_home, config, auth, scope, &plugins);
-=======
-    let plugins = fetch_directory_plugins_for_scope(config, auth, scope).await?;
-    catalog_cache::write_cached_directory_plugins(
-        codex_home, config, auth, scope, /*collection*/ None, &plugins,
-    );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     Ok(())
 }
 
@@ -1048,16 +1035,18 @@ pub fn invalidate_cached_remote_plugin_catalog_scopes(
         return;
     };
     for scope in scopes {
-<<<<<<< HEAD
-        catalog_flight::invalidate(codex_home, config, auth, *scope);
-        catalog_cache::remove_cached_directory_plugins(codex_home, config, auth, *scope);
-||||||| 413492cd6c
-        catalog_cache::remove_cached_directory_plugins(codex_home, config, auth, *scope);
-=======
+        catalog_flight::invalidate(codex_home, config, auth, *scope, /*collection*/ None);
         catalog_cache::remove_cached_directory_plugins(
             codex_home, config, auth, *scope, /*collection*/ None,
         );
         if *scope == RemotePluginScope::Global {
+            catalog_flight::invalidate(
+                codex_home,
+                config,
+                auth,
+                *scope,
+                Some(OPENAI_CURATED_REMOTE_COLLECTION_KEY),
+            );
             catalog_cache::remove_cached_directory_plugins(
                 codex_home,
                 config,
@@ -1066,7 +1055,6 @@ pub fn invalidate_cached_remote_plugin_catalog_scopes(
                 Some(OPENAI_CURATED_REMOTE_COLLECTION_KEY),
             );
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 
@@ -2135,47 +2123,7 @@ async fn fetch_directory_plugins_for_scope_with_cache(
     collection: Option<&str>,
     cache_mode: RemotePluginCatalogCacheMode,
 ) -> Result<DirectoryPluginsFetchOutcome, RemotePluginCatalogError> {
-<<<<<<< HEAD
     let requested_at = Instant::now();
-    let reuse = match cache_mode {
-        RemotePluginCatalogCacheMode::PreferCache => {
-            if let Some(codex_home) = codex_home
-                && let Some(cached) =
-                    catalog_cache::load_cached_directory_plugins(codex_home, config, auth, scope)
-            {
-                return Ok(DirectoryPluginsFetchOutcome {
-                    plugins: cached.plugins,
-                    cache_refresh_needed: matches!(
-                        cached.freshness,
-                        catalog_cache::RemotePluginCatalogCacheFreshness::Stale
-                    ),
-                });
-            }
-            // No cache: any download already running, or completed since the miss, will do.
-            catalog_flight::CatalogFetchReuse {
-                join_started_since: None,
-                reuse_completed_since: Some(requested_at),
-            }
-        }
-        RemotePluginCatalogCacheMode::ForceRefetch => {
-            catalog_flight::CatalogFetchReuse::started_since(requested_at)
-        }
-    };
-||||||| 413492cd6c
-    if cache_mode == RemotePluginCatalogCacheMode::PreferCache
-        && let Some(codex_home) = codex_home
-        && let Some(cached) =
-            catalog_cache::load_cached_directory_plugins(codex_home, config, auth, scope)
-    {
-        return Ok(DirectoryPluginsFetchOutcome {
-            plugins: cached.plugins,
-            cache_refresh_needed: matches!(
-                cached.freshness,
-                catalog_cache::RemotePluginCatalogCacheFreshness::Stale
-            ),
-        });
-    }
-=======
     if let Some(codex_home) = codex_home
         && let Some(cached) = catalog_cache::load_cached_directory_plugins(
             codex_home, config, auth, scope, collection, cache_mode,
@@ -2190,42 +2138,28 @@ async fn fetch_directory_plugins_for_scope_with_cache(
             catalog_cache_used: true,
         });
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    // #1324: share one download per home, account, scope and collection.
+    let reuse = match cache_mode {
+        // No cache: any download already running, or completed since the miss, will do.
+        RemotePluginCatalogCacheMode::PreferCache
+        | RemotePluginCatalogCacheMode::PreferFreshCache => catalog_flight::CatalogFetchReuse {
+            join_started_since: None,
+            reuse_completed_since: Some(requested_at),
+        },
+        RemotePluginCatalogCacheMode::ForceRefetch => {
+            catalog_flight::CatalogFetchReuse::started_since(requested_at)
+        }
+    };
 
-    let plugins =
-<<<<<<< HEAD
-        catalog_flight::fetch_directory_plugins_shared(codex_home, config, auth, scope, reuse)
-            .await?;
-||||||| 413492cd6c
-    let plugins = fetch_directory_plugins_for_scope(config, auth, scope).await?;
-    if let Some(codex_home) = codex_home {
-        catalog_cache::write_cached_directory_plugins(codex_home, config, auth, scope, &plugins);
-    }
-=======
-        fetch_directory_plugins_for_scope_with_optional_collection(config, auth, scope, collection)
-            .await?;
-    if let Some(codex_home) = codex_home {
-        catalog_cache::write_cached_directory_plugins(
-            codex_home, config, auth, scope, collection, &plugins,
-        );
-    }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    let plugins = catalog_flight::fetch_directory_plugins_shared(
+        codex_home, config, auth, scope, collection, reuse,
+    )
+    .await?;
     Ok(DirectoryPluginsFetchOutcome {
         plugins: Arc::unwrap_or_clone(plugins),
         cache_refresh_needed: false,
         catalog_cache_used: false,
     })
-}
-
-async fn fetch_directory_plugins_for_scope(
-    config: &RemotePluginServiceConfig,
-    auth: &CodexAuth,
-    scope: RemotePluginScope,
-) -> Result<Vec<RemotePluginDirectoryItem>, RemotePluginCatalogError> {
-    fetch_directory_plugins_for_scope_with_optional_collection(
-        config, auth, scope, /*collection*/ None,
-    )
-    .await
 }
 
 async fn fetch_directory_plugins_for_scope_with_optional_collection(

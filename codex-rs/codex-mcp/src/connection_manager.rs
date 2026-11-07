@@ -100,7 +100,14 @@ static LIVE_CONNECTIONS: Gauge = Gauge::new("mcp.connections.live");
 pub(crate) struct McpServerConnection {
     identity: Option<McpServerConnectionIdentity>,
     client: AsyncManagedClient,
-<<<<<<< HEAD
+    legacy_fallback: Option<Arc<OnceLock<Arc<Self>>>>,
+    // Startup-only budget; changing it must not replace a ready connection.
+    startup_timeout: Duration,
+    startup_trigger: Option<watch::Sender<bool>>,
+    // Only the initial host-owned Apps attempt publishes here. A retry uses normal readiness.
+    initialized_apps:
+        Option<watch::Receiver<Option<std::sync::Weak<codex_rmcp_client::RmcpClient>>>>,
+    _diagnostics_guard: GaugeGuard,
     startup_cancellation: StartupCancellation,
 }
 
@@ -137,17 +144,6 @@ impl StartupCancellation {
     fn should_report(&self) -> bool {
         self.disposition.load(Ordering::Acquire) != STARTUP_CANCELLATION_SILENT
     }
-||||||| 413492cd6c
-=======
-    legacy_fallback: Option<Arc<OnceLock<Arc<Self>>>>,
-    // Startup-only budget; changing it must not replace a ready connection.
-    startup_timeout: Duration,
-    startup_trigger: Option<watch::Sender<bool>>,
-    // Only the initial host-owned Apps attempt publishes here. A retry uses normal readiness.
-    initialized_apps:
-        Option<watch::Receiver<Option<std::sync::Weak<codex_rmcp_client::RmcpClient>>>>,
-    _diagnostics_guard: GaugeGuard,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl McpServerConnection {
@@ -265,17 +261,9 @@ impl McpServerConnection {
     }
 
     fn cancel_startup(&self) {
-<<<<<<< HEAD
-        if !self.client.startup_complete.load(Ordering::Acquire) {
+        if !self.startup_is_dormant() && !self.client.startup_complete.load(Ordering::Acquire) {
             self.startup_cancellation
                 .cancel_reportably(&self.client.cancel_token);
-||||||| 413492cd6c
-        if !self.client.startup_complete.load(Ordering::Acquire) {
-            self.client.cancel_token.cancel();
-=======
-        if !self.startup_is_dormant() && !self.client.startup_complete.load(Ordering::Acquire) {
-            self.client.cancel_token.cancel();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 
@@ -441,15 +429,9 @@ impl McpConnectionSet {
         let codex_home = config.codex_home.clone();
         let prefix_mcp_tool_names = config.prefix_mcp_tool_names;
         let non_prefixed_mcp_tool_servers = config.non_prefixed_mcp_tool_servers.clone();
-<<<<<<< HEAD
-        let multi_agent_v2_tool_namespace = config.multi_agent_v2_tool_namespace.clone();
-        let protocol_mode = config.protocol_mode;
-||||||| 413492cd6c
-        let protocol_mode = config.protocol_mode;
-=======
         let default_protocol_mode = config.protocol_mode;
         let host_owned_apps_protocol_mode = config.host_owned_apps_protocol_mode;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        let multi_agent_v2_tool_namespace = config.multi_agent_v2_tool_namespace.clone();
         let client_elicitation_capability = config.client_elicitation_capability.clone();
         let tool_plugin_context = crate::mcp::tool_plugin_context(&config);
         let auth = auth.as_ref();
@@ -796,12 +778,19 @@ impl McpConnectionSet {
                         );
                         if pending {
                             let client = connection.client.clone();
+                            let startup_cancellation = connection.startup_cancellation.clone();
                             let publication_gate = publication_gate.clone();
                             join_set.spawn(async move {
                                 if !publication_gate.wait().await {
-                                    return (server_name, Err(StartupOutcomeError::Cancelled));
+                                    return (
+                                        server_name,
+                                        Err(StartupOutcomeError::Cancelled),
+                                        /*report_cancellation*/ false,
+                                    );
                                 }
-                                (server_name, client.client().await)
+                                let outcome = client.client().await;
+                                // A reused startup reports its cancellation as its owner does.
+                                (server_name, outcome, startup_cancellation.should_report())
                             });
                         } else {
                             reused_ready.push(server_name);
@@ -859,8 +848,12 @@ impl McpConnectionSet {
                             })
                         }))
                 {
-                    let pending_client =
-                        reusable_pending_startup.then(|| connection.client.clone());
+                    let pending_client = reusable_pending_startup.then(|| {
+                        (
+                            connection.client.clone(),
+                            connection.startup_cancellation.clone(),
+                        )
+                    });
                     servers.insert(
                         server_name.clone(),
                         McpServerView {
@@ -895,7 +888,11 @@ impl McpConnectionSet {
                         let publication_gate = publication_gate.clone();
                         join_set.spawn(async move {
                             if !publication_gate.wait().await {
-                                return (server_name, Err(StartupOutcomeError::Cancelled));
+                                return (
+                                    server_name,
+                                    Err(StartupOutcomeError::Cancelled),
+                                    /*report_cancellation*/ false,
+                                );
                             }
                             if let Some(tx_event) = tx_event.as_ref() {
                                 for status in [McpStartupStatus::Starting, status] {
@@ -910,15 +907,21 @@ impl McpConnectionSet {
                                     .await;
                                 }
                             }
-                            (server_name, Err(error))
+                            (server_name, Err(error), /*report_cancellation*/ true)
                         });
-                    } else if let Some(client) = pending_client {
+                    } else if let Some((client, startup_cancellation)) = pending_client {
                         let publication_gate = publication_gate.clone();
                         join_set.spawn(async move {
                             if !publication_gate.wait().await {
-                                return (server_name, Err(StartupOutcomeError::Cancelled));
+                                return (
+                                    server_name,
+                                    Err(StartupOutcomeError::Cancelled),
+                                    /*report_cancellation*/ false,
+                                );
                             }
-                            (server_name, client.client().await)
+                            let outcome = client.client().await;
+                            // A reused startup reports its cancellation as its owner does.
+                            (server_name, outcome, startup_cancellation.should_report())
                         });
                     } else {
                         reused_ready.push(server_name);
@@ -941,12 +944,7 @@ impl McpConnectionSet {
             let cancel_token = startup_cancellation_token.child_token();
             let tool_catalog_cache_context = tool_catalog_cache_context.take();
             let has_runtime_auth = runtime_auth_provider.is_some();
-<<<<<<< HEAD
             let startup_cancellation = StartupCancellation::default();
-            let async_managed_client = AsyncManagedClient::new(
-||||||| 413492cd6c
-            let async_managed_client = AsyncManagedClient::new(
-=======
             let connection_pool = connection_pool.map(|pool| {
                 (
                     pool.clone(),
@@ -974,7 +972,6 @@ impl McpConnectionSet {
                 };
             let mut async_managed_client = AsyncManagedClient::new(
                 ema_auth.clone(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 server_name.clone(),
                 startup_submit_id.clone(),
                 server,
@@ -1023,16 +1020,12 @@ impl McpConnectionSet {
                     connection: Arc::new(McpServerConnection {
                         identity: Some(connection_identity),
                         client: async_managed_client.clone(),
-<<<<<<< HEAD
                         startup_cancellation: startup_cancellation.clone(),
-||||||| 413492cd6c
-=======
                         legacy_fallback,
                         startup_timeout,
                         startup_trigger,
                         initialized_apps,
                         _diagnostics_guard: LIVE_CONNECTIONS.track(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     }),
                     protocol_mode,
                     startup_readiness: configured_config.startup_readiness,
@@ -1054,7 +1047,11 @@ impl McpConnectionSet {
                         () = cancel_token.cancelled() => true,
                     }
                 {
-                    return (server_name, Err(StartupOutcomeError::Cancelled));
+                    return (
+                        server_name,
+                        Err(StartupOutcomeError::Cancelled),
+                        startup_cancellation.should_report(),
+                    );
                 }
                 if !publication_gate.wait().await {
                     return (
@@ -1144,14 +1141,8 @@ impl McpConnectionSet {
                                 server_name.as_str(),
                                 Some(&configured_config),
                                 error,
-<<<<<<< HEAD
-                            ) };
-||||||| 413492cd6c
-                            );
-=======
                                 reason,
-                            );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                            ) };
                             McpStartupStatus::Failed {
                                 error: error_str,
                                 reason,
@@ -1177,15 +1168,8 @@ impl McpConnectionSet {
                     async_managed_client.reconnect_failed_startup().await;
                 }
 
-<<<<<<< HEAD
                 let report_cancellation = startup_cancellation.should_report();
                 (server_name, outcome, report_cancellation)
-            });
-||||||| 413492cd6c
-                (server_name, outcome)
-            });
-=======
-                (server_name, outcome)
             };
             let startup = AuthStorageOriginator::current().scope(startup);
             if defer_startup {
@@ -1194,7 +1178,6 @@ impl McpConnectionSet {
             } else {
                 join_set.spawn(startup);
             }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
         let manager = Self {
             config: Some(config),
@@ -1271,27 +1254,9 @@ impl McpConnectionSet {
             tool_plugin_context: Arc::new(ToolPluginContext::default()),
             prefix_mcp_tool_names,
             non_prefixed_mcp_tool_servers: Vec::new(),
-<<<<<<< HEAD
             multi_agent_v2_tool_namespace: None,
-            elicitation_requests: ElicitationRequestManager::new(
-                AskForApproval::Never,
-                PermissionProfile::default(),
-                /*reviewer*/ None,
-                /*lifecycle*/ None,
-                ElicitationRequestRouter::default(),
-            ),
-||||||| 413492cd6c
-            elicitation_requests: ElicitationRequestManager::new(
-                AskForApproval::Never,
-                PermissionProfile::default(),
-                /*reviewer*/ None,
-                /*lifecycle*/ None,
-                ElicitationRequestRouter::default(),
-            ),
-=======
             elicitation_requests: ElicitationRequestManager::default(),
             trusted_access: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 
