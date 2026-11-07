@@ -19,6 +19,7 @@ fn tokens(access: &str, refresh: &str) -> StoredOAuthTokens {
     StoredOAuthTokens {
         server_name: "pf28s02-mcp".to_string(),
         url: "https://mcp.example.test".to_string(),
+        issuer: None,
         client_id: "client".to_string(),
         token_response: WrappedOAuthTokenResponse(response),
         expires_at: None,

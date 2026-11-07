@@ -216,7 +216,6 @@ fn default_search_text_uses_model_visible_namespace_metadata_once() {
 }
 
 #[test]
-<<<<<<< HEAD
 fn custom_search_text_is_augmented_with_spec_metadata() {
     let spec = ToolSpec::Namespace(crate::ResponsesApiNamespace {
         name: "multi_agent_v1".to_string(),
@@ -260,8 +259,10 @@ fn custom_search_text_is_augmented_with_spec_metadata() {
             .entry
             .search_text
             .contains("custom: Custom role")
-||||||| 413492cd6c
-=======
+    );
+}
+
+#[test]
 fn mixed_namespaced_function_and_custom_tools_are_searchable() {
     let function_tool = ResponsesApiTool {
         name: "lookup_order".to_string(),
@@ -322,6 +323,5 @@ fn mixed_namespaced_function_and_custom_tools_are_searchable() {
                 }),
             ],
         })
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     );
 }

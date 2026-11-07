@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-||||||| 413492cd6c
-=======
 use codex_protocol_test_support::ContentItemTestExt;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -10,27 +6,6 @@ use std::sync::Mutex;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
-<<<<<<< HEAD
-use codex_core_skills::HostSkillsSnapshot;
-use codex_core_skills::SKILLS_INTRO_WITH_ABSOLUTE_PATHS;
-use codex_core_skills::SkillLoadOutcome;
-use codex_core_skills::injection::HOST_SKILLS_CONTEXT_SOURCE_ID;
-use codex_core_skills::injection::InjectedHostSkillPrompts;
-use codex_core_skills::injection::THREAD_SKILLS_CONTEXT_SOURCE_ID;
-use codex_core_skills::loader::MAX_CONCURRENT_ROOT_SCANS;
-use codex_core_skills::loader::SkillRoot;
-use codex_core_skills::loader::load_skills_from_roots;
-use codex_exec_server::EnvironmentManager;
-use codex_exec_server::LOCAL_ENVIRONMENT_ID;
-||||||| 413492cd6c
-use codex_core_skills::HostSkillsSnapshot;
-use codex_core_skills::SKILLS_INTRO_WITH_ABSOLUTE_PATHS;
-use codex_core_skills::SkillLoadOutcome;
-use codex_core_skills::injection::InjectedHostSkillPrompts;
-use codex_core_skills::loader::MAX_CONCURRENT_ROOT_SCANS;
-use codex_core_skills::loader::SkillRoot;
-use codex_core_skills::loader::load_skills_from_roots;
-=======
 use assert_matches::assert_matches;
 use codex_attachment_store::InlineAttachmentStore;
 use codex_config::ConfigLayerEntry;
@@ -44,7 +19,6 @@ use codex_exec_server::ExecutorCapabilityDiscoverySnapshot;
 use codex_exec_server::ExecutorCapabilityDiscoveryV2Snapshot;
 use codex_exec_server::ExecutorSkill;
 use codex_exec_server::FileSystemEnvironmentAccessor;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_exec_server::LOCAL_FS;
 use codex_exec_server::SkillDiscoveryRoot;
 use codex_extension_api::ConversationHistory;
@@ -89,6 +63,7 @@ use codex_protocol::protocol::TurnEnvironmentSelection;
 use codex_protocol::user_input::UserInput;
 use codex_skills::SkillMetadata;
 use codex_skills_extension::ExecutorSkillProvider;
+use codex_skills_extension::HOST_SKILLS_CONTEXT_SOURCE_ID;
 use codex_skills_extension::HostSkillProvider;
 use codex_skills_extension::HostSkillsLoadInput;
 use codex_skills_extension::HostSkillsService;
@@ -413,13 +388,13 @@ async fn installed_extension_uses_host_service_snapshot() -> TestResult {
         ],
         fragments
             .iter()
-<<<<<<< HEAD
-            .map(|fragment| (fragment.role(), fragment.source_id(), fragment.render()))
-||||||| 413492cd6c
-            .map(|fragment| (fragment.role(), fragment.render()))
-=======
-            .map(|fragment| (fragment.role(), fragment.render().expect_text()))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            .map(|fragment| {
+                (
+                    fragment.role(),
+                    fragment.source_id(),
+                    fragment.render().expect_text(),
+                )
+            })
             .collect::<Vec<_>>()
     );
     let injected_host_skill_prompts = turn_store
@@ -1680,174 +1655,6 @@ async fn selected_executor_catalog_caches_root_selections_per_turn_and_reuses_di
     Ok(())
 }
 
-<<<<<<< HEAD
-#[tokio::test]
-async fn executor_skill_tools_reuse_the_thread_catalog_across_steps() -> TestResult {
-    let read_requests = Arc::new(Mutex::new(Vec::new()));
-    let list_calls = Arc::new(AtomicUsize::new(0));
-    let executor_provider = Arc::new(StaticSkillProvider {
-        catalog: SkillCatalog {
-            entries: vec![test_entry(
-                SkillSourceKind::Executor,
-                "lint-fix",
-                "executor/lint-fix",
-                "lint-fix/SKILL.md",
-            )],
-            warnings: Vec::new(),
-        },
-        read_requests: Arc::clone(&read_requests),
-        list_calls: Some(Arc::clone(&list_calls)),
-        fail_first_list: false,
-    });
-    let providers = SkillProviders::new().with_executor_provider(executor_provider);
-    let mut builder = ExtensionRegistryBuilder::new();
-    install_with_providers(&mut builder, providers, skills_extension_config);
-    let registry = builder.build();
-
-    let session_store = ExtensionData::new("session");
-    let thread_store = ExtensionData::new("thread");
-    let selected_roots = vec![SelectedCapabilityRoot {
-        id: "lint-fix".to_string(),
-        location: CapabilityRootLocation::Environment {
-            environment_id: LOCAL_ENVIRONMENT_ID.to_string(),
-            path: PathUri::parse("file:///skills/lint-fix").expect("skill root URI"),
-        },
-    }];
-    let session_source = SessionSource::Cli;
-    let config = default_config();
-    registry.thread_lifecycle_contributors()[0]
-        .on_thread_start(ThreadStartInput {
-            config: &config,
-            session_source: &session_source,
-            persistent_thread_state_available: true,
-            environments: &[],
-            mcp_resource_client: None,
-            extension_metrics: None,
-            session_store: &session_store,
-            thread_store: &thread_store,
-        })
-        .await;
-    let turn_store = ExtensionData::new("turn-1");
-    registry.context_contributors()[0]
-        .contribute_world_state(WorldStateContributionInput {
-            thread_id: codex_protocol::ThreadId::new(),
-            turn_id: "turn-1",
-            environments: &[],
-            ready_selected_capability_roots: &selected_roots,
-            executor_capability_discovery: None,
-            extension_metrics: None,
-            session_store: &session_store,
-            thread_store: &thread_store,
-            turn_store: &turn_store,
-        })
-        .await;
-    assert_eq!(1, list_calls.load(Ordering::Relaxed));
-
-    let environment_manager = EnvironmentManager::default_for_tests();
-    for step_id in ["step-1", "step-2"] {
-        let step_store = ExtensionData::new(step_id);
-        step_store.insert(
-            environment_manager
-                .resolve_selected_capability_roots(&selected_roots, &HashMap::new())
-                .await,
-        );
-        let tools = registry.tool_contributors()[0].tools_for_step(
-            &session_store,
-            &thread_store,
-            &step_store,
-        );
-        for (tool_name, arguments) in [
-            (
-                "list",
-                serde_json::json!({"authority": {"kind": "executor"}}),
-            ),
-            (
-                "read",
-                serde_json::json!({
-                    "authority": {"kind": "executor", "id": "lint-fix"},
-                    "package": "executor/lint-fix",
-                    "resource": "lint-fix/SKILL.md",
-                }),
-            ),
-        ] {
-            let tool = tools
-                .iter()
-                .find(|tool| tool.tool_name().name == tool_name)
-                .ok_or("skill tool should be registered")?;
-            let call_id = format!("{step_id}-{tool_name}");
-            let payload = ToolPayload::Function {
-                arguments: arguments.to_string(),
-            };
-            let output = tool
-                .handle(ToolCall {
-                    turn_id: "turn-1".to_string(),
-                    call_id: call_id.clone(),
-                    tool_name: tool.tool_name(),
-                    model: "gpt-test".to_string(),
-                    codex_turn_metadata: None,
-                    truncation_policy: TruncationPolicy::Bytes(1_024),
-                    conversation_history: ConversationHistory::default(),
-                    turn_item_emitter: Arc::new(NoopTurnItemEmitter),
-                    environments: Vec::new(),
-                    payload: payload.clone(),
-                })
-                .await?;
-            let response = output
-                .post_tool_use_response(&call_id, &payload)
-                .ok_or("skill tool should expose structured output")?;
-            if tool_name == "list" {
-                assert_eq!(response["skills"][0]["name"], "lint-fix");
-            } else {
-                assert_eq!(response["contents"], "# Lint Fix\n\nRun the formatter.");
-            }
-        }
-    }
-
-    // World State and every later skills.list/skills.read step share one executor scan.
-    assert_eq!(1, list_calls.load(Ordering::Relaxed));
-    assert_eq!(
-        2,
-        read_requests
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .len()
-    );
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn default_context_truncates_catalog_descriptions() -> TestResult {
-    let description = "x".repeat(1_025);
-    let mut entry = test_entry(
-        SkillSourceKind::Orchestrator,
-        "codex_apps",
-        "orchestrator/long-description",
-        "skill://orchestrator/long-description/SKILL.md",
-    );
-    entry.description = description.clone();
-    let providers =
-        SkillProviders::new().with_orchestrator_provider(Arc::new(StaticSkillProvider {
-            catalog: SkillCatalog {
-                entries: vec![entry],
-                warnings: Vec::new(),
-||||||| 413492cd6c
-#[tokio::test]
-async fn default_context_truncates_catalog_descriptions() -> TestResult {
-    let description = "x".repeat(1_025);
-    let mut entry = test_entry(
-        SkillSourceKind::Orchestrator,
-        "codex_apps",
-        "orchestrator/long-description",
-        "skill://orchestrator/long-description/SKILL.md",
-    );
-    entry.description = description.clone();
-    let providers =
-        SkillProviders::new().with_orchestrator_provider(Arc::new(StaticSkillProvider {
-            catalog: SkillCatalog {
-                entries: vec![entry],
-                warnings: Vec::new(),
-=======
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn overlapping_executor_catalogs_render_their_own_roots() -> TestResult {
     use tracing::Subscriber;
@@ -1894,7 +1701,6 @@ async fn overlapping_executor_catalogs_render_their_own_roots() -> TestResult {
             location: CapabilityRootLocation::Environment {
                 environment_id: codex_exec_server::LOCAL_ENVIRONMENT_ID.to_string(),
                 path: PathUri::from_host_native_path(path)?,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             },
         })
     };
@@ -1941,31 +1747,6 @@ async fn overlapping_executor_catalogs_render_their_own_roots() -> TestResult {
                     turn_id: "turn",
                     environments: &[],
 
-<<<<<<< HEAD
-    let fragments = registry.context_contributors()[0]
-        .contribute_thread_context(&session_store, &thread_store)
-        .await;
-    assert_eq!(1, fragments.len());
-    assert_eq!(
-        Some(THREAD_SKILLS_CONTEXT_SOURCE_ID),
-        fragments[0].source_id()
-    );
-    let rendered = fragments[0].text();
-    assert!(rendered.contains(&("x".repeat(1_021) + "...")));
-    assert!(!rendered.contains(&"x".repeat(1_024)));
-    assert!(!rendered.contains(&description));
-
-||||||| 413492cd6c
-    let fragments = registry.context_contributors()[0]
-        .contribute_thread_context(&session_store, &thread_store)
-        .await;
-    assert_eq!(1, fragments.len());
-    let rendered = fragments[0].text();
-    assert!(rendered.contains(&("x".repeat(1_021) + "...")));
-    assert!(!rendered.contains(&"x".repeat(1_024)));
-    assert!(!rendered.contains(&description));
-
-=======
                     extension_metrics: None,
                     session_store: &session_store,
                     thread_store: &thread_store,
@@ -2006,7 +1787,6 @@ async fn overlapping_executor_catalogs_render_their_own_roots() -> TestResult {
     let a = a.await?;
     assert!(a.contains("skill-a") && !a.contains("skill-b"), "{a}");
     assert!(b.contains("skill-b") && !b.contains("skill-a"), "{b}");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     Ok(())
 }
 

@@ -724,7 +724,12 @@ fn assert_store_scope_releases_retained_descriptor(
     exit: LockScopeExit,
 ) -> Result<()> {
     let home = tempfile::tempdir()?;
-    let guard = OAuthStoreLock::acquire_in(home.path(), store, Duration::ZERO)?;
+    let guard = OAuthStoreLock::acquire_in_with_mode(
+        home.path(),
+        store,
+        Duration::ZERO,
+        OAuthStoreLockMode::Exclusive,
+    )?;
     let retained = guard._file.try_clone()?;
     let path = super::oauth_store_lock_path(home.path(), store);
     let before = std::fs::metadata(&path)?;
@@ -742,7 +747,12 @@ fn assert_store_scope_releases_retained_descriptor(
             assert!(result.is_err());
         }
     }
-    let reacquired = OAuthStoreLock::acquire_in(home.path(), store, Duration::ZERO);
+    let reacquired = OAuthStoreLock::acquire_in_with_mode(
+        home.path(),
+        store,
+        Duration::ZERO,
+        OAuthStoreLockMode::Exclusive,
+    );
     assert!(
         reacquired.is_ok(),
         "real {store} guard must release on {exit:?} while its duplicate remains open: {:?}",
@@ -794,13 +804,23 @@ fn issue928_mcp_secrets_guard_scope_releases_with_retained_descriptor() -> Resul
 fn issue928_mcp_live_store_guard_exclusion_and_independence() -> Result<()> {
     for store in [OAuthStore::File, OAuthStore::Secrets] {
         let home = tempfile::tempdir()?;
-        let held = OAuthStoreLock::acquire_in(home.path(), store, Duration::ZERO)?;
+        let held = OAuthStoreLock::acquire_in_with_mode(
+            home.path(),
+            store,
+            Duration::ZERO,
+            OAuthStoreLockMode::Exclusive,
+        )?;
         drop(held._file.try_clone()?);
         let other_store = match store {
             OAuthStore::File => OAuthStore::Secrets,
             OAuthStore::Secrets => OAuthStore::File,
         };
-        let _independent = OAuthStoreLock::acquire_in(home.path(), other_store, Duration::ZERO)?;
+        let _independent = OAuthStoreLock::acquire_in_with_mode(
+            home.path(),
+            other_store,
+            Duration::ZERO,
+            OAuthStoreLockMode::Exclusive,
+        )?;
         let contender = std::fs::OpenOptions::new()
             .read(true)
             .write(true)
@@ -809,12 +829,22 @@ fn issue928_mcp_live_store_guard_exclusion_and_independence() -> Result<()> {
             contender.try_lock(),
             Err(std::fs::TryLockError::WouldBlock)
         ));
-        let error = OAuthStoreLock::acquire_in(home.path(), store, Duration::ZERO)
-            .err()
-            .expect("same-resource contender must time out while the guard lives");
+        let error = OAuthStoreLock::acquire_in_with_mode(
+            home.path(),
+            store,
+            Duration::ZERO,
+            OAuthStoreLockMode::Exclusive,
+        )
+        .err()
+        .expect("same-resource contender must time out while the guard lives");
         assert!(matches!(error, OAuthStoreLockFailure::Timeout { .. }));
         drop(held);
-        let _reacquired = OAuthStoreLock::acquire_in(home.path(), store, Duration::ZERO)?;
+        let _reacquired = OAuthStoreLock::acquire_in_with_mode(
+            home.path(),
+            store,
+            Duration::ZERO,
+            OAuthStoreLockMode::Exclusive,
+        )?;
     }
     Ok(())
 }
@@ -825,16 +855,26 @@ fn issue928_mcp_store_acquisition_io_errors_are_preserved() -> Result<()> {
         let home = tempfile::tempdir()?;
         let blocked_home = home.path().join("not-a-directory");
         std::fs::write(&blocked_home, b"synthetic sentinel")?;
-        let error = OAuthStoreLock::acquire_in(&blocked_home, store, Duration::ZERO)
-            .err()
-            .expect("file-as-home must fail directory creation");
+        let error = OAuthStoreLock::acquire_in_with_mode(
+            &blocked_home,
+            store,
+            Duration::ZERO,
+            OAuthStoreLockMode::Exclusive,
+        )
+        .err()
+        .expect("file-as-home must fail directory creation");
         assert!(matches!(error, OAuthStoreLockFailure::CreateDir { .. }));
         assert_eq!(std::fs::read(&blocked_home)?, b"synthetic sentinel");
         let path = super::oauth_store_lock_path(home.path(), store);
         std::fs::create_dir_all(&path)?;
-        let error = OAuthStoreLock::acquire_in(home.path(), store, Duration::ZERO)
-            .err()
-            .expect("directory-as-lock must fail opening the file");
+        let error = OAuthStoreLock::acquire_in_with_mode(
+            home.path(),
+            store,
+            Duration::ZERO,
+            OAuthStoreLockMode::Exclusive,
+        )
+        .err()
+        .expect("directory-as-lock must fail opening the file");
         assert!(matches!(error, OAuthStoreLockFailure::Open { .. }));
         assert!(path.is_dir());
     }

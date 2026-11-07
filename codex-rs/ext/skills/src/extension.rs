@@ -1,32 +1,11 @@
 use std::sync::Arc;
 
-<<<<<<< HEAD
-use codex_core_skills::HostSkillsSnapshot;
-use codex_core_skills::injection::HOST_SKILLS_CONTEXT_SOURCE_ID;
-use codex_core_skills::injection::HostSkillsCatalogInWorldState;
-use codex_core_skills::injection::InjectedHostSkillPrompts;
-use codex_core_skills::injection::THREAD_SKILLS_CONTEXT_SOURCE_ID;
-use codex_exec_server::ExecutorCapabilityDiscoverySnapshot;
-use codex_exec_server::FileSystemSandboxContext;
-||||||| 413492cd6c
-use codex_core_skills::HostSkillsSnapshot;
-use codex_core_skills::injection::HostSkillsCatalogInWorldState;
-use codex_core_skills::injection::InjectedHostSkillPrompts;
-use codex_exec_server::ExecutorCapabilityDiscoverySnapshot;
-use codex_exec_server::FileSystemSandboxContext;
-=======
+use crate::HOST_SKILLS_CONTEXT_SOURCE_ID;
 use crate::HostSkillsSnapshot;
 use crate::InjectedHostSkillPrompts;
+use crate::THREAD_SKILLS_CONTEXT_SOURCE_ID;
 use codex_analytics::InvocationType;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_exec_server::LOCAL_ENVIRONMENT_ID;
-<<<<<<< HEAD
-use codex_exec_server::ResolvedSelectedCapabilityRoot;
-use codex_extension_api::AttributedFragment;
-||||||| 413492cd6c
-use codex_exec_server::ResolvedSelectedCapabilityRoot;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_extension_api::ConfigContributor;
 use codex_extension_api::ContextContributor;
 use codex_extension_api::ContextualUserFragment;
@@ -41,6 +20,7 @@ use codex_extension_api::PromptSlot;
 use codex_extension_api::SkillInvocationContributor;
 use codex_extension_api::SkillInvocationInput;
 use codex_extension_api::SkillInvocationKind;
+use codex_extension_api::SourcedFragment;
 use codex_extension_api::ThreadLifecycleContributor;
 use codex_extension_api::ThreadStartInput;
 use codex_extension_api::ToolCall;
@@ -272,14 +252,8 @@ where
             rendered
                 .fragment
                 .map(|fragment| {
-<<<<<<< HEAD
-                    PromptFragment::developer_capability(fragment.render())
-                        .with_source_id(THREAD_SKILLS_CONTEXT_SOURCE_ID)
-||||||| 413492cd6c
-                .map(|fragment| PromptFragment::developer_capability(fragment.render()))
-=======
                     PromptFragment::from_fragment(PromptSlot::DeveloperCapabilities, &fragment)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                        .with_source_id(THREAD_SKILLS_CONTEXT_SOURCE_ID)
                 })
                 .into_iter()
                 .collect()
@@ -459,7 +433,7 @@ where
                 if let Some(fragment) = rendered.fragment {
                     // This per-turn catalog stands in for the host catalog when it is not
                     // projected through WorldState.
-                    fragments.push(Box::new(AttributedFragment::new(
+                    fragments.push(Box::new(SourcedFragment::new(
                         HOST_SKILLS_CONTEXT_SOURCE_ID,
                         Box::new(fragment),
                     )));

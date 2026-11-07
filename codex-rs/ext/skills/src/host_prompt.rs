@@ -8,6 +8,14 @@ use crate::HostSkillsSnapshot;
 use crate::fragments::SkillInstructions;
 use crate::render::truncate_main_prompt_contents;
 
+/// Stable producer ID of the host skill catalog, shared by the skills extension's
+/// WorldState section and core's legacy thread-start catalog.
+pub const HOST_SKILLS_CONTEXT_SOURCE_ID: &str = "host_skills";
+
+/// Stable producer ID of the skills extension's thread-context catalog. It shares the skills
+/// markers with the host and executor catalogs but must not replace them.
+pub const THREAD_SKILLS_CONTEXT_SOURCE_ID: &str = "thread_skills";
+
 /// Host skill prompts already supplied or superseded by an extension.
 ///
 /// Core preserves its host skill invocation lifecycle while avoiding duplicate

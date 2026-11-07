@@ -229,16 +229,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             StreamableHttpService::new(
                 || Ok(TestToolServer::new()),
                 Arc::new(LocalSessionManager::default()),
-<<<<<<< HEAD
-                StreamableHttpServerConfig::default()
+                transport_config
                     // The remote test lane reaches this server by container IP,
                     // not loopback, so accept any Host header.
                     .disable_allowed_hosts(),
-||||||| 413492cd6c
-                StreamableHttpServerConfig::default(),
-=======
-                transport_config,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             ),
         )
         .layer(middleware::from_fn_with_state(

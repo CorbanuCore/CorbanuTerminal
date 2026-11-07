@@ -68,18 +68,16 @@ pub trait ToolOutput: Send {
         response_input_to_code_mode_result(self.to_response_item("", payload))
     }
 
-<<<<<<< HEAD
     /// What this result told the model, without per-call metadata such as
     /// chunk ids or wall time. Two calls whose results have the same identity
     /// gave the model no new information.
     fn result_identity(&self, payload: &ToolPayload) -> JsonValue {
         self.code_mode_result(payload)
-||||||| 413492cd6c
-=======
+    }
+
     /// Borrows original host-only metadata for recording, not for model output or logging.
     fn tool_result_metadata(&self) -> Option<&JsonValue> {
         None
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 
@@ -131,14 +129,12 @@ where
         (**self).code_mode_result(payload)
     }
 
-<<<<<<< HEAD
     fn result_identity(&self, payload: &ToolPayload) -> JsonValue {
         (**self).result_identity(payload)
-||||||| 413492cd6c
-=======
+    }
+
     fn tool_result_metadata(&self) -> Option<&JsonValue> {
         (**self).tool_result_metadata()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 

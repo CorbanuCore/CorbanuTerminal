@@ -313,8 +313,9 @@ pub(super) fn cache_identity(
     config: &RemotePluginServiceConfig,
     auth: &CodexAuth,
     scope: RemotePluginScope,
+    collection: Option<&str>,
 ) -> Option<String> {
-    let cache_key = RemotePluginCatalogCacheKey::new(config, auth, scope)?;
+    let cache_key = RemotePluginCatalogCacheKey::new(config, auth, scope, collection)?;
     serde_json::to_string(&cache_key).ok()
 }
 

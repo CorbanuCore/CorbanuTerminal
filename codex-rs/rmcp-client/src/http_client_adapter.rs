@@ -285,34 +285,18 @@ impl StreamableHttpClient for StreamableHttpClientAdapter {
             ));
         }
         if response.status == StatusCode::UNAUTHORIZED.as_u16() {
-<<<<<<< HEAD
-            // Some bearer-token services omit the OAuth challenge. HTTP 401 is
-            // still a typed authentication rejection, not an unstructured error.
-            let header = response_header(&response.headers, WWW_AUTHENTICATE).unwrap_or_default();
-            return Err(StreamableHttpError::AuthRequired(AuthRequiredError::new(
-                header,
-            )));
-||||||| 413492cd6c
-        if response.status == StatusCode::UNAUTHORIZED.as_u16()
-            && let Some(header) = response_header(&response.headers, WWW_AUTHENTICATE)
-        {
-            return Err(StreamableHttpError::AuthRequired(AuthRequiredError::new(
-                header,
-            )));
-=======
+            // RFC 9110 allows combining these list-based fields; keep challenges after the
+            // first. Some bearer-token services omit the OAuth challenge: HTTP 401 is still a
+            // typed authentication rejection, not an unstructured error.
             let challenges = response
                 .headers
                 .iter()
                 .filter(|header| header.name.eq_ignore_ascii_case(WWW_AUTHENTICATE.as_str()))
                 .map(|header| header.value.as_str())
                 .collect::<Vec<_>>();
-            if !challenges.is_empty() {
-                // RFC 9110 allows combining these list-based fields; keep challenges after the first.
-                return Err(StreamableHttpError::AuthRequired(AuthRequiredError::new(
-                    challenges.join(", "),
-                )));
-            }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            return Err(StreamableHttpError::AuthRequired(AuthRequiredError::new(
+                challenges.join(", "),
+            )));
         }
         if response.status == StatusCode::FORBIDDEN.as_u16()
             && let Some(challenge) = insufficient_scope_challenge(&response.headers)
