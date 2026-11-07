@@ -937,10 +937,9 @@ fn sec_win_345_sandboxed_commands_dont_get_the_runners_access() {
             gone.clone(),
         )
     };
-    assert_eq!(
-        results,
-        vec![expected("false"), expected("true"), expected("false")]
-    );
+    // Private desktop without and with ConPTY (no shared desktop left): the
+    // commands never use Core's desktop.
+    assert_eq!(results, vec![expected("false"), expected("false")]);
 }
 
 /// Copies the elevated sandbox's helpers (`CARGO_BIN_EXE_*`, else the
