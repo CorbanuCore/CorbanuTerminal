@@ -123,6 +123,7 @@ pub(crate) fn run(args: &crate::Args, upstream: SocketAddr) -> Result<()> {
         args.server_info.is_none()
             && args.dump_dir.is_none()
             && !args.http_shutdown
+            && !args.github_oidc
             && args.upstream_url == "https://api.openai.com/v1/responses",
         "incompatible synthetic options"
     );

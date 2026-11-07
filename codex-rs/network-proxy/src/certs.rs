@@ -171,7 +171,6 @@ impl ManagedMitmCa {
     }
 }
 
-<<<<<<< HEAD
 fn acceptor_data_for_pem(cert_pem: &str, key_pem: &str) -> Result<TlsAcceptorData> {
     let cert = CertificateDer::from_pem_slice(cert_pem.as_bytes())
         .context("failed to parse host cert PEM")?;
@@ -205,8 +204,8 @@ pub(crate) fn test_ca_and_host_acceptor(host: &str) -> Result<(String, TlsAccept
         .with_no_client_auth()
         .with_single_cert(vec![cert], key)?;
     Ok((ca_pem, TlsAcceptorData::from(server_config)))
-||||||| 413492cd6c
-=======
+}
+
 fn read_external_ca_file(path: &Path, field: &str, private: bool) -> Result<String> {
     // Do not accept a caller-provided signing key where its access controls cannot be verified.
     #[cfg(not(unix))]
@@ -253,7 +252,6 @@ fn read_external_ca_file(path: &Path, field: &str, private: bool) -> Result<Stri
         "{field} exceeds {MAX_EXTERNAL_CA_FILE_BYTES} bytes"
     );
     Ok(pem)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn issue_host_certificate_pem(

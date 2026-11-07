@@ -13,9 +13,14 @@ async fn explicit_denial_never_calls_the_destination_resolver() {
         ),
         ..NetworkProxyConfig::default()
     };
-    let policy = NetworkProxyState::from_remote_launch_config(RemoteNetworkProxyLaunchConfig::new(
-        RemoteNetworkProxyConfig::from_effective_config(&config).unwrap(),
-    ))
+    let policy = NetworkProxyState::from_remote_launch_config(
+        RemoteNetworkProxyLaunchConfig::new(
+            RemoteNetworkProxyConfig::from_effective_config(&config).unwrap(),
+        ),
+        crate::Platform::native(),
+        &crate::RemoteCredentialBrokerCache::default(),
+        &std::collections::HashMap::new(),
+    )
     .unwrap();
     for url in ["https://blocked.example/", "https://blocked.example./"] {
         let lookup_called = std::cell::Cell::new(false);
@@ -41,15 +46,20 @@ async fn allowed_host_still_validates_the_exact_resolver_answers() {
         enabled: true,
         // Disable the native policy's DNS preflight in this offline fixture.
         // The browser's own public-address requirement must still hold.
-        allow_local_binding: true,
+        allow_local_binding: Some(true),
         domains: Some(
             serde_json::from_value(serde_json::json!({"allowed.example":"allow"})).unwrap(),
         ),
         ..NetworkProxyConfig::default()
     };
-    let policy = NetworkProxyState::from_remote_launch_config(RemoteNetworkProxyLaunchConfig::new(
-        RemoteNetworkProxyConfig::from_effective_config(&config).unwrap(),
-    ))
+    let policy = NetworkProxyState::from_remote_launch_config(
+        RemoteNetworkProxyLaunchConfig::new(
+            RemoteNetworkProxyConfig::from_effective_config(&config).unwrap(),
+        ),
+        crate::Platform::native(),
+        &crate::RemoteCredentialBrokerCache::default(),
+        &std::collections::HashMap::new(),
+    )
     .unwrap();
     for (address, expected) in [
         (
@@ -186,11 +196,15 @@ async fn existing_denial_wins_without_approval_override() {
             domains: Some(serde_json::from_value(domains).unwrap()),
             ..NetworkProxyConfig::default()
         };
-        let policy =
-            NetworkProxyState::from_remote_launch_config(RemoteNetworkProxyLaunchConfig::new(
+        let policy = NetworkProxyState::from_remote_launch_config(
+            RemoteNetworkProxyLaunchConfig::new(
                 RemoteNetworkProxyConfig::from_effective_config(&config).unwrap(),
-            ))
-            .unwrap();
+            ),
+            crate::Platform::native(),
+            &crate::RemoteCredentialBrokerCache::default(),
+            &std::collections::HashMap::new(),
+        )
+        .unwrap();
         assert!(matches!(
             resolve_browser_destination("https://1.1.1.1/", &policy).await,
             Err(BrowserPolicyError::PolicyDenied)
@@ -208,9 +222,14 @@ async fn allow_returns_exact_connection_addresses_without_network_io() {
         domains: Some(serde_json::from_value(serde_json::json!({"1.1.1.1":"allow"})).unwrap()),
         ..NetworkProxyConfig::default()
     };
-    let policy = NetworkProxyState::from_remote_launch_config(RemoteNetworkProxyLaunchConfig::new(
-        RemoteNetworkProxyConfig::from_effective_config(&config).unwrap(),
-    ))
+    let policy = NetworkProxyState::from_remote_launch_config(
+        RemoteNetworkProxyLaunchConfig::new(
+            RemoteNetworkProxyConfig::from_effective_config(&config).unwrap(),
+        ),
+        crate::Platform::native(),
+        &crate::RemoteCredentialBrokerCache::default(),
+        &std::collections::HashMap::new(),
+    )
     .unwrap();
     let destination = resolve_browser_destination("https://1.1.1.1/", &policy)
         .await

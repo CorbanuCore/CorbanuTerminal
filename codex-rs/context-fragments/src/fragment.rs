@@ -1,15 +1,8 @@
 use crate::AnnotatedContent;
 use crate::message_from_parts;
 use codex_protocol::models::ContentItem;
-<<<<<<< HEAD
-use codex_protocol::models::InternalChatMessageMetadataPassthrough;
-use codex_protocol::models::ResponseInputItem;
-||||||| 413492cd6c
-use codex_protocol::models::ResponseInputItem;
-=======
 use codex_protocol::models::ContentItemKind;
 use codex_protocol::models::ContentItemMetadata;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::models::ResponseItem;
 use codex_protocol::models::input_text;
 
@@ -68,15 +61,13 @@ pub trait ContextualUserFragment {
         ContentItemMetadata::harness()
     }
 
-<<<<<<< HEAD
     /// Stable producer ID recorded with the rendered fragment, such as a World State section ID.
     ///
     /// Provider adapters use it to tell apart distinct sources that share markers.
     fn source_id(&self) -> Option<&'static str> {
         None
     }
-||||||| 413492cd6c
-=======
+
     /// Binds producer attribution before this fragment is rendered or persisted.
     fn with_metadata(self, metadata: ContentItemMetadata) -> AttributedFragment<Self>
     where
@@ -90,7 +81,6 @@ pub trait ContextualUserFragment {
 
     /// Returns a stable `<feature>.<name>` classification, using `generic` for shared fragments.
     fn content_kind(&self) -> ContentItemKind;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     fn markers(&self) -> (&'static str, &'static str);
 
@@ -139,39 +129,13 @@ pub trait ContextualUserFragment {
     where
         Self: Sized,
     {
-<<<<<<< HEAD
-        context_message(self.role(), [(self.render(), self.source_id())])
-||||||| 413492cd6c
-        ResponseItem::Message {
-            id: None,
-            role: self.role().to_string(),
-            content: vec![ContentItem::InputText {
-                text: self.render(),
-            }],
-            phase: None,
-            internal_chat_message_metadata_passthrough: None,
-        }
-=======
-        ResponseItem::from(self.render_fragment())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        let source_id = self.source_id();
+        attach_context_source(ResponseItem::from(self.render_fragment()), source_id)
     }
 
     fn into_boxed_response_item(self: Box<Self>) -> ResponseItem {
-<<<<<<< HEAD
-        context_message(self.role(), [(self.render(), self.source_id())])
-||||||| 413492cd6c
-        ResponseItem::Message {
-            id: None,
-            role: self.role().to_string(),
-            content: vec![ContentItem::InputText {
-                text: self.render(),
-            }],
-            phase: None,
-            internal_chat_message_metadata_passthrough: None,
-        }
-=======
-        ResponseItem::from(self.render_fragment())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        let source_id = self.source_id();
+        attach_context_source(ResponseItem::from(self.render_fragment()), source_id)
     }
 }
 
@@ -203,6 +167,9 @@ impl<F: ContextualUserFragment> ContextualUserFragment for AttributedFragment<F>
     fn content_metadata(&self) -> ContentItemMetadata {
         self.metadata.clone()
     }
+    fn source_id(&self) -> Option<&'static str> {
+        self.fragment.source_id()
+    }
 }
 
 /// Builds a context message from rendered sections and their producer IDs.
@@ -210,43 +177,51 @@ impl<F: ContextualUserFragment> ContextualUserFragment for AttributedFragment<F>
 /// Producers are recorded, aligned with the content, for developer messages, the only role whose
 /// contextual sections are deduplicated per producer before non-OpenAI requests.
 pub fn context_message(
-    role: &str,
-    sections: impl IntoIterator<Item = (String, Option<&'static str>)>,
+    role: &'static str,
+    sections: impl IntoIterator<Item = (AnnotatedContent, Option<&'static str>)>,
 ) -> ResponseItem {
-    let (content, sources): (Vec<_>, Vec<_>) = sections
-        .into_iter()
-        .map(|(text, source_id)| {
-            (
-                ContentItem::InputText { text },
-                source_id.map(str::to_string),
-            )
-        })
-        .unzip();
-    let internal_chat_message_metadata_passthrough = (role == "developer"
-        && sources.iter().any(Option::is_some))
-    .then(|| InternalChatMessageMetadataPassthrough {
-        context_fragment_sources: Some(sources),
-        ..Default::default()
-    });
-    ResponseItem::Message {
-        id: None,
-        role: role.to_string(),
-        content,
-        phase: None,
+    let (parts, sources): (Vec<_>, Vec<_>) = sections.into_iter().unzip();
+    with_context_sources(message_from_parts(role, parts), sources)
+}
+
+fn attach_context_source(item: ResponseItem, source_id: Option<&'static str>) -> ResponseItem {
+    with_context_sources(item, vec![source_id])
+}
+
+fn with_context_sources(
+    mut item: ResponseItem,
+    sources: Vec<Option<&'static str>>,
+) -> ResponseItem {
+    if let ResponseItem::Message {
+        role,
         internal_chat_message_metadata_passthrough,
+        ..
+    } = &mut item
+        && role == "developer"
+        && sources.iter().any(Option::is_some)
+    {
+        internal_chat_message_metadata_passthrough
+            .get_or_insert_with(Default::default)
+            .context_fragment_sources = Some(
+            sources
+                .into_iter()
+                .map(|source| source.map(str::to_string))
+                .collect(),
+        );
     }
+    item
 }
 
 /// A fragment attributed to a stable producer ID, such as the World State section that rendered
 /// it.
 ///
 /// Producer IDs share one namespace across World State sections and extension fragments.
-pub struct AttributedFragment<F: ?Sized> {
+pub struct SourcedFragment<F: ?Sized> {
     source_id: &'static str,
     fragment: Box<F>,
 }
 
-impl<F: ?Sized> AttributedFragment<F> {
+impl<F: ?Sized> SourcedFragment<F> {
     pub fn new(source_id: &'static str, fragment: Box<F>) -> Self {
         Self {
             source_id,
@@ -255,13 +230,17 @@ impl<F: ?Sized> AttributedFragment<F> {
     }
 }
 
-impl<F: ContextualUserFragment + ?Sized> ContextualUserFragment for AttributedFragment<F> {
+impl<F: ContextualUserFragment + ?Sized> ContextualUserFragment for SourcedFragment<F> {
     fn role(&self) -> &'static str {
         self.fragment.role()
     }
 
-    fn requires_separate_message(&self) -> bool {
-        self.fragment.requires_separate_message()
+    fn content_metadata(&self) -> ContentItemMetadata {
+        self.fragment.content_metadata()
+    }
+
+    fn content_kind(&self) -> ContentItemKind {
+        self.fragment.content_kind()
     }
 
     fn source_id(&self) -> Option<&'static str> {
@@ -272,7 +251,7 @@ impl<F: ContextualUserFragment + ?Sized> ContextualUserFragment for AttributedFr
         self.fragment.markers()
     }
 
-    fn body(&self) -> String {
+    fn body(&self) -> ContentItem {
         self.fragment.body()
     }
 
@@ -280,7 +259,7 @@ impl<F: ContextualUserFragment + ?Sized> ContextualUserFragment for AttributedFr
         ("", "")
     }
 
-    fn render(&self) -> String {
+    fn render(&self) -> ContentItem {
         self.fragment.render()
     }
 }

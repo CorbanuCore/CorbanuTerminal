@@ -330,6 +330,7 @@ async fn pf_33_s02_guard_refuses_inherited_upstream_proxy() {
         http: None,
         https: Some(proxy),
         all: None,
+        proxy_private_ips_via_upstream: false,
     };
     let client = pf_33_s02_guarded_client(server.roots.clone(), proxy);
     assert!(client.has_upstream_proxy());

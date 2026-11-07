@@ -169,24 +169,10 @@ pub enum Feature {
     UnifiedExecTty,
     /// Removed compatibility flag for the retired patched zsh backend.
     ShellZshFork,
-<<<<<<< HEAD
     /// Under Moderate/Aggressive security, send external content (tool, MCP,
     /// hook and agent output) as labelled untrusted data instead of failing closed.
     SourceEnvelopes,
-    /// Allow unified exec to compose with the zsh exec bridge.
-    ///
-    /// This flag is only a composition gate. Enabling it by itself must not turn
-    /// on either `unified_exec` or `shell_zsh_fork` because those features have
-    /// separate rollout and enterprise controls.
-||||||| 413492cd6c
-    /// Allow unified exec to compose with the zsh exec bridge.
-    ///
-    /// This flag is only a composition gate. Enabling it by itself must not turn
-    /// on either `unified_exec` or `shell_zsh_fork` because those features have
-    /// separate rollout and enterprise controls.
-=======
     /// Removed compatibility flag for the retired patched zsh backend.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     UnifiedExecZshFork,
     /// Removed compatibility flag. Transcript scrollback reflow on terminal resize is always on.
     TerminalResizeReflow,
@@ -247,7 +233,6 @@ pub enum Feature {
     UnboundedConnectionRetries,
     /// Start the managed network proxy for sandboxed sessions.
     NetworkProxy,
-<<<<<<< HEAD
     /// Virtualize provider credentials through a separate broker process (PF-27-S04).
     IsolatedCredentialBroker,
     /// Launch agent commands without raw secrets and refuse launches the OS cannot contain (PF-27-S02).
@@ -262,13 +247,10 @@ pub enum Feature {
     ProtectedModePreflight,
     /// Hold Core's own model-provider API keys in the isolated credential broker (PF-27-S05).
     BrokerModelAuth,
-||||||| 413492cd6c
-=======
     /// Mask credentials and inject them through an already enabled network proxy.
     CredentialMasking,
     /// Removed compatibility flag. Managed worktrees and repository-aware sessions are always available.
     Worktrees,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     /// Respect host system proxy settings for Codex-owned network clients.
     RespectSystemProxy,
     /// Retry eligible bootstrap requests through the system proxy after normal routing fails.
@@ -484,14 +466,8 @@ pub enum Feature {
     ReasoningEffortOverride,
     /// Add current-time reminders to model-visible context.
     CurrentTimeReminder,
-<<<<<<< HEAD
-    /// Compatibility flag for the released standalone input-interruptible sleep tool.
-    SleepTool,
-||||||| 413492cd6c
-=======
     /// Report failed clock reads to the model without failing the turn.
     NonfatalClockReadErrors,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     /// Route MCP tool approval prompts through the MCP elicitation request path.
     ToolCallMcpElicitation,
     /// Prompt Codex Apps connector auth failures through MCP URL elicitations.
@@ -2244,14 +2220,8 @@ pub const FEATURES: &[FeatureSpec] = &[
         default_enabled: false,
     },
     FeatureSpec {
-<<<<<<< HEAD
-        id: Feature::SleepTool,
-        key: "sleep_tool",
-||||||| 413492cd6c
-=======
         id: Feature::NonfatalClockReadErrors,
         key: "nonfatal_clock_read_errors",
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         stage: Stage::UnderDevelopment,
         default_enabled: false,
     },

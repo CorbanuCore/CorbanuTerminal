@@ -60,7 +60,8 @@ impl RemoteCredentialBrokerCache {
         }) {
             return Some(cached.broker.clone());
         }
-        let broker = CredentialBroker::new(config.credential_broker);
+        // Remote brokers keep `main`'s engine, as every proxy Corbanu builds.
+        let broker = CredentialBroker::new(config.credential_broker).with_main_engine();
         broker.configure(&config);
         brokers.push(CachedCredentialBroker {
             environment_id: environment_id.map(str::to_owned),

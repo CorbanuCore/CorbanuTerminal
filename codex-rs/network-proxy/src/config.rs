@@ -165,7 +165,6 @@ pub struct NetworkProxyConfig {
     pub mitm_ca: Option<NetworkMitmCaConfig>,
     #[serde(default)]
     pub credential_broker: bool,
-<<<<<<< HEAD
     /// PF-27-S04: keep brokered raw credentials in a separate broker process.
     #[serde(default)]
     pub isolated_credential_broker: bool,
@@ -188,8 +187,6 @@ pub struct NetworkProxyConfig {
     /// only.
     #[serde(skip)]
     pub credential_response_gate: bool,
-||||||| 413492cd6c
-=======
     /// Whether brokerage enabled MITM rather than inheriting an explicit setting.
     #[serde(skip)]
     pub credential_broker_enabled_mitm: bool,
@@ -201,7 +198,6 @@ pub struct NetworkProxyConfig {
     /// Trusted local destination context, never sent to remote executors or child environments.
     #[serde(skip)]
     pub credential_broker_context: crate::CredentialBrokerContext,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     #[serde(default)]
     pub dangerously_allow_plaintext_credential_injection: bool,
     #[serde(default)]
@@ -227,19 +223,15 @@ impl Default for NetworkProxyConfig {
             mitm: false,
             mitm_ca: None,
             credential_broker: false,
-<<<<<<< HEAD
             isolated_credential_broker: false,
             secretless_agent_launch: None,
             credential_broker_runtime_dir: None,
             url_destination_policy: false,
             credential_response_gate: false,
-||||||| 413492cd6c
-=======
             credential_broker_enabled_mitm: false,
             credential_providers: BTreeMap::new(),
             credential_broker_openai_host: None,
             credential_broker_context: crate::CredentialBrokerContext::default(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             dangerously_allow_plaintext_credential_injection: false,
             mitm_hooks: Vec::new(),
         }
@@ -809,19 +801,15 @@ mod tests {
                 mitm: false,
                 mitm_ca: None,
                 credential_broker: false,
-<<<<<<< HEAD
                 isolated_credential_broker: false,
                 secretless_agent_launch: None,
                 credential_broker_runtime_dir: None,
                 url_destination_policy: false,
                 credential_response_gate: false,
-||||||| 413492cd6c
-=======
                 credential_broker_enabled_mitm: false,
                 credential_providers: BTreeMap::new(),
                 credential_broker_openai_host: None,
                 credential_broker_context: crate::CredentialBrokerContext::default(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 dangerously_allow_plaintext_credential_injection: false,
                 mitm_hooks: Vec::new(),
             }

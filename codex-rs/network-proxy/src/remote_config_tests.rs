@@ -270,24 +270,6 @@ fn launch_config_materializes_audit_and_execution_attribution() {
         model: Some("model-1".to_string()),
         ..NetworkProxyAuditMetadata::default()
     };
-<<<<<<< HEAD
-    let state = NetworkProxyState::from_remote_launch_config(RemoteNetworkProxyLaunchConfig {
-        proxy,
-        audit_metadata: audit_metadata.clone(),
-        environment_id: Some("remote".to_string()),
-        execution_id: Some("execution-1".to_string()),
-        policy_decision_timeout_ms: None,
-        report_denials: false,
-    })
-||||||| 413492cd6c
-    let state = NetworkProxyState::from_remote_launch_config(RemoteNetworkProxyLaunchConfig {
-        proxy,
-        audit_metadata: audit_metadata.clone(),
-        environment_id: Some("remote".to_string()),
-        execution_id: Some("execution-1".to_string()),
-        policy_decision_timeout_ms: None,
-    })
-=======
     let state = NetworkProxyState::from_remote_launch_config(
         RemoteNetworkProxyLaunchConfig {
             proxy,
@@ -295,12 +277,12 @@ fn launch_config_materializes_audit_and_execution_attribution() {
             environment_id: Some("remote".to_string()),
             execution_id: Some("execution-1".to_string()),
             policy_decision_timeout_ms: None,
+            report_denials: false,
         },
         Platform::native(),
         &crate::RemoteCredentialBrokerCache::default(),
         &std::collections::HashMap::new(),
     )
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     .expect("remote launch state");
 
     assert_eq!(state.audit_metadata(), &audit_metadata);
