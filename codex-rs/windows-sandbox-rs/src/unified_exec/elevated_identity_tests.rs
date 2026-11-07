@@ -797,7 +797,9 @@ fn measure_1766_elevated_read_only_by_real_path_under_linked_cwd() {
         return;
     };
     let _guard = legacy_process_test_guard();
-    let test_root = user_owned_test_root();
+    // The runner's D:\\tmp lets any account traverse (a user-owned root
+    // stopped the sandbox user at the link: CreateProcessWithLogonW 267).
+    let test_root = TempDir::new().expect("test root");
     let real = test_root.path().join("real");
     fs::create_dir_all(real.join("docs")).expect("create docs");
     let cmd = system32_exe("cmd.exe").display().to_string();
