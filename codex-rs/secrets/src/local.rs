@@ -1491,18 +1491,62 @@ mod tests {
                 .join("secrets/gateway_oauth.age")
                 .is_file()
         );
-        // Primary-auth key removal must not make the independent gateway file unreadable.
+        // Primary-auth key removal must not make the independent gateway file
+        // unreadable. Fresh backends, so no cached plaintext answers.
         keyring
             .delete(
                 keyring_service(),
                 &compute_keyring_account(codex_home.path(), LocalSecretsNamespace::CodexAuth),
             )
             .expect("remove primary secrets key");
+        let reopened = |namespace| {
+            LocalSecretsBackend::new_with_namespace(
+                codex_home.path().to_path_buf(),
+                keyring.clone(),
+                namespace,
+            )
+        };
         assert_eq!(
-            gateway_backend.get(&scope, &name)?,
+            reopened(LocalSecretsNamespace::GatewayOAuth).get(&scope, &name)?,
             Some("gateway-value".to_string())
         );
+        assert!(
+            reopened(LocalSecretsNamespace::CodexAuth)
+                .get(&scope, &name)
+                .is_err(),
+            "the shared primary key is gone, so the primary stores no longer open"
+        );
         Ok(())
+    }
+
+    /// Existing stores keep the keyring account earlier builds wrote; only the
+    /// gateway store gets its own.
+    #[test]
+    fn keyring_accounts_stay_stable_and_the_gateway_has_its_own() {
+        let codex_home = tempfile::tempdir().expect("tempdir");
+        let canonical = codex_home
+            .path()
+            .canonicalize()
+            .expect("canonical home")
+            .to_string_lossy()
+            .into_owned();
+        let digest = format!("{:x}", Sha256::digest(canonical.as_bytes()));
+        let shared = format!("secrets|{}", &digest[..16]);
+        for namespace in [
+            LocalSecretsNamespace::ManagedSecrets,
+            LocalSecretsNamespace::CodexAuth,
+            LocalSecretsNamespace::McpOAuth,
+        ] {
+            assert_eq!(
+                compute_keyring_account(codex_home.path(), namespace),
+                shared,
+                "{namespace:?}"
+            );
+        }
+        assert_eq!(
+            compute_keyring_account(codex_home.path(), LocalSecretsNamespace::GatewayOAuth),
+            format!("{shared}|gateway-oauth")
+        );
     }
 
     #[test]

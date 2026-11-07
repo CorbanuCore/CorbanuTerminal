@@ -103,6 +103,10 @@ pub fn arg0_dispatch() -> Option<Arg0PathEntryGuard> {
             codex_windows_sandbox::run_windows_sandbox_wrapper_main();
         }
         Some(PrivateHelper::ApplyPatch) => run_apply_patch_helper(args.next()),
+        // `codex_utils_pty::init_spawn_helper` above already ran this helper and
+        // never returns for its marker; it is classified for the CLI preflight.
+        #[cfg(target_os = "linux")]
+        Some(PrivateHelper::PtyProcessSetup) => {}
         None => {}
     }
 

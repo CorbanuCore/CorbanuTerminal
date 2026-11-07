@@ -7,6 +7,10 @@
 //! upstream sync touched `zip` and must never be regenerated (see the README
 //! there). The set of accepted methods may grow only with the security owner's
 //! approval; then only `REJECTED` changes, never the fixtures.
+//!
+//! Scope: this checks the decoders the workspace's `zip` features build, which
+//! is what D319 decides. Path safety of the bundle extraction itself is tested
+//! with that code in `src/startup_sync_tests.rs`.
 
 use std::io::Read;
 use std::path::Path;
