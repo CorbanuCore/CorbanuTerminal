@@ -1685,6 +1685,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "S3b: upstream's credential engine (configured providers, aliases, plaintext tunnels) is kept off; main's engine brokers every Corbanu proxy"]
     async fn configured_forward_requests_match_destination_scheme_and_port() {
         let real_token = "provider_abcdefghijklmnopqrstuvwx";
         for (host, port, prefix, scope) in [
@@ -1791,6 +1792,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "S3b: upstream's credential engine (configured providers, aliases, plaintext tunnels) is kept off; main's engine brokers every Corbanu proxy"]
     async fn http_plain_proxy_blocks_brokered_provider_alias_before_credential_injection() {
         let mut network = NetworkProxyConfig {
             allow_local_binding: Some(true),

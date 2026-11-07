@@ -54,6 +54,10 @@ pub(crate) struct HardenedBroker {
     /// PF-28-S02: bind credentials to HTTPS, method and path, and scrub
     /// injected values from responses (feature `secret_output_gate`).
     response_gate: bool,
+    /// Every proxy Corbanu builds sets this, so `main`'s engine brokers even
+    /// with no hardening armed; upstream's engine runs only where a broker
+    /// is built without it (upstream's own tests).
+    main_engine: bool,
 }
 
 /// Which variables may be read from Core's environment, and how.
@@ -224,7 +228,14 @@ impl HardenedBroker {
             isolation,
             process_env_source: None,
             response_gate: false,
+            main_engine: false,
         }
+    }
+
+    /// Selects `main`'s engine for this broker (see `main_engine`).
+    pub(crate) fn with_main_engine(mut self) -> Self {
+        self.main_engine = true;
+        self
     }
 
     /// PF-28-S02: bind injected credentials to HTTPS, method and path and
@@ -277,8 +288,13 @@ impl HardenedBroker {
         false
     }
 
-    /// Whether any hardening is armed, so this engine owns brokering.
+    /// Whether this engine owns brokering.
     pub(crate) fn armed(&self) -> bool {
+        self.main_engine || self.protections_armed()
+    }
+
+    /// Whether a Corbanu protection (not only the engine choice) is armed.
+    pub(crate) fn protections_armed(&self) -> bool {
         self.isolated()
             || self.response_gate
             || self.process_env_source.is_some()

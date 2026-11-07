@@ -403,9 +403,22 @@ impl CredentialBroker {
         self.hardened.isolated()
     }
 
-    /// Whether Corbanu hardening owns brokering for this broker.
+    /// Selects `main`'s engine (every proxy Corbanu builds; see
+    /// `hardened::HardenedBroker::main_engine`).
+    pub(crate) fn with_main_engine(mut self) -> Self {
+        self.hardened = self.hardened.with_main_engine();
+        self
+    }
+
+    /// Whether `main`'s engine owns brokering for this broker.
     pub(crate) fn hardened(&self) -> bool {
         self.hardened.armed()
+    }
+
+    /// Whether a Corbanu protection is armed (isolated broker, Core-sourced
+    /// values, response gate or scoped route).
+    pub(crate) fn protections_armed(&self) -> bool {
+        self.hardened.protections_armed()
     }
 
     /// Revokes every brokered reference (see `HardenedBroker`).

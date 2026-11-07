@@ -239,6 +239,7 @@ async fn mitm_policy_allows_matching_hooked_write_in_full_mode() {
 }
 
 #[tokio::test]
+#[ignore = "S3b: upstream's credential engine (configured providers, aliases, plaintext tunnels) is kept off; main's engine brokers every Corbanu proxy"]
 async fn mitm_policy_enforces_brokered_aliases_without_blocking_unrelated_credentials() {
     for hooked_hosts in [
         vec!["api.github.com"],
@@ -322,6 +323,7 @@ async fn mitm_policy_enforces_brokered_aliases_without_blocking_unrelated_creden
 }
 
 #[tokio::test]
+#[ignore = "S3b: upstream's credential engine (configured providers, aliases, plaintext tunnels) is kept off; main's engine brokers every Corbanu proxy"]
 async fn mitm_policy_checks_configured_credential_aliases_at_the_request_destination() {
     let mut hook = github_write_hook();
     hook.host = "api.hooked.example".to_string();
@@ -548,6 +550,7 @@ async fn mitm_policy_records_hook_denials_in_full_mode() {
 }
 
 #[test]
+#[ignore = "S3b: upstream's credential engine (configured providers, aliases, plaintext tunnels) is kept off; main's engine brokers every Corbanu proxy"]
 fn request_credentials_apply_hook_after_brokerage() {
     let app_state = network_proxy_state_for_policy(NetworkProxyConfig {
         credential_broker: true,

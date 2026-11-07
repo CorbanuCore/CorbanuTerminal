@@ -566,7 +566,7 @@ impl NetworkProxyState {
         // A hardened broker (isolated process, Core-sourced values, response
         // gate or scoped route) is never swapped for a cached plain one.
         anyhow::ensure!(
-            !self.credential_broker().hardened(),
+            !self.credential_broker().protections_armed(),
             "credential broker hardening cannot be rebound to another environment"
         );
         let mut state = self.state.write().await;
@@ -1558,6 +1558,7 @@ fn credential_broker_for_config(config: &crate::config::NetworkProxyConfig) -> C
     broker
         .with_process_env_source(config.secretless_agent_launch.as_deref())
         .with_response_gate(config.credential_response_gate)
+        .with_main_engine()
 }
 
 fn unix_timestamp() -> i64 {
