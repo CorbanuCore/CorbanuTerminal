@@ -790,7 +790,8 @@ fn probe_with_restricted_token(target: &Target) -> Report {
         StdinMode::Closed,
         StderrMode::MergeStdout,
         ConsoleMode::NoWindow,
-        codex_windows_sandbox::LaunchDesktop::prepare(/*logs_base_dir*/ None).expect("desktop"),
+        codex_windows_sandbox::LaunchDesktop::prepare_for_token(token, /*logs_base_dir*/ None)
+            .expect("desktop"),
         /*logs_base_dir*/ None,
     )
     .expect("spawn restricted probe");

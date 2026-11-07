@@ -746,7 +746,8 @@ fn run_script_probe(confined: bool) -> Report {
         codex_windows_sandbox::StdinMode::Closed,
         codex_windows_sandbox::StderrMode::MergeStdout,
         codex_windows_sandbox::ConsoleMode::NoWindow,
-        codex_windows_sandbox::LaunchDesktop::prepare(/*logs_base_dir*/ None).expect("desktop"),
+        codex_windows_sandbox::LaunchDesktop::prepare_for_token(token, /*logs_base_dir*/ None)
+            .expect("desktop"),
         /*logs_base_dir*/ None,
     )
     .expect("spawn cscript");
