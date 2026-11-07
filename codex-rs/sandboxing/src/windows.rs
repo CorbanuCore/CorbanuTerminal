@@ -493,3 +493,7 @@ fn reopened_writable_descendant(writable_roots: &[WritableRoot]) -> Option<(&Pat
 #[cfg(test)]
 #[path = "windows_tests.rs"]
 mod tests;
+
+#[cfg(all(test, windows))]
+#[path = "windows_measure_1766_tests.rs"]
+mod measure_1766;
