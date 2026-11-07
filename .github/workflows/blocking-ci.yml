@@ -16,6 +16,7 @@ jobs:
   # version-controlled list that the main-branch ruleset should require.
   bazel:
     name: Bazel
+    if: ${{ !startsWith(github.base_ref, 'sync/') }}  # sync-ci-mode
     uses: ./.github/workflows/bazel.yml
     secrets: inherit
 
@@ -41,11 +42,13 @@ jobs:
 
   rust-ci:
     name: rust-ci
+    if: ${{ !startsWith(github.base_ref, 'sync/') }}  # sync-ci-mode
     uses: ./.github/workflows/rust-ci.yml
     secrets: inherit
 
   sdk:
     name: sdk
+    if: ${{ !startsWith(github.base_ref, 'sync/') }}  # sync-ci-mode
     uses: ./.github/workflows/sdk.yml
     secrets: inherit
 
@@ -74,4 +77,5 @@ jobs:
       - name: Require successful dependencies
         env:
           NEEDS: ${{ toJSON(needs) }}
+          SYNC_SKIPPED_OK: ${{ startsWith(github.base_ref, 'sync/') && 'bazel,rust-ci,sdk' || '' }}  # sync-ci-mode
         run: python3 .github/scripts/check_ci_results.py

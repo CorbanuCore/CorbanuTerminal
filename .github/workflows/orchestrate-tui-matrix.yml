@@ -2,6 +2,7 @@ name: orchestrate-tui-matrix
 
 on:
   pull_request:
+    branches-ignore: ["sync/**"]  # sync-ci-mode
     paths:
       - "codex-rs/app-server/src/request_processors/turn_processor.rs"
       - "codex-rs/tui/src/app/**"

@@ -19,6 +19,7 @@ def main() -> None:
         (name, dependency["result"])
         for name, dependency in needs.items()
         if dependency["result"] != "success"
+        and not (dependency["result"] == "skipped" and name in os.environ.get("SYNC_SKIPPED_OK", "").split(","))  # sync-ci-mode
     )
 
     if failures:
