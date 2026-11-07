@@ -207,7 +207,8 @@ impl ResolvedWindowsSandboxPermissions {
                     .collect();
                 let missed =
                     inside_only_by_real_path(&explicit_non_write, &root_path, &read_only_subpaths);
-                read_only_subpaths.extend(missed);
+                // FAIL-BEFORE ONLY (never merge): the #1780 fix disabled.
+                let _ = missed;
                 WindowsWritableRoot {
                     root: root_path,
                     read_only_subpaths,
