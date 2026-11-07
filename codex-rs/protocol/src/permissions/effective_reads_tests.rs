@@ -31,7 +31,7 @@ fn reference_read(policy: &FileSystemSandboxPolicy, path: &Path, cwd: &Path) -> 
 fn entry(path: &Path, access: FileSystemAccessMode) -> FileSystemSandboxEntry {
     FileSystemSandboxEntry::new(
         FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(path).unwrap(),
+            path: AbsolutePathBuf::from_absolute_path(path).unwrap().into(),
         },
         access,
     )

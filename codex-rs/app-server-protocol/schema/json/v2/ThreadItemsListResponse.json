@@ -71,6 +71,7 @@
     "CollabAgentStatus": {
       "enum": [
         "pendingInit",
+        "unloaded",
         "running",
         "interrupted",
         "completed",
@@ -227,7 +228,8 @@
         "inProgress",
         "completed",
         "failed",
-        "declined"
+        "declined",
+        "refused"
       ],
       "type": "string"
     },
@@ -1338,6 +1340,13 @@
                 "null"
               ]
             },
+            "providerAccount": {
+              "description": "The named account the spawned agent uses (`default` included), only while named accounts are on.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "reasoningEffort": {
               "anyOf": [
                 {
@@ -1398,8 +1407,20 @@
         },
         {
           "properties": {
+            "agentNickname": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "agentPath": {
               "type": "string"
+            },
+            "agentRole": {
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "agentThreadId": {
               "type": "string"
@@ -1427,6 +1448,12 @@
                 }
               ],
               "description": "Resolved reasoning effort at sub-agent creation, when known."
+            },
+            "taskPreview": {
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "type": {
               "enum": [

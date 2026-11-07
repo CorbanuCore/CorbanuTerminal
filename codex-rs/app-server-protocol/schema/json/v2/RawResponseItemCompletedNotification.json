@@ -1132,17 +1132,14 @@
                 }
               ]
             },
-<<<<<<< HEAD
             "anthropic_content_block": {
               "description": "Provider-native server-side search blocks that must be replayed as assistant content for providers that own the web-search execution."
-||||||| 413492cd6c
-=======
+            },
             "encrypted_content": {
               "type": [
                 "string",
                 "null"
               ]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             },
             "id": {
               "type": [

@@ -5,6 +5,58 @@
       "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
       "type": "string"
     },
+    "AgentClass": {
+      "oneOf": [
+        {
+          "properties": {
+            "class": {
+              "enum": [
+                "crew_member"
+              ],
+              "type": "string"
+            },
+            "crew_id": {
+              "type": "string"
+            },
+            "human_addressable": {
+              "type": "boolean"
+            },
+            "logical_member_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "class",
+            "crew_id",
+            "human_addressable",
+            "logical_member_id"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "assignment_id": {
+              "type": "string"
+            },
+            "class": {
+              "enum": [
+                "ephemeral_task"
+              ],
+              "type": "string"
+            },
+            "retention": {
+              "$ref": "#/definitions/RetentionPolicy"
+            }
+          },
+          "required": [
+            "assignment_id",
+            "class",
+            "retention"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "AgentMessageDelivery": {
       "enum": [
         "async"
@@ -126,6 +178,13 @@
           "type": "object"
         },
         {
+          "description": "The request exceeded the provider plan's entitlement (e.g. context size).",
+          "enum": [
+            "planEntitlementExceeded"
+          ],
+          "type": "string"
+        },
+        {
           "additionalProperties": false,
           "description": "The response SSE stream disconnected in the middle of a turn before completion.",
           "properties": {
@@ -224,6 +283,7 @@
     "CollabAgentStatus": {
       "enum": [
         "pendingInit",
+        "unloaded",
         "running",
         "interrupted",
         "completed",
@@ -380,7 +440,8 @@
         "inProgress",
         "completed",
         "failed",
-        "declined"
+        "declined",
+        "refused"
       ],
       "type": "string"
     },
@@ -995,6 +1056,14 @@
       "minLength": 1,
       "type": "string"
     },
+    "RetentionPolicy": {
+      "enum": [
+        "close_on_completion",
+        "unload_on_completion",
+        "retain"
+      ],
+      "type": "string"
+    },
     "SessionSource": {
       "oneOf": [
         {
@@ -1059,6 +1128,18 @@
           "properties": {
             "thread_spawn": {
               "properties": {
+                "agent_class": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/AgentClass"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Product-level retention and addressing classification for this native thread.\n\nOlder rollouts omit this field and remain resumable as unclassified agents."
+                },
                 "agent_nickname": {
                   "default": null,
                   "type": [
@@ -1948,6 +2029,13 @@
                 "null"
               ]
             },
+            "providerAccount": {
+              "description": "The named account the spawned agent uses (`default` included), only while named accounts are on.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "reasoningEffort": {
               "anyOf": [
                 {
@@ -2008,8 +2096,20 @@
         },
         {
           "properties": {
+            "agentNickname": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "agentPath": {
               "type": "string"
+            },
+            "agentRole": {
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "agentThreadId": {
               "type": "string"
@@ -2037,6 +2137,12 @@
                 }
               ],
               "description": "Resolved reasoning effort at sub-agent creation, when known."
+            },
+            "taskPreview": {
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "type": {
               "enum": [

@@ -40,7 +40,7 @@ mod reference {
         links
             .spellings(path, cwd)
             .iter()
-            .any(|spelled| policy.can_write_path_with_cwd(spelled.as_path(), cwd))
+            .any(|spelled| policy.can_write_local_path_with_cwd(spelled.as_path(), cwd))
     }
 
     fn can_write_normalized(
@@ -69,7 +69,7 @@ mod reference {
                 path => match resolve_entry_path(path, cwd_absolute.as_ref()) {
                     Some(path) => FileSystemSandboxEntry {
                         path: FileSystemPath::Path {
-                            path: normalize_effective_absolute_path(path),
+                            path: normalize_effective_absolute_path(path).into(),
                         },
                         ..entry.clone()
                     },
@@ -78,7 +78,7 @@ mod reference {
             })
             .collect();
         if read_only_wins {
-            let read_only: Vec<AbsolutePathBuf> = entries
+            let read_only: Vec<codex_utils_path_uri::PathUri> = entries
                 .iter()
                 .filter(|entry| entry.access == FileSystemAccessMode::Read)
                 .filter_map(|entry| match &entry.path {
@@ -99,7 +99,8 @@ mod reference {
             glob_scan_max_depth: policy.glob_scan_max_depth,
             entries,
         };
-        normalized.can_write_path_with_cwd(normalize_effective_absolute_path(path).as_path(), cwd)
+        normalized
+            .can_write_local_path_with_cwd(normalize_effective_absolute_path(path).as_path(), cwd)
     }
 }
 
@@ -108,7 +109,12 @@ fn abs(path: &Path) -> AbsolutePathBuf {
 }
 
 fn entry(path: &Path, access: FileSystemAccessMode) -> FileSystemSandboxEntry {
-    FileSystemSandboxEntry::new(FileSystemPath::Path { path: abs(path) }, access)
+    FileSystemSandboxEntry::new(
+        FileSystemPath::Path {
+            path: abs(path).into(),
+        },
+        access,
+    )
 }
 
 fn special(value: FileSystemSpecialPath, access: FileSystemAccessMode) -> FileSystemSandboxEntry {
@@ -177,7 +183,7 @@ fn policies(layout: &Layout) -> Vec<(&'static str, FileSystemSandboxPolicy)> {
         entry(&real.join("ws/.codex"), Deny),
         FileSystemSandboxEntry::skip_missing_path(
             FileSystemPath::Path {
-                path: abs(&real.join("missing/a/b")),
+                path: abs(&real.join("missing/a/b")).into(),
             },
             Deny,
         ),

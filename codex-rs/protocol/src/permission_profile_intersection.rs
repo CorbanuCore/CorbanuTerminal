@@ -61,7 +61,7 @@ pub fn intersect_effective_permission_profiles(
                         "workspace permissions must already be materialized".to_string(),
                     ));
                 }
-                FileSystemPath::GlobPattern { pattern }
+                FileSystemPath::GlobPattern { pattern, .. }
                     if pattern.starts_with(&project_roots_glob_pattern(Path::new(""))) =>
                 {
                     return Err(PermissionIntersectionError::UnsupportedPath(pattern));
@@ -314,7 +314,7 @@ fn normalize_policy(
                 }
                 entry.path = physical.into();
             }
-            FileSystemPath::GlobPattern { pattern }
+            FileSystemPath::GlobPattern { pattern, .. }
                 if entry.access != FileSystemAccessMode::Deny || entry.skips_missing_path() =>
             {
                 return Err(PermissionIntersectionError::UnsupportedPath(format!(

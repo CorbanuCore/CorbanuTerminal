@@ -10,6 +10,8 @@ fn subagent_activity_legacy_event_preserves_available_identity() {
     let agent_thread_id = ThreadId::new();
     let agent_path = AgentPath::try_from("/root/worker").expect("valid agent path");
     let item = SubAgentActivityItem {
+        model: None,
+        reasoning_effort: None,
         id: "activity-1".to_string(),
         kind: SubAgentActivityKind::Interacted,
         agent_thread_id,
@@ -22,6 +24,8 @@ fn subagent_activity_legacy_event_preserves_available_identity() {
     assert_eq!(
         actual,
         SubAgentActivityEvent {
+            model: None,
+            reasoning_effort: None,
             event_id: "activity-1".to_string(),
             occurred_at_ms: 123,
             agent_thread_id,

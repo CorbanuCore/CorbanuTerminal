@@ -520,15 +520,11 @@ impl ThreadHistoryBuilder {
             | RolloutItem::TurnContext(_)
             | RolloutItem::TokenUsageRecord(_)
             | RolloutItem::WorldState(_)
-<<<<<<< HEAD
             | RolloutItem::SourceOrigin(_)
-||||||| 413492cd6c
-=======
             | RolloutItem::RealtimeItem(_)
             | RolloutItem::RetainedContext(_)
             | RolloutItem::SecurityRiskScore(_)
             | RolloutItem::DynamicToolsUpdated { .. }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             | RolloutItem::SessionMeta(_) => {}
         }
     }
@@ -1200,18 +1196,12 @@ impl ThreadHistoryBuilder {
             kind: payload.kind.into(),
             agent_thread_id: payload.agent_thread_id.to_string(),
             agent_path: String::from(payload.agent_path.clone()),
-<<<<<<< HEAD
             agent_nickname: payload.agent_nickname.clone(),
             agent_role: payload.agent_role.clone(),
             task_preview: payload.task_preview.clone(),
-        });
-||||||| 413492cd6c
-        });
-=======
         };
         let times = ItemTimes::legacy_completion(payload.occurred_at_ms);
         self.upsert_item(/*turn_id*/ None, item, times);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn handle_collab_waiting_begin(
@@ -5658,6 +5648,9 @@ mod tests {
                         kind: crate::protocol::v2::SubAgentActivityKind::Completed,
                         agent_thread_id: child_thread_id.to_string(),
                         agent_path: "/root/worker".into(),
+                        agent_nickname: None,
+                        agent_role: None,
+                        task_preview: None,
                     },
                 ]
             );

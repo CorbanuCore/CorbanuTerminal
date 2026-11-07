@@ -91,14 +91,10 @@ pub fn project_rollout_line(line: &RolloutLine) -> ThreadHistoryChangeSet {
         | RolloutItem::TurnContext(_)
         | RolloutItem::TokenUsageRecord(_)
         | RolloutItem::WorldState(_)
-<<<<<<< HEAD
         | RolloutItem::SourceOrigin(_)
-||||||| 413492cd6c
-=======
         | RolloutItem::RealtimeItem(_)
         | RolloutItem::RetainedContext(_)
         | RolloutItem::SecurityRiskScore(_)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         | RolloutItem::EventMsg(_) => ThreadHistoryChangeSet::default(),
     }
 }

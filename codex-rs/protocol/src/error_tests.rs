@@ -705,7 +705,7 @@ fn unexpected_status_payment_required_is_not_retryable() {
         identity_error_code: None,
     });
 
-    assert!(!err.is_retryable());
+    assert_eq!(err.retry_delay(/*retry_count*/ 1), None);
 }
 
 #[test]
@@ -731,7 +731,11 @@ fn unexpected_status_preserves_definite_auth_rejection_for_clients() {
             if status == StatusCode::UNAUTHORIZED {
                 CodexErrorInfo::Unauthorized
             } else {
-                CodexErrorInfo::Other
+                // Upstream reports the other statuses as connection failures
+                // carrying the status code.
+                CodexErrorInfo::HttpConnectionFailed {
+                    http_status_code: Some(status.as_u16()),
+                }
             }
         );
     }
@@ -757,7 +761,10 @@ fn unexpected_status_transient_statuses_are_retryable() {
             identity_error_code: None,
         });
 
-        assert!(err.is_retryable(), "{status} should be retryable");
+        assert!(
+            err.retry_delay(/*retry_count*/ 1).is_some(),
+            "{status} should be retryable"
+        );
     }
 }
 
@@ -870,10 +877,10 @@ fn user_visible_errors_redact_provider_url_credentials() {
         .status(StatusCode::TOO_MANY_REQUESTS)
         .body("")
         .unwrap();
-    let source = HttpResponse::from(response)
+    let mut source = HttpResponse::from(response)
         .error_for_status_ref()
-        .unwrap_err()
-        .with_url("http://example.com/v1?key=fake-stream-key".parse().unwrap());
+        .unwrap_err();
+    *source.url_mut().unwrap() = "http://example.com/v1?key=fake-stream-key".parse().unwrap();
     let err = CodexErr::ResponseStreamFailed(ResponseStreamFailed {
         source,
         request_id: None,

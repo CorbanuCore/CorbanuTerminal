@@ -93,12 +93,8 @@ export type { SubAgentSource } from "./SubAgentSource";
 export type { ThreadId } from "./ThreadId";
 export type { ThreadMemoryMode } from "./ThreadMemoryMode";
 export type { Tool } from "./Tool";
-<<<<<<< HEAD
-export type { UtcHourWindow } from "./UtcHourWindow";
-||||||| 413492cd6c
-=======
 export type { ToolExposureSurface } from "./ToolExposureSurface";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+export type { UtcHourWindow } from "./UtcHourWindow";
 export type { Verbosity } from "./Verbosity";
 export type { WebSearchAction } from "./WebSearchAction";
 export type { WebSearchContextSize } from "./WebSearchContextSize";

@@ -136,7 +136,6 @@ pub struct ThreadStartParams {
     /// Optional client-supplied analytics source classification for this thread.
     #[ts(optional = nullable)]
     pub thread_source: Option<ThreadSource>,
-<<<<<<< HEAD
     /// If set, start this thread as a native spawned-agent child of the given parent.
     #[experimental("thread/start.spawnAgentParentThreadId")]
     #[ts(optional = nullable)]
@@ -145,8 +144,6 @@ pub struct ThreadStartParams {
     #[experimental("thread/start.spawnAgentRole")]
     #[ts(optional = nullable)]
     pub spawn_agent_role: Option<String>,
-||||||| 413492cd6c
-=======
     /// Optional project identity for this new thread. Durable threads persist
     /// the assignment; ephemeral threads expose it only in live responses.
     #[experimental("thread/start.projectId")]
@@ -158,7 +155,6 @@ pub struct ThreadStartParams {
     #[experimental("thread/start.daybreakEnabled")]
     #[ts(optional = nullable)]
     pub daybreak_enabled: Option<bool>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     /// Optional sticky environments for this thread.
     ///
     /// Omitted selects the default environment when environment access is
@@ -353,18 +349,14 @@ impl ThreadStartResponse {
 #[ts(export_to = "v2/")]
 pub struct ThreadSettingsUpdateParams {
     pub thread_id: String,
-<<<<<<< HEAD
     /// Wait for this operation's Core outcome, including unchanged selections.
     /// Omission preserves the legacy acceptance-only reply.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub confirm: bool,
-||||||| 413492cd6c
-=======
     /// Replace this thread's disabled plugin IDs.
     /// Omitted/null preserves the list; [] clears it.
     #[ts(optional = nullable)]
     pub disabled_plugin_ids: Option<Vec<String>>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     /// Override the working directory for subsequent turns.
     #[ts(optional = nullable)]
     pub cwd: Option<PathBuf>,
@@ -2110,7 +2102,6 @@ pub struct ThreadItemsListResponse {
     pub backwards_cursor: Option<String>,
 }
 
-<<<<<<< HEAD
 /// Released compatibility request for listing the items in one turn.
 /// New clients should use `thread/items/list` with `turn_id` populated.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -2135,8 +2126,8 @@ pub struct ThreadTurnsItemsListResponse {
     pub data: Vec<ThreadItem>,
     pub next_cursor: Option<String>,
     pub backwards_cursor: Option<String>,
-||||||| 413492cd6c
-=======
+}
+
 /// EXPERIMENTAL - retrieve a bounded set of persisted items from one turn.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
@@ -2223,7 +2214,6 @@ pub struct ThreadTimelineListResponse {
     pub data: Vec<ThreadTimelineEntry>,
     pub next_cursor: Option<String>,
     pub active_realtime_session_at_page_start: Option<String>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

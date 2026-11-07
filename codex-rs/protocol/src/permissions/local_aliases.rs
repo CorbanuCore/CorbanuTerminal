@@ -59,6 +59,10 @@ impl LocalPolicyContext {
 pub struct LocalFileSystemPolicyMatcher<'a> {
     policy: Cow<'a, FileSystemSandboxPolicy>,
     context: FileSystemSandboxPolicyContext<'a>,
+    /// #606 (Corbanu): whether the configured policy denies reads, taken
+    /// before local resolution can drop deny entries it cannot resolve here.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    denies_reads: bool,
 }
 
 impl FileSystemSandboxPolicy {
@@ -70,6 +74,7 @@ impl FileSystemSandboxPolicy {
         &'a self,
         context: &FileSystemSandboxPolicyContext<'a>,
     ) -> io::Result<LocalFileSystemPolicyMatcher<'a>> {
+        let denies_reads = self.has_denied_read_restrictions();
         let mut policy = Cow::Borrowed(self);
         if cfg!(target_os = "macos") {
             let policy = policy.to_mut();
@@ -107,6 +112,7 @@ impl FileSystemSandboxPolicy {
         Ok(LocalFileSystemPolicyMatcher {
             policy,
             context: *context,
+            denies_reads,
         })
     }
 }
@@ -116,8 +122,13 @@ impl LocalFileSystemPolicyMatcher<'_> {
     pub fn can_write_path(&self, path: &PathUri) -> io::Result<bool> {
         self.with_path(path, |path| -> io::Result<bool> {
             let writable = self.policy.can_write_path(path, &self.context);
+            // #606 (Corbanu): case aliases of protected metadata names are
+            // refused once the policy denies reads (Moderate and Aggressive);
+            // a policy without denied paths keeps today's answers. Seatbelt
+            // already matches those names in any case.
             #[cfg(target_os = "macos")]
             if writable
+                && self.denies_reads
                 && !self
                     .policy
                     .has_full_disk_write_access_with_context(&self.context)

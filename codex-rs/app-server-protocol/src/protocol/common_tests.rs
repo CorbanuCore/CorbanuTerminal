@@ -46,21 +46,23 @@ fn client_response_jsonrpc_parts_preserve_payloads_and_request_ids() -> Result<(
                 auth_method: Some(AuthMode::Chatgpt),
                 auth_token: None,
                 requires_openai_auth: Some(true),
+                has_codex_backend_auth: None,
             }),
             json!({
                 "authMethod": "chatgpt",
                 "authToken": null,
                 "requiresOpenaiAuth": true,
+                "hasCodexBackendAuth": null,
             }),
         ),
         (
             ClientResponsePayload::GetAccount(v2::GetAccountResponse {
-                account: Some(v2::Account::ApiKey {}),
+                account: Some(v2::Account::ApiKey { env_var: None }),
                 requires_openai_auth: false,
                 workspace_routing: None,
             }),
             json!({
-                "account": { "type": "apiKey" },
+                "account": { "type": "apiKey", "envVar": null },
                 "requiresOpenaiAuth": false,
                 "workspaceRouting": null,
             }),

@@ -910,6 +910,19 @@ fn rollout_item_variants_preserve_existing_payload_shapes() -> Result<()> {
                 "text": "hello",
             },
         }),
+        // Corbanu provenance record; the wire shape is unchanged from `main`.
+        json!({
+            "type": "source_origin",
+            "payload": {
+                "version": 2,
+                "entries": [{
+                    "scope": "message",
+                    "key": "00",
+                    "origin": { "type": "human" },
+                }],
+                "mac": "ab",
+            },
+        }),
     ];
 
     for expected in fixtures {
@@ -924,7 +937,7 @@ fn rollout_item_variants_preserve_existing_payload_shapes() -> Result<()> {
 fn rollout_item_schema_matches_tagged_payload_and_sibling_metadata() -> Result<()> {
     let schema = serde_json::to_value(schemars::schema_for!(RolloutItem))?;
     let variants = schema["oneOf"].as_array().expect("rollout variants");
-    assert_eq!(variants.len(), 13);
+    assert_eq!(variants.len(), 14);
 
     for variant in variants {
         let required = variant["required"].as_array().expect("required fields");

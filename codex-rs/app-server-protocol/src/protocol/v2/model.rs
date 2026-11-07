@@ -124,17 +124,13 @@ pub struct Model {
     pub availability_nux: Option<ModelAvailabilityNux>,
     pub display_name: String,
     pub description: String,
-<<<<<<< HEAD
     /// Canonical provider, capability, and billing policy used for spawned work.
     ///
     /// This field is always present on the wire. `null` means the route is not trusted for
     /// orchestration; clients must not infer eligibility from its display name.
     pub orchestration: Option<ModelOrchestrationMetadata>,
-||||||| 413492cd6c
-=======
     #[serde(default)]
     pub model_specialty: Option<String>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub hidden: bool,
     pub supported_reasoning_efforts: Vec<ReasoningEffortOption>,
     pub default_reasoning_effort: ReasoningEffort,

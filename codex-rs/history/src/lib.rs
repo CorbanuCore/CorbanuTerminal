@@ -234,6 +234,8 @@ pub enum RolloutItem {
     EventMsg(EventMsg),
     /// Sparse, model-invisible facts used to reconstruct realtime presentation.
     RealtimeItem(RealtimeItem),
+    /// Host-recorded origins for preceding items (`source_envelopes`).
+    SourceOrigin(codex_protocol::provenance::SourceOriginRecord),
 }
 
 impl Serialize for RolloutItem {

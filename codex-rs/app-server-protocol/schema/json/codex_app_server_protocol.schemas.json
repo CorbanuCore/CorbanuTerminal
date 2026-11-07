@@ -7334,7 +7334,6 @@
         },
         "type": "object"
       },
-<<<<<<< HEAD
       "AgentClass": {
         "oneOf": [
           {
@@ -7386,14 +7385,12 @@
             "type": "object"
           }
         ]
-||||||| 413492cd6c
-=======
+      },
       "AgentMessageDelivery": {
         "enum": [
           "async"
         ],
         "type": "string"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
       },
       "AgentMessageDeltaNotification": {
         "$schema": "http://json-schema.org/draft-07/schema#",
@@ -16275,19 +16272,6 @@
           "model": {
             "type": "string"
           },
-<<<<<<< HEAD
-          "orchestration": {
-            "anyOf": [
-              {
-                "$ref": "#/definitions/v2/ModelOrchestrationMetadata"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Canonical provider, capability, and billing policy used for spawned work.\n\nThis field is always present on the wire. `null` means the route is not trusted for orchestration; clients must not infer eligibility from its display name."
-||||||| 413492cd6c
-=======
           "modelSpecialty": {
             "default": null,
             "type": [
@@ -16305,7 +16289,17 @@
               }
             ],
             "description": "Multi-agent runtime declared by this model, when available."
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+          },
+          "orchestration": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/v2/ModelOrchestrationMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Canonical provider, capability, and billing policy used for spawned work.\n\nThis field is always present on the wire. `null` means the route is not trusted for orchestration; clients must not infer eligibility from its display name."
           },
           "serviceTiers": {
             "default": [],
@@ -20799,17 +20793,14 @@
                   }
                 ]
               },
-<<<<<<< HEAD
               "anthropic_content_block": {
                 "description": "Provider-native server-side search blocks that must be replayed as assistant content for providers that own the web-search execution."
-||||||| 413492cd6c
-=======
+              },
               "encrypted_content": {
                 "type": [
                   "string",
                   "null"
                 ]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
               },
               "id": {
                 "type": [
@@ -24149,14 +24140,6 @@
               "kind": {
                 "$ref": "#/definitions/v2/SubAgentActivityKind"
               },
-<<<<<<< HEAD
-              "taskPreview": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-||||||| 413492cd6c
-=======
               "model": {
                 "description": "Resolved model at sub-agent creation; absent from older records and other activities.",
                 "type": [
@@ -24174,7 +24157,12 @@
                   }
                 ],
                 "description": "Resolved reasoning effort at sub-agent creation, when known."
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+              },
+              "taskPreview": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "type": {
                 "enum": [
@@ -25636,7 +25624,13 @@
         "title": "ThreadRealtimeTranscriptDoneNotification",
         "type": "object"
       },
-<<<<<<< HEAD
+      "ThreadRealtimeTranscriptRole": {
+        "enum": [
+          "user",
+          "assistant"
+        ],
+        "type": "string"
+      },
       "ThreadRecordSentModelRequestParams": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "description": "One model request a client sent itself, reported so the operator's ledger can record spend this process never saw.\n\nThe Claude panes bridge is the caller: it posts to a provider from inside the TUI, which does not run the model client. Only routes the server recognises are recorded.",
@@ -25685,15 +25679,6 @@
         ],
         "title": "ThreadRecordSentModelRequestResponse",
         "type": "object"
-||||||| 413492cd6c
-=======
-      "ThreadRealtimeTranscriptRole": {
-        "enum": [
-          "user",
-          "assistant"
-        ],
-        "type": "string"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
       },
       "ThreadResumeInitialTurnsPageParams": {
         "properties": {
@@ -28484,7 +28469,6 @@
         },
         "type": "object"
       },
-<<<<<<< HEAD
       "WeekdaySet": {
         "description": "UTC weekdays on which a scheduled plan peak applies.\n\n`ModelBilling::PlanSchedule::peak_weekdays == None` retains the legacy behavior where the peak window applies every day.",
         "properties": {
@@ -28520,8 +28504,7 @@
           "wednesday"
         ],
         "type": "object"
-||||||| 413492cd6c
-=======
+      },
       "WindowsSandboxImplementation": {
         "enum": [
           "elevated",
@@ -28529,7 +28512,6 @@
           "mxc"
         ],
         "type": "string"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
       },
       "WindowsSandboxReadiness": {
         "enum": [

@@ -18,12 +18,8 @@ export type { AdditionalContextKind } from "./AdditionalContextKind";
 export type { AdditionalFileSystemPermissions } from "./AdditionalFileSystemPermissions";
 export type { AdditionalNetworkPermissions } from "./AdditionalNetworkPermissions";
 export type { AdditionalPermissionProfile } from "./AdditionalPermissionProfile";
-<<<<<<< HEAD
 export type { AgentClass } from "./AgentClass";
-||||||| 413492cd6c
-=======
 export type { AgentMessageDelivery } from "./AgentMessageDelivery";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 export type { AgentMessageDeltaNotification } from "./AgentMessageDeltaNotification";
 export type { AllowDenyRequirement } from "./AllowDenyRequirement";
 export type { AnalyticsConfig } from "./AnalyticsConfig";
@@ -448,12 +444,8 @@ export type { RemoteControlStatusChangedNotification } from "./RemoteControlStat
 export type { RequestHeader } from "./RequestHeader";
 export type { RequestPermissionProfile } from "./RequestPermissionProfile";
 export type { ResidencyRequirement } from "./ResidencyRequirement";
-<<<<<<< HEAD
-export type { RetentionPolicy } from "./RetentionPolicy";
-||||||| 413492cd6c
-=======
 export type { ResponseUsageMetadata } from "./ResponseUsageMetadata";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+export type { RetentionPolicy } from "./RetentionPolicy";
 export type { ReviewDelivery } from "./ReviewDelivery";
 export type { ReviewStartParams } from "./ReviewStartParams";
 export type { ReviewStartResponse } from "./ReviewStartResponse";
@@ -582,13 +574,9 @@ export type { ThreadRealtimeStartTransport } from "./ThreadRealtimeStartTranspor
 export type { ThreadRealtimeStartedNotification } from "./ThreadRealtimeStartedNotification";
 export type { ThreadRealtimeTranscriptDeltaNotification } from "./ThreadRealtimeTranscriptDeltaNotification";
 export type { ThreadRealtimeTranscriptDoneNotification } from "./ThreadRealtimeTranscriptDoneNotification";
-<<<<<<< HEAD
+export type { ThreadRealtimeTranscriptRole } from "./ThreadRealtimeTranscriptRole";
 export type { ThreadRecordSentModelRequestParams } from "./ThreadRecordSentModelRequestParams";
 export type { ThreadRecordSentModelRequestResponse } from "./ThreadRecordSentModelRequestResponse";
-||||||| 413492cd6c
-=======
-export type { ThreadRealtimeTranscriptRole } from "./ThreadRealtimeTranscriptRole";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 export type { ThreadResumeInitialTurnsPageParams } from "./ThreadResumeInitialTurnsPageParams";
 export type { ThreadResumeParams } from "./ThreadResumeParams";
 export type { ThreadResumeResponse } from "./ThreadResumeResponse";

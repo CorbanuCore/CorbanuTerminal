@@ -25,7 +25,10 @@ fn workspace(subpath: &str) -> FileSystemPath {
 }
 
 fn glob(pattern: String) -> FileSystemPath {
-    FileSystemPath::GlobPattern { pattern }
+    FileSystemPath::GlobPattern {
+        scan: None,
+        pattern,
+    }
 }
 
 fn context<'a>(cwd: &'a PathUri, roots: &'a [PathUri]) -> FileSystemSandboxPolicyContext<'a> {
