@@ -1075,6 +1075,8 @@ fn escape_glob_literal(text: &str) -> String {
     text.chars()
         .map(|ch| match ch {
             '*' | '?' | '[' | '{' | '}' => format!("[{ch}]"),
+            // The glob syntax treats `\` as an escape too.
+            '\\' => "[\\\\]".to_string(),
             other => other.to_string(),
         })
         .collect()
@@ -1086,7 +1088,7 @@ fn canonicalize_glob_static_prefix_for_sandbox(pattern: &str) -> Option<String> 
         .find_map(|(index, ch)| matches!(ch, '*' | '?' | '[' | ']' | '{' | '\\').then_some(index));
     let Some(first_glob_index) = first_glob_index else {
         return normalize_path_for_sandbox(Path::new(pattern))
-            .map(|path| path.to_string_lossy().to_string());
+            .map(|path| escape_glob_literal(&path.to_string_lossy()));
     };
 
     let static_prefix = &pattern[..first_glob_index];
