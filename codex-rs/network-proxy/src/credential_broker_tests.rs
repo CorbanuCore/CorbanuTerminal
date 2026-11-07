@@ -2421,16 +2421,46 @@ fn pf_28_s02_legacy_route_returns_a_gate_for_the_injected_value() {
 
 #[test]
 fn pf_28_s02_legacy_route_is_unchanged_without_the_gate() {
-    let broker = CredentialBroker::new(/*enabled*/ true);
+    // Every Corbanu proxy uses main's engine; with no hardening armed its
+    // in-process route injects on any path of the bound host, as on main.
+    let broker = CredentialBroker::new(/*enabled*/ true).with_main_engine();
+    assert!(!broker.protections_armed());
     let mut env = env_map([("GH_TOKEN", PF28_S02_TOKEN)]);
     broker.virtualize_child_env(&mut env);
-    // Without any hardening upstream's engine brokers (the MITM path calls
-    // `inject_request_headers` there): any path on the bound host, unchanged.
-    assert!(!broker.hardened());
     let mut headers = headers_with_bearer(&env["GH_TOKEN"]);
-    broker.inject_request_headers("https://github.com/settings/tokens", &mut headers);
+    let routing = broker.route_request_credentials(
+        "https",
+        "github.com",
+        /*port*/ 443,
+        "GET",
+        "/settings/tokens",
+        &mut headers,
+    );
+    assert!(matches!(routing, Ok(CredentialRouting::Direct(None))));
     assert_eq!(
         authorization(&headers),
         Some(format!("Bearer {PF28_S02_TOKEN}").as_str())
+    );
+}
+
+#[test]
+fn main_engine_never_injects_raw_values_over_plain_http() {
+    let broker = CredentialBroker::new(/*enabled*/ true).with_main_engine();
+    let mut env = env_map([("GH_TOKEN", PF28_S02_TOKEN)]);
+    broker.virtualize_child_env(&mut env);
+    let dummy = env["GH_TOKEN"].clone();
+    let mut headers = headers_with_bearer(&dummy);
+    let routing = broker.route_request_credentials(
+        "http",
+        "github.com",
+        /*port*/ 80,
+        "GET",
+        "/settings/tokens",
+        &mut headers,
+    );
+    assert!(matches!(routing, Ok(CredentialRouting::Direct(None))));
+    assert_eq!(
+        authorization(&headers),
+        Some(format!("Bearer {dummy}").as_str())
     );
 }

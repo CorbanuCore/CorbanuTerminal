@@ -484,6 +484,9 @@ impl HardenedBroker {
                 .allows_request(scheme, &normalized_host, port, method, path)?;
         }
         match &credential.secret {
+            // `main`'s MITM was HTTPS-only; upstream's plaintext tunnels must
+            // never carry a raw value in cleartext.
+            RecordSecret::Raw(_) if scheme != "https" => Ok(CredentialRouting::Direct(None)),
             RecordSecret::Raw(real_value) => {
                 let gate = self
                     .response_gate
