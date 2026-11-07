@@ -96,20 +96,29 @@ impl ReqwestTransport {
         // PF-27-S05: a broker-authorized request goes to the broker and
         // nowhere else, whichever client or route pool the caller built; with
         // no broker it is not sent.
+        // A managed application network policy approves the brokered request's
+        // real destination, and can revoke it, as for any other request.
+        let permit = match self.managed_network_policy() {
+            Some(policy)
+                if prepared
+                    .headers
+                    .contains_key(crate::MODEL_BROKER_FRAME_HEADER)
+                    && !self.is_broker_socket() =>
+            {
+                let target = brokered_target_url(&url).ok_or_else(|| {
+                    TransportError::Build(
+                        "a brokered request needs a plain-HTTP broker URL".to_string(),
+                    )
+                })?;
+                Some(policy.acquire(&target).map_err(TransportError::Policy)?)
+            }
+            _ => None,
+        };
         let broker = if prepared
             .headers
             .contains_key(crate::MODEL_BROKER_FRAME_HEADER)
             && !self.is_broker_socket()
         {
-            // A managed application network policy would have to approve and
-            // be able to revoke the brokered destination; until the broker
-            // path does that, such requests are refused, not sent unchecked.
-            if self.network_policy_is_managed() {
-                return Err(TransportError::Build(
-                    "brokered model requests are not available under a managed network policy"
-                        .to_string(),
-                ));
-            }
             match crate::model_broker_route::model_broker_route().ok_or_else(|| {
                 if let Some(frame) = crate::model_broker_route::broker_frame(&prepared.headers) {
                     crate::model_broker_route::report(
@@ -124,6 +133,7 @@ impl ReqwestTransport {
                 ModelBrokerRoute::Sender(sender) => {
                     return Ok(Sent::Broker {
                         sender,
+                        permit,
                         request: ModelBrokerRequest {
                             method,
                             url,
@@ -145,14 +155,25 @@ impl ReqwestTransport {
         *request.request.body_mut() = prepared.body.map(Into::into);
 
         let response = match (&broker, &self.client) {
-            (Some(client), _) | (None, TransportClient::Fixed(client)) => {
-                Self::send_with_client(client, request).await
+            (Some(client), _) => {
+                let send = Self::send_with_client(client, request);
+                match &permit {
+                    Some(permit) => permit
+                        .run(send)
+                        .await
+                        .map_err(TransportError::Policy)??
+                        .with_permit(permit.clone()),
+                    None => send.await?,
+                }
+            }
+            (None, TransportClient::Fixed(client)) => {
+                Self::send_with_client(client, request).await?
             }
             (None, TransportClient::RouteAware(client)) => client
                 .send(request)
                 .await
-                .map_err(Self::map_route_aware_error),
-        }?;
+                .map_err(Self::map_route_aware_error)?,
+        };
         Ok(Sent::Response(response))
     }
 
@@ -178,14 +199,14 @@ impl ReqwestTransport {
         }
     }
 
-    /// Whether the caller's routes are governed by a managed application network policy.
-    fn network_policy_is_managed(&self) -> bool {
+    /// The caller's managed application network policy, if its routes have one.
+    fn managed_network_policy(&self) -> Option<&crate::NetworkPolicy> {
         match &self.client {
-            TransportClient::Fixed(client) => matches!(
-                &client.backend,
-                HttpClientBackend::Routed(pool) if pool.network_policy_is_managed()
-            ),
-            TransportClient::RouteAware(pool) => pool.network_policy_is_managed(),
+            TransportClient::Fixed(client) => match &client.backend {
+                HttpClientBackend::Routed(pool) => pool.managed_network_policy(),
+                HttpClientBackend::Direct(_) => None,
+            },
+            TransportClient::RouteAware(pool) => pool.managed_network_policy(),
         }
     }
 
@@ -278,11 +299,13 @@ impl ReqwestTransport {
             Sent::Response(resp) => resp,
             Sent::Broker {
                 sender,
+                permit,
                 request,
                 timeout,
             } => {
                 return execute_via_broker(
                     sender.as_ref(),
+                    permit,
                     request,
                     timeout,
                     response_body_limit_bytes,
@@ -336,11 +359,13 @@ impl ReqwestTransport {
             Sent::Response(resp) => resp,
             Sent::Broker {
                 sender,
+                permit,
                 request,
                 timeout,
             } => {
                 return stream_via_broker(
                     sender.as_ref(),
+                    permit,
                     request,
                     timeout,
                     response_body_limit_bytes,
@@ -405,9 +430,29 @@ enum Sent {
     Response(HttpResponse),
     Broker {
         sender: Arc<dyn ModelBrokerSender>,
+        /// The managed policy's permit for the real destination, if any.
+        permit: Option<crate::NetworkPermit>,
         request: ModelBrokerRequest,
         timeout: Option<Duration>,
     },
+}
+
+/// The HTTPS destination a broker URL stands for: core rewrites a brokered
+/// request to plain HTTP on the same host and port (`core::model_broker_auth`).
+fn brokered_target_url(url: &str) -> Option<reqwest::Url> {
+    let mut url = reqwest::Url::parse(url).ok()?;
+    if url.scheme() != "http"
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.fragment().is_some()
+        || matches!(url.host()?, url::Host::Ipv6(_))
+    {
+        return None;
+    }
+    let port = url.port_or_known_default()?;
+    url.set_scheme("https").ok()?;
+    url.set_port(Some(port)).ok()?;
+    Some(url)
 }
 
 /// Like reqwest's request timeout: one deadline for the whole exchange,
@@ -493,33 +538,63 @@ fn limit_stream(bytes: ByteStream, max_bytes: Option<usize>) -> ByteStream {
 
 async fn execute_via_broker(
     sender: &dyn ModelBrokerSender,
+    permit: Option<crate::NetworkPermit>,
     request: ModelBrokerRequest,
     timeout: Option<Duration>,
     response_body_limit_bytes: Option<usize>,
     url: &str,
 ) -> Result<Response, TransportError> {
     let deadline = deadline(timeout);
-    let response =
-        send_via_broker(sender, request, deadline, response_body_limit_bytes, url).await?;
-    let body = before(deadline, collect(response.bytes, response_body_limit_bytes)).await?;
+    let exchange = async {
+        let response =
+            send_via_broker(sender, request, deadline, response_body_limit_bytes, url).await?;
+        let body = before(deadline, collect(response.bytes, response_body_limit_bytes)).await?;
+        Ok::<_, TransportError>((response.status, response.headers, body))
+    };
+    let (status, headers, body) = match permit {
+        Some(permit) => permit
+            .run(exchange)
+            .await
+            .map_err(TransportError::Policy)??,
+        None => exchange.await?,
+    };
     Ok(Response {
-        status: response.status,
-        headers: response.headers,
+        status,
+        headers,
         body,
     })
 }
 
 async fn stream_via_broker(
     sender: &dyn ModelBrokerSender,
+    permit: Option<crate::NetworkPermit>,
     request: ModelBrokerRequest,
     timeout: Option<Duration>,
     response_body_limit_bytes: Option<usize>,
     url: &str,
 ) -> Result<StreamResponse, TransportError> {
     let deadline = deadline(timeout);
-    let response =
-        send_via_broker(sender, request, deadline, response_body_limit_bytes, url).await?;
+    let send = send_via_broker(sender, request, deadline, response_body_limit_bytes, url);
+    let response = match &permit {
+        Some(permit) => permit.run(send).await.map_err(TransportError::Policy)??,
+        None => send.await?,
+    };
     let response_bytes = limit_stream(response.bytes, response_body_limit_bytes);
+    // The permit governs the whole body: a revocation ends the stream.
+    let response_bytes = match permit {
+        Some(permit) => {
+            futures::stream::unfold(Some((response_bytes, permit)), |state| async move {
+                let (mut bytes, permit) = state?;
+                match permit.run(bytes.next()).await {
+                    Ok(Some(chunk)) => Some((chunk, Some((bytes, permit)))),
+                    Ok(None) => None,
+                    Err(denied) => Some((Err(TransportError::Policy(denied)), None)),
+                }
+            })
+            .boxed()
+        }
+        None => response_bytes,
+    };
     let bytes = match deadline {
         // The stream ends with a timeout error once the deadline passes.
         Some(deadline) => futures::stream::unfold(Some(response_bytes), move |bytes| async move {

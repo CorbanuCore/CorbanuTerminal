@@ -280,14 +280,16 @@ async fn pf_27_s05_broker_frame_requests_go_only_to_the_broker_socket() {
 }
 
 /// PF-27-S05 on upstream's routed paths: a route-aware pool and a routed
-/// `HttpClient` refuse a frame-bearing request with no broker, send nothing,
-/// and refuse it under a managed application network policy.
+/// `HttpClient` never send a frame-bearing request to the network. With no
+/// broker it is refused; under a managed application network policy the
+/// policy must also approve the real (HTTPS) destination, and a revocation
+/// ends the brokered exchange.
 #[tokio::test]
 #[expect(
     clippy::await_holding_invalid_type,
     reason = "the broker route is process-wide; tests that install one run one at a time"
 )]
-async fn pf_27_s05_routed_transports_never_send_broker_frames_to_the_network() {
+async fn pf_27_s05_routed_transports_send_broker_frames_only_to_an_approved_broker() {
     let _route = crate::model_broker_route::ROUTE_TEST_LOCK.lock().await;
     let _uninstall = UninstallRoute;
 
@@ -304,53 +306,134 @@ async fn pf_27_s05_routed_transports_never_send_broker_frames_to_the_network() {
     );
 
     let unmanaged = || crate::HttpClientFactory::new(crate::OutboundProxyPolicy::ReqwestDefault);
-    let controller = crate::NetworkPolicyController::default();
-    let policy = controller.policy();
-    controller.publish(policy.revision(), crate::DestinationPolicy::Unrestricted);
-    let managed = unmanaged().with_network_policy(policy);
-    for (transport, expected) in [
-        (
+    let managed = |destinations: crate::DestinationPolicy| {
+        let controller = crate::NetworkPolicyController::default();
+        let policy = controller.policy();
+        controller.publish(policy.revision(), destinations);
+        (controller, unmanaged().with_network_policy(policy))
+    };
+    let transports = |factory: crate::HttpClientFactory| {
+        [
             ReqwestTransport::from_route_aware_client_pool(crate::RouteAwareClientPool::new(
-                unmanaged(),
+                factory.clone(),
                 crate::ClientRouteClass::Api,
             )),
-            "credential broker is not running",
-        ),
-        (
             ReqwestTransport::from_http_client(
-                crate::RouteAwareClientPool::new(unmanaged(), crate::ClientRouteClass::Api)
+                crate::RouteAwareClientPool::new(factory, crate::ClientRouteClass::Api)
                     .into_client(),
             ),
-            "credential broker is not running",
-        ),
-        (
-            ReqwestTransport::from_route_aware_client_pool(crate::RouteAwareClientPool::new(
-                managed.clone(),
-                crate::ClientRouteClass::Api,
-            )),
-            "managed network policy",
-        ),
-        (
-            ReqwestTransport::from_http_client(
-                crate::RouteAwareClientPool::new(managed.clone(), crate::ClientRouteClass::Api)
-                    .into_client(),
-            ),
-            "managed network policy",
-        ),
-    ] {
+        ]
+    };
+    let (_unrestricted_controller, unrestricted) = managed(crate::DestinationPolicy::Unrestricted);
+    let (_restricted_controller, restricted) = managed(crate::DestinationPolicy::Restricted {
+        allowed_hosts: ["allowed.example".to_string()].into(),
+    });
+
+    // No broker: refused on every routed path, managed or not.
+    for transport in transports(unmanaged())
+        .into_iter()
+        .chain(transports(unrestricted.clone()))
+    {
         let refused = transport.execute(framed.clone()).await;
         assert!(
-            matches!(&refused, Err(TransportError::Build(message)) if message.contains(expected)),
+            matches!(&refused, Err(TransportError::Build(message)) if message.contains("credential broker is not running")),
             "{refused:?}"
         );
         let refused = transport.stream(framed.clone()).await;
         assert!(
-            matches!(&refused, Err(TransportError::Build(message)) if message.contains(expected)),
+            matches!(&refused, Err(TransportError::Build(message)) if message.contains("credential broker is not running")),
             "{:?}",
             refused.err()
         );
     }
+
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    crate::install_model_broker_sender(Arc::new(RecordingSender {
+        seen: seen.clone(),
+        status: http::StatusCode::OK,
+        chunks: vec!["o", "k"],
+        hang: false,
+    }));
+    // A managed policy that does not allow the destination denies it before the broker.
+    for transport in transports(restricted) {
+        let denied = transport.execute(framed.clone()).await;
+        assert!(
+            matches!(&denied, Err(TransportError::Policy(_))),
+            "{denied:?}"
+        );
+    }
+    assert!(seen.lock().expect("seen").is_empty());
+    // An approved destination goes to the broker, and only there.
+    for transport in transports(unrestricted) {
+        let response = transport.execute(framed.clone()).await.expect("brokered");
+        assert_eq!(response.body.as_ref(), b"ok");
+        let mut streamed = transport
+            .stream(framed.clone())
+            .await
+            .expect("brokered stream");
+        let mut body = Vec::new();
+        while let Some(chunk) = streamed.bytes.next().await {
+            body.extend_from_slice(&chunk.expect("chunk"));
+        }
+        assert_eq!(body, b"ok");
+    }
+    assert_eq!(seen.lock().expect("seen").len(), 4);
     assert!(network.accept().is_err(), "nothing may reach the network");
+}
+
+/// A revoked permit ends a brokered stream with a policy error.
+#[tokio::test]
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "the broker route is process-wide; tests that install one run one at a time"
+)]
+async fn pf_27_s05_revoking_the_policy_ends_a_brokered_stream() {
+    let _route = crate::model_broker_route::ROUTE_TEST_LOCK.lock().await;
+    let _uninstall = UninstallRoute;
+    crate::install_model_broker_sender(Arc::new(RecordingSender {
+        seen: Arc::new(Mutex::new(Vec::new())),
+        status: http::StatusCode::OK,
+        chunks: vec!["o"],
+        hang: true,
+    }));
+    let controller = crate::NetworkPolicyController::default();
+    let policy = controller.policy();
+    controller.publish(policy.revision(), crate::DestinationPolicy::Unrestricted);
+    let factory = crate::HttpClientFactory::new(crate::OutboundProxyPolicy::ReqwestDefault)
+        .with_network_policy(policy);
+    let transport = ReqwestTransport::from_route_aware_client_pool(
+        crate::RouteAwareClientPool::new(factory, crate::ClientRouteClass::Api),
+    );
+    let mut framed = Request::new(Method::POST, "http://127.0.0.1:9/v1/responses".to_string());
+    framed.headers.insert(
+        crate::MODEL_BROKER_FRAME_HEADER,
+        http::HeaderValue::from_static("signed-frame"),
+    );
+    let mut streamed = transport.stream(framed).await.expect("brokered stream");
+    assert_eq!(
+        streamed
+            .bytes
+            .next()
+            .await
+            .expect("first chunk")
+            .expect("chunk"),
+        bytes::Bytes::from_static(b"o")
+    );
+    let revision = controller.policy().revision();
+    controller.publish(
+        revision,
+        crate::DestinationPolicy::Restricted {
+            allowed_hosts: Default::default(),
+        },
+    );
+    let ended = tokio::time::timeout(std::time::Duration::from_secs(5), streamed.bytes.next())
+        .await
+        .expect("the revocation ends the stream");
+    assert!(
+        matches!(ended, Some(Err(TransportError::Policy(_)))),
+        "{:?}",
+        ended.map(|chunk| chunk.map(|bytes| bytes.len()))
+    );
 }
 
 /// Removes the process-wide broker route when a test ends, even by panic.
