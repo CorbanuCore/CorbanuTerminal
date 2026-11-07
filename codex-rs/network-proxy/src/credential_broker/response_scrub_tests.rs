@@ -173,8 +173,11 @@ async fn pf_28_s02_bodiless_responses_keep_their_length_and_names_are_scrubbed()
 #[test]
 fn pf_28_s02_hook_injected_values_join_the_gate() {
     let actions = MitmHookActions {
+        body_secret_substitution: None,
+        aws_sigv4: None,
         strip_request_headers: Vec::new(),
         inject_request_headers: vec![ResolvedInjectedHeader {
+            placeholder: None,
             name: HeaderName::from_static("x-api-key"),
             value: HeaderValue::from_static("Token pf28s02-hook-secret-0000"),
             source: SecretSource::EnvVar("PF28_HOOK".to_string()),

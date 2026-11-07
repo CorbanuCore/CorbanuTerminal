@@ -462,7 +462,7 @@ async fn mitm_policy_blocks_matching_hooked_write_in_limited_mode() {
         mode: NetworkMode::Limited,
         // Runner DNS can map public hosts to private proxy addresses. This test exercises the
         // method clamp after host admission, so local-address admission is intentionally enabled.
-        allow_local_binding: true,
+        allow_local_binding: Some(true),
         ..NetworkProxyConfig::default()
     };
     network.set_allowed_domains(vec!["api.github.com".to_string()]);

@@ -1,17 +1,13 @@
 use crate::attribution::BindConnectionAttribution;
 use crate::config::NetworkMode;
 use crate::connect_policy::TargetCheckedTcpConnector;
-<<<<<<< HEAD
+use crate::connection_lifecycle::CancelOnShutdown;
 use crate::destination;
 use crate::destination::DenialSite;
 use crate::destination::DestinationDenial;
 use crate::destination::DestinationGuard;
 use crate::destination::SystemResolver;
 use crate::destination_contract::DecisionReason;
-||||||| 413492cd6c
-=======
-use crate::connection_lifecycle::CancelOnShutdown;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::mitm;
 use crate::mitm_hook::HookEvaluation;
 use crate::network_policy::BlockDecisionAuditEventArgs;
@@ -888,7 +884,6 @@ async fn http_plain_proxy(
         }
     }
 
-<<<<<<< HEAD
     // PF-33-S01: public retrieval is HTTPS-only, so the guard refuses every
     // plain-HTTP request without resolving it.
     match destination::guard_enabled(&app_state).await {
@@ -906,8 +901,8 @@ async fn http_plain_proxy(
             return Ok(destination::blocked(&app_state, &denial, site).await);
         }
         Err(err) => return Ok(internal_error("failed to read destination policy", err)),
-||||||| 413492cd6c
-=======
+    }
+
     let host_mitm_requirement = match app_state.host_mitm_requirement(&host, port).await {
         Ok(requirement) => requirement,
         Err(err) => {
@@ -954,7 +949,6 @@ async fn http_plain_proxy(
             req.method()
         );
         return Ok(json_blocked(&host, REASON_MITM_REQUIRED, Some(&details)));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     if !method_allowed {
@@ -1003,7 +997,7 @@ async fn http_plain_proxy(
         ));
     }
 
-<<<<<<< HEAD
+    // The scoped OpenAI route is HTTPS-only: plain HTTP to its host is refused.
     if app_state.scoped_credential_route_matches_host(&host) {
         return Ok(json_blocked(
             &host,
@@ -1012,12 +1006,6 @@ async fn http_plain_proxy(
         ));
     }
 
-    if let Err(err) =
-        inject_plaintext_credentials_if_enabled(app_state.as_ref(), &host, req.headers_mut()).await
-||||||| 413492cd6c
-    if let Err(err) =
-        inject_plaintext_credentials_if_enabled(app_state.as_ref(), &host, req.headers_mut()).await
-=======
     let credential_destinations =
         match forward_request_credential_destinations(app_state.as_ref(), &request_ctx, &req).await
         {
@@ -1042,7 +1030,6 @@ async fn http_plain_proxy(
     match app_state
         .evaluate_mitm_hook_request(&host, &req, &origin, &credential_destinations)
         .await
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     {
         Ok(HookEvaluation::HookedHostNoMatch) => {
             emit_http_block_decision_audit_event(
@@ -1138,13 +1125,7 @@ async fn forward_request_credential_destinations(
         .unwrap_or("/");
     let mut destinations = vec![format!("{scheme}://{authority}{request_path}")];
     if app_state.plaintext_credential_injection_enabled().await? {
-<<<<<<< HEAD
-        app_state.inject_legacy_request_credentials(host, headers);
-||||||| 413492cd6c
-        app_state.inject_request_credentials(host, headers);
-=======
         destinations.push(normalize_host(&authority.host.to_string()));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
     Ok(destinations)
 }
@@ -1471,7 +1452,7 @@ mod tests {
 
     fn pf_33_s01_policy(allowed: &str, guard: bool) -> Arc<NetworkProxyState> {
         let mut policy = NetworkProxyConfig {
-            allow_local_binding: true,
+            allow_local_binding: Some(true),
             ..NetworkProxyConfig::default()
         };
         policy.set_allowed_domains(vec![allowed.to_string()]);
@@ -1568,7 +1549,7 @@ mod tests {
     #[tokio::test]
     async fn pf_33_s02_unix_socket_escape_hatch_is_refused_under_the_guard() {
         let mut policy = NetworkProxyConfig {
-            dangerously_allow_all_unix_sockets: true,
+            dangerously_allow_all_unix_sockets: Some(true),
             ..NetworkProxyConfig::default()
         };
         policy.set_allow_unix_sockets(vec!["/tmp/pf-33-s02.sock".to_string()]);

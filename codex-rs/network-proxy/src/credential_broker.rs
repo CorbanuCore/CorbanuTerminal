@@ -1,22 +1,20 @@
-<<<<<<< HEAD
+mod configured;
+mod destination;
 #[cfg(any(unix, windows))]
 mod env_scrub;
+mod environment;
+mod hardened;
 #[cfg(any(unix, windows))]
 pub(crate) mod isolated;
+mod matching;
 #[cfg(all(test, any(target_os = "linux", target_os = "macos", windows)))]
 mod memory_scan_tests;
 #[cfg(any(unix, windows))]
 pub mod model_auth;
-||||||| 413492cd6c
-=======
-mod configured;
-mod destination;
-mod environment;
-mod matching;
 mod provider_config;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod providers;
-<<<<<<< HEAD
+mod registry;
+mod replacement;
 mod resolver;
 pub(crate) mod response_scrub;
 
@@ -42,20 +40,27 @@ pub use resolver::ScopedCredentialResolverError;
 pub use resolver::ScopedCredentialRoute;
 pub use resolver::ScopedCredentialRouteError;
 pub use resolver::ScopedCredentialUse;
-||||||| 413492cd6c
-=======
-mod registry;
-mod replacement;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+
+#[cfg(all(test, any(unix, windows)))]
+pub(crate) use hardened::BrokeredCredentialRoute;
+pub(crate) use hardened::CredentialRouting;
+#[cfg(any(unix, windows))]
+pub(crate) use isolated::IsolatedBrokerOptions;
+#[cfg(not(any(unix, windows)))]
+#[allow(dead_code)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct IsolatedBrokerOptions {
+    pub(crate) allow_local_binding: bool,
+    pub(crate) allow_upstream_proxy: bool,
+    pub(crate) runtime_dir: Option<std::path::PathBuf>,
+    pub(crate) require_containment: bool,
+    pub(crate) scrub_responses: bool,
+    pub(crate) pin_connections: bool,
+}
 
 use crate::config::NetworkProxyConfig;
 use crate::policy::normalize_host;
-<<<<<<< HEAD
-use codex_secret_broker::response_gate::ResponseGate;
-||||||| 413492cd6c
-=======
 use environment::update_brokered_credentials_marker;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use rama_http::HeaderMap;
 use registry::ActiveCredentialSource;
 use registry::BrokeredCredentialProvider;
@@ -70,36 +75,6 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::RwLock;
-<<<<<<< HEAD
-use zeroize::Zeroizing;
-
-#[cfg(any(unix, windows))]
-use codex_secret_broker::CredentialReference as BrokerCredentialReference;
-#[cfg(any(unix, windows))]
-use codex_secret_broker::ProviderRequestOperation;
-#[cfg(any(unix, windows))]
-use isolated::IsolatedBrokerClient;
-#[cfg(any(unix, windows))]
-use isolated::IsolatedBrokerError;
-#[cfg(any(unix, windows))]
-use isolated::IsolatedBrokerLauncher;
-#[cfg(any(unix, windows))]
-pub(crate) use isolated::IsolatedBrokerOptions;
-#[cfg(any(unix, windows))]
-use isolated::protocol::HostBindingWire;
-#[cfg(not(any(unix, windows)))]
-#[allow(dead_code)]
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct IsolatedBrokerOptions {
-    pub(crate) allow_local_binding: bool,
-    pub(crate) allow_upstream_proxy: bool,
-    pub(crate) runtime_dir: Option<std::path::PathBuf>,
-    pub(crate) require_containment: bool,
-    pub(crate) scrub_responses: bool,
-    pub(crate) pin_connections: bool,
-}
-||||||| 413492cd6c
-=======
 use url::Url;
 
 pub use environment::CredentialBrokerContext;
@@ -115,7 +90,6 @@ pub use environment::is_credential_broker_provider_env_key;
 pub(crate) use environment::marked_credential_dummy_env_keys;
 pub use provider_config::CredentialAuthMethod;
 pub use provider_config::CredentialProviderConfig;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 pub const CREDENTIAL_BROKER_ACTIVE_ENV_KEY: &str = "CODEX_NETWORK_PROXY_CREDENTIAL_BROKER_ACTIVE";
 pub(crate) const BROKERED_CREDENTIALS_ENV_KEY: &str = "CODEX_NETWORK_PROXY_BROKERED_CREDENTIALS";
@@ -136,78 +110,9 @@ pub enum CredentialMaskingFailureMode {
 #[derive(Clone)]
 pub(crate) struct CredentialBroker {
     state: Arc<RwLock<CredentialBrokerState>>,
-    isolation: Isolation,
-    /// PF-27-S02: agent environments arrive without provider tokens, so raw
-    /// values are read from Core's own process environment instead.
-    process_env_source: Option<ProcessEnvSource>,
-    /// PF-28-S02: bind credentials to HTTPS, method and path, and scrub
-    /// injected values from responses (feature `secret_output_gate`).
-    response_gate: bool,
-}
-
-/// Which variables may be read from Core's environment, and how.
-#[derive(Clone)]
-struct ProcessEnvSource {
-    lookup: ProcessEnvLookup,
-    /// Only the brokered variables the user's shell environment policy would
-    /// have passed to agent commands before the launch allowlist ran.
-    keys: Arc<[String]>,
-}
-
-/// Reads one variable from Core's environment (replaceable in tests).
-type ProcessEnvLookup = fn(&str) -> Option<String>;
-
-fn core_process_env(key: &str) -> Option<String> {
-    std::env::var(key).ok()
-}
-
-/// Where raw provider credential values live while the broker is enabled.
-#[derive(Clone)]
-enum Isolation {
-    /// Legacy in-process injection: the proxy state holds raw values.
-    InProcess,
-    /// PF-27-S04: raw values live only in a separate broker process.
-    #[cfg(any(unix, windows))]
-    Process(Arc<IsolatedMode>),
-    /// Isolation was requested on a platform without the broker process.
-    /// Credentials are virtualized but never injected (fail closed).
-    #[cfg(not(any(unix, windows)))]
-    Unsupported,
-}
-
-#[cfg(any(unix, windows))]
-struct IsolatedMode {
-    client: Option<Arc<IsolatedBrokerClient>>,
-    fingerprint_key: Zeroizing<[u8; 32]>,
-}
-
-/// Routing decision for one outbound request after credential policy.
-pub(crate) enum CredentialRouting {
-    /// Send upstream from the proxy (any legacy injection already applied).
-    /// PF-28-S02: the gate for the value injected here, if armed.
-    Direct(Option<ResponseGate>),
-    /// Send through the broker, which substitutes the credential itself.
-    #[cfg(any(unix, windows))]
-    Brokered(BrokeredCredentialRoute),
-}
-
-#[cfg(any(unix, windows))]
-pub(crate) struct BrokeredCredentialRoute {
-    client: Arc<IsolatedBrokerClient>,
-    reference: BrokerCredentialReference,
-    operation: ProviderRequestOperation,
-}
-
-#[cfg(any(unix, windows))]
-impl BrokeredCredentialRoute {
-    pub(crate) async fn forward(
-        &self,
-        request: rama_http::Request,
-    ) -> Result<rama_http::Response, IsolatedBrokerError> {
-        self.client
-            .forward(&self.reference, &self.operation, request)
-            .await
-    }
+    /// Corbanu hardening (see `hardened`). While armed it owns brokering and
+    /// this upstream state registers no credentials.
+    hardened: hardened::HardenedBroker,
 }
 
 #[derive(Default)]
@@ -220,11 +125,6 @@ struct CredentialBrokerState {
     configured_provider_configs: BTreeMap<String, CredentialProviderConfig>,
     configured_providers: Vec<Arc<configured::ConfiguredCredentialProvider>>,
     credentials: Vec<CredentialRecord>,
-<<<<<<< HEAD
-    scoped_openai: Option<ScopedCredentialRecord>,
-    isolated_openai: Option<IsolatedCredentialRecord>,
-||||||| 413492cd6c
-=======
     credential_owners: Vec<CredentialOwner>,
     credential_aliases: Vec<CredentialAlias>,
 }
@@ -232,50 +132,16 @@ struct CredentialBrokerState {
 struct CredentialOwner {
     env_var: String,
     real_value: String,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 struct CredentialRecord {
     env_var: String,
     provider: BrokeredCredentialProvider,
     host_binding: providers::CredentialHostBinding,
-<<<<<<< HEAD
-    secret: RecordSecret,
-    dummy_value: String,
-}
-
-enum RecordSecret {
-    Raw(Zeroizing<String>),
-    /// Opaque broker reference; the raw value is not retained in this process.
-    #[cfg(any(unix, windows))]
-    Brokered {
-        fingerprint: [u8; 32],
-        reference: BrokerCredentialReference,
-        client: Arc<IsolatedBrokerClient>,
-    },
-    /// Isolation is active but the broker could not hold this value.
-    Unavailable {
-        fingerprint: [u8; 32],
-    },
-}
-
-struct ScopedCredentialRecord {
-    route: ScopedCredentialRoute,
-    dummy_value: String,
-    used: bool,
-}
-
-#[derive(Clone)]
-struct IsolatedCredentialRecord {
-    route: IsolatedCredentialRoute,
-||||||| 413492cd6c
-    real_value: String,
-=======
     additional_host_bindings: Vec<providers::CredentialHostBinding>,
     fallback_host_bindings: Vec<providers::CredentialHostBinding>,
     environment_id: Option<String>,
     real_value: String,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     dummy_value: String,
     // Canonical identities accompanying discovery, distinct from an alias's own credential.
     source_values: Vec<String>,
@@ -472,125 +338,168 @@ fn env_contains_credential_value(env: &HashMap<String, String>, credential: &str
 
 impl CredentialBroker {
     pub(crate) fn new(enabled: bool) -> Self {
-        Self::with_isolation(enabled, Isolation::InProcess)
+        Self::with_hardened(enabled, hardened::HardenedBroker::new(enabled))
     }
 
+    /// PF-27-S04: raw values live only in a separate broker process.
     pub(crate) fn new_isolated(enabled: bool, options: IsolatedBrokerOptions) -> Self {
-        #[cfg(any(unix, windows))]
-        {
-            Self::new_isolated_with_launcher(
-                enabled,
-                options,
-                IsolatedBrokerLauncher::current_exe(),
-            )
-        }
-        #[cfg(not(any(unix, windows)))]
-        {
-            let _ = options;
-            Self::with_isolation(enabled, Isolation::Unsupported)
-        }
-    }
-
-    #[cfg(any(unix, windows))]
-    pub(crate) fn new_isolated_with_launcher(
-        enabled: bool,
-        options: IsolatedBrokerOptions,
-        launcher: IsolatedBrokerLauncher,
-    ) -> Self {
-        let mut fingerprint_key = Zeroizing::new([0_u8; 32]);
-        rand::Rng::fill(&mut rand::rng(), fingerprint_key.as_mut_slice());
-        // Start the broker once per proxy (session), before this session spawns
-        // agent processes, to narrow the window in which a concurrent spawn could
-        // inherit its control pipes. It is never respawned: after it dies,
-        // brokered credentials fail closed until a new session starts its proxy.
-        let client = enabled
-            .then(|| IsolatedBrokerClient::spawn(&launcher, options))
-            .and_then(|spawned| match spawned {
-                Ok(client) => Some(Arc::new(client)),
-                Err(error) => {
-                    tracing::warn!("isolated credential broker unavailable: {error}");
-                    None
-                }
-            });
-        Self::with_isolation(
+        Self::with_hardened(
             enabled,
-            Isolation::Process(Arc::new(IsolatedMode {
-                client,
-                fingerprint_key,
-            })),
+            hardened::HardenedBroker::new_isolated(enabled, options),
         )
     }
 
-    fn with_isolation(enabled: bool, isolation: Isolation) -> Self {
+    #[cfg(all(test, any(unix, windows)))]
+    pub(crate) fn new_isolated_with_launcher(
+        enabled: bool,
+        options: IsolatedBrokerOptions,
+        launcher: isolated::IsolatedBrokerLauncher,
+    ) -> Self {
+        Self::with_hardened(
+            enabled,
+            hardened::HardenedBroker::new_isolated_with_launcher(enabled, options, launcher),
+        )
+    }
+
+    fn with_hardened(enabled: bool, hardened: hardened::HardenedBroker) -> Self {
         Self {
             state: Arc::new(RwLock::new(CredentialBrokerState {
                 enabled,
                 ..CredentialBrokerState::default()
             })),
-            isolation,
-            process_env_source: None,
-            response_gate: false,
+            hardened,
         }
     }
 
-<<<<<<< HEAD
     /// PF-28-S02: bind injected credentials to HTTPS, method and path and
     /// scrub them from responses.
     pub(crate) fn with_response_gate(mut self, enabled: bool) -> Self {
-        self.response_gate = enabled;
+        self.hardened = self.hardened.with_response_gate(enabled);
         self
     }
 
     pub(crate) fn response_gate_enabled(&self) -> bool {
-        self.response_gate
+        self.hardened.response_gate_enabled()
     }
 
     /// PF-27-S02: source brokered values from Core's environment rather than
     /// the (stripped) child environment.
-    pub(crate) fn with_process_env_source(self, keys: Option<&[String]>) -> Self {
-        self.with_process_env_lookup(keys, core_process_env)
+    pub(crate) fn with_process_env_source(mut self, keys: Option<&[String]>) -> Self {
+        self.hardened = self.hardened.with_process_env_source(keys);
+        self
     }
 
+    #[cfg(test)]
     pub(crate) fn with_process_env_lookup(
         mut self,
         keys: Option<&[String]>,
-        lookup: ProcessEnvLookup,
+        lookup: fn(&str) -> Option<String>,
     ) -> Self {
-        self.process_env_source = keys.map(|keys| ProcessEnvSource {
-            lookup,
-            keys: keys.into(),
-        });
+        self.hardened = self.hardened.with_process_env_lookup(keys, lookup);
         self
     }
 
     pub(crate) fn isolated(&self) -> bool {
-        !matches!(self.isolation, Isolation::InProcess)
+        self.hardened.isolated()
     }
 
-    /// Revokes every brokered reference: the broker advances its generation,
-    /// closes in-flight channels, and this process forgets the references.
-    /// Returns false when isolation is not active or the broker is unavailable.
+    /// Whether Corbanu hardening owns brokering for this broker.
+    pub(crate) fn hardened(&self) -> bool {
+        self.hardened.armed()
+    }
+
+    /// Revokes every brokered reference (see `HardenedBroker`).
     pub(crate) fn revoke_isolated_credentials(&self) -> bool {
-        let mut state = self.write_state();
-        state
-            .credentials
-            .retain(|credential| matches!(credential.secret, RecordSecret::Raw(_)));
-        #[cfg(any(unix, windows))]
-        if let Isolation::Process(mode) = &self.isolation
-            && let Some(client) = mode.live_client()
-        {
-            return client.revoke().is_ok();
-        }
-        false
+        self.hardened.revoke_isolated_credentials()
     }
 
     pub(crate) fn enabled(&self) -> bool {
         self.read_state().enabled
-||||||| 413492cd6c
-    pub(crate) fn enabled(&self) -> bool {
-        self.read_state().enabled
-=======
+    }
+
+    /// The scoped route replaces the OpenAI key, so upstream's engine must
+    /// not keep brokering one either.
+    pub(crate) fn install_scoped_openai_route(
+        &self,
+        route: ScopedCredentialRoute,
+    ) -> Result<(), ScopedCredentialRouteError> {
+        self.hardened.install_scoped_openai_route(route)?;
+        self.forget_upstream_openai_credentials();
+        Ok(())
+    }
+
+    pub(crate) fn install_isolated_openai_route(
+        &self,
+        route: IsolatedCredentialRoute,
+    ) -> Result<(), ScopedCredentialRouteError> {
+        self.hardened.install_isolated_openai_route(route)?;
+        self.forget_upstream_openai_credentials();
+        Ok(())
+    }
+
+    fn forget_upstream_openai_credentials(&self) {
+        let openai = providers::openai_provider();
+        self.write_state().credentials.retain(|credential| {
+            !matches!(&credential.provider, BrokeredCredentialProvider::Builtin(provider) if std::ptr::eq(*provider, openai))
+        });
+    }
+
+    pub(crate) fn scoped_openai_enabled(&self) -> bool {
+        self.hardened.scoped_openai_enabled()
+    }
+
+    pub(crate) fn scoped_openai_matches_host(&self, host: &str) -> bool {
+        self.hardened.scoped_openai_matches_host(host)
+    }
+
+    /// Applies credential policy and decides whether the request must travel
+    /// through the isolated broker process. Only the hardened engine routes.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn route_request_credentials(
+        &self,
+        scheme: &str,
+        host: &str,
+        port: u16,
+        method: &str,
+        path: &str,
+        headers: &mut HeaderMap,
+    ) -> Result<CredentialRouting, ScopedCredentialInjectionError> {
+        self.hardened
+            .route_request_credentials(scheme, host, port, method, path, headers)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn inject_request_headers_for_request(
+        &self,
+        scheme: &str,
+        host: &str,
+        port: u16,
+        method: &str,
+        path: &str,
+        headers: &mut HeaderMap,
+    ) -> Result<(), ScopedCredentialInjectionError> {
+        self.hardened
+            .inject_request_headers_for_request(scheme, host, port, method, path, headers)
+    }
+
+    pub(crate) fn dispatch_isolated_openai(
+        &self,
+        scheme: &str,
+        host: &str,
+        port: u16,
+        method: &str,
+        path: &str,
+    ) -> Result<IsolatedCredentialReceipt, IsolatedCredentialDispatchError> {
+        self.hardened
+            .dispatch_isolated_openai(scheme, host, port, method, path)
+    }
+
     pub(crate) fn configure(&self, config: &NetworkProxyConfig) {
+        if self.hardened.armed() && !config.credential_providers.is_empty() {
+            tracing::warn!(
+                "network.credential_providers are not brokered while Corbanu credential hardening is active"
+            );
+        }
         let mut state = self.write_state();
         let previous_context_sources = (state.context != config.credential_broker_context)
             .then(|| active_credential_sources(&state, &HashMap::new()));
@@ -762,7 +671,6 @@ impl CredentialBroker {
                 true
             });
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(crate) fn config_revision(&self) -> u64 {
@@ -786,23 +694,16 @@ impl CredentialBroker {
         child_env: &HashMap<String, String>,
         environment_id: Option<&str>,
     ) {
+        // Hardened engine: no raw value is registered in upstream state.
+        if self.hardened.armed() {
+            return;
+        }
         let mut state = self.write_state();
         if !state.enabled {
             return;
         }
         state.observe_credential_owners(parent_env);
 
-<<<<<<< HEAD
-        // With secretless launch the child environment no longer carries the
-        // provider tokens; read them (and host context) from Core's own
-        // environment, letting any value already in the child win.
-        let source_env = self
-            .process_env_source
-            .as_ref()
-            .map(|source| process_credential_env(env, source));
-        let source_env = source_env.as_ref().unwrap_or(env).clone();
-||||||| 413492cd6c
-=======
         let active_sources = active_credential_sources(&state, child_env);
         for source in &active_sources {
             for env_var in &source.env_vars {
@@ -857,6 +758,10 @@ impl CredentialBroker {
         env: &mut HashMap<String, String>,
         environment_id: Option<&str>,
     ) {
+        if self.hardened.armed() {
+            self.hardened.virtualize_child_env(env);
+            return;
+        }
         self.virtualize_env(env, environment_id, CredentialEnvironment::Child);
     }
 
@@ -865,6 +770,10 @@ impl CredentialBroker {
         env: &mut HashMap<String, String>,
         environment_id: Option<&str>,
     ) {
+        if self.hardened.armed() {
+            self.hardened.virtualize_snapshot_env(env);
+            return;
+        }
         self.virtualize_env(env, environment_id, CredentialEnvironment::Snapshot);
     }
 
@@ -1111,34 +1020,7 @@ impl CredentialBroker {
             })
             .collect::<Vec<_>>();
         let mut builtin_spans = Vec::new();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         for provider in providers::credential_providers() {
-<<<<<<< HEAD
-            if (state.scoped_openai.is_some() || state.isolated_openai.is_some())
-                && std::ptr::eq(provider, providers::openai_provider())
-            {
-                continue;
-            }
-            for source in provider.sources() {
-                if let Some(host_binding) = (source.host_binding)(&source_env) {
-                    for env_var in source.env_vars {
-                        virtualize_env_var(
-                            &source_env,
-                            env,
-                            &mut state,
-                            &self.isolation,
-                            env_var,
-                            provider,
-||||||| 413492cd6c
-            for source in provider.sources() {
-                if let Some(host_binding) = (source.host_binding)(env) {
-                    for env_var in source.env_vars {
-                        virtualize_env_var(
-                            env,
-                            &mut state,
-                            env_var,
-                            provider,
-=======
             let brokered_provider = BrokeredCredentialProvider::Builtin(provider);
             let Some((source, host_binding)) = provider.sources().iter().rev().find_map(|source| {
                 (source.host_binding)(&binding_env, state.openai_api_host.as_deref())
@@ -1232,7 +1114,6 @@ impl CredentialBroker {
                         let _ = state.register(
                             source.env_vars[0],
                             brokered_provider.clone(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                             host_binding.clone(),
                             environment_id,
                             credential,
@@ -1242,20 +1123,6 @@ impl CredentialBroker {
                 }
             }
         }
-<<<<<<< HEAD
-        if let Some(scoped) = state.scoped_openai.as_ref() {
-            env.insert(
-                resolver::OPENAI_API_KEY_ENV_VAR.to_string(),
-                scoped.dummy_value.clone(),
-            );
-        }
-        if let Some(isolated) = state.isolated_openai.as_ref() {
-            env.insert(
-                resolver::OPENAI_API_KEY_ENV_VAR.to_string(),
-                isolated.dummy_value.clone(),
-            );
-||||||| 413492cd6c
-=======
         for (provider, value, matched) in &configured_discoveries {
             let Some(host_binding) = provider.host_binding(&binding_env) else {
                 continue;
@@ -1351,132 +1218,22 @@ impl CredentialBroker {
                         .host_bindings()
                         .any(providers::CredentialHostBinding::bypasses_proxy_with_local_binding)
             });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
         update_brokered_credentials_marker(&state, env);
     }
 
-<<<<<<< HEAD
-    pub(crate) fn install_scoped_openai_route(
-        &self,
-        route: ScopedCredentialRoute,
-    ) -> Result<(), ScopedCredentialRouteError> {
-        let mut state = self.write_state();
-        if !state.enabled {
-            return Err(ScopedCredentialRouteError::BrokerDisabled);
-        }
-        if state.scoped_openai.is_some() || state.isolated_openai.is_some() {
-            return Err(ScopedCredentialRouteError::AlreadyConfigured);
-        }
-        state
-            .credentials
-            .retain(|credential| !std::ptr::eq(credential.provider, providers::openai_provider()));
-        let dummy_value = providers::openai_provider().dummy_value(route.capability_id().as_str());
-        state.scoped_openai = Some(ScopedCredentialRecord {
-            route,
-            dummy_value,
-            used: false,
-        });
-        Ok(())
-    }
-
-    pub(crate) fn install_isolated_openai_route(
-        &self,
-        route: IsolatedCredentialRoute,
-    ) -> Result<(), ScopedCredentialRouteError> {
-        let mut state = self.write_state();
-        if !state.enabled {
-            return Err(ScopedCredentialRouteError::BrokerDisabled);
-        }
-        if state.scoped_openai.is_some() || state.isolated_openai.is_some() {
-            return Err(ScopedCredentialRouteError::AlreadyConfigured);
-        }
-        state
-            .credentials
-            .retain(|credential| !std::ptr::eq(credential.provider, providers::openai_provider()));
-        let dummy_value = providers::openai_provider().dummy_value(route.capability_id.as_str());
-        state.isolated_openai = Some(IsolatedCredentialRecord { route, dummy_value });
-        Ok(())
-    }
-
-    pub(crate) fn scoped_openai_enabled(&self) -> bool {
-        let state = self.read_state();
-        state.scoped_openai.is_some() || state.isolated_openai.is_some()
-    }
-
-    pub(crate) fn scoped_openai_matches_host(&self, host: &str) -> bool {
-        let state = self.read_state();
-        (state.scoped_openai.is_some() || state.isolated_openai.is_some())
-            && normalize_host(host) == resolver::OPENAI_API_HOST
-    }
-
-    pub(crate) fn host_requires_mitm(&self, host: &str) -> bool {
-        let normalized_host = normalize_host(host);
-||||||| 413492cd6c
-    pub(crate) fn host_requires_mitm(&self, host: &str) -> bool {
-        let normalized_host = normalize_host(host);
-=======
     pub(crate) fn restore_child_env(
         &self,
         env: &mut HashMap<String, String>,
         _command: &mut [String],
     ) {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let state = self.read_state();
-<<<<<<< HEAD
-        state.enabled
-            && ((state.scoped_openai.is_some() || state.isolated_openai.is_some())
-                && normalized_host == resolver::OPENAI_API_HOST
-                || state
-                    .credentials
-                    .iter()
-                    .any(|credential| credential.matches_host(&normalized_host)))
-||||||| 413492cd6c
-        state.enabled
-            && state
-                .credentials
-                .iter()
-                .any(|credential| credential.matches_host(&normalized_host))
-=======
         if !state.enabled || env_value(env, CREDENTIAL_BROKER_ACTIVE_ENV_KEY) != Some("1") {
             return;
         }
         state.restore_child_env(env, |_| true);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
-<<<<<<< HEAD
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn inject_request_headers_for_request(
-        &self,
-        scheme: &str,
-        host: &str,
-        port: u16,
-        method: &str,
-        path: &str,
-        headers: &mut HeaderMap,
-    ) -> Result<(), ScopedCredentialInjectionError> {
-        // A brokered route cannot be honored by in-process callers; the request
-        // proceeds with its dummy value and never receives the raw credential.
-        self.route_request_credentials(scheme, host, port, method, path, headers)
-            .map(|_| ())
-    }
-
-    /// Applies credential policy and decides whether the request must travel
-    /// through the isolated broker process.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn route_request_credentials(
-        &self,
-        scheme: &str,
-        host: &str,
-        port: u16,
-        method: &str,
-        path: &str,
-        headers: &mut HeaderMap,
-    ) -> Result<CredentialRouting, ScopedCredentialInjectionError> {
-||||||| 413492cd6c
-    pub(crate) fn inject_request_headers(&self, host: &str, headers: &mut HeaderMap) {
-=======
     pub(crate) fn restore_and_disable_child_env(
         &self,
         env: &mut HashMap<String, String>,
@@ -1565,15 +1322,10 @@ impl CredentialBroker {
         port: u16,
         environment_id: Option<&str>,
     ) -> crate::brokered_tunnel::BrokeredProtocols {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let normalized_host = normalize_host(host);
-<<<<<<< HEAD
-        let mut state = self.write_state();
-||||||| 413492cd6c
-        let state = self.read_state();
-=======
         let state = self.read_state();
         let mut protocols = crate::brokered_tunnel::BrokeredProtocols::default();
+        protocols.tls |= self.hardened.host_requires_mitm(&normalized_host);
         if state.enabled {
             for credential in state
                 .credentials
@@ -1812,33 +1564,19 @@ impl CredentialBroker {
         headers: &mut HeaderMap,
         environment_id: Option<&str>,
     ) {
+        if self.hardened.armed() {
+            // `main`'s legacy injection, reached only for bare hosts (the
+            // plain-HTTP path adds one only with
+            // `dangerously_allow_plaintext_credential_injection`) and never
+            // under the response gate. URL destinations are upstream's engine.
+            if !destination.contains("://") {
+                self.hardened.inject_request_headers(destination, headers);
+            }
+            return;
+        }
         let state = self.read_state();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         if !state.enabled {
-            return Ok(CredentialRouting::Direct(None));
-        }
-
-        if let Some(scoped) = state.scoped_openai.as_mut() {
-            let carries_reference = scoped.matches_reference(headers);
-            if normalized_host == resolver::OPENAI_API_HOST || carries_reference {
-                return scoped
-                    .inject(
-                        scheme,
-                        &normalized_host,
-                        port,
-                        method,
-                        path,
-                        headers,
-                        self.response_gate,
-                    )
-                    .map(CredentialRouting::Direct);
-            }
-        }
-        if let Some(isolated) = state.isolated_openai.as_ref() {
-            let carries_reference = isolated.matches_reference(headers);
-            if normalized_host == resolver::OPENAI_API_HOST || carries_reference {
-                return Err(ScopedCredentialInjectionError::IsolatedBrokerRequired);
-            }
+            return;
         }
 
         let credentials =
@@ -1891,109 +1629,6 @@ impl CredentialBroker {
                         .any(|binding| binding.matches_request(&normalized_host, request.as_ref()))
             })
             .collect::<Vec<_>>();
-<<<<<<< HEAD
-        let Some(credential) = select_credential(headers, &matching_credentials) else {
-            return Ok(CredentialRouting::Direct(None));
-        };
-        if self.response_gate {
-            credential
-                .provider
-                .allows_request(scheme, &normalized_host, port, method, path)?;
-        }
-        match &credential.secret {
-            RecordSecret::Raw(real_value) => {
-                let gate = self
-                    .response_gate
-                    .then(|| {
-                        let label = format!("broker:{}", credential.env_var);
-                        ResponseGate::new([(label.as_str(), real_value.as_str())])
-                    })
-                    .transpose()
-                    .map_err(|_| ScopedCredentialInjectionError::ResolutionFailed)?;
-                if let Some(header_value) = credential
-                    .provider
-                    .request_header_value(real_value.as_str())
-                {
-                    credential
-                        .provider
-                        .insert_request_header(headers, header_value);
-                }
-                Ok(CredentialRouting::Direct(gate))
-            }
-            #[cfg(any(unix, windows))]
-            RecordSecret::Brokered {
-                reference, client, ..
-            } => {
-                if scheme != "https" {
-                    return Err(ScopedCredentialInjectionError::SchemeDenied);
-                }
-                if !client.is_alive() {
-                    return Err(ScopedCredentialInjectionError::IsolatedBrokerUnavailable);
-                }
-                if !matches!(method, "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE") {
-                    return Err(ScopedCredentialInjectionError::MethodDenied);
-                }
-                let operation =
-                    ProviderRequestOperation::new(normalized_host.as_str(), port, method, path)
-                        .map_err(|_| ScopedCredentialInjectionError::PathDenied)?;
-                Ok(CredentialRouting::Brokered(BrokeredCredentialRoute {
-                    client: client.clone(),
-                    reference: reference.clone(),
-                    operation,
-                }))
-            }
-            RecordSecret::Unavailable { .. } => {
-                Err(ScopedCredentialInjectionError::IsolatedBrokerUnavailable)
-            }
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn dispatch_isolated_openai(
-        &self,
-        scheme: &str,
-        host: &str,
-        port: u16,
-        method: &str,
-        path: &str,
-    ) -> Result<IsolatedCredentialReceipt, IsolatedCredentialDispatchError> {
-        let normalized_host = normalize_host(host);
-        let isolated = self
-            .read_state()
-            .isolated_openai
-            .clone()
-            .ok_or(IsolatedCredentialDispatchError::Unavailable)?;
-        isolated.dispatch(scheme, &normalized_host, port, method, path)
-    }
-
-    /// Plain-HTTP injection. PF-28-S02: never while credentials are bound to
-    /// HTTPS.
-    pub(crate) fn inject_request_headers(&self, host: &str, headers: &mut HeaderMap) {
-        if self.response_gate {
-            return;
-        }
-        let _ = self.inject_request_headers_for_request(
-            "https",
-            host,
-            resolver::OPENAI_API_PORT,
-            "POST",
-            "/v1/responses",
-            headers,
-        );
-||||||| 413492cd6c
-        let Some(credential) = select_credential(headers, &matching_credentials) else {
-            return;
-        };
-        let Some(header_value) = credential
-            .provider
-            .request_header_value(&credential.real_value)
-        else {
-            return;
-        };
-        credential
-            .provider
-            .insert_request_header(headers, header_value);
-=======
 
         // Ambiguity removes the whole header, so every translation for a surviving header
         // contributed through equivalent deduplication or Basic-field merging.
@@ -2017,7 +1652,6 @@ impl CredentialBroker {
                         .any(|(name, _)| selected_headers.contains(name))
             })
         })
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn read_state(&self) -> std::sync::RwLockReadGuard<'_, CredentialBrokerState> {
@@ -2033,41 +1667,14 @@ impl CredentialBroker {
     }
 }
 
-/// Core's own values for every broker-managed variable, overridden by any
-/// value the child environment already carries (for example a dummy).
-fn process_credential_env(
-    child_env: &HashMap<String, String>,
-    source: &ProcessEnvSource,
-) -> HashMap<String, String> {
-    let mut values = HashMap::new();
-    for key in providers::credential_broker_env_keys() {
-        let permitted = source.keys.iter().any(|permitted| permitted == key);
-        let value = child_env
-            .get(key)
-            .cloned()
-            .or_else(|| permitted.then(|| (source.lookup)(key)).flatten());
-        if let Some(value) = value {
-            values.insert(key.to_string(), value);
-        }
-    }
-    values
-}
-
 fn virtualize_env_var(
-    source_env: &HashMap<String, String>,
     env: &mut HashMap<String, String>,
     state: &mut CredentialBrokerState,
-    isolation: &Isolation,
     env_var: &str,
     provider: BrokeredCredentialProvider,
     host_binding: providers::CredentialHostBinding,
     environment_id: Option<&str>,
 ) {
-<<<<<<< HEAD
-    let Some(real_value) = brokerable_credential_value(source_env, state, env_var, provider) else {
-||||||| 413492cd6c
-    let Some(real_value) = brokerable_credential_value(env, state, env_var, provider) else {
-=======
     let previous_dummy = env_value(env, env_var)
         .filter(|value| state.is_dummy_value(value))
         .map(str::to_string);
@@ -2086,31 +1693,9 @@ fn virtualize_env_var(
                 .map(|credential| credential.real_value.clone())
         })
     else {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         return;
     };
 
-<<<<<<< HEAD
-    let dummy_value = match isolation {
-        Isolation::InProcess => state.register(env_var, provider, host_binding, real_value),
-        #[cfg(any(unix, windows))]
-        Isolation::Process(mode) => {
-            state.register_isolated(mode, env_var, provider, host_binding, real_value)
-        }
-        #[cfg(not(any(unix, windows)))]
-        Isolation::Unsupported => state.register_unavailable(
-            fingerprint(&[0; 32], env_var, real_value),
-            env_var,
-            provider,
-            host_binding,
-            real_value,
-        ),
-    };
-    env.insert(env_var.to_string(), dummy_value);
-||||||| 413492cd6c
-    let dummy_value = state.register(env_var, provider, host_binding, real_value);
-    env.insert(env_var.to_string(), dummy_value);
-=======
     if let Some(dummy_value) = state.register(
         env_var,
         provider,
@@ -2125,28 +1710,6 @@ fn virtualize_env_var(
             state.replace_child_env_dummies(env, &[(previous_dummy, dummy_value.clone())]);
         }
         set_env_value(env, env_var, dummy_value);
-    }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-}
-
-fn fingerprint(key: &[u8; 32], env_var: &str, value: &str) -> [u8; 32] {
-    use sha2::Digest as _;
-    let mut hasher = sha2::Sha256::new();
-    hasher.update(key);
-    hasher.update(env_var.as_bytes());
-    hasher.update([0]);
-    hasher.update(value.as_bytes());
-    hasher.finalize().into()
-}
-
-#[cfg(any(unix, windows))]
-impl IsolatedMode {
-    /// Returns the broker while it is alive. A dead broker is not replaced.
-    fn live_client(&self) -> Option<Arc<IsolatedBrokerClient>> {
-        self.client
-            .as_ref()
-            .filter(|client| client.is_alive())
-            .cloned()
     }
 }
 
@@ -2283,21 +1846,6 @@ impl CredentialBrokerState {
         host_binding: providers::CredentialHostBinding,
         environment_id: Option<&str>,
         real_value: &str,
-<<<<<<< HEAD
-    ) -> String {
-        if let Some(existing) = self.credentials.iter().find(|credential| {
-            credential.env_var == env_var
-                && std::ptr::eq(credential.provider, provider)
-                && credential.host_binding == host_binding
-                && matches!(&credential.secret, RecordSecret::Raw(value) if value.as_str() == real_value)
-||||||| 413492cd6c
-    ) -> String {
-        if let Some(existing) = self.credentials.iter().find(|credential| {
-            credential.env_var == env_var
-                && std::ptr::eq(credential.provider, provider)
-                && credential.host_binding == host_binding
-                && credential.real_value == real_value
-=======
         existing_env: &HashMap<String, String>,
     ) -> Option<String> {
         self.remember_credential_owner(env_var, real_value);
@@ -2306,7 +1854,6 @@ impl CredentialBrokerState {
                 && credential.provider.same_provider(&provider)
                 && credential.belongs_to_environment(environment_id)
                 && credential.real_value == real_value
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }) {
             // Existing dummies were reconciled before fresh-value discovery.
             if !env_contains_credential_value(existing_env, &existing.dummy_value) {
@@ -2325,16 +1872,6 @@ impl CredentialBrokerState {
             return None;
         }
 
-<<<<<<< HEAD
-        let dummy_value = self.fresh_dummy(provider, real_value);
-||||||| 413492cd6c
-        let dummy_value = loop {
-            let candidate = provider.dummy_value(real_value);
-            if candidate != real_value && !self.is_dummy_value(&candidate) {
-                break candidate;
-            }
-        };
-=======
         let mut alias_identities = Vec::new();
         if matches!(&provider, BrokeredCredentialProvider::Builtin(_))
             && !self.configured_providers.is_empty()
@@ -2460,21 +1997,14 @@ impl CredentialBrokerState {
                 }
             })
             .unwrap_or_default();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         self.credentials.push(CredentialRecord {
             env_var: env_var.to_string(),
             provider,
             host_binding,
-<<<<<<< HEAD
-            secret: RecordSecret::Raw(Zeroizing::new(real_value.to_string())),
-||||||| 413492cd6c
-            real_value: real_value.to_string(),
-=======
             additional_host_bindings: Vec::new(),
             fallback_host_bindings: Vec::new(),
             environment_id: environment_id.map(str::to_string),
             real_value: real_value.to_string(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             dummy_value: dummy_value.clone(),
             source_values,
             generated_aliases: Arc::default(),
@@ -2482,358 +2012,25 @@ impl CredentialBrokerState {
         Some(dummy_value)
     }
 
-    #[cfg(any(unix, windows))]
-    fn register_isolated(
-        &mut self,
-        mode: &IsolatedMode,
-        env_var: &str,
-        provider: &'static providers::CredentialProvider,
-        host_binding: providers::CredentialHostBinding,
-        real_value: &str,
-    ) -> String {
-        let fingerprint = fingerprint(&mode.fingerprint_key, env_var, real_value);
-        let client = mode.live_client();
-        // References from a dead or replaced broker are never reused.
-        self.credentials
-            .retain(|credential| match &credential.secret {
-                RecordSecret::Brokered { client: owner, .. } => client
-                    .as_ref()
-                    .is_some_and(|current| Arc::ptr_eq(current, owner)),
-                RecordSecret::Raw(_) | RecordSecret::Unavailable { .. } => true,
-            });
-        if let Some(existing) = self.credentials.iter().position(|credential| {
-            credential.env_var == env_var
-                && std::ptr::eq(credential.provider, provider)
-                && credential.host_binding == host_binding
-                && credential.fingerprint() == Some(fingerprint)
-        }) {
-            if matches!(
-                self.credentials[existing].secret,
-                RecordSecret::Brokered { .. }
-            ) || client.is_none()
-            {
-                return self.credentials[existing].dummy_value.clone();
-            }
-            self.credentials.remove(existing);
-        }
-        let (Some(client), Some(provider_id)) = (client, providers::provider_id(provider)) else {
-            return self.register_unavailable(
-                fingerprint,
-                env_var,
-                provider,
-                host_binding,
-                real_value,
-            );
-        };
-        let reference = match client.register(
-            provider_id,
-            HostBindingWire::from_binding(&host_binding),
-            real_value,
-        ) {
-            Ok(reference) => reference,
-            Err(error) => {
-                tracing::warn!("isolated credential broker rejected a credential: {error}");
-                return self.register_unavailable(
-                    fingerprint,
-                    env_var,
-                    provider,
-                    host_binding,
-                    real_value,
-                );
-            }
-        };
-        let dummy_value = self.fresh_dummy(provider, real_value);
-        self.credentials.push(CredentialRecord {
-            env_var: env_var.to_string(),
-            provider,
-            host_binding,
-            secret: RecordSecret::Brokered {
-                fingerprint,
-                reference,
-                client,
-            },
-            dummy_value: dummy_value.clone(),
-        });
-        dummy_value
-    }
-
-    fn register_unavailable(
-        &mut self,
-        fingerprint: [u8; 32],
-        env_var: &str,
-        provider: &'static providers::CredentialProvider,
-        host_binding: providers::CredentialHostBinding,
-        real_value: &str,
-    ) -> String {
-        let dummy_value = self.fresh_dummy(provider, real_value);
-        self.credentials.push(CredentialRecord {
-            env_var: env_var.to_string(),
-            provider,
-            host_binding,
-            secret: RecordSecret::Unavailable { fingerprint },
-            dummy_value: dummy_value.clone(),
-        });
-        dummy_value
-    }
-
-    fn fresh_dummy(
-        &self,
-        provider: &'static providers::CredentialProvider,
-        real_value: &str,
-    ) -> String {
-        loop {
-            let candidate = provider.dummy_value(real_value);
-            if candidate != real_value && !self.is_dummy_value(&candidate) {
-                break candidate;
-            }
-        }
-    }
-
     fn is_dummy_value(&self, value: &str) -> bool {
         self.credentials
             .iter()
             .any(|credential| credential.dummy_value == value)
-            || self
-                .scoped_openai
-                .as_ref()
-                .is_some_and(|credential| credential.dummy_value == value)
-            || self
-                .isolated_openai
-                .as_ref()
-                .is_some_and(|credential| credential.dummy_value == value)
     }
 }
 
-<<<<<<< HEAD
-impl CredentialRecord {
-    fn matches_host(&self, host: &str) -> bool {
-        self.host_binding.matches_host(host)
-    }
-
-    #[cfg(any(unix, windows))]
-    fn fingerprint(&self) -> Option<[u8; 32]> {
-        match &self.secret {
-            RecordSecret::Raw(_) => None,
-            #[cfg(any(unix, windows))]
-            RecordSecret::Brokered { fingerprint, .. } => Some(*fingerprint),
-            RecordSecret::Unavailable { fingerprint } => Some(*fingerprint),
-        }
-    }
-}
-
-impl IsolatedCredentialRecord {
-    fn matches_reference(&self, headers: &HeaderMap) -> bool {
-        providers::openai_provider()
-            .request_header(headers)
-            .and_then(|value| value.to_str().ok())
-            .is_some_and(|value| value == format!("Bearer {}", self.dummy_value))
-    }
-
-    fn dispatch(
-        &self,
-        scheme: &str,
-        host: &str,
-        port: u16,
-        method: &str,
-        path: &str,
-    ) -> Result<IsolatedCredentialReceipt, IsolatedCredentialDispatchError> {
-        if scheme != "https"
-            || host != resolver::OPENAI_API_HOST
-            || port != resolver::OPENAI_API_PORT
-            || method != "POST"
-            || path != self.route.authority.path.as_str()
-        {
-            return Err(IsolatedCredentialDispatchError::Denied);
-        }
-        self.route.dispatcher.dispatch(&IsolatedCredentialUse {
-            scheme,
-            host,
-            port,
-            method,
-            path,
-            capability_id: &self.route.capability_id,
-            authority: &self.route.authority,
-        })
-    }
-}
-
-impl ScopedCredentialRecord {
-    fn matches_reference(&self, headers: &HeaderMap) -> bool {
-        providers::openai_provider()
-            .request_header(headers)
-            .and_then(|value| value.to_str().ok())
-            .is_some_and(|value| value == format!("Bearer {}", self.dummy_value))
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn inject(
-        &mut self,
-        scheme: &str,
-        host: &str,
-        port: u16,
-        method: &str,
-        path: &str,
-        headers: &mut HeaderMap,
-        response_gate: bool,
-    ) -> Result<Option<ResponseGate>, ScopedCredentialInjectionError> {
-        if scheme != "https" {
-            return Err(ScopedCredentialInjectionError::SchemeDenied);
-        }
-        if host != resolver::OPENAI_API_HOST {
-            return Err(ScopedCredentialInjectionError::HostDenied);
-        }
-        if port != resolver::OPENAI_API_PORT {
-            return Err(ScopedCredentialInjectionError::PortDenied);
-        }
-        if method != "POST" {
-            return Err(ScopedCredentialInjectionError::MethodDenied);
-        }
-        if !path.starts_with(resolver::OPENAI_API_PATH_PREFIX)
-            || path != self.route.authority().path.as_str()
-        {
-            return Err(ScopedCredentialInjectionError::PathDenied);
-        }
-        let Some(authorization) = providers::openai_provider()
-            .request_header(headers)
-            .and_then(|value| value.to_str().ok())
-        else {
-            return Err(ScopedCredentialInjectionError::MissingReference);
-        };
-        if authorization != format!("Bearer {}", self.dummy_value) {
-            return Err(ScopedCredentialInjectionError::AuthorizationConflict);
-        }
-        if self.used {
-            return Err(ScopedCredentialInjectionError::AlreadyUsed);
-        }
-
-        let use_request = ScopedCredentialUse {
-            scheme,
-            host,
-            port,
-            method,
-            path,
-            capability_id: self.route.capability_id(),
-            authority: self.route.authority(),
-        };
-        let mut inserted = false;
-        let mut gate = None;
-        let mut callback = |secret: &str| {
-            let Some(header_value) = providers::scoped_openai_header_value(secret) else {
-                return Err(ScopedCredentialCallbackError::Failed);
-            };
-            if response_gate {
-                gate = Some(
-                    ResponseGate::new([("broker:OPENAI_API_KEY", secret)])
-                        .map_err(|_| ScopedCredentialCallbackError::Failed)?,
-                );
-            }
-            providers::openai_provider().insert_request_header(headers, header_value);
-            inserted = true;
-            Ok(())
-        };
-        self.route
-            .resolver()
-            .resolve(&use_request, &mut callback)
-            .map_err(|_| ScopedCredentialInjectionError::ResolutionFailed)?;
-        if !inserted {
-            return Err(ScopedCredentialInjectionError::ResolutionFailed);
-        }
-        self.used = true;
-        Ok(gate)
-    }
-}
-
-fn select_credential<'a>(
-    headers: &HeaderMap,
-    matching_credentials: &[&'a CredentialRecord],
-) -> Option<&'a CredentialRecord> {
-    let dummy_matches = matching_credentials
-        .iter()
-        .copied()
-        .filter(|credential| {
-            credential
-                .provider
-                .request_header(headers)
-                .and_then(|value| value.to_str().ok())
-                .is_some_and(|value| value.contains(&credential.dummy_value))
-        })
-        .collect::<Vec<_>>();
-    match dummy_matches.as_slice() {
-        [credential] => Some(*credential),
-        [] | [_, _, ..] => None,
-    }
-}
-
-fn update_brokered_credentials_marker(
-||||||| 413492cd6c
-impl CredentialRecord {
-    fn matches_host(&self, host: &str) -> bool {
-        self.host_binding.matches_host(host)
-    }
-}
-
-fn select_credential<'a>(
-    headers: &HeaderMap,
-    matching_credentials: &[&'a CredentialRecord],
-) -> Option<&'a CredentialRecord> {
-    let dummy_matches = matching_credentials
-        .iter()
-        .copied()
-        .filter(|credential| {
-            credential
-                .provider
-                .request_header(headers)
-                .and_then(|value| value.to_str().ok())
-                .is_some_and(|value| value.contains(&credential.dummy_value))
-        })
-        .collect::<Vec<_>>();
-    match dummy_matches.as_slice() {
-        [credential] => Some(*credential),
-        [] | [_, _, ..] => None,
-    }
-}
-
-fn update_brokered_credentials_marker(
-=======
 fn credential_provider_definitions(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     state: &CredentialBrokerState,
-<<<<<<< HEAD
-    env: &mut HashMap<String, String>,
-) {
-    let brokered = providers::credential_broker_env_keys()
-        .filter_map(|key| {
-            let value = env.get(key)?;
-            state.is_dummy_value(value).then_some((key, value.as_str()))
-        })
-        .collect::<Vec<_>>();
-    match serde_json::to_string(&brokered) {
-        Ok(marker) => {
-            env.insert(BROKERED_CREDENTIALS_ENV_KEY.to_string(), marker);
-        }
-        Err(_) => {
-            env.remove(BROKERED_CREDENTIALS_ENV_KEY);
-        }
-    }
-}
-
-/// Returns supported environment keys whose current values still match the child-scoped dummy
-/// values recorded by the credential broker.
-///
-/// The broker marker is treated as untrusted: malformed metadata, unsupported keys, and values
-/// replaced by the user are ignored. The environment is not mutated; callers own the decision to
-/// remove the returned keys.
-pub fn brokered_credential_dummy_env_keys(env: &HashMap<String, String>) -> Vec<String> {
-    env.get(BROKERED_CREDENTIALS_ENV_KEY)
-        .and_then(|marker| serde_json::from_str::<Vec<(String, String)>>(marker).ok())
-        .unwrap_or_default()
-        .into_iter()
-        .filter_map(|(key, dummy_value)| {
-            (providers::credential_broker_env_keys().any(|candidate| candidate == key.as_str())
-                && env.get(&key) == Some(&dummy_value))
-            .then_some(key)
-        })
-        .collect()
+) -> impl Iterator<Item = BrokeredCredentialProvider> + '_ {
+    providers::credential_providers()
+        .map(BrokeredCredentialProvider::Builtin)
+        .chain(
+            state
+                .configured_providers
+                .iter()
+                .cloned()
+                .map(BrokeredCredentialProvider::Configured),
+        )
 }
 
 /// Every environment variable the credential broker manages (tokens and host
@@ -2855,90 +2052,21 @@ pub fn credential_broker_user_runtime_dir() -> Option<std::path::PathBuf> {
     }
 }
 
-/// Returns supported credential keys only for an environment with an active broker.
-pub fn brokered_credential_env_keys(
-    env: &HashMap<String, String>,
-) -> impl Iterator<Item = &'static str> {
-    let active = env
-        .get(CREDENTIAL_BROKER_ACTIVE_ENV_KEY)
-        .is_some_and(|value| value == "1");
-    providers::credential_broker_env_keys().filter(move |_| active)
-||||||| 413492cd6c
-    env: &mut HashMap<String, String>,
-) {
-    let brokered = providers::credential_broker_env_keys()
-        .filter_map(|key| {
-            let value = env.get(key)?;
-            state.is_dummy_value(value).then_some((key, value.as_str()))
-        })
-        .collect::<Vec<_>>();
-    match serde_json::to_string(&brokered) {
-        Ok(marker) => {
-            env.insert(BROKERED_CREDENTIALS_ENV_KEY.to_string(), marker);
-        }
-        Err(_) => {
-            env.remove(BROKERED_CREDENTIALS_ENV_KEY);
-        }
-    }
-}
-
-/// Returns supported environment keys whose current values still match the child-scoped dummy
-/// values recorded by the credential broker.
-///
-/// The broker marker is treated as untrusted: malformed metadata, unsupported keys, and values
-/// replaced by the user are ignored. The environment is not mutated; callers own the decision to
-/// remove the returned keys.
-pub fn brokered_credential_dummy_env_keys(env: &HashMap<String, String>) -> Vec<String> {
-    env.get(BROKERED_CREDENTIALS_ENV_KEY)
-        .and_then(|marker| serde_json::from_str::<Vec<(String, String)>>(marker).ok())
-        .unwrap_or_default()
-        .into_iter()
-        .filter_map(|(key, dummy_value)| {
-            (providers::credential_broker_env_keys().any(|candidate| candidate == key.as_str())
-                && env.get(&key) == Some(&dummy_value))
-            .then_some(key)
-        })
-        .collect()
-}
-
-/// Returns supported credential keys only for an environment with an active broker.
-pub fn brokered_credential_env_keys(
-    env: &HashMap<String, String>,
-) -> impl Iterator<Item = &'static str> {
-    let active = env
-        .get(CREDENTIAL_BROKER_ACTIVE_ENV_KEY)
-        .is_some_and(|value| value == "1");
-    providers::credential_broker_env_keys().filter(move |_| active)
-=======
-) -> impl Iterator<Item = BrokeredCredentialProvider> + '_ {
-    providers::credential_providers()
-        .map(BrokeredCredentialProvider::Builtin)
-        .chain(
-            state
-                .configured_providers
-                .iter()
-                .cloned()
-                .map(BrokeredCredentialProvider::Configured),
-        )
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-}
-
 #[cfg(test)]
 impl CredentialBroker {
     /// True when this process still retains `value` as raw credential material.
     pub(crate) fn holds_raw_value(&self, value: &str) -> bool {
-        self.read_state()
-            .credentials
-            .iter()
-            .any(|credential| matches!(&credential.secret, RecordSecret::Raw(raw) if raw.as_str() == value))
+        self.hardened.holds_raw_value(value)
+            || self
+                .read_state()
+                .credentials
+                .iter()
+                .any(|credential| credential.real_value == value)
     }
 
     #[cfg(any(unix, windows))]
-    pub(crate) fn current_isolated_client(&self) -> Option<Arc<IsolatedBrokerClient>> {
-        match &self.isolation {
-            Isolation::Process(mode) => mode.client.clone(),
-            Isolation::InProcess => None,
-        }
+    pub(crate) fn current_isolated_client(&self) -> Option<Arc<isolated::IsolatedBrokerClient>> {
+        self.hardened.current_isolated_client()
     }
 }
 

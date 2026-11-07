@@ -6,7 +6,6 @@ use crate::config::NetworkMode;
 use crate::config::NetworkProxyConfig;
 use crate::config::ValidatedUnixSocketPath;
 use crate::credential_broker::CredentialBroker;
-<<<<<<< HEAD
 use crate::credential_broker::CredentialRouting;
 use crate::credential_broker::IsolatedBrokerOptions;
 use crate::credential_broker::IsolatedCredentialDispatchError;
@@ -15,11 +14,8 @@ use crate::credential_broker::IsolatedCredentialRoute;
 use crate::credential_broker::ScopedCredentialInjectionError;
 use crate::credential_broker::ScopedCredentialRoute;
 use crate::credential_broker::ScopedCredentialRouteError;
-||||||| 413492cd6c
-=======
 use crate::credential_broker::env_value;
 use crate::domain_matcher::DomainPatternSet;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::mitm::MitmState;
 use crate::mitm_hook::HookEvaluation;
 use crate::mitm_hook::MitmHooksByHost;
@@ -451,17 +447,11 @@ impl NetworkProxyState {
         local_binding_policy: LocalBindingPolicy,
         blocked_request_observer: Option<Arc<dyn BlockedRequestObserver>>,
     ) -> Self {
-        let credential_broker = CredentialBroker::new(state.config.credential_broker);
+        let credential_broker = credential_broker_for_config(&state.config);
         credential_broker.configure(&local_binding_policy.resolved_config(&state.config));
         Self {
-<<<<<<< HEAD
-            credential_broker: credential_broker_for_config(&state.config),
-||||||| 413492cd6c
-            credential_broker: CredentialBroker::new(state.config.credential_broker),
-=======
             credential_broker: Arc::new(std::sync::RwLock::new(credential_broker)),
             local_aws_signers: Arc::new(std::sync::RwLock::new(state.local_aws_signers())),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             state: Arc::new(RwLock::new(state)),
             local_binding_policy,
             proxy_private_ips_via_upstream: false,
@@ -560,43 +550,6 @@ impl NetworkProxyState {
         &self.audit_metadata
     }
 
-<<<<<<< HEAD
-    pub fn install_scoped_credential_route(
-        &self,
-        route: ScopedCredentialRoute,
-    ) -> Result<(), ScopedCredentialRouteError> {
-        self.credential_broker.install_scoped_openai_route(route)
-    }
-
-    pub fn scoped_credential_route_enabled(&self) -> bool {
-        self.credential_broker.scoped_openai_enabled()
-    }
-
-    /// Register an opaque broker route; this does not qualify its OS service.
-    pub fn install_isolated_credential_route(
-        &self,
-        route: IsolatedCredentialRoute,
-    ) -> Result<(), ScopedCredentialRouteError> {
-        self.credential_broker.install_isolated_openai_route(route)
-    }
-
-    /// Dispatch only through the installed exact-host isolated credential route.
-    pub fn dispatch_isolated_credential(
-        &self,
-        scheme: &str,
-        host: &str,
-        port: u16,
-        method: &str,
-        path: &str,
-    ) -> Result<IsolatedCredentialReceipt, IsolatedCredentialDispatchError> {
-        self.credential_broker
-            .dispatch_isolated_openai(scheme, host, port, method, path)
-    }
-
-    pub fn scoped_credential_route_matches_host(&self, host: &str) -> bool {
-        self.credential_broker.scoped_openai_matches_host(host)
-||||||| 413492cd6c
-=======
     fn credential_broker(&self) -> CredentialBroker {
         self.credential_broker
             .read()
@@ -610,6 +563,12 @@ impl NetworkProxyState {
         environment: &HashMap<String, String>,
     ) -> Result<()> {
         self.reload_if_needed().await?;
+        // A hardened broker (isolated process, Core-sourced values, response
+        // gate or scoped route) is never swapped for a cached plain one.
+        anyhow::ensure!(
+            !self.credential_broker().hardened(),
+            "credential broker hardening cannot be rebound to another environment"
+        );
         let mut state = self.state.write().await;
         let mut config = self.local_binding_policy.resolved_config(&state.config);
         config.configure_credential_broker_environment(environment);
@@ -655,7 +614,43 @@ impl NetworkProxyState {
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         mask_local_aws_env(&signers, env, ca_path);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    }
+
+    pub fn install_scoped_credential_route(
+        &self,
+        route: ScopedCredentialRoute,
+    ) -> Result<(), ScopedCredentialRouteError> {
+        self.credential_broker().install_scoped_openai_route(route)
+    }
+
+    pub fn scoped_credential_route_enabled(&self) -> bool {
+        self.credential_broker().scoped_openai_enabled()
+    }
+
+    /// Register an opaque broker route; this does not qualify its OS service.
+    pub fn install_isolated_credential_route(
+        &self,
+        route: IsolatedCredentialRoute,
+    ) -> Result<(), ScopedCredentialRouteError> {
+        self.credential_broker()
+            .install_isolated_openai_route(route)
+    }
+
+    /// Dispatch only through the installed exact-host isolated credential route.
+    pub fn dispatch_isolated_credential(
+        &self,
+        scheme: &str,
+        host: &str,
+        port: u16,
+        method: &str,
+        path: &str,
+    ) -> Result<IsolatedCredentialReceipt, IsolatedCredentialDispatchError> {
+        self.credential_broker()
+            .dispatch_isolated_openai(scheme, host, port, method, path)
+    }
+
+    pub fn scoped_credential_route_matches_host(&self, host: &str) -> bool {
+        self.credential_broker().scoped_openai_matches_host(host)
     }
 
     pub fn virtualize_child_credentials(&self, env: &mut HashMap<String, String>) {
@@ -782,32 +777,34 @@ impl NetworkProxyState {
         self.credential_broker().restore_text(text)
     }
 
-<<<<<<< HEAD
     pub fn inject_legacy_request_credentials(
         &self,
         host: &str,
         headers: &mut rama_http::HeaderMap,
     ) {
-        self.credential_broker.inject_request_headers(host, headers);
-||||||| 413492cd6c
-    pub fn inject_request_credentials(&self, host: &str, headers: &mut rama_http::HeaderMap) {
-        self.credential_broker.inject_request_headers(host, headers);
-=======
+        self.inject_request_credentials(host, headers);
+    }
+
     pub fn inject_request_credentials(&self, host: &str, headers: &mut rama_http::HeaderMap) {
         self.credential_broker()
             .inject_request_headers_for_environment(host, headers, self.environment_id());
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    }
+
+    /// Whether Corbanu credential hardening owns brokering (see
+    /// `credential_broker::hardened`).
+    pub(crate) fn credential_broker_hardened(&self) -> bool {
+        self.credential_broker().hardened()
     }
 
     /// PF-28-S02: whether injected values are scrubbed from responses.
     pub(crate) fn credential_response_gate(&self) -> bool {
-        self.credential_broker.response_gate_enabled()
+        self.credential_broker().response_gate_enabled()
     }
 
     /// Revokes every reference held by the isolated credential broker and
     /// closes its in-flight channels. Returns false when isolation is inactive.
     pub fn revoke_brokered_credentials(&self) -> bool {
-        self.credential_broker.revoke_isolated_credentials()
+        self.credential_broker().revoke_isolated_credentials()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -820,12 +817,14 @@ impl NetworkProxyState {
         path: &str,
         headers: &mut rama_http::HeaderMap,
     ) -> Result<CredentialRouting, ScopedCredentialInjectionError> {
-        self.credential_broker
+        self.credential_broker()
             .route_request_credentials(scheme, host, port, method, path, headers)
     }
 
+    /// `main`'s request-scoped injection (renamed: upstream took
+    /// `inject_request_credentials` for host-only injection).
     #[allow(clippy::too_many_arguments)]
-    pub fn inject_request_credentials(
+    pub fn inject_request_credentials_for_request(
         &self,
         scheme: &str,
         host: &str,
@@ -834,7 +833,7 @@ impl NetworkProxyState {
         path: &str,
         headers: &mut rama_http::HeaderMap,
     ) -> Result<(), ScopedCredentialInjectionError> {
-        self.credential_broker
+        self.credential_broker()
             .inject_request_headers_for_request(scheme, host, port, method, path, headers)
     }
 
@@ -888,6 +887,7 @@ impl NetworkProxyState {
     pub async fn force_reload(&self) -> Result<()> {
         match self.reloader.reload_now().await {
             Ok(mut new_state) => {
+                self.ensure_credential_broker_enablement_unchanged(&new_state)?;
                 {
                     let mut guard = self.state.write().await;
                     self.credential_broker()
@@ -911,6 +911,7 @@ impl NetworkProxyState {
 
     pub async fn replace_config_state(&self, mut new_state: ConfigState) -> Result<()> {
         self.reload_if_needed().await?;
+        self.ensure_credential_broker_enablement_unchanged(&new_state)?;
         let mut guard = self.state.write().await;
         self.credential_broker()
             .configure(&self.local_binding_policy.resolved_config(&new_state.config));
@@ -1346,6 +1347,7 @@ impl NetworkProxyState {
         match self.reloader.maybe_reload().await? {
             None => Ok(()),
             Some(mut new_state) => {
+                self.ensure_credential_broker_enablement_unchanged(&new_state)?;
                 {
                     let mut guard = self.state.write().await;
                     self.credential_broker()
@@ -1361,27 +1363,19 @@ impl NetworkProxyState {
             }
         }
     }
-<<<<<<< HEAD
 
+    /// The isolated broker process starts once per proxy and the hardening
+    /// modes are fixed at launch, so enablement and isolation cannot change
+    /// while the proxy runs (upstream allows reconfiguring the broker).
     fn ensure_credential_broker_enablement_unchanged(&self, new_state: &ConfigState) -> Result<()> {
+        let broker = self.credential_broker();
         anyhow::ensure!(
-            self.credential_broker.enabled() == new_state.config.credential_broker
-                && self.credential_broker.isolated() == new_state.config.isolated_credential_broker,
+            broker.enabled() == new_state.config.credential_broker
+                && broker.isolated() == new_state.config.isolated_credential_broker,
             "network.credential_broker cannot change while the proxy is running"
         );
         Ok(())
     }
-||||||| 413492cd6c
-
-    fn ensure_credential_broker_enablement_unchanged(&self, new_state: &ConfigState) -> Result<()> {
-        anyhow::ensure!(
-            self.credential_broker.enabled() == new_state.config.credential_broker,
-            "network.credential_broker cannot change while the proxy is running"
-        );
-        Ok(())
-    }
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[derive(Clone, Copy)]
@@ -1550,7 +1544,7 @@ fn credential_broker_for_config(config: &crate::config::NetworkProxyConfig) -> C
                 // PF-33-S02: under the destination guard local binding is no
                 // private-network grant, and the broker dials only the
                 // answers the guard checked.
-                allow_local_binding: config.allow_local_binding && !config.url_destination_policy,
+                allow_local_binding: config.allow_local_binding() && !config.url_destination_policy,
                 allow_upstream_proxy: config.allow_upstream_proxy,
                 runtime_dir: config.credential_broker_runtime_dir.clone(),
                 require_containment: config.secretless_agent_launch.is_some(),
@@ -1678,7 +1672,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reload_applies_credential_broker_enablement_changes() {
+    async fn reload_rejects_credential_broker_enablement_changes() {
+        // Corbanu keeps `main`'s rule: the broker (and its isolated process)
+        // is fixed for the proxy's lifetime; upstream applies the change.
         let config = NetworkProxyConfig {
             enabled: true,
             ..NetworkProxyConfig::default()
@@ -1704,13 +1700,20 @@ mod tests {
             }),
         );
 
-        state
+        let err = state
             .force_reload()
             .await
-            .expect("enable credential broker");
+            .expect_err("credential broker enablement should require a proxy restart");
         let mut env = HashMap::from([("OPENAI_API_KEY".to_string(), "sk-real".to_string())]);
         state.virtualize_child_credentials(&mut env);
-        assert_ne!(env["OPENAI_API_KEY"], "sk-real");
+
+        assert!(
+            format!("{err:#}")
+                .contains("network.credential_broker cannot change while the proxy is running"),
+            "unexpected error: {err:#}"
+        );
+        assert_eq!(env["OPENAI_API_KEY"], "sk-real");
+        assert!(!state.credential_broker().enabled());
     }
 
     #[test]

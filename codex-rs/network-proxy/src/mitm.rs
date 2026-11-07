@@ -13,6 +13,7 @@ use crate::destination::RedirectScope;
 use crate::destination::SystemResolver;
 use crate::destination::is_redirect_response;
 use crate::destination::request_has_body;
+use crate::destination_contract::DecisionReason;
 use crate::mitm_hook::HookEvaluation;
 use crate::mitm_hook::MitmHookActions;
 use crate::policy::normalize_host;
@@ -352,7 +353,7 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
     let method = req.method().as_str().to_string();
     let path = path_and_query(req.uri());
     let log_path = path_for_log(req.uri());
-    let authority = authority_header_value(&target_host, target_port);
+    let authority = authority_header_value(&target_host, target_port, &request_ctx.policy.scheme);
     let app_state = &request_ctx.policy.app_state;
 
     // PF-33-S01: authorize the full URL, method and DNS answers, and place the
@@ -363,6 +364,20 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
             .extensions()
             .get::<SocketInfo>()
             .map(|info| info.peer_addr().to_string());
+        // PF-33-S01: public retrieval is HTTPS-only, including upstream's
+        // plaintext brokered tunnels.
+        if request_ctx.policy.scheme != Scheme::HTTPS {
+            let site = DenialSite {
+                host: &target_host,
+                port: target_port,
+                method: Some(&method),
+                protocol: "http",
+                client,
+                fail_command: false,
+            };
+            let denial = DestinationDenial::Decision(DecisionReason::PublicRuleMismatch);
+            return Ok(destination::blocked(app_state, &denial, site).await);
+        }
         let chain_client = format!(
             "{}|{}",
             app_state.execution_id().unwrap_or_default(),
@@ -413,47 +428,74 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
     };
 
     let (mut parts, body) = req.into_parts();
-<<<<<<< HEAD
     let has_body = request_has_body(&parts.headers);
     if let Some((authorized, _)) = destination.as_ref() {
         authorized.strip_cross_origin_credentials(&mut parts.headers);
         // PF-33-S02: the connector dials only these checked answers.
         parts.extensions.insert(authorized.pinned_peers());
     }
-    if request_ctx
-        .policy
-        .app_state
-        .scoped_credential_route_enabled()
-        && hook_actions_touch_authorization(hook_actions.as_ref())
-    {
-        warn!("scoped credential request denied: authorization hook collision");
-        return Ok(blocked_text_response(REASON_POLICY_DENIED));
-    }
-    let routing = match request_ctx.policy.app_state.route_request_credentials(
-        "https",
-        &target_host,
-        target_port,
-        &method,
-        &path,
-        &mut parts.headers,
-    ) {
-        Ok(routing) => routing,
-        Err(error) => {
-            warn!("scoped credential request denied: {error}");
+    parts.uri = Uri::builder()
+        .scheme(request_ctx.policy.scheme.clone())
+        .authority(authority.as_str())
+        .path_and_query(path.as_str())
+        .build()?;
+    // Corbanu hardening (isolated broker, response gate, Core-sourced values,
+    // scoped route) routes credentials itself; otherwise upstream's engine
+    // injects them.
+    let routing = if app_state.credential_broker_hardened() {
+        if request_ctx
+            .policy
+            .app_state
+            .scoped_credential_route_enabled()
+            && hook_actions_touch_authorization(hook_actions.as_ref())
+        {
+            warn!("scoped credential request denied: authorization hook collision");
             return Ok(blocked_text_response(REASON_POLICY_DENIED));
         }
+        let routing = match request_ctx.policy.app_state.route_request_credentials(
+            request_ctx.policy.scheme.as_str(),
+            &target_host,
+            target_port,
+            &method,
+            &path,
+            &mut parts.headers,
+        ) {
+            Ok(routing) => routing,
+            Err(error) => {
+                warn!("scoped credential request denied: {error}");
+                return Ok(blocked_text_response(REASON_POLICY_DENIED));
+            }
+        };
+        #[cfg(any(unix, windows))]
+        if matches!(routing, CredentialRouting::Brokered(_))
+            && hook_actions_touch_authorization(hook_actions.as_ref())
+        {
+            warn!("brokered credential request denied: authorization hook collision");
+            return Ok(blocked_text_response(REASON_POLICY_DENIED));
+        }
+        apply_mitm_hook_actions(&mut parts.headers, hook_actions.as_ref());
+        routing
+    } else {
+        apply_request_credentials(
+            &mut parts.headers,
+            hook_actions.as_ref(),
+            request_ctx.policy.app_state.as_ref(),
+            &credential_destination,
+        );
+        CredentialRouting::Direct(None)
     };
-    #[cfg(any(unix, windows))]
-    if matches!(routing, CredentialRouting::Brokered(_))
-        && hook_actions_touch_authorization(hook_actions.as_ref())
-    {
-        warn!("brokered credential request denied: authorization hook collision");
-        return Ok(blocked_text_response(REASON_POLICY_DENIED));
-    }
-    apply_mitm_hook_actions(&mut parts.headers, hook_actions.as_ref());
     // PF-28-S02: values injected here (credential or hook) are scrubbed from
     // the response the agent receives; the isolated broker scrubs its own.
     let reflection = if app_state.credential_response_gate() {
+        // Upstream's body secret substitution writes values the gate cannot
+        // scrub, so it is refused while the gate is on (fail closed).
+        if hook_actions
+            .as_ref()
+            .is_some_and(|actions| actions.body_secret_substitution.is_some())
+        {
+            warn!("credentialed request denied: response gate cannot scrub body substitution");
+            return Ok(blocked_text_response(REASON_POLICY_DENIED));
+        }
         let injected = match &routing {
             CredentialRouting::Direct(gate) => gate.clone(),
             #[cfg(any(unix, windows))]
@@ -472,29 +514,6 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
     if reflection.is_some() {
         response_scrub::request_identity_body(&mut parts.headers);
     }
-    parts.uri = build_https_uri(&authority, &path)?;
-||||||| 413492cd6c
-    request_ctx
-        .policy
-        .app_state
-        .inject_request_credentials(&target_host, &mut parts.headers);
-    apply_mitm_hook_actions(&mut parts.headers, hook_actions.as_ref());
-    let authority = authority_header_value(&target_host, target_port);
-    parts.uri = build_https_uri(&authority, &path)?;
-=======
-    let authority = authority_header_value(&target_host, target_port, &request_ctx.policy.scheme);
-    parts.uri = Uri::builder()
-        .scheme(request_ctx.policy.scheme.clone())
-        .authority(authority.as_str())
-        .path_and_query(path.as_str())
-        .build()?;
-    apply_request_credentials(
-        &mut parts.headers,
-        hook_actions.as_ref(),
-        request_ctx.policy.app_state.as_ref(),
-        &credential_destination,
-    );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     parts
         .headers
         .insert(HOST, HeaderValue::from_str(&authority)?);
@@ -515,10 +534,31 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
         body
     };
 
-<<<<<<< HEAD
-    let upstream_req = Request::from_parts(parts, body);
+    let mut upstream_req = Request::from_parts(parts, body);
+    if let Some(substitution) = hook_actions
+        .as_ref()
+        .and_then(|actions| actions.body_secret_substitution.as_ref())
+    {
+        let Ok(substituted) = substitution.apply(upstream_req).await else {
+            return Ok(request_ctx.policy.deny_hook(&method, client).await);
+        };
+        upstream_req = substituted;
+    }
+    if let Some((signer, guest)) = signing {
+        let Ok(signed) = signer.sign(upstream_req, &guest).await else {
+            return Ok(request_ctx.policy.deny_hook(&method, client).await);
+        };
+        upstream_req = signed;
+    }
     let mut upstream_resp = match routing {
-        CredentialRouting::Direct(_) => request_ctx.upstream.serve(upstream_req).await?,
+        CredentialRouting::Direct(_) => {
+            if request_ctx.policy.scheme == Scheme::HTTP {
+                crate::brokered_tunnel::forward_http_request(upstream_req, &request_ctx.upstream)
+                    .await?
+            } else {
+                request_ctx.upstream.serve(upstream_req).await?
+            }
+        }
         #[cfg(any(unix, windows))]
         CredentialRouting::Brokered(route) => match route.forward(upstream_req).await {
             Ok(response) => response,
@@ -569,32 +609,6 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
     if let Some(gate) = &reflection {
         upstream_resp = response_scrub::scrub_response(gate, upstream_resp);
     }
-||||||| 413492cd6c
-    let upstream_req = Request::from_parts(parts, body);
-    let upstream_resp = request_ctx.upstream.serve(upstream_req).await?;
-=======
-    let mut upstream_req = Request::from_parts(parts, body);
-    if let Some(substitution) = hook_actions
-        .as_ref()
-        .and_then(|actions| actions.body_secret_substitution.as_ref())
-    {
-        let Ok(substituted) = substitution.apply(upstream_req).await else {
-            return Ok(request_ctx.policy.deny_hook(&method, client).await);
-        };
-        upstream_req = substituted;
-    }
-    if let Some((signer, guest)) = signing {
-        let Ok(signed) = signer.sign(upstream_req, &guest).await else {
-            return Ok(request_ctx.policy.deny_hook(&method, client).await);
-        };
-        upstream_req = signed;
-    }
-    let upstream_resp = if request_ctx.policy.scheme == Scheme::HTTP {
-        crate::brokered_tunnel::forward_http_request(upstream_req, &request_ctx.upstream).await?
-    } else {
-        request_ctx.upstream.serve(upstream_req).await?
-    };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     respond_with_inspection(
         upstream_resp,
         inspect,
@@ -678,10 +692,14 @@ async fn evaluate_mitm_policy(
 
     // CONNECT already handled allowlist/denylist + decider policy. Re-check local/private
     // resolution here to defend against DNS rebinding between CONNECT and inner HTTPS requests.
-<<<<<<< HEAD
     let host_decision = policy
         .app_state
-        .host_blocked(&policy.target_host, policy.target_port)
+        .host_blocked_with_local_binding(
+            &policy.target_host,
+            policy.target_port,
+            /*allow_local_binding*/ None,
+            HostAuthorization::Approved,
+        )
         .await?;
     // PF-33-S02: under the destination guard, a host denied after its tunnel
     // opened is refused on the open tunnel too, not only on the next CONNECT.
@@ -702,28 +720,6 @@ async fn evaluate_mitm_policy(
         ));
     }
     if host_decision == HostBlockDecision::Blocked(HostBlockReason::NotAllowedLocal) {
-||||||| 413492cd6c
-    if matches!(
-        policy
-            .app_state
-            .host_blocked(&policy.target_host, policy.target_port)
-            .await?,
-        HostBlockDecision::Blocked(HostBlockReason::NotAllowedLocal)
-    ) {
-=======
-    if matches!(
-        policy
-            .app_state
-            .host_blocked_with_local_binding(
-                &policy.target_host,
-                policy.target_port,
-                /*allow_local_binding*/ None,
-                HostAuthorization::Approved,
-            )
-            .await?,
-        HostBlockDecision::Blocked(HostBlockReason::NotAllowedLocal)
-    ) {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let reason = HostBlockReason::NotAllowedLocal.as_str();
         let _ = policy
             .app_state
@@ -800,7 +796,6 @@ async fn evaluate_mitm_policy(
     Ok(MitmPolicyDecision::Allow { hook_actions })
 }
 
-<<<<<<< HEAD
 fn hook_actions_touch_authorization(actions: Option<&MitmHookActions>) -> bool {
     actions.is_some_and(|actions| {
         actions.strip_request_headers.contains(&AUTHORIZATION)
@@ -811,10 +806,7 @@ fn hook_actions_touch_authorization(actions: Option<&MitmHookActions>) -> bool {
     })
 }
 
-fn apply_mitm_hook_actions(headers: &mut HeaderMap, actions: Option<&MitmHookActions>) {
-||||||| 413492cd6c
-fn apply_mitm_hook_actions(headers: &mut HeaderMap, actions: Option<&MitmHookActions>) {
-=======
+/// Upstream's engine: inject brokered credentials, then apply hook actions.
 fn apply_request_credentials(
     headers: &mut HeaderMap,
     actions: Option<&MitmHookActions>,
@@ -822,7 +814,10 @@ fn apply_request_credentials(
     credential_destination: &str,
 ) {
     app_state.inject_request_credentials(credential_destination, headers);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    apply_mitm_hook_actions(headers, actions);
+}
+
+fn apply_mitm_hook_actions(headers: &mut HeaderMap, actions: Option<&MitmHookActions>) {
     let Some(actions) = actions else {
         return;
     };

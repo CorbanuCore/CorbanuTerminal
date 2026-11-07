@@ -1,32 +1,24 @@
 #![deny(clippy::print_stdout, clippy::print_stderr)]
 
 mod attribution;
-<<<<<<< HEAD
 // Public module seam avoids shared root registrations in the parallel browser lane.
-pub mod browser_policy;
-||||||| 413492cd6c
-=======
 mod authorization_path;
 mod aws_sigv4;
 mod body_budget;
 mod brokered_tunnel;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+pub mod browser_policy;
 mod certs;
 mod config;
 mod connect_policy;
 mod connection_lifecycle;
 mod credential_broker;
-<<<<<<< HEAD
 mod destination;
 // PF-33-S03 contract. Parts are used only by its standalone test target
 // (tests/destination_contract.rs compiles the same file).
 #[allow(dead_code)]
 mod destination_contract;
-||||||| 413492cd6c
-=======
 mod domain_matcher;
 mod environment_policy;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod http_proxy;
 mod mitm;
 mod mitm_hook;
@@ -74,7 +66,11 @@ pub use config::managed_proxy_ports;
 #[cfg(any(unix, windows))]
 pub use credential_broker::CODEX_CREDENTIAL_BROKER_ARG1;
 pub use credential_broker::CREDENTIAL_BROKER_ACTIVE_ENV_KEY;
-<<<<<<< HEAD
+pub use credential_broker::CredentialAuthMethod;
+pub use credential_broker::CredentialBrokerContext;
+pub use credential_broker::CredentialBrokerEnvironment;
+pub use credential_broker::CredentialMaskingFailureMode;
+pub use credential_broker::CredentialProviderConfig;
 pub use credential_broker::IsolatedCredentialDispatchError;
 pub use credential_broker::IsolatedCredentialDispatcher;
 pub use credential_broker::IsolatedCredentialReceipt;
@@ -90,35 +86,23 @@ pub use credential_broker::ScopedCredentialUse;
 #[cfg(any(unix, windows))]
 pub use credential_broker::StoredKeyAccount;
 pub use credential_broker::StoredKeyResolver;
-||||||| 413492cd6c
-=======
-pub use credential_broker::CredentialAuthMethod;
-pub use credential_broker::CredentialBrokerContext;
-pub use credential_broker::CredentialBrokerEnvironment;
-pub use credential_broker::CredentialMaskingFailureMode;
-pub use credential_broker::CredentialProviderConfig;
 pub use credential_broker::brokered_credential_binding_env_keys;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use credential_broker::brokered_credential_dummy_env_keys;
 pub use credential_broker::brokered_credential_env_keys;
-<<<<<<< HEAD
+pub use credential_broker::brokered_credential_marker_env_keys;
+pub use credential_broker::brokered_credential_value_env_keys;
 pub use credential_broker::credential_broker_env_var_names;
+pub use credential_broker::credential_broker_provider_context_env_keys;
+pub use credential_broker::credential_broker_provider_sources_allowed;
 pub use credential_broker::credential_broker_user_runtime_dir;
+pub use credential_broker::is_credential_broker_provider_env_key;
 #[cfg(any(unix, windows))]
 pub use credential_broker::model_auth;
 #[cfg(any(unix, windows))]
 pub use credential_broker::run_credential_broker_main;
 #[cfg(any(unix, windows))]
 pub use credential_broker::run_credential_broker_main_with;
-||||||| 413492cd6c
-=======
-pub use credential_broker::brokered_credential_marker_env_keys;
-pub use credential_broker::brokered_credential_value_env_keys;
-pub use credential_broker::credential_broker_provider_context_env_keys;
-pub use credential_broker::credential_broker_provider_sources_allowed;
-pub use credential_broker::is_credential_broker_provider_env_key;
 pub use environment_policy::EnvironmentNetworkPolicy;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use mitm_hook::InjectedHeaderConfig;
 pub use mitm_hook::MitmHookActionsConfig;
 pub use mitm_hook::MitmHookBodyConfig;
