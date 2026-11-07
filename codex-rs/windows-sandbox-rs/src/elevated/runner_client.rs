@@ -46,40 +46,17 @@ use windows_sys::Win32::Foundation::ERROR_SERVICE_ALREADY_RUNNING;
 use windows_sys::Win32::Foundation::GetLastError;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::System::IO::CancelSynchronousIo;
-<<<<<<< HEAD
 use windows_sys::Win32::System::Pipes::PeekNamedPipe;
-||||||| 413492cd6c
-use windows_sys::Win32::System::Pipes::PeekNamedPipe;
-use windows_sys::Win32::System::Threading::CreateProcessWithLogonW;
-=======
-use windows_sys::Win32::System::Threading::CreateProcessWithLogonW;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 use windows_sys::Win32::System::Threading::GetCurrentThread;
-<<<<<<< HEAD
 use windows_sys::Win32::System::Threading::INFINITE;
-||||||| 413492cd6c
-use windows_sys::Win32::System::Threading::PROCESS_INFORMATION;
-use windows_sys::Win32::System::Threading::STARTUPINFOW;
-=======
 use windows_sys::Win32::System::Threading::LOGON_WITH_PROFILE;
-use windows_sys::Win32::System::Threading::PROCESS_INFORMATION;
-use windows_sys::Win32::System::Threading::STARTF_FORCEOFFFEEDBACK;
-use windows_sys::Win32::System::Threading::STARTUPINFOW;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use windows_sys::Win32::System::Threading::TerminateProcess;
 use windows_sys::Win32::System::Threading::WaitForSingleObject;
 
 const RUNNER_SPAWN_READY_TIMEOUT: Duration = Duration::from_secs(15);
 const RUNNER_PIPE_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
-<<<<<<< HEAD
 const RUNNER_SPAWN_READY_POLL_INTERVAL: Duration = Duration::from_millis(5);
-||||||| 413492cd6c
-const RUNNER_SPAWN_READY_POLL_INTERVAL: Duration = Duration::from_millis(5);
-const RUNNER_ERROR_MODE_FLAGS: u32 = 0x0001 | 0x0002;
-=======
-const RUNNER_ERROR_MODE_FLAGS: u32 = 0x0001 | 0x0002;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 const WAIT_OBJECT_0: u32 = 0;
 
 struct NonOwningHandle(HANDLE);
@@ -95,36 +72,6 @@ impl NonOwningHandle {
 }
 
 #[derive(Debug)]
-<<<<<<< HEAD
-||||||| 413492cd6c
-struct RunnerLogonError {
-    code: u32,
-}
-
-impl std::fmt::Display for RunnerLogonError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CreateProcessWithLogonW failed: {}", self.code)
-    }
-}
-
-impl std::error::Error for RunnerLogonError {}
-
-#[derive(Debug)]
-=======
-pub(crate) struct RunnerLogonError {
-    pub(crate) code: u32,
-}
-
-impl std::fmt::Display for RunnerLogonError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CreateProcessWithLogonW failed: {}", self.code)
-    }
-}
-
-impl std::error::Error for RunnerLogonError {}
-
-#[derive(Debug)]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub(crate) struct RunnerStartupError {
     payload: ErrorPayload,
 }
@@ -228,20 +175,12 @@ impl RunnerTransport {
         write_frame(&mut self.pipe_write, &spawn_request)
     }
 
-<<<<<<< HEAD
     pub(crate) fn read_spawn_ready(&mut self) -> Result<SpawnReady> {
-        wait_for_complete_frame(&self.pipe_read, RUNNER_SPAWN_READY_TIMEOUT)?;
-||||||| 413492cd6c
-    pub(crate) fn read_spawn_ready(&mut self) -> Result<()> {
-        wait_for_complete_frame(&self.pipe_read, RUNNER_SPAWN_READY_TIMEOUT)?;
-=======
-    pub(crate) fn read_spawn_ready(&mut self) -> Result<()> {
         crate::framed_io::wait_for_complete_frame(
             &self.pipe_read,
             Instant::now() + RUNNER_SPAWN_READY_TIMEOUT,
         )
         .context("wait for runner spawn_ready")?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let msg = read_frame(&mut self.pipe_read)?
             .ok_or_else(|| anyhow::anyhow!("runner pipe closed before spawn_ready"))?;
         match msg.message {
@@ -434,19 +373,9 @@ pub(crate) fn spawn_runner_transport(
     let h_pipe_in = pipe_write.as_raw_handle() as HANDLE;
     let h_pipe_out = pipe_read.as_raw_handle() as HANDLE;
 
-<<<<<<< HEAD
-    // Taken before the request moves into the transport.
-    let commands_use_this_desktop = !spawn_request.use_private_desktop;
-    let runner_exe = find_runner_exe(codex_home, log_dir);
-    let runner_cmdline = runner_exe
-||||||| 413492cd6c
-    let runner_exe = find_runner_exe(codex_home, log_dir);
-    let runner_cmdline = runner_exe
-=======
     let runner_cmdline = registered_alias
         .as_deref()
         .unwrap_or(&runner_exe)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         .to_str()
         .map(str::to_owned)
         .unwrap_or_else(|| "codex-command-runner.exe".to_string());
@@ -456,126 +385,39 @@ pub(crate) fn spawn_runner_transport(
         quote_windows_arg(&format!("--pipe-in={pipe_in_name}")),
         quote_windows_arg(&format!("--pipe-out={pipe_out_name}"))
     );
-<<<<<<< HEAD
-    let mut launched = match create_process_with_logon(
+    // #295: through the logon launcher when this process is protected; #341:
+    // off the interactive window station the runner's logon gets this
+    // session's window station and desktop. Execution aliases require the
+    // registered account's profile; other launches stay profile-free.
+    let mut launched = create_process_with_logon(
         &LogonLaunchRequest {
             username: &sandbox_creds.username,
             password: &sandbox_creds.password,
             application: Path::new(&runner_cmdline),
             command_line: &runner_full_cmd,
             cwd,
+            logon_flags: if registered_alias.is_some() {
+                LOGON_WITH_PROFILE
+            } else {
+                0
+            },
         },
         &runner_exe,
-    ) {
-        Ok(launched) => launched,
-        Err(err) => {
-            unsafe {
-                CloseHandle(h_pipe_in);
-                CloseHandle(h_pipe_out);
-            }
-            return Err(err);
-        }
-    };
+    )?;
     if launched.via_launcher {
         crate::logging::log_note(
             "runner started through the logon launcher (protected process, #295)",
             log_dir,
         );
-||||||| 413492cd6c
-    let mut cmdline_vec = to_wide(&runner_full_cmd);
-    let exe_w = to_wide(&runner_cmdline);
-    let cwd_w = to_wide(cwd);
-    let user_w = to_wide(&sandbox_creds.username);
-    let domain_w = to_wide(".");
-    let password_w = to_wide(&sandbox_creds.password);
-    let mut si: STARTUPINFOW = unsafe { std::mem::zeroed() };
-    si.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
-    let mut pi: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
-    let env_block: Option<Vec<u16>> = None;
-
-    let previous_error_mode = unsafe { SetErrorMode(RUNNER_ERROR_MODE_FLAGS) };
-    // Sandbox users have no profile state that commands should inherit.
-    let spawn_res = unsafe {
-        CreateProcessWithLogonW(
-            user_w.as_ptr(),
-            domain_w.as_ptr(),
-            password_w.as_ptr(),
-            /*dwlogonflags*/ 0,
-            exe_w.as_ptr(),
-            cmdline_vec.as_mut_ptr(),
-            windows_sys::Win32::System::Threading::CREATE_NO_WINDOW
-                | windows_sys::Win32::System::Threading::CREATE_UNICODE_ENVIRONMENT,
-            env_block
-                .as_ref()
-                .map(|block| block.as_ptr() as *const c_void)
-                .unwrap_or(ptr::null()),
-            cwd_w.as_ptr(),
-            &si,
-            &mut pi,
-        )
-    };
-    unsafe {
-        SetErrorMode(previous_error_mode);
     }
-    if spawn_res == 0 {
-        let err = unsafe { GetLastError() };
-        unsafe {
-            CloseHandle(h_pipe_in);
-            CloseHandle(h_pipe_out);
-        }
-        return Err(RunnerLogonError { code: err }.into());
-=======
-    let mut cmdline_vec = to_wide(&runner_full_cmd);
-    let exe_w = to_wide(&runner_cmdline);
-    let cwd_w = to_wide(cwd);
-    let user_w = to_wide(&sandbox_creds.username);
-    let domain_w = to_wide(".");
-    let password_w = to_wide(&sandbox_creds.password);
-    let mut si: STARTUPINFOW = unsafe { std::mem::zeroed() };
-    si.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    let mut pi: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
-
-    let previous_error_mode = unsafe { SetErrorMode(RUNNER_ERROR_MODE_FLAGS) };
-    // Execution aliases require the registered account's profile.
-    // Other launches retain their existing profile-free behavior.
-    let spawn_res = unsafe {
-        CreateProcessWithLogonW(
-            user_w.as_ptr(),
-            domain_w.as_ptr(),
-            password_w.as_ptr(),
-            if registered_alias.is_some() {
-                LOGON_WITH_PROFILE
-            } else {
-                0
-            },
-            exe_w.as_ptr(),
-            cmdline_vec.as_mut_ptr(),
-            windows_sys::Win32::System::Threading::CREATE_NO_WINDOW
-                | windows_sys::Win32::System::Threading::CREATE_UNICODE_ENVIRONMENT,
-            ptr::null(),
-            cwd_w.as_ptr(),
-            &si,
-            &mut pi,
-        )
-    };
-    // Preserve the failure code before SetErrorMode can overwrite it.
-    let spawn_error = (spawn_res == 0).then(|| unsafe { GetLastError() });
-    unsafe {
-        SetErrorMode(previous_error_mode);
-    }
-    if let Some(err) = spawn_error {
-        return Err(RunnerLogonError { code: err }.into());
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-    }
-<<<<<<< HEAD
     if let Some(err) = &launched.window_access_error {
         crate::logging::log_note(
             &format!("runner may not start: could not give its logon this window station: {err}"),
             log_dir,
         );
     }
-    let runner_process = launched.process;
+    // SAFETY: create_process_with_logon transfers the process handle to the caller.
+    let runner_process = unsafe { OwnedHandle::from_raw_handle(launched.process as _) };
     let expected_runner_pid = launched.pid;
     // #345: removed when the runner exits, or on the failure paths below once
     // it has been ended.
@@ -583,176 +425,92 @@ pub(crate) fn spawn_runner_transport(
         access.set_log_dir(log_dir);
         access
     });
-
-    let connect_result = (|| -> Result<()> {
-        connect_pipe_with_timeout(h_pipe_in, expected_runner_pid, "pipe-in")?;
-        connect_pipe_with_timeout(h_pipe_out, expected_runner_pid, "pipe-out")?;
-        Ok(())
-    })()
-    .map_err(|err| match &launched.window_access_error {
-        // #341: the likely reason the runner never connected.
-        Some(access) => anyhow::anyhow!(
-            "{err:#} (could not give the runner's logon access to this session's window station: {access})"
-        ),
-        None => err,
-    });
-
-    if let Err(err) = connect_result {
-        unsafe {
-            // Keep the process handle alive until the pipe handshake finishes. If the handshake
-            // fails after the runner process has already launched, we still need a way to stop
-            // that child instead of leaking a stray `codex-command-runner.exe`.
-            if runner_process != 0 {
-                let _ = TerminateProcess(runner_process, 1);
-                CloseHandle(runner_process);
-            }
-            CloseHandle(h_pipe_in);
-            CloseHandle(h_pipe_out);
-        }
-        return Err(err);
-    }
-
-||||||| 413492cd6c
-    let expected_runner_pid = pi.dwProcessId;
-
-    let connect_result = (|| -> Result<()> {
-        connect_pipe_with_timeout(h_pipe_in, expected_runner_pid, "pipe-in")?;
-        connect_pipe_with_timeout(h_pipe_out, expected_runner_pid, "pipe-out")?;
-        Ok(())
-    })();
-
-    unsafe {
-        if pi.hThread != 0 {
-            CloseHandle(pi.hThread);
-        }
-    }
-
-    if let Err(err) = connect_result {
-        unsafe {
-            // Keep the process handle alive until the pipe handshake finishes. If the handshake
-            // fails after the runner process has already launched, we still need a way to stop
-            // that child instead of leaking a stray `codex-command-runner.exe`.
-            if pi.hProcess != 0 {
-                let _ = TerminateProcess(pi.hProcess, 1);
-                CloseHandle(pi.hProcess);
-            }
-            CloseHandle(h_pipe_in);
-            CloseHandle(h_pipe_out);
-        }
-        return Err(err);
-    }
-
-=======
-    // Keep the process pinned through the entire startup handshake. Pipes close
-    // automatically on every error, including failure to create the second pipe.
-    let _runner_process = unsafe { OwnedHandle::from_raw_handle(pi.hProcess as _) };
-    let _runner_thread = unsafe { OwnedHandle::from_raw_handle(pi.hThread as _) };
-    let expected_runner_pid = pi.dwProcessId;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut transport = RunnerTransport {
         pipe_write,
         pipe_read,
     };
-<<<<<<< HEAD
     let startup_result = (|| -> Result<SpawnReady> {
-        // Keep the runner process HANDLE alive until the *entire* startup handshake finishes.
-        // That way, a later `send_spawn_request` or `spawn_ready` failure can still terminate the
-        // runner instead of leaving a stray `codex-command-runner.exe` behind.
-||||||| 413492cd6c
-    let startup_result = (|| -> Result<()> {
-        // Keep the runner process HANDLE alive until the *entire* startup handshake finishes.
-        // That way, a later `send_spawn_request` or `spawn_ready` failure can still terminate the
-        // runner instead of leaving a stray `codex-command-runner.exe` behind.
-=======
-    let startup_result = (|| -> Result<()> {
         // An update can retarget the alias after setup. Check the selected image
         // and authenticate its pipes before sending it the command.
         if registered_alias.is_some() {
-            verify_registered_core_runner(pi.hProcess, &runner_exe)?;
+            verify_registered_core_runner(runner_process.as_raw_handle() as HANDLE, &runner_exe)?;
         }
-        connect_pipe_with_timeout(h_pipe_in, expected_runner_pid, "pipe-in")?;
-        connect_pipe_with_timeout(h_pipe_out, expected_runner_pid, "pipe-out")?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        connect_pipe_with_timeout(h_pipe_in, expected_runner_pid, "pipe-in").map_err(|err| {
+            runner_connect_error(err, launched.window_access_error.as_deref())
+        })?;
+        connect_pipe_with_timeout(h_pipe_out, expected_runner_pid, "pipe-out").map_err(|err| {
+            runner_connect_error(err, launched.window_access_error.as_deref())
+        })?;
         transport.send_spawn_request(spawn_request)?;
         transport.read_spawn_ready()
     })();
     let spawn_ready = match startup_result {
         Ok(spawn_ready) => spawn_ready,
         Err(err) => {
+            // Keep the process handle alive until the handshake finishes, so a
+            // failure can still stop the runner instead of leaving it behind.
             unsafe {
-                if runner_process != 0 {
-                    let _ = TerminateProcess(runner_process, 1);
-                    CloseHandle(runner_process);
-                }
+                let _ = TerminateProcess(runner_process.as_raw_handle() as HANDLE, 1);
             }
-            drop(transport);
             return Err(err);
         }
     };
 
+    if registered_alias.is_some() {
+        crate::logging::debug_log(
+            &format!(
+                "registered_core_runner_ready pid={expected_runner_pid} package_verified=true pipes_authenticated=true"
+            ),
+            log_dir,
+        );
+    }
+
     let Some(window_access) = window_access else {
-        unsafe {
-<<<<<<< HEAD
-            if runner_process != 0 {
-                // The runner has now connected both pipes *and* acknowledged the spawn request,
-                // so startup is complete. At that point the transport pipes become the only
-                // lifetime anchor we need to keep the session alive.
-                CloseHandle(runner_process);
-            }
-||||||| 413492cd6c
-            if pi.hProcess != 0 {
-                let _ = TerminateProcess(pi.hProcess, 1);
-                CloseHandle(pi.hProcess);
-            }
-=======
-            let _ = TerminateProcess(pi.hProcess, 1);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-        }
-<<<<<<< HEAD
+        // Startup is complete: the transport pipes are the session's only anchor.
         return Ok(transport);
     };
-    // #345: the runner has created its desktop and started its command; leave the command
-    // only what it and its children need to start, and remove that once the runner exits.
-    // A ConPTY's console host starts on Core's desktop: keep that entry if the runner could
-    // not tell it had started.
-    let commands_use_this_desktop =
-        commands_use_this_desktop || spawn_ready.console_host_started == Some(false);
-    let mut window_access = match WindowAccessReaper::start(
-        window_access,
-        runner_process,
-        &runner_exe,
-    ) {
-        Ok(mut reaper) => {
-            // The reaper removes it when the runner exits, even after Core.
-            if let Err(err) = reaper.narrow_for_commands(commands_use_this_desktop) {
-                crate::logging::log_note(&format!("{err:#}"), log_dir);
+    // #345: the runner has started its command on a private desktop; leave the
+    // command only what it and its children need to start, and remove that once
+    // the runner exits. A ConPTY's console host starts on Core's desktop: keep
+    // that entry if the runner could not tell it had started.
+    let commands_use_this_desktop = spawn_ready.console_host_started == Some(false);
+    let runner_process = runner_process.into_raw_handle() as HANDLE;
+    let mut window_access =
+        match WindowAccessReaper::start(window_access, runner_process, &runner_exe) {
+            Ok(mut reaper) => {
+                // The reaper removes it when the runner exits, even after Core.
+                if let Err(err) = reaper.narrow_for_commands(commands_use_this_desktop) {
+                    crate::logging::log_note(&format!("{err:#}"), log_dir);
+                }
+                unsafe { CloseHandle(runner_process) };
+                return Ok(transport);
             }
-            unsafe { CloseHandle(runner_process) };
-            return Ok(transport);
-        }
-        Err((window_access, err)) => {
-            crate::logging::log_note(
-                &format!(
-                    "no reaper for the runner's window station access ({err:#}); Core removes it, unless it exits first"
-                ),
-                log_dir,
-            );
-            window_access
-        }
-    };
+            Err((window_access, err)) => {
+                crate::logging::log_note(
+                    &format!(
+                        "no reaper for the runner's window station access ({err:#}); Core removes it, unless it exits first"
+                    ),
+                    log_dir,
+                );
+                window_access
+            }
+        };
     if let Err(err) = window_access.narrow_for_commands(commands_use_this_desktop) {
         crate::logging::log_note(
             &format!("could not narrow the runner's window station access: {err:#}"),
             log_dir,
         );
     }
+    let runner_raw = runner_process;
+    let runner_process = NonOwningHandle(runner_process);
     let watch = thread::Builder::new()
         .name("codex-runner-window-access".to_string())
         .spawn(move || {
+            let runner_process = runner_process;
             // SAFETY: the runner's process handle, owned by this thread from here on.
             unsafe {
-                WaitForSingleObject(runner_process, INFINITE);
-                CloseHandle(runner_process);
+                WaitForSingleObject(runner_process.raw(), INFINITE);
+                CloseHandle(runner_process.raw());
             }
             drop(window_access);
         });
@@ -764,34 +522,20 @@ pub(crate) fn spawn_runner_transport(
             log_dir,
         );
         // SAFETY: the thread never started, so the handle is still ours.
-        unsafe { CloseHandle(runner_process) };
-||||||| 413492cd6c
-        drop(transport);
-        return Err(err);
-    }
-
-    unsafe {
-        if pi.hProcess != 0 {
-            // The runner has now connected both pipes *and* acknowledged the spawn request, so
-            // startup is complete. At that point the transport pipes become the only lifetime
-            // anchor we need to keep the session alive.
-            CloseHandle(pi.hProcess);
-        }
-=======
-        return Err(err);
-    }
-
-    if registered_alias.is_some() {
-        crate::logging::debug_log(
-            &format!(
-                "registered_core_runner_ready pid={expected_runner_pid} package_verified=true pipes_authenticated=true"
-            ),
-            log_dir,
-        );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        unsafe { CloseHandle(runner_raw) };
     }
 
     Ok(transport)
+}
+
+/// #341: the likely reason a runner never connected.
+fn runner_connect_error(err: anyhow::Error, window_access_error: Option<&str>) -> anyhow::Error {
+    match window_access_error {
+        Some(access) => anyhow::anyhow!(
+            "{err:#} (could not give the runner's logon access to this session's window station: {access})"
+        ),
+        None => err,
+    }
 }
 
 #[cfg(test)]

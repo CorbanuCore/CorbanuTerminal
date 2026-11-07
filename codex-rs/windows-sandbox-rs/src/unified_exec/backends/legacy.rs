@@ -462,14 +462,8 @@ pub(crate) async fn spawn_windows_sandbox_session_legacy(
     std::thread::spawn(move || {
         let _desktop = desktop;
         let timeout = timeout_ms.map(|ms| ms as u32).unwrap_or(INFINITE);
-<<<<<<< HEAD
-        let wait_res = unsafe { WaitForSingleObject(pi.hProcess, timeout) };
-        let mut descendants_preserved = false;
-||||||| 413492cd6c
-        let wait_res = unsafe { WaitForSingleObject(pi.hProcess, timeout) };
-=======
         let wait_res = unsafe { WaitForSingleObject(wait_process_handle.raw(), timeout) };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        let mut descendants_preserved = false;
         if wait_res == WAIT_TIMEOUT {
             terminate_job_or_process(&job_for_wait, &wait_handle, wait_logs_base_dir.as_deref());
         } else if let Err(err) = job_for_wait.preserve_descendants() {
@@ -486,26 +480,12 @@ pub(crate) async fn spawn_windows_sandbox_session_legacy(
             let _ = guard.take();
         }
         drop(conpty_owner.take());
-<<<<<<< HEAD
-        unsafe {
-            if token_handle != 0 && token_handle != INVALID_HANDLE_VALUE {
-                CloseHandle(token_handle);
-            }
-        }
+        drop(token_handle);
         // Labels are put back before the exit is reported, unless processes
         // the command left running still use them.
         if let Some(lease) = integrity_lease {
             lease.release_after_job(Arc::clone(&job_for_wait), descendants_preserved);
         }
-||||||| 413492cd6c
-        unsafe {
-            if token_handle != 0 && token_handle != INVALID_HANDLE_VALUE {
-                CloseHandle(token_handle);
-            }
-        }
-=======
-        drop(token_handle);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         finalize_exit(
             exit_tx,
             wait_handle,

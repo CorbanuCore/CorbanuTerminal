@@ -10,12 +10,8 @@ use crate::deny_read_targets::DenyReadTargets;
 use crate::setup::sandbox_secrets_dir;
 use anyhow::Context;
 use anyhow::Result;
-<<<<<<< HEAD
 use codex_utils_absolute_path::AbsolutePathBuf;
-||||||| 413492cd6c
-=======
 use anyhow::ensure;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -24,15 +20,11 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ffi::c_void;
 use std::fs::File;
-<<<<<<< HEAD
-||||||| 413492cd6c
-=======
 use std::fs::OpenOptions;
 use std::io::Read;
 use std::io::Write;
 use std::os::windows::fs::OpenOptionsExt;
 use std::os::windows::io::AsRawHandle;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -183,7 +175,6 @@ pub unsafe fn sync_persistent_deny_read_acls(
         .iter()
         .map(|applied| applied.object.identity())
         .collect::<HashSet<_>>();
-<<<<<<< HEAD
     // Ours, not listed now: kept while one of its rules is still configured
     // (S1), stale otherwise.
     let mut stale = Vec::new();
@@ -203,17 +194,6 @@ pub unsafe fn sync_persistent_deny_read_acls(
                 object: owned.object,
                 rules,
             });
-||||||| 413492cd6c
-
-    for path in previous_paths {
-        if !desired_keys.contains(&lexical_path_key(&path)) {
-            revoke_ace(&path, psid);
-=======
-
-    for path in previous_paths {
-        if !desired_keys.contains(&lexical_path_key(&path)) {
-            let _ = revoke_ace(&path, psid);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 
@@ -371,9 +351,6 @@ fn store_state(path: &Path, state: &PersistentDenyReadAclState) -> Result<()> {
     .with_context(|| format!("write deny-read ACL state {}", path.display()))
 }
 
-<<<<<<< HEAD
-||||||| 413492cd6c
-=======
 fn validate_state_file(file: &File) -> Result<()> {
     let mut info = unsafe { std::mem::zeroed::<winfs::BY_HANDLE_FILE_INFORMATION>() };
     if unsafe { winfs::GetFileInformationByHandle(file.as_raw_handle() as win::HANDLE, &mut info) }
@@ -389,7 +366,6 @@ fn validate_state_file(file: &File) -> Result<()> {
     Ok(())
 }
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[cfg(test)]
 #[path = "deny_read_state_tests.rs"]
 mod tests;

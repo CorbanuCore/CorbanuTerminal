@@ -20,12 +20,8 @@ pub struct ProcThreadAttributeList {
     buffer: Vec<u8>,
     handle_list: Vec<HANDLE>,
     job_list: Vec<HANDLE>,
-<<<<<<< HEAD
     parent_process: Box<HANDLE>,
-||||||| 413492cd6c
-=======
     desktop_app_policy: Option<Box<u32>>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl ProcThreadAttributeList {
@@ -51,12 +47,8 @@ impl ProcThreadAttributeList {
             buffer,
             handle_list: Vec::new(),
             job_list: Vec::new(),
-<<<<<<< HEAD
-            parent_process: Box::new(0),
-||||||| 413492cd6c
-=======
+            parent_process: Box::new(std::ptr::null_mut()),
             desktop_app_policy: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         })
     }
 

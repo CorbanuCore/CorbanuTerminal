@@ -319,14 +319,8 @@ fn spawn_ipc_process(req: &SpawnRequest) -> Result<IpcSpawnedProcess> {
     )?;
 
     let mut conpty_owner = None;
-<<<<<<< HEAD
-    let mut console_host_started = None;
-    let mut hpc_handle: Option<HANDLE> = None;
-||||||| 413492cd6c
-    let mut hpc_handle: Option<HANDLE> = None;
-=======
     let mut hpc_handle: Option<HPCON> = None;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    let mut console_host_started = None;
     let mut pipe_handles = None;
     let (pi, job, stdout_handle, stderr_handle, stdin_handle) = if req.tty {
         let (pi, mut conpty) = codex_windows_sandbox::spawn_conpty_process_as_user(
@@ -574,8 +568,6 @@ pub fn main() -> Result<()> {
     if std::env::args().nth(1).as_deref() == Some(codex_windows_sandbox::WINDOW_ACCESS_REAPER_ARG) {
         return codex_windows_sandbox::run_window_access_reaper();
     }
-    // Core gave this logon its desktop access; the runner can't change it.
-    codex_windows_sandbox::mark_as_command_runner();
     let mut pipe_in = None;
     let mut pipe_out = None;
     for arg in std::env::args().skip(1) {

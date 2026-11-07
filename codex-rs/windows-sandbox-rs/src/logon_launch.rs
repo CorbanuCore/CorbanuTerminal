@@ -115,6 +115,10 @@ struct LauncherRequest {
     /// Start it suspended and hand Core its main thread too (#345).
     #[serde(default)]
     suspended: bool,
+    /// `CreateProcessWithLogonW`'s logon flags (upstream: `LOGON_WITH_PROFILE`
+    /// for a registered package's execution alias).
+    #[serde(default)]
+    logon_flags: u32,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -155,6 +159,8 @@ pub struct LogonLaunchRequest<'a> {
     pub application: &'a Path,
     pub command_line: &'a str,
     pub cwd: &'a Path,
+    /// `CreateProcessWithLogonW`'s `dwLogonFlags`.
+    pub logon_flags: u32,
 }
 
 /// A started process. The caller owns `process` and must close it.
@@ -451,6 +457,7 @@ fn create_process_with_logon_via_launcher(
             command_line: request.command_line.to_string(),
             cwd: request.cwd.to_path_buf(),
             suspended,
+            logon_flags: request.logon_flags,
         })?;
         line.push(b'\n');
         stdin.write_all(&line).context("send launch request")?;
@@ -742,6 +749,7 @@ pub fn run_logon_launcher() -> anyhow::Result<()> {
             application: &request.application,
             command_line: &request.command_line,
             cwd: &request.cwd,
+            logon_flags: request.logon_flags,
         },
         request.suspended,
     );
@@ -790,6 +798,7 @@ fn create_process_with_logon_here(
     // SAFETY: zeroed POD with its size set, as the API requires.
     let mut startup: STARTUPINFOW = unsafe { std::mem::zeroed() };
     startup.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
+    startup.dwFlags = windows_sys::Win32::System::Threading::STARTF_FORCEOFFFEEDBACK;
     // SAFETY: zeroed POD filled in by the call.
     let mut info: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
     // SAFETY: only changes this process's error mode; restored below.
@@ -800,7 +809,7 @@ fn create_process_with_logon_here(
             user.as_ptr(),
             domain.as_ptr(),
             password.as_ptr(),
-            /*dwlogonflags*/ 0,
+            request.logon_flags,
             application.as_ptr(),
             command_line.as_mut_ptr(),
             CREATE_NO_WINDOW
