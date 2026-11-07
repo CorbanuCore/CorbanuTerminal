@@ -220,32 +220,6 @@ async fn spawn_process_portable(
     let (stdout_tx, stdout_rx) = mpsc::channel::<Vec<u8>>(128);
     let (_stderr_tx, stderr_rx) = mpsc::channel::<Vec<u8>>(1);
     #[cfg(unix)]
-<<<<<<< HEAD
-    let (reader_handle, reader_stop) = {
-        // #780: our own copy of the master, so the reader can also wait for
-        // `terminate()` (see `spawn_pty_reader`).
-        let Some(master_fd) = pair.master.as_raw_fd() else {
-            anyhow::bail!("the PTY master has no file descriptor");
-        };
-        // SAFETY: `pair.master` owns `master_fd` and outlives this borrow.
-        let reader =
-            unsafe { std::os::fd::BorrowedFd::borrow_raw(master_fd) }.try_clone_to_owned()?;
-        spawn_pty_reader(File::from(reader), stdout_tx)?
-    };
-    #[cfg(not(unix))]
-    let reader_handle: JoinHandle<()> = {
-        let mut reader = pair.master.try_clone_reader()?;
-        tokio::task::spawn_blocking(move || {
-||||||| 413492cd6c
-    let mut reader = pair.master.try_clone_reader()?;
-    let reader_handle: JoinHandle<()> = tokio::task::spawn_blocking(move || {
-        let mut buf = [0u8; 8_192];
-        loop {
-            match reader.read(&mut buf) {
-                Ok(0) => break,
-                Ok(n) => {
-                    let _ = stdout_tx.blocking_send(buf[..n].to_vec());
-=======
     let (reader_handle, writer_handle) = io.spawn(
         stdout_tx,
         writer_rx,
@@ -255,7 +229,6 @@ async fn spawn_process_portable(
     let (reader_handle, writer_handle) = {
         let mut reader = pair.master.try_clone_reader()?;
         let reader_handle: JoinHandle<()> = tokio::task::spawn_blocking(move || {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             let mut buf = [0u8; 8_192];
             loop {
                 match reader.read(&mut buf) {
@@ -271,15 +244,7 @@ async fn spawn_process_portable(
                     Err(_) => break,
                 }
             }
-<<<<<<< HEAD
-        })
-    };
-||||||| 413492cd6c
-        }
-    });
-=======
         });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         let mut writer_rx = writer_rx;
         let writer = pair.master.take_writer()?;
@@ -326,8 +291,6 @@ async fn spawn_process_portable(
             None
         },
         _master: PtyMasterHandle::Resizable(pair.master),
-        #[cfg(unix)]
-        _reader_stop: reader_stop,
     };
 
     let handle = ProcessHandle::new(
@@ -459,56 +422,7 @@ async fn spawn_process_preserving_fds(
     let (writer_tx, writer_rx) = mpsc::channel::<Vec<u8>>(128);
     let (stdout_tx, stdout_rx) = mpsc::channel::<Vec<u8>>(128);
     let (_stderr_tx, stderr_rx) = mpsc::channel::<Vec<u8>>(1);
-<<<<<<< HEAD
-    let (reader_handle, reader_stop) = spawn_pty_reader(master.try_clone()?, stdout_tx)?;
-
-    let writer = Arc::new(tokio::sync::Mutex::new(master.try_clone()?));
-    let writer_handle: JoinHandle<()> = tokio::spawn({
-        let writer = Arc::clone(&writer);
-        async move {
-            while let Some(bytes) = writer_rx.recv().await {
-                let mut guard = writer.lock().await;
-                use std::io::Write;
-                let _ = guard.write_all(&bytes);
-                let _ = guard.flush();
-            }
-        }
-    });
-||||||| 413492cd6c
-    let mut reader = master.try_clone()?;
-    let reader_handle: JoinHandle<()> = tokio::task::spawn_blocking(move || {
-        let mut buf = [0u8; 8_192];
-        loop {
-            match std::io::Read::read(&mut reader, &mut buf) {
-                Ok(0) => break,
-                Ok(n) => {
-                    let _ = stdout_tx.blocking_send(buf[..n].to_vec());
-                }
-                Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
-                Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                    std::thread::sleep(Duration::from_millis(5));
-                    continue;
-                }
-                Err(_) => break,
-            }
-        }
-    });
-
-    let writer = Arc::new(tokio::sync::Mutex::new(master.try_clone()?));
-    let writer_handle: JoinHandle<()> = tokio::spawn({
-        let writer = Arc::clone(&writer);
-        async move {
-            while let Some(bytes) = writer_rx.recv().await {
-                let mut guard = writer.lock().await;
-                use std::io::Write;
-                let _ = guard.write_all(&bytes);
-                let _ = guard.flush();
-            }
-        }
-    });
-=======
     let (reader_handle, writer_handle) = io.spawn(stdout_tx, writer_rx, stdin_close_behavior);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     let (exit_tx, exit_rx) = oneshot::channel::<i32>();
     let exit_status = Arc::new(AtomicBool::new(false));
@@ -540,7 +454,6 @@ async fn spawn_process_preserving_fds(
             raw_fd: master.as_raw_fd(),
             _handle: Box::new(master),
         },
-        _reader_stop: reader_stop,
     };
 
     let handle = ProcessHandle::new(
@@ -562,73 +475,6 @@ async fn spawn_process_preserving_fds(
         stderr_rx,
         exit_rx,
     })
-}
-
-/// Reads the PTY master into `stdout_tx` until end of output, or until the
-/// returned stop handle is dropped (`ProcessHandle::terminate`).
-///
-/// #780: end of output comes only once every process holding the terminal
-/// has closed it. One outside the child's process group survives
-/// `terminate()`'s group kill: a sandboxed shell runs in its own session
-/// (bubblewrap's `--new-session`), and one left behind when bubblewrap died
-/// early lives on. A reader waiting for it kept its blocking thread, and a
-/// runtime shutting down waits for those, for as long as that process lived.
-/// `terminate()` also closes the master, which hangs up the terminal for
-/// such a process. Output not yet read by then is discarded, as the pipe
-/// backend's aborted readers do.
-#[cfg(unix)]
-fn spawn_pty_reader(
-    reader: File,
-    stdout_tx: mpsc::Sender<Vec<u8>>,
-) -> std::io::Result<(JoinHandle<()>, std::io::PipeWriter)> {
-    let (stop, stop_handle) = std::io::pipe()?;
-    let handle = tokio::task::spawn_blocking(move || {
-        let mut buf = [0u8; 8_192];
-        while wait_for_output(&reader, &stop) {
-            match std::io::Read::read(&mut &reader, &mut buf) {
-                Ok(0) => break,
-                Ok(n) => {
-                    let _ = stdout_tx.blocking_send(buf[..n].to_vec());
-                }
-                Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
-                Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                    std::thread::sleep(Duration::from_millis(5));
-                    continue;
-                }
-                Err(_) => break,
-            }
-        }
-    });
-    Ok((handle, stop_handle))
-}
-
-/// Waits until `reader` can be read (output, end of output or an error) or
-/// `stop`'s other end is dropped; false for the latter.
-#[cfg(unix)]
-fn wait_for_output(reader: &File, stop: &std::io::PipeReader) -> bool {
-    let mut fds = [
-        libc::pollfd {
-            fd: reader.as_raw_fd(),
-            events: libc::POLLIN,
-            revents: 0,
-        },
-        libc::pollfd {
-            fd: stop.as_raw_fd(),
-            events: libc::POLLIN,
-            revents: 0,
-        },
-    ];
-    loop {
-        // SAFETY: `fds` is a valid array of two pollfds for the call.
-        let res = unsafe { libc::poll(fds.as_mut_ptr(), 2, -1) };
-        if res >= 0 {
-            return fds[1].revents == 0;
-        }
-        if std::io::Error::last_os_error().kind() != ErrorKind::Interrupted {
-            // Let the read report the problem.
-            return true;
-        }
-    }
 }
 
 #[cfg(unix)]

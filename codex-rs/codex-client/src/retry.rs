@@ -1,9 +1,9 @@
 use codex_http_client::Request;
-use codex_http_client::RetryAfter;
 use codex_http_client::TransportError;
 use rand::Rng;
 use std::future::Future;
 use std::time::Duration;
+use tokio::time::sleep;
 
 #[derive(Debug, Clone)]
 pub struct RetryPolicy {
@@ -177,30 +177,22 @@ where
                     .retry_on
                     .should_retry(&err, attempt, policy.max_attempts) =>
             {
-<<<<<<< HEAD
-                let delay = backoff(policy.base_delay, attempt + 1);
+                let retry_attempt = attempt + 1;
+                let backoff_delay = backoff(policy.base_delay, retry_attempt);
                 let delay = match rate_limit_retry_delay(&err) {
-                    RateLimitRetry::NotRateLimited => delay,
-                    RateLimitRetry::After(wait) => delay.max(wait),
+                    // Upstream honours a server's `Retry-After` on other retryable
+                    // errors; capped like a 429's so a 5xx can't stall the request.
+                    RateLimitRetry::NotRateLimited => {
+                        err.retry_after().map_or(backoff_delay, |wait| {
+                            wait.remaining_delay().min(MAX_TRANSPORT_RETRY_AFTER)
+                        })
+                    }
+                    RateLimitRetry::After(wait) => backoff_delay.max(wait),
                     // The provider-request throttle owns a longer wait (#510).
                     RateLimitRetry::Stop => return Err(err),
                 };
-                sleep(delay).await;
-||||||| 413492cd6c
-                sleep(backoff(policy.base_delay, attempt + 1)).await;
-=======
-                let retry_attempt = attempt + 1;
-                let retry_after = err.retry_after();
-                let delay = retry_after
-                    .map(RetryAfter::remaining_delay)
-                    .unwrap_or_else(|| backoff(policy.base_delay, retry_attempt));
                 crate::record_retry!(retry_attempt, delay, RetryOperation::HttpRequest);
-                if let Some(retry_after) = retry_after {
-                    tokio::time::sleep_until(retry_after.deadline()).await;
-                } else {
-                    tokio::time::sleep(delay).await;
-                }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                sleep(delay).await;
             }
             Err(err) => return Err(err),
         }

@@ -23,14 +23,10 @@ pub use capabilities::NoopExtensionEventSink;
 pub use capabilities::NoopResponseItemInjector;
 pub use capabilities::ResponseItemInjectionFuture;
 pub use capabilities::ResponseItemInjector;
-<<<<<<< HEAD
-pub use codex_context_fragments::AttributedFragment;
-||||||| 413492cd6c
-=======
 pub use capabilities::record_catalog_entries;
 pub use catalog_refresh::CatalogRefreshBackoff;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use codex_context_fragments::ContextualUserFragment;
+pub use codex_context_fragments::SourcedFragment;
 pub use codex_mcp::McpProtocolMode;
 pub use codex_mcp::ToolInfo as McpToolInfo;
 pub use codex_protocol::models::ContentItem;
