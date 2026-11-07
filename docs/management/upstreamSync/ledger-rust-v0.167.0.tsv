@@ -163,8 +163,8 @@ codex-rs/cli/src/login.rs	content	UU	other	S4e other crates above core	3	unassig
 codex-rs/cli/src/main.rs	content	UU	other	S4e other crates above core	3	unassigned	yes	open		22	492	false	false	false	true	
 codex-rs/cli/tests/sandbox_network_proxy.rs	content	UU	other	S4e other crates above core	3	unassigned	yes	open		1	37	true	false	false	false	
 codex-rs/code-mode-host/Cargo.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	4	false	false	false	false	
-codex-rs/code-mode-host/src/main.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		1	41	false	false	false	true	
-codex-rs/code-mode-runtime/src/service_tests.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		3	159	true	false	false	false	
+codex-rs/code-mode-host/src/main.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	merged	1	41	false	false	false	true	upstream's registry with the OTEL trace layer, wrapped in our log guard (#398) with the redacting stderr writer
+codex-rs/code-mode-runtime/src/service_tests.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	theirs	3	159	true	false	false	false	upstream's Notify/cancellation-based wait_until_tool_started and hold_virtual_time cover our postmerge flake fix (535d989927)
 codex-rs/codex-api/src/common.rs	content	UU	config/providers/auth	S1b config/providers/auth	1	unassigned	yes	open		11	550	false	false	false	false	
 codex-rs/codex-api/src/endpoint/mod.rs	content	UU	config/providers/auth	S1b config/providers/auth	1	unassigned	yes	open		2	9	false	false	false	false	
 codex-rs/codex-api/src/endpoint/models.rs	content	UU	config/providers/auth	S1b config/providers/auth	1	unassigned	yes	open		1	9	false	false	false	false	
@@ -172,7 +172,7 @@ codex-rs/codex-api/src/endpoint/responses_websocket.rs	content	UU	config/provide
 codex-rs/codex-api/src/lib.rs	content	UU	config/providers/auth	S1b config/providers/auth	1	unassigned	yes	open		2	18	false	false	false	false	
 codex-rs/codex-api/src/sse/responses.rs	content	UU	config/providers/auth	S1b config/providers/auth	1	unassigned	yes	open		7	279	false	false	false	false	
 codex-rs/codex-api/tests/clients.rs	content	UU	config/providers/auth	S1b config/providers/auth	1	unassigned	yes	open		6	24	true	false	false	false	
-codex-rs/codex-client/src/retry.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		1	19	false	false	false	false	
+codex-rs/codex-client/src/retry.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	merged	1	19	false	false	false	false	kept #510 (429: Retry-After over 5 s, or an HTTP date, ends transport retries so the provider throttle owns the wait; shorter waits are max(backoff, wait)); took upstream retry telemetry (record_retry!) and its Retry-After honouring for other retryable errors (5xx)
 codex-rs/codex-mcp/src/connection_manager.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		8	113	false	false	false	false	
 codex-rs/codex-mcp/src/connection_manager_tests.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		5	32	true	false	false	true	
 codex-rs/codex-mcp/src/lib.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		2	7	false	false	false	false	
@@ -184,8 +184,8 @@ codex-rs/config/src/loader/mod.rs	content	UU	config/providers/auth	S1b config/pr
 codex-rs/config/src/loader/tests.rs	content	UU	config/providers/auth	S1b config/providers/auth	1	unassigned	yes	open		1	448	true	false	false	true	
 codex-rs/config/src/thread_config.rs	content	UU	config/providers/auth	S1b config/providers/auth	1	unassigned	yes	open		1	7	false	false	false	true	
 codex-rs/config/src/thread_config/remote.rs	content	UU	config/providers/auth	S1b config/providers/auth	1	unassigned	yes	open		4	27	false	false	false	true	
-codex-rs/context-fragments/src/fragment.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		4	27	false	false	false	false	
-codex-rs/context-fragments/src/lib.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		2	15	false	false	false	false	
+codex-rs/context-fragments/src/fragment.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	merged	4	27	false	false	false	false	upstream's annotated fragments (RenderedFragment, content kind/metadata, AttributedFragment<F> for provenance) plus our producer IDs: source_id() on the trait, context_message() now takes AnnotatedContent, and our Box-based source wrapper is renamed SourcedFragment (name clash with upstream's AttributedFragment); developer messages still record context_fragment_sources
+codex-rs/context-fragments/src/lib.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	merged	2	15	false	false	false	false	upstream exports (FragmentRegistration removed upstream) plus SourcedFragment and context_message
 codex-rs/core-api/src/lib.rs	content	UU	core	S4e other crates above core	3	unassigned	yes	open		1	5	false	false	false	true	
 codex-rs/core-plugins/Cargo.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	6	false	false	false	false	
 codex-rs/core-plugins/src/manager.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		3	10	false	false	false	true	
@@ -438,8 +438,8 @@ codex-rs/exec/src/lib.rs	content	UU	exec	S4d exec	3	unassigned	yes	open		13	479	
 codex-rs/exec/src/lib_tests.rs	content	UU	exec	S4d exec	3	unassigned	yes	open		1	6	true	false	false	false	
 codex-rs/exec/tests/suite/auth_env.rs	content	UU	exec	S4d exec	3	unassigned	yes	open		2	260	true	false	false	false	
 codex-rs/exec/tests/suite/mod.rs	content	UU	exec	S4d exec	3	unassigned	yes	open		1	2	true	false	false	true	
-codex-rs/ext/extension-api/src/contributors/prompt.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		2	33	false	false	false	true	
-codex-rs/ext/extension-api/src/lib.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		1	3	false	false	false	false	
+codex-rs/ext/extension-api/src/contributors/prompt.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	merged	2	33	false	false	false	true	upstream AnnotatedContent and constructors; kept our source_id/with_source_id and stored_data/with_stored_data (source envelopes); from_fragment keeps the fragment's producer ID
+codex-rs/ext/extension-api/src/lib.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	merged	1	3	false	false	false	false	upstream exports plus our SourcedFragment (renamed from our AttributedFragment; upstream now owns that name)
 codex-rs/ext/image-generation/src/backend.rs	content	UU	other	S4e other crates above core	3	unassigned	yes	open		6	59	false	false	false	false	
 codex-rs/ext/memories/src/extension.rs	content	UU	other	S4e other crates above core	3	unassigned	yes	open		1	30	false	false	false	true	
 codex-rs/ext/memories/src/tests.rs	content	UU	other	S4e other crates above core	3	unassigned	yes	open		1	12	true	false	false	true	
@@ -449,11 +449,11 @@ codex-rs/ext/skills/src/tools/mod.rs	content	UU	other	S1c other crates	1	unassig
 codex-rs/ext/skills/src/world_state.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		2	11	false	false	false	false	
 codex-rs/ext/skills/tests/skills_extension.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		5	276	true	false	false	false	
 codex-rs/ext/web-search/src/tool.rs	content	UU	other	S4e other crates above core	3	unassigned	yes	open		1	66	false	false	false	false	
-codex-rs/features/src/lib.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		4	35	false	false	false	true	
+codex-rs/features/src/lib.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	merged	4	35	false	false	false	true	union of feature flags: ours (SourceEnvelopes, PF-27/28/29/33 security flags) and upstream (CredentialMasking, Worktrees, NonfatalClockReadErrors, zsh removal docs). Our `sleep_tool` compatibility flag (UnderDevelopment, off) duplicated upstream's built-in SleepTool (Stable, on, same key): took upstream's (decision for Travis)
 codex-rs/feedback/Cargo.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	2	9	false	false	false	false	
 codex-rs/feedback/src/lib.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		4	424	false	false	false	true	
-codex-rs/file-system/src/lib.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		6	64	false	false	false	true	
-codex-rs/git-utils/src/info.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		6	109	false	false	false	false	
+codex-rs/file-system/src/lib.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	merged	6	64	false	false	false	true	SECURITY: took upstream's split into should_read_from_sandbox/should_write_into_sandbox (convention-aware); both also return true for entries only the sandbox enforces (#506 unlistable dirs, #598 unmovable paths, #758 keychain on macOS, #826 userns on Linux), as main's should_run_in_sandbox did; kept our glob scan (#732/#907) on ExecFileSystemPath with upstream's PathUri paths; upstream's infallible From keeps the deny glob and drops only a scan hint whose directory is foreign to this host
+codex-rs/git-utils/src/info.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	theirs	6	109	false	false	false	false	upstream moved resolve_root_git_project_for_trust to trust.rs with our parent-repo loop (#39629) included; its test fixtures use codex_utils_cargo_bin::write_executable, which writes from a child on Linux like our #1448 fix
 codex-rs/history/src/compaction_resume_metadata.rs	follow-up	--	protocol	S1a protocol	1	sync-s1a (maintainer)	no	resolved	ported	0	0	false	false	false	false	SourceOrigin arm
 codex-rs/history/src/lib.rs	follow-up	--	protocol	S1a protocol	1	sync-s1a (maintainer)	no	resolved	ported	0	0	false	false	false	false	port of main RolloutItem::SourceOrigin (provenance) into upstream codex-history (#37871 moved RolloutItem out of protocol); outside S1a crates, needed by app-server-protocol
 codex-rs/history/src/rollout_payload.rs	follow-up	--	protocol	S1a protocol	1	sync-s1a (maintainer)	no	resolved	ported	0	0	false	false	false	false	SourceOrigin wire variant (same JSON as main: type source_origin)
@@ -474,7 +474,7 @@ codex-rs/http-client/src/client_builder.rs	follow-up	--	other	S1c other crates	1
 codex-rs/http-client/src/log_redaction_tests.rs	follow-up	--	other	S1c other crates	1	sync-s1c1 (maintainer)	no	resolved	merged	0	0	true	false	false	true	compile fix: TransportError::Http retry_after field in the redacted-Debug test
 codex-rs/http-client/src/response.rs	follow-up	--	other	S1c other crates	1	sync-s1c1 (maintainer)	no	resolved	merged	0	0	false	false	false	true	with_permit(): a brokered response is governed by its destination's permit while the body is read
 codex-rs/http-client/src/network_policy.rs	follow-up	--	other	S1c other crates	1	sync-s1c1 (maintainer)	no	resolved	merged	0	0	false	false	false	true	restricts_destinations(): the broker permit also applies to endpoint-restricted (unmanaged) policies
-codex-rs/install-context/src/lib.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		1	434	false	false	false	false	
+codex-rs/install-context/src/lib.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	merged	1	434	false	false	false	false	took upstream's split of the tests into lib_tests.rs; moved our standalone-wins-over-inherited-package-manager test (#?) into lib_tests.rs
 codex-rs/keyring-store/Cargo.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	1	false	false	false	false	
 codex-rs/keyring-store/src/lib.rs	content	UU	other	S1b config/providers/auth	1	unassigned	yes	open		7	238	false	false	false	false	
 codex-rs/linux-sandbox/README.md	content	UU	sandboxing	S3a security resolution	1+2	security owner	no	open		1	141	false	false	true	false	
@@ -553,8 +553,8 @@ codex-rs/otel/src/otlp_http_client.rs	follow-up	--	other	S1c other crates	1	sync
 codex-rs/otel/src/otlp_http_client_tests.rs	follow-up	--	other	S1c other crates	1	sync-s1c1 (maintainer)	no	resolved	merged	0	0	true	false	false	false	async adapter tests removed with the adapter; blocking tests kept
 codex-rs/otel/src/network_policy.rs	follow-up	--	other	S1c other crates	1	sync-s1c1 (maintainer)	no	resolved	merged	0	0	false	false	false	true	RuntimeHttpClient keeps main's adapter contract: 4 MiB response cap, non-success statuses returned for the exporter to classify, URL-free errors
 codex-rs/otel/src/guardian_assessment.rs	follow-up	--	other	S1c other crates	1	sync-s1c1 (maintainer)	no	resolved	merged	0	0	false	false	false	true	PF-28-S01: upstream's opt-in guardian rationale export passes the armed secret output gate
-codex-rs/prompts/src/permissions_instructions.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		1	61	false	false	false	false	
-codex-rs/prompts/src/permissions_instructions_tests.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		1	3	true	false	false	false	
+codex-rs/prompts/src/permissions_instructions.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	merged	1	61	false	false	false	false	upstream's resolved-context rewrite; re-added our with_note (#439, security-level notes) on the new type
+codex-rs/prompts/src/permissions_instructions_tests.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	merged	1	3	true	false	false	false	upstream pattern conversion plus our glob scan field (scan: None)
 codex-rs/protocol/src/approvals.rs	content	UU	protocol	S1a protocol	1	sync-s1a (maintainer)	no	resolved	merged	1	30	false	false	false	false	both: ours ExecApprovalRequestWithdrawnEvent (#722, D279) + upstream ExecApprovalKind
 codex-rs/protocol/src/error.rs	content	UU	protocol	S1a protocol	1	sync-s1a (maintainer)	no	resolved	merged	2	18	false	false	false	true	upstream retry_delay(retry_count)/RetryAfter; ours kept: UnexpectedStatus retryable only for 5xx/408/429 (now via backoff), is_home_unreadable (#616), 401 -> Unauthorized (moved before the new upstream HttpConnectionFailed arm, which made it unreachable), URL redaction of HttpError via redact_reqwest_error on its Request variant (needs http-client to keep redact_reqwest_error)
 codex-rs/protocol/src/legacy_events_tests.rs	follow-up	--	protocol	S1a protocol	1	sync-s1a (maintainer)	no	resolved	merged	0	0	true	false	false	false	compile fix: upstream model/reasoning_effort fields
@@ -572,7 +572,7 @@ codex-rs/protocol/src/permissions/glob_scan_tests.rs	follow-up	--	protocol	S1a p
 codex-rs/protocol/src/protocol.rs	content	UU	protocol	S1a protocol	1	sync-s1a (maintainer)	no	resolved	merged	6	79	false	false	false	true	both: ExecApprovalRequestWithdrawn + upstream NetworkApprovalResolved; #1577 fill keeps counters and resets last_usage_includes_reasoning; RolloutItem moved to codex-history upstream (SourceOrigin ported there); TurnContextItem keeps security_level with upstream Option summary
 codex-rs/protocol/src/shell_environment_tests.rs	add/add	AA	protocol	S1a protocol	1	sync-s1a (maintainer)	no	resolved	merged	1	254	true	false	false	false	add/add: both test sets (keyring isolation + upstream scrubber tests)
 codex-rs/responses-api-proxy/Cargo.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	2	9	false	false	false	false	
-codex-rs/responses-api-proxy/src/lib.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		2	15	false	false	false	false	
+codex-rs/responses-api-proxy/src/lib.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	merged	2	15	false	false	false	false	both: our synthetic loopback modules and early return (before any auth is read), then upstream's Auth (API key or GitHub OIDC)
 codex-rs/rmcp-client/src/bin/test_streamable_http_server.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		1	5	false	false	false	false	
 codex-rs/rmcp-client/src/http_client_adapter.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		1	18	false	false	false	false	
 codex-rs/rmcp-client/src/oauth.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		2	19	false	false	false	true	
@@ -907,12 +907,12 @@ codex-rs/tui/tests/suite/mod.rs	content	UU	tui	S4a tui app/lib/onboarding/status
 codex-rs/tui/tests/suite/resize_reflow.rs	content	UU	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		2	88	true	false	false	false	
 codex-rs/tui/tooltips.txt	modify/delete	UD	tui	S4a tui app/lib/onboarding/status	3	unassigned	no	open		0	0	false	false	false	false	deleted upstream; skeleton keeps ours
 codex-rs/uds/Cargo.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	7	false	false	false	false	
-codex-rs/uds/src/lib.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		1	115	false	false	false	false	
-codex-rs/utils/pty/src/process.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		1	15	false	false	false	false	
-codex-rs/utils/pty/src/pty.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		3	42	false	false	false	false	
-codex-rs/utils/pty/src/win/job_tests.rs	add/add	AA	other	S1c other crates	1	unassigned	yes	open		1	135	true	false	false	true	
+codex-rs/uds/src/lib.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	theirs	1	115	false	false	false	false	SECURITY: upstream's windows_security::prepare_private_directory (user-only inheritable DACL set at creation; existing directories validated, not repaired) replaces our create-then-SetFileSecurityW (SY + user); our DACL test is replaced by upstream's tests plus two in lib_tests.rs
+codex-rs/utils/pty/src/process.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	merged	1	15	false	false	false	false	took upstream's async PTY I/O (abortable readers replace our #780 stop-pipe reader); kept #780's close of the PTY master in terminate() so a process outside the killed group is hung up
+codex-rs/utils/pty/src/pty.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	theirs	3	42	false	false	false	false	upstream PtyIo replaces our spawn_pty_reader/_reader_stop (#780); the master close stays in process.rs; our #780 tests in tests.rs still apply
+codex-rs/utils/pty/src/win/job_tests.rs	add/add	AA	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	merged	1	135	true	false	false	true	union: our #733 breakaway tests plus upstream's console-suppression test, under upstream's `use super::*` header
 codex-rs/vault/src/tests.rs	follow-up	--	other	S1c other crates	1	sync-s1c1 (maintainer)	no	resolved	merged	0	0	true	false	false	true	compile fix: compute_keyring_account(home, ManagedSecrets) after upstream's 2-arg signature (accounts unchanged); cargo test -p codex-vault 83 passed (scratch)
-codex-rs/websocket-client/src/dialer_tests.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		1	28	true	false	false	false	
+codex-rs/websocket-client/src/dialer_tests.rs	content	UU	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	merged	1	28	true	false	false	false	kept our 30 s timeout and transport-default probe switch; added upstream's new loopback_direct argument (false)
 codex-rs/windows-sandbox-rs/src/acl.rs	content	UU	windows-sandbox	S3a security resolution	1+2	security owner	no	open		12	213	false	false	true	true	
 codex-rs/windows-sandbox-rs/src/acl_tests.rs	add/add	AA	windows-sandbox	S3a security resolution	1+2	security owner	no	open		1	601	true	false	true	true	
 codex-rs/windows-sandbox-rs/src/bin/command_runner/win.rs	content	UU	windows-sandbox	S3a security resolution	1+2	security owner	no	open		1	3	false	false	true	true	
@@ -1465,7 +1465,7 @@ codex-rs/tui/src/chatwidget/tool_requests.rs	security-review		tui	S3b security r
 codex-rs/tui/src/chatwidget/windows_sandbox_prompts.rs	security-review		tui	S3b security review	S3b	security owner	no	open		0	0	false	false	true	true	upstream change merged without conflict
 codex-rs/tui/src/history_cell/approvals.rs	security-review		tui	S3b security review	S3b	security owner	no	open		0	0	false	false	false	true	upstream change merged without conflict
 codex-rs/tui/src/windows_sandbox_tests.rs	security-review		tui	S3b security review	S3b	security owner	no	open		0	0	false	false	true	false	upstream change merged without conflict
-codex-rs/utils/pty/src/win/job.rs	security-review		other	S3b security review	S3b	security owner	no	open		0	0	false	false	false	true	upstream change merged without conflict
+codex-rs/utils/pty/src/win/job.rs	security-review		other	S3b security review	S3b	security owner	no	open		0	0	false	false	false	true	upstream change merged without conflict; sync-s1c2 follow-up edit: clean merge defined create_without_breakaway twice; kept ours (#733: breakaway stays off after preserve_descendants), dropped upstream duplicate
 codex-rs/windows-sandbox-rs/sandbox_smoketests.py	security-review		windows-sandbox	S3b security review	S3b	security owner	no	open		0	0	false	false	true	false	upstream change merged without conflict
 codex-rs/windows-sandbox-rs/src/allow.rs	security-review		windows-sandbox	S3b security review	S3b	security owner	no	open		0	0	false	false	true	false	upstream change merged without conflict
 codex-rs/windows-sandbox-rs/src/app_package.rs	security-review		windows-sandbox	S3b security review	S3b	security owner	no	open		0	0	false	false	true	false	upstream change merged without conflict
@@ -1611,3 +1611,10 @@ codex-rs/state/migrations/0059_thread_attachment_reverse_lookup.sql	migration		o
 codex-rs/state/migrations/0060_guardian_review_feedback.sql	migration		other	S1c other crates	1	sync-s1c1 (maintainer)	no	resolved	renumbered	0	0	false	false	false	false	git mv to 0067_guardian_review_feedback.sql (file and checksum unchanged); mapping in state/MIGRATIONS.md; tests/state_db_upgrade.rs upgrades rust-v0.1.48 (1-52) and main 18fa372a (1-53) state DBs without changing an applied row
 codex-rs/state/migrations/0061_thread_read_state.sql	migration		other	S1c other crates	1	sync-s1c1 (maintainer)	no	resolved	renumbered	0	0	false	false	false	false	git mv to 0068_thread_read_state.sql (file and checksum unchanged); mapping in state/MIGRATIONS.md; tests/state_db_upgrade.rs upgrades rust-v0.1.48 (1-52) and main 18fa372a (1-53) state DBs without changing an applied row
 codex-rs/state/migrations/0062_threads_attached_parent.sql	migration		other	S1c other crates	1	sync-s1c1 (maintainer)	no	resolved	renumbered	0	0	false	false	false	false	git mv to 0069_threads_attached_parent.sql (file and checksum unchanged); mapping in state/MIGRATIONS.md; tests/state_db_upgrade.rs upgrades rust-v0.1.48 (1-52) and main 18fa372a (1-53) state DBs without changing an applied row
+codex-rs/uds/src/windows_security.rs	follow-up	--	other	S1c other crates	1	sync-s1c2 (maintainer)	no	resolved	merged	0	0	false	false	false	false	SECURITY: upgrade path for socket directories written by main (protected DACL with exactly LocalSystem FA + current user FA, no inheritance, owner = user): pinned by handle (no reparse point) and moved to upstream's user-only DACL; any other layout stays rejected. Without it the wallet daemon and app-server daemon fail on every Windows install upgraded from main
+codex-rs/uds/src/lib_tests.rs	follow-up	--	other	S1c other crates	1	sync-s1c2 (maintainer)	no	resolved	merged	0	0	true	false	false	false	Windows tests: the previous Corbanu layout is upgraded; a broadened previous layout stays rejected
+codex-rs/responses-api-proxy/src/github_oidc_tests.rs	follow-up	--	other	S1c other crates	1	sync-s1c2 (maintainer)	no	resolved	merged	0	0	true	false	false	false	allow clippy::disallowed_methods for #[traced_test] (our log-guard clippy rule, #398), as core accounting tests do
+codex-rs/utils/pty/src/unix_io.rs	follow-up	--	other	S1c other crates	1	sync-s1c2 (maintainer)	no	resolved	merged	0	0	false	false	false	false	AsyncFd::new is deprecated in our tokio 1.53.3 (unsound without I/O safety); use AsyncFd::register with the File owning its fd
+codex-rs/utils/pty/src/tests.rs	follow-up	--	other	S1c other crates	1	sync-s1c2 (maintainer)	no	resolved	merged	0	0	true	false	false	false	our #780 test passes ChildFds::Inherited(&[]) to the new spawn_pty_process signature
+codex-rs/prompts/src/model_instructions_tests.rs	follow-up	--	other	S1c other crates	1	sync-s1c2 (maintainer)	no	resolved	merged	0	0	true	false	false	false	ModelInfo fixture gains our orchestration/chat_completions/max_output_tokens fields
+codex-rs/install-context/src/lib_tests.rs	follow-up	--	other	S1c other crates	1	sync-s1c2 (maintainer)	no	resolved	merged	0	0	true	false	false	false	our standalone-wins-over-inherited-package-manager test, moved here from lib.rs

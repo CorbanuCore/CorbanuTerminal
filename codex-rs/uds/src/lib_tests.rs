@@ -116,6 +116,78 @@ Set-Acl -LiteralPath $env:CODEX_TEST_DIRECTORY -AclObject $acl
     );
 }
 
+/// Sets `directory`'s owner and DACL from SDDL, with `$sid` standing for the current user.
+#[cfg(windows)]
+fn set_directory_sddl(directory: &std::path::Path, sddl: &str) {
+    let output = std::process::Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            r#"
+$ErrorActionPreference = 'Stop'
+$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$acl = Get-Acl -LiteralPath $env:CODEX_TEST_DIRECTORY
+$acl.SetSecurityDescriptorSddlForm($env:CODEX_TEST_SDDL.Replace('$sid', $sid), 'Owner,Access')
+Set-Acl -LiteralPath $env:CODEX_TEST_DIRECTORY -AclObject $acl
+"#,
+        ])
+        .env("CODEX_TEST_DIRECTORY", directory)
+        .env("CODEX_TEST_SDDL", sddl)
+        .output()
+        .expect("set directory ACL");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// Socket directories written before the rust-v0.167.0 sync (protected DACL for LocalSystem and
+/// the user, no inheritance) move to the user-only layout instead of failing every daemon start.
+#[cfg(windows)]
+#[tokio::test]
+async fn private_directory_upgrades_the_previous_corbanu_layout() {
+    let temp = tempfile::TempDir::new().expect("temp directory");
+    let directory = temp.path().join("wallet-run");
+    std::fs::create_dir(&directory).expect("create directory");
+    set_directory_sddl(&directory, "O:$sidD:P(A;;FA;;;SY)(A;;FA;;;$sid)");
+    assert_eq!(
+        validate_private_socket_path(&directory.join("socket"))
+            .unwrap_err()
+            .kind(),
+        ErrorKind::PermissionDenied,
+    );
+
+    prepare_private_socket_directory(&directory)
+        .await
+        .expect("upgrade the previous layout");
+
+    let (_validated_path, _guard) =
+        validate_private_socket_path(&directory.join("socket")).expect("user-only directory");
+}
+
+/// Only the exact previous layout is upgraded: one more grant keeps the directory rejected.
+#[cfg(windows)]
+#[tokio::test]
+async fn private_directory_rejects_a_broadened_previous_corbanu_layout() {
+    let temp = tempfile::TempDir::new().expect("temp directory");
+    let directory = temp.path().join("wallet-run");
+    std::fs::create_dir(&directory).expect("create directory");
+    set_directory_sddl(
+        &directory,
+        "O:$sidD:P(A;;FA;;;SY)(A;;FA;;;$sid)(A;;FR;;;BU)",
+    );
+
+    assert_eq!(
+        prepare_private_socket_directory(&directory)
+            .await
+            .unwrap_err()
+            .kind(),
+        ErrorKind::PermissionDenied,
+    );
+}
+
 #[cfg(windows)]
 #[tokio::test]
 async fn private_directory_supports_extended_length_paths() {

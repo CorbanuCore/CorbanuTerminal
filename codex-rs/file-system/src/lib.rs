@@ -1,13 +1,9 @@
 mod environment_accessor;
 mod exec_permission_profile_serde;
 mod find_up;
-<<<<<<< HEAD
 mod glob_scan;
-||||||| 413492cd6c
-=======
 mod local_logs;
 mod nfs;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 use bytes::Bytes;
 use codex_protocol::config_types::WindowsSandboxLevel;
@@ -20,6 +16,7 @@ use codex_protocol::permissions::FileSystemGlobScan;
 use codex_protocol::permissions::FileSystemPath;
 use codex_protocol::permissions::FileSystemSandboxEntry;
 use codex_protocol::permissions::FileSystemSandboxEntryMissingPathBehavior;
+use codex_protocol::permissions::FileSystemSandboxKind;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::permissions::FileSystemSandboxPolicyContext;
 use codex_protocol::permissions::FileSystemSpecialPath;
@@ -36,14 +33,10 @@ pub use find_up::FindUpErrorPolicy;
 pub use find_up::find_nearest_ancestor_with_markers;
 pub use find_up::find_nearest_native_ancestor_with_markers;
 use futures::Stream;
-<<<<<<< HEAD
-pub use glob_scan::ExecFileSystemGlobScan;
-||||||| 413492cd6c
-=======
 use futures::stream::BoxStream;
+pub use glob_scan::ExecFileSystemGlobScan;
 pub use local_logs::LocalLogsDir;
 pub use nfs::is_nfs;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use serde::Deserialize;
 use serde::Serialize;
 use std::future::Future;
@@ -213,58 +206,27 @@ pub enum ExecFileSystemPath {
 impl From<FileSystemPath> for ExecFileSystemPath {
     fn from(value: FileSystemPath) -> Self {
         match value {
-<<<<<<< HEAD
-            FileSystemPath::Path { path } => Self::Path {
-                path: PathUri::from_abs_path(&path),
-            },
+            FileSystemPath::Path { path } => Self::Path { path },
             FileSystemPath::GlobPattern { pattern, scan } => Self::GlobPattern {
                 pattern,
                 scan: scan.map(Into::into),
             },
-||||||| 413492cd6c
-            FileSystemPath::Path { path } => Self::Path {
-                path: PathUri::from_abs_path(&path),
-            },
-            FileSystemPath::GlobPattern { pattern } => Self::GlobPattern { pattern },
-=======
-            FileSystemPath::Path { path } => Self::Path { path },
-            FileSystemPath::GlobPattern { pattern } => Self::GlobPattern { pattern },
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             FileSystemPath::Special { value } => Self::Special { value },
         }
     }
 }
 
-<<<<<<< HEAD
-impl TryFrom<ExecFileSystemPath> for FileSystemPath {
-    type Error = io::Error;
-
-    fn try_from(value: ExecFileSystemPath) -> Result<Self, Self::Error> {
-        Ok(match value {
-            ExecFileSystemPath::Path { path } => Self::Path {
-                path: path.to_abs_path()?,
-            },
-            ExecFileSystemPath::GlobPattern { pattern, scan } => Self::GlobPattern {
-                pattern,
-                scan: scan.map(FileSystemGlobScan::try_from).transpose()?,
-            },
-||||||| 413492cd6c
-impl TryFrom<ExecFileSystemPath> for FileSystemPath {
-    type Error = io::Error;
-
-    fn try_from(value: ExecFileSystemPath) -> Result<Self, Self::Error> {
-        Ok(match value {
-            ExecFileSystemPath::Path { path } => Self::Path {
-                path: path.to_abs_path()?,
-            },
-            ExecFileSystemPath::GlobPattern { pattern } => Self::GlobPattern { pattern },
-=======
 impl From<ExecFileSystemPath> for FileSystemPath {
     fn from(value: ExecFileSystemPath) -> Self {
         match value {
             ExecFileSystemPath::Path { path } => Self::Path { path },
-            ExecFileSystemPath::GlobPattern { pattern } => Self::GlobPattern { pattern },
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            ExecFileSystemPath::GlobPattern { pattern, scan } => Self::GlobPattern {
+                pattern,
+                // A scan directory this host cannot express natively (another
+                // executor's convention) loses only the Linux scan hint: the
+                // deny glob itself stays and expands as an ordinary glob.
+                scan: scan.and_then(|scan| FileSystemGlobScan::try_from(scan).ok()),
+            },
             ExecFileSystemPath::Special { value } => Self::Special { value },
         }
     }
@@ -473,40 +435,27 @@ impl FileSystemSandboxContext {
         }
     }
 
-<<<<<<< HEAD
-    pub fn should_run_in_sandbox(&self) -> bool {
-        let Ok(permissions) = PermissionProfile::try_from(self.permissions.clone()) else {
-            // A sandbox context for another host must not select the unsandboxed filesystem.
-            return true;
-        };
-        let file_system_policy = permissions.file_system_sandbox_policy();
-        // #506: a directory that may not be listed needs the sandbox too, and
-        // so does a path that may not be moved (#598), and keeping the
-        // keychain services away on macOS (#758), and denying user
-        // namespaces on Linux (#826), as for commands.
-        matches!(file_system_policy.kind, FileSystemSandboxKind::Restricted)
-            && (!file_system_policy.has_full_disk_write_access()
-                || !file_system_policy.get_unlistable_directories().is_empty()
-                || !file_system_policy.get_unmovable_paths().is_empty()
-                || (cfg!(target_os = "macos") && file_system_policy.denies_keychain_services())
-                || (cfg!(target_os = "linux") && file_system_policy.denies_user_namespaces()))
-||||||| 413492cd6c
-    pub fn should_run_in_sandbox(&self) -> bool {
-        let Ok(permissions) = PermissionProfile::try_from(self.permissions.clone()) else {
-            // A sandbox context for another host must not select the unsandboxed filesystem.
-            return true;
-        };
-        let file_system_policy = permissions.file_system_sandbox_policy();
-        matches!(file_system_policy.kind, FileSystemSandboxKind::Restricted)
-            && !file_system_policy.has_full_disk_write_access()
-=======
     /// Whether filesystem reads need a platform sandbox on the selected executor.
     pub fn should_read_from_sandbox(&self) -> bool {
         !self
             .permissions
             .file_system_sandbox_policy()
             .has_full_disk_read_access_for_convention(self.cwd.infer_path_convention())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            || self.has_entries_only_the_sandbox_enforces()
+    }
+
+    /// Whether the policy carries entries that only a platform sandbox enforces, so that
+    /// reads and writes both go through it even with full disk access: a directory that
+    /// may not be listed (#506), a path that may not be moved (#598), keeping the keychain
+    /// services away on macOS (#758) and denying user namespaces on Linux (#826), as for
+    /// commands.
+    fn has_entries_only_the_sandbox_enforces(&self) -> bool {
+        let file_system_policy = self.permissions.file_system_sandbox_policy();
+        matches!(file_system_policy.kind, FileSystemSandboxKind::Restricted)
+            && (!file_system_policy.get_unlistable_directories().is_empty()
+                || !file_system_policy.get_unmovable_paths().is_empty()
+                || (cfg!(target_os = "macos") && file_system_policy.denies_keychain_services())
+                || (cfg!(target_os = "linux") && file_system_policy.denies_user_namespaces()))
     }
 
     /// Whether filesystem writes need a platform sandbox on the selected executor.
@@ -515,6 +464,7 @@ impl FileSystemSandboxContext {
             .permissions
             .file_system_sandbox_policy()
             .has_full_disk_write_access_for_convention(self.cwd.infer_path_convention())
+            || self.has_entries_only_the_sandbox_enforces()
     }
 
     /// Whether this context selects either supported Windows sandbox implementation.
@@ -611,20 +561,14 @@ impl From<FileSystemSandboxContext> for WireFileSystemSandboxContext {
                 file_system: ExecManagedFileSystemPermissions::Restricted { entries, .. },
                 ..
             } => entries.iter().any(|entry| match &entry.path {
-<<<<<<< HEAD
                 ExecFileSystemPath::GlobPattern { pattern, .. } => {
-                    !Path::new(pattern).is_absolute()
+                    match cwd.infer_path_convention() {
+                        Some(convention) => LegacyAppPathString::from_string(pattern)
+                            .to_path_uri(convention)
+                            .is_err(),
+                        None => true,
+                    }
                 }
-||||||| 413492cd6c
-                ExecFileSystemPath::GlobPattern { pattern } => !Path::new(pattern).is_absolute(),
-=======
-                ExecFileSystemPath::GlobPattern { pattern } => match cwd.infer_path_convention() {
-                    Some(convention) => LegacyAppPathString::from_string(pattern)
-                        .to_path_uri(convention)
-                        .is_err(),
-                    None => true,
-                },
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 ExecFileSystemPath::Special {
                     value: FileSystemSpecialPath::ProjectRoots { .. },
                 } => true,
@@ -679,7 +623,7 @@ impl WireFileSystemSandboxContext {
         };
 
         entries.iter().any(|entry| match &entry.path {
-            ExecFileSystemPath::GlobPattern { pattern } => !Path::new(pattern).is_absolute(),
+            ExecFileSystemPath::GlobPattern { pattern, .. } => !Path::new(pattern).is_absolute(),
             ExecFileSystemPath::Special {
                 value: FileSystemSpecialPath::ProjectRoots { .. },
             } => true,

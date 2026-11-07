@@ -12,7 +12,6 @@ use codex_otel::OtelSettings;
 use codex_otel_trace_websocket::TraceWebSocket;
 use tracing_subscriber::Layer;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
 
 const OTEL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 5);
 
@@ -44,24 +43,6 @@ struct Cli {
 }
 
 #[tokio::main(flavor = "current_thread")]
-<<<<<<< HEAD
-async fn main() -> anyhow::Result<()> {
-    codex_log_guard::guard(
-        tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::INFO)
-            .with_writer(codex_log_guard::RedactingMakeWriter::new(std::io::stderr))
-            .with_ansi(false)
-            .finish(),
-    )
-    .init();
-||||||| 413492cd6c
-async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
-        .with_writer(std::io::stderr)
-        .with_ansi(false)
-        .init();
-=======
 async fn run(cli: Cli) -> anyhow::Result<()> {
     let mut trace_transport = if let Some(trace_listen) = cli.otel_trace_listen.as_deref() {
         Some(TraceWebSocket::start(trace_listen).await?)
@@ -76,15 +57,18 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
         .map(build_trace_provider)
         .transpose()?;
     let otel_layer = otel.as_ref().and_then(OtelProvider::tracing_layer);
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(std::io::stderr)
-                .with_ansi(false)
-                .with_filter(tracing_subscriber::filter::LevelFilter::INFO),
-        )
-        .with(otel_layer)
-        .init();
+    // The log guard caps secret-bearing events before the stderr and OTEL layers see them.
+    codex_log_guard::guard(
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(codex_log_guard::RedactingMakeWriter::new(std::io::stderr))
+                    .with_ansi(false)
+                    .with_filter(tracing_subscriber::filter::LevelFilter::INFO),
+            )
+            .with(otel_layer),
+    )
+    .init();
     if let Some(trace_transport) = trace_transport.as_ref() {
         let listen_addr = trace_transport.listen_addr();
         tracing::info!("codex-code-mode-host OTEL trace websocket listening on ws://{listen_addr}");
@@ -94,7 +78,6 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
         otel.name = "code_mode_host.startup"
     )
     .in_scope(|| {});
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     let main_transport = codex_code_mode_host::run_main(&cli.listen);
     let result = match trace_transport.as_mut() {

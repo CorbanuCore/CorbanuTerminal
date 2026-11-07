@@ -18,15 +18,9 @@ pub enum PromptSlot {
 #[derive(Clone, Debug, PartialEq)]
 pub struct PromptFragment {
     slot: PromptSlot,
-<<<<<<< HEAD
-    text: String,
+    content: AnnotatedContent,
     source_id: Option<&'static str>,
     stored_data: bool,
-||||||| 413492cd6c
-    text: String,
-=======
-    content: AnnotatedContent,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl PromptFragment {
@@ -35,14 +29,9 @@ impl PromptFragment {
     pub fn from_fragment(slot: PromptSlot, fragment: &impl ContextualUserFragment) -> Self {
         Self {
             slot,
-<<<<<<< HEAD
-            text: text.into(),
-            source_id: None,
-            stored_data: false,
-||||||| 413492cd6c
-            text: text.into(),
-=======
             content: fragment.render_fragment().into_parts().1,
+            source_id: fragment.source_id(),
+            stored_data: false,
         }
     }
 
@@ -51,6 +40,8 @@ impl PromptFragment {
         Self {
             slot,
             content: AnnotatedContent::text(text, content_kind, ContentItemMetadata::harness()),
+            source_id: None,
+            stored_data: false,
         }
     }
 
@@ -68,7 +59,8 @@ impl PromptFragment {
                 content_kind,
                 ContentItemMetadata::tool(Some(namespace.into())),
             ),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            source_id: None,
+            stored_data: false,
         }
     }
 
@@ -120,12 +112,6 @@ impl PromptFragment {
     pub fn into_content(self) -> AnnotatedContent {
         self.content
     }
-}
-
-impl From<PromptFragment> for RenderedFragment {
-    fn from(fragment: PromptFragment) -> Self {
-        Self::new("developer", fragment.content)
-    }
 
     /// Returns the stable producer ID, if the fragment is attributed.
     pub fn source_id(&self) -> Option<&'static str> {
@@ -135,5 +121,11 @@ impl From<PromptFragment> for RenderedFragment {
     /// Whether the text is derived from stored content (see [`Self::with_stored_data`]).
     pub fn is_stored_data(&self) -> bool {
         self.stored_data
+    }
+}
+
+impl From<PromptFragment> for RenderedFragment {
+    fn from(fragment: PromptFragment) -> Self {
+        Self::new("developer", fragment.content)
     }
 }
