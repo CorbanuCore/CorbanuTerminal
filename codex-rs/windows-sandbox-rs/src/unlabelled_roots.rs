@@ -76,14 +76,20 @@ pub fn legacy_writable_roots(
             policy.clone(),
             workspace_roots,
         );
-    crate::allow::compute_allow_paths_for_permissions(
-        &permissions,
-        cwd,
-        &std::collections::HashMap::new(),
-    )
-    .allow
-    .into_iter()
-    .collect()
+    // The legacy session's `%TEMP%`/`%TMP%` are this process's (main fell back
+    // to them; upstream resolves `:tmpdir` only from the given environment).
+    let host_temp: std::collections::HashMap<String, String> = ["TEMP", "TMP"]
+        .into_iter()
+        .filter_map(|key| {
+            std::env::var(key)
+                .ok()
+                .map(|value| (key.to_string(), value))
+        })
+        .collect();
+    crate::allow::compute_allow_paths_for_permissions(&permissions, cwd, &host_temp)
+        .allow
+        .into_iter()
+        .collect()
 }
 
 /// The canonical writable roots the legacy sandbox labels; empty off Windows.

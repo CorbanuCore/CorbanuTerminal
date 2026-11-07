@@ -1060,8 +1060,11 @@ unsafe fn is_exact_delete_child_deny(
 /// # Safety
 /// Caller must ensure `psid` points to a valid SID and `path` exists.
 pub unsafe fn add_deny_delete_ace(path: &Path, psid: *mut c_void) -> Result<bool> {
-    let added = add_deny_ace(path, psid, DenyAceKind::Delete)?;
-    // `add_deny_ace` reports a failed write as "not added"; confirm instead.
+    // Upstream's `add_deny_ace` reports a failed write as an error; keep
+    // main's D263 message for it.
+    let added = add_deny_ace(path, psid, DenyAceKind::Delete)
+        .with_context(|| format!("could not deny the sandbox DELETE on {}", path.display()))?;
+    // Confirm the entry is there.
     let (p_dacl, p_sd) = fetch_dacl_handle(path)?;
     let present = DenyAceKind::Delete.already_present(p_dacl, psid, path.is_dir());
     if !p_sd.is_null() {

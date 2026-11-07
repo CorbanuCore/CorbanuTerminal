@@ -145,7 +145,11 @@ fn accessible_entry<T>(result: io::Result<T>, path: &Path) -> Result<Option<T>, 
         // can plant) leads nowhere the walk doesn't reach through the real
         // folder: skip it rather than refuse every later command (main
         // skipped it too). ERROR_CANT_RESOLVE_FILENAME is Windows' loop error.
-        Err(err) if err.raw_os_error() == Some(1921) => Ok(None),
+        // ERROR_SHARING_VIOLATION / ERROR_LOCK_VIOLATION: a file another
+        // process holds open without sharing can't be opened by the command
+        // either; the persistent sync keeps an earlier entry for its rule
+        // (#304 S1), as main's walk did by skipping it.
+        Err(err) if matches!(err.raw_os_error(), Some(32 | 33 | 1921)) => Ok(None),
         Err(err) => Err(format!(
             "failed to enumerate unreadable glob paths under {}: {err}",
             path.display()
