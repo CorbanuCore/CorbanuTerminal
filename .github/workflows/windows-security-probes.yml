@@ -3,6 +3,10 @@ name: windows-security-probes
 # win-1560m: D367/D368 compatibility probes only (test branch, never merged).
 on:
   workflow_dispatch:
+    inputs:
+      variants:
+        description: JSON list of probe variants
+        default: '["base", "d368", "d367a", "both"]'
 
 jobs:
   probes:
@@ -12,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [base, d368, d367a, both]
+        variant: ${{ fromJSON(inputs.variants) }}
     env:
       CORBANU_PROBE_VARIANT: ${{ matrix.variant }}
       CODEX_SEC_WIN_341_REQUIRE: "1"

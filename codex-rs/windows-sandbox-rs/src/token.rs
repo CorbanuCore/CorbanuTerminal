@@ -44,8 +44,10 @@ use windows_sys::Win32::Security::TOKEN_USER;
 use windows_sys::Win32::Security::TokenDefaultDacl;
 use windows_sys::Win32::Security::TokenGroups;
 use windows_sys::Win32::Security::TokenUser;
+use windows_sys::Win32::Storage::FileSystem::DELETE;
 use windows_sys::Win32::Storage::FileSystem::READ_CONTROL;
 use windows_sys::Win32::Storage::FileSystem::WRITE_DAC;
+use windows_sys::Win32::Storage::FileSystem::WRITE_OWNER;
 use windows_sys::Win32::System::Threading::GetCurrentProcess;
 use windows_sys::Win32::System::Threading::OpenProcessToken;
 
@@ -70,7 +72,7 @@ const SE_GROUP_ENABLED: u32 = 0x0000_0004;
 const PROBE_VARIANT: Option<&str> = option_env!("CORBANU_PROBE_VARIANT");
 
 fn probe_d368() -> bool {
-    matches!(PROBE_VARIANT, Some("d368") | Some("both"))
+    matches!(PROBE_VARIANT, Some("d368") | Some("both") | Some("d368s"))
 }
 
 fn probe_d367a() -> bool {
@@ -86,7 +88,10 @@ pub fn probe_variant() -> &'static str {
 /// The right the shared normal SID (legacy: the user; elevated: the sandbox
 /// users' group) gets in a command's default DACL.
 fn shared_normal_sid_access() -> u32 {
-    if probe_d368() {
+    if PROBE_VARIANT == Some("d368s") {
+        // `d368s`: plus the standard rights generic write leaves out.
+        GENERIC_READ | GENERIC_WRITE | GENERIC_EXECUTE | WRITE_DAC | WRITE_OWNER | DELETE
+    } else if probe_d368() {
         GENERIC_READ | GENERIC_WRITE | GENERIC_EXECUTE
     } else {
         GENERIC_ALL
