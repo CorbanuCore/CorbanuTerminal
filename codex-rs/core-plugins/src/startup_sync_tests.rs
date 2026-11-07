@@ -43,6 +43,7 @@ fn pretrust_startup_sync_uses_installed_git_with_hostile_path() {
         sync_openai_plugins_repo(
             Path::new(&home),
             crate::test_support::test_http_client_factory(),
+            &NOT_CANCELLED,
         )
         .expect("Git-only startup sync should succeed");
         return;
@@ -506,10 +507,9 @@ fn has_plugins_clone_dirs(codex_home: &Path) -> bool {
     })
 }
 
-/// Writes an executable script from a child process. Written here, a
-/// sibling test forking (to spawn its own `git`) while the file is open for
-/// writing keeps a copy of that descriptor until it execs, and running the
-/// script then fails with ETXTBSY on Linux (#635).
+/// Writes an executable script. On Linux `write_executable` writes it from a child
+/// process, so a sibling test forking (to spawn its own `git`) can't keep a copy of
+/// the open descriptor and make running the script fail with ETXTBSY (#635).
 #[cfg(unix)]
 fn write_executable_script(path: &Path, contents: &str) {
     codex_utils_cargo_bin::write_executable(path, contents).expect("write script");
@@ -1364,7 +1364,7 @@ fn cancelled_sync_spawns_no_git() {
     let cancel = AtomicBool::new(true);
 
     let err = run_git_command_with_timeout(
-        &mut git_command(&git_path),
+        &mut git_command(&git_path).expect("git command"),
         "git test",
         CURATED_PLUGINS_GIT_TIMEOUT,
         &cancel,
