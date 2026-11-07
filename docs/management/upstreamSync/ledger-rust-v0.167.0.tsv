@@ -12,7 +12,7 @@ path	kind	code	area	slice	tier	owner	contributor	status	resolution	hunks	lines	t
 .github/actions/setup-bazel-ci/action.yml	modify/delete	UD	CI/workflows	S0 manifests/locks/CI	0	integrator	no	resolved	ours	0	0	false	false	false	false	deleted upstream; skeleton keeps ours; skeleton keeps main's file; port upstream changes in S4
 .github/pull_request_template.md	modify/delete	UD	CI/workflows	S1d tooling/repo	1	unassigned	yes	open		0	0	false	false	false	false	deleted upstream; skeleton keeps ours
 .github/scripts/build-codex-package-archive.sh	content	UU	CI/workflows	S0 manifests/locks/CI	0	integrator	no	resolved	ours	1	7	false	false	false	false	skeleton keeps main's file; port upstream changes in S4
-.github/scripts/run-bazel-ci.sh	content	UU	CI/workflows	S0 manifests/locks/CI	0	integrator	no	resolved	ours	1	8	false	false	false	false	skeleton keeps main's file; port upstream changes in S4
+.github/scripts/run-bazel-ci.sh	content	UU	CI/workflows	S0 manifests/locks/CI	0	integrator	no	resolved	ours	1	8	false	false	false	false	skeleton keeps main's file (mode 100755); port upstream changes in S4
 .github/scripts/verify_cargo_workspace_manifests.py	content	UU	CI/workflows	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	1	false	false	false	false	main's file without the code-mode-runtime feature exception (upstream dropped that feature); port other upstream changes in S4
 .github/workflows/README.md	content	UU	CI/workflows	S0 manifests/locks/CI	0	integrator	no	resolved	ours	1	19	false	false	false	false	skeleton keeps main's file; port upstream changes in S4
 .github/workflows/bazel.yml	content	UU	CI/workflows	S0 manifests/locks/CI	0	integrator	no	resolved	ours	5	110	false	false	false	false	skeleton keeps main's file; port upstream changes in S4
@@ -33,7 +33,7 @@ CHANGELOG.md	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		1	249	fals
 MODULE.bazel	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	7	100	false	false	false	false	v8 crate archive from CorbanuCore/rusty_v8, same sha256 (D317)
 MODULE.bazel.lock	content	UU	schemas/locks	S0 manifests/locks/CI	0	integrator	no	resolved	merged	30	461	false	false	false	false	regenerated from main's lock
 codex-cli/bin/codex.js	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		4	21	false	false	false	false	
-codex-rs/.cargo/audit.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	20	false	false	false	true	
+codex-rs/.cargo/audit.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	20	false	false	false	true	main's ignores; duplicate RUSTSEC-2024-0449 dropped
 codex-rs/.config/nextest.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	14	false	false	false	false	
 codex-rs/.gitignore	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	19	false	false	false	false	
 codex-rs/Cargo.lock	content	UU	schemas/locks	S0 manifests/locks/CI	0	integrator	no	resolved	merged	77	755	false	false	false	false	regenerated from main's lock
@@ -410,7 +410,7 @@ codex-rs/core/tests/suite/unified_exec_process_events.rs	content	UU	core	S3a sec
 codex-rs/core/tests/suite/unified_exec_zsh_fork_approvals.rs	modify/delete	UD	core	S3a security resolution	1+2	security owner	no	open		0	0	true	false	true	false	deleted upstream; skeleton keeps ours
 codex-rs/core/tests/suite/view_image.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		2	16	true	false	false	false	
 codex-rs/core/tests/suite/windows_sandbox.rs	modify/delete	UD	core	S3a security resolution	1+2	security owner	no	open		0	0	true	false	true	true	deleted upstream; skeleton keeps ours
-codex-rs/deny.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	2	25	false	false	false	true	main advisory ignores; allow-git CorbanuCore/rusty_v8 instead of the personal fork (D317)
+codex-rs/deny.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	2	25	false	false	false	true	main's advisory ignores (one RUSTSEC-2024-0449 entry); allow-git CorbanuCore/rusty_v8 instead of the personal fork (D317); unused juberti-oai/rust-sdks source dropped
 codex-rs/exec-server-protocol/src/lib.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		1	6	false	false	false	false	
 codex-rs/exec-server-protocol/src/network_policy_tests.rs	content	UU	other	S1c other crates	1	unassigned	yes	open		1	59	true	false	false	false	
 codex-rs/exec-server/src/client.rs	content	UU	exec	S1c other crates	1	unassigned	yes	open		10	89	false	false	false	false	
