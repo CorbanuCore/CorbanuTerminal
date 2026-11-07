@@ -63,6 +63,7 @@ fn deny_read_globs_protect_matching_contents_without_disabling_other_checks() ->
     let mut policy = policy(&[(&root, Write)]);
     policy.entries.push(FileSystemSandboxEntry::new(
         FileSystemPath::GlobPattern {
+            scan: None,
             pattern: format!("{}/sandbox-*", root.display()),
         },
         Deny,
@@ -96,6 +97,7 @@ fn contents_follow_links_and_resolved_write_grants() -> io::Result<()> {
     let mut alias_denied = policy(&[(&root, Write)]);
     alias_denied.entries.push(FileSystemSandboxEntry::new(
         FileSystemPath::GlobPattern {
+            scan: None,
             pattern: format!("{}/helper-*", writable.display()),
         },
         Deny,

@@ -200,15 +200,11 @@ pub enum SandboxTransformError {
     MissingLinuxSandboxExecutable,
     WindowsMxcPreparation(String),
     EnvironmentNetworkProxy(String),
-<<<<<<< HEAD
     /// #536: a writable root moved through a link (see
     /// [`crate::writable_root_ledger`]).
     WritableRootRefused(crate::writable_root_ledger::WritableRootRefusal),
-||||||| 413492cd6c
-=======
     #[cfg(target_os = "macos")]
     SeatbeltPreparation(String),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     #[cfg(target_os = "linux")]
     Wsl1UnsupportedForBubblewrap,
     #[cfg(not(target_os = "macos"))]
@@ -239,15 +235,11 @@ impl std::fmt::Display for SandboxTransformError {
             Self::EnvironmentNetworkProxy(err) => {
                 write!(f, "failed to prepare environment network proxy: {err}")
             }
-<<<<<<< HEAD
             Self::WritableRootRefused(refusal) => write!(f, "{refusal}"),
-||||||| 413492cd6c
-=======
             #[cfg(target_os = "macos")]
             Self::SeatbeltPreparation(err) => {
                 write!(f, "failed to prepare Seatbelt sandbox: {err}")
             }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             #[cfg(target_os = "linux")]
             Self::Wsl1UnsupportedForBubblewrap => write!(f, "{WSL1_BWRAP_WARNING}"),
             #[cfg(not(target_os = "macos"))]
@@ -268,13 +260,9 @@ impl std::error::Error for SandboxTransformError {
             Self::MissingLinuxSandboxExecutable => None,
             Self::WindowsMxcPreparation(_) => None,
             Self::EnvironmentNetworkProxy(_) => None,
-<<<<<<< HEAD
             Self::WritableRootRefused(refusal) => Some(refusal),
-||||||| 413492cd6c
-=======
             #[cfg(target_os = "macos")]
             Self::SeatbeltPreparation(_) => None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             #[cfg(target_os = "linux")]
             Self::Wsl1UnsupportedForBubblewrap => None,
             #[cfg(not(target_os = "macos"))]
@@ -461,7 +449,6 @@ impl SandboxManager {
                 let (file_system_sandbox_policy, network_sandbox_policy) = pending
                     .effective_permission_profile
                     .to_runtime_permissions();
-<<<<<<< HEAD
                 // #536: the arguments grant writes at the real locations
                 // this check pins.
                 crate::writable_root_ledger::check_writable_roots(
@@ -469,32 +456,6 @@ impl SandboxManager {
                     pending.native_sandbox_policy_cwd.as_path(),
                 )
                 .map_err(SandboxTransformError::WritableRootRefused)?;
-                let mut args = create_seatbelt_command_args(CreateSeatbeltCommandArgsParams {
-                    command: os_argv_to_strings(argv),
-                    file_system_sandbox_policy: &file_system_sandbox_policy,
-                    network_sandbox_policy,
-                    sandbox_policy_cwd: pending.native_sandbox_policy_cwd.as_path(),
-                    enforce_managed_network,
-                    managed_network,
-                    environment_id,
-                    network,
-                    extra_allow_unix_sockets: &[],
-                })
-                .map_err(SandboxTransformError::EnvironmentNetworkProxy)?;
-||||||| 413492cd6c
-                let mut args = create_seatbelt_command_args(CreateSeatbeltCommandArgsParams {
-                    command: os_argv_to_strings(argv),
-                    file_system_sandbox_policy: &file_system_sandbox_policy,
-                    network_sandbox_policy,
-                    sandbox_policy_cwd: pending.native_sandbox_policy_cwd.as_path(),
-                    enforce_managed_network,
-                    managed_network,
-                    environment_id,
-                    network,
-                    extra_allow_unix_sockets: &[],
-                })
-                .map_err(SandboxTransformError::EnvironmentNetworkProxy)?;
-=======
                 let mut args = create_seatbelt_command_args_with_profile(
                     CreateSeatbeltCommandArgsParams {
                         command: argv,
@@ -518,7 +479,6 @@ impl SandboxManager {
                         SandboxTransformError::EnvironmentNetworkProxy(message)
                     }
                 })?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 let mut full_command = Vec::with_capacity(1 + args.len());
                 full_command.push(MACOS_PATH_TO_SEATBELT_EXECUTABLE.to_string());
                 full_command.append(&mut args);
@@ -574,7 +534,6 @@ impl SandboxManager {
                     use_legacy_landlock,
                     managed_network.as_ref(),
                 );
-<<<<<<< HEAD
                 crate::landlock::insert_pinned_writable_roots_arg(&mut args, &pinned);
                 // #348: where the helper records the placeholders it makes.
                 if let Ok(codex_home) = codex_utils_home_dir::find_codex_home() {
@@ -582,13 +541,11 @@ impl SandboxManager {
                         &mut args,
                         codex_home.as_path(),
                     );
-||||||| 413492cd6c
-=======
+                }
                 // Keep default invocations compatible with older helpers. Only the
                 // startup opt-in requires a helper that understands PID inheritance.
                 if self.linux_sandbox_pid_namespace == LinuxSandboxPidNamespace::Inherit {
                     args.insert(0, "--inherit-pid-namespace".to_string());
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 }
                 let mut full_command = Vec::with_capacity(1 + args.len());
                 full_command.push(os_string_to_command_component(exe.as_os_str().to_owned()));

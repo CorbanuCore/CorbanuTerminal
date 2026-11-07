@@ -1,26 +1,17 @@
 use crate::policy_transforms::should_require_platform_sandbox;
 use codex_install_context::InstallContext;
 use codex_protocol::models::PermissionProfile;
-<<<<<<< HEAD
-use codex_utils_absolute_path::AbsolutePathBuf;
-||||||| 413492cd6c
-=======
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use std::ffi::CString;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use std::io::ErrorKind;
 use std::io::Read;
 use std::os::fd::AsRawFd;
-<<<<<<< HEAD
 use std::os::fd::RawFd;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
-||||||| 413492cd6c
-=======
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
@@ -103,8 +94,10 @@ pub fn system_bwrap_warning(
         return None;
     }
 
-<<<<<<< HEAD
-    let system_bwrap_path = find_system_bwrap_in_path();
+    let system_bwrap_path = find_system_bwrap_in_path(
+        &permission_profile.file_system_sandbox_policy(),
+        sandbox_policy_cwd,
+    );
     system_bwrap_warning_for_path(
         system_bwrap_path.as_deref(),
         || find_bundled_bwrap().is_some(),
@@ -133,16 +126,6 @@ fn find_aa_exec() -> Option<PathBuf> {
         .into_iter()
         .map(PathBuf::from)
         .find(|candidate| candidate.is_file())
-||||||| 413492cd6c
-    let system_bwrap_path = find_system_bwrap_in_path();
-    system_bwrap_warning_for_path(system_bwrap_path.as_deref())
-=======
-    let system_bwrap_path = find_system_bwrap_in_path(
-        &permission_profile.file_system_sandbox_policy(),
-        sandbox_policy_cwd,
-    );
-    system_bwrap_warning_for_path(system_bwrap_path.as_deref())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 fn should_warn_about_system_bwrap(permission_profile: &PermissionProfile) -> bool {
@@ -518,7 +501,6 @@ pub fn find_executable_in_search_paths(
         })
 }
 
-<<<<<<< HEAD
 /// The bubblewrap that came with Corbanu Terminal: in the install's
 /// resources, or next to the executable (older package layouts and
 /// development builds).
@@ -559,8 +541,8 @@ fn is_executable_file(path: &Path) -> bool {
         return false;
     };
     metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
-||||||| 413492cd6c
-=======
+}
+
 fn current_user_can_replace_child(parent: &Path, child: &Path) -> bool {
     if !current_user_can_modify(parent) {
         return false;
@@ -611,7 +593,6 @@ fn current_user_can_modify(path: &Path) -> bool {
         std::io::Error::last_os_error().raw_os_error(),
         Some(libc::EACCES | libc::EROFS)
     )
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[cfg(test)]

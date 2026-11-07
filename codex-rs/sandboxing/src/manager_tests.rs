@@ -138,61 +138,6 @@ fn unsandboxed_transform_preserves_foreign_cwd_and_unrestricted_file_system_poli
     );
 }
 
-#[cfg(target_os = "macos")]
-#[test]
-fn symlinked_workspace_reports_seatbelt_preparation_error() {
-    use std::os::unix::fs::symlink;
-
-    let manager = SandboxManager::new();
-    let temp_dir = TempDir::new().expect("create temp dir");
-    let target = temp_dir.path().join("target");
-    let workspace = temp_dir.path().join("workspace");
-    std::fs::create_dir(&target).expect("create target");
-    symlink(&target, &workspace).expect("create symlinked workspace");
-    let workspace = AbsolutePathBuf::from_absolute_path(workspace).expect("absolute workspace");
-    let workspace_uri = PathUri::from_abs_path(&workspace);
-    let permissions = PermissionProfile::from_runtime_permissions(
-        &FileSystemSandboxPolicy::workspace_write(
-            &[],
-            /*exclude_tmpdir_env_var*/ true,
-            /*exclude_slash_tmp*/ true,
-        ),
-        NetworkSandboxPolicy::Restricted,
-    );
-
-    let error = manager
-        .transform(SandboxTransformRequest {
-            command: SandboxCommand {
-                program: "true".into(),
-                args: Vec::new(),
-                cwd: workspace_uri.clone(),
-                env: HashMap::new(),
-                managed_network: None,
-                additional_permissions: None,
-            },
-            permissions: &permissions,
-            sandbox: SandboxType::MacosSeatbelt,
-            enforce_managed_network: false,
-            environment_id: None,
-            network: None,
-            sandbox_policy_cwd: &workspace_uri,
-            sandbox_exe: None,
-            use_legacy_landlock: false,
-            windows_sandbox_level: WindowsSandboxLevel::Disabled,
-        })
-        .expect_err("symlinked workspace should be rejected");
-
-    assert!(matches!(
-        &error,
-        super::SandboxTransformError::SeatbeltPreparation(message)
-            if message.contains("symlinked writable roots are not supported")
-    ));
-    assert!(
-        !error.to_string().contains("network proxy"),
-        "filesystem error should not be attributed to network proxy: {error}"
-    );
-}
-
 #[test]
 fn transform_additional_permissions_enable_network_for_external_sandbox() {
     let manager = SandboxManager::new();
@@ -811,13 +756,7 @@ fn transform_for_direct_spawn_windows_materializes_inner_helper() {
         exec_request
             .command
             .iter()
-<<<<<<< HEAD
-            .any(|arg| arg == "--deny-read-json")
-||||||| 413492cd6c
-            .any(|arg| arg == "--deny-read-paths-json")
-=======
             .any(|arg| arg == "--deny-write-paths-json")
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     );
     assert_eq!(
         exec_request.command[separator_index + 2],

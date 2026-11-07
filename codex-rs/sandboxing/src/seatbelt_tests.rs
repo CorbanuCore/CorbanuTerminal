@@ -1,5 +1,6 @@
 use super::CreateSeatbeltCommandArgsParams;
 use super::GlobMatch;
+use super::MACOS_KEYCHAIN_SERVICES_DENY_POLICY;
 use super::MACOS_PATH_TO_SEATBELT_EXECUTABLE;
 use super::MACOS_SEATBELT_BASE_POLICY;
 use super::MacosSeatbeltProfile;
@@ -35,13 +36,9 @@ use codex_protocol::permissions::PROTECTED_METADATA_PATH_NAMES;
 use codex_protocol::protocol::SandboxPolicy;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
-<<<<<<< HEAD
 use std::collections::BTreeMap;
-||||||| 413492cd6c
-=======
 use std::ffi::CStr;
 use std::ffi::OsStr;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use std::fs;
 use std::mem::MaybeUninit;
 use std::os::unix::ffi::OsStrExt;
@@ -589,7 +586,10 @@ fn explicit_unreadable_paths_are_excluded_from_full_disk_read_and_write_access()
 
 #[test]
 fn global_literal_basename_denies_survive_directory_moves() {
-    for name in [".env", "credentials", "secret+file.txt"] {
+    // `/**/.env` is Corbanu's credential-rule form, which keeps main's #442
+    // rules (a `.env` folder stays usable); see
+    // `build_seatbelt_unreadable_glob_policy`.
+    for name in ["credentials", "secret+file.txt"] {
         let temp_dir = TempDir::new().expect("temp dir");
         let root = temp_dir.path().canonicalize().expect("canonical temp dir");
         let workspace = root.join("workspace");
@@ -620,6 +620,7 @@ fn global_literal_basename_denies_survive_directory_moves() {
         let mut policy = restricted_write_policy(&[&workspace, &destination]);
         policy.entries.push(FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
+                scan: None,
                 pattern: format!("/**/{name}"),
             },
             FileSystemAccessMode::Deny,
@@ -702,9 +703,9 @@ fn scoped_or_nonliteral_basename_denies_still_block_directory_moves() {
     let workspace = temp_dir.path().canonicalize().expect("canonical temp dir");
     fs::create_dir(workspace.join("source")).expect("source directory");
     fs::write(workspace.join("source/.env"), "secret").expect("protected file");
+    // `**/.env` and `<workspace>/**/.env` are Corbanu's credential-rule form,
+    // which keeps main's #442 rules (no ancestor rename denies).
     for pattern in [
-        "**/.env".to_string(),
-        format!("{}/**/.env", workspace.display()),
         format!("{}/*/.env", workspace.display()),
         "/**/source/.env".to_string(),
         "/**/*.env".to_string(),
@@ -713,6 +714,7 @@ fn scoped_or_nonliteral_basename_denies_still_block_directory_moves() {
         let mut policy = restricted_write_policy(&[&workspace]);
         policy.entries.push(FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
+                scan: None,
                 pattern: pattern.clone(),
             },
             FileSystemAccessMode::Deny,
@@ -806,12 +808,14 @@ fn nested_protected_paths_cannot_be_bypassed_by_renaming_ancestors() {
             ),
             Protection::DenyGlob(component) => (
                 FileSystemPath::GlobPattern {
+                    scan: None,
                     pattern: format!("{}/{component}/workflows/*.yml", workspace.display()),
                 },
                 FileSystemAccessMode::Deny,
             ),
             Protection::DenyGlobAboveRoot => (
                 FileSystemPath::GlobPattern {
+                    scan: None,
                     pattern: format!(
                         "{}/*/.github/workflows/*.yml",
                         workspace.parent().expect("workspace parent").display()
@@ -821,7 +825,7 @@ fn nested_protected_paths_cannot_be_bypassed_by_renaming_ancestors() {
             ),
         };
         let glob_pattern = match &protected_path {
-            FileSystemPath::GlobPattern { pattern } => Some(pattern.clone()),
+            FileSystemPath::GlobPattern { pattern, .. } => Some(pattern.clone()),
             _ => None,
         };
         let mut file_system_policy = FileSystemSandboxPolicy::read_only();
@@ -1231,44 +1235,6 @@ fn unreadable_glob_policy_includes_canonicalized_static_prefix() {
     fs::create_dir(&real_root).expect("create real root");
     symlink(&real_root, &link_root).expect("create symlinked root");
 
-<<<<<<< HEAD
-    let pattern = format!("{}/**/*.env", link_root.display());
-    let canonical_pattern = format!(
-        "{}/**/*.env",
-        real_root
-            .canonicalize()
-            .expect("canonicalize real root")
-            .display()
-    );
-    let expected_regex = seatbelt_regex_for_unreadable_glob(&canonical_pattern)
-        .expect("canonical glob should compile");
-    let mut policy = FileSystemSandboxPolicy::default();
-    policy.entries.push(FileSystemSandboxEntry {
-        path: FileSystemPath::GlobPattern {
-            pattern,
-            scan: None,
-        },
-        access: FileSystemAccessMode::Deny,
-        missing_path_behavior: None,
-    });
-||||||| 413492cd6c
-    let pattern = format!("{}/**/*.env", link_root.display());
-    let canonical_pattern = format!(
-        "{}/**/*.env",
-        real_root
-            .canonicalize()
-            .expect("canonicalize real root")
-            .display()
-    );
-    let expected_regex = seatbelt_regex_for_unreadable_glob(&canonical_pattern)
-        .expect("canonical glob should compile");
-    let mut policy = FileSystemSandboxPolicy::default();
-    policy.entries.push(FileSystemSandboxEntry {
-        path: FileSystemPath::GlobPattern { pattern },
-        access: FileSystemAccessMode::Deny,
-        missing_path_behavior: None,
-    });
-=======
     let canonical_root = real_root.canonicalize().expect("canonicalize real root");
     for suffix in ["**/*.env", "{app,service}/*.env", r"secret\?.env"] {
         let pattern = format!("{}/{suffix}", link_root.display());
@@ -1277,11 +1243,10 @@ fn unreadable_glob_policy_includes_canonicalized_static_prefix() {
             .expect("canonical glob should compile");
         let mut policy = FileSystemSandboxPolicy::default();
         policy.entries.push(FileSystemSandboxEntry {
-            path: FileSystemPath::GlobPattern { pattern },
+            path: FileSystemPath::GlobPattern { pattern, scan: None },
             access: FileSystemAccessMode::Deny,
             missing_path_behavior: None,
         });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         let seatbelt_policy = build_seatbelt_unreadable_glob_policy(&policy, temp_dir.path());
 
@@ -1323,6 +1288,7 @@ fn preferences_access_requires_unrestricted_reads() {
     let mut denied_glob = full_read.clone();
     denied_glob.entries.push(FileSystemSandboxEntry::new(
         FileSystemPath::GlobPattern {
+            scan: None,
             pattern: "/tmp/**/*.private".to_string(),
         },
         FileSystemAccessMode::Deny,
@@ -2055,21 +2021,21 @@ fn create_seatbelt_args_with_read_only_git_and_codex_subpaths() {
             "-DWRITABLE_ROOT_0_EXCLUDED_0={}",
             cwd.canonicalize()
                 .expect("canonicalize cwd")
-                .join(".codex")
+                .join(".git")
                 .display()
         ),
         format!(
             "-DWRITABLE_ROOT_0_EXCLUDED_1={}",
             cwd.canonicalize()
                 .expect("canonicalize cwd")
-                .join(".git")
+                .join(".agents")
                 .display()
         ),
         format!(
             "-DWRITABLE_ROOT_0_EXCLUDED_2={}",
             cwd.canonicalize()
                 .expect("canonicalize cwd")
-                .join(".agents")
+                .join(".codex")
                 .display()
         ),
         format!(
@@ -2210,42 +2176,6 @@ fn create_seatbelt_args_with_read_only_git_and_codex_subpaths() {
         String::from_utf8_lossy(&fs::read(&allowed_file).expect("read allowed.txt")),
         "{} should contain the written text",
         allowed_file.display()
-    );
-}
-
-#[cfg(unix)]
-#[test]
-fn create_seatbelt_args_rejects_symlinked_writable_root() {
-    use std::os::unix::fs::symlink;
-
-    let tmp = TempDir::new().expect("tempdir");
-    let target = tmp.path().join("target");
-    let workspace = tmp.path().join("workspace");
-    fs::create_dir(&target).expect("create target");
-    symlink(&target, &workspace).expect("create symlinked workspace");
-    let policy = SandboxPolicy::WorkspaceWrite {
-        writable_roots: Vec::new(),
-        network_access: false,
-        exclude_tmpdir_env_var: true,
-        exclude_slash_tmp: true,
-    };
-
-    let error = create_seatbelt_command_args_for_legacy_policy(
-        vec!["/usr/bin/true".to_string()],
-        &policy,
-        &workspace,
-        /*enforce_managed_network*/ false,
-        /*network*/ None,
-    )
-    .expect_err("symlinked workspace should be rejected");
-
-    assert!(
-        error.contains("symlinked writable roots are not supported"),
-        "unexpected error: {error}"
-    );
-    assert!(
-        error.contains(&workspace.display().to_string()),
-        "error should identify the rejected workspace: {error}"
     );
 }
 
@@ -3169,8 +3099,9 @@ fn create_seatbelt_args_for_cwd_as_git_repo() {
         args.contains(&expected_dot_git),
         "missing {expected_dot_git}: {args:#?}"
     );
+    // `.agents` now comes before `.codex` (upstream's root ordering).
     let expected_dot_codex = format!(
-        "-DWRITABLE_ROOT_0_EXCLUDED_1={}",
+        "-DWRITABLE_ROOT_0_EXCLUDED_2={}",
         dot_codex_canonical.to_string_lossy()
     );
     assert!(
@@ -3178,7 +3109,7 @@ fn create_seatbelt_args_for_cwd_as_git_repo() {
         "missing {expected_dot_codex}: {args:#?}"
     );
     let expected_dot_agents = format!(
-        "-DWRITABLE_ROOT_0_EXCLUDED_2={}",
+        "-DWRITABLE_ROOT_0_EXCLUDED_1={}",
         dot_agents_canonical.to_string_lossy()
     );
     assert!(
@@ -3275,12 +3206,16 @@ async fn pf_33_s02_guard_limits_seatbelt_egress_to_proxy_ports() -> anyhow::Resu
         let mut network_config = NetworkProxyConfig {
             enabled: true,
             mode: NetworkMode::Full,
-            allow_local_binding: true,
+            allow_local_binding: Some(true),
             ..Default::default()
         };
         network_config.set_allow_unix_sockets(vec!["/tmp/pf-33-s02-docker.sock".to_string()]);
         network_config.set_url_destination_policy(guarded);
-        let state = build_config_state(network_config, NetworkProxyConstraints::default())?;
+        let state = build_config_state(
+            network_config,
+            NetworkProxyConstraints::default(),
+            codex_network_proxy::Platform::native(),
+        )?;
         let network_proxy = NetworkProxy::builder()
             .state(Arc::new(NetworkProxyState::with_reloader(
                 state,
@@ -3305,9 +3240,10 @@ async fn pf_33_s02_guard_limits_seatbelt_egress_to_proxy_ports() -> anyhow::Resu
     }
     let [open, guarded] = [&policies[0], &policies[1]];
 
+    // Upstream (#51650) no longer allows direct DNS (`*:53`) either way.
+    assert!(!open.contains("*:53") && !guarded.contains("*:53"));
     for rule in [
         "(allow network-outbound (remote ip \"localhost:*\"))",
-        "(allow network-outbound (remote ip \"*:53\"))",
         "UNIX_SOCKET_PATH_0",
     ] {
         assert!(open.contains(rule), "flag off keeps {rule}:\n{open}");
@@ -3331,7 +3267,7 @@ fn a_writable_root_inside_a_read_only_folder_cannot_be_moved() {
     fs::create_dir_all(home.join("worktrees")).expect("worktrees");
     let entry = |path: &Path, access| FileSystemSandboxEntry {
         path: FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute").into(),
         },
         access,
         missing_path_behavior: None,
@@ -3405,7 +3341,7 @@ fn renaming_a_folder_above_a_protected_path_is_denied() {
     std::os::unix::fs::symlink(base.join("dotfiles/zshrc"), base.join(".zshrc")).expect("link");
     let entry = |path: &Path, access| FileSystemSandboxEntry {
         path: FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute").into(),
         },
         access,
         missing_path_behavior: None,
@@ -3481,7 +3417,7 @@ fn full_write_profile_with_denial_keeps_dev_null_usable() {
         },
         FileSystemSandboxEntry {
             path: FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path(&secret).expect("absolute"),
+                path: AbsolutePathBuf::from_absolute_path(&secret).expect("absolute").into(),
             },
             access: FileSystemAccessMode::Deny,
             missing_path_behavior: None,
@@ -3554,7 +3490,7 @@ fn workspace_policy_denying(denied: &[PathBuf]) -> FileSystemSandboxPolicy {
     ];
     entries.extend(denied.iter().map(|path| FileSystemSandboxEntry {
         path: FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute").into(),
         },
         access: FileSystemAccessMode::Deny,
         missing_path_behavior: None,
@@ -3769,7 +3705,7 @@ fn allows_inside_denied_folders_survive_across_links() {
     std::os::unix::fs::symlink(&real, &link).expect("link");
     let entry = |path: PathBuf, access| FileSystemSandboxEntry {
         path: FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute").into(),
         },
         access,
         missing_path_behavior: None,
@@ -3895,7 +3831,7 @@ fn sandboxed_commands_cannot_read_denied_files_through_a_nested_link() {
 fn path_entry(path: &Path, access: FileSystemAccessMode) -> FileSystemSandboxEntry {
     FileSystemSandboxEntry {
         path: FileSystemPath::Path {
-            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute"),
+            path: AbsolutePathBuf::from_absolute_path(path).expect("absolute").into(),
         },
         access,
         missing_path_behavior: None,
@@ -4198,7 +4134,7 @@ fn unlistable_directory_cannot_be_listed_but_its_entries_stay_usable() {
             ),
             FileSystemSandboxEntry::new(
                 FileSystemPath::Path {
-                    path: home_path.join("secret.txt"),
+                    path: home_path.join("secret.txt").into(),
                 },
                 FileSystemAccessMode::Deny,
             ),
@@ -4264,7 +4200,7 @@ fn credential_templates_stay_usable() {
         ),
         FileSystemSandboxEntry::new(
             FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path(&work).expect("absolute"),
+                path: AbsolutePathBuf::from_absolute_path(&work).expect("absolute").into(),
             },
             FileSystemAccessMode::Write,
         ),
@@ -4429,7 +4365,7 @@ fn credential_names_cannot_be_read_created_or_planted() {
         ),
         FileSystemSandboxEntry::new(
             FileSystemPath::Path {
-                path: AbsolutePathBuf::from_absolute_path(&work).expect("absolute"),
+                path: AbsolutePathBuf::from_absolute_path(&work).expect("absolute").into(),
             },
             FileSystemAccessMode::Write,
         ),
@@ -4732,10 +4668,9 @@ fn run_transformed(
             environment_id: None,
             network: None,
             sandbox_policy_cwd: &cwd_uri,
-            codex_linux_sandbox_exe: None,
+            sandbox_exe: None,
             use_legacy_landlock: false,
             windows_sandbox_level: WindowsSandboxLevel::Disabled,
-            windows_sandbox_private_desktop: false,
         })
         .map_err(|err| err.to_string())?;
     let output = Command::new(&request.command[0])
@@ -5267,6 +5202,8 @@ fn keychain_services_entry_closes_the_keychain_in_every_network_branch() {
     let managed_network = ManagedNetworkSandboxContext {
         loopback_ports: vec![43123],
         allow_local_binding: false,
+        allow_unix_sockets: Vec::new(),
+        dangerously_allow_all_unix_sockets: false,
     };
     let socket = vec![absolute_path("/tmp/codex-kc-758.sock")];
     struct Branch<'a> {
@@ -5370,5 +5307,6 @@ fn keychain_services_are_denied_only_with_the_entry() {
     .expect("seatbelt args");
     let text = seatbelt_policy_arg(&args);
     assert!(text.contains("(global-name \"com.apple.SecurityServer\")"));
-    assert!(!text.contains("(deny mach-lookup"), "{text}");
+    // Upstream's blanket XPC-service deny is unrelated to #758.
+    assert!(!text.contains(MACOS_KEYCHAIN_SERVICES_DENY_POLICY), "{text}");
 }
