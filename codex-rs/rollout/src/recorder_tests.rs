@@ -2030,14 +2030,8 @@ async fn resume_candidate_matches_cwd_reads_latest_turn_context() -> std::io::Re
             realtime_active: None,
             cyber_access_program: None,
             effort: None,
-<<<<<<< HEAD
             security_level: None,
-            summary: codex_protocol::config_types::ReasoningSummary::Auto,
-||||||| 413492cd6c
-            summary: codex_protocol::config_types::ReasoningSummary::Auto,
-=======
             summary: Some(codex_protocol::config_types::ReasoningSummary::Auto),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }),
     };
     writeln!(file, "{}", serde_json::to_string(&turn_context)?)?;

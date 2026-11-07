@@ -81,7 +81,6 @@ fn first_acquisition_removes_stale_locks_without_removing_active_locks() {
     drop(active_owner);
 }
 
-<<<<<<< HEAD:codex-rs/thread-store/src/local/writer_lock_tests.rs
 /// #928: a dropped coordination lock is free at once, even while a child that
 /// another thread forked still holds a copy of its descriptor.
 #[cfg(unix)]
@@ -340,8 +339,8 @@ fn writer_lock_is_released_when_coordination_fails() -> std::io::Result<()> {
     );
     drop(retained);
     Ok(())
-||||||| 413492cd6c:codex-rs/thread-store/src/local/writer_lock_tests.rs
-=======
+}
+
 #[test]
 fn publication_skips_live_writers_and_keeps_coordination_locked() {
     let home = TempDir::new().expect("temp dir");
@@ -389,5 +388,4 @@ fn publication_skips_live_writers_and_keeps_coordination_locked() {
             .expect("stale lock is idle"),
     );
     assert!(writer.acquire(thread_id).is_ok());
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/rollout/src/writer_lock_tests.rs
 }

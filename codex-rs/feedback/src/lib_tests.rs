@@ -68,6 +68,9 @@ fn logger_layer_filters_noisy_trace_payloads() {
     );
     log::trace!(target: "tungstenite::protocol", "websocket-frame-payload");
     log::debug!(target: "tungstenite::protocol", "websocket-debug");
+    // Main's guard: events whose target is `log` itself (log-bridge output such as a
+    // websocket handshake request with its `Authorization` header) are dropped too.
+    tracing::trace!(target: "log", "Request: Authorization: Bearer fake-log-bridge-token");
 
     let logs = String::from_utf8(fb.snapshot(/*session_id*/ None).bytes).unwrap();
     for excluded in [
@@ -79,6 +82,7 @@ fn logger_layer_filters_noisy_trace_payloads() {
         "nested-sse-trace",
         "websocket-handshake-payload",
         "websocket-frame-payload",
+        "fake-log-bridge-token",
     ] {
         assert!(!logs.contains(excluded));
     }

@@ -92,33 +92,23 @@ const ANALYTICS_EVENTS_FLUSH_TIMEOUT: Duration = Duration::from_secs(25);
 const ANALYTICS_EVENT_DEDUPE_MAX_KEYS: usize = 4096;
 
 pub(crate) enum AnalyticsEventsQueueMessage {
-<<<<<<< HEAD
     /// A fact and (#658) the sign-in it was recorded under, resolved when it
     /// was recorded rather than when it is sent; `None`: none may be used.
     Fact(Box<AnalyticsFact>, Option<Arc<AuthManager>>),
-||||||| 413492cd6c
-    Fact(Box<AnalyticsFact>),
-=======
-    Fact(Box<AnalyticsFact>),
     ThreadProduct {
         thread_id: String,
         product_sku: Option<String>,
         generation: u64,
     },
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     Flush(oneshot::Sender<()>),
 }
 
 #[derive(Clone)]
 pub(crate) struct AnalyticsEventsQueue {
     pub(crate) sender: mpsc::Sender<AnalyticsEventsQueueMessage>,
-<<<<<<< HEAD
     /// Resolves the sign-in of each recorded fact (#658).
     pub(crate) auth_manager: Option<Arc<AuthManager>>,
-||||||| 413492cd6c
-=======
     pub(crate) product_generation: Arc<AtomicU64>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub(crate) app_used_emitted_keys: Arc<Mutex<HashSet<(String, String)>>>,
     pub(crate) plugin_used_emitted_keys: Arc<Mutex<HashSet<(String, String)>>>,
 }
@@ -197,6 +187,9 @@ fn analytics_capture_file_from_env() -> Option<PathBuf> {
 impl AnalyticsEventsQueue {
     fn new(auth_manager: Arc<AuthManager>, destination: AnalyticsEventsDestination) -> Self {
         let (sender, mut receiver) = mpsc::channel(ANALYTICS_EVENTS_QUEUE_SIZE);
+        // #658: each fact resolves its sign-in when it is recorded; the worker's copy
+        // serves flushes and product updates, which use the sign-in at that time.
+        let queue_auth_manager = Arc::clone(&auth_manager);
         let product_generation = Arc::new(AtomicU64::new(0));
         let worker_product_generation = Arc::clone(&product_generation);
         tokio::spawn(async move {
@@ -204,21 +197,14 @@ impl AnalyticsEventsQueue {
             let mut thread_products = ThreadProducts::default();
             let mut registered_generation = 0;
             while let Some(input) = receiver.recv().await {
-<<<<<<< HEAD
-                let (input, sign_in) = match input {
-                    AnalyticsEventsQueueMessage::Fact(input, sign_in) => (*input, sign_in),
-||||||| 413492cd6c
-                let input = match input {
-                    AnalyticsEventsQueueMessage::Fact(input) => *input,
-=======
                 let generation = worker_product_generation.load(Ordering::Acquire);
                 if generation != registered_generation {
                     // A dropped registration invalidates both current and queued attribution.
                     thread_products = ThreadProducts::default();
                     registered_generation = generation;
                 }
-                let input = match input {
-                    AnalyticsEventsQueueMessage::Fact(input) => *input,
+                let (input, sign_in) = match input {
+                    AnalyticsEventsQueueMessage::Fact(input, sign_in) => (*input, sign_in),
                     AnalyticsEventsQueueMessage::ThreadProduct {
                         thread_id,
                         product_sku,
@@ -244,7 +230,6 @@ impl AnalyticsEventsQueue {
                         thread_products.register(thread_id, product_sku);
                         continue;
                     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     AnalyticsEventsQueueMessage::Flush(done_tx) => {
                         let mut events = Vec::new();
                         reducer.flush(&mut events);
@@ -256,23 +241,13 @@ impl AnalyticsEventsQueue {
                 };
                 let mut events = Vec::new();
                 reducer.ingest(input, &mut events).await;
-<<<<<<< HEAD
-                send_track_events_as(sign_in, &destination, events).await;
-||||||| 413492cd6c
-                send_track_events(&auth_manager, &destination, events).await;
-=======
-                send_track_events(&auth_manager, &destination, events, &thread_products).await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                send_track_events_as(sign_in, &destination, events, &thread_products).await;
             }
         });
         Self {
             sender,
-<<<<<<< HEAD
-            auth_manager: Some(auth_manager),
-||||||| 413492cd6c
-=======
+            auth_manager: Some(queue_auth_manager),
             product_generation,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             app_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
             plugin_used_emitted_keys: Arc::new(Mutex::new(HashSet::new())),
         }
@@ -922,10 +897,6 @@ impl AnalyticsEventsClient {
     }
 }
 
-<<<<<<< HEAD
-#[cfg(test)]
-||||||| 413492cd6c
-=======
 fn session_event_to_analytics_notification(
     thread_id: ThreadId,
     event: &Event,
@@ -1016,13 +987,21 @@ fn analytics_turn(turn_id: &str, status: TurnStatus) -> Turn {
     }
 }
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+/// Sends `events` with the sign-in the process's user sessions run on now (#658):
+/// for flushed pending events and product updates, which carry no sign-in of their own.
 async fn send_track_events(
     auth_manager: &Arc<AuthManager>,
     destination: &AnalyticsEventsDestination,
     events: Vec<TrackEventRequest>,
+    thread_products: &ThreadProducts,
 ) {
-    send_track_events_as(auth_manager.for_session(), destination, events).await;
+    send_track_events_as(
+        auth_manager.for_session(),
+        destination,
+        events,
+        thread_products,
+    )
+    .await;
 }
 
 /// Sends `events` with `sign_in`: the sign-in the process's user sessions ran
@@ -1037,17 +1016,10 @@ async fn send_track_events_as(
         return;
     }
 
-<<<<<<< HEAD
     let Some(sign_in) = sign_in else {
         return;
     };
-    let Some(auth) = sign_in.auth().await else {
-||||||| 413492cd6c
-    let Some(auth) = auth_manager.auth().await else {
-=======
-    let Some((auth, http_client_factory)) = auth_manager.auth_with_http_client_factory().await
-    else {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    let Some((auth, http_client_factory)) = sign_in.auth_with_http_client_factory().await else {
         return;
     };
     if auth.is_api_key_auth() {
