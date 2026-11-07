@@ -46,7 +46,16 @@ impl SessionTelemetry {
                     GuardianUserAuthorization::Medium => "medium",
                     GuardianUserAuthorization::High => "high",
                 });
-        let rationale = assessment.rationale.as_deref();
+        // PF-28-S01: the rationale can quote commands and their output, so it
+        // passes the secret output gate when it is armed.
+        let gated_rationale = assessment.rationale.as_deref().map(|text| {
+            codex_secret_broker::output_gate::scrub_if_armed(
+                codex_secret_broker::output_gate::OutputSink::Trace,
+                text,
+            )
+            .unwrap_or_else(|| text.to_string())
+        });
+        let rationale = gated_rationale.as_deref();
         log_event!(
             self,
             event.name = "codex.guardian_assessment",

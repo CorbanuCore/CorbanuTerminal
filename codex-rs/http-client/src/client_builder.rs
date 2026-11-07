@@ -334,7 +334,7 @@ impl HttpClientBuilder {
     }
 
     fn try_build_with_custom_ca_fallback_using(
-        self,
+        mut self,
         proxy_routing: ProxyRouting,
         build_with_custom_ca: impl FnOnce(
             reqwest::ClientBuilder,
@@ -345,6 +345,7 @@ impl HttpClientBuilder {
         ) -> Result<reqwest::Client, reqwest::Error>,
     ) -> Result<HttpClient, BuildCustomCaTransportError> {
         let request_logging = self.request_logging;
+        let default_headers = self.default_headers.take().unwrap_or_default();
         let inner = match build_with_custom_ca(self.clone().reqwest_builder(proxy_routing)) {
             Ok(inner) => inner,
             Err(error) => {
@@ -353,7 +354,11 @@ impl HttpClientBuilder {
                     .map_err(BuildCustomCaTransportError::BuildClientWithSystemRoots)?
             }
         };
-        Ok(HttpClient::from_parts(inner, request_logging))
+        Ok(HttpClient::from_parts(
+            inner,
+            request_logging,
+            default_headers,
+        ))
     }
 
     fn build_with_proxy_routing(

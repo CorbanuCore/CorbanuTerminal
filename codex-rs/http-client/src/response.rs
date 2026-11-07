@@ -40,6 +40,15 @@ impl HttpResponse {
         Self { inner, permit }
     }
 
+    /// The same response, governed by `permit` (a brokered request's permit for
+    /// its real destination) while its body is read.
+    pub(crate) fn with_permit(self, permit: NetworkPermit) -> Self {
+        Self {
+            inner: self.inner,
+            permit,
+        }
+    }
+
     pub async fn bytes(self) -> Result<Bytes, HttpError> {
         Ok(Box::pin(self.permit.run(self.inner.bytes())).await??)
     }

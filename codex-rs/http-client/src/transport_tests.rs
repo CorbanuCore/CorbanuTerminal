@@ -59,12 +59,19 @@ async fn disabled_request_logging_suppresses_transport_url_and_body() {
         .with_network_policy(policy);
     let client =
         crate::RouteAwareClientPool::new(factory, crate::ClientRouteClass::Api).into_client();
+    // Routed clients log like fixed ones: the URL with its query values redacted.
     let logs = capture_transport_logs(client.clone()).await;
-    assert!(logs.contains("url-secret"));
+    assert!(logs.contains("/request?token=REDACTED"), "{logs}");
+    assert!(!logs.contains("url-secret"), "{logs}");
     let logs = capture_transport_logs(client.clone().without_request_logging()).await;
     assert!(!logs.contains("url-secret"), "{logs}");
+    assert!(!logs.contains("/request?token="), "{logs}");
     assert!(!logs.contains("body-secret"));
-    assert!(capture_transport_logs(client).await.contains("url-secret"));
+    assert!(
+        capture_transport_logs(client)
+            .await
+            .contains("/request?token=REDACTED")
+    );
 }
 
 #[tokio::test]
@@ -270,6 +277,232 @@ async fn pf_27_s05_broker_frame_requests_go_only_to_the_broker_socket() {
         "{seen}"
     );
     assert!(network.accept().is_err(), "nothing may reach the network");
+}
+
+/// PF-27-S05 on upstream's routed paths: a route-aware pool and a routed
+/// `HttpClient` never send a frame-bearing request to the network. With no
+/// broker it is refused; under a managed application network policy the
+/// policy must also approve the real (HTTPS) destination, and a revocation
+/// ends the brokered exchange.
+#[tokio::test]
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "the broker route is process-wide; tests that install one run one at a time"
+)]
+async fn pf_27_s05_routed_transports_send_broker_frames_only_to_an_approved_broker() {
+    let _route = crate::model_broker_route::ROUTE_TEST_LOCK.lock().await;
+    let _uninstall = UninstallRoute;
+
+    let network = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    network.set_nonblocking(true).expect("nonblocking");
+    let url = format!(
+        "http://127.0.0.1:{}/v1/responses",
+        network.local_addr().expect("addr").port()
+    );
+    let mut framed = Request::new(Method::POST, url);
+    framed.headers.insert(
+        crate::MODEL_BROKER_FRAME_HEADER,
+        http::HeaderValue::from_static("signed-frame"),
+    );
+
+    let unmanaged = || crate::HttpClientFactory::new(crate::OutboundProxyPolicy::ReqwestDefault);
+    let managed = |destinations: crate::DestinationPolicy| {
+        let controller = crate::NetworkPolicyController::default();
+        let policy = controller.policy();
+        controller.publish(policy.revision(), destinations);
+        (controller, unmanaged().with_network_policy(policy))
+    };
+    let transports = |factory: crate::HttpClientFactory| {
+        [
+            ReqwestTransport::from_route_aware_client_pool(crate::RouteAwareClientPool::new(
+                factory.clone(),
+                crate::ClientRouteClass::Api,
+            )),
+            ReqwestTransport::from_http_client(
+                crate::RouteAwareClientPool::new(factory, crate::ClientRouteClass::Api)
+                    .into_client(),
+            ),
+        ]
+    };
+    let (_unrestricted_controller, unrestricted) = managed(crate::DestinationPolicy::Unrestricted);
+    let (_restricted_controller, restricted) = managed(crate::DestinationPolicy::Restricted {
+        allowed_hosts: ["allowed.example".to_string()].into(),
+    });
+
+    // No broker: refused on every routed path, managed or not.
+    for transport in transports(unmanaged())
+        .into_iter()
+        .chain(transports(unrestricted.clone()))
+    {
+        let refused = transport.execute(framed.clone()).await;
+        assert!(
+            matches!(&refused, Err(TransportError::Build(message)) if message.contains("credential broker is not running")),
+            "{refused:?}"
+        );
+        let refused = transport.stream(framed.clone()).await;
+        assert!(
+            matches!(&refused, Err(TransportError::Build(message)) if message.contains("credential broker is not running")),
+            "{:?}",
+            refused.err()
+        );
+    }
+
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    crate::install_model_broker_sender(Arc::new(RecordingSender {
+        seen: seen.clone(),
+        status: http::StatusCode::OK,
+        chunks: vec!["o", "k"],
+        hang: false,
+    }));
+    // A managed policy that does not allow the destination denies it before the broker.
+    for transport in transports(restricted) {
+        let denied = transport.execute(framed.clone()).await;
+        assert!(
+            matches!(&denied, Err(TransportError::Policy(_))),
+            "{denied:?}"
+        );
+    }
+    assert!(seen.lock().expect("seen").is_empty());
+    // An approved destination goes to the broker, and only there.
+    for transport in transports(unrestricted) {
+        let response = transport.execute(framed.clone()).await.expect("brokered");
+        assert_eq!(response.body.as_ref(), b"ok");
+        let mut streamed = transport
+            .stream(framed.clone())
+            .await
+            .expect("brokered stream");
+        let mut body = Vec::new();
+        while let Some(chunk) = streamed.bytes.next().await {
+            body.extend_from_slice(&chunk.expect("chunk"));
+        }
+        assert_eq!(body, b"ok");
+    }
+    assert_eq!(seen.lock().expect("seen").len(), 4);
+    assert!(network.accept().is_err(), "nothing may reach the network");
+}
+
+/// The unix-socket broker client under a managed policy: an approved request
+/// reaches the broker with its permit, and a denied one never connects.
+#[cfg(unix)]
+#[tokio::test]
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "the broker route is process-wide; tests that install one run one at a time"
+)]
+async fn pf_27_s05_managed_policy_governs_the_broker_socket_route() {
+    use tokio::io::AsyncReadExt as _;
+    use tokio::io::AsyncWriteExt as _;
+    let _route = crate::model_broker_route::ROUTE_TEST_LOCK.lock().await;
+    let _uninstall = UninstallRoute;
+
+    let dir = tempfile::Builder::new()
+        .prefix("pf27m")
+        .tempdir_in("/tmp")
+        .expect("dir");
+    let socket = dir.path().join("b.sock");
+    let listener = tokio::net::UnixListener::bind(&socket).expect("bind socket");
+    crate::install_model_broker_client(
+        HttpClient::unix_socket(&socket, http::HeaderMap::new()).expect("broker client"),
+    );
+    let pool_with = |destinations| {
+        let controller = crate::NetworkPolicyController::default();
+        let policy = controller.policy();
+        controller.publish(policy.revision(), destinations);
+        let factory = crate::HttpClientFactory::new(crate::OutboundProxyPolicy::ReqwestDefault)
+            .with_network_policy(policy);
+        (
+            controller,
+            ReqwestTransport::from_route_aware_client_pool(crate::RouteAwareClientPool::new(
+                factory,
+                crate::ClientRouteClass::Api,
+            )),
+        )
+    };
+    let mut framed = Request::new(Method::POST, "http://127.0.0.1:9/v1/responses".to_string());
+    framed.headers.insert(
+        crate::MODEL_BROKER_FRAME_HEADER,
+        http::HeaderValue::from_static("signed-frame"),
+    );
+
+    let (_denying, denied_transport) = pool_with(crate::DestinationPolicy::Restricted {
+        allowed_hosts: ["allowed.example".to_string()].into(),
+    });
+    let denied = denied_transport.execute(framed.clone()).await;
+    assert!(
+        matches!(&denied, Err(TransportError::Policy(_))),
+        "{denied:?}"
+    );
+
+    let (_allowing, transport) = pool_with(crate::DestinationPolicy::Unrestricted);
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.expect("accept");
+        let mut request = vec![0_u8; 4096];
+        let read = stream.read(&mut request).await.expect("read");
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nok")
+            .await
+            .expect("write");
+        String::from_utf8_lossy(&request[..read]).into_owned()
+    });
+    let response = transport.execute(framed).await.expect("brokered response");
+    assert_eq!(response.body.as_ref(), b"ok");
+    let seen = server.await.expect("server");
+    assert!(seen.starts_with("POST /v1/responses"), "{seen}");
+}
+
+/// A revoked permit ends a brokered stream with a policy error.
+#[tokio::test]
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "the broker route is process-wide; tests that install one run one at a time"
+)]
+async fn pf_27_s05_revoking_the_policy_ends_a_brokered_stream() {
+    let _route = crate::model_broker_route::ROUTE_TEST_LOCK.lock().await;
+    let _uninstall = UninstallRoute;
+    crate::install_model_broker_sender(Arc::new(RecordingSender {
+        seen: Arc::new(Mutex::new(Vec::new())),
+        status: http::StatusCode::OK,
+        chunks: vec!["o"],
+        hang: true,
+    }));
+    let controller = crate::NetworkPolicyController::default();
+    let policy = controller.policy();
+    controller.publish(policy.revision(), crate::DestinationPolicy::Unrestricted);
+    let factory = crate::HttpClientFactory::new(crate::OutboundProxyPolicy::ReqwestDefault)
+        .with_network_policy(policy);
+    let transport = ReqwestTransport::from_route_aware_client_pool(
+        crate::RouteAwareClientPool::new(factory, crate::ClientRouteClass::Api),
+    );
+    let mut framed = Request::new(Method::POST, "http://127.0.0.1:9/v1/responses".to_string());
+    framed.headers.insert(
+        crate::MODEL_BROKER_FRAME_HEADER,
+        http::HeaderValue::from_static("signed-frame"),
+    );
+    let mut streamed = transport.stream(framed).await.expect("brokered stream");
+    assert_eq!(
+        streamed
+            .bytes
+            .next()
+            .await
+            .expect("first chunk")
+            .expect("chunk"),
+        bytes::Bytes::from_static(b"o")
+    );
+    let revision = controller.policy().revision();
+    controller.publish(
+        revision,
+        crate::DestinationPolicy::Restricted {
+            allowed_hosts: Default::default(),
+        },
+    );
+    let ended = tokio::time::timeout(std::time::Duration::from_secs(5), streamed.bytes.next())
+        .await
+        .expect("the revocation ends the stream");
+    assert!(
+        matches!(ended, Some(Err(TransportError::Policy(_)))),
+        "{:?}",
+        ended.map(|chunk| chunk.map(|bytes| bytes.len()))
+    );
 }
 
 /// Removes the process-wide broker route when a test ends, even by panic.

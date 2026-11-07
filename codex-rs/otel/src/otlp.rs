@@ -1,5 +1,4 @@
 use crate::config::OtelTlsConfig;
-use crate::otlp_http_client::AsyncOtlpHttpClient;
 use crate::otlp_http_client::BlockingOtlpHttpClient;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use http::Uri;
@@ -160,23 +159,8 @@ pub(crate) fn build_async_http_client(
     factory: &codex_http_client::HttpClientFactory,
     tls: Option<&OtelTlsConfig>,
     timeout_var: &str,
-<<<<<<< HEAD
-) -> Result<AsyncOtlpHttpClient, Box<dyn Error>> {
-    build_async_http_client_inner(tls, timeout_var).map(AsyncOtlpHttpClient::new)
-}
-
-fn build_async_http_client_inner(
-    tls: Option<&OtelTlsConfig>,
-    timeout_var: &str,
-) -> Result<reqwest::Client, Box<dyn Error>> {
-    let mut builder = reqwest::Client::builder().timeout(resolve_otlp_timeout(timeout_var));
-||||||| 413492cd6c
-) -> Result<reqwest::Client, Box<dyn Error>> {
-    let mut builder = reqwest::Client::builder().timeout(resolve_otlp_timeout(timeout_var));
-=======
 ) -> Result<crate::network_policy::RuntimeHttpClient, Box<dyn Error>> {
     let mut config = codex_http_client::HttpClientTlsConfig::default();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     if let Some(tls) = tls {
         if let Some(path) = tls.ca_certificate.as_ref() {
@@ -311,7 +295,7 @@ mod tests {
     fn build_http_client_accepts_pem_client_identity() {
         let (_temp_dir, tls) = write_test_mtls_config();
 
-        build_http_client(&tls, OTEL_EXPORTER_OTLP_TIMEOUT)
+        build_http_client(Some(&tls), OTEL_EXPORTER_OTLP_TIMEOUT)
             .expect("blocking HTTP client should accept PEM client identity");
     }
 

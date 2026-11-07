@@ -57,9 +57,10 @@ fn transport_error_debug_redacts_url_and_headers() {
         url: Some("https://x.test/v1?key=fake-debug-key".to_string()),
         headers: Some(headers),
         body: Some("denied".to_string()),
+        retry_after: None,
     };
     assert_eq!(
         format!("{error:?}"),
-        "Http { status: 401, url: Some(\"https://x.test/v1?key=REDACTED\"), headers: Some({\"set-cookie\": \"REDACTED\"}), body: Some(\"denied\") }"
+        "Http { status: 401, url: Some(\"https://x.test/v1?key=REDACTED\"), headers: Some({\"set-cookie\": \"REDACTED\"}), body: Some(\"denied\"), retry_after: None }"
     );
 }

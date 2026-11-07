@@ -243,6 +243,12 @@ impl NetworkPolicy {
         self.state.is_some()
     }
 
+    /// Whether `acquire` can deny a destination: a managed policy, or one
+    /// narrowed to exact endpoints.
+    pub(crate) fn restricts_destinations(&self) -> bool {
+        self.state.is_some() || self.endpoints.is_some()
+    }
+
     /// Watches effective changes; unmanaged callers have no application policy owner.
     pub fn changes(&self) -> Option<watch::Receiver<()>> {
         self.state
