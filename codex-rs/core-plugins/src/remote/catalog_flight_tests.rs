@@ -196,7 +196,7 @@ async fn a_download_started_before_invalidation_does_not_rewrite_the_cache() {
     earlier.await.expect("earlier list task");
 
     assert!(
-        catalog_cache::load_cached_directory_plugins(
+        catalog_cache::load_cached_directory_plugins::<RemotePluginDirectoryItem>(
             fixture.codex_home.path(),
             &fixture.config,
             &fixture.auth,

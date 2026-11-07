@@ -193,13 +193,15 @@ fn curated_repo_sync_does_not_start_after_shutdown() {
     let tmp = TempDir::new().unwrap();
     let config = PluginsConfigInput::new(
         unrestricted_config_layer_stack(),
+        Default::default(),
         "openai".to_string(),
         /*plugins_enabled*/ true,
         /*remote_plugin_enabled*/ false,
         "https://chatgpt.com".to_string(),
         test_http_client_factory(),
+        /*product_sku*/ None,
     );
-    let manager = Arc::new(PluginsManager::new(tmp.path().to_path_buf()));
+    let manager = Arc::new(test_plugins_manager(tmp.path().to_path_buf()));
 
     manager.cancel_curated_repo_sync();
     manager.maybe_start_curated_repo_sync_for_config(

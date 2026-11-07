@@ -1221,6 +1221,7 @@ fn write_slow_fetch_git(bin_dir: &Path) -> SlowFetchGit {
         &git_path,
         &format!(
             r#"#!/bin/sh
+if [ "$1" = "-c" ] && [ "$2" = "safe.bareRepository=explicit" ]; then shift 2; fi
 if [ "$1" = "ls-remote" ]; then
   printf '%s\tHEAD\n' "{sha}"
   exit 0
