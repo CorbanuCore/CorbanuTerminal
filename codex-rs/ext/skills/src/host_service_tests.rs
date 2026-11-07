@@ -186,7 +186,7 @@ async fn bundled_frontend_design_skill_loads_from_unrelated_cwd() {
     let codex_home = tempfile::tempdir().expect("tempdir");
     let cwd = tempfile::tempdir().expect("tempdir");
     let config_layer_stack = config_stack(&codex_home, "");
-    let skills_service = SkillsService::new(
+    let skills_service = HostSkillsService::new(
         codex_home.path().abs(),
         /*bundled_skills_enabled*/ true,
     );
@@ -203,10 +203,10 @@ async fn bundled_frontend_design_skill_loads_from_unrelated_cwd() {
     assert!(
         skill
             .path_to_skills_md
-            .as_path()
+            .to_path_buf()
             .ends_with(Path::new("skills/.system/frontend-design/SKILL.md")),
         "unexpected bundled skill path: {}",
-        skill.path_to_skills_md.display()
+        skill.path_to_skills_md
     );
 }
 
@@ -215,7 +215,7 @@ async fn bundled_corbanu_terminal_help_skill_loads_from_unrelated_cwd() {
     let codex_home = tempfile::tempdir().expect("tempdir");
     let cwd = tempfile::tempdir().expect("tempdir");
     let config_layer_stack = config_stack(&codex_home, "");
-    let skills_service = SkillsService::new(
+    let skills_service = HostSkillsService::new(
         codex_home.path().abs(),
         /*bundled_skills_enabled*/ true,
     );
@@ -232,10 +232,10 @@ async fn bundled_corbanu_terminal_help_skill_loads_from_unrelated_cwd() {
     assert!(
         skill
             .path_to_skills_md
-            .as_path()
+            .to_path_buf()
             .ends_with(Path::new("skills/.system/corbanu-terminal-help/SKILL.md")),
         "unexpected bundled skill path: {}",
-        skill.path_to_skills_md.display()
+        skill.path_to_skills_md
     );
 }
 

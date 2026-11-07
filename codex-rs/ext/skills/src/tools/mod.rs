@@ -78,21 +78,8 @@ pub(crate) fn skill_tools(
         providers,
         mcp_resources,
         thread_state,
-<<<<<<< HEAD
-        orchestrator_available,
-        executor_query,
-        sandbox_contexts,
-        shadow_selection,
-||||||| 413492cd6c
-        orchestrator_available,
-        executor_query,
-        sandbox_contexts,
-        executor_catalog: Arc::new(OnceCell::new()),
-        shadow_selection,
-=======
         analytics,
         step_state,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
     let mut tools: Vec<Arc<dyn for<'call> ToolExecutor<ToolCall<'call>>>> = vec![
         Arc::new(list::ListTool {
@@ -222,94 +209,11 @@ struct SkillToolContext {
     providers: SkillProviders,
     mcp_resources: Option<Arc<McpResourceClient>>,
     thread_state: Arc<SkillsThreadState>,
-<<<<<<< HEAD
-    orchestrator_available: bool,
-    executor_query: Option<SkillListQuery>,
-    sandbox_contexts: Option<Arc<HashMap<String, FileSystemSandboxContext>>>,
-    shadow_selection: Arc<ShadowSelectionExperiment>,
-||||||| 413492cd6c
-    orchestrator_available: bool,
-    executor_query: Option<SkillListQuery>,
-    sandbox_contexts: Option<Arc<HashMap<String, FileSystemSandboxContext>>>,
-    executor_catalog: Arc<OnceCell<SkillCatalog>>,
-    shadow_selection: Arc<ShadowSelectionExperiment>,
-=======
     analytics: Option<SkillAnalytics>,
     step_state: Arc<SkillsStepState>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl SkillToolContext {
-<<<<<<< HEAD
-    async fn catalog(&self, turn_id: &str, authority: SkillToolAuthoritySelector) -> SkillCatalog {
-        match authority {
-            SkillToolAuthoritySelector::Orchestrator => {
-                if !self.orchestrator_available {
-                    return SkillCatalog::default();
-                }
-                self.thread_state
-                    .orchestrator_catalog_snapshot(
-                        self.mcp_resources.as_deref(),
-                        self.providers.list_orchestrator_for_turn(SkillListQuery {
-                            turn_id: turn_id.to_string(),
-                            executor_roots: Vec::new(),
-                            resolved_executor_roots: Vec::new(),
-                            host_snapshot: None,
-                            include_host_skills: false,
-                            include_bundled_skills: false,
-                            include_orchestrator_skills: true,
-                            mcp_resources: self.mcp_resources.clone(),
-                            executor_capability_discovery: None,
-                        }),
-                    )
-                    .await
-            }
-            SkillToolAuthoritySelector::Executor => {
-                let Some(mut query) = self.executor_query.clone() else {
-                    return SkillCatalog::default();
-                };
-                query.turn_id = turn_id.to_string();
-                // Selected roots are stable for the thread, so reuse the catalog that World State
-                // already discovered instead of rescanning the executor filesystem on every call.
-                self.thread_state
-                    .executor_catalog_snapshot(&self.providers, query)
-                    .await
-            }
-||||||| 413492cd6c
-    async fn catalog(&self, turn_id: &str, authority: SkillToolAuthoritySelector) -> SkillCatalog {
-        match authority {
-            SkillToolAuthoritySelector::Orchestrator => {
-                if !self.orchestrator_available {
-                    return SkillCatalog::default();
-                }
-                self.thread_state
-                    .orchestrator_catalog_snapshot(
-                        self.mcp_resources.as_deref(),
-                        self.providers.list_orchestrator_for_turn(SkillListQuery {
-                            turn_id: turn_id.to_string(),
-                            executor_roots: Vec::new(),
-                            resolved_executor_roots: Vec::new(),
-                            host_snapshot: None,
-                            include_host_skills: false,
-                            include_bundled_skills: false,
-                            include_orchestrator_skills: true,
-                            mcp_resources: self.mcp_resources.clone(),
-                            executor_capability_discovery: None,
-                        }),
-                    )
-                    .await
-            }
-            SkillToolAuthoritySelector::Executor => {
-                let Some(mut query) = self.executor_query.clone() else {
-                    return SkillCatalog::default();
-                };
-                query.turn_id = turn_id.to_string();
-                self.executor_catalog
-                    .get_or_init(|| self.providers.list_executor_for_turn(query))
-                    .await
-                    .clone()
-            }
-=======
     fn matching_packages<'a>(
         &'a self,
         package: &SkillLocator,
@@ -335,7 +239,6 @@ impl SkillToolContext {
         let exact = matching_entries(package.as_str(), /*alias_source*/ None);
         if !exact.is_empty() || package.alias_source().is_none() {
             return exact;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
         let resolved_package = self.step_state.catalog.aliases.resolve(package);
         resolved_package.map_or_else(Vec::new, |resolved| {

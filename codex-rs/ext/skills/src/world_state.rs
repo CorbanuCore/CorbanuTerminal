@@ -1,22 +1,4 @@
-<<<<<<< HEAD
-use std::sync::Arc;
-
-use codex_core_skills::HostSkillsSnapshot;
-use codex_core_skills::build_available_skills;
-use codex_core_skills::injection::HOST_SKILLS_CONTEXT_SOURCE_ID;
-use codex_core_skills::render::SkillRenderSideEffects;
-use codex_extension_api::ContextualUserFragment;
-use codex_extension_api::ExtensionMetrics;
-||||||| 413492cd6c
-use std::sync::Arc;
-
-use codex_core_skills::HostSkillsSnapshot;
-use codex_core_skills::build_available_skills;
-use codex_core_skills::render::SkillRenderSideEffects;
-use codex_extension_api::ContextualUserFragment;
-use codex_extension_api::ExtensionMetrics;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use crate::HOST_SKILLS_CONTEXT_SOURCE_ID;
 use codex_extension_api::PreviousWorldStateSection;
 use codex_extension_api::RenderedWorldStateFragment;
 use codex_extension_api::WorldStateSectionContribution;
@@ -31,14 +13,8 @@ use crate::render::SkillRenderReport;
 use crate::world_state_catalogs::CatalogBudgetAllocation;
 
 pub(crate) const SKILLS_WORLD_STATE_ID: &str = "skills";
-<<<<<<< HEAD
-pub(crate) const HOST_SKILLS_WORLD_STATE_ID: &str = HOST_SKILLS_CONTEXT_SOURCE_ID;
-||||||| 413492cd6c
-pub(crate) const HOST_SKILLS_WORLD_STATE_ID: &str = "host_skills";
-=======
 pub(crate) const CLOUD_SKILLS_WORLD_STATE_ID: &str = "cloud_skills";
-pub(crate) const HOST_SKILLS_WORLD_STATE_ID: &str = "host_skills";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+pub(crate) const HOST_SKILLS_WORLD_STATE_ID: &str = HOST_SKILLS_CONTEXT_SOURCE_ID;
 const NO_EXECUTOR_SKILLS_BODY: &str =
     "\n## Skills update\nNo selected-environment skills are currently available.\n";
 const HIDDEN_EXECUTOR_SKILLS_BODY: &str = "\n## Skills update\nSelected-environment skills are not listed automatically. Explicit skill mentions can still be resolved when available.\n";

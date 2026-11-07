@@ -142,12 +142,8 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
-<<<<<<< HEAD
-use std::sync::PoisonError;
-||||||| 413492cd6c
-=======
 use std::sync::OnceLock;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use std::sync::PoisonError;
 use std::sync::RwLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
@@ -832,7 +828,7 @@ impl PluginsManager {
         if !config.plugins_enabled {
             return None;
         }
-        let auth = self.auth_manager.auth_cached();
+        let auth = self.auth_manager.session_auth_cached();
         let key = PluginLoadCacheKey::from_config(
             config,
             self.codex_home.as_path(),
@@ -867,7 +863,7 @@ impl PluginsManager {
         loop {
             let auth_revision = *auth_change_receiver.borrow();
             let remote_global_catalog_active = self.remote_global_catalog_active(config);
-            let auth = self.auth_manager.auth_cached();
+            let auth = self.auth_manager.session_auth_cached();
             let auth_mode = auth.as_ref().map(CodexAuth::api_auth_mode);
             let auth_identity = RemoteInstalledPluginsAuthIdentity::from_auth(auth.as_ref());
             let cache_key = PluginLoadCacheKey::from_config(
@@ -1186,7 +1182,7 @@ impl PluginsManager {
         &self,
         cache: &RemoteInstalledPluginsCache,
     ) -> bool {
-        let auth = self.auth_manager.auth_cached();
+        let auth = self.auth_manager.session_auth_cached();
         cache.auth_identity.as_ref()
             == Some(&RemoteInstalledPluginsAuthIdentity::from_auth(
                 auth.as_ref(),
@@ -1197,7 +1193,7 @@ impl PluginsManager {
         &self,
         auth_identity: &RemoteInstalledPluginsAuthIdentity,
     ) -> bool {
-        let auth = self.auth_manager.auth_cached();
+        let auth = self.auth_manager.session_auth_cached();
         RemoteInstalledPluginsAuthIdentity::from_auth(auth.as_ref()) == *auth_identity
     }
 
@@ -1293,7 +1289,7 @@ impl PluginsManager {
         visible_marketplaces: &[&str],
         display_assets: InstalledPluginDisplayAssets,
     ) -> Option<Vec<crate::remote::RemoteMarketplace>> {
-        let auth = self.auth_manager.auth_cached();
+        let auth = self.auth_manager.session_auth_cached();
         self.build_remote_installed_plugin_marketplaces_from_cache_for_auth(
             auth.as_ref(),
             visible_marketplaces,
@@ -1564,7 +1560,7 @@ impl PluginsManager {
 
     #[cfg(test)]
     fn write_remote_installed_plugins_cache(&self, plugins: Vec<RemoteInstalledPlugin>) -> bool {
-        let auth = self.auth_manager.auth_cached();
+        let auth = self.auth_manager.session_auth_cached();
         let generation = self
             .prepare_remote_installed_plugins_cache_generation(auth.as_ref())
             .expect("test cache identity should remain current");
@@ -3004,13 +3000,7 @@ impl PluginsManager {
             let manager = Arc::clone(self);
             let on_effective_plugins_changed = on_effective_plugins_changed.clone();
             tokio::spawn(async move {
-<<<<<<< HEAD
-                let auth = auth_manager_for_remote_sync.session_auth().await;
-||||||| 413492cd6c
-                let auth = auth_manager_for_remote_sync.auth().await;
-=======
-                let auth = manager.auth_manager.auth().await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                let auth = manager.auth_manager.session_auth().await;
                 manager.maybe_start_remote_plugin_caches_refresh(
                     &config_for_remote_sync,
                     auth.clone(),
@@ -3047,22 +3037,6 @@ impl PluginsManager {
                     RemoteCatalogCacheRefreshMode::Force,
                     remote_catalog_refresh_requested_at,
                 );
-<<<<<<< HEAD
-            });
-
-            let config_for_featured_plugins = config.clone();
-            let manager = Arc::clone(self);
-            tokio::spawn(async move {
-                let auth = auth_manager.session_auth().await;
-||||||| 413492cd6c
-            });
-
-            let config_for_featured_plugins = config.clone();
-            let manager = Arc::clone(self);
-            tokio::spawn(async move {
-                let auth = auth_manager.auth().await;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 if let Err(err) = manager
                     .featured_plugin_ids_for_config(&config_for_remote_sync, auth.as_ref())
                     .await

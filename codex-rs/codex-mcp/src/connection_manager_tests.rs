@@ -29,12 +29,8 @@ use crate::tools::ToolFilter;
 use crate::tools::ToolInfo;
 use crate::tools::filter_tools;
 use crate::tools::normalize_tools_for_model_with_prefix;
-<<<<<<< HEAD
 use crate::tools::unprefixed_mcp_namespace_reservation;
-||||||| 413492cd6c
-=======
 use assert_matches::assert_matches;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_config::AppToolApproval;
 use codex_config::Constrained;
 use codex_config::McpServerAuth;
@@ -157,16 +153,12 @@ impl McpConnectionSet {
                 connection: Arc::new(McpServerConnection {
                     identity: None,
                     client,
-<<<<<<< HEAD
                     startup_cancellation: StartupCancellation::default(),
-||||||| 413492cd6c
-=======
                     startup_timeout: DEFAULT_STARTUP_TIMEOUT,
                     initialized_apps: None,
                     startup_trigger: None,
                     legacy_fallback: None,
                     _diagnostics_guard: LIVE_CONNECTIONS.track(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 }),
                 metadata: McpServerMetadata {
                     environment_id: String::new(),
@@ -5355,11 +5347,15 @@ async fn pending_http_startup_manager() -> (
             bearer_token_env_var: None,
             http_headers: None,
             env_http_headers: None,
+            http_headers_helper: None,
         },
         environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
         enabled: true,
         required: false,
+        startup_readiness: Default::default(),
         supports_parallel_tool_calls: false,
+        tool_input_schema_max_bytes: None,
+        omit_tools_from: None,
         disabled_reason: None,
         startup_timeout_sec: Some(Duration::from_secs(30)),
         tool_timeout_sec: None,
@@ -5374,9 +5370,13 @@ async fn pending_http_startup_manager() -> (
     let codex_home = tempdir().expect("tempdir");
     let (tx_event, rx_event) = async_channel::unbounded();
     let manager = McpConnectionSet::new(
+        /*ema_auth*/ None,
+        /*existing_ema*/ None,
         /*previous*/ None,
         McpPublicationGate::already_published(),
         McpRuntimeInput {
+            network_policy_metadata: None,
+            startup_policy: McpStartupPolicy::Eager,
             config: Arc::new(crate::mcp::tests::test_mcp_config(
                 codex_home.path().to_path_buf(),
             )),
@@ -5398,9 +5398,9 @@ async fn pending_http_startup_manager() -> (
             codex_apps_tools_cache_key: ConnectorRuntimeContextKey::personal(
                 /*account_id*/ None, /*chatgpt_user_id*/ None,
             ),
-            supports_openai_form_elicitation: false,
+            client_mcp_extensions: ClientMcpExtensions::default(),
             auth: None,
-            codex_apps_auth_manager: None,
+            auth_manager: None,
             elicitation_reviewer: None,
             elicitation_lifecycle: None,
         },
@@ -5825,10 +5825,7 @@ async fn manager_with_reusable_ready_server(
             connection: Arc::new(McpServerConnection {
                 identity: Some(reusable_server_identity("docs", config, runtime_context)),
                 client: create_ready_async_managed_client(tools).await,
-<<<<<<< HEAD
                 startup_cancellation: StartupCancellation::default(),
-||||||| 413492cd6c
-=======
                 startup_timeout: config
                     .startup_timeout_sec
                     .unwrap_or(DEFAULT_STARTUP_TIMEOUT),
@@ -5836,7 +5833,6 @@ async fn manager_with_reusable_ready_server(
                 startup_trigger: None,
                 legacy_fallback: None,
                 _diagnostics_guard: LIVE_CONNECTIONS.track(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }),
             metadata: McpServerMetadata::from(&server),
             tool_filter: ToolFilter::from_config(config),
@@ -6289,10 +6285,7 @@ async fn reconciliation_reuses_connection_without_relisting_regular_tools() -> a
                     startup_reconnect: None,
                     cancel_token: CancellationToken::new(),
                 },
-<<<<<<< HEAD
                 startup_cancellation: StartupCancellation::default(),
-||||||| 413492cd6c
-=======
                 startup_timeout: config
                     .startup_timeout_sec
                     .unwrap_or(DEFAULT_STARTUP_TIMEOUT),
@@ -6300,7 +6293,6 @@ async fn reconciliation_reuses_connection_without_relisting_regular_tools() -> a
                 startup_trigger: None,
                 legacy_fallback: None,
                 _diagnostics_guard: LIVE_CONNECTIONS.track(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }),
             metadata: McpServerMetadata::from(&server),
             tool_filter: ToolFilter::from_config(&config),
@@ -7132,10 +7124,7 @@ async fn reconciliation_replaces_closed_connections() -> anyhow::Result<()> {
             startup_reconnect: None,
             cancel_token: CancellationToken::new(),
         },
-<<<<<<< HEAD
         startup_cancellation: StartupCancellation::default(),
-||||||| 413492cd6c
-=======
         startup_timeout: config
             .startup_timeout_sec
             .unwrap_or(DEFAULT_STARTUP_TIMEOUT),
@@ -7143,7 +7132,6 @@ async fn reconciliation_replaces_closed_connections() -> anyhow::Result<()> {
         startup_trigger: None,
         legacy_fallback: None,
         _diagnostics_guard: LIVE_CONNECTIONS.track(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     });
 
     assert!(!client.is_closed().await);

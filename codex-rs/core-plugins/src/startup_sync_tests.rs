@@ -43,6 +43,7 @@ fn pretrust_startup_sync_uses_installed_git_with_hostile_path() {
         sync_openai_plugins_repo(
             Path::new(&home),
             crate::test_support::test_http_client_factory(),
+            &NOT_CANCELLED,
         )
         .expect("Git-only startup sync should succeed");
         return;
@@ -506,41 +507,12 @@ fn has_plugins_clone_dirs(codex_home: &Path) -> bool {
     })
 }
 
-/// Writes an executable script from a child process. Written here, a
-/// sibling test forking (to spawn its own `git`) while the file is open for
-/// writing keeps a copy of that descriptor until it execs, and running the
-/// script then fails with ETXTBSY on Linux (#635).
+/// Writes an executable script. On Linux `write_executable` writes it from a child
+/// process, so a sibling test forking (to spawn its own `git`) can't keep a copy of
+/// the open descriptor and make running the script fail with ETXTBSY (#635).
 #[cfg(unix)]
 fn write_executable_script(path: &Path, contents: &str) {
-<<<<<<< HEAD
-    let mut writer = Command::new("/bin/sh")
-        .args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "sh"])
-        .arg(path)
-        .stdin(Stdio::piped())
-        .spawn()
-        .expect("spawn script writer");
-    writer
-        .stdin
-        .take()
-        .expect("script writer stdin")
-        .write_all(contents.as_bytes())
-        .expect("write script");
-    let status = writer.wait().expect("wait for script writer");
-    assert!(status.success(), "script writer failed: {status}");
-||||||| 413492cd6c
-    #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
-
-    std::fs::write(path, contents).expect("write script");
-    #[cfg(unix)]
-    {
-        let mut permissions = std::fs::metadata(path).expect("metadata").permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(path, permissions).expect("chmod");
-    }
-=======
     codex_utils_cargo_bin::write_executable(path, contents).expect("write script");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[cfg(unix)]
@@ -1249,6 +1221,7 @@ fn write_slow_fetch_git(bin_dir: &Path) -> SlowFetchGit {
         &git_path,
         &format!(
             r#"#!/bin/sh
+if [ "$1" = "-c" ] && [ "$2" = "safe.bareRepository=explicit" ]; then shift 2; fi
 if [ "$1" = "ls-remote" ]; then
   printf '%s\tHEAD\n' "{sha}"
   exit 0
@@ -1392,7 +1365,7 @@ fn cancelled_sync_spawns_no_git() {
     let cancel = AtomicBool::new(true);
 
     let err = run_git_command_with_timeout(
-        &mut git_command(&git_path),
+        &mut git_command(&git_path).expect("git command"),
         "git test",
         CURATED_PLUGINS_GIT_TIMEOUT,
         &cancel,

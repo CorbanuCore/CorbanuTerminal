@@ -39,6 +39,7 @@ impl Fixture {
         let config = RemotePluginServiceConfig::new(
             format!("{}/backend-api", server.uri()),
             crate::test_support::test_http_client_factory(),
+            /*product_sku*/ None,
         );
         Self {
             server,
@@ -74,6 +75,7 @@ impl Fixture {
             &self.config,
             &self.auth,
             RemotePluginScope::Global,
+            /*collection*/ None,
             mode,
         )
         .await
@@ -194,11 +196,13 @@ async fn a_download_started_before_invalidation_does_not_rewrite_the_cache() {
     earlier.await.expect("earlier list task");
 
     assert!(
-        catalog_cache::load_cached_directory_plugins(
+        catalog_cache::load_cached_directory_plugins::<RemotePluginDirectoryItem>(
             fixture.codex_home.path(),
             &fixture.config,
             &fixture.auth,
             RemotePluginScope::Global,
+            /*collection*/ None,
+            RemotePluginCatalogCacheMode::PreferCache,
         )
         .is_none()
     );
