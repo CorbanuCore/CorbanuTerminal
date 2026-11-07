@@ -2267,15 +2267,11 @@ async fn resume_candidate_matches_cwd(
             | RolloutItem::InterAgentCommunicationMetadata { .. }
             | RolloutItem::Compacted(_)
             | RolloutItem::WorldState(_)
-<<<<<<< HEAD
-            | RolloutItem::SourceOrigin(_)
-||||||| 413492cd6c
-=======
             | RolloutItem::RealtimeItem(_)
             | RolloutItem::TokenUsageRecord(_)
             | RolloutItem::RetainedContext(_)
             | RolloutItem::SecurityRiskScore(_)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            | RolloutItem::SourceOrigin(_)
             | RolloutItem::EventMsg(_) => None,
         })
     {

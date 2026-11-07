@@ -343,18 +343,12 @@ fn conversation_text_from_item(item: &RolloutItem) -> Option<String> {
         | RolloutItem::InterAgentCommunication(_)
         | RolloutItem::InterAgentCommunicationMetadata { .. }
         | RolloutItem::Compacted(_)
-<<<<<<< HEAD
-        | RolloutItem::WorldState(_)
-        | RolloutItem::SourceOrigin(_) => None,
-||||||| 413492cd6c
-        | RolloutItem::WorldState(_) => None,
-=======
         | RolloutItem::RealtimeItem(_)
         | RolloutItem::RetainedContext(_)
         | RolloutItem::SecurityRiskScore(_)
         | RolloutItem::TokenUsageRecord(_)
-        | RolloutItem::WorldState(_) => None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        | RolloutItem::WorldState(_)
+        | RolloutItem::SourceOrigin(_) => None,
     }
 }
 

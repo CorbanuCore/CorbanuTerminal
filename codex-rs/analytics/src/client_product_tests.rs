@@ -251,6 +251,7 @@ async fn buffered_tool_events_preserve_attribution_or_drop_it_on_queue_overflow(
                 model: None,
                 reasoning_effort: None,
                 agents_states: Default::default(),
+                provider_account: None,
             },
             /*started_at_ms*/ None,
             /*completed_at_ms*/ 2,

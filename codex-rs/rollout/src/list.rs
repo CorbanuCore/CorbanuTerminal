@@ -1054,13 +1054,7 @@ async fn read_head_summary(path: &Path, head_limit: usize) -> io::Result<HeadTai
             RolloutItem::TurnContext(_) => {
                 // Not included in `head`; skip.
             }
-<<<<<<< HEAD
-            RolloutItem::WorldState(_) | RolloutItem::SourceOrigin(_) => {
-||||||| 413492cd6c
-            RolloutItem::WorldState(_) => {
-=======
-            RolloutItem::TokenUsageRecord(_) => {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            RolloutItem::TokenUsageRecord(_) | RolloutItem::SourceOrigin(_) => {
                 // Not included in `head`; skip.
             }
             RolloutItem::RetainedContext(_)
@@ -1143,15 +1137,11 @@ pub async fn read_head_for_summary(path: &Path) -> io::Result<Vec<serde_json::Va
                 | RolloutItem::TurnContext(_)
                 | RolloutItem::TokenUsageRecord(_)
                 | RolloutItem::WorldState(_)
-<<<<<<< HEAD
-                | RolloutItem::SourceOrigin(_)
-||||||| 413492cd6c
-=======
                 | RolloutItem::RealtimeItem(_)
                 | RolloutItem::RetainedContext(_)
                 | RolloutItem::DynamicToolsUpdated { .. }
                 | RolloutItem::SecurityRiskScore(_)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                | RolloutItem::SourceOrigin(_)
                 | RolloutItem::EventMsg(_) => {}
             }
         }
@@ -1243,15 +1233,11 @@ pub async fn read_session_meta_line(path: &Path) -> io::Result<SessionMetaLine> 
             | RolloutItem::TurnContext(_)
             | RolloutItem::TokenUsageRecord(_)
             | RolloutItem::WorldState(_)
-<<<<<<< HEAD
-            | RolloutItem::SourceOrigin(_)
-||||||| 413492cd6c
-=======
             | RolloutItem::RealtimeItem(_)
             | RolloutItem::RetainedContext(_)
             | RolloutItem::DynamicToolsUpdated { .. }
             | RolloutItem::SecurityRiskScore(_)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            | RolloutItem::SourceOrigin(_)
             | RolloutItem::EventMsg(_) => {}
         }
     }
