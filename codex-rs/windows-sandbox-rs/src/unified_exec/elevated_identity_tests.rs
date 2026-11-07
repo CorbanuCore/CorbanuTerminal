@@ -470,8 +470,8 @@ fn sec_win_1648_elevated_command_cannot_borrow_another_workspaces_command_token(
 /// console's and a ConPTY's, another workspace's or its own command's. They
 /// run with the runner's unrestricted token, so their processes must refuse
 /// every write right (a child started under one leaves the command's job
-/// and restricted token), and their tokens `TOKEN_DUPLICATE` (not a write
-/// right, so the normal check alone decides it).
+/// and restricted token), and their tokens must give a command nothing it
+/// can write with.
 #[test]
 fn sec_win_1648_elevated_command_cannot_write_to_or_borrow_a_console_host() {
     let Some(codex_home) = elevated_home("d324-console") else {
@@ -553,13 +553,19 @@ fn sec_win_1648_elevated_command_cannot_write_to_or_borrow_a_console_host() {
         closed(&peer_line) && closed(&own_line),
         "a console host is open to writes:\nother: {peer_line}\nown: {own_line}"
     );
+    // Its token may still open for `TOKEN_DUPLICATE` (measured), but a
+    // restricted token can only identify as an unrestricted one (1346), and
+    // starting a process with it needs a privilege commands lack (1314).
     assert!(
         borrow_line.starts_with("host=")
             && borrow_line.split(" | ").all(|host| {
-                host.contains(" own_write=err") && host.contains("borrow=open_token_err5")
+                host.contains(" own_write=err")
+                    && !host.contains("write=ok")
+                    && !host.contains("create_process=ok")
+                    && !host.contains("primary=ok")
             })
             && !target.exists(),
-        "a command opened a console host's token: {borrow_line}"
+        "a command wrote with a console host's token: {borrow_line}"
     );
 }
 
@@ -625,7 +631,17 @@ fn sec_win_1648_measure_runner_startup_race() {
     });
     record_setup(codex_home.path());
     let line = expect_line(&line, codex_home.path());
-    println!("\nd324 race: exit={exit_code} {line:?}");
+    let log = sandbox_log(codex_home.path());
+    println!(
+        "\nd324 race: exit={exit_code} {line:?} core_restricted_default_dacl={}",
+        !log.contains("runner default DACL left to the runner")
+    );
+    if let Some(note) = log
+        .lines()
+        .find(|line| line.contains("runner default DACL left to the runner"))
+    {
+        println!("d324 race: {note}");
+    }
     assert!(line.starts_with("race seen="), "{line}");
 }
 
