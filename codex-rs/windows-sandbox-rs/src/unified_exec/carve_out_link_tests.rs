@@ -67,7 +67,6 @@ pub(super) fn run_script(
             carve_outs,
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .map_err(|err| format!("{err:#}"))?;
@@ -145,13 +144,13 @@ fn legacy_read_only_path_that_is_a_link_stops_the_command() {
             ),
             FileSystemSandboxEntry::new(
                 FileSystemPath::Path {
-                    path: absolute(workspace.clone()),
+                    path: absolute(workspace.clone()).into(),
                 },
                 FileSystemAccessMode::Write,
             ),
             FileSystemSandboxEntry::new(
                 FileSystemPath::Path {
-                    path: absolute(link.clone()),
+                    path: absolute(link.clone()).into(),
                 },
                 FileSystemAccessMode::Read,
             ),
@@ -218,13 +217,13 @@ fn legacy_read_only_path_through_a_linked_root_keeps_its_ancestors() {
             ),
             FileSystemSandboxEntry::new(
                 FileSystemPath::Path {
-                    path: absolute(linked.clone()),
+                    path: absolute(linked.clone()).into(),
                 },
                 FileSystemAccessMode::Write,
             ),
             FileSystemSandboxEntry::new(
                 FileSystemPath::Path {
-                    path: absolute(linked.join("a\\b\\c")),
+                    path: absolute(linked.join("a\\b\\c")).into(),
                 },
                 FileSystemAccessMode::Read,
             ),

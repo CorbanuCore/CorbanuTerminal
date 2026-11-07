@@ -370,6 +370,8 @@ impl Drop for WindowAccess {
 /// it there. `None` on the interactive window station (nothing to wait
 /// for), else whether it started, or why that isn't known (Core then keeps
 /// the desktop entry).
+// `output_read` is only passed to Windows, never dereferenced here.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn wait_for_console_host_start(
     output_read: HANDLE,
     timeout: std::time::Duration,
@@ -611,7 +613,8 @@ fn local_app_data() -> Option<PathBuf> {
     use windows_sys::Win32::UI::Shell::SHGetKnownFolderPath;
     let mut path: *mut u16 = ptr::null_mut();
     // SAFETY: `path` receives a string the call allocates, freed below.
-    let status = unsafe { SHGetKnownFolderPath(&FOLDERID_LocalAppData, 0, std::ptr::null_mut(), &mut path) };
+    let status =
+        unsafe { SHGetKnownFolderPath(&FOLDERID_LocalAppData, 0, std::ptr::null_mut(), &mut path) };
     let result = (status == 0 && !path.is_null()).then(|| {
         // SAFETY: a NUL-terminated string from the call.
         let len = (0..).take_while(|&i| unsafe { *path.add(i) } != 0).count();
@@ -768,7 +771,12 @@ fn object_dacl(handle: *mut c_void) -> Result<(*mut ACL, *mut c_void)> {
 /// placed before any inherited entries. Fails, writing nothing, if a deny
 /// entry for `sid` takes away any of `add`. Returns whether the access added
 /// (if any) was kept: another writer may have replaced the DACL meanwhile.
-fn rewrite_dacl(handle: *mut c_void, sid: &[u8], remove: Option<u32>, add: Option<u32>) -> Result<bool> {
+fn rewrite_dacl(
+    handle: *mut c_void,
+    sid: &[u8],
+    remove: Option<u32>,
+    add: Option<u32>,
+) -> Result<bool> {
     let (dacl, descriptor) = object_dacl(handle)?;
     // SAFETY: `dacl` belongs to `descriptor`, freed right after.
     let rebuilt = unsafe { rebuild_dacl(dacl, sid, remove, add) };

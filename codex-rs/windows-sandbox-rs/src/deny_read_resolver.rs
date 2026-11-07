@@ -166,11 +166,8 @@ mod access_tests;
 
 #[cfg(test)]
 mod tests {
-    use super::GlobScanPlan;
     use super::glob_scan_plan;
-    use super::glob_scan_plans;
     use super::resolve_windows_deny_read_paths;
-    use super::ripgrep_glob;
     use codex_protocol::permissions::FileSystemAccessMode;
     use codex_protocol::permissions::FileSystemPath;
     use codex_protocol::permissions::FileSystemSandboxEntry;
@@ -252,68 +249,6 @@ mod tests {
         assert_eq!(
             glob_scan_plan("/tmp/work/*/*.env", Some(1)).max_depth,
             Some(1)
-        );
-    }
-
-    #[test]
-    fn glob_patterns_with_the_same_root_and_depth_share_one_scan() {
-        assert_eq!(
-            glob_scan_plans(
-                &[
-                    "/tmp/work/**/*.env".to_string(),
-                    "/tmp/work/**/*.pem".to_string(),
-                    "/tmp/work/**/*.secret".to_string(),
-                ],
-                /*configured_max_depth*/ Some(3),
-            )
-            .expect("combined scan plans"),
-            vec![GlobScanPlan {
-                root: PathBuf::from("/tmp/work"),
-                max_depth: Some(3),
-                globs: vec![
-                    "**/*.env".to_string(),
-                    "**/*.pem".to_string(),
-                    "**/*.secret".to_string(),
-                ],
-            }]
-        );
-    }
-
-    #[test]
-    fn bounded_globs_with_the_same_root_share_the_deepest_scan() {
-        assert_eq!(
-            glob_scan_plans(
-                &[
-                    "/tmp/work/*.env".to_string(),
-                    "/tmp/work/*/*.pem".to_string(),
-                ],
-                /*configured_max_depth*/ None,
-            )
-            .expect("combined scan plans"),
-            vec![GlobScanPlan {
-                root: PathBuf::from("/tmp/work"),
-                max_depth: Some(2),
-                globs: vec!["**/*.env".to_string(), "**/*/*.pem".to_string()],
-            }]
-        );
-    }
-
-    #[test]
-    fn recursive_and_bounded_globs_with_the_same_root_share_one_scan() {
-        assert_eq!(
-            glob_scan_plans(
-                &[
-                    "/tmp/work/*.env".to_string(),
-                    "/tmp/work/**/*.pem".to_string(),
-                ],
-                /*configured_max_depth*/ None,
-            )
-            .expect("combined scan plans"),
-            vec![GlobScanPlan {
-                root: PathBuf::from("/tmp/work"),
-                max_depth: None,
-                globs: vec!["**/*.env".to_string(), "**/*.pem".to_string()],
-            }]
         );
     }
 
@@ -481,18 +416,6 @@ mod tests {
             tmp.path().display()
         ))]);
 
-        if let Some(paths) = super::ripgrep_files(
-            &GlobScanPlan {
-                root: tmp.path().to_path_buf(),
-                max_depth: None,
-                globs: vec!["**/*.env".to_string()],
-            },
-            &|_| {},
-        )
-        .expect("case-insensitive ripgrep scan")
-        {
-            assert!(paths.contains(&uppercase_env));
-        }
         let actual: HashSet<PathBuf> = resolve_windows_deny_read_paths(&policy, &cwd)
             .expect("resolve")
             .into_iter()
@@ -594,13 +517,6 @@ mod tests {
             resolve_windows_deny_read_paths(&policy, &cwd).expect("fresh resolution"),
             vec![AbsolutePathBuf::from_absolute_path(secret).expect("secret path")]
         );
-    }
-
-    #[test]
-    fn ripgrep_globs_normalize_windows_separators_and_unclosed_classes() {
-        assert_eq!(ripgrep_glob(r"**\*.env"), "**/*.env");
-        assert_eq!(ripgrep_glob("nested/*.env"), "**/nested/*.env");
-        assert_eq!(ripgrep_glob("[*.env"), r"**/\[*.env");
     }
 
     #[test]

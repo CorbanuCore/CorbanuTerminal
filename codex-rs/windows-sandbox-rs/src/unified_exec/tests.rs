@@ -305,7 +305,7 @@ fn restricted_token_rejects_managed_network_before_spawn() {
             read_roots_override: None,
             read_roots_include_platform_defaults: false,
             write_roots_override: None,
-            deny_read_paths_override: &[],
+            deny_read_override: &crate::DenyReadTargets::default(),
             deny_write_paths_override: &[],
             tty: false,
             stdin_open: false,
@@ -445,7 +445,7 @@ fn registered_non_tty_cmd_forwards_env_output_and_exit() {
             /*read_roots_override*/ None,
             /*read_roots_include_platform_defaults*/ true,
             /*write_roots_override*/ None,
-            &[],
+            &crate::DenyReadTargets::default(),
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
@@ -862,7 +862,7 @@ fn low_integrity_can_open(path: &Path, access: u32, share: u32) -> bool {
     // SAFETY: token handles are opened and closed here; the impersonation is
     // reverted before returning.
     unsafe {
-        let mut process_token: HANDLE = 0;
+        let mut process_token: HANDLE = std::ptr::null_mut();
         assert_ne!(
             OpenProcessToken(
                 GetCurrentProcess(),
@@ -872,7 +872,7 @@ fn low_integrity_can_open(path: &Path, access: u32, share: u32) -> bool {
             0,
             "open the process token"
         );
-        let mut low: HANDLE = 0;
+        let mut low: HANDLE = std::ptr::null_mut();
         let duplicated = DuplicateTokenEx(
             process_token,
             TOKEN_ALL_ACCESS,
@@ -897,7 +897,7 @@ fn low_integrity_can_open(path: &Path, access: u32, share: u32) -> bool {
             std::ptr::null(),
             OPEN_EXISTING,
             FILE_FLAG_BACKUP_SEMANTICS,
-            0,
+            std::ptr::null_mut(),
         );
         RevertToSelf();
         CloseHandle(low);
@@ -1208,7 +1208,6 @@ fn legacy_workspace_write_cannot_delete_or_replace_protected_git_dir() {
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn legacy replace-git session");
@@ -1312,7 +1311,6 @@ fn legacy_workspace_write_cannot_move_ancestor_of_nested_carve_out() {
             &carve_outs,
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn legacy move-ancestor session");
@@ -1457,7 +1455,6 @@ fn run_legacy_script(
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn legacy session");
@@ -1828,7 +1825,6 @@ fn legacy_command_cannot_break_away_from_its_job() {
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn legacy breakaway probe");
@@ -1914,7 +1910,6 @@ fn sec_win_1507_elevated_command_cannot_break_away_from_its_job() {
                 // A ConPTY whose input closes ends its console's processes.
                 /*stdin_open*/
                 tty,
-                /*use_private_desktop*/ true,
             )
             .await
             .expect("spawn elevated breakaway probe");
@@ -2058,7 +2053,6 @@ fn sec_win_1507_elevated_tools_work_without_breakaway() {
                 &[],
                 tty,
                 /*stdin_open*/ tty,
-                /*use_private_desktop*/ true,
             )
             .await
             .unwrap_or_else(|err| {
@@ -2291,7 +2285,6 @@ fn legacy_delete_child_denies_are_removed_after_the_session() {
             &carve_outs,
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn legacy session");
@@ -2914,7 +2907,6 @@ fn legacy_command_log_redacts_credentials() {
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn legacy credential command");
@@ -2957,7 +2949,6 @@ fn elevated_command_log_redacts_credentials() {
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn elevated credential command");
@@ -2990,7 +2981,6 @@ fn legacy_capture_command_log_redacts_credentials() {
         HashMap::new(),
         Some(10_000),
         /*cancellation*/ None,
-        /*use_private_desktop*/ true,
     )
     .expect("run legacy capture credential command");
     let stdout = String::from_utf8_lossy(&result.stdout);

@@ -55,6 +55,7 @@ fn shared_desktop_survives_launch_handles_and_concurrent_requests() -> Result<()
         capability_sids: Default::default(),
         network_enabled: false,
         network_proxy_restricting_sid: None,
+        low_integrity: false,
         read_roots: Some(Default::default()),
         write_roots: Default::default(),
         deny_read_paths: Default::default(),
@@ -159,7 +160,10 @@ fn shared_desktop_reuses_only_equivalent_permissions() -> Result<()> {
         (
             "deny reads",
             SetupRootOverrides {
-                deny_read_paths: Some(vec![readable.clone()]),
+                deny_read: Some(crate::DenyReadTargets::from_exact_paths([
+                    codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(&readable)
+                        .expect("absolute"),
+                ])),
                 ..overrides()
             },
         ),

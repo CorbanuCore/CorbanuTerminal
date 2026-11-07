@@ -95,11 +95,11 @@ mod hide_users;
 #[cfg(target_os = "windows")]
 mod identity;
 #[cfg(target_os = "windows")]
+mod installation_record;
+#[cfg(target_os = "windows")]
 mod integrity;
 #[cfg(target_os = "windows")]
 mod integrity_leases;
-#[cfg(target_os = "windows")]
-mod installation_record;
 #[cfg(target_os = "windows")]
 mod logging;
 #[cfg(target_os = "windows")]
@@ -297,6 +297,7 @@ pub use deny_read_acl::apply_deny_read_acls;
 pub use deny_read_acl::plan_deny_read_acl_paths;
 pub use deny_read_resolver::GLOB_SCAN_PROGRAM;
 pub use deny_read_resolver::resolve_windows_deny_read_paths;
+pub use deny_read_resolver::resolve_windows_deny_read_paths_in_environment;
 pub use deny_read_resolver::resolve_windows_deny_read_targets;
 #[cfg(target_os = "windows")]
 pub use deny_read_sessions::DENY_READ_SYNC_LOCK_WAIT;
@@ -310,7 +311,6 @@ pub use deny_read_sessions::ensure_registry as ensure_deny_read_session_registry
 pub use deny_read_sessions::register_this_process as register_deny_read_session;
 #[cfg(target_os = "windows")]
 pub use deny_read_state::SECRETLESS_LAUNCH_LOCK_FILE;
-pub use deny_read_resolver::resolve_windows_deny_read_paths_in_environment;
 #[cfg(target_os = "windows")]
 pub use deny_read_state::sync_persistent_deny_read_acls;
 pub use deny_read_targets::DenyReadRule;
@@ -343,6 +343,8 @@ pub use identity::require_logon_sandbox_creds;
 #[cfg(target_os = "windows")]
 pub use identity::sandbox_setup_is_complete;
 #[cfg(target_os = "windows")]
+pub use identity::sandbox_setup_is_complete_with_settings;
+#[cfg(target_os = "windows")]
 pub use integrity_leases::confirm_planted_project_metadata;
 #[cfg(target_os = "windows")]
 pub use integrity_leases::planted_project_metadata;
@@ -350,8 +352,6 @@ pub use integrity_leases::planted_project_metadata;
 pub use integrity_leases::project_metadata_counts_as_planted;
 #[cfg(target_os = "windows")]
 pub use integrity_leases::repair_stale_integrity_labels;
-#[cfg(target_os = "windows")]
-pub use identity::sandbox_setup_is_complete_with_settings;
 #[cfg(target_os = "windows")]
 pub use ipc_framed::ErrorPayload;
 #[cfg(target_os = "windows")]
@@ -393,6 +393,8 @@ pub use logging::log_note;
 #[cfg(target_os = "windows")]
 pub use logging::log_writer;
 #[cfg(target_os = "windows")]
+pub use logging::setup_log_writer;
+#[cfg(target_os = "windows")]
 pub use logon_launch::LOGON_LAUNCH_ARG;
 #[cfg(target_os = "windows")]
 pub use logon_launch::LaunchedProcess;
@@ -408,8 +410,6 @@ pub use logon_launch::create_process_with_logon;
 pub use logon_launch::run_logon_launcher;
 #[cfg(target_os = "windows")]
 pub use logon_launch::run_window_access_reaper;
-#[cfg(target_os = "windows")]
-pub use logging::setup_log_writer;
 #[cfg(target_os = "windows")]
 pub use no_reparse_dir::DirectoryOpenDisposition;
 #[cfg(target_os = "windows")]
@@ -563,10 +563,6 @@ pub use unified_exec::spawn_windows_sandbox_session_elevated_for_permission_prof
 pub use unified_exec::spawn_windows_sandbox_session_for_level;
 #[cfg(target_os = "windows")]
 pub use unified_exec::spawn_windows_sandbox_session_legacy;
-pub use unlabelled_roots::legacy_writable_roots;
-pub use unlabelled_roots::unlabelled_roots_mark;
-pub use unlabelled_roots::unlabelled_roots_since;
-pub use unlabelled_roots::unlabelled_writable_root_warning;
 #[cfg(target_os = "windows")]
 pub use uninstall_windows::PreparedWindowsSandboxCleanup;
 #[cfg(target_os = "windows")]
@@ -577,6 +573,10 @@ pub use uninstall_windows::clean_up_packaged_windows_sandbox;
 pub use uninstall_windows::prepare_packaged_windows_sandbox_cleanup;
 #[cfg(target_os = "windows")]
 pub use uninstall_windows::prepare_packaged_windows_sandbox_cleanup_with_retained_tokens;
+pub use unlabelled_roots::legacy_writable_roots;
+pub use unlabelled_roots::unlabelled_roots_mark;
+pub use unlabelled_roots::unlabelled_roots_since;
+pub use unlabelled_roots::unlabelled_writable_root_warning;
 #[cfg(target_os = "windows")]
 pub use wfp::install_wfp_filters_for_account;
 #[cfg(target_os = "windows")]

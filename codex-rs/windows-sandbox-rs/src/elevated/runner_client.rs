@@ -12,7 +12,7 @@ use crate::ipc_framed::SpawnReady;
 use crate::ipc_framed::SpawnRequest;
 use crate::ipc_framed::read_frame;
 use crate::ipc_framed::write_frame;
-use crate::logon_launch::LogonError as RunnerLogonError;
+pub(crate) use crate::logon_launch::LogonError as RunnerLogonError;
 use crate::logon_launch::LogonLaunchRequest;
 use crate::logon_launch::WindowAccessReaper;
 use crate::logon_launch::create_process_with_logon;
@@ -433,12 +433,10 @@ pub(crate) fn spawn_runner_transport(
         if registered_alias.is_some() {
             verify_registered_core_runner(runner_process.as_raw_handle() as HANDLE, &runner_exe)?;
         }
-        connect_pipe_with_timeout(h_pipe_in, expected_runner_pid, "pipe-in").map_err(|err| {
-            runner_connect_error(err, launched.window_access_error.as_deref())
-        })?;
-        connect_pipe_with_timeout(h_pipe_out, expected_runner_pid, "pipe-out").map_err(|err| {
-            runner_connect_error(err, launched.window_access_error.as_deref())
-        })?;
+        connect_pipe_with_timeout(h_pipe_in, expected_runner_pid, "pipe-in")
+            .map_err(|err| runner_connect_error(err, launched.window_access_error.as_deref()))?;
+        connect_pipe_with_timeout(h_pipe_out, expected_runner_pid, "pipe-out")
+            .map_err(|err| runner_connect_error(err, launched.window_access_error.as_deref()))?;
         transport.send_spawn_request(spawn_request)?;
         transport.read_spawn_ready()
     })();
@@ -473,26 +471,29 @@ pub(crate) fn spawn_runner_transport(
     // that entry if the runner could not tell it had started.
     let commands_use_this_desktop = spawn_ready.console_host_started == Some(false);
     let runner_process = runner_process.into_raw_handle() as HANDLE;
-    let mut window_access =
-        match WindowAccessReaper::start(window_access, runner_process, &runner_exe) {
-            Ok(mut reaper) => {
-                // The reaper removes it when the runner exits, even after Core.
-                if let Err(err) = reaper.narrow_for_commands(commands_use_this_desktop) {
-                    crate::logging::log_note(&format!("{err:#}"), log_dir);
-                }
-                unsafe { CloseHandle(runner_process) };
-                return Ok(transport);
+    let mut window_access = match WindowAccessReaper::start(
+        window_access,
+        runner_process,
+        &runner_exe,
+    ) {
+        Ok(mut reaper) => {
+            // The reaper removes it when the runner exits, even after Core.
+            if let Err(err) = reaper.narrow_for_commands(commands_use_this_desktop) {
+                crate::logging::log_note(&format!("{err:#}"), log_dir);
             }
-            Err((window_access, err)) => {
-                crate::logging::log_note(
-                    &format!(
-                        "no reaper for the runner's window station access ({err:#}); Core removes it, unless it exits first"
-                    ),
-                    log_dir,
-                );
-                window_access
-            }
-        };
+            unsafe { CloseHandle(runner_process) };
+            return Ok(transport);
+        }
+        Err((window_access, err)) => {
+            crate::logging::log_note(
+                &format!(
+                    "no reaper for the runner's window station access ({err:#}); Core removes it, unless it exits first"
+                ),
+                log_dir,
+            );
+            window_access
+        }
+    };
     if let Err(err) = window_access.narrow_for_commands(commands_use_this_desktop) {
         crate::logging::log_note(
             &format!("could not narrow the runner's window station access: {err:#}"),

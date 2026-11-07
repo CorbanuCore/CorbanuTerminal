@@ -60,7 +60,7 @@ fn open_result(pid: u32, access: u32) -> String {
     // SAFETY: the handle is closed right away.
     unsafe {
         let handle = windows_sys::Win32::System::Threading::OpenProcess(access, 0, pid);
-        if handle == 0 {
+        if handle.is_null() {
             format!("err{}", GetLastError())
         } else {
             CloseHandle(handle);
@@ -79,7 +79,7 @@ unsafe fn adjust_default_dacl(process: HANDLE) -> String {
     // SAFETY: per the caller; the buffer outlives both calls and the token
     // handle is closed below.
     unsafe {
-        let mut token: HANDLE = 0;
+        let mut token: HANDLE = std::ptr::null_mut();
         if OpenProcessToken(process, TOKEN_QUERY | TOKEN_ADJUST_DEFAULT, &mut token) == 0 {
             return format!("open_err{}", GetLastError());
         }
@@ -131,7 +131,7 @@ fn access_report(pid: u32) -> String {
             0,
             pid,
         );
-        if process == 0 {
+        if process.is_null() {
             format!("query_err{}", GetLastError())
         } else {
             let result = adjust_default_dacl(process);
@@ -163,17 +163,17 @@ fn borrow_report(pid: u32, path: &Path) -> String {
             0,
             pid,
         );
-        if process == 0 {
+        if process.is_null() {
             return format!("own_write={own} borrow=open_process_err{}", GetLastError());
         }
-        let mut token: HANDLE = 0;
+        let mut token: HANDLE = std::ptr::null_mut();
         let opened = OpenProcessToken(process, TOKEN_DUPLICATE | TOKEN_QUERY, &mut token) != 0;
         let error = GetLastError();
         CloseHandle(process);
         if !opened {
             return format!("own_write={own} borrow=open_token_err{error}");
         }
-        let mut duplicate: HANDLE = 0;
+        let mut duplicate: HANDLE = std::ptr::null_mut();
         let duplicated = DuplicateTokenEx(
             token,
             TOKEN_IMPERSONATE | TOKEN_QUERY,
@@ -270,8 +270,8 @@ fn command_identity_probe_entry() {
                 0,
                 child.id(),
             );
-            let ended = process != 0 && TerminateProcess(process, 1) != 0;
-            if process != 0 {
+            let ended = !process.is_null() && TerminateProcess(process, 1) != 0;
+            if !process.is_null() {
                 CloseHandle(process);
             }
             ended
@@ -332,7 +332,6 @@ async fn run_legacy_with_tty(
         &[],
         tty,
         /*stdin_open*/ false,
-        /*use_private_desktop*/ true,
     )
     .await
     .expect("spawn legacy command");
@@ -378,7 +377,6 @@ async fn with_holder<T>(root: &Path, codex_home: &Path, probe: impl AsyncFnOnce(
         &[],
         /*tty*/ false,
         /*stdin_open*/ false,
-        /*use_private_desktop*/ true,
     )
     .await
     .expect("spawn holding session");

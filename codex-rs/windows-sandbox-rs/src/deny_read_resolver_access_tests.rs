@@ -16,6 +16,7 @@ use tempfile::TempDir;
 fn policy() -> FileSystemSandboxPolicy {
     FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
         path: FileSystemPath::GlobPattern {
+            scan: None,
             pattern: "**/*.env".to_string(),
         },
         access: FileSystemAccessMode::Deny,
@@ -207,6 +208,7 @@ fn native_walk_preserves_canonical_matches_through_directory_links_and_cycles() 
     }
     let policy = FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
         path: FileSystemPath::GlobPattern {
+            scan: None,
             pattern: target
                 .canonicalize()
                 .expect("canonical target")

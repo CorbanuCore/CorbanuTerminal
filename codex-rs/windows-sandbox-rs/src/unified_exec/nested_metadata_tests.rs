@@ -186,7 +186,6 @@ fn legacy_workspace_write_cannot_change_nested_project_metadata() {
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn legacy session");
@@ -313,7 +312,6 @@ fn legacy_temp_root_is_not_watched_for_nested_metadata() {
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn legacy session");
@@ -387,7 +385,6 @@ fn legacy_workspace_stays_watched_when_temp_resolves_to_it() {
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .expect("spawn legacy session");

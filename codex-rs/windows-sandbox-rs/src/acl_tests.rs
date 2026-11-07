@@ -233,7 +233,7 @@ impl WithoutPrivileges {
         unsafe {
             assert_ne!(ImpersonateSelf(SecurityImpersonation), 0, "ImpersonateSelf");
             let guard = Self;
-            let mut token: HANDLE = 0;
+            let mut token: HANDLE = std::ptr::null_mut();
             assert_ne!(
                 OpenThreadToken(
                     GetCurrentThread(),

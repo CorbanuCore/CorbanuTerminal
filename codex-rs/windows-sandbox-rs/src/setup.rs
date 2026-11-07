@@ -1880,6 +1880,7 @@ mod tests {
                     ),
                     FileSystemSandboxEntry::new(
                         FileSystemPath::GlobPattern {
+                            scan: None,
                             pattern: project_roots_glob_pattern(Path::new("**/*.env")),
                         },
                         FileSystemAccessMode::Deny,
@@ -1890,15 +1891,19 @@ mod tests {
             network: NetworkSandboxPolicy::Restricted,
         };
 
-        let deny_read_paths = super::setup_refresh_deny_read_paths(
+        let deny_read_paths = super::setup_refresh_deny_read_targets(
             &permission_profile,
             workspace_roots_for(&workspace_root).as_slice(),
             &command_cwd,
         )
-        .expect("resolve refresh deny-read paths");
+        .expect("resolve refresh deny-read paths")
+        .paths();
 
         assert_eq!(
-            deny_read_paths.into_iter().collect::<HashSet<_>>(),
+            deny_read_paths
+                .into_iter()
+                .map(AbsolutePathBuf::into_path_buf)
+                .collect::<HashSet<_>>(),
             [
                 dunce::canonicalize(&workspace_root)
                     .expect("canonicalize workspace root")
@@ -1920,6 +1925,7 @@ mod tests {
         let mut file_system = FileSystemSandboxPolicy::read_only();
         file_system.entries.push(FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
+                scan: None,
                 pattern: root.join("**").display().to_string(),
             },
             FileSystemAccessMode::Deny,
@@ -1969,6 +1975,7 @@ mod tests {
             file_system: ManagedFileSystemPermissions::Restricted {
                 entries: vec![FileSystemSandboxEntry::new(
                     FileSystemPath::GlobPattern {
+                        scan: None,
                         pattern: project_roots_glob_pattern(Path::new("[z-a]")),
                     },
                     FileSystemAccessMode::Deny,
@@ -1978,7 +1985,7 @@ mod tests {
             network: NetworkSandboxPolicy::Restricted,
         };
 
-        let err = super::setup_refresh_deny_read_paths(
+        let err = super::setup_refresh_deny_read_targets(
             &permission_profile,
             workspace_roots_for(&workspace_root).as_slice(),
             &workspace_root,

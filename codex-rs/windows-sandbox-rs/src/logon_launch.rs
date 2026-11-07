@@ -385,10 +385,12 @@ fn spawn_helper(
     let holder = HandleHolder::start(launcher_exe).context("start the launcher's handle holder")?;
     let held_stdin = holder
         .hold(child_stdin.0 as isize)
-        .map(|held| held as HANDLE).context("hand a launcher pipe to the holder")?;
+        .map(|held| held as HANDLE)
+        .context("hand a launcher pipe to the holder")?;
     let held_stdout = holder
         .hold(child_stdout.0 as isize)
-        .map(|held| held as HANDLE).context("hand a launcher pipe to the holder")?;
+        .map(|held| held as HANDLE)
+        .context("hand a launcher pipe to the holder")?;
     drop((child_stdin, child_stdout));
     let mut attributes = ProcThreadAttributeList::new(/*attr_count*/ 2)?;
     attributes.set_parent_process(holder.raw() as HANDLE)?;

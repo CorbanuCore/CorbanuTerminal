@@ -46,11 +46,11 @@ use windows_sys::Win32::Security::GetSecurityDescriptorControl;
 use windows_sys::Win32::Security::InitializeAcl;
 use windows_sys::Win32::Security::IsValidAcl;
 use windows_sys::Win32::Security::MapGenericMask;
+use windows_sys::Win32::Security::OWNER_SECURITY_INFORMATION;
 use windows_sys::Win32::Security::PROTECTED_DACL_SECURITY_INFORMATION;
 use windows_sys::Win32::Security::SE_DACL_PROTECTED;
 use windows_sys::Win32::Security::UNPROTECTED_DACL_SECURITY_INFORMATION;
 use windows_sys::Win32::Storage::FileSystem::BY_HANDLE_FILE_INFORMATION;
-use windows_sys::Win32::Security::OWNER_SECURITY_INFORMATION;
 use windows_sys::Win32::Storage::FileSystem::CreateFileW;
 use windows_sys::Win32::Storage::FileSystem::DELETE;
 use windows_sys::Win32::Storage::FileSystem::FILE_ALL_ACCESS;
@@ -77,8 +77,8 @@ use windows_sys::Win32::Storage::FileSystem::GetFileInformationByHandleEx;
 use windows_sys::Win32::Storage::FileSystem::GetFinalPathNameByHandleW;
 use windows_sys::Win32::Storage::FileSystem::OPEN_EXISTING;
 use windows_sys::Win32::Storage::FileSystem::READ_CONTROL;
-use windows_sys::Win32::Storage::FileSystem::WRITE_DAC;
 use windows_sys::Win32::Storage::FileSystem::VOLUME_NAME_NONE;
+use windows_sys::Win32::Storage::FileSystem::WRITE_DAC;
 use windows_sys::Win32::Storage::FileSystem::WRITE_OWNER;
 use windows_sys::Win32::System::SystemServices::MAXIMUM_ALLOWED;
 const SE_KERNEL_OBJECT: u32 = 6;
@@ -1841,8 +1841,8 @@ unsafe fn deny_ace_already_present(
         std::ptr::null_mut(),
         &mut p_sd,
     );
-    let result =
-        acl_api_result(path, "GetSecurityInfo", code).map(|()| kind.already_present(p_dacl, psid, path.is_dir()));
+    let result = acl_api_result(path, "GetSecurityInfo", code)
+        .map(|()| kind.already_present(p_dacl, psid, path.is_dir()));
     if !p_sd.is_null() {
         LocalFree(p_sd as HLOCAL);
     }

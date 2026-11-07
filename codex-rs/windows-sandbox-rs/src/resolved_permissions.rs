@@ -674,6 +674,7 @@ mod tests {
                     ),
                     FileSystemSandboxEntry::new(
                         FileSystemPath::GlobPattern {
+                            scan: None,
                             pattern: root.join("**").display().to_string(),
                         },
                         FileSystemAccessMode::Deny,
