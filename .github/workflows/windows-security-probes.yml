@@ -29,7 +29,7 @@ jobs:
           export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
           failed=0
           for t in $(cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- --list --format terse sec_win_1648_ | sed -n 's/: test$//p'); do
-            cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- --exact "$t" --nocapture --test-threads=1 || failed=$((failed+1))
+            cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- --exact "$t" --include-ignored --nocapture --test-threads=1 || failed=$((failed+1))
           done
           test "$failed" = 0
       - name: D324 normal session
@@ -51,7 +51,7 @@ jobs:
             # Record a fresh setup elevated, then reuse it at medium integrity.
             & $sandbox --exact 'unified_exec::tests::command_identity::elevated::sec_win_1648_elevated_command_keeps_write_access_to_its_own_processes' --nocapture --test-threads=1 | Out-Null
             $env:CODEX_SEC_WIN_1648_REQUIRE = '1'
-            & $medium -Program $sandbox -Arguments @('--exact', $t, '--nocapture', '--test-threads=1')
+            & $medium -Program $sandbox -Arguments @('--exact', $t, '--include-ignored', '--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { $failed++ }
             Remove-Item Env:CODEX_SEC_WIN_1648_REQUIRE
           }
