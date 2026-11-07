@@ -7,6 +7,12 @@ on:
       variants:
         description: JSON list of probe variants
         default: '["base", "d368", "d367a", "both"]'
+      filter:
+        description: Test name filters
+        default: 'sec_win_1648_ command_identity::legacy_ probe_1560m_'
+      suite:
+        description: Also run the whole sec_win_ suite
+        default: 'true'
 
 jobs:
   probes:
@@ -20,6 +26,8 @@ jobs:
     env:
       CORBANU_PROBE_VARIANT: ${{ matrix.variant }}
       CODEX_SEC_WIN_341_REQUIRE: "1"
+      W1560M_FILTER: ${{ inputs.filter }}
+      W1560M_SUITE: ${{ inputs.suite }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -42,7 +50,7 @@ jobs:
           export CARGO_BIN_EXE_codex_windows_sandbox_setup="$(cygpath -w "${bin_dir}/codex-windows-sandbox-setup.exe")"
           export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
           run() { cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- "$@"; }
-          tests=$(run --list --format terse --include-ignored sec_win_1648_ command_identity::legacy_ probe_1560m_ | sed -n 's/: test$//p')
+          tests=$(run --list --format terse --include-ignored $W1560M_FILTER | sed -n 's/: test$//p')
           for t in $tests; do
             run --exact "$t" --include-ignored --nocapture --test-threads=1 > t.log 2>&1
             code=$?
@@ -53,6 +61,7 @@ jobs:
             grep -E 'W1560M\||d324 (race|borrow)|d259 borrow' t.log >> results.txt || true
           done
           # The rest of the existing P1 hardening suite, as main's CI runs it.
+          [ "$W1560M_SUITE" = true ] || exit 0
           run sec_win_ --nocapture --test-threads=1 > suite.log 2>&1
           tail -n 60 suite.log
           echo "SUITE|$CORBANU_PROBE_VARIANT|admin|sec_win_|$(grep -E '^test result' suite.log | tail -n1)" | tee -a results.txt
@@ -71,7 +80,7 @@ jobs:
           $env:CODEX_PF27S06_SETUP_SEED = Join-Path $env:RUNNER_TEMP 'w1560m-seed'
           New-Item -ItemType Directory -Force $env:CODEX_PF27S06_SETUP_SEED | Out-Null
           Remove-Item Env:CODEX_SEC_WIN_341_REQUIRE
-          $tests = @(& $sandbox --list --format terse --include-ignored 'sec_win_1648_' 'command_identity::legacy_' 'probe_1560m_' | Where-Object { $_ -like '*: test' } | ForEach-Object { $_ -replace ': test$', '' })
+          $tests = @(& $sandbox --list --format terse --include-ignored @($env:W1560M_FILTER -split ' ') | Where-Object { $_ -like '*: test' } | ForEach-Object { $_ -replace ': test$', '' })
           foreach ($t in $tests) {
             $elevatedBackend = ($t -like '*sec_win_1648_*') -or ($t -like '*probe_1560m_elevated_*')
             if ($elevatedBackend) {
@@ -90,6 +99,7 @@ jobs:
             Add-Content -Encoding ascii results.txt $line
             $out | Where-Object { $_ -match 'W1560M\||d324 (race|borrow)|d259 borrow' } | ForEach-Object { Add-Content -Encoding ascii results.txt $_ }
           }
+          if ($env:W1560M_SUITE -ne 'true') { exit 0 }
           $suite = & $medium -Program $sandbox -Arguments @('sec_win_', '--nocapture', '--test-threads=1')
           $suite | Select-Object -Last 60
           $joined = $suite -join "`n"

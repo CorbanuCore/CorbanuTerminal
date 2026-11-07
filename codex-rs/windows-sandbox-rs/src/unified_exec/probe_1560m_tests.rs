@@ -664,8 +664,124 @@ pub(crate) fn self_token_report() -> String {
         }
         parts.push(format!("start_child_with_copy={}", primary_result(token)));
         CloseHandle(token);
+        // Informational (no `=`, so not scored): this token object's own DACL.
+        parts.push(format!("token_dacl:{}", own_token_dacl_sddl()));
         parts.join(" ")
     }
+}
+
+/// This process's token object's DACL as SDDL, or `err<code>`.
+fn own_token_dacl_sddl() -> String {
+    use windows_sys::Win32::Foundation::HLOCAL;
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Authorization::ConvertSecurityDescriptorToStringSecurityDescriptorW;
+    use windows_sys::Win32::Security::Authorization::GetSecurityInfo;
+    use windows_sys::Win32::Security::Authorization::SDDL_REVISION_1;
+    use windows_sys::Win32::Security::Authorization::SE_KERNEL_OBJECT;
+    use windows_sys::Win32::Security::DACL_SECURITY_INFORMATION;
+    // SAFETY: every handle and buffer is checked and freed here.
+    unsafe {
+        let mut token: HANDLE = 0;
+        if OpenProcessToken(GetCurrentProcess(), 0x0002_0000 | TOKEN_QUERY, &mut token) == 0 {
+            return format!("open_err{}", GetLastError());
+        }
+        let mut sd: *mut std::ffi::c_void = std::ptr::null_mut();
+        let status = GetSecurityInfo(
+            token,
+            SE_KERNEL_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut sd,
+        );
+        CloseHandle(token);
+        if status != 0 {
+            return format!("err{status}");
+        }
+        let mut text: *mut u16 = std::ptr::null_mut();
+        let converted = ConvertSecurityDescriptorToStringSecurityDescriptorW(
+            sd,
+            SDDL_REVISION_1,
+            DACL_SECURITY_INFORMATION,
+            &mut text,
+            std::ptr::null_mut(),
+        ) != 0;
+        let sddl = if converted {
+            let len = (0..).take_while(|&i| *text.add(i) != 0).count();
+            let sddl = String::from_utf16_lossy(std::slice::from_raw_parts(text, len));
+            LocalFree(text as HLOCAL);
+            sddl
+        } else {
+            format!("convert_err{}", GetLastError())
+        };
+        LocalFree(sd as HLOCAL);
+        sddl
+    }
+}
+
+/// The borrow probes with the holder and the borrower in a ConPTY (the
+/// mode that still starts under `d368`); results go through a file.
+#[test]
+fn probe_1560m_elevated_tty_borrow() {
+    let Some(codex_home) = elevated_home("w1560m-elevated-tty") else {
+        return;
+    };
+    let _guard = legacy_process_test_guard();
+    let holder_root = user_owned_test_root();
+    let root = user_owned_test_root();
+    let runtime = current_thread_runtime();
+    let profile = PermissionProfile::workspace_write();
+    for mode in ["borrow", "thread_borrow", "self_token"] {
+        let target = holder_root.path().join(format!("{mode}-tty.txt"));
+        let out = root.path().join(format!("{mode}.out"));
+        let child_dir = root.path().join(format!("child-{mode}"));
+        fs::create_dir_all(&child_dir).expect("child dir");
+        let (_stdout, code) = runtime.block_on(with_elevated_holder_tty(
+            holder_root.path(),
+            codex_home.path(),
+            /*tty*/ true,
+            async |pid| {
+                run_in(
+                    Backend::Elevated,
+                    &profile,
+                    root.path(),
+                    codex_home.path(),
+                    probe_argv(PROBE_ENTRY),
+                    &[
+                        (PROBE_ENV, mode.to_string()),
+                        (TARGET_ENV, pid.to_string()),
+                        (FILE_ENV, target.display().to_string()),
+                        (OUT_ENV, out.display().to_string()),
+                        (CHILD_ENV, child_dir.display().to_string()),
+                    ],
+                    /*tty*/ true,
+                )
+                .await
+            },
+        ));
+        let line = fs::read_to_string(&out).unwrap_or_else(|_| format!("no result exit={code}"));
+        let ok = if mode == "self_token" {
+            line.split(' ')
+                .filter(|part| part.contains('='))
+                .all(|part| part.ends_with("=ok"))
+        } else {
+            !target.exists() && !line.contains("create_process=ok") && !line.contains("no result")
+        };
+        let name = if mode == "self_token" {
+            "self token (ConPTY)".to_string()
+        } else {
+            format!("{mode} closed (ConPTY)")
+        };
+        report(
+            Backend::Elevated,
+            &name,
+            ok,
+            &format!("wrote={} {line}", target.exists()),
+        );
+    }
+    record_setup(codex_home.path());
 }
 
 /// The `thread_borrow` probe (#1560, review of #1717): opens a thread of
