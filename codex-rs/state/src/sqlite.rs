@@ -97,7 +97,9 @@ enum RecoveryMode {
 struct RuntimeDbSpec {
     label: &'static str,
     filename: &'static str,
-    legacy_filename: &'static str,
+    /// The pre-namespace name PF Terminal builds wrote, adopted once; `None`
+    /// for databases no such build created.
+    legacy_filename: Option<&'static str>,
     kind: DbKind,
     open_phase: &'static str,
     migrate_phase: &'static str,
@@ -121,7 +123,7 @@ impl RuntimeDbSpec {
 const STATE_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "state DB",
     filename: STATE_DB_FILENAME,
-    legacy_filename: "state_5.sqlite",
+    legacy_filename: Some("state_5.sqlite"),
     kind: DbKind::State,
     open_phase: "open_state",
     migrate_phase: "migrate_state",
@@ -132,7 +134,7 @@ const STATE_DB: RuntimeDbSpec = RuntimeDbSpec {
 const LOGS_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "log DB",
     filename: LOGS_DB_FILENAME,
-    legacy_filename: "logs_2.sqlite",
+    legacy_filename: Some("logs_2.sqlite"),
     kind: DbKind::Logs,
     open_phase: "open_logs",
     migrate_phase: "migrate_logs",
@@ -144,7 +146,7 @@ const LOGS_DB: RuntimeDbSpec = RuntimeDbSpec {
 const GOALS_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "goals DB",
     filename: GOALS_DB_FILENAME,
-    legacy_filename: "goals_1.sqlite",
+    legacy_filename: Some("goals_1.sqlite"),
     kind: DbKind::Goals,
     open_phase: "open_goals",
     migrate_phase: "migrate_goals",
@@ -155,7 +157,7 @@ const GOALS_DB: RuntimeDbSpec = RuntimeDbSpec {
 const MEMORIES_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "memories DB",
     filename: MEMORIES_DB_FILENAME,
-    legacy_filename: "memories_1.sqlite",
+    legacy_filename: Some("memories_1.sqlite"),
     kind: DbKind::Memories,
     open_phase: "open_memories",
     migrate_phase: "migrate_memories",
@@ -166,7 +168,7 @@ const MEMORIES_DB: RuntimeDbSpec = RuntimeDbSpec {
 const MEMORIES_V2_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "memories v2 DB",
     filename: MEMORIES_V2_DB_FILENAME,
-    legacy_filename: "memories_v2_1.sqlite",
+    legacy_filename: None,
     background_reclamation: false,
     ..MEMORIES_DB
 };
@@ -174,7 +176,7 @@ const MEMORIES_V2_DB: RuntimeDbSpec = RuntimeDbSpec {
 const QUEUE_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "queue DB",
     filename: QUEUE_DB_FILENAME,
-    legacy_filename: "queue_1.sqlite",
+    legacy_filename: None,
     kind: DbKind::Queue,
     open_phase: "open_queue",
     migrate_phase: "migrate_queue",
@@ -185,7 +187,7 @@ const QUEUE_DB: RuntimeDbSpec = RuntimeDbSpec {
 const THREAD_HISTORY_DB: RuntimeDbSpec = RuntimeDbSpec {
     label: "thread history DB",
     filename: THREAD_HISTORY_DB_FILENAME,
-    legacy_filename: "thread_history_1.sqlite",
+    legacy_filename: Some("thread_history_1.sqlite"),
     kind: DbKind::ThreadHistory,
     open_phase: "open_thread_history",
     migrate_phase: "migrate_thread_history",
@@ -208,7 +210,7 @@ const RUNTIME_DBS: [RuntimeDbSpec; 7] = [
 pub fn runtime_database_filenames() -> impl Iterator<Item = &'static str> {
     RUNTIME_DBS
         .iter()
-        .flat_map(|db| [db.filename, db.legacy_filename])
+        .flat_map(|db| std::iter::once(db.filename).chain(db.legacy_filename))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -330,7 +332,10 @@ impl SqliteConfig {
     /// commands do not create an otherwise absent state database. The legacy filename remains a
     /// valid source because runtime initialization adopts it into the PF namespace.
     pub fn has_existing_state_db(&self) -> bool {
-        self.state_db_path().exists() || self.home().join(STATE_DB.legacy_filename).exists()
+        self.state_db_path().exists()
+            || STATE_DB
+                .legacy_filename
+                .is_some_and(|legacy| self.home().join(legacy).exists())
     }
 
     /// Return the path to the logs database.
@@ -399,7 +404,8 @@ impl SqliteConfig {
     pub(crate) async fn migrate_legacy_runtime_db_names(&self) -> anyhow::Result<()> {
         let has_legacy_db = RUNTIME_DBS
             .iter()
-            .any(|spec| self.home().join(spec.legacy_filename).exists());
+            .filter_map(|spec| spec.legacy_filename)
+            .any(|legacy| self.home().join(legacy).exists());
         if !has_legacy_db {
             return Ok(());
         }
@@ -411,7 +417,10 @@ impl SqliteConfig {
         }
 
         for spec in RUNTIME_DBS {
-            let legacy_path = self.home().join(spec.legacy_filename);
+            let Some(legacy_filename) = spec.legacy_filename else {
+                continue;
+            };
+            let legacy_path = self.home().join(legacy_filename);
             // Adoption renames in place; logs moved to a local directory later.
             let namespaced_path = self.home().join(spec.filename);
             if !tokio::fs::try_exists(&legacy_path).await?
@@ -478,7 +487,28 @@ impl SqliteConfig {
             .synchronous(SqliteSynchronous::Normal)
             .busy_timeout(busy_timeout)
             .log_statements(LevelFilter::Off);
-        open_quick_pool(options, SqlitePoolOptions::new(), busy_timeout).await
+        let require_delete = self.enforce_delete_on_nfs && self.is_nfs().await.unwrap_or(false);
+        // As the main pool's connections (`connection::connect_once`): DELETE
+        // journaling gets EXTRA syncs, and managed NFS enforcement requires it.
+        let pool_options = SqlitePoolOptions::new().after_connect(move |connection, _metadata| {
+            Box::pin(async move {
+                let journal: String = sqlx::query_scalar("PRAGMA journal_mode")
+                    .fetch_one(&mut *connection)
+                    .await?;
+                if require_delete && journal != "delete" {
+                    return Err(Error::Protocol(format!(
+                        "NFS database requires DELETE journaling, found {journal}"
+                    )));
+                }
+                if journal == "delete" {
+                    sqlx::query("PRAGMA synchronous = EXTRA")
+                        .execute(connection)
+                        .await?;
+                }
+                Ok(())
+            })
+        });
+        open_quick_pool(options, pool_options, busy_timeout).await
     }
 
     pub(super) async fn open_logs_db(

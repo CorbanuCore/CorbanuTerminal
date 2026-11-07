@@ -1118,3 +1118,45 @@ async fn writable_pool_reads_do_not_wait_for_an_existing_writer() {
         );
     }
 }
+
+/// Upstream sync S1c: upstream's 0047-0062 run as 0054-0069 (see `MIGRATIONS.md`);
+/// every version below is one file, so no upstream migration kept a number a
+/// Corbanu build already applied.
+#[test]
+fn upstream_migrations_are_renumbered_after_0053() {
+    const RENUMBERED: &[(i64, &str)] = &[
+        (54, "rollout migration state"),
+        (55, "thread section appearance"),
+        (56, "projects"),
+        (57, "threads section empty preview indexes"),
+        (58, "thread artifacts"),
+        (59, "projects recency"),
+        (60, "threads originator"),
+        (61, "threads daybreak enabled"),
+        (62, "thread attachments"),
+        (63, "threads creator identity"),
+        (64, "cleanup guardian thread metadata"),
+        (65, "threads archive sort indexes"),
+        (66, "thread attachment reverse lookup"),
+        (67, "guardian review feedback"),
+        (68, "thread read state"),
+        (69, "threads attached parent"),
+    ];
+    let versions: Vec<i64> = STATE_MIGRATOR
+        .migrations
+        .iter()
+        .map(|migration| migration.version)
+        .collect();
+    assert_eq!(versions, (1..=69).collect::<Vec<_>>());
+    let described = |version: i64| {
+        STATE_MIGRATOR
+            .migrations
+            .iter()
+            .find(|migration| migration.version == version)
+            .map(|migration| migration.description.to_string())
+    };
+    assert_eq!(described(53).as_deref(), Some("provider request key salt"));
+    for (version, description) in RENUMBERED {
+        assert_eq!(described(*version).as_deref(), Some(*description));
+    }
+}

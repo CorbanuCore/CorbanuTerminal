@@ -951,10 +951,19 @@ mod tests {
             "pfterminal_logs_2.sqlite",
             "pfterminal_goals_1.sqlite",
             "pfterminal_memories_1.sqlite",
+            "pfterminal_queue_1.sqlite",
         ] {
             assert!(filenames.contains(std::ffi::OsStr::new(expected)));
         }
-        assert!(!filenames.contains(std::ffi::OsStr::new("state_5.sqlite")));
+        for upstream_name in [
+            "state_5.sqlite",
+            "logs_2.sqlite",
+            "goals_1.sqlite",
+            "memories_1.sqlite",
+            "queue_1.sqlite",
+        ] {
+            assert!(!filenames.contains(std::ffi::OsStr::new(upstream_name)));
+        }
 
         let _ = tokio::fs::remove_dir_all(codex_home).await;
     }

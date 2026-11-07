@@ -2,6 +2,9 @@
 //! after Corbanu's 0053, and a state DB written by the latest release (and by
 //! `main` before the sync) upgrades without touching an applied migration.
 //!
+//! The file layout itself is checked by `migrations_tests.rs`
+//! (`upstream_migrations_are_renumbered_after_0053`).
+//!
 //! Fixtures (`tests/fixtures/state_db_upgrade/`, see `MIGRATIONS.md`): a state DB
 //! written by the `rust-v0.1.48` release code (migrations 1-52) and one written
 //! by `main` 18fa372a (1-53), each with two threads.
@@ -180,32 +183,4 @@ async fn release_0_1_48_state_db_upgrades_without_changing_applied_migrations() 
 #[tokio::test]
 async fn main_state_db_upgrades_without_changing_applied_migrations() -> anyhow::Result<()> {
     upgrade("main-18fa372a", /*released_through*/ 53).await
-}
-
-#[test]
-fn upstream_migrations_are_renumbered_after_0053() -> anyhow::Result<()> {
-    let migrations = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
-    let migrations = if migrations.is_dir() {
-        migrations
-    } else {
-        PathBuf::from("migrations")
-    };
-    let mut names: Vec<String> = std::fs::read_dir(&migrations)?
-        .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
-        .collect::<Result<_, _>>()?;
-    names.sort();
-    // One file per version: no upstream file kept a number Corbanu already uses.
-    let versions: Vec<i64> = names
-        .iter()
-        .map(|name| name[..4].parse::<i64>())
-        .collect::<Result<_, _>>()?;
-    assert_eq!(versions, (1..=69).collect::<Vec<_>>());
-    for (upstream, ours, description) in RENUMBERED {
-        let expected = format!("{ours:04}_{}.sql", description.replace(' ', "_"));
-        assert!(
-            names.contains(&expected),
-            "upstream {upstream:04} should be {expected}"
-        );
-    }
-    Ok(())
 }

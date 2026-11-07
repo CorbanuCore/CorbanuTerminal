@@ -8,7 +8,7 @@ as it is, with the same file, name and checksum; the runtime refuses a state DB 
 - **0046-0052:** upstream's 0040-0046, renumbered on `main` before `rust-v0.1.48`.
 - **0054-0069:** upstream's 0047-0062 from `rust-v0.167.0`, renumbered in the upstream sync (S1c, #1628). Upstream reused numbers that Corbanu builds had already applied.
 
-| Upstream (`rust-v0.167.0`) | Corbanu | Corbanu file previously at that number |
+| Upstream (`rust-v0.167.0`) | Corbanu | Corbanu file at the upstream number (unchanged) |
 |---|---|---|
 | `0047_rollout_migration_state.sql` | `0054_rollout_migration_state.sql` | `0047_threads_name` |
 | `0048_thread_section_appearance.sql` | `0055_thread_section_appearance.sql` | `0048_drop_agent_jobs` |
@@ -27,12 +27,23 @@ as it is, with the same file, name and checksum; the runtime refuses a state DB 
 | `0061_thread_read_state.sql` | `0068_thread_read_state.sql` | `(none)` |
 | `0062_threads_attached_parent.sql` | `0069_threads_attached_parent.sql` | `(none)` |
 
-`tests/state_db_upgrade.rs` checks three things:
+Checks:
 
-- this table against the files;
-- upgrades of a state DB written by the `rust-v0.1.48` release code (migrations 1-52) and one written by `main` `18fa372a` (1-53);
-- that no applied migration row changes in either upgrade.
+- `src/migrations_tests.rs` (`upstream_migrations_are_renumbered_after_0053`): versions 1-69, one migration each, with this
+  table's names.
+- `tests/state_db_upgrade.rs`: upgrades a state DB written by the `rust-v0.1.48` release code (migrations 1-52) and one
+  written by `main` `18fa372a` (1-53); no applied migration row changes, exactly 0053 (release only) and 0054-0069 are
+  added, the threads survive, and a second start has nothing to do.
 
-The fixtures are in `tests/fixtures/state_db_upgrade/`. Opening the upgraded DB with the previous release's binary is tested in S5.
+The fixtures in `tests/fixtures/state_db_upgrade/` (WAL databases, checkpointed) were made once by a throwaway test at each
+ref: `StateRuntime::init(SqliteConfig::from_sqlite_home(dir), "openai")`, then `upsert_thread` of two
+`test_thread_metadata` threads (one named, one archived), `close()`, `PRAGMA wal_checkpoint(TRUNCATE)`, and a copy of
+`pfterminal_state_5.sqlite`. Don't regenerate them.
 
-Upstream tests that name migration versions (`src/migrations_tests.rs`) use the Corbanu numbers. Future syncs add any new upstream migrations after the highest Corbanu number in the same way.
+**Rollback:** an older Corbanu build cannot open an upgraded state DB. Since `main`'s 0053, `validate_applied_migrations`
+refuses any applied version it doesn't know ("appears to belong to a different ... distribution"); `rust-v0.1.48` does
+the same for 0053-0069. Going back means restoring the state DB backed up before the upgrade (S5 canary). Whether to let
+builds tolerate versions newer than their own is a decision for Travis (see the S1c report).
+
+Upstream tests that name migration versions (`src/migrations_tests.rs`) use the Corbanu numbers. Future syncs add any new
+upstream migrations after the highest Corbanu number in the same way.
