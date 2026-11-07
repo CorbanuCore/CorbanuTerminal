@@ -409,6 +409,7 @@ pub(crate) fn spawn_runner_transport(
         pipe_write: unsafe { File::from_raw_handle(h_pipe_in as _) },
         pipe_read: unsafe { File::from_raw_handle(h_pipe_out as _) },
     };
+    let mut command_window_access = None;
     if runner_creds.is_some() {
         match crate::probe_1560m2::command_token_for_runner(
             &command_creds.username,
@@ -416,7 +417,10 @@ pub(crate) fn spawn_runner_transport(
             runner_process,
             log_dir,
         ) {
-            Ok(remote) => spawn_request.probe_command_token = Some(remote),
+            Ok((remote, access)) => {
+                spawn_request.probe_command_token = Some(remote);
+                command_window_access = access;
+            }
             Err(err) => {
                 unsafe {
                     if runner_process != 0 {
@@ -450,6 +454,17 @@ pub(crate) fn spawn_runner_transport(
         }
     };
 
+    // PROBE (win-1560m2, d367p): the command logon's window access goes when
+    // the runner exits, like the runner's own.
+    if let Some(access) = command_window_access
+        && let Err((_access, err)) =
+            WindowAccessReaper::start(access, runner_process, &runner_exe)
+    {
+        crate::logging::log_note(
+            &format!("d367p: no reaper for the command logon's window access: {err:#}"),
+            log_dir,
+        );
+    }
     let Some(window_access) = window_access else {
         unsafe {
             if runner_process != 0 {

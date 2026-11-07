@@ -39,8 +39,8 @@ fn session() -> &'static str {
 fn report(backend: Backend, case: &str, ok: bool, detail: &str) {
     let flat: Vec<char> = detail.replace(['\r', '\n'], " ").chars().collect();
     // Head and tail: Python and cargo put the cause first, tools the last word.
-    let detail: String = if flat.len() > 1400 {
-        let head: String = flat[..600].iter().collect();
+    let detail: String = if flat.len() > 2400 {
+        let head: String = flat[..1600].iter().collect();
         let tail: String = flat[flat.len() - 800..].iter().collect();
         format!("{head} [...] {tail}")
     } else {

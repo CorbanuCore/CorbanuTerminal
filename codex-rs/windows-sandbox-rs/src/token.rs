@@ -62,6 +62,7 @@ const WIN_WORLD_SID: i32 = 1;
 const WIN_LOCAL_SYSTEM_SID: i32 = 22;
 const WIN_CREATOR_OWNER_RIGHTS_SID: i32 = 71;
 const SE_GROUP_LOGON_ID: u32 = 0xC0000000;
+const SYNCHRONIZE_RIGHT: u32 = 0x0010_0000;
 const SE_GROUP_ENABLED: u32 = 0x0000_0004;
 
 /// PROBE ONLY (win-1560m, never merged): the token change under test,
@@ -974,6 +975,24 @@ unsafe fn set_elevated_default_dacl(
     let mut system = well_known_sid(WIN_LOCAL_SYSTEM_SID)?;
     let mut owner_rights = well_known_sid(WIN_CREATOR_OWNER_RIGHTS_SID)?;
     let read_execute = GENERIC_READ | GENERIC_EXECUTE;
+    if crate::probe_1560m2::per_logon_dacl() {
+        // PROBE (win-1560m2, pl): the command's own logon SID (a normal group
+        // and a restricting SID, unique per command under d367p) gets full
+        // access; every SID other commands share gets only to read the
+        // security descriptor, wait, and (processes) query limited
+        // information (0x1000, no right on tokens, files or sync objects).
+        let shared = READ_CONTROL | SYNCHRONIZE_RIGHT | 0x1000;
+        let grants = vec![
+            (system.as_mut_ptr() as *mut c_void, GENERIC_ALL),
+            (psid_logon, GENERIC_ALL),
+            (psid_command, GENERIC_ALL),
+            (psid_group, shared),
+            (psid_everyone, shared),
+            (owner_rights.as_mut_ptr() as *mut c_void, READ_CONTROL),
+        ];
+        let _ = (psid_user, psid_capabilities);
+        return set_default_dacl_grants(token, &grants);
+    }
     let mut grants = vec![
         (system.as_mut_ptr() as *mut c_void, GENERIC_ALL),
         (psid_group, shared_normal_sid_access()),

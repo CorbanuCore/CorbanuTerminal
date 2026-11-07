@@ -194,9 +194,19 @@ fn refused_parts() -> Vec<String> {
 }
 
 fn missing_parts(line: &str) -> Vec<String> {
+    // PROBE (win-1560m2): a stricter refusal counts as refused.
+    let stricter = |part: &str| match part {
+        "query=ok" => Some("query=err5"),
+        "token_adjust_default=open_err5" => Some("token_adjust_default=query_err5"),
+        _ => None,
+    };
     refused_parts()
         .into_iter()
-        .filter(|part| !line.split(' ').any(|have| have == part.as_str()))
+        .filter(|part| {
+            !line.split(' ').any(|have| {
+                have == part.as_str() || Some(have) == stricter(part.as_str())
+            })
+        })
         .collect()
 }
 

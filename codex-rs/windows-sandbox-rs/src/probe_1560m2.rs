@@ -51,7 +51,14 @@ const VARIANT: Option<&str> = option_env!("CORBANU_PROBE_VARIANT");
 pub const RUNNER_USERNAME: &str = "CodexSbxRunner";
 
 pub fn d367p() -> bool {
-    matches!(VARIANT, Some("d367p") | Some("px"))
+    matches!(VARIANT, Some("d367p") | Some("px") | Some("pl"))
+}
+
+/// `pl`: `d367p`, and each elevated command's default DACL gives full access
+/// to its own logon SID (unique per command under `d367p`: Core logs the
+/// account on for each command) instead of the shared sandbox users' group.
+pub fn per_logon_dacl() -> bool {
+    VARIANT == Some("pl")
 }
 
 pub fn x1560() -> bool {
@@ -270,7 +277,7 @@ pub(crate) fn command_token_for_runner(
     password: &str,
     runner: HANDLE,
     log_dir: Option<&Path>,
-) -> Result<u64> {
+) -> Result<(u64, Option<crate::window_station::WindowAccess>)> {
     let user = to_wide(username);
     let domain = to_wide(".");
     let pass = to_wide(password);
@@ -291,17 +298,23 @@ pub(crate) fn command_token_for_runner(
             GetLastError()
         }));
     }
-    let result = (|| -> Result<u64> {
+    let result = (|| -> Result<(u64, Option<crate::window_station::WindowAccess>)> {
         // SAFETY: a live token handle.
         let logon = unsafe { crate::token::get_logon_sid_bytes(token) }?;
-        match crate::window_station::WindowAccess::probe_grant_command_logon(&logon) {
-            // Kept until the window station goes away (probe only).
-            Ok(access) => std::mem::forget(access),
-            Err(err) => crate::logging::log_note(
-                &format!("d367p: window access for the command logon: {err:#}"),
-                log_dir,
-            ),
-        }
+        let bno = grant_session_namespace(&logon);
+        crate::logging::log_note(&format!("d367p: session namespace grant={bno}"), log_dir);
+        // Removed once the runner exits (Core hands it to a reaper).
+        let access = match crate::window_station::WindowAccess::probe_grant_command_logon(&logon)
+        {
+            Ok(access) => Some(access),
+            Err(err) => {
+                crate::logging::log_note(
+                    &format!("d367p: window access for the command logon: {err:#}"),
+                    log_dir,
+                );
+                None
+            }
+        };
         let mut remote: HANDLE = 0;
         // SAFETY: both process handles are live; `remote` belongs to the runner.
         let ok = unsafe {
@@ -320,7 +333,7 @@ pub(crate) fn command_token_for_runner(
                 GetLastError()
             }));
         }
-        Ok(remote as u64)
+        Ok((remote as u64, access))
     })();
     // SAFETY: from LogonUserW above.
     unsafe { CloseHandle(token) };
@@ -351,4 +364,142 @@ pub(crate) fn extra_desktop_sid() -> Option<Vec<u8>> {
 pub fn enable_assign_primary(token: HANDLE) -> Result<()> {
     // SAFETY: a live token handle with `TOKEN_ADJUST_PRIVILEGES`.
     unsafe { crate::token::enable_single_privilege_pub(token, "SeAssignPrimaryTokenPrivilege") }
+}
+
+#[repr(C)]
+struct UnicodeString {
+    length: u16,
+    maximum_length: u16,
+    buffer: *mut u16,
+}
+
+#[repr(C)]
+struct ObjectAttributes {
+    length: u32,
+    root_directory: HANDLE,
+    object_name: *const UnicodeString,
+    attributes: u32,
+    security_descriptor: *const c_void,
+    security_quality_of_service: *const c_void,
+}
+
+/// d367p: the command's own logon SID may create named objects and
+/// subdirectories in this session's `BaseNamedObjects` (`Local\`), which
+/// grants this session's logon SID, which a token Core logs on itself lacks.
+/// Probe only: the entry stays.
+fn grant_session_namespace(logon: &[u8]) -> String {
+    use windows_sys::Win32::Security::Authorization::EXPLICIT_ACCESS_W;
+    use windows_sys::Win32::Security::Authorization::GRANT_ACCESS;
+    use windows_sys::Win32::Security::Authorization::GetSecurityInfo;
+    use windows_sys::Win32::Security::Authorization::SetEntriesInAclW;
+    use windows_sys::Win32::Security::Authorization::TRUSTEE_IS_SID;
+    use windows_sys::Win32::Security::Authorization::TRUSTEE_IS_UNKNOWN;
+    use windows_sys::Win32::Security::Authorization::TRUSTEE_W;
+    use windows_sys::Win32::Security::GetTokenInformation;
+    use windows_sys::Win32::Security::TOKEN_QUERY;
+    use windows_sys::Win32::Security::TokenSessionId;
+    type NtOpenDirectoryObject =
+        unsafe extern "system" fn(*mut HANDLE, u32, *const ObjectAttributes) -> i32;
+    // SAFETY: every handle and allocation is released below.
+    unsafe {
+        let mut session = 0u32;
+        let mut own: HANDLE = 0;
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut own) != 0 {
+            let mut needed = 0u32;
+            GetTokenInformation(
+                own,
+                TokenSessionId,
+                (&mut session as *mut u32).cast(),
+                4,
+                &mut needed,
+            );
+            CloseHandle(own);
+        }
+        let path = if session == 0 {
+            "\\BaseNamedObjects".to_string()
+        } else {
+            format!("\\Sessions\\{session}\\BaseNamedObjects")
+        };
+        let mut name: Vec<u16> = path.encode_utf16().collect();
+        let unicode = UnicodeString {
+            length: (name.len() * 2) as u16,
+            maximum_length: (name.len() * 2) as u16,
+            buffer: name.as_mut_ptr(),
+        };
+        let attributes = ObjectAttributes {
+            length: std::mem::size_of::<ObjectAttributes>() as u32,
+            root_directory: 0,
+            object_name: &unicode,
+            attributes: 0x40,
+            security_descriptor: std::ptr::null(),
+            security_quality_of_service: std::ptr::null(),
+        };
+        let ntdll = to_wide("ntdll.dll");
+        let module = windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(ntdll.as_ptr());
+        let Some(proc) = windows_sys::Win32::System::LibraryLoader::GetProcAddress(
+            module,
+            c"NtOpenDirectoryObject".as_ptr().cast(),
+        ) else {
+            return "no_ntopendirectoryobject".to_string();
+        };
+        let open: NtOpenDirectoryObject = std::mem::transmute(proc);
+        let mut directory: HANDLE = 0;
+        let status = open(&mut directory, READ_CONTROL | WRITE_DAC, &attributes);
+        if status != 0 {
+            return format!("{path}: open_status_{status:#x}");
+        }
+        let mut dacl: *mut ACL = std::ptr::null_mut();
+        let mut descriptor: *mut c_void = std::ptr::null_mut();
+        let res = GetSecurityInfo(
+            directory,
+            SE_KERNEL_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut dacl,
+            std::ptr::null_mut(),
+            &mut descriptor,
+        );
+        if res != ERROR_SUCCESS {
+            CloseHandle(directory);
+            return format!("{path}: get_err{res}");
+        }
+        let mut sid = logon.to_vec();
+        let entry = EXPLICIT_ACCESS_W {
+            // Query, traverse, create object, create subdirectory.
+            grfAccessPermissions: 0x000F,
+            grfAccessMode: GRANT_ACCESS,
+            grfInheritance: 0,
+            Trustee: TRUSTEE_W {
+                pMultipleTrustee: std::ptr::null_mut(),
+                MultipleTrusteeOperation: 0,
+                TrusteeForm: TRUSTEE_IS_SID,
+                TrusteeType: TRUSTEE_IS_UNKNOWN,
+                ptstrName: sid.as_mut_ptr().cast(),
+            },
+        };
+        let mut updated: *mut ACL = std::ptr::null_mut();
+        let res = SetEntriesInAclW(1, &entry, dacl, &mut updated);
+        LocalFree(descriptor as HLOCAL);
+        if res != ERROR_SUCCESS {
+            CloseHandle(directory);
+            return format!("{path}: entries_err{res}");
+        }
+        let res = SetSecurityInfo(
+            directory,
+            SE_KERNEL_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            updated,
+            std::ptr::null(),
+        );
+        LocalFree(updated as HLOCAL);
+        CloseHandle(directory);
+        if res == ERROR_SUCCESS {
+            format!("{path}: ok")
+        } else {
+            format!("{path}: set_err{res}")
+        }
+    }
 }
