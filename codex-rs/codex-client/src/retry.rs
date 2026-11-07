@@ -1,5 +1,4 @@
 use codex_http_client::Request;
-use codex_http_client::RetryAfter;
 use codex_http_client::TransportError;
 use rand::Rng;
 use std::future::Future;
@@ -181,10 +180,13 @@ where
                 let retry_attempt = attempt + 1;
                 let backoff_delay = backoff(policy.base_delay, retry_attempt);
                 let delay = match rate_limit_retry_delay(&err) {
-                    // Upstream: honour a server's `Retry-After` on other retryable errors.
-                    RateLimitRetry::NotRateLimited => err
-                        .retry_after()
-                        .map_or(backoff_delay, RetryAfter::remaining_delay),
+                    // Upstream honours a server's `Retry-After` on other retryable
+                    // errors; capped like a 429's so a 5xx can't stall the request.
+                    RateLimitRetry::NotRateLimited => {
+                        err.retry_after().map_or(backoff_delay, |wait| {
+                            wait.remaining_delay().min(MAX_TRANSPORT_RETRY_AFTER)
+                        })
+                    }
                     RateLimitRetry::After(wait) => backoff_delay.max(wait),
                     // The provider-request throttle owns a longer wait (#510).
                     RateLimitRetry::Stop => return Err(err),

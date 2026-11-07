@@ -373,7 +373,6 @@ mod platform {
 
     unsafe impl async_io::IoSafe for WindowsUnixListener {}
     unsafe impl async_io::IoSafe for WindowsUnixStream {}
-
 }
 
 #[cfg(test)]

@@ -194,7 +194,9 @@ fn upgrade_legacy_private_directory(
                 && (*ace.cast::<ACE_HEADER>()).AceType == ACCESS_ALLOWED_ACE_TYPE as u8
                 && (*ace.cast::<ACE_HEADER>()).AceFlags == 0
                 && (*ace.cast::<ACCESS_ALLOWED_ACE>()).Mask == FILE_ALL_ACCESS
-                && sid_matches(ptr::addr_of_mut!((*ace.cast::<ACCESS_ALLOWED_ACE>()).SidStart).cast())
+                && sid_matches(
+                    ptr::addr_of_mut!((*ace.cast::<ACCESS_ALLOWED_ACE>()).SidStart).cast(),
+                )
         };
         !owner.is_null()
             && EqualSid(owner, user_sid) != 0
