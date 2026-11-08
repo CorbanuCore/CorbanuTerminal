@@ -17,7 +17,8 @@ const REQUIRE_ENV: &str = "CODEX_SEC_WIN_1648_REQUIRE";
 const SETUP_FILES: [(&str, &str); 3] = [
     ("setup_marker.json", ".sandbox"),
     ("sandbox_users.json", ".sandbox-secrets"),
-    // D414: without it the first command needs the admin setup again.
+    // D414: without it the first command needs the admin setup again. Its
+    // lists are the recording home's: don't use a seeded home for removals.
     ("shared_folder_scan.json", ".sandbox"),
 ];
 

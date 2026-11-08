@@ -6,8 +6,9 @@
 //! The end-to-end test needs the elevated sandbox. An elevated session sets
 //! it up itself; a normal (medium-integrity) session cannot answer the setup's
 //! UAC prompt, so set `CODEX_PF27S06_SETUP_SEED` to a directory holding the
-//! `setup_marker.json` and `sandbox_users.json` of an earlier elevated setup
-//! on the same machine and user (the sandbox's users are machine-wide). Every
+//! `setup_marker.json`, `shared_folder_scan.json` and `sandbox_users.json` of
+//! an earlier elevated setup on the same machine and user (the sandbox's
+//! users are machine-wide). Every
 //! elevated setup resets the sandbox users' passwords (which also invalidates
 //! a real installation's saved setup), so record the seed with an elevated run
 //! of this test (it writes the directory) right before. The seed holds those
@@ -295,9 +296,11 @@ async fn run(request: crate::sandboxing::ExecRequest) -> String {
     format!("{}{}", output.stdout.text, output.stderr.text)
 }
 
-const SETUP_FILES: [(&str, &str); 2] = [
+const SETUP_FILES: [(&str, &str); 3] = [
     ("setup_marker.json", ".sandbox"),
     ("sandbox_users.json", ".sandbox-secrets"),
+    // D414 (#1798): without it the first command needs the admin setup.
+    ("shared_folder_scan.json", ".sandbox"),
 ];
 
 /// See the module docs: seeds the elevated setup for a normal session.
