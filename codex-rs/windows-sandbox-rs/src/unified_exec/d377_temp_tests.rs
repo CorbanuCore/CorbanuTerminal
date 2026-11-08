@@ -526,6 +526,10 @@ fn sec_win_d377_old_leftovers_in_temp_are_taken_for_the_user() {
         "{} still lets the sandbox change it",
         refused_now.display()
     );
+    for path in [temp.path(), refused_now.as_path()] {
+        let out = std::process::Command::new(system32_exe("icacls.exe")).arg(path).output().expect("icacls");
+        println!("d377 leftovers diag icacls: {}", String::from_utf8_lossy(&out.stdout).replace(['\r', '\n'], " | "));
+    }
     // A later command writes there (granting itself access first, as an
     // owner may).
     let tamper = root.path().join("d377-tamper.cmd");
@@ -542,7 +546,8 @@ fn sec_win_d377_old_leftovers_in_temp_are_taken_for_the_user() {
              (echo x>>\"{dir}\\inner.txt\") 2>nul && echo INNER-WRITTEN\r\n\
              (echo x>>\"{refused_now}\") 2>nul && echo REFUSED-WRITTEN\r\n\
              del /f /q \"{refused_now}\" >nul 2>nul\r\n\
-             if not exist \"{refused_now}\" echo REFUSED-DELETED\r\n",
+             if not exist \"{refused_now}\" echo REFUSED-DELETED\r\n\
+             whoami /user /groups\r\n",
             file = file.display(),
             dir = dir.display(),
             open_to_all = open_to_all.display(),

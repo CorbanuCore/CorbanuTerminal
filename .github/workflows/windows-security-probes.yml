@@ -48,7 +48,7 @@ jobs:
           cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib sec_win_ -- --skip sec_win_1770_ --nocapture --test-threads=1 > admin.log 2>&1
           echo "exit=$?"
           cat admin.log
-          { echo "ADMIN $(git rev-parse HEAD)"; grep -E 'd377 leftovers|test result|panicked|assertion|FAILED' admin.log; } >> results.txt
+          { echo "ADMIN $(git rev-parse HEAD)"; grep -E 'd377 leftovers|test result|panicked|assertion|FAILED' admin.log; grep -A60 'd377 leftovers tamper' admin.log | head -80; } >> results.txt
       - name: Normal session
         if: ${{ !cancelled() }}
         shell: powershell
