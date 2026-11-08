@@ -350,7 +350,7 @@ pub(crate) fn repo_states(paths: &[PathBuf], roots: &[PathBuf]) -> Vec<RepoState
         .iter()
         .map(|path| {
             let link = std::fs::symlink_metadata(path)
-                .map_or(false, |metadata| metadata.file_type().is_symlink());
+                .is_ok_and(|metadata| metadata.file_type().is_symlink());
             let mut prints = crate::git_watch::fingerprint(path, roots);
             // D419 (rule 3): a link by its identity and what it points to.
             let identity = if link {
