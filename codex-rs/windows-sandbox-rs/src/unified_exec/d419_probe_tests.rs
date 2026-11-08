@@ -269,7 +269,9 @@ fn legacy_d419_probe_sandboxed_command_and_git_links() {
         let git = root.join(".git");
         let old = before.iter().find(|entry| entry.path == git);
         let new = after.iter().find(|entry| entry.path == git);
-        let target_now = std::fs::read_link(&git).ok();
+        let target_now = std::fs::read_link(&git)
+            .ok()
+            .map(|target| target.to_string_lossy().into_owned());
         let differs = old.map(|e| (&e.identity, &e.link)) != new.map(|e| (&e.identity, &e.link));
         eprintln!(
             "D419-MEASURE root={} before={:?} after={:?} target_now={:?} rule3_changed={differs}",

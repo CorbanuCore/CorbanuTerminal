@@ -39,14 +39,19 @@ pub(crate) struct NestedMetadata {
 /// target is (`None` when it doesn't resolve).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct LinkTarget {
-    pub(crate) text: PathBuf,
+    /// Lossy, so a target name that isn't valid Unicode can still be
+    /// recorded (the records are JSON).
+    pub(crate) text: String,
     pub(crate) identity: Option<FileIdentity>,
 }
 
 /// D419 (rule 3): what the link at `path` points to; `None` when it isn't a
 /// link or its target can't be read.
 pub(crate) fn link_target(path: &Path) -> Option<LinkTarget> {
-    let text = std::fs::read_link(path).ok()?;
+    let text = std::fs::read_link(path)
+        .ok()?
+        .to_string_lossy()
+        .into_owned();
     let identity = dunce::canonicalize(path)
         .ok()
         .and_then(|target| identity(&target));
@@ -443,7 +448,7 @@ pub(crate) fn repo_states(paths: &[PathBuf], roots: &[PathBuf]) -> Vec<RepoState
                 if let Some(target) = target {
                     prints.insert(
                         ".git target".to_string(),
-                        format!("{} {:?}", target.text.display(), target.identity),
+                        format!("{} {:?}", target.text, target.identity),
                     );
                 }
                 own
