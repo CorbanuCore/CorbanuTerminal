@@ -1,8 +1,10 @@
 use super::PASSWORD_CHARS;
 use super::PASSWORD_LEN;
+use super::SessionUser;
 use super::has_every_character_class;
 use super::random_password;
 use super::random_password_with;
+use super::runner_account_decision;
 use pretty_assertions::assert_eq;
 
 fn index_of(c: u8) -> usize {
@@ -56,4 +58,34 @@ fn generated_passwords_meet_windows_complexity() {
         assert!(password.bytes().all(|b| PASSWORD_CHARS.contains(&b)));
         assert!(has_every_character_class(&password));
     }
+}
+
+/// D392 (b): setup makes the runner account only when it is elevated and
+/// runs as the user it sets Codex up for and as the session's user (or in a
+/// session without one). A standard user who names the administrator
+/// approving the UAC prompt as `real_user` (through `USERNAME`) still gets
+/// none: the session's user is theirs.
+#[test]
+fn runner_account_only_for_the_sessions_own_administrator() {
+    let admin = b"admin".to_vec();
+    let user = b"user".to_vec();
+    let decide = |elevated, real: Option<&Vec<u8>>, session| {
+        runner_account_decision(&admin, elevated, real.map(Vec::as_slice), &session)
+    };
+    assert_eq!(
+        [
+            decide(true, Some(&admin), SessionUser::SignedIn(admin.clone())),
+            decide(true, Some(&admin), SessionUser::NoUser),
+            // Over the shoulder, with `USERNAME` set to the administrator.
+            decide(true, Some(&admin), SessionUser::SignedIn(user.clone())),
+            // Over the shoulder, honestly.
+            decide(true, Some(&user), SessionUser::SignedIn(user.clone())),
+            // `codex sandbox setup --user` for another user.
+            decide(true, Some(&user), SessionUser::NoUser),
+            decide(true, None, SessionUser::SignedIn(admin.clone())),
+            decide(true, Some(&admin), SessionUser::Unknown),
+            decide(false, Some(&admin), SessionUser::SignedIn(admin.clone())),
+        ],
+        [true, true, false, false, false, false, false, false]
+    );
 }

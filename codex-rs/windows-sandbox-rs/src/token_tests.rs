@@ -60,6 +60,7 @@ fn elevated_token_includes_network_proxy_restricting_sid() -> Result<()> {
     let restricted_token = unsafe {
         create_elevated_token_with_group(
             base_token,
+            ElevatedBaseLogon::OwnLogon,
             &[capability_sid.as_ptr()],
             &[network_proxy_sid.as_ptr()],
             group_sid.as_ptr(),
@@ -88,11 +89,13 @@ fn elevated_token_builders_refuse_a_caller_outside_the_sandbox_users_group() -> 
         [
             create_readonly_token_with_caps_and_user_from(
                 base_token,
+                ElevatedBaseLogon::OwnLogon,
                 &[capability_sid.as_ptr()],
                 &[network_proxy_sid.as_ptr()],
             ),
             create_workspace_write_token_with_caps_and_user_from(
                 base_token,
+                ElevatedBaseLogon::RunnerLogon,
                 &[capability_sid.as_ptr()],
                 &[network_proxy_sid.as_ptr()],
             ),
@@ -206,4 +209,128 @@ fn d429_legacy_default_dacl_gives_shared_sids_only_synchronize() -> Result<()> {
     expected.sort();
     pretty_assertions::assert_eq!(entries, expected);
     Ok(())
+}
+
+/// D392 (b): an elevated command's default DACL follows whose logon its base
+/// token is. On a logon of its own (#1721 (a′)), the `pl` DACL: full access
+/// for SYSTEM, that logon SID and the command SID only. On the runner's own
+/// logon, which every runner Core starts shares (a standard user's setup,
+/// no runner account), the D324 DACL as before #1800: full access for
+/// SYSTEM, the sandbox users' group and the command SID, read and execute
+/// for the shared SIDs. The `pl` DACL there would give every elevated
+/// command full access to every other's objects through the shared logon
+/// SID.
+#[test]
+fn d392_elevated_default_dacl_follows_whose_logon_the_base_token_is() -> Result<()> {
+    let capability = "S-1-5-21-10-20-30-40";
+    let capability_sid = LocalSid::from_string(capability)?;
+    let group_sid = LocalSid::from_string(TEST_GROUP_SID)?;
+    let base_token = unsafe { get_current_token_for_restriction()? };
+    let sid_string = |sid: Result<Vec<u8>>| {
+        sid.and_then(|sid| crate::winutil::string_from_sid_bytes(&sid).map_err(|err| anyhow!(err)))
+    };
+    let user = sid_string(unsafe { get_user_sid_bytes(base_token) });
+    let logon = sid_string(unsafe { get_logon_sid_bytes(base_token) });
+    let dacl = |base_logon: ElevatedBaseLogon| -> Result<Vec<(String, u32)>> {
+        let token = unsafe {
+            create_elevated_token_with_group(
+                base_token,
+                base_logon,
+                &[capability_sid.as_ptr()],
+                &[],
+                group_sid.as_ptr(),
+            )
+        }?;
+        let entries = unsafe { default_dacl_entries(token) };
+        unsafe { CloseHandle(token) };
+        entries
+    };
+    let own = dacl(ElevatedBaseLogon::OwnLogon);
+    let runner = dacl(ElevatedBaseLogon::RunnerLogon);
+    unsafe { CloseHandle(base_token) };
+    let (user, logon) = (user?, logon?);
+    // The command SID is new for each token: name it.
+    let known = [
+        user.as_str(),
+        logon.as_str(),
+        capability,
+        TEST_GROUP_SID,
+        "S-1-1-0",
+        "S-1-3-4",
+        "S-1-5-18",
+    ];
+    let named = |entries: Vec<(String, u32)>| {
+        let mut entries: Vec<(String, u32)> = entries
+            .into_iter()
+            .map(|(sid, mask)| {
+                if known.contains(&sid.as_str()) {
+                    (sid, mask)
+                } else {
+                    ("command".to_string(), mask)
+                }
+            })
+            .collect();
+        entries.sort();
+        entries
+    };
+    let sorted = |mut entries: Vec<(String, u32)>| {
+        entries.sort();
+        entries
+    };
+    let read_execute = GENERIC_READ | GENERIC_EXECUTE;
+    pretty_assertions::assert_eq!(
+        (named(own?), named(runner?)),
+        (
+            sorted(vec![
+                ("S-1-5-18".to_string(), GENERIC_ALL),
+                (logon.clone(), GENERIC_ALL),
+                ("command".to_string(), GENERIC_ALL),
+                (TEST_GROUP_SID.to_string(), ELEVATED_PEER_ACCESS),
+                ("S-1-1-0".to_string(), ELEVATED_PEER_ACCESS),
+                ("S-1-3-4".to_string(), READ_CONTROL),
+            ]),
+            sorted(vec![
+                ("S-1-5-18".to_string(), GENERIC_ALL),
+                (TEST_GROUP_SID.to_string(), GENERIC_ALL),
+                ("command".to_string(), GENERIC_ALL),
+                (logon, read_execute),
+                ("S-1-3-4".to_string(), read_execute),
+                (user, read_execute),
+                ("S-1-1-0".to_string(), read_execute),
+                (capability.to_string(), read_execute),
+            ]),
+        )
+    );
+    Ok(())
+}
+
+/// D392: a runner makes the command's token from the command's own logon
+/// when Core sent one, and from its own token only when it doesn't hold
+/// `SeAssignPrimaryTokenPrivilege` (a runner running as the runner account
+/// refuses a request without a command logon).
+#[test]
+fn d392_runner_uses_its_own_token_only_without_the_privilege() {
+    let decide = |logon, privilege: bool| {
+        ElevatedBaseLogon::for_request(logon, || Ok(privilege)).map_err(|err| format!("{err:#}"))
+    };
+    pretty_assertions::assert_eq!(
+        [
+            decide(true, true),
+            decide(true, false),
+            decide(false, false),
+            decide(false, true),
+        ],
+        [
+            Ok(ElevatedBaseLogon::OwnLogon),
+            Ok(ElevatedBaseLogon::OwnLogon),
+            Ok(ElevatedBaseLogon::RunnerLogon),
+            Err("runner: Core sent no logon token for the command (#1721)".to_string()),
+        ]
+    );
+    // With a command logon, the runner's own token isn't queried at all.
+    let unasked = ElevatedBaseLogon::for_request(true, || anyhow::bail!("queried"));
+    pretty_assertions::assert_eq!(
+        unasked.map_err(|err| format!("{err:#}")),
+        Ok(ElevatedBaseLogon::OwnLogon)
+    );
 }

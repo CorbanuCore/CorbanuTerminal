@@ -15,6 +15,7 @@ use anyhow::Context;
 use anyhow::Result;
 use codex_utils_pty::JobObject;
 use codex_windows_sandbox::ConsoleMode;
+use codex_windows_sandbox::ElevatedBaseLogon;
 use codex_windows_sandbox::ErrorPayload;
 use codex_windows_sandbox::ErrorStage;
 use codex_windows_sandbox::ExitPayload;
@@ -35,12 +36,15 @@ use codex_windows_sandbox::allow_null_device;
 use codex_windows_sandbox::create_readonly_token_with_caps_and_user_from;
 use codex_windows_sandbox::create_workspace_write_token_with_caps_and_user_from;
 use codex_windows_sandbox::decode_bytes;
+use codex_windows_sandbox::enable_assign_primary_token_privilege;
 use codex_windows_sandbox::encode_bytes;
 use codex_windows_sandbox::get_current_token_for_restriction;
 use codex_windows_sandbox::hide_current_user_profile_dir;
+use codex_windows_sandbox::holds_assign_primary_token_privilege;
 use codex_windows_sandbox::log_note;
 use codex_windows_sandbox::read_frame;
 use codex_windows_sandbox::read_handle_loop;
+use codex_windows_sandbox::remove_assign_primary_token_privilege;
 use codex_windows_sandbox::restrict_current_default_dacl;
 use codex_windows_sandbox::restrict_current_token_access;
 use codex_windows_sandbox::spawn_process_with_pipes;
@@ -50,6 +54,7 @@ use codex_windows_sandbox::wait_for_console_host_start;
 use codex_windows_sandbox::write_frame;
 use std::ffi::OsStr;
 use std::fs::File;
+use std::os::windows::io::AsRawHandle;
 use std::os::windows::io::FromRawHandle;
 use std::path::Path;
 use std::path::PathBuf;
@@ -250,8 +255,11 @@ fn effective_cwd(req_cwd: &Path, log_dir: Option<&Path>) -> PathBuf {
 /// open (and its default DACL this one, where Core may), but from the
 /// secondary logon service creating it until then, any elevated command
 /// could open it (#1721).
-/// Returns the token the command's token is made from, opened first: the
-/// runner can't open its own token for that afterwards.
+/// #1721 (a′): the runner now runs as an account of its own, which no
+/// command holds, so even that window grants commands nothing; the steps
+/// stay as defence in depth.
+/// Returns the runner's own token, opened first (the runner can't open it
+/// afterwards), to enable and then remove `SeAssignPrimaryTokenPrivilege`.
 fn harden_runner() -> Result<OwnedWinHandle> {
     // A console host started before this would carry the logon's default
     // DACL, which gives the sandbox account full access: a command could
@@ -282,8 +290,23 @@ fn harden_runner() -> Result<OwnedWinHandle> {
     base
 }
 
-fn spawn_ipc_process(req: &SpawnRequest, base: &OwnedWinHandle) -> Result<IpcSpawnedProcess> {
+fn spawn_ipc_process(req: &SpawnRequest, own_token: &OwnedWinHandle) -> Result<IpcSpawnedProcess> {
     let log_dir = req.codex_home.clone();
+    // #1721 (a′): the command's token is made from the logon Core made for
+    // this command (its own logon SID), not from the runner's token. D392
+    // (b): with no runner account (a standard user's setup) Core sends none
+    // and this runner, running as the command's account, makes it from its
+    // own token as before #1800; never while it holds
+    // SeAssignPrimaryTokenPrivilege, which only the runner account holds.
+    let command_logon = req
+        .command_token
+        .map(|token| OwnedWinHandle::new(token as HANDLE));
+    let base_logon = ElevatedBaseLogon::for_request(command_logon.is_some(), || {
+        holds_assign_primary_token_privilege(own_token.raw())
+    })?;
+    let base = command_logon
+        .as_ref()
+        .map_or(own_token.raw(), OwnedWinHandle::raw);
     hide_current_user_profile_dir(req.codex_home.as_path());
     let token_mode = token_mode_for_permission_profile(
         &req.permission_profile,
@@ -321,14 +344,16 @@ fn spawn_ipc_process(req: &SpawnRequest, base: &OwnedWinHandle) -> Result<IpcSpa
         match token_mode {
             WindowsSandboxTokenMode::ReadOnlyCapability => {
                 create_readonly_token_with_caps_and_user_from(
-                    base.raw(),
+                    base,
+                    base_logon,
                     &cap_psid_ptrs,
                     &additional_restricting_sid_ptrs,
                 )
             }
             WindowsSandboxTokenMode::WritableRootsCapability => {
                 create_workspace_write_token_with_caps_and_user_from(
-                    base.raw(),
+                    base,
+                    base_logon,
                     &cap_psid_ptrs,
                     &additional_restricting_sid_ptrs,
                 )
@@ -344,7 +369,14 @@ fn spawn_ipc_process(req: &SpawnRequest, base: &OwnedWinHandle) -> Result<IpcSpa
         }
     }
 
+    drop(command_logon);
     let effective_cwd = effective_cwd(&req.cwd, Some(log_dir.as_path()));
+    // Starting a process with a token not derived from this process's takes
+    // the privilege; it goes again once the command has started (below).
+    if base_logon == ElevatedBaseLogon::OwnLogon {
+        enable_assign_primary_token_privilege(own_token.raw())
+            .context("enable SeAssignPrimaryTokenPrivilege (rerun the sandbox setup)")?;
+    }
 
     let mut conpty_owner = None;
     let mut console_host_started = None;
@@ -649,7 +681,28 @@ pub fn main() -> Result<()> {
         }
     };
 
-    let ipc_spawn = match base.and_then(|base| spawn_ipc_process(&req, &base)) {
+    let ipc_spawn = match base.and_then(|base| {
+        let spawned = spawn_ipc_process(&req, &base);
+        // #1721 (a′), D392: the runner starts one command; whether or not it
+        // started, the runner keeps no right to start another with a token
+        // it did not derive from its own. If that fails the runner ends the
+        // command's job first and exits with an error.
+        let removed = remove_assign_primary_token_privilege(base.raw());
+        match (spawned, removed) {
+            (spawned, Ok(())) => spawned,
+            (Ok(spawned), Err(err)) => {
+                // SAFETY: the command's live job handle, owned by `spawned`.
+                unsafe {
+                    windows_sys::Win32::System::JobObjects::TerminateJobObject(
+                        spawned.job.as_raw_handle() as HANDLE,
+                        /*uexitcode*/ 1,
+                    );
+                }
+                Err(err)
+            }
+            (Err(err), Err(removal)) => Err(err.context(format!("{removal:#}"))),
+        }
+    }) {
         Ok(value) => value,
         Err(err) => {
             let _ = send_error(

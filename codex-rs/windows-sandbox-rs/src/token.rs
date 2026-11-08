@@ -387,6 +387,18 @@ pub unsafe fn get_current_token_for_query() -> Result<HANDLE> {
     Ok(token)
 }
 
+/// This process's user SID (D392: the setup helper compares it with the
+/// user it sets Codex up for).
+pub fn current_process_user_sid() -> Result<Vec<u8>> {
+    // SAFETY: the token is ours and closed before returning.
+    unsafe {
+        let token = get_current_token_for_query()?;
+        let sid = get_user_sid_bytes(token);
+        CloseHandle(token);
+        sid
+    }
+}
+
 /// # Safety
 /// Caller must close the returned token handle.
 pub unsafe fn get_current_token_for_restriction() -> Result<HANDLE> {
@@ -538,6 +550,21 @@ pub(crate) unsafe fn get_user_sid_bytes(h_token: HANDLE) -> Result<Vec<u8>> {
 }
 
 unsafe fn enable_single_privilege(h_token: HANDLE, name: &str) -> Result<()> {
+    set_single_privilege(h_token, name, SE_PRIVILEGE_ENABLED)
+}
+
+pub(crate) const SE_PRIVILEGE_ENABLED: u32 = 0x0000_0002;
+/// Removes the privilege from the token for good.
+pub(crate) const SE_PRIVILEGE_REMOVED: u32 = 0x0000_0004;
+
+/// Sets the privilege `name` of `h_token` (opened for
+/// `TOKEN_ADJUST_PRIVILEGES`) to `attributes`: [`SE_PRIVILEGE_ENABLED`] or
+/// [`SE_PRIVILEGE_REMOVED`]. Fails if the token doesn't hold it.
+pub(crate) unsafe fn set_single_privilege(
+    h_token: HANDLE,
+    name: &str,
+    attributes: u32,
+) -> Result<()> {
     let mut luid = LUID {
         LowPart: 0,
         HighPart: 0,
@@ -549,7 +576,7 @@ unsafe fn enable_single_privilege(h_token: HANDLE, name: &str) -> Result<()> {
     let mut tp: TOKEN_PRIVILEGES = std::mem::zeroed();
     tp.PrivilegeCount = 1;
     tp.Privileges[0].Luid = luid;
-    tp.Privileges[0].Attributes = 0x00000002; // SE_PRIVILEGE_ENABLED
+    tp.Privileges[0].Attributes = attributes;
     let ok2 = AdjustTokenPrivileges(
         h_token,
         0,
@@ -651,11 +678,13 @@ pub(crate) unsafe fn create_legacy_token_with_caps_from(
 /// Caller must close the returned token handle; base_token must be a valid primary token.
 pub unsafe fn create_workspace_write_token_with_caps_and_user_from(
     base_token: HANDLE,
+    base_logon: ElevatedBaseLogon,
     psid_capabilities: &[*mut c_void],
     additional_restricting_sids: &[*mut c_void],
 ) -> Result<HANDLE> {
     create_token_with_caps_user_and_additional_restrictions_from(
         base_token,
+        base_logon,
         psid_capabilities,
         additional_restricting_sids,
     )
@@ -682,45 +711,80 @@ pub unsafe fn create_readonly_token_with_caps_from(
 /// Caller must close the returned token handle; base_token must be a valid primary token.
 pub unsafe fn create_readonly_token_with_caps_and_user_from(
     base_token: HANDLE,
+    base_logon: ElevatedBaseLogon,
     psid_capabilities: &[*mut c_void],
     additional_restricting_sids: &[*mut c_void],
 ) -> Result<HANDLE> {
     create_token_with_caps_user_and_additional_restrictions_from(
         base_token,
+        base_logon,
         psid_capabilities,
         additional_restricting_sids,
     )
 }
 
+/// Whose logon an elevated command's base token is, which decides its
+/// default DACL (D392).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ElevatedBaseLogon {
+    /// #1721 (a′): a logon Core made for this command alone; `pl` DACL.
+    OwnLogon,
+    /// D392 (b), a standard user's setup (no runner account): the runner's
+    /// own token, whose logon SID every runner Core starts shares; the D324
+    /// DACL, as before #1800.
+    RunnerLogon,
+}
+
+impl ElevatedBaseLogon {
+    /// D392: the base a runner makes a command's token from: the command's
+    /// own logon when Core sent one; otherwise the runner's own token, which
+    /// only a runner without `SeAssignPrimaryTokenPrivilege` may use (one
+    /// running as the command's account, not as the runner account).
+    /// `runner_holds_privilege` is asked only without a command logon.
+    pub fn for_request(
+        has_command_logon: bool,
+        runner_holds_privilege: impl FnOnce() -> Result<bool>,
+    ) -> Result<Self> {
+        if has_command_logon {
+            return Ok(Self::OwnLogon);
+        }
+        if runner_holds_privilege()? {
+            anyhow::bail!("runner: Core sent no logon token for the command (#1721)");
+        }
+        Ok(Self::RunnerLogon)
+    }
+}
+
 /// D324 (#1648): an elevated command's token. Every elevated command runs as
 /// the same sandbox account (per network mode), which is also a restricting
-/// SID of its token, and the runners Core starts from one logon session share
-/// their logon SID (the secondary logon service gives each the caller's), so
-/// neither identifies one command. As D259 does for a legacy command, the
-/// token gets a fresh SID of its own as an extra restricting SID, never
-/// persisted or named by any ACL. Its default DACL grants full access only to
-/// SYSTEM, the sandbox users' group (a normal group of every elevated token,
-/// never a restricting SID, so it passes only the normal access check) and
-/// that command SID: a write right needs both checks, so only this command
-/// and its runner may write to its objects. The logon SID, the sandbox
-/// account, Everyone and the capability SIDs get read and execute, and so
-/// does `OWNER RIGHTS`: the sandbox account owns every elevated command's
-/// objects, and an owner is otherwise always allowed `WRITE_DAC`. Before D324
-/// the logon SID, Everyone and the capability SIDs, restricting SIDs of every
-/// elevated token, had `GENERIC_ALL`, so any elevated command could open
-/// another's processes for every write right. Not closed (as #1560 for
-/// legacy): `TOKEN_DUPLICATE` isn't a write right, so the group still lets
-/// another elevated command impersonate this command's token.
+/// SID of its token. As D259 does for a legacy command, the token gets a
+/// fresh SID of its own as an extra restricting SID, never persisted or
+/// named by any ACL.
 ///
-/// Fails if the runner isn't in the sandbox users' group.
+/// #1560 (`pl`, with #1721 (a′)): with [`ElevatedBaseLogon::OwnLogon`],
+/// `base_token` is a logon Core made for this command alone
+/// (`crate::command_logon`), so its logon SID (a normal group
+/// and a restricting SID of the token) names this command and the processes
+/// it starts, and nothing else. The default DACL (see
+/// [`set_elevated_default_dacl`]) gives full access only to SYSTEM, that
+/// logon SID and the command SID; every SID other commands share gets no
+/// right to duplicate or impersonate this command's token or threads, which
+/// the D324 DACL still gave the sandbox users' group (`TOKEN_DUPLICATE` and
+/// impersonation aren't write rights, so the restricted check never stopped
+/// them). With [`ElevatedBaseLogon::RunnerLogon`] the logon SID is shared,
+/// so the token gets the D324 DACL (see [`set_runner_logon_default_dacl`]).
+///
+/// Fails if `base_token` isn't in the sandbox users' group.
 unsafe fn create_token_with_caps_user_and_additional_restrictions_from(
     base_token: HANDLE,
+    base_logon: ElevatedBaseLogon,
     psid_capabilities: &[*mut c_void],
     additional_restricting_sids: &[*mut c_void],
 ) -> Result<HANDLE> {
     let mut group = sandbox_users_group_of(base_token)?;
     create_elevated_token_with_group(
         base_token,
+        base_logon,
         psid_capabilities,
         additional_restricting_sids,
         group.as_mut_ptr() as *mut c_void,
@@ -736,6 +800,7 @@ unsafe fn create_token_with_caps_user_and_additional_restrictions_from(
 /// outside the sandbox users' group (#1795).
 unsafe fn create_elevated_token_with_group(
     base_token: HANDLE,
+    base_logon: ElevatedBaseLogon,
     psid_capabilities: &[*mut c_void],
     additional_restricting_sids: &[*mut c_void],
     psid_group: *mut c_void,
@@ -753,6 +818,7 @@ unsafe fn create_elevated_token_with_group(
         psid_capabilities,
         &extra_restricting_sids,
         DefaultDacl::Elevated {
+            base_logon,
             psid_user,
             psid_group,
             psid_command: command.as_ptr(),
@@ -782,10 +848,11 @@ enum DefaultDacl {
     /// D259: a legacy command's, with its command SID (also added as a
     /// restricting SID).
     Legacy { psid_command: *mut c_void },
-    /// D324: an elevated command's; `psid_user` is the sandbox account,
-    /// `psid_group` the sandbox users' group and `psid_command` the command's
-    /// SID (already among the restricting SIDs).
+    /// D324, #1560 (`pl`): an elevated command's; `psid_user` is the
+    /// sandbox account, `psid_group` the sandbox users' group and
+    /// `psid_command` the command's SID (already among the restricting SIDs).
     Elevated {
+        base_logon: ElevatedBaseLogon,
         psid_user: *mut c_void,
         psid_group: *mut c_void,
         psid_command: *mut c_void,
@@ -867,10 +934,23 @@ unsafe fn create_token(
             psid_capabilities,
         ),
         DefaultDacl::Elevated {
-            psid_user,
+            base_logon: ElevatedBaseLogon::OwnLogon,
+            psid_user: _,
             psid_group,
             psid_command,
         } => set_elevated_default_dacl(
+            new_token,
+            psid_group,
+            psid_command,
+            psid_logon,
+            psid_everyone,
+        ),
+        DefaultDacl::Elevated {
+            base_logon: ElevatedBaseLogon::RunnerLogon,
+            psid_user,
+            psid_group,
+            psid_command,
+        } => set_runner_logon_default_dacl(
             new_token,
             psid_user,
             psid_group,
@@ -923,10 +1003,54 @@ unsafe fn set_legacy_default_dacl(
     set_default_dacl_grants(token, &grants)
 }
 
-/// D324: sets an elevated command's default DACL (see
+/// #1560 (`pl`): what every SID other elevated commands share (the sandbox
+/// users' group, Everyone) gets on an elevated command's objects: read the
+/// security descriptor, wait, and `0x1000` (`PROCESS_QUERY_LIMITED_INFORMATION`
+/// on processes, `THREAD_RESUME` on threads, nothing on tokens, files or
+/// synchronization objects). No right to write, duplicate or impersonate.
+pub(crate) const ELEVATED_PEER_ACCESS: u32 = READ_CONTROL | SYNCHRONIZE | 0x1000;
+
+/// D324, #1560 (`pl`): sets an elevated command's default DACL (see
 /// [`create_token_with_caps_user_and_additional_restrictions_from`]) on
-/// `token`.
+/// `token`: full access for SYSTEM, the command's own logon SID (unique to
+/// this command and its processes under #1721 (a′)) and its command SID;
+/// [`ELEVATED_PEER_ACCESS`] for the sandbox users' group and Everyone; and
+/// only `READ_CONTROL` for `OWNER RIGHTS` (the sandbox account owns every
+/// elevated command's objects, and an owner is otherwise always allowed
+/// `WRITE_DAC`). The sandbox account and the capability SIDs get nothing.
 unsafe fn set_elevated_default_dacl(
+    token: HANDLE,
+    psid_group: *mut c_void,
+    psid_command: *mut c_void,
+    psid_logon: *mut c_void,
+    psid_everyone: *mut c_void,
+) -> Result<()> {
+    let mut system = well_known_sid(WIN_LOCAL_SYSTEM_SID)?;
+    let mut owner_rights = well_known_sid(WIN_CREATOR_OWNER_RIGHTS_SID)?;
+    let grants = [
+        (system.as_mut_ptr() as *mut c_void, GENERIC_ALL),
+        (psid_logon, GENERIC_ALL),
+        (psid_command, GENERIC_ALL),
+        (psid_group, ELEVATED_PEER_ACCESS),
+        (psid_everyone, ELEVATED_PEER_ACCESS),
+        (owner_rights.as_mut_ptr() as *mut c_void, READ_CONTROL),
+    ];
+    set_default_dacl_grants(token, &grants)
+}
+
+/// D324 (#1648), kept for D392 (b): an elevated command's default DACL when
+/// its token is made from the runner's own ([`ElevatedBaseLogon::RunnerLogon`],
+/// a standard user's setup, no runner account), exactly as before #1800.
+/// Every runner Core starts shares the logon SID, so the `pl` DACL's full
+/// access for it would let every elevated command write to every other's
+/// objects. Here full access goes to SYSTEM, the sandbox users' group and
+/// the command SID: a write right needs both checks, and only the command
+/// SID passes the restricted one, so only this command and its runner may
+/// write to its objects. The logon SID, `OWNER RIGHTS`, the sandbox
+/// account, Everyone and the capability SIDs get read and execute. Not
+/// closed, as on main: other elevated commands may duplicate this
+/// command's token and read its memory (#1560, #1803).
+unsafe fn set_runner_logon_default_dacl(
     token: HANDLE,
     psid_user: *mut c_void,
     psid_group: *mut c_void,

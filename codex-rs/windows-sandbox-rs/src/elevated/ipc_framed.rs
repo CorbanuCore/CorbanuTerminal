@@ -74,6 +74,11 @@ pub struct SpawnRequest {
     pub stdin_open: bool,
     #[serde(default)]
     pub use_private_desktop: bool,
+    /// #1721 (a′): the token of the logon Core made for this command, as a
+    /// handle value in the runner's handle table. Core fills it in when it
+    /// starts the runner; the runner refuses a request without it.
+    #[serde(default)]
+    pub command_token: Option<u64>,
 }
 
 /// Ack from runner after it spawns the child process.
@@ -236,6 +241,7 @@ mod tests {
                     tty: false,
                     stdin_open: false,
                     use_private_desktop: false,
+                    command_token: Some(0x1234),
                 }),
             },
         };
@@ -257,6 +263,7 @@ mod tests {
             Some("S-1-5-21-100-200-300-400"),
             payload.network_proxy_restricting_sid.as_deref()
         );
+        assert_eq!(Some(0x1234), payload.command_token);
     }
 
     #[test]

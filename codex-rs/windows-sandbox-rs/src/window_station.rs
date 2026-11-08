@@ -49,6 +49,8 @@ use windows_sys::Win32::Security::ACL_SIZE_INFORMATION;
 use windows_sys::Win32::Security::AclSizeInformation;
 use windows_sys::Win32::Security::AddAce;
 use windows_sys::Win32::Security::Authorization::GetSecurityInfo;
+use windows_sys::Win32::Security::Authorization::SE_KERNEL_OBJECT;
+use windows_sys::Win32::Security::Authorization::SE_OBJECT_TYPE;
 use windows_sys::Win32::Security::Authorization::SE_WINDOW_OBJECT;
 use windows_sys::Win32::Security::Authorization::SetSecurityInfo;
 use windows_sys::Win32::Security::DACL_SECURITY_INFORMATION;
@@ -108,6 +110,12 @@ pub(crate) const COMMAND_STATION_ACCESS: u32 =
 /// start there (measured likewise): read and write objects. No hooks,
 /// windows or menus.
 pub(crate) const DESKTOP_ACCESS: u32 = DESKTOP_READOBJECTS | DESKTOP_WRITEOBJECTS;
+/// #1721 (a′): what a command's own logon needs in its session's named-object
+/// directory (`Local\`, `BaseNamedObjects`): query, traverse, create objects
+/// and subdirectories. That directory grants the session's own logon SID,
+/// which a logon Core makes for a command lacks; without it Git Bash and
+/// cargo fail (measured by win-1560m2: `0xC0000022`).
+pub(crate) const NAMED_OBJECTS_ACCESS: u32 = 0x000F;
 /// Under this user's local application data: the lock file that serializes
 /// window-object DACL edits across processes (see [`with_dacl_lock`]).
 const DACL_LOCK_DIR: &str = "CorbanuTerminalSandbox";
@@ -168,6 +176,17 @@ pub(crate) fn is_interactive_window_station(name: &str) -> bool {
 enum WindowObject {
     Station,
     Desktop,
+    /// The session's `BaseNamedObjects` object directory (a kernel object).
+    NamedObjects,
+}
+
+impl WindowObject {
+    fn security_type(self) -> SE_OBJECT_TYPE {
+        match self {
+            WindowObject::Station | WindowObject::Desktop => SE_WINDOW_OBJECT,
+            WindowObject::NamedObjects => SE_KERNEL_OBJECT,
+        }
+    }
 }
 
 /// Allow entries for one logon SID on this process's non-interactive window
@@ -194,6 +213,13 @@ pub(crate) struct WindowAccessState {
     /// The masks of the entries this value added and has not removed.
     station_entry: Option<u32>,
     desktop_entry: Option<u32>,
+    /// #1721 (a′): the session's named-object directory, for a command's own
+    /// logon ([`WindowAccess::grant_command_logon`]), and the mask of the
+    /// entry this value added there.
+    #[serde(default)]
+    named_objects: Option<String>,
+    #[serde(default)]
+    named_objects_entry: Option<u32>,
 }
 
 impl WindowAccess {
@@ -221,6 +247,53 @@ impl WindowAccess {
         Ok(Some(access))
     }
 
+    /// #1721 (a′): before a command starts on a logon Core made for it
+    /// (`crate::command_logon`), not on its runner's: gives that logon what
+    /// a command and its children need to start, on this process's window
+    /// station (the interactive one too, which the secondary logon service
+    /// prepares only for the runner's logon) and on this process's desktop
+    /// when the command starts there (`desktop_too`, no private desktop);
+    /// fails, removing what it added, unless both are kept. Then the
+    /// session's named-object directory ([`NAMED_OBJECTS_ACCESS`]), only
+    /// logged if it fails: most commands start without it.
+    pub(crate) fn grant_command_logon(
+        sid: &[u8],
+        desktop_too: bool,
+        log_dir: Option<&Path>,
+    ) -> Result<Self> {
+        let station = current_window_station_name().context("read the window station's name")?;
+        let desktop = current_desktop_name().context("read the desktop's name")?;
+        let mut access = Self {
+            state: WindowAccessState {
+                station,
+                desktop,
+                sid: sid.to_vec(),
+                station_entry: None,
+                desktop_entry: None,
+                named_objects: None,
+                named_objects_entry: None,
+            },
+            log_dir: log_dir.map(Path::to_path_buf),
+        };
+        access.set(WindowObject::Station, Some(COMMAND_STATION_ACCESS))?;
+        if desktop_too {
+            access.set(WindowObject::Desktop, Some(DESKTOP_ACCESS))?;
+        }
+        let named_objects = session_named_objects_directory().and_then(|directory| {
+            access.state.named_objects = Some(directory);
+            access.set(WindowObject::NamedObjects, Some(NAMED_OBJECTS_ACCESS))
+        });
+        if let Err(err) = named_objects {
+            crate::logging::log_note(
+                &format!(
+                    "the command's logon may not create named objects in this session: {err:#}"
+                ),
+                log_dir,
+            );
+        }
+        Ok(access)
+    }
+
     fn off_interactive_station(sid: &[u8]) -> Result<Option<Self>> {
         let station = current_window_station_name().context("read the window station's name")?;
         if is_interactive_window_station(&station) {
@@ -234,6 +307,8 @@ impl WindowAccess {
                 sid: sid.to_vec(),
                 station_entry: None,
                 desktop_entry: None,
+                named_objects: None,
+                named_objects_entry: None,
             },
             log_dir: None,
         }))
@@ -277,6 +352,7 @@ impl WindowAccess {
     pub(crate) fn disarm(mut self) {
         self.state.station_entry = None;
         self.state.desktop_entry = None;
+        self.state.named_objects_entry = None;
     }
 
     /// Once the runner has started its command: what the commands started
@@ -300,6 +376,7 @@ impl WindowAccess {
         match object {
             WindowObject::Station => &mut self.state.station_entry,
             WindowObject::Desktop => &mut self.state.desktop_entry,
+            WindowObject::NamedObjects => &mut self.state.named_objects_entry,
         }
     }
 
@@ -307,6 +384,7 @@ impl WindowAccess {
         match object {
             WindowObject::Station => self.state.station.clone(),
             WindowObject::Desktop => format!("{}\\{}", self.state.station, self.state.desktop),
+            WindowObject::NamedObjects => self.state.named_objects.clone().unwrap_or_default(),
         }
     }
 
@@ -318,6 +396,11 @@ impl WindowAccess {
         let name = match object {
             WindowObject::Station => self.state.station.clone(),
             WindowObject::Desktop => self.state.desktop.clone(),
+            WindowObject::NamedObjects => self
+                .state
+                .named_objects
+                .clone()
+                .context("no named-object directory recorded")?,
         };
         let sid = self.state.sid.clone();
         let (locked, rewritten) =
@@ -346,7 +429,11 @@ impl WindowAccess {
 
 impl Drop for WindowAccess {
     fn drop(&mut self) {
-        for object in [WindowObject::Station, WindowObject::Desktop] {
+        for object in [
+            WindowObject::Station,
+            WindowObject::Desktop,
+            WindowObject::NamedObjects,
+        ] {
             if self.entry(object).is_some()
                 && let Err(err) = self.set(object, /*mask*/ None)
             {
@@ -653,16 +740,18 @@ fn edit_window_object(
         WindowObject::Desktop => unsafe {
             OpenDesktopW(wide.as_ptr(), 0, 0, READ_CONTROL | WRITE_DAC)
         },
+        WindowObject::NamedObjects => open_object_directory(name, READ_CONTROL | WRITE_DAC)?,
     };
     if handle == 0 {
         return Err(std::io::Error::last_os_error().into());
     }
-    let result = rewrite_dacl(handle, sid, remove, add);
+    let result = rewrite_dacl_of(object.security_type(), handle, sid, remove, add);
     // SAFETY: opened above.
     unsafe {
         match object {
             WindowObject::Station => CloseWindowStation(handle),
             WindowObject::Desktop => CloseDesktop(handle),
+            WindowObject::NamedObjects => CloseHandle(handle),
         }
     };
     result
@@ -670,8 +759,8 @@ fn edit_window_object(
 
 /// True when `handle`'s DACL has an allow entry for `sid` with all of
 /// `access`, and no deny entry for `sid` that takes any of it away.
-pub(crate) fn object_grants(handle: isize, sid: &[u8], access: u32) -> Result<bool> {
-    Ok(object_access(handle, sid, access)? == AccessState::Granted)
+fn object_grants_of(kind: SE_OBJECT_TYPE, handle: isize, sid: &[u8], access: u32) -> Result<bool> {
+    Ok(object_access(kind, handle, sid, access)? == AccessState::Granted)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -682,8 +771,13 @@ enum AccessState {
     Denied,
 }
 
-fn object_access(handle: isize, sid: &[u8], access: u32) -> Result<AccessState> {
-    let (dacl, descriptor) = object_dacl(handle)?;
+fn object_access(
+    kind: SE_OBJECT_TYPE,
+    handle: isize,
+    sid: &[u8],
+    access: u32,
+) -> Result<AccessState> {
+    let (dacl, descriptor) = object_dacl_of(kind, handle)?;
     // SAFETY: `dacl` belongs to `descriptor`, freed below.
     let state = unsafe { dacl_access(dacl, sid, access) };
     // SAFETY: allocated by GetSecurityInfo.
@@ -750,14 +844,19 @@ unsafe fn dacl_access(dacl: *mut ACL, sid: &[u8], access: u32) -> AccessState {
     }
 }
 
+#[cfg(test)]
 fn object_dacl(handle: isize) -> Result<(*mut ACL, *mut c_void)> {
+    object_dacl_of(SE_WINDOW_OBJECT, handle)
+}
+
+fn object_dacl_of(kind: SE_OBJECT_TYPE, handle: isize) -> Result<(*mut ACL, *mut c_void)> {
     let mut dacl: *mut ACL = ptr::null_mut();
     let mut descriptor: *mut c_void = ptr::null_mut();
     // SAFETY: reads the DACL into a descriptor the caller frees.
     let status = unsafe {
         GetSecurityInfo(
             handle,
-            SE_WINDOW_OBJECT,
+            kind,
             DACL_SECURITY_INFORMATION,
             ptr::null_mut(),
             ptr::null_mut(),
@@ -778,8 +877,14 @@ fn object_dacl(handle: isize) -> Result<(*mut ACL, *mut c_void)> {
 /// placed before any inherited entries. Fails, writing nothing, if a deny
 /// entry for `sid` takes away any of `add`. Returns whether the access added
 /// (if any) was kept: another writer may have replaced the DACL meanwhile.
-fn rewrite_dacl(handle: isize, sid: &[u8], remove: Option<u32>, add: Option<u32>) -> Result<bool> {
-    let (dacl, descriptor) = object_dacl(handle)?;
+fn rewrite_dacl_of(
+    kind: SE_OBJECT_TYPE,
+    handle: isize,
+    sid: &[u8],
+    remove: Option<u32>,
+    add: Option<u32>,
+) -> Result<bool> {
+    let (dacl, descriptor) = object_dacl_of(kind, handle)?;
     // SAFETY: `dacl` belongs to `descriptor`, freed right after.
     let rebuilt = unsafe { rebuild_dacl(dacl, sid, remove, add) };
     // SAFETY: allocated by GetSecurityInfo; `dacl` is not used after this.
@@ -791,7 +896,7 @@ fn rewrite_dacl(handle: isize, sid: &[u8], remove: Option<u32>, add: Option<u32>
     let status = unsafe {
         SetSecurityInfo(
             handle,
-            SE_WINDOW_OBJECT,
+            kind,
             DACL_SECURITY_INFORMATION,
             ptr::null_mut(),
             ptr::null_mut(),
@@ -803,7 +908,7 @@ fn rewrite_dacl(handle: isize, sid: &[u8], remove: Option<u32>, add: Option<u32>
         anyhow::bail!("SetSecurityInfo failed: {status}");
     }
     Ok(match add {
-        Some(add) => object_grants(handle, sid, add).unwrap_or(false),
+        Some(add) => object_grants_of(kind, handle, sid, add).unwrap_or(false),
         None => true,
     })
 }
@@ -892,6 +997,122 @@ unsafe fn rebuild_dacl(
         return Ok(None);
     }
     Ok(Some(rebuilt))
+}
+
+/// Test oracle (#1721 (a′)): whether this process's window station and its
+/// session's named-object directory still hold the entries
+/// [`WindowAccess::grant_command_logon`] adds for the logon SID `sid`.
+#[cfg(test)]
+pub(crate) fn command_logon_entries(sid: &[u8]) -> Result<(bool, bool)> {
+    let station = current_window_station_name().context("read the window station's name")?;
+    let wide = to_wide(&station);
+    // SAFETY: opens this process's window station; closed below.
+    let handle = unsafe { OpenWindowStationW(wide.as_ptr(), 0, READ_CONTROL) };
+    if handle == 0 {
+        return Err(std::io::Error::last_os_error()).context("open the window station");
+    }
+    let on_station = object_access(SE_WINDOW_OBJECT, handle, sid, COMMAND_STATION_ACCESS);
+    // SAFETY: opened above.
+    unsafe { CloseWindowStation(handle) };
+    let directory = open_object_directory(&session_named_objects_directory()?, READ_CONTROL)?;
+    let in_directory = object_access(SE_KERNEL_OBJECT, directory, sid, NAMED_OBJECTS_ACCESS);
+    // SAFETY: opened above.
+    unsafe { CloseHandle(directory) };
+    Ok((
+        on_station? == AccessState::Granted,
+        in_directory? == AccessState::Granted,
+    ))
+}
+
+/// This process's session's named-object directory (what `Local\` names):
+/// `\Sessions\<id>\BaseNamedObjects`, or `\BaseNamedObjects` in session 0.
+fn session_named_objects_directory() -> Result<String> {
+    use windows_sys::Win32::Security::GetTokenInformation;
+    use windows_sys::Win32::Security::TokenSessionId;
+    // SAFETY: opens this process's token for query; closed below.
+    let token = unsafe { get_current_token_for_query() }?;
+    let mut session = 0u32;
+    let mut needed = 0u32;
+    // SAFETY: a live token handle and a buffer of the size given; closed below.
+    let ok = unsafe {
+        let ok = GetTokenInformation(
+            token,
+            TokenSessionId,
+            ptr::from_mut(&mut session).cast(),
+            std::mem::size_of::<u32>() as u32,
+            &mut needed,
+        );
+        CloseHandle(token);
+        ok
+    };
+    if ok == 0 {
+        return Err(std::io::Error::last_os_error()).context("read this process's session");
+    }
+    Ok(if session == 0 {
+        "\\BaseNamedObjects".to_string()
+    } else {
+        format!("\\Sessions\\{session}\\BaseNamedObjects")
+    })
+}
+
+#[repr(C)]
+struct UnicodeString {
+    length: u16,
+    maximum_length: u16,
+    buffer: *mut u16,
+}
+
+#[repr(C)]
+struct ObjectAttributes {
+    length: u32,
+    root_directory: HANDLE,
+    object_name: *const UnicodeString,
+    attributes: u32,
+    security_descriptor: *const c_void,
+    security_quality_of_service: *const c_void,
+}
+
+/// Opens the object-manager directory `path` (`NtOpenDirectoryObject`) for
+/// `access`. Close with `CloseHandle`.
+fn open_object_directory(path: &str, access: u32) -> Result<HANDLE> {
+    use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows_sys::Win32::System::LibraryLoader::GetProcAddress;
+    type NtOpenDirectoryObject =
+        unsafe extern "system" fn(*mut HANDLE, u32, *const ObjectAttributes) -> i32;
+    const OBJ_CASE_INSENSITIVE: u32 = 0x40;
+    let mut name: Vec<u16> = path.encode_utf16().collect();
+    let bytes = u16::try_from(name.len() * 2).context("object directory name too long")?;
+    let unicode = UnicodeString {
+        length: bytes,
+        maximum_length: bytes,
+        buffer: name.as_mut_ptr(),
+    };
+    let attributes = ObjectAttributes {
+        length: std::mem::size_of::<ObjectAttributes>() as u32,
+        root_directory: 0,
+        object_name: &unicode,
+        attributes: OBJ_CASE_INSENSITIVE,
+        security_descriptor: ptr::null(),
+        security_quality_of_service: ptr::null(),
+    };
+    let ntdll = to_wide("ntdll.dll");
+    // SAFETY: ntdll is loaded in every process; the name is NUL-terminated.
+    let proc = unsafe {
+        GetProcAddress(
+            GetModuleHandleW(ntdll.as_ptr()),
+            c"NtOpenDirectoryObject".as_ptr().cast(),
+        )
+    }
+    .context("ntdll has no NtOpenDirectoryObject")?;
+    // SAFETY: the documented signature of `NtOpenDirectoryObject`.
+    let open: NtOpenDirectoryObject = unsafe { std::mem::transmute(proc) };
+    let mut directory: HANDLE = 0;
+    // SAFETY: `attributes` and the name it points to outlive the call.
+    let status = unsafe { open(&mut directory, access, &attributes) };
+    if status != 0 {
+        anyhow::bail!("NtOpenDirectoryObject({path}) failed: {status:#x}");
+    }
+    Ok(directory)
 }
 
 /// An `ACCESS_ALLOWED_ACE` for `sid` with `mask`, no flags.

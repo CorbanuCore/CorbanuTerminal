@@ -46,9 +46,23 @@ use windows_sys::Win32::Security::CheckTokenMembership;
 use windows_sys::Win32::Security::FreeSid;
 use windows_sys::Win32::Security::SECURITY_NT_AUTHORITY;
 
-pub const SETUP_VERSION: u32 = 6;
+/// 7: the command runner's own account ([`RUNNER_USERNAME`], D391/D392).
+///
+/// #1798 also takes 7; whichever of the two merges second takes the next
+/// number. Nothing else in #1800 names the number: a users file without a
+/// runner account and without [`SandboxUsersFile::standard_user`] (as setup 6,
+/// or #1798's 7, writes it) never counts as current, so setup runs again
+/// whatever the number is.
+pub const SETUP_VERSION: u32 = 7;
 pub const OFFLINE_USERNAME: &str = "CodexSandboxOffline";
 pub const ONLINE_USERNAME: &str = "CodexSandboxOnline";
+/// #1721 (a′): the account the elevated command runner runs as. No command
+/// ever runs as it: commands run as [`OFFLINE_USERNAME`] or
+/// [`ONLINE_USERNAME`], logged on by Core for each command, so no command
+/// holds anything a starting runner's process, threads or token grant. It
+/// holds `SeAssignPrimaryTokenPrivilege` to start a command with a token it
+/// did not derive from its own.
+pub const RUNNER_USERNAME: &str = "CodexSandboxRunner";
 const ERROR_CANCELLED: u32 = 1223;
 const SECURITY_BUILTIN_DOMAIN_RID: u32 = 0x0000_0020;
 const DOMAIN_ALIAS_RID_ADMINS: u32 = 0x0000_0220;
@@ -325,7 +339,7 @@ fn run_setup_refresh_inner(
         proxy_ports: offline_proxy_settings.proxy_ports,
         allow_local_binding: offline_proxy_settings.allow_local_binding,
         otel: None,
-        real_user: std::env::var("USERNAME").unwrap_or_else(|_| "Administrators".to_string()),
+        real_user: current_real_user(),
         mode: SetupMode::Full,
         refresh_only: true,
     };
@@ -456,15 +470,44 @@ pub struct SandboxUsersFile {
     pub version: u32,
     pub offline: SandboxUserRecord,
     pub online: SandboxUserRecord,
+    /// The command runner's account ([`RUNNER_USERNAME`]), which setup makes
+    /// only for an administrator (D392).
+    #[serde(default)]
+    pub runner: Option<SandboxUserRecord>,
+    /// D392 (b): set when setup ran as another account than the user it set
+    /// Codex up for, signed in to that session (a standard user's setup,
+    /// which an administrator approved), so it made no runner account and the
+    /// elevated sandbox runs as it did before #1800: each runner as its
+    /// command's account (see [`STANDARD_USER_NOTICE`]).
+    #[serde(default)]
+    pub standard_user: bool,
 }
 
 impl SandboxUsersFile {
+    /// Current only with a runner account or the standard-user record of
+    /// why there is none: a file from before the runner account has neither,
+    /// so setup runs again (D392, whatever [`SETUP_VERSION`] is).
     pub fn version_matches(&self) -> bool {
-        self.version == SETUP_VERSION
+        self.version == SETUP_VERSION && (self.runner.is_some() || self.standard_user)
     }
 }
 
-pub(crate) fn is_elevated() -> Result<bool> {
+/// D392 (b): what Codex tells a user whose sandbox setup made no runner
+/// account because they aren't an administrator.
+pub const STANDARD_USER_NOTICE: &str = "The elevated sandbox's setup ran as a different Windows account than yours (as when an administrator approves it for a standard account), or couldn't confirm it ran as yours, so it didn't create Corbanu Terminal's separate command-runner account: that account's Windows right would let anyone signed in as you become an administrator. The elevated sandbox still works as before. Commands in other projects can then interfere with a command while it starts, borrow its access and read its memory (#1721, #1560, #1803), so avoid running commands in several projects at once. For the stronger isolation, run Corbanu Terminal from an administrator account and let it run the setup itself.";
+
+/// D392 (b): [`STANDARD_USER_NOTICE`] when the current setup in
+/// `codex_home` made no runner account because the user isn't an
+/// administrator.
+pub fn standard_user_notice(codex_home: &Path) -> Option<&'static str> {
+    let users: SandboxUsersFile =
+        serde_json::from_slice(&std::fs::read(sandbox_users_path(codex_home)).ok()?).ok()?;
+    (users.version_matches() && users.runner.is_none()).then_some(STANDARD_USER_NOTICE)
+}
+
+/// Whether this process's token is in the Administrators group (an
+/// elevated administrator, or one with UAC off).
+pub fn is_elevated() -> Result<bool> {
     unsafe {
         let mut administrators_group: *mut c_void = std::ptr::null_mut();
         let ok = AllocateAndInitializeSid(
@@ -1001,8 +1044,33 @@ pub fn run_elevated_setup(
     overrides: SetupRootOverrides,
 ) -> Result<()> {
     run_elevated_setup_inner(
-        request, overrides, /*offline_proxy_settings_override*/ None,
+        request,
+        overrides,
+        /*offline_proxy_settings_override*/ None,
+        current_real_user(),
     )
+}
+
+/// D392 tests: the elevated setup as an administrator runs it for another,
+/// standard user `real_user` (an administrator's password typed into a
+/// standard user's UAC prompt, or `codex sandbox setup` for another user).
+#[cfg(test)]
+pub(crate) fn run_elevated_setup_for_user(
+    request: SandboxSetupRequest<'_>,
+    overrides: SetupRootOverrides,
+    real_user: &str,
+) -> Result<()> {
+    run_elevated_setup_inner(
+        request,
+        overrides,
+        /*offline_proxy_settings_override*/ None,
+        real_user.to_string(),
+    )
+}
+
+/// The user Codex runs as, for whom setup grants access.
+fn current_real_user() -> String {
+    std::env::var("USERNAME").unwrap_or_else(|_| "Administrators".to_string())
 }
 
 pub(crate) fn run_elevated_setup_with_proxy_settings(
@@ -1010,13 +1078,19 @@ pub(crate) fn run_elevated_setup_with_proxy_settings(
     overrides: SetupRootOverrides,
     offline_proxy_settings: &OfflineProxySettings,
 ) -> Result<()> {
-    run_elevated_setup_inner(request, overrides, Some(offline_proxy_settings))
+    run_elevated_setup_inner(
+        request,
+        overrides,
+        Some(offline_proxy_settings),
+        current_real_user(),
+    )
 }
 
 fn run_elevated_setup_inner(
     request: SandboxSetupRequest<'_>,
     overrides: SetupRootOverrides,
     offline_proxy_settings_override: Option<&OfflineProxySettings>,
+    real_user: String,
 ) -> Result<()> {
     if !request.permissions.is_enforceable_by_windows_sandbox() {
         anyhow::bail!("unsupported filesystem permissions for Windows sandbox setup");
@@ -1050,7 +1124,7 @@ fn run_elevated_setup_inner(
         deny_write_paths,
         proxy_ports: offline_proxy_settings.proxy_ports,
         allow_local_binding: offline_proxy_settings.allow_local_binding,
-        real_user: std::env::var("USERNAME").unwrap_or_else(|_| "Administrators".to_string()),
+        real_user,
         otel: codex_otel::global_statsig_metrics_settings(),
         mode: SetupMode::Full,
         refresh_only: false,
@@ -2286,6 +2360,36 @@ mod tests {
             canonical_windows_platform_default_roots()
                 .into_iter()
                 .all(|path| roots.contains(&path))
+        );
+    }
+
+    /// D392 (b), and rebase-safe with #1798 (both take setup version 7): a
+    /// users file counts as current only with a runner account or the
+    /// standard-user record of why there is none. One with neither, as setup
+    /// 6 (or #1798's 7) writes it, sends Codex back to the setup whatever the
+    /// version number says.
+    #[test]
+    fn d392_users_file_is_current_with_a_runner_or_the_standard_user_record() {
+        let record = serde_json::json!({ "username": "u", "password": "cA==" });
+        let file = |extra: serde_json::Value| {
+            let mut file = serde_json::json!({
+                "version": super::SETUP_VERSION,
+                "offline": record,
+                "online": record,
+            });
+            file.as_object_mut()
+                .expect("object")
+                .extend(extra.as_object().expect("object").clone());
+            serde_json::from_value::<super::SandboxUsersFile>(file).expect("users file")
+        };
+        assert_eq!(
+            [
+                file(serde_json::json!({})).version_matches(),
+                file(serde_json::json!({ "runner": record })).version_matches(),
+                file(serde_json::json!({ "standard_user": true })).version_matches(),
+                file(serde_json::json!({ "standard_user": false })).version_matches(),
+            ],
+            [false, true, true, false]
         );
     }
 }

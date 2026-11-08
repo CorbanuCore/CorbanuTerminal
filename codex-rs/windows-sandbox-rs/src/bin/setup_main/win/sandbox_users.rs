@@ -1,3 +1,4 @@
+use anyhow::Context;
 use anyhow::Result;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -41,6 +42,7 @@ use windows_sys::Win32::Storage::FileSystem::CREATE_NEW;
 use windows_sys::Win32::Storage::FileSystem::CreateFileW;
 use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_NORMAL;
 
+use codex_windows_sandbox::RUNNER_USERNAME;
 use codex_windows_sandbox::SETUP_VERSION;
 use codex_windows_sandbox::SetupErrorCode;
 use codex_windows_sandbox::SetupFailure;
@@ -66,12 +68,15 @@ pub fn resolve_sandbox_users_group_sid() -> Result<Vec<u8>> {
     resolve_sid(SANDBOX_USERS_GROUP)
 }
 
+/// Provisions the sandbox accounts for `real_user`; returns whether it made
+/// the runner account (D392 (b): only when `real_user` is an administrator).
 pub fn provision_sandbox_users(
     codex_home: &Path,
     offline_username: &str,
     online_username: &str,
+    real_user: &str,
     log: &mut dyn Write,
-) -> Result<()> {
+) -> Result<bool> {
     ensure_sandbox_users_group(log)?;
     super::log_line(
         log,
@@ -81,13 +86,224 @@ pub fn provision_sandbox_users(
     let online_password = random_password();
     ensure_sandbox_user(offline_username, &offline_password, log)?;
     ensure_sandbox_user(online_username, &online_password, log)?;
+    let runner_password = random_password();
+    let runner = runner_account_allowed(real_user, log)?.then_some(RUNNER_USERNAME);
+    if let Some(runner) = runner {
+        provision_runner_user(runner, &runner_password, log)?;
+    }
     write_secrets(
         codex_home,
-        offline_username,
-        &offline_password,
-        online_username,
-        &online_password,
+        (offline_username, offline_password.as_str()),
+        (online_username, online_password.as_str()),
+        runner.map(|runner| (runner, runner_password.as_str())),
     )?;
+    Ok(runner.is_some())
+}
+
+/// D392 (b): the runner account's privilege lets anyone who can sign in as
+/// it become SYSTEM, and any program running as the user can read its
+/// password, so setup makes it only where the user may become an
+/// administrator anyway. That is when this (elevated) setup runs as the user
+/// it sets Codex up for (`real_user`), and as the user signed in to this
+/// process's session. `real_user` comes from the user's own environment
+/// (or `codex sandbox setup --user`), so it alone proves nothing; the
+/// session's user Windows reports does. A standard user's setup runs as the
+/// administrator who typed their password into the user's UAC prompt, in
+/// the user's session: the session's user isn't this setup's. A session
+/// with no user (session 0: services, SSH, CI) shows no UAC prompt, so a
+/// setup elevated there was started by an already elevated caller.
+fn runner_account_allowed(real_user: &str, log: &mut dyn Write) -> Result<bool> {
+    let own = codex_windows_sandbox::current_process_user_sid()?;
+    let elevated = codex_windows_sandbox::is_elevated().unwrap_or(false);
+    let real = match resolve_sid(real_user) {
+        Ok(sid) => Some(sid),
+        Err(err) => {
+            super::log_line(log, &format!("resolve {real_user} failed: {err:#}"))?;
+            None
+        }
+    };
+    let session = match session_user() {
+        Ok(None) => SessionUser::NoUser,
+        Ok(Some(name)) => match resolve_sid(&name) {
+            Ok(sid) => SessionUser::SignedIn(sid),
+            Err(err) => {
+                super::log_line(log, &format!("resolve session user {name} failed: {err:#}"))?;
+                SessionUser::Unknown
+            }
+        },
+        Err(err) => {
+            super::log_line(log, &format!("query this session's user failed: {err:#}"))?;
+            SessionUser::Unknown
+        }
+    };
+    let allowed = runner_account_decision(&own, elevated, real.as_deref(), &session);
+    if !allowed {
+        super::log_line(
+            log,
+            &format!(
+                "setup doesn't run as {real_user} signed in to this session: no runner account (D392)"
+            ),
+        )?;
+    }
+    Ok(allowed)
+}
+
+/// Who is signed in to the session a process runs in.
+#[derive(Debug)]
+pub(super) enum SessionUser {
+    /// A session with no user (session 0).
+    NoUser,
+    /// This user's SID.
+    SignedIn(Vec<u8>),
+    /// Couldn't tell.
+    Unknown,
+}
+
+/// [`runner_account_allowed`] given this setup's own SID, whether it is
+/// elevated, the SID `real_user` resolves to and this session's user.
+pub(super) fn runner_account_decision(
+    own: &[u8],
+    elevated: bool,
+    real_user: Option<&[u8]>,
+    session: &SessionUser,
+) -> bool {
+    elevated
+        && real_user == Some(own)
+        && match session {
+            SessionUser::NoUser => true,
+            SessionUser::SignedIn(user) => user.as_slice() == own,
+            SessionUser::Unknown => false,
+        }
+}
+
+/// `DOMAIN\user` signed in to this process's session, or `None` for a
+/// session without one.
+fn session_user() -> Result<Option<String>> {
+    use windows_sys::Win32::System::RemoteDesktop::WTS_CURRENT_SERVER_HANDLE;
+    use windows_sys::Win32::System::RemoteDesktop::WTS_CURRENT_SESSION;
+    use windows_sys::Win32::System::RemoteDesktop::WTS_INFO_CLASS;
+    use windows_sys::Win32::System::RemoteDesktop::WTSDomainName;
+    use windows_sys::Win32::System::RemoteDesktop::WTSFreeMemory;
+    use windows_sys::Win32::System::RemoteDesktop::WTSQuerySessionInformationW;
+    use windows_sys::Win32::System::RemoteDesktop::WTSUserName;
+    let query = |class: WTS_INFO_CLASS| -> Result<String> {
+        let mut buffer: *mut u16 = std::ptr::null_mut();
+        let mut bytes = 0u32;
+        // SAFETY: Windows allocates `buffer` (freed below) and sets `bytes`.
+        let ok = unsafe {
+            WTSQuerySessionInformationW(
+                WTS_CURRENT_SERVER_HANDLE,
+                WTS_CURRENT_SESSION,
+                class,
+                &mut buffer,
+                &mut bytes,
+            )
+        };
+        if ok == 0 || buffer.is_null() {
+            return Err(std::io::Error::last_os_error()).context("WTSQuerySessionInformationW");
+        }
+        // SAFETY: a NUL-terminated string of `bytes` bytes from Windows.
+        let text = unsafe {
+            let units = std::slice::from_raw_parts(buffer, bytes as usize / 2);
+            let len = units
+                .iter()
+                .position(|&unit| unit == 0)
+                .unwrap_or(units.len());
+            let text = String::from_utf16_lossy(&units[..len]);
+            WTSFreeMemory(buffer as *mut c_void);
+            text
+        };
+        Ok(text)
+    };
+    let user = query(WTSUserName)?;
+    if user.is_empty() {
+        return Ok(None);
+    }
+    let domain = query(WTSDomainName)?;
+    Ok(Some(if domain.is_empty() {
+        user
+    } else {
+        format!("{domain}\\{user}")
+    }))
+}
+
+/// The right the command runner's account needs to start a command with
+/// the token Core logged the command's account on with (#1721 (a′), D392).
+pub const RUNNER_ACCOUNT_RIGHT: &str = "SeAssignPrimaryTokenPrivilege";
+
+/// The logons the runner's account never needs (Core starts the runner
+/// with `CreateProcessWithLogonW`, an interactive logon), denied so its
+/// password works for nothing else.
+pub const RUNNER_DENIED_LOGON_RIGHTS: [&str; 4] = [
+    "SeDenyNetworkLogonRight",
+    "SeDenyRemoteInteractiveLogonRight",
+    "SeDenyBatchLogonRight",
+    "SeDenyServiceLogonRight",
+];
+
+/// #1721 (a′): the command runner's own account, in the sandbox users' group
+/// (for the sandbox's helper and log folders), holding
+/// [`RUNNER_ACCOUNT_RIGHT`] and denied [`RUNNER_DENIED_LOGON_RIGHTS`].
+/// Idempotent: setup reruns reset its password and re-add the rights.
+fn provision_runner_user(username: &str, password: &str, log: &mut dyn Write) -> Result<()> {
+    ensure_sandbox_user(username, password, log)?;
+    let sid = resolve_sid(username)?;
+    for right in std::iter::once(RUNNER_ACCOUNT_RIGHT).chain(RUNNER_DENIED_LOGON_RIGHTS) {
+        add_account_right(&sid, right).map_err(|err| {
+            anyhow::Error::new(SetupFailure::new(
+                SetupErrorCode::HelperUserProvisionFailed,
+                format!("grant {right} to {username} failed: {err:#}"),
+            ))
+        })?;
+    }
+    super::log_line(
+        log,
+        &format!("runner account {username} holds {RUNNER_ACCOUNT_RIGHT}"),
+    )?;
+    Ok(())
+}
+
+/// `LsaAddAccountRights(sid, right)` on this machine's policy.
+fn add_account_right(sid: &[u8], right: &str) -> Result<()> {
+    use windows_sys::Win32::Security::Authentication::Identity::LSA_OBJECT_ATTRIBUTES;
+    use windows_sys::Win32::Security::Authentication::Identity::LSA_UNICODE_STRING;
+    use windows_sys::Win32::Security::Authentication::Identity::LsaAddAccountRights;
+    use windows_sys::Win32::Security::Authentication::Identity::LsaClose;
+    use windows_sys::Win32::Security::Authentication::Identity::LsaNtStatusToWinError;
+    use windows_sys::Win32::Security::Authentication::Identity::LsaOpenPolicy;
+    use windows_sys::Win32::Security::Authentication::Identity::POLICY_CREATE_ACCOUNT;
+    use windows_sys::Win32::Security::Authentication::Identity::POLICY_LOOKUP_NAMES;
+    let mut name: Vec<u16> = right.encode_utf16().collect();
+    let bytes = u16::try_from(name.len() * 2).context("right name too long")?;
+    // SAFETY: a zeroed plain struct with its size set; the policy handle is
+    // closed before returning, and `name` outlives the call that reads it.
+    unsafe {
+        let mut attributes: LSA_OBJECT_ATTRIBUTES = std::mem::zeroed();
+        attributes.Length = std::mem::size_of::<LSA_OBJECT_ATTRIBUTES>() as u32;
+        let mut policy = 0;
+        let status = LsaOpenPolicy(
+            std::ptr::null(),
+            &attributes,
+            (POLICY_CREATE_ACCOUNT | POLICY_LOOKUP_NAMES) as u32,
+            &mut policy,
+        );
+        if status != 0 {
+            anyhow::bail!("LsaOpenPolicy failed: {}", LsaNtStatusToWinError(status));
+        }
+        let rights = LSA_UNICODE_STRING {
+            Length: bytes,
+            MaximumLength: bytes,
+            Buffer: name.as_mut_ptr(),
+        };
+        let status = LsaAddAccountRights(policy, sid.as_ptr() as *mut c_void, &rights, 1);
+        LsaClose(policy);
+        if status != 0 {
+            anyhow::bail!(
+                "LsaAddAccountRights failed: {}",
+                LsaNtStatusToWinError(status)
+            );
+        }
+    }
     Ok(())
 }
 
@@ -406,6 +622,10 @@ struct SandboxUsersFile {
     version: u32,
     offline: SandboxUserRecord,
     online: SandboxUserRecord,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runner: Option<SandboxUserRecord>,
+    /// D392 (b): no runner account because the user isn't an administrator.
+    standard_user: bool,
 }
 
 #[derive(Serialize)]
@@ -422,10 +642,9 @@ struct SetupMarker {
 
 fn write_secrets(
     codex_home: &Path,
-    offline_user: &str,
-    offline_pwd: &str,
-    online_user: &str,
-    online_pwd: &str,
+    offline: (&str, &str),
+    online: (&str, &str),
+    runner: Option<(&str, &str)>,
 ) -> Result<()> {
     let secrets_dir = sandbox_secrets_dir(codex_home);
     std::fs::create_dir_all(&secrets_dir).map_err(|err| {
@@ -437,28 +656,24 @@ fn write_secrets(
             ),
         ))
     })?;
-    let offline_blob = dpapi_protect(offline_pwd.as_bytes()).map_err(|err| {
-        anyhow::Error::new(SetupFailure::new(
-            SetupErrorCode::HelperDpapiProtectFailed,
-            format!("dpapi protect failed for offline user: {err}"),
-        ))
-    })?;
-    let online_blob = dpapi_protect(online_pwd.as_bytes()).map_err(|err| {
-        anyhow::Error::new(SetupFailure::new(
-            SetupErrorCode::HelperDpapiProtectFailed,
-            format!("dpapi protect failed for online user: {err}"),
-        ))
-    })?;
+    let record = |(username, password): (&str, &str)| -> Result<SandboxUserRecord> {
+        let blob = dpapi_protect(password.as_bytes()).map_err(|err| {
+            anyhow::Error::new(SetupFailure::new(
+                SetupErrorCode::HelperDpapiProtectFailed,
+                format!("dpapi protect failed for {username}: {err}"),
+            ))
+        })?;
+        Ok(SandboxUserRecord {
+            username: username.to_string(),
+            password: BASE64.encode(blob),
+        })
+    };
     let users = SandboxUsersFile {
         version: SETUP_VERSION,
-        offline: SandboxUserRecord {
-            username: offline_user.to_string(),
-            password: BASE64.encode(offline_blob),
-        },
-        online: SandboxUserRecord {
-            username: online_user.to_string(),
-            password: BASE64.encode(online_blob),
-        },
+        offline: record(offline)?,
+        online: record(online)?,
+        standard_user: runner.is_none(),
+        runner: runner.map(record).transpose()?,
     };
     let users_path = secrets_dir.join("sandbox_users.json");
     let users_json = serde_json::to_vec_pretty(&users).map_err(|err| {

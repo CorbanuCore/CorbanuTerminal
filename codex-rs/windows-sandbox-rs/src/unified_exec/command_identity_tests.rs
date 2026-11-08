@@ -40,6 +40,9 @@ const CHILD_ENV: &str = "CODEX_D259_CHILD";
 const HOLD_ENV: &str = "CODEX_D259_HOLD";
 const FILE_ENV: &str = "CODEX_D259_FILE";
 const OUT_ENV: &str = "CODEX_D259_OUT";
+/// #1560: set for a holding command that holds in a child it starts, so a
+/// probe targets a process the command started rather than its first one.
+const HOLD_CHILD_ENV: &str = "CODEX_1560_HOLD_CHILD";
 const RESULT: &str = "d259: ";
 
 /// Process rights that are write rights for a write-restricted token (in the
@@ -274,6 +277,26 @@ fn command_identity_hold_entry() {
     let Some(dir) = std::env::var_os(HOLD_ENV).map(PathBuf::from) else {
         return;
     };
+    if std::env::var_os(HOLD_CHILD_ENV).is_some() {
+        let mut child = std::process::Command::new(std::env::current_exe().expect("test exe"))
+            .args(std::env::args().skip(1))
+            .env_remove(HOLD_CHILD_ENV)
+            .spawn()
+            .expect("start the holding child");
+        wait_for_path(&dir.join("hold.release"), Duration::from_secs(/*secs*/ 60));
+        let _ = child.wait();
+        return;
+    }
+    // #1721 (a′): this command's logon SID (hex), for the entries test.
+    // SAFETY: this process's own token, opened for query and closed here.
+    let logon = unsafe {
+        let token = crate::token::get_current_token_for_query().expect("own token");
+        let logon = crate::token::get_logon_sid_bytes(token);
+        CloseHandle(token);
+        logon.expect("own logon SID")
+    };
+    let hex: String = logon.iter().map(|byte| format!("{byte:02x}")).collect();
+    fs::write(dir.join("hold.logon"), hex).expect("write hold logon");
     fs::write(dir.join("hold.pid"), std::process::id().to_string()).expect("write hold pid");
     wait_for_path(&dir.join("hold.release"), Duration::from_secs(/*secs*/ 60));
 }
@@ -302,7 +325,7 @@ fn command_identity_child_entry() {
 /// process's parent (an elevated command's runner). `peer_console`/
 /// `borrow_console`: the same for each of that runner's console hosts.
 /// `peer_command_console`: `peer` for each console host of that process
-/// itself. `race`:
+/// itself. `thread_borrow`: see [`thread_borrow_report`]. `race`:
 /// see [`race_report`] (`CODEX_D259_CHILD` names its folder). `self`: what it may do
 /// to its own child and token, and that it can end the child. Prints one
 /// `d259: ` line. Does nothing otherwise.
@@ -336,6 +359,10 @@ fn command_identity_probe_entry() {
     } else if mode == "borrow_console" {
         let file = file();
         console_report(target(), |host| borrow_report(host, &file))
+    } else if mode == "console_privileges" {
+        console_report(target(), console_privilege_report)
+    } else if mode == "thread_borrow" {
+        thread_borrow_report(target(), &file())
     } else if mode == "race" {
         race_report(&PathBuf::from(
             std::env::var_os(CHILD_ENV).expect("race dir"),
@@ -553,6 +580,137 @@ fn threads_of(pids: &std::collections::HashSet<u32>) -> Vec<(u32, u32)> {
         CloseHandle(snapshot);
     }
     threads
+}
+
+/// #1721 (a′): whether console host `pid` (a runner's) still holds
+/// `SeAssignPrimaryTokenPrivilege`, which its token copied from the runner's.
+fn console_privilege_report(pid: u32) -> String {
+    use windows_sys::Win32::System::Threading::OpenProcess;
+    // SAFETY: every handle is closed here.
+    unsafe {
+        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if process == 0 {
+            return format!("assign_primary=open_process_err{}", GetLastError());
+        }
+        let mut token: HANDLE = 0;
+        let opened = OpenProcessToken(process, TOKEN_QUERY, &mut token) != 0;
+        let error = GetLastError();
+        CloseHandle(process);
+        if !opened {
+            return format!("assign_primary=open_token_err{error}");
+        }
+        let held = crate::command_logon::token_holds_privilege(
+            token,
+            crate::command_logon::ASSIGN_PRIMARY_TOKEN_PRIVILEGE,
+        );
+        CloseHandle(token);
+        match held {
+            Ok(true) => "assign_primary=present".to_string(),
+            Ok(false) => "assign_primary=absent".to_string(),
+            Err(err) => format!("assign_primary=query_err({err})").replace(' ', "_"),
+        }
+    }
+}
+
+/// #1560: opens each thread of process `pid` (another workspace's command)
+/// for direct impersonation and impersonates the first it can with
+/// `NtImpersonateThread`, then writes `path` (in that workspace) and opens
+/// that process for `PROCESS_CREATE_PROCESS`. Also reports which other
+/// thread rights it gets on that thread.
+fn thread_borrow_report(pid: u32, path: &Path) -> String {
+    use windows_sys::Win32::Security::SECURITY_QUALITY_OF_SERVICE;
+    use windows_sys::Win32::Security::TokenImpersonationLevel;
+    use windows_sys::Win32::System::Threading::GetCurrentThread;
+    use windows_sys::Win32::System::Threading::OpenThread;
+    use windows_sys::Win32::System::Threading::OpenThreadToken;
+    type NtImpersonateThread =
+        unsafe extern "system" fn(HANDLE, HANDLE, *const SECURITY_QUALITY_OF_SERVICE) -> i32;
+    const THREAD_DIRECT_IMPERSONATION: u32 = 0x0200;
+    let own = write_result(path);
+    let threads = threads_of(&std::collections::HashSet::from([pid]));
+    let open = |thread: u32, access: u32| -> String {
+        // SAFETY: the handle is closed right away.
+        unsafe {
+            let handle = OpenThread(access, 0, thread);
+            if handle == 0 {
+                format!("err{}", GetLastError())
+            } else {
+                CloseHandle(handle);
+                "ok".to_string()
+            }
+        }
+    };
+    let Some((first, _)) = threads.first().copied() else {
+        return format!("own_write={own} threads=0");
+    };
+    let openable: Vec<u32> = threads
+        .iter()
+        .map(|(thread, _)| *thread)
+        .filter(|thread| open(*thread, THREAD_DIRECT_IMPERSONATION) == "ok")
+        .collect();
+    let thread = openable.first().copied().unwrap_or(first);
+    let mut parts = vec![
+        format!("own_write={own}"),
+        format!("threads={}", threads.len()),
+        format!("direct_impersonation_threads={}", openable.len()),
+        format!("impersonate={}", open(thread, 0x0100)),
+        format!("set_thread_token={}", open(thread, 0x0080)),
+        format!("set_context={}", open(thread, 0x0010)),
+    ];
+    // SAFETY: every handle is closed below; the thread reverts before returning.
+    unsafe {
+        let handle = OpenThread(THREAD_DIRECT_IMPERSONATION, 0, thread);
+        if handle == 0 {
+            parts.push("borrow=not_opened".to_string());
+            return parts.join(" ");
+        }
+        let ntdll = crate::winutil::to_wide("ntdll.dll");
+        let Some(proc) = windows_sys::Win32::System::LibraryLoader::GetProcAddress(
+            windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(ntdll.as_ptr()),
+            c"NtImpersonateThread".as_ptr().cast(),
+        ) else {
+            CloseHandle(handle);
+            parts.push("borrow=no_ntimpersonatethread".to_string());
+            return parts.join(" ");
+        };
+        let nt_impersonate: NtImpersonateThread = std::mem::transmute(proc);
+        let qos = SECURITY_QUALITY_OF_SERVICE {
+            Length: std::mem::size_of::<SECURITY_QUALITY_OF_SERVICE>() as u32,
+            ImpersonationLevel: SecurityImpersonation,
+            ContextTrackingMode: 0,
+            EffectiveOnly: 0,
+        };
+        let status = nt_impersonate(GetCurrentThread(), handle, &qos);
+        CloseHandle(handle);
+        if status != 0 {
+            parts.push(format!("borrow=nt_status_{status:#x}"));
+            return parts.join(" ");
+        }
+        let mut token: HANDLE = 0;
+        let level = if OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, 1, &mut token) == 0 {
+            format!("token_err{}", GetLastError())
+        } else {
+            let mut level: i32 = -1;
+            let mut needed = 0;
+            GetTokenInformation(
+                token,
+                TokenImpersonationLevel,
+                (&mut level as *mut i32).cast(),
+                std::mem::size_of::<i32>() as u32,
+                &mut needed,
+            );
+            CloseHandle(token);
+            // 1 identification, 2 impersonation, 3 delegation.
+            format!("{level}")
+        };
+        let write = write_result(path);
+        let create_process = open_result(pid, 0x0080);
+        RevertToSelf();
+        parts.push(format!(
+            "borrow=impersonated level={level} write={write} create_process={create_process}"
+        ));
+    }
+    parts.join(" ")
 }
 
 /// Polls for elevated command runners other than this command's own until

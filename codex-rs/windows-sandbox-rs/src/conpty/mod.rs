@@ -122,15 +122,14 @@ pub fn spawn_conpty_process_as_user(
     si.StartupInfo.hStdInput = INVALID_HANDLE_VALUE;
     si.StartupInfo.hStdOutput = INVALID_HANDLE_VALUE;
     si.StartupInfo.hStdError = INVALID_HANDLE_VALUE;
-    let desktop = LaunchDesktop::prepare(
-        use_private_desktop,
-        crate::integrity::token_is_low_integrity(h_token),
-        logs_base_dir,
-    )?;
+    let desktop = LaunchDesktop::prepare_for_token(use_private_desktop, h_token, logs_base_dir)?;
     si.StartupInfo.lpDesktop = desktop.startup_info_desktop();
     let job = Arc::new(crate::process::sandbox_job().context("create process job")?);
 
     let raw = RawConPty::new(/*cols*/ 80, /*rows*/ 24)?;
+    // #1721 (a′): the console host copied the runner's token, privilege and
+    // all; it goes before any command can write to the console.
+    crate::command_logon::strip_privilege_from_console_hosts()?;
     let (pseudoconsole, input_write, output_read) = raw.into_handles();
     let hpc = pseudoconsole.raw_handle() as HANDLE;
     let conpty = ConptyInstance {

@@ -4519,6 +4519,15 @@ impl App {
                             self.chat_widget.set_windows_sandbox_mode(
                                 self.config.permissions.windows_sandbox_mode,
                             );
+                            if elevated_enabled
+                                && let Some(notice) =
+                                    crate::windows_sandbox::standard_user_notice(
+                                        self.config.codex_home.as_path(),
+                                    )
+                            {
+                                self.chat_widget
+                                    .add_info_message(notice.to_string(), /*hint*/ None);
+                            }
                             let windows_sandbox_level =
                                 crate::windows_sandbox::level_from_config(&self.config);
                             if let Some((sample_paths, extra_count, failed_scan)) =

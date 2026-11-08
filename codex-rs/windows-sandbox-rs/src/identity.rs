@@ -119,6 +119,24 @@ fn decode_password(record: &SandboxUserRecord) -> Result<String> {
     Ok(pwd)
 }
 
+/// #1721 (a′): the command runner's account, which setup records next to
+/// the command accounts (see [`crate::setup::RUNNER_USERNAME`]). `None`
+/// when setup made none because the user isn't an administrator (D392 (b),
+/// [`SandboxUsersFile::standard_user`]): each runner then runs as its
+/// command's account, as before #1800.
+pub(crate) fn runner_creds(codex_home: &Path) -> Result<Option<SandboxCreds>> {
+    let users = load_users(codex_home)?
+        .filter(SandboxUsersFile::version_matches)
+        .context("no current sandbox users file; rerun the sandbox setup")?;
+    let Some(record) = users.runner else {
+        return Ok(None);
+    };
+    Ok(Some(SandboxCreds {
+        password: decode_password(&record)?,
+        username: record.username,
+    }))
+}
+
 fn select_identity(
     network_identity: SandboxNetworkIdentity,
     codex_home: &Path,
