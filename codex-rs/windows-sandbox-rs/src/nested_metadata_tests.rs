@@ -123,8 +123,9 @@ fn find_reports_folded_names_and_unlistable_folders() {
     );
 }
 
-/// D332: a root's top-level `.git` is reported when it exists, a folder or
-/// file with its identity and a junction without one; a missing one isn't.
+/// D332: a root's top-level `.git` is reported when it exists, with its
+/// identity (D419: a junction too, with what it points to); a missing one
+/// isn't.
 /// One counts as appeared in a session unless it is there, as the same
 /// file, from the start; a `.git` below the top of a root isn't D332's.
 #[test]
@@ -175,14 +176,53 @@ fn top_level_git_is_reported_and_compared() {
             vec![
                 (folder.join(".git"), true),
                 (file.join(".git"), true),
-                (linked.join(".git"), false),
+                (linked.join(".git"), true),
             ],
-            (true, false, false, true, false, false),
-            (
-                true,
-                true,
-                vec![none.join(".git"), folder.join(".git"), linked.join(".git")]
-            ),
+            // D419 (rule 3): an unchanged junction no longer counts.
+            (true, false, false, false, false, false),
+            (true, true, vec![none.join(".git"), folder.join(".git")]),
         )
+    );
+}
+
+/// D419 (rule 3, #1775): a `.git` junction counts as changed when it is
+/// remade (same target), pointed elsewhere, or its target folder is
+/// replaced, and not otherwise.
+#[test]
+fn top_level_git_link_counts_only_when_it_or_its_target_changes() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let base = dunce::canonicalize(dir.path()).expect("canonical");
+    let roots: Vec<PathBuf> = ["remade", "retargeted", "target-replaced", "kept"]
+        .iter()
+        .map(|name| base.join(name))
+        .collect();
+    let (a, b) = (base.join("a"), base.join("b"));
+    for path in roots.iter().chain([&a, &b]) {
+        std::fs::create_dir_all(path).expect("create");
+    }
+    let targets = [a.clone(), a.clone(), base.join("t"), a.clone()];
+    std::fs::create_dir_all(&targets[2]).expect("target");
+    for (root, target) in roots.iter().zip(&targets) {
+        junction(&root.join(".git"), target);
+    }
+    let before = top_level_git(&roots);
+
+    // Remade with the same target: a new link, so a new identity.
+    std::fs::remove_dir(roots[0].join(".git")).expect("remove");
+    junction(&roots[0].join(".git"), &a);
+    // Pointed elsewhere.
+    std::fs::remove_dir(roots[1].join(".git")).expect("remove");
+    junction(&roots[1].join(".git"), &b);
+    // The target folder replaced by another at the same path.
+    std::fs::rename(&targets[2], base.join("t-old")).expect("move target");
+    std::fs::create_dir(&targets[2]).expect("new target");
+
+    assert_eq!(
+        crate::nested_metadata::appeared(&before, top_level_git(&roots)),
+        vec![
+            roots[0].join(".git"),
+            roots[1].join(".git"),
+            roots[2].join(".git")
+        ]
     );
 }

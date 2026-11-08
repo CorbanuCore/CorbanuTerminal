@@ -184,8 +184,17 @@ jobs:
         run: |
           set -euo pipefail
           cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- nested_metadata::tests:: --nocapture --test-threads=1 2>&1 | tee d283-1541.log
-          grep -q "test result: ok. 4 passed" d283-1541.log
+          grep -q "test result: ok. 5 passed" d283-1541.log
           rm d283-1541.log
+      - name: D419 measurement 1 and costs (#1775; draft, needs security sign-off)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- d419_probe --nocapture --test-threads=1 2>&1 | tee d419.log
+          grep "D419-MEASURE" d419.log || true
+          grep -q "test result: ok. 4 passed" d419.log
+          rm d419.log
       - name: Configured read-only paths the legacy backend makes (#1686, #1708, #1780)
         if: ${{ !cancelled() }}
         shell: bash
