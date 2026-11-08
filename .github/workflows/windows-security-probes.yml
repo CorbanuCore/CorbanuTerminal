@@ -1,6 +1,6 @@
 name: windows-security-probes
 
-# win-377: D377 (#304) temp-folder measurement (test branch, never merged).
+# win-377b: #1871 sandbox-owned leftovers in %TEMP% (test branch, never merged).
 on:
   workflow_dispatch:
 
@@ -9,11 +9,11 @@ permissions:
 
 jobs:
   probe:
-    name: win-377 temp probe (windows-2022)
+    name: win-377b leftovers probe (windows-2022)
     runs-on: windows-2022
     timeout-minutes: 150
     env:
-      P377_TEST: unified_exec::tests::command_identity::elevated::probe_377::probe_377_temp_measure
+      P377_TEST: unified_exec::tests::command_identity::elevated::probe_377::probe_377b_leftovers
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -32,7 +32,7 @@ jobs:
         shell: cmd
         run: |
           echo TEMP=%TEMP% TMP=%TMP%
-          where python node npm cargo git pwsh dotnet
+          where python node npm cargo git pwsh dotnet && python --version
           dir /a "%TEMP%" | find /c /v ""
       - name: Admin session
         if: ${{ !cancelled() }}

@@ -354,7 +354,7 @@ fn owner_is_trusted(file: &File, trust_this_user: bool) -> Result<bool> {
 }
 
 /// The owner of `file` (open with `READ_CONTROL`), as a SID string.
-fn owner_sid(file: &File) -> Result<String> {
+pub(crate) fn owner_sid(file: &File) -> Result<String> {
     use windows_sys::Win32::Foundation::ERROR_SUCCESS;
     use windows_sys::Win32::Security::Authorization::GetSecurityInfo;
     use windows_sys::Win32::Security::Authorization::SE_FILE_OBJECT;
@@ -389,7 +389,7 @@ fn owner_sid(file: &File) -> Result<String> {
     owner.context("no owner")?.map_err(anyhow::Error::msg)
 }
 
-fn current_user_sid() -> Result<String> {
+pub(crate) fn current_user_sid() -> Result<String> {
     use windows_sys::Win32::Foundation::CloseHandle;
     // SAFETY: the token is closed right after reading its user.
     let sid = unsafe {

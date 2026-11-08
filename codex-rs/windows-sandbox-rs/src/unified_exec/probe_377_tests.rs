@@ -432,10 +432,7 @@ fn workloads(dir: &Path) -> Vec<(&'static str, PathBuf)> {
         .expect("t.sh");
         list.push((
             "git-bash-heredoc-mktemp",
-            w(
-                "git-bash",
-                &format!("\"{}\" t.sh 2>&1", bash.display()),
-            ),
+            w("git-bash", &format!("\"{}\" t.sh 2>&1", bash.display())),
         ));
     }
     match find_msbuild() {
@@ -595,4 +592,316 @@ fn probe_377_temp_measure() {
         }
     }
     record_setup(home1.path());
+}
+
+// ---------------------------------------------------------------------------
+// PROBE ONLY (win-377b, #1871, never merged): what an elevated pre-upgrade
+// session leaves in the user's `%TEMP%` that the sandbox's accounts own, what
+// a sandboxed command can still do to it once the old `%TEMP%` grant is gone
+// (#1857's upgrade step), and what taking it for the user changes.
+// Reports only (`P377B|` lines).
+
+const SCAN_B_ENTRY: &str =
+    "unified_exec::tests::command_identity::elevated::probe_377::probe_377b_scan_entry";
+const LIST_ENV: &str = "CODEX_P377B_LIST";
+const READ_CONTROL_B: u32 = 0x2_0000;
+const WRITE_DAC_B: u32 = 0x4_0000;
+const WRITE_OWNER_B: u32 = 0x8_0000;
+const READ_ATTRIBUTES_B: u32 = 0x80;
+const BACKUP_SEMANTICS_B: u32 = 0x0200_0000;
+
+fn open_b(path: &Path, access: u32) -> std::io::Result<fs::File> {
+    OpenOptions::new()
+        .access_mode(access)
+        .share_mode(7)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT | BACKUP_SEMANTICS_B)
+        .open(path)
+}
+
+/// The sandboxed side: for each listed path, can it be opened to change its
+/// DACL, to write (or add a file, for a folder), to delete.
+#[test]
+fn probe_377b_scan_entry() {
+    let Some(list) = std::env::var_os(LIST_ENV) else {
+        return;
+    };
+    let text = fs::read_to_string(list).unwrap_or_default();
+    let (mut total, mut write_dac, mut write, mut delete, mut regrant) = (0, 0, 0, 0, 0);
+    for line in text.lines().filter(|line| !line.is_empty()) {
+        let path = Path::new(line);
+        total += 1;
+        write_dac += usize::from(open_b(path, WRITE_DAC_B).is_ok());
+        write += usize::from(open_b(path, FILE_WRITE_DATA).is_ok());
+        delete += usize::from(open_b(path, DELETE).is_ok());
+        // What an owner does with WRITE_DAC: grant itself access again
+        // (only on the first five, to keep the state comparable).
+        if regrant < 5 && open_b(path, WRITE_DAC_B).is_ok() {
+            let me = crate::deny_read_sessions::current_user_sid().unwrap_or_default();
+            let out = std::process::Command::new(system32_exe("icacls.exe"))
+                .arg(path)
+                .arg("/grant")
+                .arg(format!("*{me}:(M)"))
+                .output();
+            if out.is_ok_and(|out| out.status.success()) && open_b(path, FILE_WRITE_DATA).is_ok() {
+                regrant += 1;
+            }
+        }
+    }
+    println!(
+        "\nP377BSCAN|total={total} write_dac={write_dac} write={write} delete={delete} regranted_then_writable={regrant}"
+    );
+}
+
+fn bucket(name: &str) -> String {
+    let mut out = String::new();
+    for ch in name.chars().take(28) {
+        out.push(if ch.is_ascii_digit() { '#' } else { ch });
+    }
+    out
+}
+
+#[derive(Default)]
+struct Inventory {
+    entries: usize,
+    owners: std::collections::BTreeMap<&'static str, usize>,
+    sandbox: Vec<PathBuf>,
+    sandbox_files: usize,
+    sandbox_dirs: usize,
+    sandbox_links: usize,
+    sandbox_takeable: usize,
+    buckets: std::collections::BTreeMap<String, usize>,
+}
+
+fn inventory(base: &Path, accounts: &[String]) -> Inventory {
+    let user = crate::deny_read_sessions::current_user_sid().unwrap_or_default();
+    let mut inv = Inventory::default();
+    let mut stack = vec![base.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            if inv.entries >= 200_000 {
+                return inv;
+            }
+            inv.entries += 1;
+            let path = entry.path();
+            let Ok(look) = open_b(&path, READ_CONTROL_B | READ_ATTRIBUTES_B) else {
+                *inv.owners.entry("unreadable").or_default() += 1;
+                continue;
+            };
+            let attrs = look.metadata().map(|m| {
+                use std::os::windows::fs::MetadataExt;
+                m.file_attributes()
+            });
+            let attrs = attrs.unwrap_or(0);
+            let is_link = attrs & 0x400 != 0;
+            let is_dir = attrs & 0x10 != 0;
+            let owner = crate::deny_read_sessions::owner_sid(&look).unwrap_or_default();
+            let class = if accounts.iter().any(|a| a.eq_ignore_ascii_case(&owner)) {
+                "sandbox"
+            } else if owner == user {
+                "user"
+            } else if owner == "S-1-5-32-544" {
+                "admins"
+            } else if owner == "S-1-5-18" {
+                "system"
+            } else {
+                "other"
+            };
+            *inv.owners.entry(class).or_default() += 1;
+            if class == "sandbox" {
+                inv.sandbox.push(path.clone());
+                if is_link {
+                    inv.sandbox_links += 1;
+                } else if is_dir {
+                    inv.sandbox_dirs += 1;
+                } else {
+                    inv.sandbox_files += 1;
+                }
+                inv.sandbox_takeable += usize::from(
+                    open_b(&path, READ_CONTROL_B | WRITE_DAC_B | WRITE_OWNER_B).is_ok(),
+                );
+                let top = path
+                    .strip_prefix(base)
+                    .ok()
+                    .and_then(|rel| rel.components().next())
+                    .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                *inv.buckets.entry(bucket(&top)).or_default() += 1;
+            }
+            if is_dir && !is_link {
+                stack.push(path);
+            }
+        }
+    }
+    inv
+}
+
+fn print_inventory(label: &str, inv: &Inventory) {
+    println!(
+        "\nP377B|{}|{label}|entries={} owners={:?} sandbox_files={} sandbox_dirs={} sandbox_links={} sandbox_takeable={}/{}",
+        session(),
+        inv.entries,
+        inv.owners,
+        inv.sandbox_files,
+        inv.sandbox_dirs,
+        inv.sandbox_links,
+        inv.sandbox_takeable,
+        inv.sandbox.len()
+    );
+    println!(
+        "\nP377B|{}|{label}|top-level buckets={:?}",
+        session(),
+        inv.buckets
+    );
+}
+
+#[test]
+fn probe_377b_leftovers() {
+    let _guard = legacy_process_test_guard();
+    let Some(home) = elevated_home("p377b") else {
+        println!("\nP377B|{}|skipped: no elevated setup", session());
+        return;
+    };
+    let runtime = current_thread_runtime();
+    let real_temp =
+        dunce::canonicalize(std::env::var_os("TEMP").expect("TEMP")).expect("TEMP real");
+    let id = unique_id();
+    println!("\nP377B|{}|temp={}", session(), real_temp.display());
+    let accounts = crate::session_temp_leftovers::sandbox_account_sids();
+    println!("\nP377B|{}|accounts(before)={accounts:?}", session());
+    let user_dir = real_temp.join(format!("p377b-user-{id}"));
+    fs::create_dir_all(&user_dir).expect("user dir");
+    fs::write(user_dir.join("user.txt"), "user").expect("user file");
+    let root = user_owned_test_root();
+    let work = root.path().join("work");
+    fs::create_dir_all(&work).expect("work");
+    // A pre-upgrade session: the usual tools with TEMP = %TEMP%.
+    let list = workloads(&work);
+    let total = list.len();
+    let mut passed = 0;
+    for (name, script) in list {
+        let (out, code) = runtime.block_on(run(
+            root.path(),
+            home.path(),
+            cmd_argv(&script),
+            &temp_env(&real_temp),
+        ));
+        let ok = code == 0 && out.contains("P377OK");
+        passed += usize::from(ok);
+        println!("\nP377BW|{}|{name}|ok={ok} exit={code}", session());
+    }
+    println!("\nP377B|{}|workloads passed={passed}/{total}", session());
+    // Things a session plausibly leaves behind (crashes, tools that keep
+    // their temp files, files written on purpose).
+    let bash = command_identity::git_for_windows("bin\\bash.exe")
+        .map(|bash| {
+            format!(
+                "\"{}\" -c \"d=$(mktemp -d) && echo x > $d/f && t=$(mktemp) && echo $d $t\" 2>&1",
+                bash.display()
+            )
+        })
+        .unwrap_or_default();
+    let left = work.join("w-left.cmd");
+    fs::write(
+        &left,
+        format!(
+            "@echo off\r\n\
+             echo x> \"%TEMP%\\p377b-cmd-left-{id}.txt\"\r\n\
+             mkdir \"%TEMP%\\p377b-cmd-dir-{id}\" && echo x> \"%TEMP%\\p377b-cmd-dir-{id}\\f.txt\"\r\n\
+             echo x> \"{ud}\\sandbox-made.txt\"\r\n\
+             mkdir \"{ud}\\sandbox-sub\" && echo x> \"{ud}\\sandbox-sub\\f.txt\"\r\n\
+             python -c \"import tempfile,os,sys;print(sys.version);f=tempfile.NamedTemporaryFile(delete=False,prefix='p377b-py-');f.write(b'x');f.close();d=tempfile.mkdtemp(prefix='p377b-pyd-');open(os.path.join(d,'f'),'w').write('x');os.mkdir(os.path.join(tempfile.gettempdir(),'p377b-py700-{id}'),0o700)\" 2>&1\r\n\
+             node -e \"const os=require('os'),fs=require('fs'),p=require('path');const d=fs.mkdtempSync(p.join(os.tmpdir(),'p377b-node-'));fs.writeFileSync(p.join(d,'f'),'x')\" 2>&1\r\n\
+             \"{ps}\" -NoProfile -Command \"$f=New-TemporaryFile; Set-Content $f x; $f.FullName\" 2>&1\r\n\
+             {bash}\r\n\
+             echo P377OK\r\n",
+            ud = user_dir.display(),
+            ps = system32_exe("WindowsPowerShell\\v1.0\\powershell.exe").display(),
+        ),
+    )
+    .expect("left script");
+    let (out, code) = runtime.block_on(run(
+        root.path(),
+        home.path(),
+        cmd_argv(&left),
+        &temp_env(&real_temp),
+    ));
+    println!(
+        "\nP377B|{}|leave-behind exit={code} out={}",
+        session(),
+        tail(&out)
+    );
+    let accounts = crate::session_temp_leftovers::sandbox_account_sids();
+    println!("\nP377B|{}|accounts={accounts:?}", session());
+    let accounts = accounts.unwrap_or_default();
+    let before = inventory(&real_temp, &accounts);
+    print_inventory("after-session", &before);
+    let list_file = root.path().join("p377b-list.txt");
+    fs::write(
+        &list_file,
+        before
+            .sandbox
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
+    .expect("list");
+    let scan = |label: &str| {
+        let mut env = temp_env(&work);
+        env.push((LIST_ENV, list_file.display().to_string()));
+        let (out, code) = runtime.block_on(run(
+            root.path(),
+            home.path(),
+            probe_argv(SCAN_B_ENTRY),
+            &env,
+        ));
+        let line = out
+            .lines()
+            .find(|line| line.starts_with("P377BSCAN|"))
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("no scan line exit={code} {}", tail(&out)));
+        println!("\nP377B|{}|{label}|{line}", session());
+    };
+    scan("sandbox-with-old-grant");
+    // #1857's upgrade step: the group's and the home's grants on %TEMP% go.
+    let caps = crate::cap::load_or_create_cap_sids(home.path()).expect("caps");
+    let mut sids: Vec<String> = caps
+        .writable_root_by_path
+        .values()
+        .chain(caps.workspace_by_cwd.values())
+        .cloned()
+        .collect();
+    if let Ok(group) = crate::winutil::resolve_sid(crate::token::SANDBOX_USERS_GROUP)
+        && let Ok(group) = crate::winutil::string_from_sid_bytes(&group)
+    {
+        sids.push(group);
+    }
+    let psids: Vec<crate::token::LocalSid> = sids
+        .iter()
+        .filter_map(|sid| crate::token::LocalSid::from_string(sid).ok())
+        .collect();
+    let ptrs: Vec<_> = psids.iter().map(|sid| sid.as_ptr()).collect();
+    // SAFETY: valid SIDs; the folder exists.
+    let removed = unsafe { crate::acl::remove_explicit_allow_aces(&real_temp, &ptrs) };
+    println!("\nP377B|{}|old grant removed={removed:?}", session());
+    scan("sandbox-after-grant-removed");
+    let started = Instant::now();
+    let taken = crate::session_temp_leftovers::take_sandbox_leftovers(&real_temp, &accounts);
+    println!(
+        "\nP377B|{}|take secs={:.2} result={taken:?}",
+        session(),
+        started.elapsed().as_secs_f64()
+    );
+    scan("sandbox-after-take");
+    let after = inventory(&real_temp, &accounts);
+    print_inventory("after-take", &after);
+    println!(
+        "\nP377B|{}|user-dir user.txt intact={}",
+        session(),
+        fs::read_to_string(user_dir.join("user.txt")).is_ok_and(|text| text == "user")
+    );
+    record_setup(home.path());
 }
