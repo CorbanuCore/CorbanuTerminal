@@ -78,6 +78,13 @@ an administrator, delete the `CodexSandboxRunner` local user (and that
 `sandbox_users.json`): the account, and the password stored for it, would
 otherwise keep working.
 
+Setup also leaves the account out if it can't look up either account name
+(for example a domain account while the domain controller is unreachable);
+delete `sandbox_users.json` as above to retry. And if you, as an
+administrator, run another account's program on your own desktop and approve
+the setup prompt it raises, that account gets the runner account: approve
+only prompts you started.
+
 One gap remains with the runner account too: another elevated command can
 resume a command's suspended threads. Commands aren't started suspended, so
 this matters only for threads a command suspends itself.

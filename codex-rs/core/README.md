@@ -249,8 +249,13 @@ Codex up for (`real_user`, from Core's `USERNAME` or `codex sandbox setup
 UAC prompt). `real_user` alone is the user's to set; the session's user
 isn't. A standard user's setup, run as the administrator who typed their
 password into the UAC prompt in the user's session (or `codex sandbox setup`
-for another user), records `standard_user` in `sandbox_users.json` instead. Core then starts each
-runner as the command's account and the runner makes the command's token
+for another user), records `standard_user` in `sandbox_users.json`
+instead; so does a setup that can't resolve either name (it fails closed,
+and the user has to delete that file to retry). Residual: an administrator
+who runs another user's code on their own desktop and approves the UAC
+prompt it raises passes the check (the session's user is theirs), as with
+any prompt they approve. Core then starts each runner as the command's
+account and the runner makes the command's token
 from its own (`ElevatedBaseLogon::RunnerLogon`), with the D324 default DACL,
 exactly as before #1800: #1721, #1560 and #1803 stay open for them, and the
 TUI and `codex sandbox setup` tell the user so. A runner that holds the

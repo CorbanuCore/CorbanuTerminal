@@ -310,8 +310,8 @@ fn d392_elevated_default_dacl_follows_whose_logon_the_base_token_is() -> Result<
 /// refuses a request without a command logon).
 #[test]
 fn d392_runner_uses_its_own_token_only_without_the_privilege() {
-    let decide = |logon, privilege| {
-        ElevatedBaseLogon::for_request(logon, privilege).map_err(|err| format!("{err:#}"))
+    let decide = |logon, privilege: bool| {
+        ElevatedBaseLogon::for_request(logon, || Ok(privilege)).map_err(|err| format!("{err:#}"))
     };
     pretty_assertions::assert_eq!(
         [
@@ -326,5 +326,11 @@ fn d392_runner_uses_its_own_token_only_without_the_privilege() {
             Ok(ElevatedBaseLogon::RunnerLogon),
             Err("runner: Core sent no logon token for the command (#1721)".to_string()),
         ]
+    );
+    // With a command logon, the runner's own token isn't queried at all.
+    let unasked = ElevatedBaseLogon::for_request(true, || anyhow::bail!("queried"));
+    pretty_assertions::assert_eq!(
+        unasked.map_err(|err| format!("{err:#}")),
+        Ok(ElevatedBaseLogon::OwnLogon)
     );
 }

@@ -494,7 +494,7 @@ impl SandboxUsersFile {
 
 /// D392 (b): what Codex tells a user whose sandbox setup made no runner
 /// account because they aren't an administrator.
-pub const STANDARD_USER_NOTICE: &str = "The elevated sandbox's setup ran as a different Windows account than yours (as when an administrator approves it for a standard account), so it didn't create Corbanu Terminal's separate command-runner account: that account's Windows right would let anyone signed in as you become an administrator. The elevated sandbox still works as before. Commands in other projects can then interfere with a command while it starts, borrow its access and read its memory (#1721, #1560, #1803), so avoid running commands in several projects at once. For the stronger isolation, run Corbanu Terminal from an administrator account and let it run the setup itself.";
+pub const STANDARD_USER_NOTICE: &str = "The elevated sandbox's setup ran as a different Windows account than yours (as when an administrator approves it for a standard account), or couldn't confirm it ran as yours, so it didn't create Corbanu Terminal's separate command-runner account: that account's Windows right would let anyone signed in as you become an administrator. The elevated sandbox still works as before. Commands in other projects can then interfere with a command while it starts, borrow its access and read its memory (#1721, #1560, #1803), so avoid running commands in several projects at once. For the stronger isolation, run Corbanu Terminal from an administrator account and let it run the setup itself.";
 
 /// D392 (b): [`STANDARD_USER_NOTICE`] when the current setup in
 /// `codex_home` made no runner account because the user isn't an

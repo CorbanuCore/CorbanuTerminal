@@ -740,14 +740,18 @@ impl ElevatedBaseLogon {
     /// own logon when Core sent one; otherwise the runner's own token, which
     /// only a runner without `SeAssignPrimaryTokenPrivilege` may use (one
     /// running as the command's account, not as the runner account).
-    pub fn for_request(has_command_logon: bool, runner_holds_privilege: bool) -> Result<Self> {
-        match (has_command_logon, runner_holds_privilege) {
-            (true, _) => Ok(Self::OwnLogon),
-            (false, false) => Ok(Self::RunnerLogon),
-            (false, true) => Err(anyhow!(
-                "runner: Core sent no logon token for the command (#1721)"
-            )),
+    /// `runner_holds_privilege` is asked only without a command logon.
+    pub fn for_request(
+        has_command_logon: bool,
+        runner_holds_privilege: impl FnOnce() -> Result<bool>,
+    ) -> Result<Self> {
+        if has_command_logon {
+            return Ok(Self::OwnLogon);
         }
+        if runner_holds_privilege()? {
+            anyhow::bail!("runner: Core sent no logon token for the command (#1721)");
+        }
+        Ok(Self::RunnerLogon)
     }
 }
 

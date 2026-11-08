@@ -301,10 +301,9 @@ fn spawn_ipc_process(req: &SpawnRequest, own_token: &OwnedWinHandle) -> Result<I
     let command_logon = req
         .command_token
         .map(|token| OwnedWinHandle::new(token as HANDLE));
-    let base_logon = ElevatedBaseLogon::for_request(
-        command_logon.is_some(),
-        holds_assign_primary_token_privilege(own_token.raw())?,
-    )?;
+    let base_logon = ElevatedBaseLogon::for_request(command_logon.is_some(), || {
+        holds_assign_primary_token_privilege(own_token.raw())
+    })?;
     let base = command_logon
         .as_ref()
         .map_or(own_token.raw(), OwnedWinHandle::raw);
