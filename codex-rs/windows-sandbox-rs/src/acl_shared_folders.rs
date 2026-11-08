@@ -962,6 +962,11 @@ pub unsafe fn remove_shared_folder_denies_for_home(
     Ok(removal)
 }
 
+/// Fail-before stub: the code under test reports nothing (D415 not built).
+pub fn shared_folder_write_denied_roots(_roots: &[PathBuf]) -> Vec<PathBuf> {
+    Vec::new()
+}
+
 #[cfg(test)]
 #[path = "acl_shared_folders_tests.rs"]
 mod tests;
