@@ -113,12 +113,15 @@ pub const SHARED_GROUP_SIDS: [&str; 9] = [
 
 /// The machine's record, in [`SHARED_FOLDER_RECORD_DIR`].
 pub const SHARED_FOLDER_RECORD_FILE: &str = "record.json";
+const SHARED_FOLDER_RECORD_LOCK: &str = "record.lock";
 /// Under `%ProgramData%\CorbanuTerminalSandbox`.
 pub const SHARED_FOLDER_RECORD_DIR: &str = "shared-folder-denies";
 /// Rights an allow for Everyone may give that the [`SharedFolderDenyKind::Write`]
 /// deny closes (Everyone is a restricting SID, so they pass both checks).
 const EVERYONE_WRITE_RIGHTS: u32 = FILE_ADD_FILE
     | FILE_ADD_SUBDIRECTORY
+    | FILE_WRITE_EA
+    | FILE_WRITE_ATTRIBUTES
     | DELETE
     | FILE_DELETE_CHILD
     | WRITE_DAC
@@ -767,6 +770,35 @@ fn load_or_set_aside(record_dir: &Path, notes: &mut Vec<String>) -> Result<Share
     }
 }
 
+/// Held while a setup reads, changes and saves the record, so two at once
+/// don't lose each other's updates. Only Administrators and SYSTEM may open
+/// the record folder, so no one else can hold it.
+fn lock_record(record_dir: &Path) -> Result<std::fs::File> {
+    use std::os::windows::fs::OpenOptionsExt;
+    const ERROR_SHARING_VIOLATION: i32 = 32;
+    let path = record_dir.join(SHARED_FOLDER_RECORD_LOCK);
+    let started = Instant::now();
+    loop {
+        match std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .share_mode(0)
+            .open(&path)
+        {
+            Ok(file) => return Ok(file),
+            Err(err)
+                if err.raw_os_error() == Some(ERROR_SHARING_VIOLATION)
+                    && started.elapsed() < std::time::Duration::from_secs(120) =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            Err(err) => return Err(err).with_context(|| format!("locking {}", path.display())),
+        }
+    }
+}
+
 fn save_record(record_dir: &Path, record: &SharedFolderDenyRecord) -> Result<()> {
     let path = record_dir.join(SHARED_FOLDER_RECORD_FILE);
     let tmp = record_dir.join(format!("{SHARED_FOLDER_RECORD_FILE}.tmp"));
@@ -802,6 +834,7 @@ pub unsafe fn apply_shared_folder_denies(
     group_psid: *mut c_void,
     findings: &[SharedFolderFinding],
 ) -> Result<SharedFolderDenyReport> {
+    let _lock = lock_record(record_dir)?;
     let mut report = SharedFolderDenyReport::default();
     let mut record = load_or_set_aside(record_dir, &mut report.notes)?;
     let home = home_key(codex_home);
@@ -819,9 +852,9 @@ pub unsafe fn apply_shared_folder_denies(
             }
         };
         let identity = folder.identity();
+        // The folder, however its path is spelled.
         let recorded = record.entries.iter_mut().find(|entry| {
-            entry.path == finding.path
-                && entry.kind == finding.kind
+            entry.kind == finding.kind
                 && entry.sid == group_sid
                 && entry.identity() == Some(identity)
         });
@@ -889,6 +922,7 @@ pub unsafe fn remove_shared_folder_denies_for_home(
     group_sid: &str,
     group_psid: *mut c_void,
 ) -> Result<SharedFolderDenyRemoval> {
+    let _lock = lock_record(record_dir)?;
     let record = load_shared_folder_deny_record(record_dir)?;
     let home = home_key(codex_home);
     let mut kept = SharedFolderDenyRecord::default();

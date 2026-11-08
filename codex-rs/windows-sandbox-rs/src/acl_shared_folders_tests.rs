@@ -96,6 +96,8 @@ fn shared_folders_classify_allow() {
         (everyone, 0, WRITE_DAC, false, (false, true)),
         (everyone, 0, WRITE_OWNER, false, (false, true)),
         (everyone, 0, DELETE, false, (false, true)),
+        (everyone, 0, FILE_WRITE_ATTRIBUTES, false, (false, true)),
+        (everyone, 0, FILE_WRITE_EA, false, (false, true)),
         (everyone, OI | CI, FULL, false, (true, true)),
         // Files only: the files are writable.
         (everyone, OI | IO, MODIFY, false, (false, true)),
