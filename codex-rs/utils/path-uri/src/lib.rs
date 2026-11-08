@@ -477,20 +477,6 @@ impl PathUri {
             ));
         }
 
-        // A `\\localhost\share` path keeps an empty host once
-        // `without_localhost_authority` drops `localhost`. `url` can't convert
-        // that: it panics in debug builds (#1863).
-        if self.0.host_str() == Some("") {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                PathUriParseError::LocalhostUncPath {
-                    path: format!(
-                        r"\\localhost{}",
-                        decode_uri_path(self.0.path()).replace('/', r"\")
-                    ),
-                },
-            ));
-        }
         let path = self.0.to_file_path().map_err(|()| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
