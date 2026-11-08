@@ -52,6 +52,7 @@ use codex_windows_sandbox::wait_for_console_host_start;
 use codex_windows_sandbox::write_frame;
 use std::ffi::OsStr;
 use std::fs::File;
+use std::os::windows::io::AsRawHandle;
 use std::os::windows::io::FromRawHandle;
 use std::path::Path;
 use std::path::PathBuf;
@@ -669,12 +670,21 @@ pub fn main() -> Result<()> {
         let spawned = spawn_ipc_process(&req, &base);
         // #1721 (a′), D392: the runner starts one command; whether or not it
         // started, the runner keeps no right to start another with a token
-        // it did not derive from its own. If that fails the runner exits
-        // with an error, and its job ends the command.
+        // it did not derive from its own. If that fails the runner ends the
+        // command's job first and exits with an error.
         let removed = remove_assign_primary_token_privilege(base.raw());
         match (spawned, removed) {
             (spawned, Ok(())) => spawned,
-            (Ok(_spawned), Err(err)) => Err(err),
+            (Ok(spawned), Err(err)) => {
+                // SAFETY: the command's live job handle, owned by `spawned`.
+                unsafe {
+                    windows_sys::Win32::System::JobObjects::TerminateJobObject(
+                        spawned.job.as_raw_handle() as HANDLE,
+                        /*uexitcode*/ 1,
+                    );
+                }
+                Err(err)
+            }
             (Err(err), Err(removal)) => Err(err.context(format!("{removal:#}"))),
         }
     }) {

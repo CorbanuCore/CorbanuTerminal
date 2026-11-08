@@ -39,11 +39,16 @@ program that starts them runs as a third account, `CodexSandboxRunner`, which
 no command uses (#1721). Setup gives that account the Windows right "Replace a
 process level token" (`SeAssignPrimaryTokenPrivilege`), which it needs to
 start each command on its own logon, and denies it network, remote desktop,
-batch and service sign-in. Its password is in a file that only you,
-administrators and the system can read, so a program running as you could use
-it to sign in as that account and, with that right, possibly gain full control
-of the computer. To remove the account, delete the `CodexSandboxRunner` local
-user; setup creates it again the next time it runs.
+batch and service sign-in. Its password is stored, encrypted for this
+computer, in the sandbox's secrets folder under your Codex home. That folder
+gives you, administrators and the system access; if your Codex home is
+somewhere other accounts may read (for example a folder at the root of a
+drive), they may be able to read it too. Anyone who can read the password can
+sign in as that account and, with that right, possibly gain full control of
+the computer; that includes a program running as you. To remove the account,
+delete the `CodexSandboxRunner` local user; setup creates it again the next
+time it runs. Windows keeps the rights it was given, which no other account
+can use.
 
 **When you will see a warning.** If your sandboxed commands run in the
 non-admin sandbox, Corbanu Terminal tells you once per session:
