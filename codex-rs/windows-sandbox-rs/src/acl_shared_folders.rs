@@ -548,6 +548,9 @@ unsafe fn add_to_open_folder(
     psid: *mut c_void,
     kind: SharedFolderDenyKind,
 ) -> Result<bool> {
+    // Another finding for the same folder may have changed it since it was
+    // opened.
+    folder.reread()?;
     if dacl_has_exact(folder.p_dacl, psid, kind) {
         return Ok(false);
     }

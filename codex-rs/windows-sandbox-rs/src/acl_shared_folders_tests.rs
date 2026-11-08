@@ -413,6 +413,36 @@ fn shared_folders_record_lists_what_the_removal_takes_out() {
     assert_eq!(after, before);
 }
 
+/// Two findings for one folder (Everyone Full control): both entries stay.
+#[test]
+fn shared_folders_two_denies_on_one_folder() {
+    let tmp = tempfile::tempdir().expect("tmp");
+    let record_dir = folder(&tmp.path().join("record"), None);
+    let shared = folder(
+        &tmp.path().join("everyone-full"),
+        Some("*S-1-1-0:(OI)(CI)F"),
+    );
+    let group = LocalSid::from_string(GROUP).expect("group SID");
+    let findings = vec![
+        finding(&shared, SharedFolderDenyKind::DeleteChild),
+        finding(&shared, SharedFolderDenyKind::Write),
+    ];
+    // SAFETY: `group` is the SID `GROUP` names.
+    let report = unsafe {
+        apply_shared_folder_denies(&record_dir, tmp.path(), GROUP, group.as_ptr(), &findings)
+    }
+    .expect("apply");
+    assert_eq!((report.added.len(), report.errors.len()), (2, 0));
+    for kind in [
+        SharedFolderDenyKind::DeleteChild,
+        SharedFolderDenyKind::Write,
+    ] {
+        // SAFETY: as above.
+        let present = unsafe { has_shared_folder_deny(&shared, group.as_ptr(), kind) };
+        assert!(present.expect("has"), "{kind:?}: {}", dacl_sddl(&shared));
+    }
+}
+
 /// A recorded folder replaced by another at the same path keeps its new
 /// DACL: the entry is forgotten, not removed from the newcomer.
 #[test]

@@ -581,6 +581,28 @@ fn workload(
     failed
 }
 
+/// A workspace like a user's project folder, outside the checkout (whose
+/// `rust-toolchain.toml` would make rustup install components).
+fn private_root() -> TempDir {
+    let root = tempfile::Builder::new()
+        .prefix("sec-win-1791-")
+        .tempdir_in(std::env::temp_dir().to_string_lossy().replace('/', "\\"))
+        .expect("a workspace");
+    let user = format!("*{}:(OI)(CI)F", current_user_sid());
+    icacls(
+        root.path(),
+        &[
+            "/inheritance:r",
+            "/grant:r",
+            "*S-1-5-18:(OI)(CI)F",
+            "*S-1-5-32-544:(OI)(CI)F",
+            user.as_str(),
+        ],
+    );
+    icacls(root.path(), &["/setintegritylevel", "(OI)(CI)M"]);
+    root
+}
+
 fn prepare_cmd_project(root: &Path) {
     fs::write(root.join("pre.txt"), "pre").expect("pre.txt");
     fs::create_dir_all(root.join("pre-dir").join("sub")).expect("pre-dir");
@@ -599,8 +621,8 @@ fn sec_win_1791_elevated_everyday_workloads_still_work() {
     }
     let _guard = legacy_process_test_guard();
     let home = codex_home.path();
-    let root_dir = user_owned_test_root();
-    let temp_dir = user_owned_test_root();
+    let root_dir = private_root();
+    let temp_dir = private_root();
     let (root, temp) = (root_dir.path(), temp_dir.path());
     let mut failed = Vec::new();
 
