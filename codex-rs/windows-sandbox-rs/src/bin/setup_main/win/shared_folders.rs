@@ -38,15 +38,9 @@ pub(super) fn deny_shared_folders(
     let scan = match scan_shared_folders(&roots) {
         Ok(scan) => scan,
         Err(err) => {
+            // D414: no stamp, so Core asks for this setup again (once per
+            // process once one has succeeded).
             log_line(log, &format!("shared-folder scan failed: {err:#}"))?;
-            // D414: the next version's rescan asks for this setup again.
-            let stamp = SharedFolderScanStamp {
-                cli_version: shared_folder_scan_cli_version().to_string(),
-                ..SharedFolderScanStamp::default()
-            };
-            if let Err(err) = write_shared_folder_scan_stamp(codex_home, &stamp) {
-                log_line(log, &format!("shared-folder scan stamp: {err:#}"))?;
-            }
             return Ok(());
         }
     };
@@ -121,6 +115,7 @@ pub(super) fn deny_shared_folders(
                     foreign: report.foreign_folders.clone(),
                     unchanged: report.unchanged.clone(),
                     unopened: report.unopened.clone(),
+                    clean_versions: Vec::new(),
                 },
             )
         });

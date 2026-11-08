@@ -63,6 +63,10 @@ pub struct SharedFolderScanStamp {
     pub unchanged: Vec<RecordedSharedFolder>,
     #[serde(default)]
     pub unopened: Vec<PathBuf>,
+    /// Other versions whose user scan against these lists found nothing to
+    /// close (several versions may share a home).
+    #[serde(default)]
+    pub clean_versions: Vec<String>,
 }
 
 /// The version shipped with these binaries (Core and setup alike).
@@ -91,9 +95,15 @@ pub fn write_shared_folder_scan_stamp(
     }
     // Replaced whole, so a reader never sees half of it.
     let tmp = path.with_extension(format!("json.tmp-{}", std::process::id()));
-    std::fs::write(&tmp, serde_json::to_vec_pretty(stamp)?)
-        .with_context(|| format!("writing {}", tmp.display()))?;
-    std::fs::rename(&tmp, &path).with_context(|| format!("replacing {}", path.display()))
+    let written = std::fs::write(&tmp, serde_json::to_vec_pretty(stamp)?)
+        .with_context(|| format!("writing {}", tmp.display()))
+        .and_then(|()| {
+            std::fs::rename(&tmp, &path).with_context(|| format!("replacing {}", path.display()))
+        });
+    if written.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    written
 }
 
 /// D413: after the removal, so the next elevated command runs the setup
@@ -187,15 +197,18 @@ pub(crate) fn rescan_decision(
             "no shared-folder scan is recorded for this home".to_string(),
         ));
     };
-    if stamp.cli_version == version {
+    if stamp.cli_version == version || stamp.clean_versions.iter().any(|v| v == version) {
         return Ok(RescanDecision::NotDue);
     }
     let missing = scan(&stamp)?;
     Ok(match missing.first() {
-        None => RescanDecision::Clean(SharedFolderScanStamp {
-            cli_version: version.to_string(),
-            ..stamp
-        }),
+        // The setup's version stays: another version sharing the home
+        // doesn't scan again for it either.
+        None => {
+            let mut stamp = stamp;
+            stamp.clean_versions.push(version.to_string());
+            RescanDecision::Clean(stamp)
+        }
         Some(first) => RescanDecision::AdminSetup(format!(
             "CLI version {version}: {} shared folders lack the setup's deny (first: {:?} on {})",
             missing.len(),

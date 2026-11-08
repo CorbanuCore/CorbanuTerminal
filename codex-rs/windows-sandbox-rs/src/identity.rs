@@ -256,7 +256,7 @@ pub fn require_logon_sandbox_creds(
             }
             (Err(err), Some(fallback)) => {
                 let notice = format!(
-                    "The Windows sandbox setup needed to close shared folders found since the last update failed or was declined; commands run with the protections the last setup added (#1791): {err:#}"
+                    "The Windows sandbox setup needed to close shared folders found since the last update failed or was declined, so a command ran with the shared-folder protections already in place (#1791). If the setup started and failed, later commands need it to succeed. Details are in the sandbox log: {err:#}"
                 );
                 crate::logging::log_note(&notice, Some(&sandbox_dir));
                 crate::shared_folder_rescan::push_notice(notice);
@@ -346,7 +346,7 @@ fn shared_folder_rescan_reason(
             checked.extend(key);
             note(format!(
                 "shared-folder rescan for CLI version {}: nothing to close",
-                stamp.cli_version
+                crate::shared_folder_rescan::shared_folder_scan_cli_version()
             ));
             if let Err(err) =
                 crate::shared_folder_rescan::write_shared_folder_scan_stamp(codex_home, &stamp)

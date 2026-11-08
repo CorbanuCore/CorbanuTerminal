@@ -12,6 +12,7 @@ fn stamp(version: &str) -> SharedFolderScanStamp {
         foreign: Vec::new(),
         unchanged: Vec::new(),
         unopened: vec![PathBuf::from(r"C:\ProgramData\Locked")],
+        clean_versions: Vec::new(),
     }
 }
 
@@ -45,7 +46,16 @@ fn new_version_with_nothing_missing_keeps_the_setups_lists() {
         Ok(Vec::new())
     })
     .expect("decision");
-    assert_eq!(decision, RescanDecision::Clean(stamp("2.0.0")));
+    let mut clean = stamp("1.0.0");
+    clean.clean_versions.push("2.0.0".to_string());
+    assert_eq!(decision, RescanDecision::Clean(clean.clone()));
+
+    // Both versions sharing the home: neither scans again.
+    for version in ["1.0.0", "2.0.0"] {
+        let decision =
+            rescan_decision(Some(clean.clone()), version, |_| panic!("no scan")).expect("decision");
+        assert_eq!(decision, RescanDecision::NotDue);
+    }
 }
 
 #[test]

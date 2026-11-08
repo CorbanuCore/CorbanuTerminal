@@ -230,8 +230,10 @@ you, and runs the administrator setup again (one approval prompt) only if it
 finds a folder without its deny, for example one a program installed since.
 If you decline that prompt, or can't approve it (for example as a standard
 user whose administrator ran the setup), commands still run with the denies
-the last setup added, Corbanu Terminal warns you, and it asks again the next
-time it starts. A setup made before this protection existed (or after you
+the last setup added, and Corbanu Terminal asks again the next time it
+starts; it warns you when the next turn starts (a single `corbanu exec` run
+may end first; the sandbox log in `.sandbox` always has it). If the setup
+started and then failed, later commands need it to succeed. A setup made before this protection existed (or after you
 removed the denies) needs the administrator setup at the first command, and
 commands don't run until it succeeds, as after any setup change. Folders you
 can't list yourself are scanned only when the administrator setup runs, and
@@ -248,7 +250,7 @@ cryptographic keys (`ProgramData\Microsoft\Crypto\...\MachineKeys`).
 commands may write to (your project, or an extra writable folder) is in an
 Everyone-writable shared folder, sandboxed commands can't change files there.
 Corbanu Terminal checks these folders when each turn starts and warns you
-once per session for each one (a setup that runs during a turn shows up at
+once for each one while it runs (a setup that runs during a turn shows up at
 the next). (A subfolder that is itself Everyone-writable
 gets a deny of its own and isn't checked.) Move the project to a folder of
 your own, such as one under your user profile.

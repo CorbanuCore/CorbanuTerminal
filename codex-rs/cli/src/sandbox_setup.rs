@@ -84,8 +84,9 @@ fn remove_shared_folder_denies(cmd: &SandboxSetupCommand) -> anyhow::Result<()> 
     // The machine's record names a home by the path its setup was given.
     let codex_home = std::path::absolute(&identity.codex_home)
         .with_context(|| format!("resolving {}", identity.codex_home.display()))?;
-    let sandbox_dir = codex_home.join(".sandbox");
-    if !sandbox_dir.join("setup_marker.json").is_file() {
+    // Not the setup marker: a setup that failed partway removed it, and
+    // that is when an uninstall needs this.
+    if !codex_home.join(".sandbox").is_dir() {
         anyhow::bail!(
             "no elevated sandbox setup is recorded in {}; pass the Codex home the setup used with --codex-home (and --user for another account)",
             codex_home.display()
