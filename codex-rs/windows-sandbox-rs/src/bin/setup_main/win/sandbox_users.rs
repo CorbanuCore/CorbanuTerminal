@@ -575,7 +575,7 @@ fn write_secrets(
         offline: record(offline)?,
         online: record(online)?,
         standard_user: runner.is_none(),
-        runner: runner.map(&record).transpose()?,
+        runner: runner.map(record).transpose()?,
     };
     let users_path = secrets_dir.join("sandbox_users.json");
     let users_json = serde_json::to_vec_pretty(&users).map_err(|err| {
