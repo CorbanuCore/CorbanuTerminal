@@ -298,17 +298,16 @@ fn spawn_ipc_process(req: &SpawnRequest, own_token: &OwnedWinHandle) -> Result<I
     // and this runner, running as the command's account, makes it from its
     // own token as before #1800; never while it holds
     // SeAssignPrimaryTokenPrivilege, which only the runner account holds.
-    let command_logon = match req.command_token {
-        Some(token) => Some(OwnedWinHandle::new(token as HANDLE)),
-        None if holds_assign_primary_token_privilege(own_token.raw())? => {
-            anyhow::bail!("runner: Core sent no logon token for the command (#1721)")
-        }
-        None => None,
-    };
-    let (base, base_logon) = match &command_logon {
-        Some(command_logon) => (command_logon.raw(), ElevatedBaseLogon::OwnLogon),
-        None => (own_token.raw(), ElevatedBaseLogon::RunnerLogon),
-    };
+    let command_logon = req
+        .command_token
+        .map(|token| OwnedWinHandle::new(token as HANDLE));
+    let base_logon = ElevatedBaseLogon::for_request(
+        command_logon.is_some(),
+        holds_assign_primary_token_privilege(own_token.raw())?,
+    )?;
+    let base = command_logon
+        .as_ref()
+        .map_or(own_token.raw(), OwnedWinHandle::raw);
     hide_current_user_profile_dir(req.codex_home.as_path());
     let token_mode = token_mode_for_permission_profile(
         &req.permission_profile,

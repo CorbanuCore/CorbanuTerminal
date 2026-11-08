@@ -127,7 +127,7 @@ async fn run_elevated(
     #[cfg(not(target_os = "windows"))]
     let notice: Option<&str> = None;
     if let Some(notice) = notice {
-        println!("{notice}");
+        println!("For {}: {notice}", identity.real_user);
     }
     Ok(())
 }

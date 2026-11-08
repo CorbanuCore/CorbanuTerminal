@@ -474,10 +474,11 @@ pub struct SandboxUsersFile {
     /// only for an administrator (D392).
     #[serde(default)]
     pub runner: Option<SandboxUserRecord>,
-    /// D392 (b): set when the user Codex was set up for isn't an
-    /// administrator (setup ran as another account), so setup made no runner
-    /// account and the elevated sandbox runs as it did before #1800: each
-    /// runner as its command's account (see [`STANDARD_USER_NOTICE`]).
+    /// D392 (b): set when setup ran as another account than the user it set
+    /// Codex up for, signed in to that session (a standard user's setup,
+    /// which an administrator approved), so it made no runner account and the
+    /// elevated sandbox runs as it did before #1800: each runner as its
+    /// command's account (see [`STANDARD_USER_NOTICE`]).
     #[serde(default)]
     pub standard_user: bool,
 }
@@ -493,7 +494,7 @@ impl SandboxUsersFile {
 
 /// D392 (b): what Codex tells a user whose sandbox setup made no runner
 /// account because they aren't an administrator.
-pub const STANDARD_USER_NOTICE: &str = "Your Windows account isn't an administrator, so the elevated sandbox setup didn't create Codex's separate command-runner account (it needs a powerful Windows right that would let anyone signed in as you become an administrator). The elevated sandbox still works as before, with each command's runner running as the sandbox account. Commands in other projects can then interfere with a command while it starts, borrow its access and read its memory (#1717, #1560, #1803), so avoid running commands in several projects at once. To get the stronger isolation, run Codex from an administrator account.";
+pub const STANDARD_USER_NOTICE: &str = "The elevated sandbox's setup ran as a different Windows account than yours (as when an administrator approves it for a standard account), so it didn't create Corbanu Terminal's separate command-runner account: that account's Windows right would let anyone signed in as you become an administrator. The elevated sandbox still works as before. Commands in other projects can then interfere with a command while it starts, borrow its access and read its memory (#1721, #1560, #1803), so avoid running commands in several projects at once. For the stronger isolation, run Corbanu Terminal from an administrator account and let it run the setup itself.";
 
 /// D392 (b): [`STANDARD_USER_NOTICE`] when the current setup in
 /// `codex_home` made no runner account because the user isn't an
@@ -504,7 +505,9 @@ pub fn standard_user_notice(codex_home: &Path) -> Option<&'static str> {
     (users.version_matches() && users.runner.is_none()).then_some(STANDARD_USER_NOTICE)
 }
 
-pub(crate) fn is_elevated() -> Result<bool> {
+/// Whether this process's token is in the Administrators group (an
+/// elevated administrator, or one with UAC off).
+pub fn is_elevated() -> Result<bool> {
     unsafe {
         let mut administrators_group: *mut c_void = std::ptr::null_mut();
         let ok = AllocateAndInitializeSid(

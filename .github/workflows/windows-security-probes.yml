@@ -237,19 +237,19 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: cargo build --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --bins
-      - name: Sandbox user passwords meet Windows complexity (#1776)
+      - name: Sandbox user passwords meet Windows complexity (#1776); runner account only for the session's administrator (D392)
         if: ${{ !cancelled() }}
         shell: bash
         run: |
           set -euo pipefail
           cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --bin codex-windows-sandbox-setup -- sandbox_users::tests:: --nocapture 2>&1 | tee pw-1776.log
-          grep -q 'test result: ok. 3 passed' pw-1776.log
+          grep -q 'test result: ok. 4 passed' pw-1776.log
       - name: Users file and default DACLs without a runner account (D392)
         if: ${{ !cancelled() }}
         shell: bash
         run: |
           set -euo pipefail
-          for t in setup::tests::d392_users_file_is_current_with_a_runner_or_the_standard_user_record token::tests::d392_elevated_default_dacl_follows_whose_logon_the_base_token_is; do
+          for t in setup::tests::d392_users_file_is_current_with_a_runner_or_the_standard_user_record token::tests::d392_elevated_default_dacl_follows_whose_logon_the_base_token_is token::tests::d392_runner_uses_its_own_token_only_without_the_privilege; do
             cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- --exact "$t" --nocapture 2>&1 | tee d392.log
             grep -q 'test result: ok. 1 passed' d392.log
           done

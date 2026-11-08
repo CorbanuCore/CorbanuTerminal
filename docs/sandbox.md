@@ -54,22 +54,33 @@ delete the `CodexSandboxRunner` local user; setup creates it again the next
 time it runs. Windows keeps the rights it was given, which no other account
 can use.
 
-**If your account isn't an administrator** (an administrator typed their
-password into the setup's Windows prompt, or ran `corbanu sandbox setup` for
-you), setup doesn't create `CodexSandboxRunner`: with that right, anyone who
-can sign in as you could become an administrator. The default sandbox then
-works as it did before: the program that starts each command runs as the
-command's sandbox account, and the command starts from that program's logon.
-Corbanu Terminal tells you so after setup. Commands in different projects can
-then still interfere with each other: one can run code with the sandbox
-account's full access while another command starts (#1721), borrow another's
-access (#1560) and read its memory (#1803), so avoid running commands in
-several projects at once. You keep the default sandbox rather than being moved
-to the non-admin one, which leaves the same gaps (#1560, #1838) and protects
-less otherwise. To get the stronger isolation, run Corbanu Terminal from an
-administrator account. If your own account becomes an administrator later,
-delete `sandbox_users.json` from the `.sandbox-secrets` folder in your Codex
-home; setup then runs again before the next command.
+**If your account isn't an administrator**, an administrator types their
+password into the setup's Windows prompt (or runs `corbanu sandbox setup` for
+you), so setup runs as their account rather than yours. Setup then doesn't
+create `CodexSandboxRunner`: with that right, anyone who can sign in as you
+could become an administrator. Setup creates it only when it runs as the
+account Corbanu Terminal runs as, which is also the account signed in to the
+Windows session. Changing environment variables such as `USERNAME` doesn't
+get around this. Without the account, the default sandbox works as it did
+before: the program that starts each command runs as the command's sandbox
+account, and the command starts from that program's logon. Corbanu Terminal
+tells you so after setup. Commands in different projects can then still
+interfere with each other: one can run code with the sandbox account's full
+access while another command starts (#1721), borrow another's access (#1560)
+and read its memory (#1803), so avoid running commands in several projects at
+once. You keep the default sandbox rather than being moved to the non-admin
+one, which leaves the same gaps (#1560, #1838) and protects less otherwise.
+For the stronger isolation, run Corbanu Terminal from an administrator account.
+If your own account becomes an administrator later, delete `sandbox_users.json`
+from the `.sandbox-secrets` folder in your Codex home; setup then runs again
+before the next command. If an account that used Corbanu Terminal stops being
+an administrator, delete the `CodexSandboxRunner` local user (and that
+`sandbox_users.json`): the account, and the password stored for it, would
+otherwise keep working.
+
+One gap remains with the runner account too: another elevated command can
+resume a command's suspended threads. Commands aren't started suspended, so
+this matters only for threads a command suspends itself.
 
 **When you will see a warning.** If your sandboxed commands run in the
 non-admin sandbox, Corbanu Terminal tells you once per session:

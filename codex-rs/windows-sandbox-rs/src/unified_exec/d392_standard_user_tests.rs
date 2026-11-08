@@ -1,10 +1,12 @@
 //! D392 (b): the runner account's `SeAssignPrimaryTokenPrivilege` lets
 //! anyone who can sign in as it become SYSTEM, and any program running as
 //! the user can read its password, so setup makes it only for a user who is
-//! an administrator anyway: when setup runs as that user. A standard user's
-//! setup runs as the administrator whose password was typed into the UAC
-//! prompt; here, the elevated test process sets Codex up for a standard
-//! user it creates. That setup makes no runner account, and the elevated
+//! an administrator anyway: when setup runs as that user (and as the user
+//! signed in to its session). A standard user's setup runs as the
+//! administrator whose password was typed into the UAC prompt; here, the
+//! elevated test process sets Codex up for a standard user it creates. (The
+//! session check, which an honest `real_user` doesn't reach, has its own
+//! unit test in the setup helper.) That setup makes no runner account, and the elevated
 //! sandbox works as before #1800: each runner as its command's account,
 //! with the D324 isolation between commands.
 //!
@@ -66,7 +68,9 @@ fn set_up_for_standard_user(codex_home: &Path) {
         use rand::Rng;
         use rand::SeedableRng;
         let mut rng = rand::rngs::SmallRng::from_entropy();
-        let password = format!("Aa1!{:032x}", rng.r#gen::<u128>());
+        // 14 characters: `net user` asks (and, with no input, fails) before
+        // taking a longer one.
+        let password = format!("Aa1!{:010x}", rng.r#gen::<u64>() >> 24);
         let output = std::process::Command::new(&net)
             .args(["user", STANDARD_USER, &password, "/add"])
             .output()

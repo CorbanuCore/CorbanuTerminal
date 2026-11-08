@@ -101,32 +101,130 @@ pub fn provision_sandbox_users(
 }
 
 /// D392 (b): the runner account's privilege lets anyone who can sign in as
-/// it become SYSTEM, and any program running as `real_user` can read its
-/// password, so setup makes it only where `real_user` may become an
-/// administrator anyway: when this setup runs as `real_user` itself
-/// (elevated, which only an administrator's account can be). A standard
-/// user's setup runs as the administrator whose password was typed into
-/// the UAC prompt, or `codex sandbox setup` runs as an administrator for
-/// another user; neither gets the runner account. An unresolvable
-/// `real_user` gets none either.
+/// it become SYSTEM, and any program running as the user can read its
+/// password, so setup makes it only where the user may become an
+/// administrator anyway. That is when this (elevated) setup runs as the user
+/// it sets Codex up for (`real_user`), and as the user signed in to this
+/// process's session. `real_user` comes from the user's own environment
+/// (or `codex sandbox setup --user`), so it alone proves nothing; the
+/// session's user Windows reports does. A standard user's setup runs as the
+/// administrator who typed their password into the user's UAC prompt, in
+/// the user's session: the session's user isn't this setup's. A session
+/// with no user (session 0: services, SSH, CI) shows no UAC prompt, so a
+/// setup elevated there was started by an already elevated caller.
 fn runner_account_allowed(real_user: &str, log: &mut dyn Write) -> Result<bool> {
     let own = codex_windows_sandbox::current_process_user_sid()?;
-    let allowed = match resolve_sid(real_user) {
-        Ok(real) => real == own,
+    let elevated = codex_windows_sandbox::is_elevated().unwrap_or(false);
+    let real = match resolve_sid(real_user) {
+        Ok(sid) => Some(sid),
         Err(err) => {
             super::log_line(log, &format!("resolve {real_user} failed: {err:#}"))?;
-            false
+            None
         }
     };
+    let session = match session_user() {
+        Ok(None) => SessionUser::NoUser,
+        Ok(Some(name)) => match resolve_sid(&name) {
+            Ok(sid) => SessionUser::SignedIn(sid),
+            Err(err) => {
+                super::log_line(log, &format!("resolve session user {name} failed: {err:#}"))?;
+                SessionUser::Unknown
+            }
+        },
+        Err(err) => {
+            super::log_line(log, &format!("query this session's user failed: {err:#}"))?;
+            SessionUser::Unknown
+        }
+    };
+    let allowed = runner_account_decision(&own, elevated, real.as_deref(), &session);
     if !allowed {
         super::log_line(
             log,
             &format!(
-                "{real_user} isn't this setup's administrator: no runner account (standard user, D392)"
+                "setup doesn't run as {real_user} signed in to this session: no runner account (D392)"
             ),
         )?;
     }
     Ok(allowed)
+}
+
+/// Who is signed in to the session a process runs in.
+#[derive(Debug)]
+pub(super) enum SessionUser {
+    /// A session with no user (session 0).
+    NoUser,
+    /// This user's SID.
+    SignedIn(Vec<u8>),
+    /// Couldn't tell.
+    Unknown,
+}
+
+/// [`runner_account_allowed`] given this setup's own SID, whether it is
+/// elevated, the SID `real_user` resolves to and this session's user.
+pub(super) fn runner_account_decision(
+    own: &[u8],
+    elevated: bool,
+    real_user: Option<&[u8]>,
+    session: &SessionUser,
+) -> bool {
+    elevated
+        && real_user == Some(own)
+        && match session {
+            SessionUser::NoUser => true,
+            SessionUser::SignedIn(user) => user.as_slice() == own,
+            SessionUser::Unknown => false,
+        }
+}
+
+/// `DOMAIN\user` signed in to this process's session, or `None` for a
+/// session without one.
+fn session_user() -> Result<Option<String>> {
+    use windows_sys::Win32::System::RemoteDesktop::WTS_CURRENT_SERVER_HANDLE;
+    use windows_sys::Win32::System::RemoteDesktop::WTS_CURRENT_SESSION;
+    use windows_sys::Win32::System::RemoteDesktop::WTS_INFO_CLASS;
+    use windows_sys::Win32::System::RemoteDesktop::WTSDomainName;
+    use windows_sys::Win32::System::RemoteDesktop::WTSFreeMemory;
+    use windows_sys::Win32::System::RemoteDesktop::WTSQuerySessionInformationW;
+    use windows_sys::Win32::System::RemoteDesktop::WTSUserName;
+    let query = |class: WTS_INFO_CLASS| -> Result<String> {
+        let mut buffer: *mut u16 = std::ptr::null_mut();
+        let mut bytes = 0u32;
+        // SAFETY: Windows allocates `buffer` (freed below) and sets `bytes`.
+        let ok = unsafe {
+            WTSQuerySessionInformationW(
+                WTS_CURRENT_SERVER_HANDLE,
+                WTS_CURRENT_SESSION,
+                class,
+                &mut buffer,
+                &mut bytes,
+            )
+        };
+        if ok == 0 || buffer.is_null() {
+            return Err(std::io::Error::last_os_error()).context("WTSQuerySessionInformationW");
+        }
+        // SAFETY: a NUL-terminated string of `bytes` bytes from Windows.
+        let text = unsafe {
+            let units = std::slice::from_raw_parts(buffer, bytes as usize / 2);
+            let len = units
+                .iter()
+                .position(|&unit| unit == 0)
+                .unwrap_or(units.len());
+            let text = String::from_utf16_lossy(&units[..len]);
+            WTSFreeMemory(buffer as *mut c_void);
+            text
+        };
+        Ok(text)
+    };
+    let user = query(WTSUserName)?;
+    if user.is_empty() {
+        return Ok(None);
+    }
+    let domain = query(WTSDomainName)?;
+    Ok(Some(if domain.is_empty() {
+        user
+    } else {
+        format!("{domain}\\{user}")
+    }))
 }
 
 /// The right the command runner's account needs to start a command with

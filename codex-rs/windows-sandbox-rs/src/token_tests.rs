@@ -303,3 +303,28 @@ fn d392_elevated_default_dacl_follows_whose_logon_the_base_token_is() -> Result<
     );
     Ok(())
 }
+
+/// D392: a runner makes the command's token from the command's own logon
+/// when Core sent one, and from its own token only when it doesn't hold
+/// `SeAssignPrimaryTokenPrivilege` (a runner running as the runner account
+/// refuses a request without a command logon).
+#[test]
+fn d392_runner_uses_its_own_token_only_without_the_privilege() {
+    let decide = |logon, privilege| {
+        ElevatedBaseLogon::for_request(logon, privilege).map_err(|err| format!("{err:#}"))
+    };
+    pretty_assertions::assert_eq!(
+        [
+            decide(true, true),
+            decide(true, false),
+            decide(false, false),
+            decide(false, true),
+        ],
+        [
+            Ok(ElevatedBaseLogon::OwnLogon),
+            Ok(ElevatedBaseLogon::OwnLogon),
+            Ok(ElevatedBaseLogon::RunnerLogon),
+            Err("runner: Core sent no logon token for the command (#1721)".to_string()),
+        ]
+    );
+}

@@ -735,6 +735,22 @@ pub enum ElevatedBaseLogon {
     RunnerLogon,
 }
 
+impl ElevatedBaseLogon {
+    /// D392: the base a runner makes a command's token from: the command's
+    /// own logon when Core sent one; otherwise the runner's own token, which
+    /// only a runner without `SeAssignPrimaryTokenPrivilege` may use (one
+    /// running as the command's account, not as the runner account).
+    pub fn for_request(has_command_logon: bool, runner_holds_privilege: bool) -> Result<Self> {
+        match (has_command_logon, runner_holds_privilege) {
+            (true, _) => Ok(Self::OwnLogon),
+            (false, false) => Ok(Self::RunnerLogon),
+            (false, true) => Err(anyhow!(
+                "runner: Core sent no logon token for the command (#1721)"
+            )),
+        }
+    }
+}
+
 /// D324 (#1648): an elevated command's token. Every elevated command runs as
 /// the same sandbox account (per network mode), which is also a restricting
 /// SID of its token. As D259 does for a legacy command, the token gets a

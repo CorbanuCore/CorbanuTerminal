@@ -242,14 +242,17 @@ it to the runner's account, and the runner enables it only to start its one
 command and then removes it from its token. Anything that can run as the
 user can read that account's password and sign in as it, and that privilege
 is the kind "potato" attacks use to reach SYSTEM (D392). So (D392 (b))
-setup creates that account only when it runs as the user it sets Codex up
-for, which only an administrator's own (elevated) account can: a standard
-user's setup, run as the administrator who typed their password into the
-UAC prompt (or `codex sandbox setup` for another user), records
-`standard_user` in `sandbox_users.json` instead. Core then starts each
+setup creates that account only when it runs elevated as the user it sets
+Codex up for (`real_user`, from Core's `USERNAME` or `codex sandbox setup
+--user`) and as the user Windows reports signed in to its session
+(`WTSQuerySessionInformationW`; a session without one, session 0, shows no
+UAC prompt). `real_user` alone is the user's to set; the session's user
+isn't. A standard user's setup, run as the administrator who typed their
+password into the UAC prompt in the user's session (or `codex sandbox setup`
+for another user), records `standard_user` in `sandbox_users.json` instead. Core then starts each
 runner as the command's account and the runner makes the command's token
 from its own (`ElevatedBaseLogon::RunnerLogon`), with the D324 default DACL,
-exactly as before #1800: #1717, #1560 and #1803 stay open for them, and the
+exactly as before #1800: #1721, #1560 and #1803 stay open for them, and the
 TUI and `codex sandbox setup` tell the user so. A runner that holds the
 privilege refuses a request without a command logon. Elevated commands
 can still read a runner's ConPTY console host (another workspace's terminal
