@@ -71,7 +71,7 @@ exit [Retarget]::Run($args[0], $args[1])
 /// Measurement 1: what a non-admin sandbox command can do to a top-level
 /// `.git` link, and whether rule 3 sees it.
 #[test]
-fn d419_probe_sandboxed_command_and_git_links() {
+fn legacy_d419_probe_sandboxed_command_and_git_links() {
     let _guard = legacy_process_test_guard();
     let test_root = user_owned_test_root();
     let base = test_root.path().join("d419");
@@ -260,7 +260,7 @@ fn d419_probe_costs() {
             }
         }
     }
-    let roots = [tree.clone()];
+    let roots = [tree];
     let start = Instant::now();
     let found = crate::nested_metadata::find(&roots);
     let walk = start.elapsed();
