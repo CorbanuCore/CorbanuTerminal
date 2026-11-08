@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   probe:
-    name: win-377b leftovers gate (windows-2022)
+    name: win-377b leftovers diag, all sec_win_ (windows-2022)
     runs-on: windows-2022
     timeout-minutes: 150
     env:
@@ -44,10 +44,11 @@ jobs:
           export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
           export CODEX_PF27S06_SETUP_SEED="$(cygpath -w "${RUNNER_TEMP}/p377-seed")"
           mkdir -p "${RUNNER_TEMP}/p377-seed"
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- --exact "$P377_TEST" --nocapture --test-threads=1 > admin.log 2>&1
+          export CODEX_SEC_WIN_341_REQUIRE=1 CORBANU_TEST_REQUIRE_SYMLINKS=1
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib sec_win_ -- --skip sec_win_1770_ --nocapture --test-threads=1 > admin.log 2>&1
           echo "exit=$?"
           cat admin.log
-          { echo "ADMIN $(git rev-parse HEAD)"; grep -E 'd377 leftovers|test result|panicked|assertion' admin.log; } >> results.txt
+          { echo "ADMIN $(git rev-parse HEAD)"; grep -E 'd377 leftovers|test result|panicked|assertion|FAILED' admin.log; } >> results.txt
       - name: Normal session
         if: ${{ !cancelled() }}
         shell: powershell

@@ -466,6 +466,12 @@ fn sec_win_d377_old_leftovers_in_temp_are_taken_for_the_user() {
         /*tty*/ false,
     ));
     println!("d377 leftovers upgrade: exit={code} stdout={stdout:?}");
+    for line in sandbox_log(home.path())
+        .lines()
+        .filter(|line| line.contains("D377"))
+    {
+        println!("d377 leftovers log: {line}");
+    }
     // A later command writes there (granting itself access first, as an
     // owner may).
     let tamper = root.path().join("d377-tamper.cmd");
@@ -509,6 +515,9 @@ fn sec_win_d377_old_leftovers_in_temp_are_taken_for_the_user() {
     }
     assert_eq!(fs::read_to_string(&file).expect("read").trim(), "made");
     // Renamed in place, not deleted.
+    if refused.exists() {
+        println!("d377 leftovers refused.txt kept, owner {}", owner(&refused));
+    }
     assert!(!refused.exists(), "{} was not set aside", refused.display());
     let aside: Vec<_> = fs::read_dir(temp.path())
         .expect("list")
