@@ -675,6 +675,9 @@ struct ElevationPayload {
 enum SetupMode {
     Full,
     ProvisionOnly,
+    /// #1791 / D400: removes the shared-folder denies only this home's
+    /// setups rely on.
+    RemoveSharedFolderDenies,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -885,8 +888,10 @@ fn run_setup_exe(
         )
     })?;
     let payload_b64 = BASE64_STANDARD.encode(payload_json.as_bytes());
+    // The removal leaves the setup as it was; there is nothing to verify.
+    let verify = !matches!(payload.mode, SetupMode::RemoveSharedFolderDenies);
     run_setup_singleflight(payload_b64.clone(), || {
-        run_setup_exe_payload(&payload_b64, needs_elevation, codex_home)
+        run_setup_exe_payload(&payload_b64, needs_elevation, codex_home, verify)
     })
 }
 
@@ -894,6 +899,7 @@ fn run_setup_exe_payload(
     payload_b64: &str,
     needs_elevation: bool,
     codex_home: &Path,
+    verify: bool,
 ) -> Result<()> {
     use windows_sys::Win32::System::Threading::GetExitCodeProcess;
     use windows_sys::Win32::System::Threading::INFINITE;
@@ -936,7 +942,9 @@ fn run_setup_exe_payload(
                 status.code(),
             ));
         }
-        verify_setup_completed(codex_home)?;
+        if verify {
+            verify_setup_completed(codex_home)?;
+        }
         if let Err(err) = clear_setup_error_report(codex_home) {
             log_note(
                 &format!(
@@ -986,7 +994,9 @@ fn run_setup_exe_payload(
             ));
         }
     }
-    verify_setup_completed(codex_home)?;
+    if verify {
+        verify_setup_completed(codex_home)?;
+    }
     if let Err(err) = clear_setup_error_report(codex_home) {
         log_note(
             &format!("setup orchestrator: failed to clear setup_error.json after success: {err}"),
@@ -1120,6 +1130,50 @@ pub fn run_elevated_provisioning_setup(
         refresh_only: false,
     };
     run_setup_exe(&payload, /*needs_elevation*/ false, codex_home)
+}
+
+/// #1791 / D400: as an administrator, forgets `codex_home` in the machine's
+/// record of shared-folder denies and removes each one no other home's setup
+/// relies on (for uninstalling).
+pub fn run_elevated_shared_folder_deny_removal(
+    codex_home: &Path,
+) -> Result<crate::SharedFolderDenyRemovalSummary> {
+    let needs_elevation = !is_elevated().map_err(|err| {
+        failure(
+            SetupErrorCode::OrchestratorElevationCheckFailed,
+            format!("failed to determine elevation state: {err}"),
+        )
+    })?;
+    let sbx_dir = sandbox_dir(codex_home);
+    std::fs::create_dir_all(&sbx_dir).map_err(|err| {
+        failure(
+            SetupErrorCode::OrchestratorSandboxDirCreateFailed,
+            format!("failed to create sandbox dir {}: {err}", sbx_dir.display()),
+        )
+    })?;
+    let payload = ElevationPayload {
+        version: SETUP_VERSION,
+        offline_username: OFFLINE_USERNAME.to_string(),
+        online_username: ONLINE_USERNAME.to_string(),
+        codex_home: codex_home.to_path_buf(),
+        command_cwd: codex_home.to_path_buf(),
+        read_roots: Vec::new(),
+        write_roots: Vec::new(),
+        deny_read: None,
+        deny_read_paths: Vec::new(),
+        deny_read_sessions: crate::DenyReadSessions::default(),
+        deny_write_paths: Vec::new(),
+        proxy_ports: Vec::new(),
+        allow_local_binding: false,
+        otel: None,
+        real_user: std::env::var("USERNAME").unwrap_or_else(|_| "Administrators".to_string()),
+        mode: SetupMode::RemoveSharedFolderDenies,
+        refresh_only: false,
+    };
+    crate::shared_folder_rescan::take_shared_folder_removal_summary(codex_home);
+    run_setup_exe(&payload, needs_elevation, codex_home)?;
+    crate::shared_folder_rescan::take_shared_folder_removal_summary(codex_home)
+        .ok_or_else(|| anyhow!("the setup didn't report what it removed"))
 }
 
 fn build_payload_roots(

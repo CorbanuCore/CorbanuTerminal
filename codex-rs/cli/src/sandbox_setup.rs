@@ -41,16 +41,26 @@ pub(crate) struct SandboxSetupCommand {
     /// CODEX_HOME for the Codex user. Required with --user.
     #[arg(long = "codex-home", value_name = "DIR")]
     codex_home: Option<PathBuf>,
+
+    /// Instead of setting up, remove the denies the elevated setup added to
+    /// shared folders (#1791) that no other Codex home's setup relies on.
+    /// For uninstalling; needs administrator approval.
+    #[arg(long = "remove-shared-folder-denies", default_value_t = false)]
+    remove_shared_folder_denies: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SandboxSetupLevel {
     Elevated,
+    /// D413: undo the elevated setup's shared-folder denies.
+    RemoveSharedFolderDenies,
 }
 
 impl SandboxSetupCommand {
     fn setup_level(&self) -> anyhow::Result<SandboxSetupLevel> {
-        if self.elevated_sandbox_level {
+        if self.remove_shared_folder_denies {
+            Ok(SandboxSetupLevel::RemoveSharedFolderDenies)
+        } else if self.elevated_sandbox_level {
             Ok(SandboxSetupLevel::Elevated)
         } else {
             anyhow::bail!("`codex sandbox setup` currently requires --elevated");
@@ -65,7 +75,43 @@ pub(crate) async fn run(
 ) -> anyhow::Result<()> {
     match cmd.setup_level()? {
         SandboxSetupLevel::Elevated => run_elevated(cmd, config_profile, cli_overrides).await,
+        SandboxSetupLevel::RemoveSharedFolderDenies => remove_shared_folder_denies(&cmd),
     }
+}
+
+fn remove_shared_folder_denies(cmd: &SandboxSetupCommand) -> anyhow::Result<()> {
+    let identity = resolve_sandbox_setup_identity(cmd)?;
+    // The machine's record names a home by the path its setup was given.
+    let codex_home = std::path::absolute(&identity.codex_home)
+        .with_context(|| format!("resolving {}", identity.codex_home.display()))?;
+    // Not the setup marker: a setup that failed partway removed it, and
+    // that is when an uninstall needs this.
+    if !codex_home.join(".sandbox").is_dir() {
+        anyhow::bail!(
+            "no `.sandbox` folder in {}; pass the Codex home the setup used with --codex-home (and --user for another account)",
+            codex_home.display()
+        );
+    }
+    let removal =
+        codex_core::windows_sandbox::run_elevated_shared_folder_deny_removal(&codex_home)?;
+    println!("{}", removal_message(&codex_home, removal));
+    Ok(())
+}
+
+fn removal_message(
+    codex_home: &std::path::Path,
+    removal: codex_core::windows_sandbox::SharedFolderDenyRemoval,
+) -> String {
+    let home = codex_home.display();
+    if removal.removed + removal.kept + removal.absent == 0 {
+        return format!(
+            "No shared-folder deny was recorded for {home}; nothing was removed. Check that this is the Codex home path its setup used."
+        );
+    }
+    format!(
+        "Removed {} shared-folder denies recorded for {home}; kept {} that other Codex homes rely on; {} were gone already. The next elevated sandbox command for this Codex home runs the setup again, which adds them back.",
+        removal.removed, removal.kept, removal.absent
+    )
 }
 
 pub(crate) fn parse_setup_command(
@@ -218,6 +264,59 @@ mod tests {
         .expect("setup command");
 
         assert_eq!(command.user.as_deref(), Some(r"DOMAIN\alice"));
+    }
+
+    #[test]
+    fn remove_shared_folder_denies_selects_the_removal() {
+        for args in [
+            &["setup", "--remove-shared-folder-denies", "--current-user"][..],
+            &[
+                "setup",
+                "--elevated",
+                "--remove-shared-folder-denies",
+                "--user",
+                r"DOMAIN\alice",
+                "--codex-home",
+                r"C:\Users\alice\.codex",
+            ][..],
+        ] {
+            let command = SandboxSetupCommand::try_parse_from(args).expect("parse");
+            assert_eq!(
+                command.setup_level().expect("level"),
+                SandboxSetupLevel::RemoveSharedFolderDenies
+            );
+        }
+        let setup = SandboxSetupCommand::try_parse_from(["setup", "--elevated", "--current-user"])
+            .expect("parse");
+        assert_eq!(
+            setup.setup_level().expect("level"),
+            SandboxSetupLevel::Elevated
+        );
+    }
+
+    #[test]
+    fn removal_message_says_when_nothing_was_recorded() {
+        use codex_core::windows_sandbox::SharedFolderDenyRemoval;
+        let home = std::path::Path::new(r"C:\Users\alice\.codex");
+        let none = removal_message(home, SharedFolderDenyRemoval::default());
+        assert!(
+            none.starts_with("No shared-folder deny was recorded"),
+            "{none}"
+        );
+        let some = removal_message(
+            home,
+            SharedFolderDenyRemoval {
+                removed: 2,
+                kept: 3,
+                absent: 1,
+            },
+        );
+        assert!(
+            some.starts_with(
+                r"Removed 2 shared-folder denies recorded for C:\Users\alice\.codex; kept 3"
+            ),
+            "{some}"
+        );
     }
 
     #[test]

@@ -244,6 +244,97 @@ Terminal from the console or Remote Desktop session instead.
 Your organization's managed requirements may allow only the non-admin sandbox.
 In that case the warning still appears so you know the limits.
 
+## Windows default sandbox: shared folders
+
+Some folders outside your projects are shared by every account on the
+computer: folders in `C:\ProgramData`, `C:\Users\Public` and `C:\Windows\Temp`
+that give Users, Authenticated Users or INTERACTIVE Full control, or that
+let Everyone write. Without help, a sandboxed command could delete other
+people's files there, or write there (#1791). The default sandbox's
+administrator setup therefore scans those three folders, everything below
+them and each folder at the top of the system drive, and denies the
+sandbox's accounts (the `CodexSandboxUsers` group):
+
+- deleting in folders that give such a group Full control;
+- writing, deleting and changing permissions in folders Everyone may write
+  to. Commands can still list and read there.
+
+Every deny the setup adds is recorded in
+`%ProgramData%\CorbanuTerminalSandbox\shared-folder-denies\record.json`
+(only administrators can open it), with the Codex homes that rely on it.
+
+**When it scans again.** Setup scans each time it runs. The first sandboxed
+command after Corbanu Terminal is updated to a new version also scans, as
+you, and runs the administrator setup again (one approval prompt) only if it
+finds a folder without its deny, for example one a program installed since.
+If you decline that prompt, or can't approve it (for example as a standard
+user whose administrator ran the setup), commands still run with the denies
+the last setup added, and Corbanu Terminal asks again the next time it
+starts; it warns you when the next turn starts (a single `corbanu exec` run
+may end first; the sandbox log in `.sandbox` always has it). If the setup
+started and then failed, later commands need it to succeed. A setup made
+before this protection existed (or after you removed the denies) needs the
+administrator setup at the first command, and commands don't run until it
+succeeds, as after any setup change. Folders you can't list yourself are
+scanned only when the administrator setup runs, and a folder the setup
+couldn't change isn't asked about again until it next runs.
+
+**What it doesn't cover.** Folders elsewhere (other drives, or deeper than
+the top level of the system drive outside the three folders above), single
+files that let others write, and folders installed after the last scan until
+the next update stay open. Commands can no longer create computer-wide
+cryptographic keys (`ProgramData\Microsoft\Crypto\...\MachineKeys`).
+
+**A project in such a folder is read-only to commands.** If a folder
+commands may write to (your project, or an extra writable folder) is in an
+Everyone-writable shared folder, sandboxed commands can't change files
+there. Corbanu Terminal checks these folders when each turn starts and warns
+you once for each one while Corbanu Terminal runs (a setup that runs during
+a turn shows up at the next). (A subfolder that is itself Everyone-writable
+gets a deny of its own and isn't checked.) Move the project to a folder of
+your own, such as one under your user profile.
+
+**Removing the denies.** Signed in as the account that uses Corbanu
+Terminal (approving the administrator prompt):
+
+```
+corbanu sandbox setup --remove-shared-folder-denies --current-user
+```
+
+From another administrator account, name the account and its Codex home the
+setup used: `--user <name> --codex-home <dir>`. It removes, exactly, the
+denies recorded for that Codex home that no other Codex home relies on, and
+leaves every other permission alone; the setup log in the home's `.sandbox`
+folder says what it removed and kept. The next default-sandbox command for
+that Codex home runs the setup again, which adds them back.
+
+## Uninstalling the Windows default sandbox
+
+There is no single uninstall command yet. In an administrator PowerShell:
+
+1. Switch Corbanu Terminal away from the default sandbox (or stop using it),
+   so no command runs the setup again. Then remove the shared-folder denies,
+   for each Codex home you used, before step 3 deletes the group they name:
+   `corbanu sandbox setup --remove-shared-folder-denies --user <name> --codex-home <dir>`
+   (or `--current-user` signed in as that account). The record lists the
+   homes still relying on a deny.
+2. Delete the sandbox accounts:
+   `Remove-LocalUser CodexSandboxOffline, CodexSandboxOnline`.
+3. Delete the group: `Remove-LocalGroup CodexSandboxUsers`.
+4. Delete the firewall rules:
+   `Get-NetFirewallRule -DisplayName 'codex_sandbox_*' | Remove-NetFirewallRule`.
+5. Delete the folders `%ProgramData%\CorbanuTerminalSandbox` and, in each
+   Codex home, `.sandbox`, `.sandbox-bin` and `.sandbox-secrets`.
+6. Optionally, delete the accounts' entries under
+   `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList`,
+   which hide them from the sign-in screen.
+
+Optionally delete `%LOCALAPPDATA%\CorbanuTerminalSandbox` too. Permissions
+setup gave the sandbox on your project folders (including entries that keep
+it from reading files you protected), and its persistent network (WFP)
+filters, name accounts that no longer exist once
+you've deleted them; they do nothing and you may leave them.
+
 This page documents the shipped capability "existing general sandboxing" from
 the [product specification](corbanu-product-spec.md) heading "Shipping MVP —
 LIVE": "The shipping MVP already has a wallet, vault, scoped signing, approvals,

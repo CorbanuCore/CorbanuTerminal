@@ -70,6 +70,7 @@ const WRITE_ROOT_ALLOW_MASK: u32 =
 
 mod sandbox_users;
 mod setup_runtime_bin;
+mod shared_folders;
 use read_acl_mutex::acquire_read_acl_mutex;
 use read_acl_mutex::read_acl_mutex_exists;
 use sandbox_users::commit_setup_marker;
@@ -121,6 +122,8 @@ enum SetupMode {
     Full,
     ProvisionOnly,
     ReadAclsOnly,
+    /// #1791 / D400: removes the shared-folder denies this home recorded.
+    RemoveSharedFolderDenies,
 }
 
 fn log_line(log: &mut dyn Write, msg: &str) -> Result<()> {
@@ -489,7 +492,11 @@ fn real_main() -> Result<()> {
 }
 
 fn run_setup(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> Result<()> {
-    let writes_setup_marker = !payload.refresh_only && payload.mode != SetupMode::ReadAclsOnly;
+    let writes_setup_marker = !payload.refresh_only
+        && !matches!(
+            payload.mode,
+            SetupMode::ReadAclsOnly | SetupMode::RemoveSharedFolderDenies
+        );
     if writes_setup_marker {
         prepare_setup_marker(&payload.codex_home, &payload.real_user)?;
     }
@@ -497,6 +504,10 @@ fn run_setup(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> Result<(
         SetupMode::ReadAclsOnly => run_read_acl_only(payload, log),
         SetupMode::ProvisionOnly => run_provision_only(payload, log, sbx_dir),
         SetupMode::Full => run_setup_full(payload, log, sbx_dir),
+        SetupMode::RemoveSharedFolderDenies => {
+            let group = resolve_sandbox_users_group_sid()?;
+            shared_folders::remove_shared_folder_denies(&payload.codex_home, &group, log)
+        }
     }?;
     if writes_setup_marker {
         commit_setup_marker(
@@ -736,6 +747,7 @@ fn run_provision_only(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) ->
     })?;
 
     configure_offline_sandbox_network(payload, &offline_sid_str, log)?;
+    shared_folders::deny_shared_folders(&payload.codex_home, &sandbox_group_sid, log)?;
 
     lock_sandbox_bin_dir(payload, &sandbox_group_sid, log)?;
     lock_persistent_sandbox_dirs(payload, &sandbox_group_sid, log)?;
@@ -777,6 +789,7 @@ fn run_setup_full(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> Res
     let mut refresh_errors: Vec<String> = Vec::new();
     if !refresh_only {
         configure_offline_sandbox_network(payload, &offline_sid_str, log)?;
+        shared_folders::deny_shared_folders(&payload.codex_home, &sandbox_group_sid, log)?;
         // #323: the registry of sessions that rely on deny-read entries.
         // Without it, entries are kept and armed launches refused.
         if let Err(err) =
@@ -1092,6 +1105,15 @@ mod tests {
         let payload: Payload = serde_json::from_value(payload).expect("payload");
 
         assert_eq!(payload.mode, super::SetupMode::ProvisionOnly);
+    }
+
+    #[test]
+    fn payload_accepts_remove_shared_folder_denies_mode() {
+        let mut payload = payload_json();
+        payload["mode"] = json!("remove-shared-folder-denies");
+        let payload: Payload = serde_json::from_value(payload).expect("payload");
+
+        assert_eq!(payload.mode, super::SetupMode::RemoveSharedFolderDenies);
     }
 
     #[test]

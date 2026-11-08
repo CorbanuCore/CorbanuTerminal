@@ -361,7 +361,7 @@ fn add_deny(path: &Path, sid: *mut c_void, mask: u32, inheritance: u32) {
     }
 }
 
-fn dacl_sddl(path: &Path) -> String {
+pub(super) fn dacl_sddl(path: &Path) -> String {
     let mut sd: *mut c_void = std::ptr::null_mut();
     // SAFETY: valid path; `sd` is freed below.
     let code = unsafe {

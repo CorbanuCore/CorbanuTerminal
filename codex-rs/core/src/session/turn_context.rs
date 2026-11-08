@@ -1255,6 +1255,22 @@ impl Session {
             self.send_event(tc, EventMsg::Warning(WarningEvent { message }))
                 .await;
         }
+
+        if tc.windows_sandbox_level == WindowsSandboxLevel::Elevated
+            && let Some(cwd) = tc.environments.single_local_environment_cwd()
+        {
+            let level = tc.windows_sandbox_level;
+            let profile = tc.permission_profile.clone();
+            let warnings = tokio::task::spawn_blocking(move || {
+                crate::windows_sandbox::shared_folder_deny_warnings(level, &profile, cwd.as_path())
+            })
+            .await
+            .unwrap_or_default();
+            for message in warnings {
+                self.send_event(tc, EventMsg::Warning(WarningEvent { message }))
+                    .await;
+            }
+        }
     }
 
     pub(crate) async fn new_default_turn(&self) -> Arc<TurnContext> {

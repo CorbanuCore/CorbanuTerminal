@@ -184,3 +184,52 @@ fn pf_33_s02_destination_guard_drops_local_binding_from_provisioning() {
         }
     );
 }
+
+#[test]
+fn shared_folder_deny_message_names_each_read_only_folder() {
+    assert_eq!(shared_folder_deny_message(&[]), None);
+    let message = shared_folder_deny_message(&[
+        PathBuf::from(r"C:\ProgramData\Vendor\project"),
+        PathBuf::from(r"C:\Users\Public\work"),
+    ])
+    .expect("a warning");
+    assert!(
+        message.starts_with(
+            r"Sandboxed commands can't change files in `C:\ProgramData\Vendor\project`, `C:\Users\Public\work`:"
+        ),
+        "{message}"
+    );
+    assert!(message.contains("#1791"), "{message}");
+}
+
+#[test]
+fn shared_folder_deny_warning_is_only_for_the_elevated_sandbox() {
+    let cwd = std::env::temp_dir();
+    for level in [
+        WindowsSandboxLevel::Disabled,
+        WindowsSandboxLevel::RestrictedToken,
+    ] {
+        assert_eq!(
+            shared_folder_deny_warnings(
+                level,
+                &PermissionProfile::workspace_write(),
+                cwd.as_path()
+            ),
+            Vec::<String>::new()
+        );
+    }
+}
+
+#[test]
+fn only_system_drive_paths_are_checked_for_shared_folder_denies() {
+    let drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".to_string());
+    assert!(on_system_drive(Path::new(&format!(
+        r"{drive}\ProgramData\x"
+    ))));
+    assert!(on_system_drive(Path::new(&format!(
+        r"{}\ProgramData\x",
+        drive.to_lowercase()
+    ))));
+    assert!(!on_system_drive(Path::new(r"\\server\share\project")));
+    assert!(!on_system_drive(Path::new(r"Z:\project")));
+}

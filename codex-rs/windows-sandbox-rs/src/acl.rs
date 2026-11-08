@@ -1698,6 +1698,10 @@ pub(crate) const FILE_MAPPING: GENERIC_MAPPING = GENERIC_MAPPING {
 #[path = "acl_delete_child.rs"]
 mod delete_child;
 
+/// #1791 / D400: the admin setup's denies on shared folders.
+#[path = "acl_shared_folders.rs"]
+pub(crate) mod shared_folders;
+
 /// D311/D313: the pieces of our own tree walk.
 #[path = "acl_walk.rs"]
 pub(crate) mod walk;

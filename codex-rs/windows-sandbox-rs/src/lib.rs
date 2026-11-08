@@ -129,6 +129,8 @@ mod setup;
 
 #[cfg(target_os = "windows")]
 mod setup_error;
+#[cfg(target_os = "windows")]
+mod shared_folder_rescan;
 
 #[cfg(target_os = "windows")]
 mod spawn_prep;
@@ -183,6 +185,30 @@ pub use acl::fetch_dacl_handle;
 pub use acl::path_mask_allows;
 #[cfg(target_os = "windows")]
 pub use acl::path_write_aces_need_refresh;
+#[cfg(target_os = "windows")]
+pub use acl::shared_folders::SharedFolderDenyKind;
+#[cfg(target_os = "windows")]
+pub use acl::shared_folders::SharedFolderDenyRecord;
+#[cfg(target_os = "windows")]
+pub use acl::shared_folders::apply_shared_folder_denies;
+#[cfg(target_os = "windows")]
+pub use acl::shared_folders::default_shared_folder_scan_roots;
+#[cfg(target_os = "windows")]
+pub use acl::shared_folders::ensure_machine_shared_folder_record_dir;
+#[cfg(target_os = "windows")]
+pub use acl::shared_folders::has_shared_folder_deny;
+#[cfg(target_os = "windows")]
+pub use acl::shared_folders::load_shared_folder_deny_record;
+#[cfg(target_os = "windows")]
+pub use acl::shared_folders::machine_shared_folder_record_dir;
+#[cfg(target_os = "windows")]
+pub use acl::shared_folders::recorded_shared_folders_for_home;
+#[cfg(target_os = "windows")]
+pub use acl::shared_folders::remove_shared_folder_denies_for_home;
+#[cfg(target_os = "windows")]
+pub use acl::shared_folders::scan_shared_folders;
+#[cfg(target_os = "windows")]
+pub use acl::shared_folders::shared_folder_write_denied_roots;
 #[cfg(target_os = "windows")]
 pub use audit::apply_world_writable_scan_and_denies_for_permissions;
 #[cfg(target_os = "windows")]
@@ -343,6 +369,8 @@ pub use setup::run_elevated_provisioning_setup;
 #[cfg(target_os = "windows")]
 pub use setup::run_elevated_setup;
 #[cfg(target_os = "windows")]
+pub use setup::run_elevated_shared_folder_deny_removal;
+#[cfg(target_os = "windows")]
 pub use setup::run_setup_refresh;
 #[cfg(target_os = "windows")]
 pub use setup::run_setup_refresh_with_extra_read_roots;
@@ -366,6 +394,22 @@ pub use setup_error::sanitize_setup_metric_tag_value;
 pub use setup_error::setup_error_path;
 #[cfg(target_os = "windows")]
 pub use setup_error::write_setup_error_report;
+#[cfg(target_os = "windows")]
+pub use shared_folder_rescan::RecordedSharedFolder;
+#[cfg(target_os = "windows")]
+pub use shared_folder_rescan::SharedFolderDenyRemovalSummary;
+#[cfg(target_os = "windows")]
+pub use shared_folder_rescan::SharedFolderScanStamp;
+#[cfg(target_os = "windows")]
+pub use shared_folder_rescan::remove_shared_folder_scan_stamp;
+#[cfg(target_os = "windows")]
+pub use shared_folder_rescan::shared_folder_scan_cli_version;
+#[cfg(target_os = "windows")]
+pub use shared_folder_rescan::take_shared_folder_rescan_notices;
+#[cfg(target_os = "windows")]
+pub use shared_folder_rescan::write_shared_folder_removal_summary;
+#[cfg(target_os = "windows")]
+pub use shared_folder_rescan::write_shared_folder_scan_stamp;
 #[cfg(target_os = "windows")]
 pub use stdio_bridge::forward_sandbox_session_stdio;
 #[cfg(target_os = "windows")]

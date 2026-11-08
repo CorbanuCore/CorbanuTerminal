@@ -165,13 +165,9 @@ pub fn ensure_registry(sandbox_group: Option<&str>) -> Result<PathBuf> {
     let registry = registry_dir().context("no ProgramData folder")?;
     let parent = registry.parent().context("registry has no parent")?;
     let deny = sandbox_group.map_or_else(String::new, |group| format!("(D;OICI;FA;;;{group})"));
-    let admins = "(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
-    let label = "S:(ML;OICI;NW;;;ME)";
-    // Users: list and traverse.
-    ensure_dir(
-        parent,
-        &format!("O:BAD:P{deny}{admins}(A;;0x1200a9;;;BU){label}"),
-    )?;
+    let admins = ADMINS_SDDL;
+    let label = LABEL_SDDL;
+    ensure_dir(parent, &parent_sddl(sandbox_group))?;
     // Users: also add files; a file's creator gets full control, other users
     // read it. The medium label lets a normal session's Core write files an
     // elevated Core created.
@@ -201,6 +197,33 @@ pub fn ensure_registry(sandbox_group: Option<&str>) -> Result<PathBuf> {
         .with_context(|| format!("create {}", lock.display()))?;
     check_registry(&registry, /*trust_this_user*/ false)?;
     Ok(registry)
+}
+
+const ADMINS_SDDL: &str = "(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
+const LABEL_SDDL: &str = "S:(ML;OICI;NW;;;ME)";
+
+/// `%ProgramData%\CorbanuTerminalSandbox`: Users may list and traverse it.
+fn parent_sddl(sandbox_group: Option<&str>) -> String {
+    let deny = sandbox_group.map_or_else(String::new, |group| format!("(D;OICI;FA;;;{group})"));
+    format!("O:BAD:P{deny}{ADMINS_SDDL}(A;;0x1200a9;;;BU){LABEL_SDDL}")
+}
+
+/// `%ProgramData%\CorbanuTerminalSandbox\<name>`, without making it.
+pub(crate) fn admin_state_dir(name: &str) -> Option<PathBuf> {
+    program_data().map(|dir| dir.join(REGISTRY_PARENT).join(name))
+}
+
+/// Elevated setup: makes (or repairs, as [`ensure_registry`] does) the folder
+/// [`admin_state_dir`] names, which only Administrators and SYSTEM may use.
+pub(crate) fn ensure_admin_state_dir(name: &str, sandbox_group: &str) -> Result<PathBuf> {
+    let dir = admin_state_dir(name).context("no ProgramData folder")?;
+    let parent = dir.parent().context("no parent")?;
+    ensure_dir(parent, &parent_sddl(Some(sandbox_group)))?;
+    ensure_dir(
+        &dir,
+        &format!("O:BAD:P(D;OICI;FA;;;{sandbox_group}){ADMINS_SDDL}{LABEL_SDDL}"),
+    )?;
+    Ok(dir)
 }
 
 /// Makes `dir` a folder with the security `sddl` describes.
