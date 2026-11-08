@@ -146,6 +146,7 @@ fn count_after(haystack: &[u8], needle: &[u8], kept: usize) -> usize {
 /// contexts `GetThreadContext` reads.
 fn threads_report(threads: &[u32]) -> String {
     let (mut opened, mut read) = (0, 0);
+    let mut context_error = String::new();
     for thread in threads {
         // SAFETY: the handle is closed right away; the context is aligned
         // by its type.
@@ -160,12 +161,14 @@ fn threads_report(threads: &[u32]) -> String {
             context.ContextFlags = 0x0010_0003;
             if GetThreadContext(handle, &mut context) != 0 {
                 read += 1;
+            } else if context_error.is_empty() {
+                context_error = format!(" context_err={}", GetLastError());
             }
             CloseHandle(handle);
         }
     }
     format!(
-        "threads={} thread_get_context={opened} context_read={read}",
+        "threads={} thread_get_context={opened} context_read={read}{context_error}",
         threads.len()
     )
 }
@@ -381,7 +384,7 @@ fn sec_win_d429_legacy_workloads_still_work() {
         (
             "python venv, pip and a child",
             cmd_c(format!(
-                "{} -m venv d429venv && d429venv\\Scripts\\python.exe -m pip --version && d429venv\\Scripts\\python.exe d429.py",
+                "({} -m venv d429venv && d429venv\\Scripts\\python.exe -m pip --version && d429venv\\Scripts\\python.exe d429.py) 2>&1",
                 python.display()
             )),
             &[][..],
@@ -390,7 +393,7 @@ fn sec_win_d429_legacy_workloads_still_work() {
         (
             "cargo build and run",
             cmd_c(format!(
-                "cd d429crate && {} run --offline --quiet",
+                "cd d429crate && {} run --offline --quiet 2>&1",
                 cargo.display()
             )),
             &cargo_env[..],
@@ -426,16 +429,14 @@ fn sec_win_d429_legacy_workloads_still_work() {
             &["d429-pwsh", "pwsh", "d429-pwsh-done"],
         ),
         (
+            "tasklist",
+            cmd_c("tasklist /fo csv /nh 2>&1".to_string()),
+            &[][..],
+            &["tasklist.exe"],
+        ),
+        (
             "tasklist /v",
-            vec![
-                system32_exe("tasklist.exe").display().to_string(),
-                "/v".to_string(),
-                "/fo".to_string(),
-                "csv".to_string(),
-                "/nh".to_string(),
-                "/fi".to_string(),
-                "IMAGENAME eq tasklist.exe".to_string(),
-            ],
+            cmd_c("tasklist /v /fo csv /nh 2>&1".to_string()),
             &[][..],
             &["tasklist.exe"],
         ),
@@ -505,7 +506,8 @@ async fn end_a_running_command(
         let mut stdout = Vec::new();
         while let Some(chunk) = stdout_rx.recv().await {
             stdout.extend(chunk);
-            if String::from_utf8_lossy(&stdout).contains("d429-running") {
+            // ping's first line: it runs, and has its console set up.
+            if String::from_utf8_lossy(&stdout).contains("Pinging") {
                 return true;
             }
         }
@@ -517,18 +519,23 @@ async fn end_a_running_command(
         session.terminate();
         return "never started".to_string();
     }
-    // Let ping start.
-    tokio::time::sleep(Duration::from_secs(/*secs*/ 2)).await;
-    if interrupt {
-        let _ = session.writer_sender().send(vec![0x03]).await;
-    } else {
+    let drain = tokio::spawn(async move { while stdout_rx.recv().await.is_some() {} });
+    if !interrupt {
         session.request_terminate();
     }
-    let drain = tokio::spawn(async move { while stdout_rx.recv().await.is_some() {} });
+    let writer = session.writer_sender();
+    let typing = tokio::spawn(async move {
+        // Ctrl-C, again every few seconds in case one arrives too early.
+        for _ in 0..interrupt as usize * 5 {
+            let _ = writer.send(vec![0x03]).await;
+            tokio::time::sleep(Duration::from_secs(/*secs*/ 3)).await;
+        }
+    });
     let result = match timeout(Duration::from_secs(/*secs*/ 20), exit_rx).await {
         Ok(code) => format!("ended exit={code:?}"),
         Err(_) => "still running after 20s".to_string(),
     };
+    typing.abort();
     session.terminate();
     drain.abort();
     result
