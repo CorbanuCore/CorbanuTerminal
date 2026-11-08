@@ -338,11 +338,10 @@ jobs:
           bin_dir="${CARGO_TARGET_DIR}/debug"
           export CARGO_BIN_EXE_codex_windows_sandbox_setup="$(cygpath -w "${bin_dir}/codex-windows-sandbox-setup.exe")"
           export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --lib -- pf_27_s06 pf_27_s07 sec_win_300 sec_win_d331 sec_win_1506 --nocapture --test-threads=1
-          # #1801: the D331 check compares by real path in all three resolvers.
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-sandboxing --lib -- sec_win_1801 --nocapture --test-threads=1 2>&1 | tee d1801.log
-          grep -q "test result: ok. 1 passed" d1801.log
-          rm d1801.log
+          # fail-before: report each, don't stop at the first.
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --lib -- sec_win_d331 --nocapture --test-threads=1 || echo "FAILBEFORE: core sec_win_d331 failed (elevated session)"
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-sandboxing --lib -- sec_win_1801 --nocapture --test-threads=1 || echo "FAILBEFORE: sandboxing sec_win_1801 failed (elevated session)"
+          exit 1
       # The runners are elevated, which hid #294/#295. This reruns those probes
       # with the token of an administrator's normal session (medium integrity).
       # Not covered here: a separate non-administrator account, and the
@@ -563,11 +562,12 @@ jobs:
             # one, also through a junction, symbolic link or subst drive (#1801).
             Assert-Tests $core 'sec_win_d331' 2
             & $medium -Program $core -Arguments @('sec_win_d331', '--nocapture', '--test-threads=1')
-            if ($LASTEXITCODE -ne 0) { throw "D331 agent-path refusal failed in a normal session" }
+            if ($LASTEXITCODE -ne 0) { Write-Output "FAILBEFORE: core sec_win_d331 failed (normal session)" }
             $sandboxing = Get-TestExe @('-p', 'codex-sandboxing', '--lib')
             Assert-Tests $sandboxing 'sec_win_1801' 1
             & $medium -Program $sandboxing -Arguments @('sec_win_1801', '--nocapture', '--test-threads=1')
-            if ($LASTEXITCODE -ne 0) { throw "#1801 resolver refusals failed in a normal session" }
+            if ($LASTEXITCODE -ne 0) { Write-Output "FAILBEFORE: sandboxing sec_win_1801 failed (normal session)" }
+            throw "fail-before branch: stop here"
             # #1506 item 2: planted .codex/.agents aren't loaded until confirmed.
             Assert-Tests $core 'sec_win_1506' 1
             & $medium -Program $core -Arguments @('sec_win_1506', '--nocapture', '--test-threads=1')
