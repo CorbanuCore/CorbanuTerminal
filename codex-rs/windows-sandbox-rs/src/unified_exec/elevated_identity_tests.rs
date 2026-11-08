@@ -820,6 +820,10 @@ fn sec_win_1648_elevated_tools_work_with_command_identity() {
     );
 }
 
+/// PROBE ONLY (win-1803m, never merged): #1803 cross-workspace reads.
+#[path = "probe_1803m_tests.rs"]
+mod probe_1803m;
+
 /// #1758: a configured read-only `.git\hooks` in a workspace with no `.git`.
 /// The setup helper makes `.git\hooks`, and `.git` on the way, before the
 /// first command starts; that command can't write `.git` (a `config` there
