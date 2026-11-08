@@ -2988,12 +2988,12 @@ mod command_identity;
 #[path = "token_boundary_tests.rs"]
 mod token_boundary;
 
-/// #1791 / D400: the admin setup's shared-folder denies.
-#[path = "shared_folder_tests.rs"]
-mod shared_folders;
 /// #1805: a command's environment holds each name once, in any case.
 #[path = "env_case_tests.rs"]
 mod env_case;
+/// #1791 / D400: the admin setup's shared-folder denies.
+#[path = "shared_folder_tests.rs"]
+mod shared_folders;
 
 /// D285: what the per-command ACL work costs on a large workspace.
 #[path = "acl_cost_tests.rs"]
