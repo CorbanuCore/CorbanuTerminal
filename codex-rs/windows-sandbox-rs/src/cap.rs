@@ -318,6 +318,30 @@ mod tests {
         assert_eq!(caps.writable_root_by_path.len(), 1);
     }
 
+    /// #1871: the update lock is the user's only, even in a home others
+    /// may read (a sandboxed command that could open it could hold it).
+    #[test]
+    fn update_lock_is_the_users_only() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let codex_home = temp.path().join("codex-home");
+        std::fs::create_dir_all(&codex_home).expect("create codex home");
+        let granted = std::process::Command::new("icacls")
+            .arg(&codex_home)
+            .args(["/grant", "*S-1-1-0:(OI)(CI)R"])
+            .output()
+            .expect("icacls");
+        assert!(granted.status.success(), "{granted:?}");
+        writable_root_cap_sid_for_path(&codex_home, &temp.path().join("root")).expect("sid");
+        let lock = codex_home.join("cap_sid.lock");
+        let user = crate::deny_read_sessions::current_user_sid().expect("user");
+        let reads = |sid: &str| {
+            let sid = crate::token::LocalSid::from_string(sid).expect("sid");
+            crate::acl::path_mask_allows(&lock, &[sid.as_ptr()], 0x1, true).expect("dacl")
+        };
+        assert!(!reads("S-1-1-0"), "Everyone may read the lock");
+        assert!(reads(&user), "the user may not read the lock");
+    }
+
     /// #1871: updates made at the same time keep every SID they record, and
     /// first uses agree on one set of SIDs.
     #[test]
