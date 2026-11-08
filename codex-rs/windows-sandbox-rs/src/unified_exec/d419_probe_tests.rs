@@ -28,45 +28,126 @@ fn junction(link: &Path, target: &Path) {
     assert!(status.success(), "mklink /J failed");
 }
 
-/// Rewrites the junction at `$args[0]` in place to point at `$args[1]`
-/// (`FSCTL_SET_REPARSE_POINT`), keeping the link's own file.
-const RETARGET_PS1: &str = r#"
-$ErrorActionPreference = 'Stop'
-Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-using System.Text;
-public static class Retarget {
-  [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-  static extern IntPtr CreateFileW(string name, uint access, uint share, IntPtr sa, uint disposition, uint flags, IntPtr template);
-  [DllImport("kernel32.dll", SetLastError = true)]
-  static extern bool DeviceIoControl(IntPtr h, uint code, byte[] inBuf, int inSize, IntPtr outBuf, int outSize, out int returned, IntPtr overlapped);
-  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
-  public static int Run(string link, string target) {
-    IntPtr h = CreateFileW(link, 0x40000000, 7, IntPtr.Zero, 3, 0x02000000 | 0x00200000, IntPtr.Zero);
-    if (h == new IntPtr(-1)) return Marshal.GetLastWin32Error();
-    byte[] sub = Encoding.Unicode.GetBytes(@"\??\" + target);
-    byte[] print = Encoding.Unicode.GetBytes(target);
-    int pathLen = sub.Length + 2 + print.Length + 2;
-    byte[] buf = new byte[8 + 8 + pathLen];
-    BitConverter.GetBytes(0xA0000003u).CopyTo(buf, 0);
-    BitConverter.GetBytes((ushort)(8 + pathLen)).CopyTo(buf, 4);
-    BitConverter.GetBytes((ushort)0).CopyTo(buf, 8);
-    BitConverter.GetBytes((ushort)sub.Length).CopyTo(buf, 10);
-    BitConverter.GetBytes((ushort)(sub.Length + 2)).CopyTo(buf, 12);
-    BitConverter.GetBytes((ushort)print.Length).CopyTo(buf, 14);
-    sub.CopyTo(buf, 16);
-    print.CopyTo(buf, 16 + sub.Length + 2);
-    int returned;
-    bool ok = DeviceIoControl(h, 0x000900A4, buf, buf.Length, IntPtr.Zero, 0, out returned, IntPtr.Zero);
-    int err = ok ? 0 : Marshal.GetLastWin32Error();
-    CloseHandle(h);
-    return err;
-  }
+/// Rewrites the junction at `link` in place to point at `target`
+/// (`FSCTL_SET_REPARSE_POINT`), keeping the link's own file. Returns the
+/// Win32 error, 0 on success.
+fn retarget_junction(link: &Path, target: &Path) -> u32 {
+    use std::os::windows::ffi::OsStrExt as _;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::Foundation::GetLastError;
+    use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+    use windows_sys::Win32::Storage::FileSystem::CreateFileW;
+    use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
+    use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
+    use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_DELETE;
+    use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ;
+    use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_WRITE;
+    use windows_sys::Win32::Storage::FileSystem::OPEN_EXISTING;
+    use windows_sys::Win32::System::IO::DeviceIoControl;
+    const GENERIC_WRITE: u32 = 0x4000_0000;
+    const FSCTL_SET_REPARSE_POINT: u32 = 0x0009_00A4;
+    const IO_REPARSE_TAG_MOUNT_POINT: u32 = 0xA000_0003;
+    let substitute: Vec<u16> = format!(r"\??\{}", target.display())
+        .encode_utf16()
+        .collect();
+    let print: Vec<u16> = target.display().to_string().encode_utf16().collect();
+    let names = (substitute.len() + 1 + print.len() + 1) * 2;
+    let mut buffer: Vec<u8> = Vec::with_capacity(16 + names);
+    buffer.extend(IO_REPARSE_TAG_MOUNT_POINT.to_le_bytes());
+    buffer.extend(((8 + names) as u16).to_le_bytes());
+    buffer.extend(0_u16.to_le_bytes());
+    buffer.extend(0_u16.to_le_bytes());
+    buffer.extend(((substitute.len() * 2) as u16).to_le_bytes());
+    buffer.extend((((substitute.len() + 1) * 2) as u16).to_le_bytes());
+    buffer.extend(((print.len() * 2) as u16).to_le_bytes());
+    for unit in substitute
+        .iter()
+        .chain(&[0_u16])
+        .chain(&print)
+        .chain(&[0_u16])
+    {
+        buffer.extend(unit.to_le_bytes());
+    }
+    let wide: Vec<u16> = link.as_os_str().encode_wide().chain(Some(0)).collect();
+    // SAFETY: valid, NUL-terminated path and buffer; the handle is closed
+    // here.
+    unsafe {
+        let handle = CreateFileW(
+            wide.as_ptr(),
+            GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            std::ptr::null_mut(),
+            OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+            0,
+        );
+        if handle == INVALID_HANDLE_VALUE {
+            return GetLastError();
+        }
+        let mut returned = 0_u32;
+        let ok = DeviceIoControl(
+            handle,
+            FSCTL_SET_REPARSE_POINT,
+            buffer.as_ptr().cast(),
+            buffer.len() as u32,
+            std::ptr::null_mut(),
+            0,
+            &mut returned,
+            std::ptr::null_mut(),
+        );
+        let err = if ok == 0 { GetLastError() } else { 0 };
+        CloseHandle(handle);
+        err
+    }
 }
-'@
-exit [Retarget]::Run($args[0], $args[1])
-"#;
+
+/// Run by the sandboxed command (this test binary, started again inside
+/// the sandbox): retargets `D419_RETARGET_LINK` in place to
+/// `D419_RETARGET_TARGET` and prints the Win32 error. Does nothing when
+/// they aren't set.
+#[test]
+fn d419_probe_helper_retarget() {
+    let (Some(link), Some(target)) = (
+        std::env::var_os("D419_RETARGET_LINK"),
+        std::env::var_os("D419_RETARGET_TARGET"),
+    ) else {
+        return;
+    };
+    let err = retarget_junction(Path::new(&link), Path::new(&target));
+    println!("D419-OP in-place.fsctl rc={err}");
+}
+
+/// Control: retargeted in place (here by this Medium process), a junction
+/// keeps its own identity and only its target text changes, which rule 3
+/// records, so it is flagged.
+#[test]
+fn d419_probe_in_place_retarget_is_seen_by_its_target_text() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let base = canonical(dir.path());
+    let (root, a, b) = (base.join("root"), base.join("a"), base.join("b"));
+    for path in [&root, &a, &b] {
+        fs::create_dir_all(path).expect("create");
+    }
+    junction(&root.join(".git"), &a);
+    let roots = [root.clone()];
+    let before = crate::nested_metadata::top_level_git(&roots);
+    let err = retarget_junction(&root.join(".git"), &b);
+    let after = crate::nested_metadata::top_level_git(&roots);
+    eprintln!(
+        "D419-MEASURE medium in-place retarget rc={err} same_own_identity={} target_text_changed={}",
+        before[0].identity == after[0].identity,
+        before[0].link.as_ref().map(|link| &link.text)
+            != after[0].link.as_ref().map(|link| &link.text),
+    );
+    assert_eq!(
+        (
+            err,
+            before[0].identity == after[0].identity,
+            crate::nested_metadata::appeared(&before, after),
+        ),
+        (0, true, vec![root.join(".git")])
+    );
+}
 
 /// Measurement 1: what a non-admin sandbox command can do to a top-level
 /// `.git` link, and whether rule 3 sees it.
@@ -105,8 +186,7 @@ fn legacy_d419_probe_sandboxed_command_and_git_links() {
     let before = crate::nested_metadata::top_level_git(&roots);
 
     let codex_home = sandbox_home("d419-probe");
-    let ps1 = codex_home.path().join("retarget.ps1");
-    fs::write(&ps1, RETARGET_PS1).expect("write ps1");
+    let helper = std::env::current_exe().expect("test binary");
     let script = format!(
         concat!(
             "@echo off\r\n",
@@ -126,8 +206,10 @@ fn legacy_d419_probe_sandboxed_command_and_git_links() {
             "echo D419-OP target-moved.mkdir rc=%errorlevel%\r\n",
             "mklink /D \"{r4}\\.git\" \"{a}\" >nul\r\n",
             "echo D419-OP symlinked.mklink-d rc=%errorlevel%\r\n",
-            "powershell -NoProfile -ExecutionPolicy Bypass -File \"{ps1}\" \"{r5}\\.git\" \"{b}\" >nul 2>nul\r\n",
-            "echo D419-OP in-place.fsctl rc=%errorlevel%\r\n",
+            "set D419_RETARGET_LINK={r5}\\.git\r\n",
+            "set D419_RETARGET_TARGET={b}\r\n",
+            "\"{helper}\" --exact unified_exec::tests::d419_probe::d419_probe_helper_retarget --nocapture --test-threads=1 2>nul | findstr D419-OP\r\n",
+            "echo D419-OP in-place.helper rc=%errorlevel%\r\n",
             "exit /b 0\r\n",
         ),
         r0 = roots[0].display(),
@@ -138,7 +220,7 @@ fn legacy_d419_probe_sandboxed_command_and_git_links() {
         r5 = roots[5].display(),
         a = a.display(),
         b = b.display(),
-        ps1 = ps1.display(),
+        helper = helper.display(),
     );
     let script_path = codex_home.path().join("d419.cmd");
     fs::write(&script_path, script).expect("write script");
@@ -196,12 +278,16 @@ fn legacy_d419_probe_sandboxed_command_and_git_links() {
             new.map(|e| (&e.identity, &e.link)),
             target_now,
         );
-        // What is on disk now differs from the start in a way git would
-        // see: another link target, no longer a link, a link that is new.
+        // A `.git` there now that git would see differently from the
+        // start: another link target, no longer a link, a new one, or the
+        // same link to a replaced folder. (One removed is no threat: git
+        // then finds no repository there.)
         let was = old.and_then(|e| e.link.as_ref().map(|link| link.text.clone()));
-        if target_now != was
-            || (root.ends_with("target-moved")
-                && fs::symlink_metadata(root.join("real-old")).is_ok())
+        let exists = fs::symlink_metadata(&git).is_ok();
+        if exists
+            && (target_now != was
+                || (root.ends_with("target-moved")
+                    && fs::symlink_metadata(root.join("real-old")).is_ok()))
         {
             changed_on_disk.push(root.clone());
         }
