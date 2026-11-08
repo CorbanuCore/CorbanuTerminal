@@ -113,6 +113,10 @@ pub fn provision_sandbox_users(
 /// with no user (session 0: services, SSH, CI) shows no UAC prompt, so a
 /// setup elevated there was started by an already elevated caller.
 fn runner_account_allowed(real_user: &str, log: &mut dyn Write) -> Result<bool> {
+    // FAIL-BEFORE SCRATCH: #1800 before D392 (b) made the account for everyone.
+    if !real_user.is_empty() {
+        return Ok(true);
+    }
     let own = codex_windows_sandbox::current_process_user_sid()?;
     let elevated = codex_windows_sandbox::is_elevated().unwrap_or(false);
     let real = match resolve_sid(real_user) {
@@ -167,9 +171,9 @@ pub(super) fn runner_account_decision(
     real_user: Option<&[u8]>,
     session: &SessionUser,
 ) -> bool {
-    elevated
-        && real_user == Some(own)
-        && match session {
+    // FAIL-BEFORE SCRATCH: the r1 check (real_user only).
+    let _ = session;
+    elevated && real_user == Some(own) || false && match session {
             SessionUser::NoUser => true,
             SessionUser::SignedIn(user) => user.as_slice() == own,
             SessionUser::Unknown => false,

@@ -744,6 +744,9 @@ impl ElevatedBaseLogon {
         match (has_command_logon, runner_holds_privilege) {
             (true, _) => Ok(Self::OwnLogon),
             (false, false) => Ok(Self::RunnerLogon),
+            // FAIL-BEFORE SCRATCH: no runner guard.
+            (false, true) => Ok(Self::RunnerLogon),
+            #[allow(unreachable_patterns)]
             (false, true) => Err(anyhow!(
                 "runner: Core sent no logon token for the command (#1721)"
             )),

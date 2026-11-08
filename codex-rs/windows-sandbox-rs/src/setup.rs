@@ -488,7 +488,8 @@ impl SandboxUsersFile {
     /// why there is none: a file from before the runner account has neither,
     /// so setup runs again (D392, whatever [`SETUP_VERSION`] is).
     pub fn version_matches(&self) -> bool {
-        self.version == SETUP_VERSION && (self.runner.is_some() || self.standard_user)
+        // FAIL-BEFORE SCRATCH: #1800 before D392 (b).
+        self.version == SETUP_VERSION && self.runner.is_some()
     }
 }
 
