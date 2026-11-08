@@ -350,9 +350,11 @@ fn command_chain(words: &[String], wrapper: &mut dyn FnMut(usize)) -> Option<(us
         if word.starts_with('#') {
             return None;
         }
-        // #1808 review: a chroot named by a path (`./chroot`) is the program
-        // at that path, not the system chroot (#1302): not a wrapper.
-        if name == "chroot" && word.contains('/') {
+        // #1808 review: a chroot named by a path outside the system folders
+        // (`./chroot`) is the program at that path, not the system chroot
+        // (#1302): not a wrapper. A system chroot (`/usr/sbin/chroot`)
+        // stays one.
+        if name == "chroot" && word.contains('/') && !system_chroot(word) {
             return Some((index, name));
         }
         let Some((_, value_options, operands)) =
@@ -378,12 +380,32 @@ fn command_chain(words: &[String], wrapper: &mut dyn FnMut(usize)) -> Option<(us
         index += *operands;
         // #1808 review: zsh's `=word` after chroot's root is not read as its
         // command (#1159 judges such a word wherever it is not the command
-        // word): chroot stays the command word, as before.
-        if name == "chroot" && words.get(index).is_some_and(|word| word.starts_with('=')) {
+        // word), nor is a dash word (under a launcher, the runner check
+        // skips it and judges the input after it: `xargs -I% chroot / -x
+        // %`): chroot stays the command word, as before.
+        if name == "chroot"
+            && words
+                .get(index)
+                .is_some_and(|word| word.starts_with('=') || word.starts_with('-'))
+        {
             return Some((wrapper_at, name));
         }
     }
     None
+}
+
+/// #1808 review: whether a chroot named by a path is the system one: a
+/// path in the system program folders (inline, like `SYSTEM_SHELLS`).
+fn system_chroot(word: &str) -> bool {
+    const SYSTEM_CHROOTS: &[&str] = &[
+        "/usr/sbin/chroot",
+        "/usr/bin/chroot",
+        "/sbin/chroot",
+        "/bin/chroot",
+        "/usr/local/sbin/chroot",
+        "/usr/local/bin/chroot",
+    ];
+    SYSTEM_CHROOTS.contains(&word)
 }
 
 /// #1159: whether `word` is zsh's `=git` (EQUALS expansion: the `git` on the

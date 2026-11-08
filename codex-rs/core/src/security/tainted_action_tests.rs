@@ -12404,6 +12404,10 @@ fn issue1808_chroot_judges_its_command() {
         "chroot -- / ./x",
         "sudo chroot / ./x",
         "env chroot / ./x",
+        // Review round 2: a system chroot named by its path is the wrapper.
+        "/usr/sbin/chroot / ./x",
+        "sudo /usr/sbin/chroot / ./x",
+        "env /usr/sbin/chroot / ./x",
         "true && chroot / ./x",
         "eval chroot / ./x",
         // Unjudgeable wrapped code.
@@ -12441,6 +12445,13 @@ fn issue1808_chroot_judges_its_command() {
         "env chroot -- / =git log",
         "xargs chroot / =git log < f",
         "./chroot / true",
+        // Review round 2: dash words after the root under a launcher.
+        "xargs -I% chroot / -x % < f",
+        "printf x | xargs -I% chroot / -x %",
+        "fd . -x chroot / --userspec u {}",
+        "parallel chroot / -x {} ::: a",
+        "find . -exec chroot A=B -x {} \\;",
+        "xargs -I% chroot / -- % < f",
     ];
     let mut wrong = Vec::new();
     for shell in ["/bin/bash", "/bin/zsh"] {
@@ -12477,13 +12488,15 @@ fn issue1808_chroot_reading_is_linear() {
     }
 }
 
-/// #1808 review: argv forms (no shell) keep main's verdicts: `=git` after
-/// chroot's root, and a chroot named by a path, ask.
+/// #1808 review: argv forms (no shell) ask: `=git` after chroot's root and a
+/// chroot named by a workspace path (as on main), and a system chroot named
+/// by its path, whose command is judged.
 #[test]
 fn issue1808_chroot_argv_forms_keep_main_verdicts() {
     for command in [
         &["chroot", "/", "=git", "log"][..],
         &["./chroot", "/", "true"][..],
+        &["/usr/sbin/chroot", "/", "./x"][..],
     ] {
         assert!(kind(command).is_some(), "{command:?}");
     }
