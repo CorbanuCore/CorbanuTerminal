@@ -582,22 +582,26 @@ fn provision_and_hide_sandbox_users(
         &payload.codex_home,
         &payload.offline_username,
         &payload.online_username,
+        &payload.real_user,
         log,
     );
-    if let Err(err) = provision_result {
-        if extract_setup_failure(&err).is_some() {
-            return Err(err);
+    let made_runner = match provision_result {
+        Ok(made_runner) => made_runner,
+        Err(err) if extract_setup_failure(&err).is_some() => return Err(err),
+        Err(err) => {
+            return Err(anyhow::Error::new(SetupFailure::new(
+                SetupErrorCode::HelperUserProvisionFailed,
+                format!("provision sandbox users failed: {err}"),
+            )));
         }
-        return Err(anyhow::Error::new(SetupFailure::new(
-            SetupErrorCode::HelperUserProvisionFailed,
-            format!("provision sandbox users failed: {err}"),
-        )));
-    }
-    let users = vec![
+    };
+    let mut users = vec![
         payload.offline_username.clone(),
         payload.online_username.clone(),
-        codex_windows_sandbox::RUNNER_USERNAME.to_string(),
     ];
+    if made_runner {
+        users.push(codex_windows_sandbox::RUNNER_USERNAME.to_string());
+    }
     hide_newly_created_users(&users, sbx_dir);
     Ok(())
 }

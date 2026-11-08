@@ -866,6 +866,10 @@ fn sec_win_1648_elevated_tools_work_with_command_identity() {
 #[path = "d429_read_tests.rs"]
 mod d429;
 
+/// D392 (b): a standard user's setup makes no runner account.
+#[path = "d392_standard_user_tests.rs"]
+mod d392;
+
 /// #1758: a configured read-only `.git\hooks` in a workspace with no `.git`.
 /// The setup helper makes `.git\hooks`, and `.git` on the way, before the
 /// first command starts; that command can't write `.git` (a `config` there

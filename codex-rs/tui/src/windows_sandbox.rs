@@ -104,6 +104,11 @@ pub(crate) fn run_elevated_setup(
     )
 }
 
+/// D392 (b): why the elevated sandbox runs without its separate runner
+/// account here (the user isn't an administrator), or `None`.
+#[cfg(target_os = "windows")]
+pub(crate) use codex_windows_sandbox::standard_user_notice;
+
 #[cfg(target_os = "windows")]
 pub(crate) fn elevated_setup_failure_details(err: &anyhow::Error) -> Option<(String, String)> {
     let failure = codex_windows_sandbox::extract_setup_failure(err)?;

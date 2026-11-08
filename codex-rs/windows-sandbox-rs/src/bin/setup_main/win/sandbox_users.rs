@@ -68,12 +68,15 @@ pub fn resolve_sandbox_users_group_sid() -> Result<Vec<u8>> {
     resolve_sid(SANDBOX_USERS_GROUP)
 }
 
+/// Provisions the sandbox accounts for `real_user`; returns whether it made
+/// the runner account (D392 (b): only when `real_user` is an administrator).
 pub fn provision_sandbox_users(
     codex_home: &Path,
     offline_username: &str,
     online_username: &str,
+    real_user: &str,
     log: &mut dyn Write,
-) -> Result<()> {
+) -> Result<bool> {
     ensure_sandbox_users_group(log)?;
     super::log_line(
         log,
@@ -84,16 +87,46 @@ pub fn provision_sandbox_users(
     ensure_sandbox_user(offline_username, &offline_password, log)?;
     ensure_sandbox_user(online_username, &online_password, log)?;
     let runner_password = random_password();
-    provision_runner_user(RUNNER_USERNAME, &runner_password, log)?;
+    let runner = runner_account_allowed(real_user, log)?.then_some(RUNNER_USERNAME);
+    if let Some(runner) = runner {
+        provision_runner_user(runner, &runner_password, log)?;
+    }
     write_secrets(
         codex_home,
-        [
-            (offline_username, offline_password.as_str()),
-            (online_username, online_password.as_str()),
-            (RUNNER_USERNAME, runner_password.as_str()),
-        ],
+        (offline_username, offline_password.as_str()),
+        (online_username, online_password.as_str()),
+        runner.map(|runner| (runner, runner_password.as_str())),
     )?;
-    Ok(())
+    Ok(runner.is_some())
+}
+
+/// D392 (b): the runner account's privilege lets anyone who can sign in as
+/// it become SYSTEM, and any program running as `real_user` can read its
+/// password, so setup makes it only where `real_user` may become an
+/// administrator anyway: when this setup runs as `real_user` itself
+/// (elevated, which only an administrator's account can be). A standard
+/// user's setup runs as the administrator whose password was typed into
+/// the UAC prompt, or `codex sandbox setup` runs as an administrator for
+/// another user; neither gets the runner account. An unresolvable
+/// `real_user` gets none either.
+fn runner_account_allowed(real_user: &str, log: &mut dyn Write) -> Result<bool> {
+    let own = codex_windows_sandbox::current_process_user_sid()?;
+    let allowed = match resolve_sid(real_user) {
+        Ok(real) => real == own,
+        Err(err) => {
+            super::log_line(log, &format!("resolve {real_user} failed: {err:#}"))?;
+            false
+        }
+    };
+    if !allowed {
+        super::log_line(
+            log,
+            &format!(
+                "{real_user} isn't this setup's administrator: no runner account (standard user, D392)"
+            ),
+        )?;
+    }
+    Ok(allowed)
 }
 
 /// The right the command runner's account needs to start a command with
@@ -491,7 +524,10 @@ struct SandboxUsersFile {
     version: u32,
     offline: SandboxUserRecord,
     online: SandboxUserRecord,
-    runner: SandboxUserRecord,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runner: Option<SandboxUserRecord>,
+    /// D392 (b): no runner account because the user isn't an administrator.
+    standard_user: bool,
 }
 
 #[derive(Serialize)]
@@ -506,7 +542,12 @@ struct SetupMarker {
     write_roots: Vec<PathBuf>,
 }
 
-fn write_secrets(codex_home: &Path, accounts: [(&str, &str); 3]) -> Result<()> {
+fn write_secrets(
+    codex_home: &Path,
+    offline: (&str, &str),
+    online: (&str, &str),
+    runner: Option<(&str, &str)>,
+) -> Result<()> {
     let secrets_dir = sandbox_secrets_dir(codex_home);
     std::fs::create_dir_all(&secrets_dir).map_err(|err| {
         anyhow::Error::new(SetupFailure::new(
@@ -529,12 +570,12 @@ fn write_secrets(codex_home: &Path, accounts: [(&str, &str); 3]) -> Result<()> {
             password: BASE64.encode(blob),
         })
     };
-    let [offline, online, runner] = accounts;
     let users = SandboxUsersFile {
         version: SETUP_VERSION,
         offline: record(offline)?,
         online: record(online)?,
-        runner: record(runner)?,
+        standard_user: runner.is_none(),
+        runner: runner.map(&record).transpose()?,
     };
     let users_path = secrets_dir.join("sandbox_users.json");
     let users_json = serde_json::to_vec_pretty(&users).map_err(|err| {

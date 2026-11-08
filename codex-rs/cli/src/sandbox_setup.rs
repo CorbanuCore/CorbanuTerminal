@@ -121,6 +121,14 @@ async fn run_elevated(
         identity.real_user,
         identity.codex_home.display()
     );
+    // D392 (b): run for a user who isn't this administrator.
+    #[cfg(target_os = "windows")]
+    let notice = codex_windows_sandbox::standard_user_notice(&identity.codex_home);
+    #[cfg(not(target_os = "windows"))]
+    let notice: Option<&str> = None;
+    if let Some(notice) = notice {
+        println!("{notice}");
+    }
     Ok(())
 }
 

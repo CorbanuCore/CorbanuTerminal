@@ -244,7 +244,17 @@ jobs:
           set -euo pipefail
           cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --bin codex-windows-sandbox-setup -- sandbox_users::tests:: --nocapture 2>&1 | tee pw-1776.log
           grep -q 'test result: ok. 3 passed' pw-1776.log
-      - name: P1 Windows hardening regressions (#301, #304, #307, #323, #341, #345, #1819, D429)
+      - name: Users file and default DACLs without a runner account (D392)
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for t in setup::tests::d392_users_file_is_current_with_a_runner_or_the_standard_user_record token::tests::d392_elevated_default_dacl_follows_whose_logon_the_base_token_is; do
+            cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- --exact "$t" --nocapture 2>&1 | tee d392.log
+            grep -q 'test result: ok. 1 passed' d392.log
+          done
+          rm d392.log
+      - name: P1 Windows hardening regressions (#301, #304, #307, #323, #341, #345, #1819, D429, D392)
         if: ${{ !cancelled() }}
         shell: bash
         # Elevated: the #341/#345 tests must not skip. #345 runs a command in
@@ -522,7 +532,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "#295 probe failed in a normal session" }
             $sandbox = Get-TestExe @('-p', 'codex-windows-sandbox', '--lib')
             # The D324 tests skip here: no elevated setup is recorded yet.
-            Assert-Tests $sandbox 'sec_win_' 60
+            Assert-Tests $sandbox 'sec_win_' 63
             # The #1770 tests run on their own below.
             & $medium -Program $sandbox -Arguments @('sec_win_', '--skip', 'sec_win_1770_', '--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "P1 hardening regressions failed in a normal session" }
@@ -544,6 +554,22 @@ jobs:
               $out
               if ($code -ne 0) { throw "D324 $t failed in a normal session" }
               if (-not ($out -match 'test result: ok\. 1 passed')) { throw "D324 $t did not run in a normal session" }
+            }
+            # D392 (b): the elevated backend set up for a standard user (no
+            # runner account), from a normal session. Each test reuses the
+            # setup its elevated run recorded right before it.
+            $d392 = @(& $sandbox --list --format terse 'sec_win_d392_' | Where-Object { $_ -like '*: test' } | ForEach-Object { $_ -replace ': test$', '' })
+            if ($d392.Count -ne 3) { throw "expected 3 D392 tests, found $($d392.Count)" }
+            foreach ($t in $d392) {
+              & $sandbox --exact $t --nocapture --test-threads=1 | Out-Null
+              if ($LASTEXITCODE -ne 0) { throw "recording the setup for $t failed" }
+              $env:CODEX_SEC_WIN_1648_REQUIRE = '1'
+              $out = & $medium -Program $sandbox -Arguments @('--exact', $t, '--nocapture', '--test-threads=1')
+              $code = $LASTEXITCODE
+              Remove-Item Env:CODEX_SEC_WIN_1648_REQUIRE
+              $out
+              if ($code -ne 0) { throw "D392 $t failed in a normal session" }
+              if (-not ($out -match 'test result: ok\. 1 passed')) { throw "D392 $t did not run in a normal session" }
             }
             # #1721, #1560: everyday tools on per-command logons, from a normal session.
             $workloads = 'unified_exec::tests::command_identity::elevated::workloads::elevated_workloads_work_on_their_own_logon'

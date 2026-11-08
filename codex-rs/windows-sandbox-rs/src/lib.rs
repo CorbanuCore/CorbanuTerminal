@@ -200,6 +200,8 @@ pub use cap::workspace_write_root_overlaps_path;
 #[cfg(target_os = "windows")]
 pub use command_logon::enable_assign_primary_token_privilege;
 #[cfg(target_os = "windows")]
+pub use command_logon::holds_assign_primary_token_privilege;
+#[cfg(target_os = "windows")]
 pub use command_logon::remove_assign_primary_token_privilege;
 #[cfg(target_os = "windows")]
 pub use conpty::ConptyInstance;
@@ -343,6 +345,8 @@ pub use setup::RUNNER_USERNAME;
 #[cfg(target_os = "windows")]
 pub use setup::SETUP_VERSION;
 #[cfg(target_os = "windows")]
+pub use setup::STANDARD_USER_NOTICE;
+#[cfg(target_os = "windows")]
 pub use setup::SandboxSetupRequest;
 #[cfg(target_os = "windows")]
 pub use setup::SetupRootOverrides;
@@ -361,6 +365,8 @@ pub use setup::sandbox_dir;
 #[cfg(target_os = "windows")]
 pub use setup::sandbox_secrets_dir;
 #[cfg(target_os = "windows")]
+pub use setup::standard_user_notice;
+#[cfg(target_os = "windows")]
 pub use setup_error::SetupErrorCode;
 #[cfg(target_os = "windows")]
 pub use setup_error::SetupErrorReport;
@@ -377,6 +383,8 @@ pub use setup_error::write_setup_error_report;
 #[cfg(target_os = "windows")]
 pub use stdio_bridge::forward_sandbox_session_stdio;
 #[cfg(target_os = "windows")]
+pub use token::ElevatedBaseLogon;
+#[cfg(target_os = "windows")]
 #[doc(hidden)]
 pub use token::LocalSid;
 #[cfg(target_os = "windows")]
@@ -391,6 +399,8 @@ pub use token::create_readonly_token_with_caps_from;
 pub use token::create_workspace_write_token_with_caps_and_user_from;
 #[cfg(target_os = "windows")]
 pub use token::create_workspace_write_token_with_caps_from;
+#[cfg(target_os = "windows")]
+pub use token::current_process_user_sid;
 #[cfg(target_os = "windows")]
 pub use token::get_current_token_for_restriction;
 #[cfg(target_os = "windows")]

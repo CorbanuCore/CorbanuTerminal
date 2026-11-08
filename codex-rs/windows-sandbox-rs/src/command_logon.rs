@@ -197,6 +197,14 @@ pub fn enable_assign_primary_token_privilege(own_token: HANDLE) -> Result<()> {
     }
 }
 
+/// In the runner: whether `own_token` (opened for `TOKEN_QUERY`) holds
+/// [`ASSIGN_PRIMARY_TOKEN_PRIVILEGE`], enabled or not: only a runner running
+/// as the runner account does (D392).
+pub fn holds_assign_primary_token_privilege(own_token: HANDLE) -> Result<bool> {
+    // SAFETY: a live token handle opened for `TOKEN_QUERY`.
+    unsafe { token_holds_privilege(own_token, ASSIGN_PRIMARY_TOKEN_PRIVILEGE) }
+}
+
 /// In the runner, once its command has started (or failed to): removes
 /// [`ASSIGN_PRIMARY_TOKEN_PRIVILEGE`] from `own_token` for good, so a runner
 /// taken over later can't use it, and checks that it is gone.

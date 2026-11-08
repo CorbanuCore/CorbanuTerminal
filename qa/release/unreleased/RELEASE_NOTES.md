@@ -417,10 +417,16 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   (#1721, #1560, #1800). A command racing another command's start-up can no
   longer reach the runner, and one command can no longer borrow another's
   token or threads. The non-admin sandbox is unchanged.
-- **Setup runs again once** (setup version 7). It creates the account and
-  gives it the Windows right "Replace a process level token"
-  (`SeAssignPrimaryTokenPrivilege`). A program running as you could use that
-  account to try to gain full control of the computer; see `docs/sandbox.md`.
+- **Setup runs again once** (a new setup version). If your Windows account
+  is an administrator, it creates the account and gives it the Windows right
+  "Replace a process level token" (`SeAssignPrimaryTokenPrivilege`). A
+  program running as you could use that account to try to gain full control
+  of the computer; see `docs/sandbox.md`.
+- **Standard (non-administrator) accounts keep the default sandbox as it
+  was** (D392). Setup doesn't create the runner account for them, since that
+  right would let anyone signed in as them become an administrator, and
+  Corbanu Terminal says so after setup. Commands in different projects are
+  then not kept apart while they run, as before; see `docs/sandbox.md`.
 
 ## Windows non-admin sandbox warning
 

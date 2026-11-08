@@ -15,6 +15,7 @@ use anyhow::Context;
 use anyhow::Result;
 use codex_utils_pty::JobObject;
 use codex_windows_sandbox::ConsoleMode;
+use codex_windows_sandbox::ElevatedBaseLogon;
 use codex_windows_sandbox::ErrorPayload;
 use codex_windows_sandbox::ErrorStage;
 use codex_windows_sandbox::ExitPayload;
@@ -39,6 +40,7 @@ use codex_windows_sandbox::enable_assign_primary_token_privilege;
 use codex_windows_sandbox::encode_bytes;
 use codex_windows_sandbox::get_current_token_for_restriction;
 use codex_windows_sandbox::hide_current_user_profile_dir;
+use codex_windows_sandbox::holds_assign_primary_token_privilege;
 use codex_windows_sandbox::log_note;
 use codex_windows_sandbox::read_frame;
 use codex_windows_sandbox::read_handle_loop;
@@ -291,11 +293,22 @@ fn harden_runner() -> Result<OwnedWinHandle> {
 fn spawn_ipc_process(req: &SpawnRequest, own_token: &OwnedWinHandle) -> Result<IpcSpawnedProcess> {
     let log_dir = req.codex_home.clone();
     // #1721 (a′): the command's token is made from the logon Core made for
-    // this command (its own logon SID), not from the runner's token.
-    let command_logon = OwnedWinHandle::new(
-        req.command_token
-            .context("runner: Core sent no logon token for the command (#1721)")? as HANDLE,
-    );
+    // this command (its own logon SID), not from the runner's token. D392
+    // (b): with no runner account (a standard user's setup) Core sends none
+    // and this runner, running as the command's account, makes it from its
+    // own token as before #1800; never while it holds
+    // SeAssignPrimaryTokenPrivilege, which only the runner account holds.
+    let command_logon = match req.command_token {
+        Some(token) => Some(OwnedWinHandle::new(token as HANDLE)),
+        None if holds_assign_primary_token_privilege(own_token.raw())? => {
+            anyhow::bail!("runner: Core sent no logon token for the command (#1721)")
+        }
+        None => None,
+    };
+    let (base, base_logon) = match &command_logon {
+        Some(command_logon) => (command_logon.raw(), ElevatedBaseLogon::OwnLogon),
+        None => (own_token.raw(), ElevatedBaseLogon::RunnerLogon),
+    };
     hide_current_user_profile_dir(req.codex_home.as_path());
     let token_mode = token_mode_for_permission_profile(
         &req.permission_profile,
@@ -333,14 +346,16 @@ fn spawn_ipc_process(req: &SpawnRequest, own_token: &OwnedWinHandle) -> Result<I
         match token_mode {
             WindowsSandboxTokenMode::ReadOnlyCapability => {
                 create_readonly_token_with_caps_and_user_from(
-                    command_logon.raw(),
+                    base,
+                    base_logon,
                     &cap_psid_ptrs,
                     &additional_restricting_sid_ptrs,
                 )
             }
             WindowsSandboxTokenMode::WritableRootsCapability => {
                 create_workspace_write_token_with_caps_and_user_from(
-                    command_logon.raw(),
+                    base,
+                    base_logon,
                     &cap_psid_ptrs,
                     &additional_restricting_sid_ptrs,
                 )
@@ -360,8 +375,10 @@ fn spawn_ipc_process(req: &SpawnRequest, own_token: &OwnedWinHandle) -> Result<I
     let effective_cwd = effective_cwd(&req.cwd, Some(log_dir.as_path()));
     // Starting a process with a token not derived from this process's takes
     // the privilege; it goes again once the command has started (below).
-    enable_assign_primary_token_privilege(own_token.raw())
-        .context("enable SeAssignPrimaryTokenPrivilege (rerun the sandbox setup)")?;
+    if base_logon == ElevatedBaseLogon::OwnLogon {
+        enable_assign_primary_token_privilege(own_token.raw())
+            .context("enable SeAssignPrimaryTokenPrivilege (rerun the sandbox setup)")?;
+    }
 
     let mut conpty_owner = None;
     let mut console_host_started = None;

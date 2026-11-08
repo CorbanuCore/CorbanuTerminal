@@ -305,10 +305,18 @@ pub(crate) fn spawn_runner_transport(
     mut spawn_request: SpawnRequest,
 ) -> Result<RunnerTransport> {
     // #1721 (a′): the runner runs as its own account; the command, as
-    // `sandbox_creds`, on a logon Core makes for it below.
-    let command_creds = sandbox_creds;
+    // `sandbox_creds`, on a logon Core makes for it below. D392 (b): with no
+    // runner account (a standard user's setup) the runner runs as the
+    // command's account and starts it from its own token, as before #1800.
     let runner_creds = crate::identity::runner_creds(codex_home)?;
-    let sandbox_creds = &runner_creds;
+    let command_creds = runner_creds.as_ref().map(|_| sandbox_creds);
+    if command_creds.is_none() {
+        crate::logging::log_note(
+            "no runner account (standard user, D392): the runner runs as the command's account",
+            log_dir,
+        );
+    }
+    let sandbox_creds = runner_creds.as_ref().unwrap_or(sandbox_creds);
     let (pipe_in_name, pipe_out_name) = pipe_pair();
     let h_pipe_in =
         create_named_pipe(&pipe_in_name, PIPE_ACCESS_OUTBOUND, &sandbox_creds.username)?;
@@ -408,30 +416,32 @@ pub(crate) fn spawn_runner_transport(
         pipe_write: unsafe { File::from_raw_handle(h_pipe_in as _) },
         pipe_read: unsafe { File::from_raw_handle(h_pipe_out as _) },
     };
-    let command_logon = match hand_command_logon_to_runner(
-        command_creds,
-        runner_process,
-        &runner_exe,
-        commands_use_this_desktop,
-        log_dir,
-    ) {
-        Ok(command_logon) => command_logon,
-        Err(err) => {
-            unsafe {
-                if runner_process != 0 {
-                    let _ = TerminateProcess(runner_process, 1);
-                    CloseHandle(runner_process);
-                }
-            }
-            drop(transport);
-            return Err(err);
-        }
-    };
-    spawn_request.command_token = Some(command_logon.runner_token);
     // What no reaper took, Core holds until the runner exits.
     let mut held: Vec<WindowAccess> = Vec::new();
-    if let CommandLogonAccess::Held(access) = command_logon.access {
-        held.push(access);
+    if let Some(command_creds) = command_creds {
+        let command_logon = match hand_command_logon_to_runner(
+            command_creds,
+            runner_process,
+            &runner_exe,
+            commands_use_this_desktop,
+            log_dir,
+        ) {
+            Ok(command_logon) => command_logon,
+            Err(err) => {
+                unsafe {
+                    if runner_process != 0 {
+                        let _ = TerminateProcess(runner_process, 1);
+                        CloseHandle(runner_process);
+                    }
+                }
+                drop(transport);
+                return Err(err);
+            }
+        };
+        spawn_request.command_token = Some(command_logon.runner_token);
+        if let CommandLogonAccess::Held(access) = command_logon.access {
+            held.push(access);
+        }
     }
     let startup_result = (|| -> Result<SpawnReady> {
         // Keep the runner process HANDLE alive until the *entire* startup handshake finishes.

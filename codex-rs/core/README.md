@@ -241,7 +241,17 @@ to start a command with a token it didn't derive from its own: setup grants
 it to the runner's account, and the runner enables it only to start its one
 command and then removes it from its token. Anything that can run as the
 user can read that account's password and sign in as it, and that privilege
-is the kind "potato" attacks use to reach SYSTEM (D392). Elevated commands
+is the kind "potato" attacks use to reach SYSTEM (D392). So (D392 (b))
+setup creates that account only when it runs as the user it sets Codex up
+for, which only an administrator's own (elevated) account can: a standard
+user's setup, run as the administrator who typed their password into the
+UAC prompt (or `codex sandbox setup` for another user), records
+`standard_user` in `sandbox_users.json` instead. Core then starts each
+runner as the command's account and the runner makes the command's token
+from its own (`ElevatedBaseLogon::RunnerLogon`), with the D324 default DACL,
+exactly as before #1800: #1717, #1560 and #1803 stay open for them, and the
+TUI and `codex sandbox setup` tell the user so. A runner that holds the
+privilege refuses a request without a command logon. Elevated commands
 can still read a runner's ConPTY console host (another workspace's terminal
 output), as before. Two routes
 still start a child
