@@ -46,9 +46,7 @@ use windows_sys::Win32::Security::CheckTokenMembership;
 use windows_sys::Win32::Security::FreeSid;
 use windows_sys::Win32::Security::SECURITY_NT_AUTHORITY;
 
-/// 7: #1791 / D400 shared-folder denies (an upgrade re-runs the setup, and
-/// so the scan).
-pub const SETUP_VERSION: u32 = 7;
+pub const SETUP_VERSION: u32 = 6;
 pub const OFFLINE_USERNAME: &str = "CodexSandboxOffline";
 pub const ONLINE_USERNAME: &str = "CodexSandboxOnline";
 const ERROR_CANCELLED: u32 = 1223;

@@ -1255,6 +1255,17 @@ impl Session {
             self.send_event(tc, EventMsg::Warning(WarningEvent { message }))
                 .await;
         }
+
+        if let Some(cwd) = tc.environments.single_local_environment_cwd()
+            && let Some(message) = crate::windows_sandbox::shared_folder_deny_warning(
+                tc.windows_sandbox_level,
+                &tc.permission_profile,
+                cwd.as_path(),
+            )
+        {
+            self.send_event(tc, EventMsg::Warning(WarningEvent { message }))
+                .await;
+        }
     }
 
     pub(crate) async fn new_default_turn(&self) -> Arc<TurnContext> {

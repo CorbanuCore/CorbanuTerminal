@@ -962,6 +962,61 @@ pub unsafe fn remove_shared_folder_denies_for_home(
     Ok(removal)
 }
 
+/// The sandbox users' group the setup makes.
+const SANDBOX_USERS_GROUP: &str = "CodexSandboxUsers";
+
+/// D414: the folders the scan finds whose own DACL lacks the deny the setup
+/// would add (new or reinstalled since the last setup). Runs as the signed-in
+/// user, so folders it can't read are left to the next admin setup. Empty
+/// without the sandbox users' group (no setup has run).
+pub fn shared_folders_missing_denies(
+    roots: &SharedFolderScanRoots,
+) -> Result<Vec<SharedFolderFinding>> {
+    let Ok(mut group) = crate::winutil::resolve_sid(SANDBOX_USERS_GROUP) else {
+        return Ok(Vec::new());
+    };
+    let psid = group.as_mut_ptr().cast::<c_void>();
+    let scan = scan_shared_folders(roots)?;
+    Ok(scan
+        .findings
+        .into_iter()
+        // SAFETY: `psid` points to `group`, which outlives the call. A DACL
+        // that can't be read counts as missing the deny.
+        .filter(|finding| {
+            !unsafe { has_shared_folder_deny(&finding.path, psid, finding.kind) }.unwrap_or(false)
+        })
+        .collect())
+}
+
+/// D415: the folders in `roots` the setup's [`SharedFolderDenyKind::Write`]
+/// entry makes read-only to sandboxed commands, on the folder itself or
+/// inherited from one above it. Reads by path: for telling the user, not for
+/// decisions. ([`SharedFolderDenyKind::DeleteChild`] doesn't stop a command
+/// deleting what it may write.)
+pub fn shared_folder_write_denied_roots(roots: &[PathBuf]) -> Vec<PathBuf> {
+    let Ok(mut group) = crate::winutil::resolve_sid(SANDBOX_USERS_GROUP) else {
+        return Vec::new();
+    };
+    let psid = group.as_mut_ptr().cast::<c_void>();
+    let mask = SharedFolderDenyKind::Write.mask();
+    roots
+        .iter()
+        .filter(|root| {
+            // SAFETY: `psid` points to `group`, which outlives the call.
+            unsafe { Dacl::read(root) }.is_ok_and(|dacl| {
+                unsafe { dacl.entries() }
+                    .into_iter()
+                    .any(|(ace_type, _, ace_mask, sid)| {
+                        ace_type == ACCESS_DENIED_ACE_TYPE
+                            && ace_mask == mask
+                            && unsafe { EqualSid(sid, psid) } != 0
+                    })
+            })
+        })
+        .cloned()
+        .collect()
+}
+
 #[cfg(test)]
 #[path = "acl_shared_folders_tests.rs"]
 mod tests;

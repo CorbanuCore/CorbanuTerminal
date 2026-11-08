@@ -1,5 +1,6 @@
 //! #1791 / D400 (needs security sign-off): each full admin setup (first
-//! run, upgrade, managed provisioning) scans the shared folders and denies
+//! run, managed provisioning, and after an upgrade when Core's own rescan
+//! finds a folder without its deny, D414) scans the shared folders and denies
 //! the sandbox users' group deleting (or, where Everyone may write, writing)
 //! in them; see `acl_shared_folders.rs` in the library. A folder that can't
 //! be changed is logged; a record that can't be kept fails the setup, since

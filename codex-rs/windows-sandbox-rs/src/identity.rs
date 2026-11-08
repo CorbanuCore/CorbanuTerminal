@@ -198,6 +198,12 @@ pub fn require_logon_sandbox_creds(
             None
         }
     };
+    if identity.is_some()
+        && let Some(reason) = shared_folder_rescan_reason(codex_home, &sandbox_dir)
+    {
+        setup_reason = Some(reason);
+        identity = None;
+    }
 
     if identity.is_none() {
         if let Some(reason) = &setup_reason {
@@ -225,6 +231,8 @@ pub fn require_logon_sandbox_creds(
             },
             &desired_offline_proxy_settings,
         )?;
+        // The full setup scanned the shared folders (D414).
+        note_shared_folder_rescan(codex_home, &sandbox_dir);
         identity = select_identity(network_identity, codex_home)?;
     }
     // Always refresh ACLs (non-elevated) for current roots via the setup binary.
@@ -254,6 +262,44 @@ pub fn require_logon_sandbox_creds(
         username: identity.username,
         password: identity.password,
     })
+}
+
+/// D414: after the CLI's version changes, why the admin setup must run again
+/// (a shared folder lacks its deny), if it must.
+fn shared_folder_rescan_reason(codex_home: &Path, sandbox_dir: &Path) -> Option<String> {
+    match crate::shared_folder_rescan::folders_needing_setup(codex_home) {
+        Ok(None) => None,
+        Ok(Some(missing)) => match missing.first() {
+            None => {
+                note_shared_folder_rescan(codex_home, sandbox_dir);
+                None
+            }
+            Some(first) => Some(format!(
+                "CLI version {}: {} shared folders lack the setup's deny (first: {:?} on {})",
+                crate::shared_folder_rescan::cli_version(),
+                missing.len(),
+                first.kind,
+                first.path.display()
+            )),
+        },
+        // Not recorded: the next command tries again.
+        Err(err) => {
+            crate::logging::log_note(
+                &format!("shared-folder rescan failed: {err:#}"),
+                Some(sandbox_dir),
+            );
+            None
+        }
+    }
+}
+
+fn note_shared_folder_rescan(codex_home: &Path, sandbox_dir: &Path) {
+    if let Err(err) = crate::shared_folder_rescan::record_rescan(codex_home) {
+        crate::logging::log_note(
+            &format!("recording the shared-folder rescan failed: {err:#}"),
+            Some(sandbox_dir),
+        );
+    }
 }
 
 fn desired_offline_proxy_settings(

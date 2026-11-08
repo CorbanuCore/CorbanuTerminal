@@ -765,6 +765,137 @@ fn sec_win_1791_elevated_everyday_workloads_still_work() {
     );
 }
 
+/// D414: the setup's scan ran for this CLI version; the next command scans
+/// again only once the version changes. Read directly so the test also runs
+/// on builds without the rescan.
+fn rescan_stamp(codex_home: &Path) -> PathBuf {
+    codex_home.join(".sandbox").join("shared_folder_scan.json")
+}
+
+/// A fresh folder in `ProgramData` that Everyone may write, as a vendor
+/// installer might leave after the setup ran.
+fn everyone_writable_folder(prefix: &str) -> TempDir {
+    let shared = tempfile::Builder::new()
+        .prefix(prefix)
+        .tempdir_in(env_dir("ProgramData", "C:\\ProgramData"))
+        .expect("a shared folder");
+    icacls(shared.path(), &["/grant", "*S-1-1-0:(OI)(CI)M"]);
+    shared
+}
+
+fn has_write_deny(path: &Path) -> bool {
+    let group = LocalSid::from_string(&sandbox_group_sid()).expect("group SID");
+    // SAFETY: a valid SID and an existing folder.
+    unsafe { has_shared_folder_deny(path, group.as_ptr(), Write) }.expect("read DACL")
+}
+
+/// D414: after the CLI's version changes, the next elevated command scans
+/// the shared folders again and the setup closes a folder made since the
+/// last scan; without a version change nothing scans. Elevated only (the
+/// setup runs again without a prompt).
+#[test]
+fn sec_win_1791_rescan_after_cli_version_change_closes_new_folders() {
+    if !crate::setup::is_elevated().expect("elevation") {
+        assert!(
+            std::env::var_os(REQUIRE_ENV).is_none(),
+            "sec-win-1791: the rescan test needs an elevated run"
+        );
+        return;
+    }
+    let Some(codex_home) = elevated_home("sec-win-1791-rescan") else {
+        return;
+    };
+    let _guard = legacy_process_test_guard();
+    let root = user_owned_test_root();
+    let temp = user_owned_test_root();
+    let run = |name: &str| {
+        let (stdout, exit_code) = current_thread_runtime().block_on(run_elevated(
+            root.path(),
+            codex_home.path(),
+            cmd_argv(root.path(), name, "@echo off\necho ran\n"),
+            &command_env(temp.path()),
+            /*tty*/ false,
+        ));
+        assert_eq!(
+            exit_code,
+            0,
+            "stdout={stdout:?}\n{}",
+            sandbox_log(codex_home.path())
+        );
+    };
+    run("setup.cmd");
+    let stamp = rescan_stamp(codex_home.path());
+    let current = fs::read_to_string(&stamp).unwrap_or_else(|err| {
+        panic!(
+            "D414: no rescan stamp after the setup: {err}\n{}",
+            sandbox_log(codex_home.path())
+        )
+    });
+    assert!(current.contains(env!("CARGO_PKG_VERSION")), "{current}");
+
+    // Same version: a folder made now stays as it is.
+    let same = everyone_writable_folder("CorbanuSecWin1791Same-");
+    run("same-version.cmd");
+    assert!(
+        !has_write_deny(same.path()),
+        "D414: a command scanned again without a version change"
+    );
+
+    // Another version: the next command closes the new folder.
+    let late = everyone_writable_folder("CorbanuSecWin1791Late-");
+    fs::write(&stamp, r#"{"cli_version":"0.0.0-sec-win-1791"}"#).expect("an older stamp");
+    run("new-version.cmd");
+    assert!(
+        has_write_deny(late.path()),
+        "D414: after a version change the new folder {} was not closed\n{}",
+        late.path().display(),
+        sandbox_log(codex_home.path())
+    );
+    assert_eq!(fs::read_to_string(&stamp).expect("stamp"), current);
+    println!(
+        "sec-win-1791: after a CLI version change the next command closed the new folder; without one it was left"
+    );
+}
+
+/// D415: a workspace in a folder the setup made read-only is reported.
+#[test]
+fn sec_win_1791_read_only_workspace_is_reported() {
+    if !crate::setup::is_elevated().expect("elevation") {
+        assert!(
+            std::env::var_os(REQUIRE_ENV).is_none(),
+            "sec-win-1791: the report test needs an elevated run"
+        );
+        return;
+    }
+    let shared = everyone_writable_folder("CorbanuSecWin1791Report-");
+    let Some(codex_home) = elevated_home("sec-win-1791-report") else {
+        return;
+    };
+    let _guard = legacy_process_test_guard();
+    let root = user_owned_test_root();
+    let temp = user_owned_test_root();
+    // A new home: this first command runs the setup, which scans.
+    let (stdout, exit_code) = current_thread_runtime().block_on(run_elevated(
+        root.path(),
+        codex_home.path(),
+        cmd_argv(root.path(), "setup.cmd", "@echo off\necho ran\n"),
+        &command_env(temp.path()),
+        /*tty*/ false,
+    ));
+    assert_eq!(exit_code, 0, "stdout={stdout:?}");
+    assert!(has_write_deny(shared.path()), "the setup didn't close it");
+    let project = shared.path().join("project");
+    fs::create_dir_all(&project).expect("a project in the shared folder");
+
+    let reported = crate::shared_folder_write_denied_roots(&[
+        project.clone(),
+        shared.path().to_path_buf(),
+        root.path().to_path_buf(),
+    ]);
+    assert_eq!(reported, vec![project, shared.path().to_path_buf()]);
+    println!("sec-win-1791: a workspace the denies make read-only is reported; its own is not");
+}
+
 /// The removal (for uninstalling) takes out exactly what the setup added.
 /// Elevated only; it removes this home's entries everywhere, so CI runs it
 /// after the tests that rely on them.

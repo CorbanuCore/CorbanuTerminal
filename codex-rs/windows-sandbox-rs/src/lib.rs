@@ -127,6 +127,8 @@ mod setup;
 
 #[cfg(target_os = "windows")]
 mod setup_error;
+#[cfg(target_os = "windows")]
+mod shared_folder_rescan;
 
 #[cfg(target_os = "windows")]
 mod spawn_prep;
@@ -201,6 +203,8 @@ pub use acl::shared_folders::machine_shared_folder_record_dir;
 pub use acl::shared_folders::remove_shared_folder_denies_for_home;
 #[cfg(target_os = "windows")]
 pub use acl::shared_folders::scan_shared_folders;
+#[cfg(target_os = "windows")]
+pub use acl::shared_folders::shared_folder_write_denied_roots;
 #[cfg(target_os = "windows")]
 pub use audit::apply_world_writable_scan_and_denies_for_permissions;
 #[cfg(target_os = "windows")]

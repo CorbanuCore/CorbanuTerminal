@@ -41,16 +41,26 @@ pub(crate) struct SandboxSetupCommand {
     /// CODEX_HOME for the Codex user. Required with --user.
     #[arg(long = "codex-home", value_name = "DIR")]
     codex_home: Option<PathBuf>,
+
+    /// Instead of setting up, remove the denies the elevated setup added to
+    /// shared folders (#1791) that no other Codex home's setup relies on.
+    /// For uninstalling; needs administrator approval.
+    #[arg(long = "remove-shared-folder-denies", default_value_t = false)]
+    remove_shared_folder_denies: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SandboxSetupLevel {
     Elevated,
+    /// D413: undo the elevated setup's shared-folder denies.
+    RemoveSharedFolderDenies,
 }
 
 impl SandboxSetupCommand {
     fn setup_level(&self) -> anyhow::Result<SandboxSetupLevel> {
-        if self.elevated_sandbox_level {
+        if self.remove_shared_folder_denies {
+            Ok(SandboxSetupLevel::RemoveSharedFolderDenies)
+        } else if self.elevated_sandbox_level {
             Ok(SandboxSetupLevel::Elevated)
         } else {
             anyhow::bail!("`codex sandbox setup` currently requires --elevated");
@@ -65,7 +75,18 @@ pub(crate) async fn run(
 ) -> anyhow::Result<()> {
     match cmd.setup_level()? {
         SandboxSetupLevel::Elevated => run_elevated(cmd, config_profile, cli_overrides).await,
+        SandboxSetupLevel::RemoveSharedFolderDenies => remove_shared_folder_denies(&cmd),
     }
+}
+
+fn remove_shared_folder_denies(cmd: &SandboxSetupCommand) -> anyhow::Result<()> {
+    let identity = resolve_sandbox_setup_identity(cmd)?;
+    codex_core::windows_sandbox::run_elevated_shared_folder_deny_removal(&identity.codex_home)?;
+    println!(
+        "Removed the elevated sandbox's shared-folder denies for {} (those no other Codex home relies on). Setup adds them again the next time it runs.",
+        identity.codex_home.display()
+    );
+    Ok(())
 }
 
 pub(crate) fn parse_setup_command(
@@ -218,6 +239,34 @@ mod tests {
         .expect("setup command");
 
         assert_eq!(command.user.as_deref(), Some(r"DOMAIN\alice"));
+    }
+
+    #[test]
+    fn remove_shared_folder_denies_selects_the_removal() {
+        for args in [
+            &["setup", "--remove-shared-folder-denies", "--current-user"][..],
+            &[
+                "setup",
+                "--elevated",
+                "--remove-shared-folder-denies",
+                "--user",
+                r"DOMAIN\alice",
+                "--codex-home",
+                r"C:\Users\alice\.codex",
+            ][..],
+        ] {
+            let command = SandboxSetupCommand::try_parse_from(args).expect("parse");
+            assert_eq!(
+                command.setup_level().expect("level"),
+                SandboxSetupLevel::RemoveSharedFolderDenies
+            );
+        }
+        let setup = SandboxSetupCommand::try_parse_from(["setup", "--elevated", "--current-user"])
+            .expect("parse");
+        assert_eq!(
+            setup.setup_level().expect("level"),
+            SandboxSetupLevel::Elevated
+        );
     }
 
     #[test]
