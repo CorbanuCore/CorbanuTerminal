@@ -278,9 +278,9 @@ jobs:
         shell: bash
         # The admin setup denies the sandbox users' group deleting in shared
         # folders that grant every signed-in account delete-child, and
-        # writing where Everyone may write; win-1791m's everyday workloads
-        # still work. The removal runs last: it takes its home's denies out
-        # everywhere (the next full setup adds them again).
+        # writing where Everyone may write, and changing their permissions;
+        # win-1791m's everyday workloads still work. The removal takes out
+        # only what no other home's setup relies on.
         env:
           CODEX_SEC_WIN_341_REQUIRE: "1"
           CODEX_SEC_WIN_1791_REQUIRE: "1"
@@ -296,7 +296,7 @@ jobs:
           }
           check elevated_command_cannot_delete_or_write_in_shared_folders "sec-win-1791 elevated session: [0-9]* folders kept their files and [0-9]* refused writes; reads worked"
           check elevated_everyday_workloads_still_work "sec-win-1791 elevated session: all 58 everyday steps worked"
-          check removal_takes_out_recorded_denies "sec-win-1791: the removal took out all [0-9]* recorded denies"
+          check removal_takes_out_recorded_denies "sec-win-1791: the removal took out the deny only its home relied on and kept [0-9]* others"
           rm sec-1791.log
       - name: Legacy sandbox delete boundary (#158)
         if: ${{ !cancelled() }}
@@ -509,9 +509,8 @@ jobs:
             }
             Remove-Item Env:CODEX_SEC_WIN_1770_SHARED_ROOT
             # #1791 / D400: the elevated backend from a normal session, with
-            # the fixtures the elevated step made and a setup an elevated run
-            # recorded right before (its full setup scans again, so it adds
-            # back what the elevated step's removal test took out).
+            # the fixtures (and their denies) the elevated step made and a
+            # setup an elevated run recorded right before.
             $env:CODEX_SEC_WIN_1791_REQUIRE = '1'
             $t1791 = [ordered]@{
               'elevated_command_cannot_delete_or_write_in_shared_folders' = 'sec-win-1791 normal session: \d+ folders kept their files and \d+ refused writes; reads worked'

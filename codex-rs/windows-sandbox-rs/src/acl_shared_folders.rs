@@ -16,19 +16,27 @@
 //! group:
 //! - [`SharedFolderDenyKind::DeleteChild`] where a folder's own entries (a
 //!   root's inherited ones too) give such a group delete-child;
-//! - [`SharedFolderDenyKind::Write`] where they give Everyone a create
-//!   right.
+//! - [`SharedFolderDenyKind::Write`] where they give Everyone a right to
+//!   write, delete or change permissions in it or in the files it holds.
 //!
-//! Each entry goes first in the DACL, so it wins over the folder's own
-//! allows (and, inherited, over its subfolders' inherited ones). Every entry
-//! is recorded in `.sandbox-secrets`, which sandboxed commands can't open, so
-//! [`remove_recorded_shared_folder_denies`] removes exactly those.
+//! Both also deny `WRITE_DAC` and `WRITE_OWNER`, so a command can't take the
+//! entry out again. Each entry goes first in the DACL, so it wins over the
+//! folder's own allows (and, inherited, over its subfolders' inherited ones).
+//!
+//! Every write goes through a handle opened without following links
+//! ([`super::open_exact`]): a folder swapped for a junction after the scan is
+//! refused, not followed. Every entry added is recorded, with the folder's
+//! identity and the homes whose setups rely on it, in
+//! `%ProgramData%\CorbanuTerminalSandbox\shared-folder-denies`, which only
+//! Administrators and SYSTEM may use. [`remove_shared_folder_denies_for_home`]
+//! removes an entry, exactly, once no recorded home relies on it.
 
+use super::DaclTarget;
 use super::INHERIT_ONLY_ACE;
 use super::INHERITED_ACE;
-use super::NO_PROPAGATE_INHERIT_ACE;
-use super::remove_matching_aces;
-use crate::setup::sandbox_secrets_dir;
+use super::open_exact;
+use super::remove_aces_from;
+use super::security_info;
 use crate::token::LocalSid;
 use crate::winutil::to_wide;
 use anyhow::Context;
@@ -36,6 +44,7 @@ use anyhow::Result;
 use anyhow::anyhow;
 use serde::Deserialize;
 use serde::Serialize;
+use std::collections::BTreeSet;
 use std::ffi::c_void;
 use std::os::windows::fs::MetadataExt;
 use std::path::Path;
@@ -54,7 +63,7 @@ use windows_sys::Win32::Security::AclSizeInformation;
 use windows_sys::Win32::Security::AddAccessDeniedAceEx;
 use windows_sys::Win32::Security::AddAce;
 use windows_sys::Win32::Security::Authorization::GetNamedSecurityInfoW;
-use windows_sys::Win32::Security::Authorization::SetNamedSecurityInfoW;
+use windows_sys::Win32::Security::Authorization::SetSecurityInfo;
 use windows_sys::Win32::Security::CONTAINER_INHERIT_ACE;
 use windows_sys::Win32::Security::DACL_SECURITY_INFORMATION;
 use windows_sys::Win32::Security::EqualSid;
@@ -76,6 +85,9 @@ use windows_sys::Win32::Storage::FileSystem::FILE_DELETE_CHILD;
 use windows_sys::Win32::Storage::FileSystem::FILE_WRITE_ATTRIBUTES;
 use windows_sys::Win32::Storage::FileSystem::FILE_WRITE_DATA;
 use windows_sys::Win32::Storage::FileSystem::FILE_WRITE_EA;
+use windows_sys::Win32::Storage::FileSystem::READ_CONTROL;
+use windows_sys::Win32::Storage::FileSystem::WRITE_DAC;
+use windows_sys::Win32::Storage::FileSystem::WRITE_OWNER;
 
 const ACCESS_ALLOWED_ACE_TYPE: u8 = 0;
 const ACCESS_DENIED_ACE_TYPE: u8 = 1;
@@ -99,25 +111,38 @@ pub const SHARED_GROUP_SIDS: [&str; 9] = [
     EVERYONE,
 ];
 
-/// The record [`apply_shared_folder_denies`] keeps, in `.sandbox-secrets`.
-pub const SHARED_FOLDER_DENIES_FILE: &str = "shared_folder_denies.json";
+/// The machine's record, in [`SHARED_FOLDER_RECORD_DIR`].
+pub const SHARED_FOLDER_RECORD_FILE: &str = "record.json";
+/// Under `%ProgramData%\CorbanuTerminalSandbox`.
+pub const SHARED_FOLDER_RECORD_DIR: &str = "shared-folder-denies";
+/// Rights an allow for Everyone may give that the [`SharedFolderDenyKind::Write`]
+/// deny closes (Everyone is a restricting SID, so they pass both checks).
+const EVERYONE_WRITE_RIGHTS: u32 = FILE_ADD_FILE
+    | FILE_ADD_SUBDIRECTORY
+    | DELETE
+    | FILE_DELETE_CHILD
+    | WRITE_DAC
+    | WRITE_OWNER
+    | GENERIC_WRITE
+    | GENERIC_ALL;
 
 /// The deny entries the setup adds for the sandbox users' group.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum SharedFolderDenyKind {
-    /// #1791: `FILE_DELETE_CHILD`, inherited by subfolders.
+    /// #1791: `FILE_DELETE_CHILD` (and changing permissions or owner),
+    /// inherited by subfolders.
     DeleteChild,
-    /// D400: creating, writing and deleting (no `SYNCHRONIZE` or
-    /// `READ_CONTROL`, so reads still work), inherited by files and
-    /// subfolders.
+    /// D400: creating, writing, deleting and changing permissions or owner
+    /// (no `SYNCHRONIZE` or `READ_CONTROL`, so reads still work), inherited
+    /// by files and subfolders.
     Write,
 }
 
 impl SharedFolderDenyKind {
     pub fn mask(self) -> u32 {
         match self {
-            Self::DeleteChild => FILE_DELETE_CHILD,
+            Self::DeleteChild => FILE_DELETE_CHILD | WRITE_DAC | WRITE_OWNER,
             Self::Write => {
                 FILE_WRITE_DATA
                     | FILE_APPEND_DATA
@@ -125,6 +150,8 @@ impl SharedFolderDenyKind {
                     | FILE_WRITE_ATTRIBUTES
                     | DELETE
                     | FILE_DELETE_CHILD
+                    | WRITE_DAC
+                    | WRITE_OWNER
             }
         }
     }
@@ -213,14 +240,17 @@ pub struct SharedFolderScan {
     pub visited: usize,
     /// Folders whose DACL or listing couldn't be read.
     pub unreadable: usize,
+    /// Folders with no DACL at all (open to everyone): reported, not changed.
+    pub no_dacl: Vec<PathBuf>,
     pub seconds: f64,
 }
 
 /// What one allow entry gives a shared group that a deny should close:
-/// `(delete_child, everyone_create)`. Only entries that apply to the folder
-/// itself or the folders it will hold count; on a folder below a root only
-/// its own entries count (inherited ones come from a folder the scan
-/// checks).
+/// `(delete_child, everyone_write)`. Delete-child counts when the entry
+/// applies to the folder itself or to subfolders (the deny reaches all of
+/// them); Everyone's rights also when it applies to files. On a folder below
+/// a root only its own entries count (inherited ones come from a folder the
+/// scan checks).
 pub(crate) fn classify_allow(
     shared_group: Option<&str>,
     ace_flags: u8,
@@ -234,15 +264,16 @@ pub(crate) fn classify_allow(
         return (false, false);
     }
     let applies_here = ace_flags & INHERIT_ONLY_ACE == 0;
-    let applies_to_subfolders = u32::from(ace_flags) & CONTAINER_INHERIT_ACE != 0
-        && u32::from(ace_flags) & NO_PROPAGATE_INHERIT_ACE == 0;
-    if !applies_here && !applies_to_subfolders {
-        return (false, false);
-    }
-    let delete_child = mask & (FILE_DELETE_CHILD | GENERIC_ALL) != 0;
-    let everyone_create = sid == EVERYONE
-        && mask & (FILE_ADD_FILE | FILE_ADD_SUBDIRECTORY | GENERIC_WRITE | GENERIC_ALL) != 0;
-    (delete_child, everyone_create)
+    // With or without NO_PROPAGATE: it reaches at least the subfolders
+    // directly below.
+    let applies_to_subfolders = u32::from(ace_flags) & CONTAINER_INHERIT_ACE != 0;
+    let applies_to_files = u32::from(ace_flags) & OBJECT_INHERIT_ACE != 0;
+    let delete_child =
+        (applies_here || applies_to_subfolders) && mask & (FILE_DELETE_CHILD | GENERIC_ALL) != 0;
+    let everyone_write = sid == EVERYONE
+        && (applies_here || applies_to_subfolders || applies_to_files)
+        && mask & EVERYONE_WRITE_RIGHTS != 0;
+    (delete_child, everyone_write)
 }
 
 struct SharedGroups(Vec<(&'static str, LocalSid)>);
@@ -362,6 +393,7 @@ pub fn scan_shared_folders(roots: &SharedFolderScanRoots) -> Result<SharedFolder
         }
         scan.visited += 1;
         match unsafe { Dacl::read(&dir) } {
+            Ok(dacl) if dacl.p_dacl.is_null() => scan.no_dacl.push(dir.clone()),
             Ok(dacl) => {
                 let (mut delete_child, mut everyone_create) = (false, false);
                 for (ace_type, flags, mask, sid) in unsafe { dacl.entries() } {
@@ -415,7 +447,11 @@ pub fn scan_shared_folders(roots: &SharedFolderScanRoots) -> Result<SharedFolder
     Ok(scan)
 }
 
+/// A folder's identity: volume serial number and 128-bit file ID.
+pub type FolderIdentity = (u64, [u8; 16]);
+
 /// Whether `path`'s DACL itself holds `kind`'s entry for `psid`, exactly.
+/// Reads by path (following links): for checks, not for decisions to write.
 ///
 /// # Safety
 /// `psid` must point to a valid SID.
@@ -425,10 +461,20 @@ pub unsafe fn has_shared_folder_deny(
     kind: SharedFolderDenyKind,
 ) -> Result<bool> {
     let dacl = Dacl::read(path)?;
-    Ok(dacl
+    Ok(dacl_has_exact(dacl.p_dacl, psid, kind))
+}
+
+unsafe fn dacl_has_exact(p_dacl: *mut ACL, psid: *mut c_void, kind: SharedFolderDenyKind) -> bool {
+    let dacl = Dacl {
+        p_sd: std::ptr::null_mut(),
+        p_dacl,
+    };
+    let found = dacl
         .entries()
         .into_iter()
-        .any(|(ace_type, flags, mask, sid)| is_exact(ace_type, flags, mask, sid, psid, kind)))
+        .any(|(ace_type, flags, mask, sid)| is_exact(ace_type, flags, mask, sid, psid, kind));
+    std::mem::forget(dacl);
+    found
 }
 
 unsafe fn is_exact(
@@ -445,29 +491,69 @@ unsafe fn is_exact(
         && EqualSid(sid, psid) != 0
 }
 
-/// Adds `kind`'s entry for `psid` first in `path`'s DACL unless it is there.
-/// Built by hand, not with `SetEntriesInAclW`, which may merge it into
-/// another deny for the same SID (a deny-read entry), so that it can be
-/// removed exactly. Returns whether it added the entry; fails if it isn't
+/// The folder `path` names, opened without following a link, with its DACL.
+struct OpenFolder {
+    handle: super::ExactHandle,
+    p_sd: *mut c_void,
+    p_dacl: *mut ACL,
+}
+
+impl OpenFolder {
+    unsafe fn open(path: &Path) -> Result<Self> {
+        let handle = open_exact(path, READ_CONTROL | WRITE_DAC)?;
+        if !handle.is_dir {
+            return Err(anyhow!("{} is not a folder", path.display()));
+        }
+        let (p_dacl, p_sd) = security_info(handle.raw)?;
+        Ok(Self {
+            handle,
+            p_sd,
+            p_dacl,
+        })
+    }
+
+    fn identity(&self) -> FolderIdentity {
+        (self.handle.volume, self.handle.file_id)
+    }
+
+    unsafe fn reread(&mut self) -> Result<()> {
+        let (p_dacl, p_sd) = security_info(self.handle.raw)?;
+        LocalFree(self.p_sd as HLOCAL);
+        (self.p_dacl, self.p_sd) = (p_dacl, p_sd);
+        Ok(())
+    }
+}
+
+impl Drop for OpenFolder {
+    fn drop(&mut self) {
+        if !self.p_sd.is_null() {
+            unsafe {
+                LocalFree(self.p_sd as HLOCAL);
+            }
+        }
+    }
+}
+
+/// Writes `kind`'s entry for `psid` first in the open folder's DACL unless
+/// it is there. Built by hand, not with `SetEntriesInAclW`, which may merge
+/// it into another deny for the same SID (a deny-read entry), so that it can
+/// be removed exactly. Returns whether it added the entry; fails if it isn't
 /// there afterwards.
-///
-/// # Safety
-/// `psid` must point to a valid SID and `path` must be an existing folder.
-pub unsafe fn add_shared_folder_deny(
+unsafe fn add_to_open_folder(
+    folder: &mut OpenFolder,
     path: &Path,
     psid: *mut c_void,
     kind: SharedFolderDenyKind,
 ) -> Result<bool> {
-    if has_shared_folder_deny(path, psid, kind)? {
+    if dacl_has_exact(folder.p_dacl, psid, kind) {
         return Ok(false);
     }
-    let dacl = Dacl::read(path)?;
-    if dacl.p_dacl.is_null() {
+    if folder.p_dacl.is_null() {
         return Err(anyhow!("{} has no DACL", path.display()));
     }
     let mut info: ACL_SIZE_INFORMATION = std::mem::zeroed();
     if GetAclInformation(
-        dacl.p_dacl as *const ACL,
+        folder.p_dacl as *const ACL,
         &mut info as *mut _ as *mut c_void,
         std::mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
         AclSizeInformation,
@@ -475,7 +561,7 @@ pub unsafe fn add_shared_folder_deny(
     {
         return Err(anyhow!("GetAclInformation failed: {}", GetLastError()));
     }
-    let revision = u32::from((*dacl.p_dacl).AclRevision).max(2);
+    let revision = u32::from((*folder.p_dacl).AclRevision).max(2);
     let ace_size = std::mem::size_of::<ACCESS_DENIED_ACE>() - std::mem::size_of::<u32>()
         + GetLengthSid(psid) as usize;
     let size = info.AclBytesInUse as usize + ace_size;
@@ -497,7 +583,7 @@ pub unsafe fn add_shared_folder_deny(
     }
     for i in 0..info.AceCount {
         let mut p_ace: *mut c_void = std::ptr::null_mut();
-        if GetAce(dacl.p_dacl as *const ACL, i, &mut p_ace) == 0 {
+        if GetAce(folder.p_dacl as *const ACL, i, &mut p_ace) == 0 {
             return Err(anyhow!("GetAce failed: {}", GetLastError()));
         }
         let ace_size = u32::from((*(p_ace as *const ACE_HEADER)).AceSize);
@@ -507,7 +593,7 @@ pub unsafe fn add_shared_folder_deny(
     }
     let mut control: u16 = 0;
     let mut sd_revision: u32 = 0;
-    if GetSecurityDescriptorControl(dacl.p_sd, &mut control, &mut sd_revision) == 0 {
+    if GetSecurityDescriptorControl(folder.p_sd, &mut control, &mut sd_revision) == 0 {
         return Err(anyhow!(
             "GetSecurityDescriptorControl failed: {}",
             GetLastError()
@@ -519,9 +605,9 @@ pub unsafe fn add_shared_folder_deny(
         UNPROTECTED_DACL_SECURITY_INFORMATION
     };
     // Windows writes only the explicit entries and recomputes the inherited
-    // ones, here and below.
-    let code = SetNamedSecurityInfoW(
-        to_wide(path).as_ptr() as *mut u16,
+    // ones, here and below (without following links below).
+    let code = SetSecurityInfo(
+        folder.handle.raw,
         SE_FILE_OBJECT,
         DACL_SECURITY_INFORMATION | protection,
         std::ptr::null_mut(),
@@ -535,7 +621,8 @@ pub unsafe fn add_shared_folder_deny(
             path.display()
         ));
     }
-    if !has_shared_folder_deny(path, psid, kind)? {
+    folder.reread()?;
+    if !dacl_has_exact(folder.p_dacl, psid, kind) {
         return Err(anyhow!(
             "the {kind:?} deny is missing from {} after writing it",
             path.display()
@@ -544,32 +631,76 @@ pub unsafe fn add_shared_folder_deny(
     Ok(true)
 }
 
-/// Removes `kind`'s entry for `psid` from `path`'s DACL, exactly: an entry
-/// with other rights or inheritance is left alone. Returns whether it was
-/// there.
+/// Adds `kind`'s entry for `psid` to the folder `path` names (refusing a
+/// link); returns whether it added it and the folder's identity.
 ///
 /// # Safety
-/// `psid` must point to a valid SID and `path` must exist.
+/// `psid` must point to a valid SID.
+#[cfg(test)]
+pub(crate) unsafe fn add_shared_folder_deny(
+    path: &Path,
+    psid: *mut c_void,
+    kind: SharedFolderDenyKind,
+) -> Result<(bool, FolderIdentity)> {
+    let mut folder = OpenFolder::open(path)?;
+    let added = add_to_open_folder(&mut folder, path, psid, kind)?;
+    Ok((added, folder.identity()))
+}
+
+/// Removes `kind`'s entry for `psid` from the folder `path` names, exactly:
+/// an entry with other rights or inheritance is left alone. Fails for a
+/// link; a folder that isn't `identity` (when given) is left alone. Returns
+/// whether it removed the entry.
+///
+/// # Safety
+/// `psid` must point to a valid SID.
 pub unsafe fn remove_shared_folder_deny(
     path: &Path,
     psid: *mut c_void,
     kind: SharedFolderDenyKind,
+    identity: Option<FolderIdentity>,
 ) -> Result<bool> {
-    remove_matching_aces(path, |_, p_ace| {
-        let hdr = &*(p_ace as *const ACE_HEADER);
-        let mask = (*(p_ace as *const ACCESS_DENIED_ACE)).Mask;
-        let sid = (p_ace as usize + std::mem::size_of::<ACE_HEADER>() + std::mem::size_of::<u32>())
-            as *mut c_void;
-        is_exact(hdr.AceType, hdr.AceFlags, mask, sid, psid, kind)
-    })
+    let folder = OpenFolder::open(path)?;
+    if identity.is_some_and(|identity| identity != folder.identity()) {
+        return Ok(false);
+    }
+    remove_aces_from(
+        DaclTarget::Handle(folder.handle.raw),
+        folder.p_sd,
+        folder.p_dacl,
+        |_, p_ace| {
+            let hdr = &*(p_ace as *const ACE_HEADER);
+            let mask = (*(p_ace as *const ACCESS_DENIED_ACE)).Mask;
+            let sid = (p_ace as usize
+                + std::mem::size_of::<ACE_HEADER>()
+                + std::mem::size_of::<u32>()) as *mut c_void;
+            is_exact(hdr.AceType, hdr.AceFlags, mask, sid, psid, kind)
+        },
+    )
 }
 
-/// One deny entry the setup added (or found and adopted).
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+/// One deny entry the setup added, and the homes whose setups rely on it.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct SharedFolderDenyEntry {
     pub path: PathBuf,
     pub kind: SharedFolderDenyKind,
+    /// The sandbox users' group.
     pub sid: String,
+    pub volume: u64,
+    /// The folder's file ID, in hex.
+    pub file_id: String,
+    pub homes: BTreeSet<String>,
+}
+
+impl SharedFolderDenyEntry {
+    fn identity(&self) -> Option<FolderIdentity> {
+        let id = u128::from_str_radix(&self.file_id, 16).ok()?;
+        Some((self.volume, id.to_le_bytes()))
+    }
+}
+
+fn file_id_hex(identity: FolderIdentity) -> String {
+    format!("{:032x}", u128::from_le_bytes(identity.1))
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -577,12 +708,28 @@ pub struct SharedFolderDenyRecord {
     pub entries: Vec<SharedFolderDenyEntry>,
 }
 
-pub fn shared_folder_denies_path(codex_home: &Path) -> PathBuf {
-    sandbox_secrets_dir(codex_home).join(SHARED_FOLDER_DENIES_FILE)
+/// The machine's record folder, without making it.
+pub fn machine_shared_folder_record_dir() -> Option<PathBuf> {
+    crate::deny_read_sessions::admin_state_dir(SHARED_FOLDER_RECORD_DIR)
 }
 
-pub fn load_shared_folder_deny_record(codex_home: &Path) -> Result<SharedFolderDenyRecord> {
-    let path = shared_folder_denies_path(codex_home);
+/// Elevated setup: makes (or repairs) the machine's record folder, which
+/// only Administrators and SYSTEM may use.
+pub fn ensure_machine_shared_folder_record_dir(sandbox_group: &str) -> Result<PathBuf> {
+    crate::deny_read_sessions::ensure_admin_state_dir(SHARED_FOLDER_RECORD_DIR, sandbox_group)
+}
+
+/// How the record names a home.
+fn home_key(codex_home: &Path) -> String {
+    codex_home
+        .to_string_lossy()
+        .trim_end_matches('\\')
+        .to_lowercase()
+}
+
+/// The record in `record_dir`; empty if there is none.
+pub fn load_shared_folder_deny_record(record_dir: &Path) -> Result<SharedFolderDenyRecord> {
+    let path = record_dir.join(SHARED_FOLDER_RECORD_FILE);
     match std::fs::read(&path) {
         Ok(bytes) => {
             serde_json::from_slice(&bytes).with_context(|| format!("parsing {}", path.display()))
@@ -594,19 +741,35 @@ pub fn load_shared_folder_deny_record(codex_home: &Path) -> Result<SharedFolderD
     }
 }
 
-fn save_record(codex_home: &Path, record: &SharedFolderDenyRecord) -> Result<()> {
-    let path = shared_folder_denies_path(codex_home);
-    if record.entries.is_empty() {
-        return match std::fs::remove_file(&path) {
-            Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
-                Err(err).with_context(|| format!("removing {}", path.display()))
+/// The record, or (for one that can't be parsed, moved aside first) an empty
+/// one. Its entries stay in their folders, unrecorded: still protecting,
+/// but no longer removed.
+fn load_or_set_aside(record_dir: &Path, notes: &mut Vec<String>) -> Result<SharedFolderDenyRecord> {
+    match load_shared_folder_deny_record(record_dir) {
+        Ok(record) => Ok(record),
+        Err(err) => {
+            let path = record_dir.join(SHARED_FOLDER_RECORD_FILE);
+            if !path.exists() {
+                return Err(err);
             }
-            _ => Ok(()),
-        };
+            let aside = record_dir.join(format!(
+                "{SHARED_FOLDER_RECORD_FILE}.damaged-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|elapsed| elapsed.as_secs())
+                    .unwrap_or_default()
+            ));
+            std::fs::rename(&path, &aside)
+                .with_context(|| format!("moving the damaged {} aside", path.display()))?;
+            notes.push(format!("{err:#}; moved to {}", aside.display()));
+            Ok(SharedFolderDenyRecord::default())
+        }
     }
-    let dir = sandbox_secrets_dir(codex_home);
-    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
-    let tmp = dir.join(format!("{SHARED_FOLDER_DENIES_FILE}.tmp"));
+}
+
+fn save_record(record_dir: &Path, record: &SharedFolderDenyRecord) -> Result<()> {
+    let path = record_dir.join(SHARED_FOLDER_RECORD_FILE);
+    let tmp = record_dir.join(format!("{SHARED_FOLDER_RECORD_FILE}.tmp"));
     std::fs::write(&tmp, serde_json::to_vec_pretty(record)?)
         .with_context(|| format!("writing {}", tmp.display()))?;
     std::fs::rename(&tmp, &path).with_context(|| format!("replacing {}", path.display()))
@@ -615,43 +778,83 @@ fn save_record(codex_home: &Path, record: &SharedFolderDenyRecord) -> Result<()>
 #[derive(Clone, Debug, Default)]
 pub struct SharedFolderDenyReport {
     pub added: Vec<SharedFolderFinding>,
+    /// Already there and recorded: this home now relies on them too.
     pub already: usize,
+    /// Already there but not recorded (not ours): left alone.
+    pub foreign: usize,
     pub errors: Vec<String>,
+    /// A damaged record set aside.
+    pub notes: Vec<String>,
 }
 
-/// Adds each finding's deny for the sandbox users' group and records it.
-/// The record is written before the DACLs, so an interrupted run leaves no
-/// unrecorded entry; an entry that isn't there makes the removal a no-op.
-/// A folder that can't be changed is reported, not fatal.
+/// Adds each finding's deny for the sandbox users' group and records it in
+/// `record_dir` for `codex_home`. Every folder is opened (refusing links)
+/// and the record written before any DACL changes, so an interrupted run
+/// leaves no unrecorded entry. A folder that can't be opened or changed is
+/// reported, not fatal.
 ///
 /// # Safety
 /// `group_psid` must point to the SID `group_sid` names.
 pub unsafe fn apply_shared_folder_denies(
+    record_dir: &Path,
     codex_home: &Path,
     group_sid: &str,
     group_psid: *mut c_void,
     findings: &[SharedFolderFinding],
 ) -> Result<SharedFolderDenyReport> {
-    // A record that can't be read fails the run rather than being replaced,
-    // which would lose the entries it lists.
-    let mut record = load_shared_folder_deny_record(codex_home)?;
+    let mut report = SharedFolderDenyReport::default();
+    let mut record = load_or_set_aside(record_dir, &mut report.notes)?;
+    let home = home_key(codex_home);
+    let mut to_add: Vec<(OpenFolder, &SharedFolderFinding)> = Vec::new();
     for finding in findings {
-        let entry = SharedFolderDenyEntry {
-            path: finding.path.clone(),
-            kind: finding.kind,
-            sid: group_sid.to_string(),
+        let folder = match OpenFolder::open(&finding.path) {
+            Ok(folder) => folder,
+            Err(err) => {
+                report.errors.push(format!(
+                    "{:?} deny on {}: {err:#}",
+                    finding.kind,
+                    finding.path.display()
+                ));
+                continue;
+            }
         };
-        if !record.entries.contains(&entry) {
-            record.entries.push(entry);
+        let identity = folder.identity();
+        let recorded = record.entries.iter_mut().find(|entry| {
+            entry.path == finding.path
+                && entry.kind == finding.kind
+                && entry.sid == group_sid
+                && entry.identity() == Some(identity)
+        });
+        let present = dacl_has_exact(folder.p_dacl, group_psid, finding.kind);
+        match (recorded, present) {
+            (Some(entry), true) => {
+                entry.homes.insert(home.clone());
+                report.already += 1;
+            }
+            (None, true) => report.foreign += 1,
+            (recorded, false) => {
+                match recorded {
+                    Some(entry) => {
+                        entry.homes.insert(home.clone());
+                    }
+                    None => record.entries.push(SharedFolderDenyEntry {
+                        path: finding.path.clone(),
+                        kind: finding.kind,
+                        sid: group_sid.to_string(),
+                        volume: identity.0,
+                        file_id: file_id_hex(identity),
+                        homes: BTreeSet::from([home.clone()]),
+                    }),
+                }
+                to_add.push((folder, finding));
+            }
         }
     }
     record.entries.sort();
-    save_record(codex_home, &record)?;
-    let mut report = SharedFolderDenyReport::default();
-    for finding in findings {
-        match add_shared_folder_deny(&finding.path, group_psid, finding.kind) {
-            Ok(true) => report.added.push(finding.clone()),
-            Ok(false) => report.already += 1,
+    save_record(record_dir, &record)?;
+    for (mut folder, finding) in to_add {
+        match add_to_open_folder(&mut folder, &finding.path, group_psid, finding.kind) {
+            Ok(_) => report.added.push(finding.clone()),
             Err(err) => report.errors.push(format!(
                 "{:?} deny on {}: {err:#}",
                 finding.kind,
@@ -665,25 +868,46 @@ pub unsafe fn apply_shared_folder_denies(
 #[derive(Clone, Debug, Default)]
 pub struct SharedFolderDenyRemoval {
     pub removed: usize,
+    /// Still relied on by another home: kept.
+    pub kept: usize,
+    /// Gone already (the folder or the entry).
     pub absent: usize,
     pub errors: Vec<String>,
 }
 
-/// Removes every recorded entry, exactly, and forgets those it removed or
-/// found gone; one it couldn't remove stays recorded.
-pub fn remove_recorded_shared_folder_denies(codex_home: &Path) -> Result<SharedFolderDenyRemoval> {
-    let record = load_shared_folder_deny_record(codex_home)?;
+/// Forgets `codex_home` in every entry and removes, exactly, each entry no
+/// recorded home relies on any more. Only entries for `group_sid` (this
+/// machine's sandbox users' group) are touched. A folder now replaced by
+/// another one is left alone and forgotten; one that is now a link, or can't
+/// be changed, is left alone and stays recorded.
+///
+/// # Safety
+/// `group_psid` must point to the SID `group_sid` names.
+pub unsafe fn remove_shared_folder_denies_for_home(
+    record_dir: &Path,
+    codex_home: &Path,
+    group_sid: &str,
+    group_psid: *mut c_void,
+) -> Result<SharedFolderDenyRemoval> {
+    let record = load_shared_folder_deny_record(record_dir)?;
+    let home = home_key(codex_home);
     let mut kept = SharedFolderDenyRecord::default();
     let mut removal = SharedFolderDenyRemoval::default();
-    for entry in record.entries {
+    for mut entry in record.entries {
+        if entry.sid != group_sid || !entry.homes.remove(&home) {
+            kept.entries.push(entry);
+            continue;
+        }
+        if !entry.homes.is_empty() {
+            removal.kept += 1;
+            kept.entries.push(entry);
+            continue;
+        }
         if !entry.path.exists() {
             removal.absent += 1;
             continue;
         }
-        let result = LocalSid::from_string(&entry.sid).and_then(|sid| unsafe {
-            remove_shared_folder_deny(&entry.path, sid.as_ptr(), entry.kind)
-        });
-        match result {
+        match remove_shared_folder_deny(&entry.path, group_psid, entry.kind, entry.identity()) {
             Ok(true) => removal.removed += 1,
             Ok(false) => removal.absent += 1,
             Err(err) => {
@@ -692,11 +916,12 @@ pub fn remove_recorded_shared_folder_denies(codex_home: &Path) -> Result<SharedF
                     entry.kind,
                     entry.path.display()
                 ));
+                entry.homes.insert(home.clone());
                 kept.entries.push(entry);
             }
         }
     }
-    save_record(codex_home, &kept)?;
+    save_record(record_dir, &kept)?;
     Ok(removal)
 }
 

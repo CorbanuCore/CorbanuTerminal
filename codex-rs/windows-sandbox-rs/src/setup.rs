@@ -677,8 +677,8 @@ struct ElevationPayload {
 enum SetupMode {
     Full,
     ProvisionOnly,
-    /// #1791 / D400: removes the shared-folder denies this home's setups
-    /// recorded.
+    /// #1791 / D400: removes the shared-folder denies only this home's
+    /// setups rely on.
     RemoveSharedFolderDenies,
 }
 
@@ -1134,9 +1134,9 @@ pub fn run_elevated_provisioning_setup(
     run_setup_exe(&payload, /*needs_elevation*/ false, codex_home)
 }
 
-/// #1791 / D400: removes, as an administrator, every shared-folder deny the
-/// setups of `codex_home` recorded (for uninstalling). Other homes' setups
-/// on this machine add them again the next time they run in full.
+/// #1791 / D400: as an administrator, forgets `codex_home` in the machine's
+/// record of shared-folder denies and removes each one no other home's setup
+/// relies on (for uninstalling).
 pub fn run_elevated_shared_folder_deny_removal(codex_home: &Path) -> Result<()> {
     let needs_elevation = !is_elevated().map_err(|err| {
         failure(

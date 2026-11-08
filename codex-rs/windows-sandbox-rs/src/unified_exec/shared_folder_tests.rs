@@ -15,8 +15,11 @@ use super::command_identity::elevated::elevated_home;
 use super::command_identity::elevated::run_elevated;
 use super::*;
 use crate::SharedFolderDenyKind;
+use crate::SharedFolderDenyKind::DeleteChild;
+use crate::SharedFolderDenyKind::Write;
 use crate::has_shared_folder_deny;
 use crate::load_shared_folder_deny_record;
+use crate::machine_shared_folder_record_dir;
 use crate::token::LocalSid;
 use pretty_assertions::assert_eq;
 
@@ -38,36 +41,51 @@ fn system_drive_root() -> PathBuf {
     PathBuf::from(format!("{}\\", env_dir("SystemDrive", "C:").display()))
 }
 
-/// Fixture folders, their grant, and the deny the setup must add.
-fn fixtures() -> Vec<(PathBuf, &'static str, SharedFolderDenyKind)> {
+type Fixture = (PathBuf, &'static str, &'static [SharedFolderDenyKind]);
+
+/// Fixture folders, their grant, and the denies the setup must add.
+fn fixtures() -> Vec<Fixture> {
     let base = env_dir("ProgramData", "C:\\ProgramData").join("CorbanuSecWin1791");
     vec![
         (
             base.join("users-full"),
             "*S-1-5-32-545:(OI)(CI)F",
-            SharedFolderDenyKind::DeleteChild,
+            &[DeleteChild],
         ),
         (
             base.join("authenticated-users-full"),
             "*S-1-5-11:(OI)(CI)F",
-            SharedFolderDenyKind::DeleteChild,
+            &[DeleteChild],
         ),
         (
             base.join("interactive-full"),
             "*S-1-5-4:(OI)(CI)F",
-            SharedFolderDenyKind::DeleteChild,
+            &[DeleteChild],
         ),
+        // Full control only for the subfolders directly below.
         (
-            base.join("everyone-modify"),
-            "*S-1-1-0:(OI)(CI)M",
-            SharedFolderDenyKind::Write,
+            base.join("users-direct-subfolders"),
+            "*S-1-5-32-545:(CI)(IO)(NP)F",
+            &[DeleteChild],
+        ),
+        (base.join("everyone-modify"), "*S-1-1-0:(OI)(CI)M", &[Write]),
+        // Everyone may also change permissions here.
+        (
+            base.join("everyone-full"),
+            "*S-1-1-0:(OI)(CI)F",
+            &[DeleteChild, Write],
         ),
         (
             system_drive_root().join("CorbanuSecWin1791Top"),
             "*S-1-5-32-545:(OI)(CI)F",
-            SharedFolderDenyKind::DeleteChild,
+            &[DeleteChild],
         ),
     ]
+}
+
+fn sandbox_group_sid() -> String {
+    let sid = crate::resolve_sid("CodexSandboxUsers").expect("the sandbox users' group");
+    crate::string_from_sid_bytes(&sid).expect("SID string")
 }
 
 fn icacls(path: &Path, args: &[&str]) -> String {
@@ -87,7 +105,7 @@ fn icacls(path: &Path, args: &[&str]) -> String {
 
 /// Makes the fixtures (elevated: before the setup scans) or checks an
 /// elevated run made them (normal session); `None` to skip.
-fn prepare_fixtures() -> Option<Vec<(PathBuf, &'static str, SharedFolderDenyKind)>> {
+fn prepare_fixtures() -> Option<Vec<Fixture>> {
     let fixtures = fixtures();
     if crate::setup::is_elevated().expect("elevation") {
         for (path, grant, _) in &fixtures {
@@ -169,18 +187,58 @@ fn sec_win_1791_elevated_command_cannot_delete_or_write_in_shared_folders() {
     let root = user_owned_test_root();
     let temp = user_owned_test_root();
     let mut deletes: Vec<PathBuf> = fixtures.iter().map(|(path, _, _)| path.clone()).collect();
-    deletes.extend(machine_shared_folders());
-    deletes.retain(|target| ensure_victims(target));
-    assert!(
-        deletes.len() >= fixtures.len(),
-        "sec-win-1791: victims missing in a fixture"
+    for fixture in &deletes {
+        assert!(
+            ensure_victims(fixture),
+            "sec-win-1791: no victims in the fixture {}",
+            fixture.display()
+        );
+    }
+    deletes.extend(
+        machine_shared_folders()
+            .into_iter()
+            .filter(|target| ensure_victims(target)),
     );
     let writes: Vec<PathBuf> = fixtures
         .iter()
-        .filter(|(_, _, kind)| *kind == SharedFolderDenyKind::Write)
+        .filter(|(_, _, kinds)| kinds.contains(&Write))
         .map(|(path, _, _)| path.clone())
         .collect();
+    // The first command runs the setup (in an elevated session, with the
+    // scan), which may still add the denies; compare permissions after it.
+    let (stdout, exit_code) = current_thread_runtime().block_on(run_elevated(
+        root.path(),
+        codex_home.path(),
+        cmd_argv(root.path(), "setup.cmd", "@echo off\necho setup\n"),
+        &command_env(temp.path()),
+        /*tty*/ false,
+    ));
+    assert_eq!(
+        exit_code,
+        0,
+        "stdout={stdout:?}\n{}",
+        sandbox_log(codex_home.path())
+    );
+    // The command also tries to take the denies out (or replace the DACL or
+    // the owner) on every fixture and its subfolder.
+    let acls_before: Vec<(PathBuf, String)> = fixtures
+        .iter()
+        .flat_map(|(path, _, _)| [path.clone(), path.join(VICTIM_SUB)])
+        .map(|path| {
+            let acl = icacls(&path, &[]);
+            (path, acl)
+        })
+        .collect();
     let mut script = String::from("@echo off\n");
+    for (path, _) in &acls_before {
+        let t = path.display();
+        script.push_str(&format!(
+            "icacls \"{t}\" /remove:d CodexSandboxUsers 2>&1\n\
+             icacls \"{t}\" /grant *S-1-1-0:(OI)(CI)F 2>&1\n\
+             icacls \"{t}\" /inheritance:r 2>&1\n\
+             icacls \"{t}\" /setowner CodexSandboxOffline 2>&1\n"
+        ));
+    }
     for (i, target) in deletes.iter().enumerate() {
         let t = target.display();
         script.push_str(&format!(
@@ -260,20 +318,45 @@ fn sec_win_1791_elevated_command_cannot_delete_or_write_in_shared_folders() {
         .count();
     assert_eq!(reads, deletes.len() * 2, "stdout={stdout}");
 
-    // An elevated run's own setup scanned: each fixture's deny is recorded,
-    // in place and only for the sandbox users' group.
-    if crate::setup::is_elevated().expect("elevation") {
-        let record = load_shared_folder_deny_record(codex_home.path()).expect("record");
-        for (path, _, kind) in &fixtures {
-            let entry = record
-                .entries
-                .iter()
-                .find(|entry| entry.path == *path && entry.kind == *kind)
-                .unwrap_or_else(|| panic!("{kind:?} on {} not recorded", path.display()));
-            let group = LocalSid::from_string(&entry.sid).expect("group SID");
+    for (path, before) in &acls_before {
+        assert_eq!(
+            &icacls(path, &[]),
+            before,
+            "#1791/D400: the elevated command changed the permissions of {}\nstdout={stdout}",
+            path.display()
+        );
+    }
+
+    // Each fixture's denies are in place, for the sandbox users' group.
+    let group_sid = sandbox_group_sid();
+    let group = LocalSid::from_string(&group_sid).expect("group SID");
+    for (path, _, kinds) in &fixtures {
+        for kind in *kinds {
             // SAFETY: a valid SID and an existing folder.
             let present = unsafe { has_shared_folder_deny(path, group.as_ptr(), *kind) };
-            assert!(present.expect("read DACL"), "{}", icacls(path, &[]));
+            assert!(
+                present.expect("read DACL"),
+                "{kind:?} missing on {}: {}",
+                path.display(),
+                icacls(path, &[])
+            );
+        }
+    }
+    // An elevated run's own setup scanned and recorded them.
+    if crate::setup::is_elevated().expect("elevation") {
+        let record_dir = machine_shared_folder_record_dir().expect("record folder");
+        let record = load_shared_folder_deny_record(&record_dir).expect("record");
+        for (path, _, kinds) in &fixtures {
+            for kind in *kinds {
+                assert!(
+                    record.entries.iter().any(|entry| entry.path == *path
+                        && entry.kind == *kind
+                        && entry.sid == group_sid
+                        && !entry.homes.is_empty()),
+                    "{kind:?} on {} not recorded",
+                    path.display()
+                );
+            }
         }
         // What the scan found and cost on this machine.
         for line in sandbox_log(codex_home.path()).lines() {
@@ -683,7 +766,8 @@ fn sec_win_1791_removal_takes_out_recorded_denies() {
         /*tty*/ false,
     ));
     assert_eq!(exit_code, 0, "stdout={stdout:?}");
-    let record = load_shared_folder_deny_record(codex_home.path()).expect("record");
+    let record_dir = machine_shared_folder_record_dir().expect("record folder");
+    let record = load_shared_folder_deny_record(&record_dir).expect("record");
     let entry = record
         .entries
         .iter()
@@ -699,27 +783,27 @@ fn sec_win_1791_removal_takes_out_recorded_denies() {
 
     crate::setup::run_elevated_shared_folder_deny_removal(codex_home.path())
         .unwrap_or_else(|err| panic!("removal: {err:#}\n{}", sandbox_log(codex_home.path())));
+    // Only this home relied on the new folder's deny: it is gone, exactly.
     assert_eq!(icacls(shared.path(), &[]), before);
-    let left = load_shared_folder_deny_record(codex_home.path()).expect("record");
-    assert_eq!(
-        left.entries,
-        Vec::new(),
-        "{}",
-        sandbox_log(codex_home.path())
+    let left = load_shared_folder_deny_record(&record_dir).expect("record");
+    assert!(
+        !left.entries.iter().any(|entry| entry.path == shared.path()),
+        "{left:?}"
     );
-    for entry in &record.entries {
+    // What other homes' setups rely on stays, in place.
+    for entry in &left.entries {
         let group = LocalSid::from_string(&entry.sid).expect("group SID");
         // SAFETY: as above.
         let present = unsafe { has_shared_folder_deny(&entry.path, group.as_ptr(), entry.kind) };
         assert!(
-            !present.unwrap_or(false),
-            "{:?} on {} survived the removal",
+            !entry.path.exists() || present.unwrap_or(false),
+            "{:?} on {} went with another home's removal",
             entry.kind,
             entry.path.display()
         );
     }
     println!(
-        "sec-win-1791: the removal took out all {} recorded denies",
-        record.entries.len()
+        "sec-win-1791: the removal took out the deny only its home relied on and kept {} others",
+        left.entries.len()
     );
 }

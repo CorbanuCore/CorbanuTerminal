@@ -10,7 +10,8 @@ use anyhow::Result;
 use codex_windows_sandbox::LocalSid;
 use codex_windows_sandbox::apply_shared_folder_denies;
 use codex_windows_sandbox::default_shared_folder_scan_roots;
-use codex_windows_sandbox::remove_recorded_shared_folder_denies;
+use codex_windows_sandbox::ensure_machine_shared_folder_record_dir;
+use codex_windows_sandbox::remove_shared_folder_denies_for_home;
 use codex_windows_sandbox::scan_shared_folders;
 use codex_windows_sandbox::string_from_sid_bytes;
 use std::io::Write;
@@ -24,6 +25,7 @@ pub(super) fn deny_shared_folders(
 ) -> Result<()> {
     let group = string_from_sid_bytes(sandbox_group_sid).map_err(anyhow::Error::msg)?;
     let group_sid = LocalSid::from_string(&group)?;
+    let record_dir = ensure_machine_shared_folder_record_dir(&group)?;
     let roots = default_shared_folder_scan_roots();
     let scan = match scan_shared_folders(&roots) {
         Ok(scan) => scan,
@@ -44,11 +46,29 @@ pub(super) fn deny_shared_folders(
             scan.seconds
         ),
     )?;
+    for path in &scan.no_dacl {
+        log_line(
+            log,
+            &format!(
+                "shared-folder scan: {} has no DACL (open to everyone); not changed",
+                path.display()
+            ),
+        )?;
+    }
     let started = Instant::now();
     // SAFETY: `group_sid` is the SID `group` names and outlives the call.
     let report = unsafe {
-        apply_shared_folder_denies(codex_home, &group, group_sid.as_ptr(), &scan.findings)
+        apply_shared_folder_denies(
+            &record_dir,
+            codex_home,
+            &group,
+            group_sid.as_ptr(),
+            &scan.findings,
+        )
     }?;
+    for note in &report.notes {
+        log_line(log, &format!("shared-folder record: {note}"))?;
+    }
     for finding in &report.added {
         log_line(
             log,
@@ -65,25 +85,37 @@ pub(super) fn deny_shared_folders(
     log_line(
         log,
         &format!(
-            "shared-folder denies: added={} already={} failed={} in {:.1}s",
+            "shared-folder denies: added={} already={} foreign={} failed={} in {:.1}s",
             report.added.len(),
             report.already,
+            report.foreign,
             report.errors.len(),
             started.elapsed().as_secs_f64()
         ),
     )
 }
 
-pub(super) fn remove_shared_folder_denies(codex_home: &Path, log: &mut dyn Write) -> Result<()> {
-    let removal = remove_recorded_shared_folder_denies(codex_home)?;
+pub(super) fn remove_shared_folder_denies(
+    codex_home: &Path,
+    sandbox_group_sid: &[u8],
+    log: &mut dyn Write,
+) -> Result<()> {
+    let group = string_from_sid_bytes(sandbox_group_sid).map_err(anyhow::Error::msg)?;
+    let group_sid = LocalSid::from_string(&group)?;
+    let record_dir = ensure_machine_shared_folder_record_dir(&group)?;
+    // SAFETY: `group_sid` is the SID `group` names and outlives the call.
+    let removal = unsafe {
+        remove_shared_folder_denies_for_home(&record_dir, codex_home, &group, group_sid.as_ptr())
+    }?;
     for error in &removal.errors {
         log_line(log, &format!("shared-folder deny not removed: {error}"))?;
     }
     log_line(
         log,
         &format!(
-            "shared-folder denies removed={} absent={} failed={}",
+            "shared-folder denies removed={} kept-for-other-homes={} absent={} failed={}",
             removal.removed,
+            removal.kept,
             removal.absent,
             removal.errors.len()
         ),

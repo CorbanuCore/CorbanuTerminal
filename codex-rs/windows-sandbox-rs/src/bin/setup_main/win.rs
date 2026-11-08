@@ -505,7 +505,8 @@ fn run_setup(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> Result<(
         SetupMode::ProvisionOnly => run_provision_only(payload, log, sbx_dir),
         SetupMode::Full => run_setup_full(payload, log, sbx_dir),
         SetupMode::RemoveSharedFolderDenies => {
-            shared_folders::remove_shared_folder_denies(&payload.codex_home, log)
+            let group = resolve_sandbox_users_group_sid()?;
+            shared_folders::remove_shared_folder_denies(&payload.codex_home, &group, log)
         }
     }?;
     if writes_setup_marker {

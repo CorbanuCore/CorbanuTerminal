@@ -190,11 +190,15 @@ pub use acl::shared_folders::apply_shared_folder_denies;
 #[cfg(target_os = "windows")]
 pub use acl::shared_folders::default_shared_folder_scan_roots;
 #[cfg(target_os = "windows")]
+pub use acl::shared_folders::ensure_machine_shared_folder_record_dir;
+#[cfg(target_os = "windows")]
 pub use acl::shared_folders::has_shared_folder_deny;
 #[cfg(target_os = "windows")]
 pub use acl::shared_folders::load_shared_folder_deny_record;
 #[cfg(target_os = "windows")]
-pub use acl::shared_folders::remove_recorded_shared_folder_denies;
+pub use acl::shared_folders::machine_shared_folder_record_dir;
+#[cfg(target_os = "windows")]
+pub use acl::shared_folders::remove_shared_folder_denies_for_home;
 #[cfg(target_os = "windows")]
 pub use acl::shared_folders::scan_shared_folders;
 #[cfg(target_os = "windows")]
