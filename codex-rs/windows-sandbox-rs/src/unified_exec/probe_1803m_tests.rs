@@ -5,6 +5,10 @@
 //! console hosts for read rights, scans their memory for both markers, and
 //! opens their threads for `THREAD_GET_CONTEXT`. Reports only (`W1803M|`
 //! lines); asserts nothing.
+//!
+//! win-1803l: the same matrix with either backend for A and for B (legacy is
+//! the non-admin backend). A legacy command's "runner" is its parent, here the
+//! test process standing in for Codex.
 
 use super::*;
 use windows_sys::Win32::System::Diagnostics::Debug::CONTEXT;
@@ -249,7 +253,59 @@ fn threads_report(pid: u32) -> String {
     )
 }
 
-fn measure(tty: bool, codex_home: &Path) {
+#[derive(Clone, Copy)]
+enum Backend {
+    Legacy,
+    Elevated,
+}
+
+impl Backend {
+    fn name(self) -> &'static str {
+        match self {
+            Backend::Legacy => "legacy",
+            Backend::Elevated => "elevated",
+        }
+    }
+}
+
+async fn spawn_as(
+    backend: Backend,
+    root: &Path,
+    codex_home: &Path,
+    argv: Vec<String>,
+    env: &[(&str, String)],
+    tty: bool,
+) -> codex_utils_pty::SpawnedProcess {
+    match backend {
+        Backend::Elevated => spawn_elevated(root, codex_home, argv, env, tty).await,
+        Backend::Legacy => {
+            let mut env_map: HashMap<String, String> = std::env::vars().collect();
+            for (key, value) in env {
+                env_map.insert((*key).to_string(), value.clone());
+            }
+            spawn_windows_sandbox_session_legacy(
+                &PermissionProfile::workspace_write(),
+                workspace_roots_for(root).as_slice(),
+                codex_home,
+                argv,
+                root,
+                env_map,
+                /*timeout_ms*/ Some(90_000),
+                &[],
+                &[],
+                tty,
+                /*stdin_open*/ tty,
+                /*use_private_desktop*/ true,
+            )
+            .await
+            .unwrap_or_else(|err| {
+                panic!("spawn legacy command: {err:#}\n{}", sandbox_log(codex_home))
+            })
+        }
+    }
+}
+
+fn measure(tty: bool, codex_home: &Path, a: Backend, b: Backend) {
     let holder_root = user_owned_test_root();
     let root = user_owned_test_root();
     let hold_dir = holder_root.path().join("hold1803");
@@ -264,7 +320,8 @@ fn measure(tty: bool, codex_home: &Path) {
     let runtime = current_thread_runtime();
     let (line, got) = runtime.block_on(async {
         let release = Release(hold_dir.join("hold.release"));
-        let holder = spawn_elevated(
+        let holder = spawn_as(
+            a,
             holder_root.path(),
             codex_home,
             probe_argv(HOLD_1803),
@@ -309,7 +366,8 @@ fn measure(tty: bool, codex_home: &Path) {
         wait_for_path(&got_path, Duration::from_secs(/*secs*/ 20));
         tokio::time::sleep(Duration::from_secs(/*secs*/ 1)).await;
         let got = fs::read_to_string(&got_path).unwrap_or_else(|_| "no hold.got".to_string());
-        let (stdout, code) = run_elevated(
+        let probe = spawn_as(
+            b,
             root.path(),
             codex_home,
             probe_argv(PROBE_1803),
@@ -321,26 +379,49 @@ fn measure(tty: bool, codex_home: &Path) {
             /*tty*/ false,
         )
         .await;
+        let (stdout, code) =
+            collect_stdout_and_exit(probe, codex_home, Duration::from_secs(/*secs*/ 120)).await;
+        let stdout = String::from_utf8_lossy(&stdout);
         let line = fs::read_to_string(&out)
             .unwrap_or_else(|_| format!("no result exit={code} {stdout}"));
         drop(release);
         let _ = collect_stdout_and_exit(holder, codex_home, Duration::from_secs(/*secs*/ 90)).await;
         (line, got)
     });
-    let mode = if tty { "conpty" } else { "pipes" };
+    let mode = format!(
+        "A={}:{}>B={}",
+        a.name(),
+        if tty { "conpty" } else { "pipes" },
+        b.name()
+    );
     println!("\nW1803M|{}|{mode}|holder {got}", session());
     for part in line.split(" || ") {
         println!("\nW1803M|{}|{mode}|{part}", session());
     }
 }
 
+/// win-1803l: legacy B against legacy A, then both cross-backend pairs, then
+/// elevated against elevated as the 1803m control. Elevated pairs need an
+/// elevated run or a recorded setup.
 #[test]
-fn probe_1803m_elevated_cross_workspace_read() {
-    let Some(codex_home) = elevated_home("w1803m") else {
+fn probe_1803l_cross_backend_read() {
+    let _guard = legacy_process_test_guard();
+    let legacy_home = sandbox_home("w1803l");
+    for tty in [true, false] {
+        measure(tty, legacy_home.path(), Backend::Legacy, Backend::Legacy);
+    }
+    let Some(codex_home) = elevated_home("w1803l") else {
+        println!("\nW1803M|{}|elevated pairs skipped", session());
         return;
     };
-    let _guard = legacy_process_test_guard();
-    measure(/*tty*/ true, codex_home.path());
-    measure(/*tty*/ false, codex_home.path());
+    for (a, b) in [
+        (Backend::Elevated, Backend::Legacy),
+        (Backend::Legacy, Backend::Elevated),
+        (Backend::Elevated, Backend::Elevated),
+    ] {
+        for tty in [true, false] {
+            measure(tty, codex_home.path(), a, b);
+        }
+    }
     record_setup(codex_home.path());
 }

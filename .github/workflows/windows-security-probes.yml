@@ -1,20 +1,20 @@
 name: windows-security-probes
 
-# win-1803m: #1803 cross-workspace read probe only (test branch, never merged).
-# One job per target: main + probe, and #1800's head (win-aprime) + probe.
+# win-1803l: #1803 cross-workspace read probe for the legacy (non-admin)
+# backend and cross-backend pairs (test branch, never merged). Reuses win-1803m.
 on:
   workflow_dispatch:
     inputs:
       targets:
         description: JSON list of branches to measure
-        default: '["win-1803m-probe", "win-1803m-probe-aprime"]'
+        default: '["win-1803l-probe"]'
 
 permissions:
   contents: read
 
 jobs:
   probe:
-    name: win-1803m ${{ matrix.ref }} (windows-2022)
+    name: win-1803l ${{ matrix.ref }} (windows-2022)
     runs-on: windows-2022
     timeout-minutes: 120
     strategy:
@@ -22,7 +22,7 @@ jobs:
       matrix:
         ref: ${{ fromJSON(inputs.targets) }}
     env:
-      W1803M_TEST: unified_exec::tests::command_identity::elevated::probe_1803m::probe_1803m_elevated_cross_workspace_read
+      W1803M_TEST: unified_exec::tests::command_identity::elevated::probe_1803m::probe_1803l_cross_backend_read
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -82,7 +82,7 @@ jobs:
           $env:CODEX_SEC_WIN_1648_REQUIRE = '1'
           $whoami = & $medium -Program "$env:SystemRoot\System32\whoami.exe" -Arguments @('/groups')
           $whoami | Select-String 'Mandatory Level'
-          $out = & $medium -Program $sandbox -TimeoutMinutes 20 -Arguments @('--exact', $env:W1803M_TEST, '--nocapture', '--test-threads=1')
+          $out = & $medium -Program $sandbox -TimeoutMinutes 45 -Arguments @('--exact', $env:W1803M_TEST, '--nocapture', '--test-threads=1')
           $out
           $out | Out-File -Encoding utf8 normal.log
           $out | Where-Object { $_ -match 'W1803M\||test result' } | ForEach-Object { Add-Content -Encoding ascii results.txt $_ }
@@ -94,7 +94,7 @@ jobs:
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         if: always()
         with:
-          name: w1803m-${{ matrix.ref }}
+          name: w1803l-${{ matrix.ref }}
           path: |
             results.txt
             admin.log
