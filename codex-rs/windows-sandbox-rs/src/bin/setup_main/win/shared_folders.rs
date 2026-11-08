@@ -9,6 +9,7 @@
 use super::log_line;
 use anyhow::Result;
 use codex_windows_sandbox::LocalSid;
+use codex_windows_sandbox::SharedFolderDenyRemovalSummary;
 use codex_windows_sandbox::SharedFolderScanStamp;
 use codex_windows_sandbox::apply_shared_folder_denies;
 use codex_windows_sandbox::default_shared_folder_scan_roots;
@@ -19,6 +20,7 @@ use codex_windows_sandbox::remove_shared_folder_scan_stamp;
 use codex_windows_sandbox::scan_shared_folders;
 use codex_windows_sandbox::shared_folder_scan_cli_version;
 use codex_windows_sandbox::string_from_sid_bytes;
+use codex_windows_sandbox::write_shared_folder_removal_summary;
 use codex_windows_sandbox::write_shared_folder_scan_stamp;
 use std::io::Write;
 use std::path::Path;
@@ -37,6 +39,14 @@ pub(super) fn deny_shared_folders(
         Ok(scan) => scan,
         Err(err) => {
             log_line(log, &format!("shared-folder scan failed: {err:#}"))?;
+            // D414: the next version's rescan asks for this setup again.
+            let stamp = SharedFolderScanStamp {
+                cli_version: shared_folder_scan_cli_version().to_string(),
+                ..SharedFolderScanStamp::default()
+            };
+            if let Err(err) = write_shared_folder_scan_stamp(codex_home, &stamp) {
+                log_line(log, &format!("shared-folder scan stamp: {err:#}"))?;
+            }
             return Ok(());
         }
     };
@@ -108,7 +118,9 @@ pub(super) fn deny_shared_folders(
                 &SharedFolderScanStamp {
                     cli_version: shared_folder_scan_cli_version().to_string(),
                     recorded,
-                    unchanged: report.failed.clone(),
+                    foreign: report.foreign_folders.clone(),
+                    unchanged: report.unchanged.clone(),
+                    unopened: report.unopened.clone(),
                 },
             )
         });
@@ -132,6 +144,15 @@ pub(super) fn remove_shared_folder_denies(
     }?;
     // D414: the next elevated command runs the setup (and adds them) again.
     remove_shared_folder_scan_stamp(codex_home)?;
+    write_shared_folder_removal_summary(
+        codex_home,
+        &SharedFolderDenyRemovalSummary {
+            removed: removal.removed,
+            kept: removal.kept,
+            absent: removal.absent,
+            failed: removal.errors.len(),
+        },
+    )?;
     for error in &removal.errors {
         log_line(log, &format!("shared-folder deny not removed: {error}"))?;
     }

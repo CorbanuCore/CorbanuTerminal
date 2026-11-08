@@ -18,11 +18,13 @@
 //!   setup only if a folder lacks a deny this home relies on (a vendor folder
 //!   installed or reinstalled since); otherwise it notes the new version.
 //!
-//! Core does this at most once per process for each home, so a setup that
-//! fails or is declined doesn't prompt before every command, and a decline
-//! leaves the denies as they were (owner decision pending; see #1798).
-//! Folders the signed-in user can't list are rescanned only by the admin
-//! setup.
+//! For each stamp version Core scans, and asks for the admin setup, at most
+//! once per process, so a setup that fails or is declined doesn't prompt
+//! before every command. A failed or declined one after a version change
+//! leaves the denies the last setup added and the command runs (with a
+//! warning; owner decision pending, see #1798); without a stamp the setup
+//! must succeed, as after a `SETUP_VERSION` bump. Folders the signed-in user
+//! can't list are rescanned only by the admin setup.
 
 use crate::acl::shared_folders::SharedFolderDenyKind;
 use crate::acl::shared_folders::SharedFolderFinding;
@@ -44,16 +46,23 @@ pub struct RecordedSharedFolder {
     pub kind: SharedFolderDenyKind,
 }
 
-/// What the last scan for a home found.
+/// What the last admin scan for a home found.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SharedFolderScanStamp {
     pub cli_version: String,
+    /// The folders whose deny the machine's record keeps for this home.
     #[serde(default)]
     pub recorded: Vec<RecordedSharedFolder>,
-    /// Found, but the setup couldn't change them: a rescan doesn't ask for
-    /// the setup again for them.
+    /// Folders that already held the deny, unrecorded (not the setup's: the
+    /// removal leaves them).
     #[serde(default)]
-    pub unchanged: Vec<PathBuf>,
+    pub foreign: Vec<RecordedSharedFolder>,
+    /// Folders the setup couldn't change, or couldn't open: a rescan
+    /// doesn't ask for the setup again for them.
+    #[serde(default)]
+    pub unchanged: Vec<RecordedSharedFolder>,
+    #[serde(default)]
+    pub unopened: Vec<PathBuf>,
 }
 
 /// The version shipped with these binaries (Core and setup alike).
@@ -80,8 +89,11 @@ pub fn write_shared_folder_scan_stamp(
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
     }
-    std::fs::write(&path, serde_json::to_vec_pretty(stamp)?)
-        .with_context(|| format!("writing {}", path.display()))
+    // Replaced whole, so a reader never sees half of it.
+    let tmp = path.with_extension(format!("json.tmp-{}", std::process::id()));
+    std::fs::write(&tmp, serde_json::to_vec_pretty(stamp)?)
+        .with_context(|| format!("writing {}", tmp.display()))?;
+    std::fs::rename(&tmp, &path).with_context(|| format!("replacing {}", path.display()))
 }
 
 /// D413: after the removal, so the next elevated command runs the setup
@@ -93,6 +105,63 @@ pub fn remove_shared_folder_scan_stamp(codex_home: &Path) -> Result<()> {
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(err) => Err(err).with_context(|| format!("removing {}", path.display())),
     }
+}
+
+const REMOVAL_FILE: &str = "shared_folder_removal.json";
+
+/// D413: what a removal did, as the setup reports it to the CLI.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SharedFolderDenyRemovalSummary {
+    pub removed: usize,
+    /// Still relied on by another home.
+    pub kept: usize,
+    /// Gone already.
+    pub absent: usize,
+    pub failed: usize,
+}
+
+fn removal_path(codex_home: &Path) -> PathBuf {
+    crate::setup::sandbox_dir(codex_home).join(REMOVAL_FILE)
+}
+
+pub fn write_shared_folder_removal_summary(
+    codex_home: &Path,
+    summary: &SharedFolderDenyRemovalSummary,
+) -> Result<()> {
+    let path = removal_path(codex_home);
+    std::fs::write(&path, serde_json::to_vec(summary)?)
+        .with_context(|| format!("writing {}", path.display()))
+}
+
+/// Reads and removes the summary the setup wrote.
+pub(crate) fn take_shared_folder_removal_summary(
+    codex_home: &Path,
+) -> Option<SharedFolderDenyRemovalSummary> {
+    let path = removal_path(codex_home);
+    let summary = std::fs::read(&path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+    let _ = std::fs::remove_file(&path);
+    summary
+}
+
+static NOTICES: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+pub(crate) fn push_notice(notice: String) {
+    NOTICES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .push(notice);
+}
+
+/// D414: for Core to show the user, once: setups the rescan asked for that
+/// failed or were declined in this process.
+pub fn take_shared_folder_rescan_notices() -> Vec<String> {
+    std::mem::take(
+        &mut *NOTICES
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+    )
 }
 
 #[derive(Debug, PartialEq, Eq)]

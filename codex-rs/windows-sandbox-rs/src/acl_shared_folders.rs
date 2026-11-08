@@ -37,6 +37,8 @@ use super::INHERITED_ACE;
 use super::open_exact;
 use super::remove_aces_from;
 use super::security_info;
+use crate::shared_folder_rescan::RecordedSharedFolder;
+use crate::shared_folder_rescan::SharedFolderScanStamp;
 use crate::token::LocalSid;
 use crate::winutil::to_wide;
 use anyhow::Context;
@@ -817,9 +819,14 @@ pub struct SharedFolderDenyReport {
     pub already: usize,
     /// Already there but not recorded (not ours): left alone.
     pub foreign: usize,
+    /// D414: those folders, so rescans count them as closed (not recorded:
+    /// the removal must leave them).
+    pub foreign_folders: Vec<RecordedSharedFolder>,
     pub errors: Vec<String>,
-    /// The folders of `errors` (D414: a rescan doesn't ask again for them).
-    pub failed: Vec<PathBuf>,
+    /// D414: the folders of `errors` that couldn't be opened, and those that
+    /// couldn't be changed; a rescan doesn't ask again for them.
+    pub unopened: Vec<PathBuf>,
+    pub unchanged: Vec<RecordedSharedFolder>,
     /// A damaged record set aside.
     pub notes: Vec<String>,
 }
@@ -848,7 +855,7 @@ pub unsafe fn apply_shared_folder_denies(
         let folder = match OpenFolder::open(&finding.path) {
             Ok(folder) => folder,
             Err(err) => {
-                report.failed.push(finding.path.clone());
+                report.unopened.push(finding.path.clone());
                 report.errors.push(format!(
                     "{:?} deny on {}: {err:#}",
                     finding.kind,
@@ -870,7 +877,12 @@ pub unsafe fn apply_shared_folder_denies(
                 entry.homes.insert(home.clone());
                 report.already += 1;
             }
-            (None, true) => report.foreign += 1,
+            (None, true) => {
+                report.foreign += 1;
+                report
+                    .foreign_folders
+                    .push(recorded_folder(identity, finding.kind));
+            }
             (recorded, false) => {
                 match recorded {
                     Some(entry) => {
@@ -895,7 +907,9 @@ pub unsafe fn apply_shared_folder_denies(
         match add_to_open_folder(&mut folder, &finding.path, group_psid, finding.kind) {
             Ok(_) => report.added.push(finding.clone()),
             Err(err) => {
-                report.failed.push(finding.path.clone());
+                report
+                    .unchanged
+                    .push(recorded_folder(folder.identity(), finding.kind));
                 report.errors.push(format!(
                     "{:?} deny on {}: {err:#}",
                     finding.kind,
@@ -972,12 +986,12 @@ pub unsafe fn remove_shared_folder_denies_for_home(
 const SANDBOX_USERS_GROUP: &str = "CodexSandboxUsers";
 
 /// D414: the folders the scan finds that lack a deny `stamp` (the last admin
-/// setup's) says this home relies on, apart from those that setup couldn't
-/// change. Runs as the signed-in user: folders it can't list are left to the
-/// admin setup. Fails without the sandbox users' group.
+/// setup's) says covers them for this home, apart from those that setup
+/// couldn't open or change. Runs as the signed-in user: folders it can't
+/// list are left to the admin setup. Fails without the sandbox users' group.
 pub fn shared_folders_missing_denies(
     roots: &SharedFolderScanRoots,
-    stamp: &crate::shared_folder_rescan::SharedFolderScanStamp,
+    stamp: &SharedFolderScanStamp,
 ) -> Result<Vec<SharedFolderFinding>> {
     let mut group = crate::winutil::resolve_sid(SANDBOX_USERS_GROUP)
         .with_context(|| format!("resolving {SANDBOX_USERS_GROUP}"))?;
@@ -988,30 +1002,31 @@ pub fn shared_folders_missing_denies(
         .into_iter()
         .filter(|finding| {
             !stamp
-                .unchanged
+                .unopened
                 .iter()
                 .any(|path| same_path(path, &finding.path))
         })
         // SAFETY: `psid` points to `group`, which outlives the call.
-        .filter(|finding| !unsafe { recorded_deny_present(finding, psid, stamp) })
+        .filter(|finding| !unsafe { covered_by_stamp(finding, psid, stamp) })
         .collect())
 }
 
-/// Whether `finding`'s folder holds its deny exactly and is one `stamp`
-/// records for this home (not only another home's).
-unsafe fn recorded_deny_present(
+/// Whether the setup that wrote `stamp` couldn't change `finding`'s folder,
+/// or the folder holds its deny exactly and `stamp` names it (this home
+/// relies on it, or it was there before any setup).
+unsafe fn covered_by_stamp(
     finding: &SharedFolderFinding,
     psid: *mut c_void,
-    stamp: &crate::shared_folder_rescan::SharedFolderScanStamp,
+    stamp: &SharedFolderScanStamp,
 ) -> bool {
     let Ok(handle) = open_exact(&finding.path, READ_CONTROL) else {
         return false;
     };
-    let file_id = file_id_hex((handle.volume, handle.file_id));
-    let recorded = stamp.recorded.iter().any(|folder| {
-        folder.kind == finding.kind && folder.volume == handle.volume && folder.file_id == file_id
-    });
-    if !recorded {
+    let folder = recorded_folder((handle.volume, handle.file_id), finding.kind);
+    if stamp.unchanged.contains(&folder) {
+        return true;
+    }
+    if !stamp.recorded.contains(&folder) && !stamp.foreign.contains(&folder) {
         return false;
     }
     let Ok((p_dacl, p_sd)) = security_info(handle.raw) else {
@@ -1022,20 +1037,28 @@ unsafe fn recorded_deny_present(
     present
 }
 
+fn recorded_folder(identity: FolderIdentity, kind: SharedFolderDenyKind) -> RecordedSharedFolder {
+    RecordedSharedFolder {
+        volume: identity.0,
+        file_id: file_id_hex(identity),
+        kind,
+    }
+}
+
 /// D414: the folders the machine's record keeps a deny on for `codex_home`
 /// (for its scan stamp).
 pub fn recorded_shared_folders_for_home(
     record_dir: &Path,
     codex_home: &Path,
     group_sid: &str,
-) -> Result<Vec<crate::shared_folder_rescan::RecordedSharedFolder>> {
+) -> Result<Vec<RecordedSharedFolder>> {
     let home = home_key(codex_home);
     let record = load_shared_folder_deny_record(record_dir)?;
     Ok(record
         .entries
         .into_iter()
         .filter(|entry| entry.sid == group_sid && entry.homes.contains(&home))
-        .map(|entry| crate::shared_folder_rescan::RecordedSharedFolder {
+        .map(|entry| RecordedSharedFolder {
             volume: entry.volume,
             file_id: entry.file_id,
             kind: entry.kind,

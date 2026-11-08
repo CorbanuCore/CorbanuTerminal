@@ -1261,13 +1261,12 @@ impl Session {
         {
             let level = tc.windows_sandbox_level;
             let profile = tc.permission_profile.clone();
-            let warning = tokio::task::spawn_blocking(move || {
-                crate::windows_sandbox::shared_folder_deny_warning(level, &profile, cwd.as_path())
+            let warnings = tokio::task::spawn_blocking(move || {
+                crate::windows_sandbox::shared_folder_deny_warnings(level, &profile, cwd.as_path())
             })
             .await
-            .ok()
-            .flatten();
-            if let Some(message) = warning {
+            .unwrap_or_default();
+            for message in warnings {
                 self.send_event(tc, EventMsg::Warning(WarningEvent { message }))
                     .await;
             }

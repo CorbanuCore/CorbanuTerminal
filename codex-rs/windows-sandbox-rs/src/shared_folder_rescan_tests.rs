@@ -9,7 +9,9 @@ fn stamp(version: &str) -> SharedFolderScanStamp {
             file_id: "00ff".to_string(),
             kind: SharedFolderDenyKind::Write,
         }],
-        unchanged: vec![PathBuf::from(r"C:\ProgramData\Locked")],
+        foreign: Vec::new(),
+        unchanged: Vec::new(),
+        unopened: vec![PathBuf::from(r"C:\ProgramData\Locked")],
     }
 }
 

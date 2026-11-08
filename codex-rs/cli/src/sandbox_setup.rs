@@ -91,13 +91,26 @@ fn remove_shared_folder_denies(cmd: &SandboxSetupCommand) -> anyhow::Result<()> 
             codex_home.display()
         );
     }
-    codex_core::windows_sandbox::run_elevated_shared_folder_deny_removal(&codex_home)?;
-    println!(
-        "Removed the shared-folder denies recorded for {} that no other Codex home relies on (details in the log in {}). The next elevated sandbox command for this home runs the setup again, which adds them back.",
-        codex_home.display(),
-        sandbox_dir.display()
-    );
+    let removal =
+        codex_core::windows_sandbox::run_elevated_shared_folder_deny_removal(&codex_home)?;
+    println!("{}", removal_message(&codex_home, removal));
     Ok(())
+}
+
+fn removal_message(
+    codex_home: &std::path::Path,
+    removal: codex_core::windows_sandbox::SharedFolderDenyRemoval,
+) -> String {
+    let home = codex_home.display();
+    if removal.removed + removal.kept + removal.absent == 0 {
+        return format!(
+            "No shared-folder deny was recorded for {home}; nothing was removed. Check that this is the Codex home path its setup used."
+        );
+    }
+    format!(
+        "Removed {} shared-folder denies recorded for {home}; kept {} that other Codex homes rely on; {} were gone already. The next elevated sandbox command for this Codex home runs the setup again, which adds them back.",
+        removal.removed, removal.kept, removal.absent
+    )
 }
 
 pub(crate) fn parse_setup_command(
@@ -277,6 +290,31 @@ mod tests {
         assert_eq!(
             setup.setup_level().expect("level"),
             SandboxSetupLevel::Elevated
+        );
+    }
+
+    #[test]
+    fn removal_message_says_when_nothing_was_recorded() {
+        use codex_core::windows_sandbox::SharedFolderDenyRemoval;
+        let home = std::path::Path::new(r"C:\Users\alice\.codex");
+        let none = removal_message(home, SharedFolderDenyRemoval::default());
+        assert!(
+            none.starts_with("No shared-folder deny was recorded"),
+            "{none}"
+        );
+        let some = removal_message(
+            home,
+            SharedFolderDenyRemoval {
+                removed: 2,
+                kept: 3,
+                absent: 1,
+            },
+        );
+        assert!(
+            some.starts_with(
+                r"Removed 2 shared-folder denies recorded for C:\Users\alice\.codex; kept 3"
+            ),
+            "{some}"
         );
     }
 

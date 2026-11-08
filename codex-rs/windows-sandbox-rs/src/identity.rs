@@ -198,14 +198,18 @@ pub fn require_logon_sandbox_creds(
             None
         }
     };
-    // D414: an admin setup the shared-folder rescan asks for; a failed or
-    // declined one leaves the denies as they were and the command runs.
+    // D414: an admin setup the shared-folder rescan asks for. After a version
+    // change, a failed or declined one leaves the denies the last setup added
+    // and the command runs; without a stamp it must succeed.
     let mut rescan_fallback = None;
     if identity.is_some()
-        && let Some(reason) = shared_folder_rescan_reason(codex_home, &sandbox_dir)
+        && let Some(rescan) = shared_folder_rescan_reason(codex_home, &sandbox_dir)
     {
-        setup_reason = Some(reason);
-        rescan_fallback = identity.take();
+        setup_reason = Some(rescan.reason);
+        let current = identity.take();
+        if rescan.may_fall_back {
+            rescan_fallback = current;
+        }
     }
 
     if identity.is_none() {
@@ -235,15 +239,29 @@ pub fn require_logon_sandbox_creds(
             &desired_offline_proxy_settings,
         );
         identity = match (setup, rescan_fallback) {
-            (Ok(()), _) => select_identity(network_identity, codex_home)?,
+            (Ok(()), _) => {
+                // Without its stamp the setup would run before every command.
+                if crate::shared_folder_rescan::read_shared_folder_scan_stamp(codex_home).is_none()
+                {
+                    crate::logging::log_note(
+                        "shared-folder rescan: the setup left no scan stamp",
+                        Some(&sandbox_dir),
+                    );
+                    RESCANNED
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .insert((codex_home.to_path_buf(), String::new()));
+                }
+                select_identity(network_identity, codex_home)?
+            }
             (Err(err), Some(fallback)) => {
-                crate::logging::log_note(
-                    &format!(
-                        "shared-folder rescan: the admin setup failed or was declined; the denies stay as they were: {err:#}"
-                    ),
-                    Some(&sandbox_dir),
+                let notice = format!(
+                    "The Windows sandbox setup needed to close shared folders found since the last update failed or was declined; commands run with the protections the last setup added (#1791): {err:#}"
                 );
-                Some(fallback)
+                crate::logging::log_note(&notice, Some(&sandbox_dir));
+                crate::shared_folder_rescan::push_notice(notice);
+                // A setup that got as far as new passwords left them on disk.
+                select_identity(network_identity, codex_home)?.or(Some(fallback))
             }
             (Err(err), None) => return Err(err),
         };
@@ -277,21 +295,42 @@ pub fn require_logon_sandbox_creds(
     })
 }
 
+/// D414: (home, stamp version) pairs this process has rescanned, or asked
+/// the admin setup for; (home, "") once a setup succeeded but left no stamp.
+static RESCANNED: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashSet<(PathBuf, String)>>,
+> = std::sync::LazyLock::new(Default::default);
+
+struct SharedFolderRescan {
+    reason: String,
+    /// After a version change: the denies the last setup added are there.
+    may_fall_back: bool,
+}
+
 /// D414: why the admin setup must run again for the shared folders, if it
-/// must. Scans and admin setups run at most once per process for each home
-/// (see `shared_folder_rescan`).
-fn shared_folder_rescan_reason(codex_home: &Path, sandbox_dir: &Path) -> Option<String> {
+/// must. For each stamp version, scans and admin setups run at most once per
+/// process for each home; without a stamp the setup runs before every
+/// command until it succeeds (see `shared_folder_rescan`).
+fn shared_folder_rescan_reason(
+    codex_home: &Path,
+    sandbox_dir: &Path,
+) -> Option<SharedFolderRescan> {
     use crate::shared_folder_rescan::RescanDecision;
-    static CHECKED: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<PathBuf>>> =
-        std::sync::LazyLock::new(Default::default);
-    let mut checked = CHECKED
+    let mut checked = RESCANNED
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if checked.contains(codex_home) {
+    let stamp = crate::shared_folder_rescan::read_shared_folder_scan_stamp(codex_home);
+    let key = stamp
+        .as_ref()
+        .map(|stamp| (codex_home.to_path_buf(), stamp.cli_version.clone()));
+    let seen = key
+        .clone()
+        .unwrap_or_else(|| (codex_home.to_path_buf(), String::new()));
+    if checked.contains(&seen) {
         return None;
     }
     let decision = crate::shared_folder_rescan::rescan_decision(
-        crate::shared_folder_rescan::read_shared_folder_scan_stamp(codex_home),
+        stamp,
         crate::shared_folder_rescan::shared_folder_scan_cli_version(),
         |stamp| {
             crate::acl::shared_folders::shared_folders_missing_denies(
@@ -302,10 +341,9 @@ fn shared_folder_rescan_reason(codex_home: &Path, sandbox_dir: &Path) -> Option<
     );
     let note = |msg: String| crate::logging::log_note(&msg, Some(sandbox_dir));
     match decision {
-        // Not noted: a removal (D413) may take the stamp away meanwhile.
         Ok(RescanDecision::NotDue) => None,
         Ok(RescanDecision::Clean(stamp)) => {
-            checked.insert(codex_home.to_path_buf());
+            checked.extend(key);
             note(format!(
                 "shared-folder rescan for CLI version {}: nothing to close",
                 stamp.cli_version
@@ -318,8 +356,12 @@ fn shared_folder_rescan_reason(codex_home: &Path, sandbox_dir: &Path) -> Option<
             None
         }
         Ok(RescanDecision::AdminSetup(reason)) => {
-            checked.insert(codex_home.to_path_buf());
-            Some(reason)
+            let may_fall_back = key.is_some();
+            checked.extend(key);
+            Some(SharedFolderRescan {
+                reason,
+                may_fall_back,
+            })
         }
         // Not noted: the next command tries again.
         Err(err) => {

@@ -228,13 +228,15 @@ Every deny the setup adds is recorded in
 command after Corbanu Terminal is updated to a new version also scans, as
 you, and runs the administrator setup again (one approval prompt) only if it
 finds a folder without its deny, for example one a program installed since.
-A setup made before this protection existed gets it the same way, with one
-prompt at the first command. If you decline the prompt, or can't approve it
-(for example as a standard user whose administrator ran the setup), commands
-still run with the denies already in place, and Corbanu Terminal asks again
-the next time it starts. Folders you can't list yourself are scanned only
-when the administrator setup runs, and a folder the setup couldn't change
-isn't asked about again until it next runs.
+If you decline that prompt, or can't approve it (for example as a standard
+user whose administrator ran the setup), commands still run with the denies
+the last setup added, Corbanu Terminal warns you, and it asks again the next
+time it starts. A setup made before this protection existed (or after you
+removed the denies) needs the administrator setup at the first command, and
+commands don't run until it succeeds, as after any setup change. Folders you
+can't list yourself are scanned only when the administrator setup runs, and
+a folder the setup couldn't change isn't asked about again until it next
+runs.
 
 **What it doesn't cover.** Folders elsewhere (other drives, or deeper than
 the top level of the system drive outside the three folders above), single
@@ -245,8 +247,9 @@ cryptographic keys (`ProgramData\Microsoft\Crypto\...\MachineKeys`).
 **A project in such a folder is read-only to commands.** If a folder
 commands may write to (your project, or an extra writable folder) is in an
 Everyone-writable shared folder, sandboxed commands can't change files there.
-Corbanu Terminal checks each such folder once per session, when a turn
-starts, and warns you if so. (A subfolder that is itself Everyone-writable
+Corbanu Terminal checks these folders when each turn starts and warns you
+once per session for each one (a setup that runs during a turn shows up at
+the next). (A subfolder that is itself Everyone-writable
 gets a deny of its own and isn't checked.) Move the project to a folder of
 your own, such as one under your user profile.
 
@@ -285,8 +288,10 @@ There is no single uninstall command yet. In an administrator PowerShell:
    `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList`,
    which hide them from the sign-in screen.
 
-Permissions setup gave the sandbox on your project folders, and its
-persistent network (WFP) filters, name accounts that no longer exist once
+Optionally delete `%LOCALAPPDATA%\CorbanuTerminalSandbox` too. Permissions
+setup gave the sandbox on your project folders (including entries that keep
+it from reading files you protected), and its persistent network (WFP)
+filters, name accounts that no longer exist once
 you've deleted them; they do nothing and you may leave them.
 
 This page documents the shipped capability "existing general sandboxing" from

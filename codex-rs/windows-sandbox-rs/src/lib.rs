@@ -395,11 +395,17 @@ pub use setup_error::write_setup_error_report;
 #[cfg(target_os = "windows")]
 pub use shared_folder_rescan::RecordedSharedFolder;
 #[cfg(target_os = "windows")]
+pub use shared_folder_rescan::SharedFolderDenyRemovalSummary;
+#[cfg(target_os = "windows")]
 pub use shared_folder_rescan::SharedFolderScanStamp;
 #[cfg(target_os = "windows")]
 pub use shared_folder_rescan::remove_shared_folder_scan_stamp;
 #[cfg(target_os = "windows")]
 pub use shared_folder_rescan::shared_folder_scan_cli_version;
+#[cfg(target_os = "windows")]
+pub use shared_folder_rescan::take_shared_folder_rescan_notices;
+#[cfg(target_os = "windows")]
+pub use shared_folder_rescan::write_shared_folder_removal_summary;
 #[cfg(target_os = "windows")]
 pub use shared_folder_rescan::write_shared_folder_scan_stamp;
 #[cfg(target_os = "windows")]

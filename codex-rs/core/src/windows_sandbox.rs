@@ -149,15 +149,34 @@ pub fn run_elevated_provisioning_setup(
     )
 }
 
+/// D413: what [`run_elevated_shared_folder_deny_removal`] did.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SharedFolderDenyRemoval {
+    pub removed: usize,
+    /// Still relied on by another Codex home.
+    pub kept: usize,
+    /// Gone already.
+    pub absent: usize,
+}
+
 /// D413: as an administrator, removes the shared-folder denies (#1791,
 /// D400) no other Codex home's setup relies on, for uninstalling.
 #[cfg(target_os = "windows")]
-pub fn run_elevated_shared_folder_deny_removal(codex_home: &Path) -> anyhow::Result<()> {
-    codex_windows_sandbox::run_elevated_shared_folder_deny_removal(codex_home)
+pub fn run_elevated_shared_folder_deny_removal(
+    codex_home: &Path,
+) -> anyhow::Result<SharedFolderDenyRemoval> {
+    let summary = codex_windows_sandbox::run_elevated_shared_folder_deny_removal(codex_home)?;
+    Ok(SharedFolderDenyRemoval {
+        removed: summary.removed,
+        kept: summary.kept,
+        absent: summary.absent,
+    })
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn run_elevated_shared_folder_deny_removal(_codex_home: &Path) -> anyhow::Result<()> {
+pub fn run_elevated_shared_folder_deny_removal(
+    _codex_home: &Path,
+) -> anyhow::Result<SharedFolderDenyRemoval> {
     anyhow::bail!(
         "removing the elevated sandbox's shared-folder denies is only supported on Windows"
     )
@@ -425,39 +444,69 @@ fn emit_windows_sandbox_setup_failure_metrics(
     }
 }
 
-/// D415: a warning when the elevated sandbox's shared-folder denies (#1791,
-/// D400) leave a folder commands may write to read-only for them. Each
-/// folder is checked once per process (it blocks: run it off the async
-/// runtime). A folder inside it with a deny of its own isn't checked.
-pub(crate) fn shared_folder_deny_warning(
+/// D414/D415: warnings about the elevated sandbox's shared-folder denies
+/// (#1791, D400): a rescan's admin setup that failed or was declined, and a
+/// folder commands may write to that the denies leave read-only for them
+/// (once per process for each folder; a folder inside it with a deny of its
+/// own isn't checked). It reads permissions: run it off the async runtime.
+pub(crate) fn shared_folder_deny_warnings(
     windows_sandbox_level: WindowsSandboxLevel,
     permission_profile: &PermissionProfile,
     cwd: &Path,
-) -> Option<String> {
-    static CHECKED: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<PathBuf>>> =
+) -> Vec<String> {
+    static WARNED: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<PathBuf>>> =
         std::sync::LazyLock::new(Default::default);
     if windows_sandbox_level != WindowsSandboxLevel::Elevated {
-        return None;
+        return Vec::new();
     }
+    let mut warnings = shared_folder_rescan_notices();
     let policy = permission_profile.file_system_sandbox_policy();
     if policy.has_full_disk_write_access() {
-        return None;
+        return warnings;
     }
-    let unchecked: Vec<PathBuf> = {
-        let mut checked = CHECKED
+    let candidates: Vec<PathBuf> = {
+        let warned = WARNED
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         policy
             .get_writable_roots_with_cwd(cwd)
             .into_iter()
             .map(|root| root.root.to_path_buf())
-            .filter(|root| checked.insert(root.clone()))
+            .filter(|root| on_system_drive(root) && !warned.contains(root))
             .collect()
     };
-    if unchecked.is_empty() {
-        return None;
+    if candidates.is_empty() {
+        return warnings;
     }
-    shared_folder_deny_message(&shared_folder_write_denied_roots(&unchecked))
+    let denied = shared_folder_write_denied_roots(&candidates);
+    let mut warned = WARNED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let new: Vec<PathBuf> = denied
+        .into_iter()
+        .filter(|root| warned.insert(root.clone()))
+        .collect();
+    warnings.extend(shared_folder_deny_message(&new));
+    warnings
+}
+
+/// The denies are only on the system drive's folders (and what inherits
+/// from them), so other drives and network paths aren't read.
+fn on_system_drive(path: &Path) -> bool {
+    let drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".to_string());
+    path.to_string_lossy()
+        .get(..drive.len())
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(&drive))
+}
+
+#[cfg(target_os = "windows")]
+fn shared_folder_rescan_notices() -> Vec<String> {
+    codex_windows_sandbox::take_shared_folder_rescan_notices()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn shared_folder_rescan_notices() -> Vec<String> {
+    Vec::new()
 }
 
 #[cfg(target_os = "windows")]

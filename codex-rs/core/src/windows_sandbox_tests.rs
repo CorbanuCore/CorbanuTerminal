@@ -210,8 +210,26 @@ fn shared_folder_deny_warning_is_only_for_the_elevated_sandbox() {
         WindowsSandboxLevel::RestrictedToken,
     ] {
         assert_eq!(
-            shared_folder_deny_warning(level, &PermissionProfile::workspace_write(), cwd.as_path()),
-            None
+            shared_folder_deny_warnings(
+                level,
+                &PermissionProfile::workspace_write(),
+                cwd.as_path()
+            ),
+            Vec::<String>::new()
         );
     }
+}
+
+#[test]
+fn only_system_drive_paths_are_checked_for_shared_folder_denies() {
+    let drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".to_string());
+    assert!(on_system_drive(Path::new(&format!(
+        r"{drive}\ProgramData\x"
+    ))));
+    assert!(on_system_drive(Path::new(&format!(
+        r"{}\ProgramData\x",
+        drive.to_lowercase()
+    ))));
+    assert!(!on_system_drive(Path::new(r"\\server\share\project")));
+    assert!(!on_system_drive(Path::new(r"Z:\project")));
 }

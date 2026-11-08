@@ -1135,7 +1135,9 @@ pub fn run_elevated_provisioning_setup(
 /// #1791 / D400: as an administrator, forgets `codex_home` in the machine's
 /// record of shared-folder denies and removes each one no other home's setup
 /// relies on (for uninstalling).
-pub fn run_elevated_shared_folder_deny_removal(codex_home: &Path) -> Result<()> {
+pub fn run_elevated_shared_folder_deny_removal(
+    codex_home: &Path,
+) -> Result<crate::SharedFolderDenyRemovalSummary> {
     let needs_elevation = !is_elevated().map_err(|err| {
         failure(
             SetupErrorCode::OrchestratorElevationCheckFailed,
@@ -1168,7 +1170,10 @@ pub fn run_elevated_shared_folder_deny_removal(codex_home: &Path) -> Result<()> 
         mode: SetupMode::RemoveSharedFolderDenies,
         refresh_only: false,
     };
-    run_setup_exe(&payload, needs_elevation, codex_home)
+    crate::shared_folder_rescan::take_shared_folder_removal_summary(codex_home);
+    run_setup_exe(&payload, needs_elevation, codex_home)?;
+    crate::shared_folder_rescan::take_shared_folder_removal_summary(codex_home)
+        .ok_or_else(|| anyhow!("the setup didn't report what it removed"))
 }
 
 fn build_payload_roots(
