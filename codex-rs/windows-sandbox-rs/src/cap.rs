@@ -195,8 +195,11 @@ mod tests {
     use super::workspace_cap_sid_for_cwd;
     use super::workspace_write_cap_sid_for_root;
     use super::writable_root_cap_sid_for_path;
+    use crate::path_normalization::canonical_path_key;
     use pretty_assertions::assert_eq;
     use std::path::PathBuf;
+    use std::sync::Arc;
+    use std::sync::Barrier;
 
     #[test]
     fn equivalent_cwd_spellings_share_workspace_sid_key() {
@@ -251,5 +254,63 @@ mod tests {
         let caps = load_or_create_cap_sids(&codex_home).expect("load caps");
         assert_eq!(caps.workspace_by_cwd.len(), 1);
         assert_eq!(caps.writable_root_by_path.len(), 1);
+    }
+
+    /// #1871: updates made at the same time keep every SID they record, and
+    /// first uses agree on one set of SIDs.
+    #[test]
+    fn concurrent_updates_lose_no_sid() {
+        const THREADS: usize = 8;
+        const ROOTS: usize = 25;
+        for round in 0..5 {
+            let temp = tempfile::tempdir().expect("tempdir");
+            let codex_home = temp.path().join("codex-home");
+            let barrier = Arc::new(Barrier::new(THREADS));
+            let mut handles = Vec::new();
+            for thread in 0..THREADS {
+                let codex_home = codex_home.clone();
+                let barrier = Arc::clone(&barrier);
+                handles.push(std::thread::spawn(move || {
+                    barrier.wait();
+                    let workspace = load_or_create_cap_sids(&codex_home)
+                        .map(|caps| caps.workspace)
+                        .map_err(|err| format!("{err:#}"));
+                    let roots: Vec<_> = (0..ROOTS)
+                        .map(|i| {
+                            let root = PathBuf::from(format!(r"C:\r1871\{thread}\{i}"));
+                            let sid = writable_root_cap_sid_for_path(&codex_home, &root)
+                                .map_err(|err| format!("{err:#}"));
+                            (root, sid)
+                        })
+                        .collect();
+                    (workspace, roots)
+                }));
+            }
+            let results: Vec<_> = handles
+                .into_iter()
+                .map(|handle| handle.join().expect("thread"))
+                .collect();
+            let caps = load_or_create_cap_sids(&codex_home).expect("load caps");
+            for (workspace, roots) in results {
+                assert_eq!(workspace, Ok(caps.workspace.clone()), "round {round}");
+                for (root, sid) in roots {
+                    let recorded = caps
+                        .writable_root_by_path
+                        .get(&canonical_path_key(&root))
+                        .cloned();
+                    assert_eq!(
+                        sid.map(Some),
+                        Ok(recorded),
+                        "round {round}: {}",
+                        root.display()
+                    );
+                }
+            }
+            assert_eq!(
+                caps.writable_root_by_path.len(),
+                THREADS * ROOTS,
+                "round {round}"
+            );
+        }
     }
 }
