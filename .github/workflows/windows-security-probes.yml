@@ -49,6 +49,9 @@ jobs:
           cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib sec_win_d377_ -- --nocapture --test-threads=1 > admin.log 2>&1
           echo "exit=$?"; cat admin.log
           { echo "ADMIN $(git rev-parse HEAD)"; grep -E '^test |test result|panicked|d377 ' admin.log; } >> results.txt
+          # A failing D377 test records no setup: record one for the normal session.
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- --exact unified_exec::tests::command_identity::elevated::sec_win_1648_elevated_command_keeps_write_access_to_its_own_processes --nocapture --test-threads=1 > record.log 2>&1
+          echo "record exit=$?"; ls "${RUNNER_TEMP}/d377-seed"
       - name: Normal session
         if: ${{ !cancelled() }}
         shell: powershell
