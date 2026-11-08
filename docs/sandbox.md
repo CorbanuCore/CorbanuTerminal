@@ -27,16 +27,20 @@ using at that moment.
 - Two commands running at the same time in different projects (or with
   different extra folders they may write to) aren't kept apart: one can
   borrow the other's access and write in that project's folders while the
-  other runs (#1560). The default sandbox doesn't prevent this yet either
-  (#1560, #1648), so avoid running commands in several projects at once.
-  In the default sandbox, a command that races another command's start-up
-  can also run code with the sandbox account's full access, outside its own
-  restrictions (#1721).
+  other runs (#1560), so avoid running commands in several projects at once.
+  The default sandbox keeps them apart.
 - Drives without Windows permissions, such as FAT or exFAT USB drives: neither
   sandbox can protect files there.
 
 The default sandbox runs commands as a separate account with a firewall-based
-network block, and protects more.
+network block, and protects more. Each of its commands runs on a logon of its
+own, so one command can't use another's access (#1560). The program that
+starts them runs as a third account, `CodexSandboxRunner`, which no command
+uses (#1721). Setup gives that account the Windows right "Replace a process
+level token" (`SeAssignPrimaryTokenPrivilege`), which it needs to start each
+command on its own logon. Its password is stored for your Windows user only,
+but a program running as you could use it to sign in as that account and,
+with that right, possibly gain full control of the computer.
 
 **When you will see a warning.** If your sandboxed commands run in the
 non-admin sandbox, Corbanu Terminal tells you once per session:

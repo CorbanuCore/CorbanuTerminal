@@ -1,3 +1,4 @@
+use anyhow::Context;
 use anyhow::Result;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -41,6 +42,7 @@ use windows_sys::Win32::Storage::FileSystem::CREATE_NEW;
 use windows_sys::Win32::Storage::FileSystem::CreateFileW;
 use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_NORMAL;
 
+use codex_windows_sandbox::RUNNER_USERNAME;
 use codex_windows_sandbox::SETUP_VERSION;
 use codex_windows_sandbox::SetupErrorCode;
 use codex_windows_sandbox::SetupFailure;
@@ -81,13 +83,84 @@ pub fn provision_sandbox_users(
     let online_password = random_password();
     ensure_sandbox_user(offline_username, &offline_password, log)?;
     ensure_sandbox_user(online_username, &online_password, log)?;
+    let runner_password = random_password();
+    provision_runner_user(RUNNER_USERNAME, &runner_password, log)?;
     write_secrets(
         codex_home,
-        offline_username,
-        &offline_password,
-        online_username,
-        &online_password,
+        [
+            (offline_username, offline_password.as_str()),
+            (online_username, online_password.as_str()),
+            (RUNNER_USERNAME, runner_password.as_str()),
+        ],
     )?;
+    Ok(())
+}
+
+/// The right the command runner's account needs to start a command with
+/// the token Core logged the command's account on with (#1721 (a′), D392).
+pub const RUNNER_ACCOUNT_RIGHT: &str = "SeAssignPrimaryTokenPrivilege";
+
+/// #1721 (a′): the command runner's own account, in the sandbox users' group
+/// (for the sandbox's helper and log folders) and holding
+/// [`RUNNER_ACCOUNT_RIGHT`]. Idempotent: setup reruns reset its password and
+/// re-add the right.
+fn provision_runner_user(username: &str, password: &str, log: &mut dyn Write) -> Result<()> {
+    ensure_sandbox_user(username, password, log)?;
+    let sid = resolve_sid(username)?;
+    add_account_right(&sid, RUNNER_ACCOUNT_RIGHT).map_err(|err| {
+        anyhow::Error::new(SetupFailure::new(
+            SetupErrorCode::HelperUserProvisionFailed,
+            format!("grant {RUNNER_ACCOUNT_RIGHT} to {username} failed: {err:#}"),
+        ))
+    })?;
+    super::log_line(
+        log,
+        &format!("runner account {username} holds {RUNNER_ACCOUNT_RIGHT}"),
+    )?;
+    Ok(())
+}
+
+/// `LsaAddAccountRights(sid, right)` on this machine's policy.
+fn add_account_right(sid: &[u8], right: &str) -> Result<()> {
+    use windows_sys::Win32::Security::Authentication::Identity::LSA_OBJECT_ATTRIBUTES;
+    use windows_sys::Win32::Security::Authentication::Identity::LSA_UNICODE_STRING;
+    use windows_sys::Win32::Security::Authentication::Identity::LsaAddAccountRights;
+    use windows_sys::Win32::Security::Authentication::Identity::LsaClose;
+    use windows_sys::Win32::Security::Authentication::Identity::LsaNtStatusToWinError;
+    use windows_sys::Win32::Security::Authentication::Identity::LsaOpenPolicy;
+    use windows_sys::Win32::Security::Authentication::Identity::POLICY_CREATE_ACCOUNT;
+    use windows_sys::Win32::Security::Authentication::Identity::POLICY_LOOKUP_NAMES;
+    let mut name: Vec<u16> = right.encode_utf16().collect();
+    let bytes = u16::try_from(name.len() * 2).context("right name too long")?;
+    // SAFETY: a zeroed plain struct with its size set; the policy handle is
+    // closed before returning, and `name` outlives the call that reads it.
+    unsafe {
+        let mut attributes: LSA_OBJECT_ATTRIBUTES = std::mem::zeroed();
+        attributes.Length = std::mem::size_of::<LSA_OBJECT_ATTRIBUTES>() as u32;
+        let mut policy = 0;
+        let status = LsaOpenPolicy(
+            std::ptr::null(),
+            &attributes,
+            (POLICY_CREATE_ACCOUNT | POLICY_LOOKUP_NAMES) as u32,
+            &mut policy,
+        );
+        if status != 0 {
+            anyhow::bail!("LsaOpenPolicy failed: {}", LsaNtStatusToWinError(status));
+        }
+        let rights = LSA_UNICODE_STRING {
+            Length: bytes,
+            MaximumLength: bytes,
+            Buffer: name.as_mut_ptr(),
+        };
+        let status = LsaAddAccountRights(policy, sid.as_ptr() as *mut c_void, &rights, 1);
+        LsaClose(policy);
+        if status != 0 {
+            anyhow::bail!(
+                "LsaAddAccountRights failed: {}",
+                LsaNtStatusToWinError(status)
+            );
+        }
+    }
     Ok(())
 }
 
@@ -406,6 +479,7 @@ struct SandboxUsersFile {
     version: u32,
     offline: SandboxUserRecord,
     online: SandboxUserRecord,
+    runner: SandboxUserRecord,
 }
 
 #[derive(Serialize)]
@@ -420,13 +494,7 @@ struct SetupMarker {
     write_roots: Vec<PathBuf>,
 }
 
-fn write_secrets(
-    codex_home: &Path,
-    offline_user: &str,
-    offline_pwd: &str,
-    online_user: &str,
-    online_pwd: &str,
-) -> Result<()> {
+fn write_secrets(codex_home: &Path, accounts: [(&str, &str); 3]) -> Result<()> {
     let secrets_dir = sandbox_secrets_dir(codex_home);
     std::fs::create_dir_all(&secrets_dir).map_err(|err| {
         anyhow::Error::new(SetupFailure::new(
@@ -437,28 +505,24 @@ fn write_secrets(
             ),
         ))
     })?;
-    let offline_blob = dpapi_protect(offline_pwd.as_bytes()).map_err(|err| {
-        anyhow::Error::new(SetupFailure::new(
-            SetupErrorCode::HelperDpapiProtectFailed,
-            format!("dpapi protect failed for offline user: {err}"),
-        ))
-    })?;
-    let online_blob = dpapi_protect(online_pwd.as_bytes()).map_err(|err| {
-        anyhow::Error::new(SetupFailure::new(
-            SetupErrorCode::HelperDpapiProtectFailed,
-            format!("dpapi protect failed for online user: {err}"),
-        ))
-    })?;
+    let record = |(username, password): (&str, &str)| -> Result<SandboxUserRecord> {
+        let blob = dpapi_protect(password.as_bytes()).map_err(|err| {
+            anyhow::Error::new(SetupFailure::new(
+                SetupErrorCode::HelperDpapiProtectFailed,
+                format!("dpapi protect failed for {username}: {err}"),
+            ))
+        })?;
+        Ok(SandboxUserRecord {
+            username: username.to_string(),
+            password: BASE64.encode(blob),
+        })
+    };
+    let [offline, online, runner] = accounts;
     let users = SandboxUsersFile {
         version: SETUP_VERSION,
-        offline: SandboxUserRecord {
-            username: offline_user.to_string(),
-            password: BASE64.encode(offline_blob),
-        },
-        online: SandboxUserRecord {
-            username: online_user.to_string(),
-            password: BASE64.encode(online_blob),
-        },
+        offline: record(offline)?,
+        online: record(online)?,
+        runner: record(runner)?,
     };
     let users_path = secrets_dir.join("sandbox_users.json");
     let users_json = serde_json::to_vec_pretty(&users).map_err(|err| {

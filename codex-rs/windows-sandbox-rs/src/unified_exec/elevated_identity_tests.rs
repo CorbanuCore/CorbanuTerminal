@@ -3,6 +3,10 @@
 //! that account is a restricting SID of its token, so its processes must not
 //! grant the account (or Everyone, or the capability SIDs) write access.
 //!
+//! #1721 (a′) and #1560 (`pl`): the runner runs as an account of its own and
+//! each command on a logon of its own, whose SID alone (with the command's
+//! own SID and SYSTEM) may do more than query its objects.
+//!
 //! An elevated session runs the sandbox's setup itself. A normal session
 //! can't (UAC), so it reuses a setup recorded by an elevated run right
 //! before: `CODEX_PF27S06_SETUP_SEED` names the directory (see
@@ -140,17 +144,23 @@ async fn with_elevated_holder_tty<T>(
     tty: bool,
     probe: impl AsyncFnOnce(u32) -> T,
 ) -> T {
+    with_elevated_holder_env(root, codex_home, tty, &[], probe).await
+}
+
+/// [`with_elevated_holder_tty`], the holding command with `env` too.
+async fn with_elevated_holder_env<T>(
+    root: &Path,
+    codex_home: &Path,
+    tty: bool,
+    env: &[(&str, String)],
+    probe: impl AsyncFnOnce(u32) -> T,
+) -> T {
     let hold_dir = root.join("hold");
     fs::create_dir_all(&hold_dir).expect("create hold dir");
     let release = Release(hold_dir.join("hold.release"));
-    let holder = spawn_elevated(
-        root,
-        codex_home,
-        probe_argv(HOLD_ENTRY),
-        &[(HOLD_ENV, hold_dir.display().to_string())],
-        tty,
-    )
-    .await;
+    let mut holder_env = vec![(HOLD_ENV, hold_dir.display().to_string())];
+    holder_env.extend(env.iter().cloned());
+    let holder = spawn_elevated(root, codex_home, probe_argv(HOLD_ENTRY), &holder_env, tty).await;
     let pid_path = hold_dir.join("hold.pid");
     let deadline = Instant::now() + Duration::from_secs(/*secs*/ 60);
     let holder_pid = loop {
@@ -193,10 +203,24 @@ fn refused_parts() -> Vec<String> {
     expected
 }
 
+/// #1560 (`pl`): another command's process may refuse even the query a
+/// D324 process allowed, and so the token behind it.
+fn stricter_refusal(part: &str) -> Option<&'static str> {
+    match part {
+        "query=ok" => Some("query=err5"),
+        "token_adjust_default=open_err5" => Some("token_adjust_default=query_err5"),
+        _ => None,
+    }
+}
+
 fn missing_parts(line: &str) -> Vec<String> {
     refused_parts()
         .into_iter()
-        .filter(|part| !line.split(' ').any(|have| have == part.as_str()))
+        .filter(|part| {
+            !line
+                .split(' ')
+                .any(|have| have == part.as_str() || Some(have) == stricter_refusal(part))
+        })
         .collect()
 }
 
@@ -422,8 +446,10 @@ fn sec_win_1648_elevated_command_cannot_borrow_a_runner_token() {
 }
 
 /// The elevated twin of `legacy_command_cannot_borrow_another_workspaces_command_token`.
+/// #1560 (`pl`): open until each command ran on a logon of its own (#1721
+/// (a′)): the sandbox users' group, which every elevated command holds, had
+/// `GENERIC_ALL` on the token, and `TOKEN_DUPLICATE` isn't a write right.
 #[test]
-#[ignore = "#1560: impersonating another workspace's elevated command token writes there (measured on CI before and after D324); closing it for both backends follows the #1560 token measurement"]
 fn sec_win_1648_elevated_command_cannot_borrow_another_workspaces_command_token() {
     let Some(codex_home) = elevated_home("d324-borrow") else {
         return;
@@ -573,9 +599,9 @@ fn sec_win_1648_elevated_command_cannot_write_to_or_borrow_a_console_host() {
 /// runners opens none of their processes for `PROCESS_CREATE_PROCESS`, their
 /// tokens for `TOKEN_ADJUST_DEFAULT`, their main threads for
 /// `THREAD_SET_CONTEXT` or a console host of theirs (Core protects a runner
-/// before it runs; the runner has no console). Still open and only reported:
-/// the threads Windows' loader starts in a runner before its first statement
-/// (`thread_won`).
+/// before it runs; the runner has no console), nor (#1721 (a′): the runner
+/// runs as an account no command holds) any thread Windows' loader starts in
+/// a runner before its first statement (`thread_won`).
 #[test]
 fn sec_win_1648_racing_command_cannot_open_a_starting_runner() {
     let Some(codex_home) = elevated_home("d324-race") else {
@@ -652,7 +678,13 @@ fn sec_win_1648_racing_command_cannot_open_a_starting_runner() {
             .unwrap_or_else(|| panic!("no {name} in {line}"))
     };
     assert!(count("seen") >= 10, "the racer saw too few runners: {line}");
-    for name in ["process_won", "token_won", "main_thread_won", "host_won"] {
+    for name in [
+        "process_won",
+        "token_won",
+        "thread_won",
+        "main_thread_won",
+        "host_won",
+    ] {
         assert!(
             count(name) == 0,
             "a racing command opened a starting runner: {line}"
@@ -870,3 +902,134 @@ fn sec_win_1758_elevated_first_command_cannot_write_a_git_made_for_its_hooks() {
         sandbox_log(codex_home.path())
     );
 }
+
+/// #1560 (`pl`): what another workspace's elevated command shows a probe
+/// that tries to borrow its token (`borrow`) or impersonate one of its
+/// threads (`thread_borrow`), the holder holding in its first process or
+/// (`hold_in_child`) in a child it started, in a ConPTY when `tty`. Returns
+/// the probe's line and whether the probe wrote in the holder's workspace.
+fn elevated_borrow(
+    name: &str,
+    mode: &str,
+    hold_in_child: bool,
+    tty: bool,
+) -> Option<(String, bool)> {
+    let codex_home = elevated_home(name)?;
+    let _guard = legacy_process_test_guard();
+    let holder_root = user_owned_test_root();
+    let root = user_owned_test_root();
+    let target = holder_root.path().join("borrowed.txt");
+    let out = root.path().join("probe.out");
+    let holder_env: Vec<(&str, String)> = if hold_in_child {
+        vec![(HOLD_CHILD_ENV, "1".to_string())]
+    } else {
+        Vec::new()
+    };
+    let runtime = current_thread_runtime();
+    let (stdout, exit_code) = runtime.block_on(with_elevated_holder_env(
+        holder_root.path(),
+        codex_home.path(),
+        tty,
+        &holder_env,
+        async |holder_pid| {
+            run_elevated(
+                root.path(),
+                codex_home.path(),
+                probe_argv(PROBE_ENTRY),
+                &[
+                    (PROBE_ENV, mode.to_string()),
+                    (TARGET_ENV, holder_pid.to_string()),
+                    (FILE_ENV, target.display().to_string()),
+                    (OUT_ENV, out.display().to_string()),
+                ],
+                tty,
+            )
+            .await
+        },
+    ));
+    record_setup(codex_home.path());
+    // A ConPTY wraps long lines: the probe writes its line to a file too.
+    let line = fs::read_to_string(&out)
+        .ok()
+        .unwrap_or_else(|| expect_line(&stdout, codex_home.path()));
+    println!(
+        "\nsec-win-1560 {name}: exit={exit_code} {line:?} wrote={}",
+        target.exists()
+    );
+    Some((line, target.exists()))
+}
+
+/// Whether a `borrow` or `thread_borrow` line shows the route closed.
+fn borrow_closed(line: &str, wrote: bool) -> bool {
+    !wrote
+        && line.starts_with("own_write=err")
+        && !line.contains("borrow=impersonated")
+        && !line.contains("primary=ok")
+        && !line.contains("create_process=ok")
+        && !line.split(' ').any(|part| {
+            part.starts_with("direct_impersonation_threads=")
+                && part != "direct_impersonation_threads=0"
+        })
+}
+
+/// #1560 (`pl`): an elevated command can't open any thread of another
+/// workspace's concurrent elevated command for impersonation, and so can't
+/// act, or start a process, as that command.
+#[test]
+fn sec_win_1560_elevated_command_cannot_impersonate_another_workspaces_command_threads() {
+    let Some((line, wrote)) = elevated_borrow(
+        "1560-thread-borrow",
+        "thread_borrow",
+        /*hold_in_child*/ false,
+        /*tty*/ false,
+    ) else {
+        return;
+    };
+    assert!(
+        borrow_closed(&line, wrote) && line.contains("borrow=not_opened"),
+        "an elevated command impersonated another workspace's command thread: {line}"
+    );
+}
+
+/// #1560 (`pl`): nor borrow the token of, or impersonate a thread of, a
+/// process another workspace's command started (its default DACL, not an
+/// explicit one, protects those).
+#[test]
+fn sec_win_1560_elevated_command_cannot_borrow_from_another_workspaces_child_process() {
+    for (case, mode) in [
+        ("1560-child-borrow", "borrow"),
+        ("1560-child-thread-borrow", "thread_borrow"),
+    ] {
+        let Some((line, wrote)) =
+            elevated_borrow(case, mode, /*hold_in_child*/ true, /*tty*/ false)
+        else {
+            return;
+        };
+        assert!(
+            borrow_closed(&line, wrote),
+            "{mode}: an elevated command borrowed from another workspace's child process: {line}"
+        );
+    }
+}
+
+/// #1560 (`pl`): the same in a ConPTY, holder and probe.
+#[test]
+fn sec_win_1560_elevated_conpty_command_cannot_borrow_another_workspaces_command() {
+    for (case, mode) in [
+        ("1560-tty-borrow", "borrow"),
+        ("1560-tty-thread-borrow", "thread_borrow"),
+    ] {
+        let Some((line, wrote)) =
+            elevated_borrow(case, mode, /*hold_in_child*/ false, /*tty*/ true)
+        else {
+            return;
+        };
+        assert!(
+            borrow_closed(&line, wrote),
+            "{mode}: an elevated ConPTY command borrowed from another workspace's command: {line}"
+        );
+    }
+}
+
+#[path = "elevated_workload_tests.rs"]
+mod workloads;

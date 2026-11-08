@@ -215,24 +215,26 @@ processes as it (measured); it keeps full access to its own processes; a cmd pip
 PowerShell (with and without ConPTY), `git init` and `git status` still
 work. Core starts each runner suspended and, before it runs, limits its
 process and main thread to SYSTEM; the runner has no console, so no console
-host starts before its first step. Not closed: the threads Windows' loader
-starts in a runner before that first step get the logon's default DACL,
-which gives the sandbox account full access, so a command racing a
-runner's start-up can still open one for write rights (10 to 16 of 20
-start-ups on CI, #1721). Such a thread lets the command run code in the
-unrestricted runner, outside its restricted token and job, so this
-start-up race is the remaining route out of the elevated sandbox that D324
-didn't close; a CI test keeps the other start-up routes closed. Elevated
-commands can still read each other's processes, including their ConPTY
-console hosts (another workspace's terminal output), as before (reads
-aren't restricted), end them (D292), and borrow another elevated command's
-token through the group's `TOKEN_DUPLICATE` and write in that command's
-writable roots, as legacy commands can (#1560); impersonating another
-command's threads may be a second borrowing route (unmeasured, #1560). So the docs
-still say neither backend keeps concurrent projects apart. Closing the
-borrowing for both backends, after the #1560 token measurement, is D324's
-second step. Killing
-another command's processes stays possible on purpose (D292). Two routes
+host starts before its first step. Since #1721 (a′) and #1560 (`pl`), the runner
+runs as a third account, `CodexSandboxRunner`, which no command holds, so
+even the threads Windows' loader starts in a runner before that first step
+give commands nothing (10 to 16 of 20 start-ups won on CI before, none
+after); and Core logs the command's account on for each command and hands
+the runner that token, so each command has a logon SID of its own. Its
+default DACL then gives full access only to SYSTEM, that logon SID and its
+command SID; the sandbox users' group and Everyone may only read its
+security descriptor, wait for it and (processes) query limited
+information. That closes borrowing another elevated command's token or
+impersonating its threads (and its children's), and also stops one elevated
+command from reading or ending another's processes, which D292 had left
+possible but nothing needs. The runner needs `SeAssignPrimaryTokenPrivilege`
+to start a command with a token it didn't derive from its own: setup grants
+it to the runner's account, and the runner enables it only to start its one
+command and then removes it from its token. Anything that can run as the
+user can read that account's password and sign in as it, and that privilege
+is the kind "potato" attacks use to reach SYSTEM (D392). Elevated commands
+can still read a runner's ConPTY console host (another workspace's terminal
+output), as before. Two routes
 still start a child
 outside the command's job: the COM servers `ShellBrowserWindow` (the child
 runs at Low integrity but with an unrestricted token) and

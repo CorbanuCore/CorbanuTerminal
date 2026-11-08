@@ -15,6 +15,7 @@ use std::ptr;
 use windows_sys::Win32::Foundation::CloseHandle;
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::Foundation::GetLastError;
+use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::Foundation::HLOCAL;
 use windows_sys::Win32::Foundation::LocalFree;
 use windows_sys::Win32::Security::Authorization::EXPLICIT_ACCESS_W;
@@ -87,11 +88,45 @@ impl LaunchDesktop {
         low_integrity: bool,
         logs_base_dir: Option<&Path>,
     ) -> Result<Self> {
+        Self::prepare_with(
+            use_private_desktop,
+            low_integrity,
+            /*command_logon_sid*/ None,
+            logs_base_dir,
+        )
+    }
+
+    /// [`Self::prepare`] for a command that starts with `h_token`: Low when
+    /// the token is, and a private desktop also grants the token's logon SID
+    /// when it isn't this process's (#1721 (a′): an elevated command runs on
+    /// a logon of its own, not its runner's).
+    pub(crate) fn prepare_for_token(
+        use_private_desktop: bool,
+        h_token: HANDLE,
+        logs_base_dir: Option<&Path>,
+    ) -> Result<Self> {
+        // SAFETY: the caller's live token handle, opened for query.
+        let command_logon_sid = unsafe { get_logon_sid_bytes(h_token) }.ok();
+        Self::prepare_with(
+            use_private_desktop,
+            crate::integrity::token_is_low_integrity(h_token),
+            command_logon_sid.as_deref(),
+            logs_base_dir,
+        )
+    }
+
+    fn prepare_with(
+        use_private_desktop: bool,
+        low_integrity: bool,
+        command_logon_sid: Option<&[u8]>,
+        logs_base_dir: Option<&Path>,
+    ) -> Result<Self> {
         let own_station = crate::window_station::current_window_station_name()
             .filter(|name| !crate::window_station::is_interactive_window_station(name));
         let station = own_station.as_deref().unwrap_or("Winsta0");
         if use_private_desktop {
-            let private_desktop = PrivateDesktop::create(low_integrity, logs_base_dir)?;
+            let private_desktop =
+                PrivateDesktop::create(low_integrity, command_logon_sid, logs_base_dir)?;
             let startup_name = to_wide(format!("{station}\\{}", private_desktop.name));
             Ok(Self {
                 _private_desktop: Some(private_desktop),
@@ -158,7 +193,11 @@ struct PrivateDesktop {
 }
 
 impl PrivateDesktop {
-    fn create(low_integrity: bool, logs_base_dir: Option<&Path>) -> Result<Self> {
+    fn create(
+        low_integrity: bool,
+        command_logon_sid: Option<&[u8]>,
+        logs_base_dir: Option<&Path>,
+    ) -> Result<Self> {
         let mut rng = SmallRng::from_entropy();
         let name = format!("CodexSandboxDesktop-{:x}", rng.r#gen::<u128>());
         let name_wide = to_wide(&name);
@@ -186,7 +225,7 @@ impl PrivateDesktop {
         }
 
         unsafe {
-            if let Err(err) = grant_desktop_access(handle, logs_base_dir) {
+            if let Err(err) = grant_desktop_access(handle, command_logon_sid, logs_base_dir) {
                 let _ = CloseDesktop(handle);
                 return Err(err);
             }
@@ -201,23 +240,37 @@ impl PrivateDesktop {
     }
 }
 
-unsafe fn grant_desktop_access(handle: isize, logs_base_dir: Option<&Path>) -> Result<()> {
+/// Gives this process's logon SID, and the command's (`command_logon_sid`)
+/// when it differs, full access to the private desktop `handle`.
+unsafe fn grant_desktop_access(
+    handle: isize,
+    command_logon_sid: Option<&[u8]>,
+    logs_base_dir: Option<&Path>,
+) -> Result<()> {
     let token = get_current_token_for_query()?;
-    let mut logon_sid = get_logon_sid_bytes(token)?;
+    let own_logon_sid = get_logon_sid_bytes(token);
     CloseHandle(token);
-
-    let entries = [EXPLICIT_ACCESS_W {
-        grfAccessPermissions: DESKTOP_ALL_ACCESS,
-        grfAccessMode: GRANT_ACCESS,
-        grfInheritance: 0,
-        Trustee: TRUSTEE_W {
-            pMultipleTrustee: ptr::null_mut(),
-            MultipleTrusteeOperation: 0,
-            TrusteeForm: TRUSTEE_IS_SID,
-            TrusteeType: TRUSTEE_IS_UNKNOWN,
-            ptstrName: logon_sid.as_mut_ptr() as *mut c_void as *mut u16,
-        },
-    }];
+    let mut sids = vec![own_logon_sid?];
+    if let Some(command) = command_logon_sid
+        && !sids.iter().any(|sid| sid.as_slice() == command)
+    {
+        sids.push(command.to_vec());
+    }
+    let entries: Vec<EXPLICIT_ACCESS_W> = sids
+        .iter_mut()
+        .map(|sid| EXPLICIT_ACCESS_W {
+            grfAccessPermissions: DESKTOP_ALL_ACCESS,
+            grfAccessMode: GRANT_ACCESS,
+            grfInheritance: 0,
+            Trustee: TRUSTEE_W {
+                pMultipleTrustee: ptr::null_mut(),
+                MultipleTrusteeOperation: 0,
+                TrusteeForm: TRUSTEE_IS_SID,
+                TrusteeType: TRUSTEE_IS_UNKNOWN,
+                ptstrName: sid.as_mut_ptr() as *mut c_void as *mut u16,
+            },
+        })
+        .collect();
 
     let mut updated_dacl = ptr::null_mut();
     let set_entries_code = SetEntriesInAclW(

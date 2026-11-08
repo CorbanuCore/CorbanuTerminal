@@ -596,6 +596,7 @@ fn provision_and_hide_sandbox_users(
     let users = vec![
         payload.offline_username.clone(),
         payload.online_username.clone(),
+        codex_windows_sandbox::RUNNER_USERNAME.to_string(),
     ];
     hide_newly_created_users(&users, sbx_dir);
     Ok(())

@@ -1,3 +1,5 @@
+use crate::command_logon::CommandLogonAccess;
+use crate::command_logon::hand_command_logon_to_runner;
 use crate::identity::SandboxCreds;
 use crate::ipc_framed::ErrorPayload;
 use crate::ipc_framed::ErrorStage;
@@ -18,6 +20,7 @@ use crate::runner_pipe::connect_pipe;
 use crate::runner_pipe::create_named_pipe;
 use crate::runner_pipe::find_runner_exe;
 use crate::runner_pipe::pipe_pair;
+use crate::window_station::WindowAccess;
 use crate::winutil::quote_windows_arg;
 use anyhow::Context;
 use anyhow::Result;
@@ -299,8 +302,13 @@ pub(crate) fn spawn_runner_transport(
     cwd: &Path,
     sandbox_creds: &SandboxCreds,
     log_dir: Option<&Path>,
-    spawn_request: SpawnRequest,
+    mut spawn_request: SpawnRequest,
 ) -> Result<RunnerTransport> {
+    // #1721 (a′): the runner runs as its own account; the command, as
+    // `sandbox_creds`, on a logon Core makes for it below.
+    let command_creds = sandbox_creds;
+    let runner_creds = crate::identity::runner_creds(codex_home)?;
+    let sandbox_creds = &runner_creds;
     let (pipe_in_name, pipe_out_name) = pipe_pair();
     let h_pipe_in =
         create_named_pipe(&pipe_in_name, PIPE_ACCESS_OUTBOUND, &sandbox_creds.username)?;
@@ -400,6 +408,31 @@ pub(crate) fn spawn_runner_transport(
         pipe_write: unsafe { File::from_raw_handle(h_pipe_in as _) },
         pipe_read: unsafe { File::from_raw_handle(h_pipe_out as _) },
     };
+    let command_logon = match hand_command_logon_to_runner(
+        command_creds,
+        runner_process,
+        &runner_exe,
+        commands_use_this_desktop,
+        log_dir,
+    ) {
+        Ok(command_logon) => command_logon,
+        Err(err) => {
+            unsafe {
+                if runner_process != 0 {
+                    let _ = TerminateProcess(runner_process, 1);
+                    CloseHandle(runner_process);
+                }
+            }
+            drop(transport);
+            return Err(err);
+        }
+    };
+    spawn_request.command_token = Some(command_logon.runner_token);
+    // What no reaper took, Core holds until the runner exits.
+    let mut held: Vec<WindowAccess> = Vec::new();
+    if let CommandLogonAccess::Held(access) = command_logon.access {
+        held.push(access);
+    }
     let startup_result = (|| -> Result<SpawnReady> {
         // Keep the runner process HANDLE alive until the *entire* startup handshake finishes.
         // That way, a later `send_spawn_request` or `spawn_ready` failure can still terminate the
@@ -421,51 +454,42 @@ pub(crate) fn spawn_runner_transport(
         }
     };
 
-    let Some(window_access) = window_access else {
-        unsafe {
-            if runner_process != 0 {
-                // The runner has now connected both pipes *and* acknowledged the spawn request,
-                // so startup is complete. At that point the transport pipes become the only
-                // lifetime anchor we need to keep the session alive.
-                CloseHandle(runner_process);
-            }
-        }
-        return Ok(transport);
-    };
     // #345: the runner has created its desktop and started its command; leave the command
     // only what it and its children need to start, and remove that once the runner exits.
     // A ConPTY's console host starts on Core's desktop: keep that entry if the runner could
     // not tell it had started.
     let commands_use_this_desktop =
         commands_use_this_desktop || spawn_ready.console_host_started == Some(false);
-    let mut window_access = match WindowAccessReaper::start(
-        window_access,
-        runner_process,
-        &runner_exe,
-    ) {
-        Ok(mut reaper) => {
-            // The reaper removes it when the runner exits, even after Core.
-            if let Err(err) = reaper.narrow_for_commands(commands_use_this_desktop) {
-                crate::logging::log_note(&format!("{err:#}"), log_dir);
+    if let Some(window_access) = window_access {
+        match WindowAccessReaper::start(window_access, runner_process, &runner_exe) {
+            Ok(mut reaper) => {
+                // The reaper removes it when the runner exits, even after Core.
+                if let Err(err) = reaper.narrow_for_commands(commands_use_this_desktop) {
+                    crate::logging::log_note(&format!("{err:#}"), log_dir);
+                }
             }
-            unsafe { CloseHandle(runner_process) };
-            return Ok(transport);
+            Err((mut window_access, err)) => {
+                crate::logging::log_note(
+                    &format!(
+                        "no reaper for the runner's window station access ({err:#}); Core removes it, unless it exits first"
+                    ),
+                    log_dir,
+                );
+                if let Err(err) = window_access.narrow_for_commands(commands_use_this_desktop) {
+                    crate::logging::log_note(
+                        &format!("could not narrow the runner's window station access: {err:#}"),
+                        log_dir,
+                    );
+                }
+                held.push(window_access);
+            }
         }
-        Err((window_access, err)) => {
-            crate::logging::log_note(
-                &format!(
-                    "no reaper for the runner's window station access ({err:#}); Core removes it, unless it exits first"
-                ),
-                log_dir,
-            );
-            window_access
-        }
-    };
-    if let Err(err) = window_access.narrow_for_commands(commands_use_this_desktop) {
-        crate::logging::log_note(
-            &format!("could not narrow the runner's window station access: {err:#}"),
-            log_dir,
-        );
+    }
+    if held.is_empty() {
+        // The runner has connected both pipes and acknowledged the spawn request, so the
+        // transport pipes are the only lifetime anchor the session needs from here on.
+        unsafe { CloseHandle(runner_process) };
+        return Ok(transport);
     }
     let watch = thread::Builder::new()
         .name("codex-runner-window-access".to_string())
@@ -475,7 +499,7 @@ pub(crate) fn spawn_runner_transport(
                 WaitForSingleObject(runner_process, INFINITE);
                 CloseHandle(runner_process);
             }
-            drop(window_access);
+            drop(held);
         });
     if let Err(err) = watch {
         // The closure, and with it the access, is dropped with the error: the access goes now

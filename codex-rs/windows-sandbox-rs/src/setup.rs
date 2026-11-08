@@ -46,9 +46,17 @@ use windows_sys::Win32::Security::CheckTokenMembership;
 use windows_sys::Win32::Security::FreeSid;
 use windows_sys::Win32::Security::SECURITY_NT_AUTHORITY;
 
-pub const SETUP_VERSION: u32 = 6;
+/// 7: the command runner's own account ([`RUNNER_USERNAME`], D391/D392).
+pub const SETUP_VERSION: u32 = 7;
 pub const OFFLINE_USERNAME: &str = "CodexSandboxOffline";
 pub const ONLINE_USERNAME: &str = "CodexSandboxOnline";
+/// #1721 (a′): the account the elevated command runner runs as. No command
+/// ever runs as it: commands run as [`OFFLINE_USERNAME`] or
+/// [`ONLINE_USERNAME`], logged on by Core for each command, so no command
+/// holds anything a starting runner's process, threads or token grant. It
+/// holds `SeAssignPrimaryTokenPrivilege` to start a command with a token it
+/// did not derive from its own.
+pub const RUNNER_USERNAME: &str = "CodexSandboxRunner";
 const ERROR_CANCELLED: u32 = 1223;
 const SECURITY_BUILTIN_DOMAIN_RID: u32 = 0x0000_0020;
 const DOMAIN_ALIAS_RID_ADMINS: u32 = 0x0000_0220;
@@ -456,11 +464,14 @@ pub struct SandboxUsersFile {
     pub version: u32,
     pub offline: SandboxUserRecord,
     pub online: SandboxUserRecord,
+    /// The command runner's account ([`RUNNER_USERNAME`]); setup 7 and later.
+    #[serde(default)]
+    pub runner: Option<SandboxUserRecord>,
 }
 
 impl SandboxUsersFile {
     pub fn version_matches(&self) -> bool {
-        self.version == SETUP_VERSION
+        self.version == SETUP_VERSION && self.runner.is_some()
     }
 }
 

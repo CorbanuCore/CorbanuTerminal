@@ -144,7 +144,8 @@ enum LauncherReply {
     },
 }
 
-/// `CreateProcessWithLogonW` failed with this Win32 error.
+/// `CreateProcessWithLogonW` (or, for an elevated command's own logon,
+/// `LogonUserW`) failed with this Win32 error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LogonError {
     pub code: u32,
