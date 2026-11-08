@@ -198,11 +198,14 @@ pub fn require_logon_sandbox_creds(
             None
         }
     };
+    // D414: an admin setup the shared-folder rescan asks for; a failed or
+    // declined one leaves the denies as they were and the command runs.
+    let mut rescan_fallback = None;
     if identity.is_some()
         && let Some(reason) = shared_folder_rescan_reason(codex_home, &sandbox_dir)
     {
         setup_reason = Some(reason);
-        identity = None;
+        rescan_fallback = identity.take();
     }
 
     if identity.is_none() {
@@ -214,7 +217,7 @@ pub fn require_logon_sandbox_creds(
         } else {
             crate::logging::log_note("sandbox setup required", Some(&sandbox_dir));
         }
-        run_elevated_setup_with_proxy_settings(
+        let setup = run_elevated_setup_with_proxy_settings(
             crate::setup::SandboxSetupRequest {
                 permissions,
                 command_cwd,
@@ -230,10 +233,20 @@ pub fn require_logon_sandbox_creds(
                 deny_write_paths: Some(deny_write_paths_override.to_vec()),
             },
             &desired_offline_proxy_settings,
-        )?;
-        // The full setup scanned the shared folders (D414).
-        note_shared_folder_rescan(codex_home, &sandbox_dir);
-        identity = select_identity(network_identity, codex_home)?;
+        );
+        identity = match (setup, rescan_fallback) {
+            (Ok(()), _) => select_identity(network_identity, codex_home)?,
+            (Err(err), Some(fallback)) => {
+                crate::logging::log_note(
+                    &format!(
+                        "shared-folder rescan: the admin setup failed or was declined; the denies stay as they were: {err:#}"
+                    ),
+                    Some(&sandbox_dir),
+                );
+                Some(fallback)
+            }
+            (Err(err), None) => return Err(err),
+        };
     }
     // Always refresh ACLs (non-elevated) for current roots via the setup binary.
     run_setup_refresh_with_overrides_and_proxy_settings(
@@ -264,41 +277,55 @@ pub fn require_logon_sandbox_creds(
     })
 }
 
-/// D414: after the CLI's version changes, why the admin setup must run again
-/// (a shared folder lacks its deny), if it must.
+/// D414: why the admin setup must run again for the shared folders, if it
+/// must. Scans and admin setups run at most once per process for each home
+/// (see `shared_folder_rescan`).
 fn shared_folder_rescan_reason(codex_home: &Path, sandbox_dir: &Path) -> Option<String> {
-    match crate::shared_folder_rescan::folders_needing_setup(codex_home) {
-        Ok(None) => None,
-        Ok(Some(missing)) => match missing.first() {
-            None => {
-                note_shared_folder_rescan(codex_home, sandbox_dir);
-                None
-            }
-            Some(first) => Some(format!(
-                "CLI version {}: {} shared folders lack the setup's deny (first: {:?} on {})",
-                crate::shared_folder_rescan::cli_version(),
-                missing.len(),
-                first.kind,
-                first.path.display()
-            )),
+    use crate::shared_folder_rescan::RescanDecision;
+    static CHECKED: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<PathBuf>>> =
+        std::sync::LazyLock::new(Default::default);
+    let mut checked = CHECKED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if checked.contains(codex_home) {
+        return None;
+    }
+    let decision = crate::shared_folder_rescan::rescan_decision(
+        crate::shared_folder_rescan::read_shared_folder_scan_stamp(codex_home),
+        crate::shared_folder_rescan::shared_folder_scan_cli_version(),
+        |stamp| {
+            crate::acl::shared_folders::shared_folders_missing_denies(
+                &crate::acl::shared_folders::default_shared_folder_scan_roots(),
+                stamp,
+            )
         },
-        // Not recorded: the next command tries again.
-        Err(err) => {
-            crate::logging::log_note(
-                &format!("shared-folder rescan failed: {err:#}"),
-                Some(sandbox_dir),
-            );
+    );
+    let note = |msg: String| crate::logging::log_note(&msg, Some(sandbox_dir));
+    match decision {
+        // Not noted: a removal (D413) may take the stamp away meanwhile.
+        Ok(RescanDecision::NotDue) => None,
+        Ok(RescanDecision::Clean(stamp)) => {
+            checked.insert(codex_home.to_path_buf());
+            note(format!(
+                "shared-folder rescan for CLI version {}: nothing to close",
+                stamp.cli_version
+            ));
+            if let Err(err) =
+                crate::shared_folder_rescan::write_shared_folder_scan_stamp(codex_home, &stamp)
+            {
+                note(format!("shared-folder rescan: {err:#}"));
+            }
             None
         }
-    }
-}
-
-fn note_shared_folder_rescan(codex_home: &Path, sandbox_dir: &Path) {
-    if let Err(err) = crate::shared_folder_rescan::record_rescan(codex_home) {
-        crate::logging::log_note(
-            &format!("recording the shared-folder rescan failed: {err:#}"),
-            Some(sandbox_dir),
-        );
+        Ok(RescanDecision::AdminSetup(reason)) => {
+            checked.insert(codex_home.to_path_buf());
+            Some(reason)
+        }
+        // Not noted: the next command tries again.
+        Err(err) => {
+            note(format!("shared-folder rescan failed: {err:#}"));
+            None
+        }
     }
 }
 

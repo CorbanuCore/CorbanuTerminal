@@ -9,12 +9,17 @@
 use super::log_line;
 use anyhow::Result;
 use codex_windows_sandbox::LocalSid;
+use codex_windows_sandbox::SharedFolderScanStamp;
 use codex_windows_sandbox::apply_shared_folder_denies;
 use codex_windows_sandbox::default_shared_folder_scan_roots;
 use codex_windows_sandbox::ensure_machine_shared_folder_record_dir;
+use codex_windows_sandbox::recorded_shared_folders_for_home;
 use codex_windows_sandbox::remove_shared_folder_denies_for_home;
+use codex_windows_sandbox::remove_shared_folder_scan_stamp;
 use codex_windows_sandbox::scan_shared_folders;
+use codex_windows_sandbox::shared_folder_scan_cli_version;
 use codex_windows_sandbox::string_from_sid_bytes;
+use codex_windows_sandbox::write_shared_folder_scan_stamp;
 use std::io::Write;
 use std::path::Path;
 use std::time::Instant;
@@ -93,7 +98,24 @@ pub(super) fn deny_shared_folders(
             report.errors.len(),
             started.elapsed().as_secs_f64()
         ),
-    )
+    )?;
+    // D414: what Core's rescans compare against. Without it Core asks for
+    // this setup again (once per process), so it isn't fatal.
+    let stamp =
+        recorded_shared_folders_for_home(&record_dir, codex_home, &group).and_then(|recorded| {
+            write_shared_folder_scan_stamp(
+                codex_home,
+                &SharedFolderScanStamp {
+                    cli_version: shared_folder_scan_cli_version().to_string(),
+                    recorded,
+                    unchanged: report.failed.clone(),
+                },
+            )
+        });
+    if let Err(err) = stamp {
+        log_line(log, &format!("shared-folder scan stamp: {err:#}"))?;
+    }
+    Ok(())
 }
 
 pub(super) fn remove_shared_folder_denies(
@@ -108,6 +130,8 @@ pub(super) fn remove_shared_folder_denies(
     let removal = unsafe {
         remove_shared_folder_denies_for_home(&record_dir, codex_home, &group, group_sid.as_ptr())
     }?;
+    // D414: the next elevated command runs the setup (and adds them) again.
+    remove_shared_folder_scan_stamp(codex_home)?;
     for error in &removal.errors {
         log_line(log, &format!("shared-folder deny not removed: {error}"))?;
     }

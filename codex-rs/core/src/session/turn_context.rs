@@ -1256,15 +1256,21 @@ impl Session {
                 .await;
         }
 
-        if let Some(cwd) = tc.environments.single_local_environment_cwd()
-            && let Some(message) = crate::windows_sandbox::shared_folder_deny_warning(
-                tc.windows_sandbox_level,
-                &tc.permission_profile,
-                cwd.as_path(),
-            )
+        if tc.windows_sandbox_level == WindowsSandboxLevel::Elevated
+            && let Some(cwd) = tc.environments.single_local_environment_cwd()
         {
-            self.send_event(tc, EventMsg::Warning(WarningEvent { message }))
-                .await;
+            let level = tc.windows_sandbox_level;
+            let profile = tc.permission_profile.clone();
+            let warning = tokio::task::spawn_blocking(move || {
+                crate::windows_sandbox::shared_folder_deny_warning(level, &profile, cwd.as_path())
+            })
+            .await
+            .ok()
+            .flatten();
+            if let Some(message) = warning {
+                self.send_event(tc, EventMsg::Warning(WarningEvent { message }))
+                    .await;
+            }
         }
     }
 

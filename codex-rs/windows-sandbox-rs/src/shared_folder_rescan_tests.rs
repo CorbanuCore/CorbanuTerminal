@@ -1,27 +1,84 @@
 use super::*;
 use pretty_assertions::assert_eq;
 
-#[test]
-fn rescan_is_due_until_recorded_for_this_version() {
-    let home = tempfile::tempdir().expect("home");
-    assert!(rescan_due(home.path()), "no stamp yet");
+fn stamp(version: &str) -> SharedFolderScanStamp {
+    SharedFolderScanStamp {
+        cli_version: version.to_string(),
+        recorded: vec![RecordedSharedFolder {
+            volume: 7,
+            file_id: "00ff".to_string(),
+            kind: SharedFolderDenyKind::Write,
+        }],
+        unchanged: vec![PathBuf::from(r"C:\ProgramData\Locked")],
+    }
+}
 
-    record_rescan(home.path()).expect("record");
-    assert!(!rescan_due(home.path()));
-    let stamp: ScanStamp =
-        serde_json::from_slice(&std::fs::read(stamp_path(home.path())).expect("read"))
-            .expect("parse");
-    assert_eq!(stamp.cli_version, cli_version());
+fn finding(path: &str) -> SharedFolderFinding {
+    SharedFolderFinding {
+        path: PathBuf::from(path),
+        kind: SharedFolderDenyKind::Write,
+    }
 }
 
 #[test]
-fn rescan_is_due_after_the_version_changes_or_the_stamp_is_damaged() {
-    let home = tempfile::tempdir().expect("home");
-    std::fs::create_dir_all(crate::setup::sandbox_dir(home.path())).expect("sandbox dir");
+fn no_stamp_runs_the_admin_setup_without_scanning() {
+    let decision = rescan_decision(None, "2.0.0", |_| panic!("no user scan")).expect("decision");
+    assert!(
+        matches!(decision, RescanDecision::AdminSetup(_)),
+        "{decision:?}"
+    );
+}
 
-    std::fs::write(stamp_path(home.path()), r#"{"cli_version":"0.0.1-old"}"#).expect("write");
-    assert!(rescan_due(home.path()));
+#[test]
+fn same_version_does_not_scan() {
+    let decision =
+        rescan_decision(Some(stamp("2.0.0")), "2.0.0", |_| panic!("no scan")).expect("decision");
+    assert_eq!(decision, RescanDecision::NotDue);
+}
+
+#[test]
+fn new_version_with_nothing_missing_keeps_the_setups_lists() {
+    let decision = rescan_decision(Some(stamp("1.0.0")), "2.0.0", |seen| {
+        assert_eq!(seen, &stamp("1.0.0"));
+        Ok(Vec::new())
+    })
+    .expect("decision");
+    assert_eq!(decision, RescanDecision::Clean(stamp("2.0.0")));
+}
+
+#[test]
+fn new_version_with_a_folder_missing_its_deny_runs_the_admin_setup() {
+    let decision = rescan_decision(Some(stamp("1.0.0")), "2.0.0", |_| {
+        Ok(vec![finding(r"C:\ProgramData\NewVendor")])
+    })
+    .expect("decision");
+    let RescanDecision::AdminSetup(reason) = decision else {
+        panic!("{decision:?}");
+    };
+    assert!(reason.contains(r"C:\ProgramData\NewVendor"), "{reason}");
+}
+
+#[test]
+fn a_failed_scan_is_an_error_not_a_clean_result() {
+    let result = rescan_decision(Some(stamp("1.0.0")), "2.0.0", |_| {
+        Err(anyhow::anyhow!("no group"))
+    });
+    assert!(result.is_err());
+}
+
+#[test]
+fn stamp_round_trips_and_is_removed() {
+    let home = tempfile::tempdir().expect("home");
+    assert_eq!(read_shared_folder_scan_stamp(home.path()), None);
+    write_shared_folder_scan_stamp(home.path(), &stamp("1.0.0")).expect("write");
+    assert_eq!(
+        read_shared_folder_scan_stamp(home.path()),
+        Some(stamp("1.0.0"))
+    );
+    remove_shared_folder_scan_stamp(home.path()).expect("remove");
+    assert_eq!(read_shared_folder_scan_stamp(home.path()), None);
+    remove_shared_folder_scan_stamp(home.path()).expect("already gone");
 
     std::fs::write(stamp_path(home.path()), "not json").expect("write");
-    assert!(rescan_due(home.path()));
+    assert_eq!(read_shared_folder_scan_stamp(home.path()), None);
 }

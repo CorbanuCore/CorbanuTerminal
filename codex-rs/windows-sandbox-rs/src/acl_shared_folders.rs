@@ -818,6 +818,8 @@ pub struct SharedFolderDenyReport {
     /// Already there but not recorded (not ours): left alone.
     pub foreign: usize,
     pub errors: Vec<String>,
+    /// The folders of `errors` (D414: a rescan doesn't ask again for them).
+    pub failed: Vec<PathBuf>,
     /// A damaged record set aside.
     pub notes: Vec<String>,
 }
@@ -846,6 +848,7 @@ pub unsafe fn apply_shared_folder_denies(
         let folder = match OpenFolder::open(&finding.path) {
             Ok(folder) => folder,
             Err(err) => {
+                report.failed.push(finding.path.clone());
                 report.errors.push(format!(
                     "{:?} deny on {}: {err:#}",
                     finding.kind,
@@ -891,11 +894,14 @@ pub unsafe fn apply_shared_folder_denies(
     for (mut folder, finding) in to_add {
         match add_to_open_folder(&mut folder, &finding.path, group_psid, finding.kind) {
             Ok(_) => report.added.push(finding.clone()),
-            Err(err) => report.errors.push(format!(
-                "{:?} deny on {}: {err:#}",
-                finding.kind,
-                finding.path.display()
-            )),
+            Err(err) => {
+                report.failed.push(finding.path.clone());
+                report.errors.push(format!(
+                    "{:?} deny on {}: {err:#}",
+                    finding.kind,
+                    finding.path.display()
+                ));
+            }
         }
     }
     Ok(report)
@@ -965,25 +971,74 @@ pub unsafe fn remove_shared_folder_denies_for_home(
 /// The sandbox users' group the setup makes.
 const SANDBOX_USERS_GROUP: &str = "CodexSandboxUsers";
 
-/// D414: the folders the scan finds whose own DACL lacks the deny the setup
-/// would add (new or reinstalled since the last setup). Runs as the signed-in
-/// user, so folders it can't read are left to the next admin setup. Empty
-/// without the sandbox users' group (no setup has run).
+/// D414: the folders the scan finds that lack a deny `stamp` (the last admin
+/// setup's) says this home relies on, apart from those that setup couldn't
+/// change. Runs as the signed-in user: folders it can't list are left to the
+/// admin setup. Fails without the sandbox users' group.
 pub fn shared_folders_missing_denies(
     roots: &SharedFolderScanRoots,
+    stamp: &crate::shared_folder_rescan::SharedFolderScanStamp,
 ) -> Result<Vec<SharedFolderFinding>> {
-    let Ok(mut group) = crate::winutil::resolve_sid(SANDBOX_USERS_GROUP) else {
-        return Ok(Vec::new());
-    };
+    let mut group = crate::winutil::resolve_sid(SANDBOX_USERS_GROUP)
+        .with_context(|| format!("resolving {SANDBOX_USERS_GROUP}"))?;
     let psid = group.as_mut_ptr().cast::<c_void>();
     let scan = scan_shared_folders(roots)?;
     Ok(scan
         .findings
         .into_iter()
-        // SAFETY: `psid` points to `group`, which outlives the call. A DACL
-        // that can't be read counts as missing the deny.
         .filter(|finding| {
-            !unsafe { has_shared_folder_deny(&finding.path, psid, finding.kind) }.unwrap_or(false)
+            !stamp
+                .unchanged
+                .iter()
+                .any(|path| same_path(path, &finding.path))
+        })
+        // SAFETY: `psid` points to `group`, which outlives the call.
+        .filter(|finding| !unsafe { recorded_deny_present(finding, psid, stamp) })
+        .collect())
+}
+
+/// Whether `finding`'s folder holds its deny exactly and is one `stamp`
+/// records for this home (not only another home's).
+unsafe fn recorded_deny_present(
+    finding: &SharedFolderFinding,
+    psid: *mut c_void,
+    stamp: &crate::shared_folder_rescan::SharedFolderScanStamp,
+) -> bool {
+    let Ok(handle) = open_exact(&finding.path, READ_CONTROL) else {
+        return false;
+    };
+    let file_id = file_id_hex((handle.volume, handle.file_id));
+    let recorded = stamp.recorded.iter().any(|folder| {
+        folder.kind == finding.kind && folder.volume == handle.volume && folder.file_id == file_id
+    });
+    if !recorded {
+        return false;
+    }
+    let Ok((p_dacl, p_sd)) = security_info(handle.raw) else {
+        return false;
+    };
+    let present = dacl_has_exact(p_dacl, psid, finding.kind);
+    LocalFree(p_sd as HLOCAL);
+    present
+}
+
+/// D414: the folders the machine's record keeps a deny on for `codex_home`
+/// (for its scan stamp).
+pub fn recorded_shared_folders_for_home(
+    record_dir: &Path,
+    codex_home: &Path,
+    group_sid: &str,
+) -> Result<Vec<crate::shared_folder_rescan::RecordedSharedFolder>> {
+    let home = home_key(codex_home);
+    let record = load_shared_folder_deny_record(record_dir)?;
+    Ok(record
+        .entries
+        .into_iter()
+        .filter(|entry| entry.sid == group_sid && entry.homes.contains(&home))
+        .map(|entry| crate::shared_folder_rescan::RecordedSharedFolder {
+            volume: entry.volume,
+            file_id: entry.file_id,
+            kind: entry.kind,
         })
         .collect())
 }

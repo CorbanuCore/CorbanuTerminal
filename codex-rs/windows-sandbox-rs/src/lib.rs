@@ -200,6 +200,8 @@ pub use acl::shared_folders::load_shared_folder_deny_record;
 #[cfg(target_os = "windows")]
 pub use acl::shared_folders::machine_shared_folder_record_dir;
 #[cfg(target_os = "windows")]
+pub use acl::shared_folders::recorded_shared_folders_for_home;
+#[cfg(target_os = "windows")]
 pub use acl::shared_folders::remove_shared_folder_denies_for_home;
 #[cfg(target_os = "windows")]
 pub use acl::shared_folders::scan_shared_folders;
@@ -390,6 +392,16 @@ pub use setup_error::sanitize_setup_metric_tag_value;
 pub use setup_error::setup_error_path;
 #[cfg(target_os = "windows")]
 pub use setup_error::write_setup_error_report;
+#[cfg(target_os = "windows")]
+pub use shared_folder_rescan::RecordedSharedFolder;
+#[cfg(target_os = "windows")]
+pub use shared_folder_rescan::SharedFolderScanStamp;
+#[cfg(target_os = "windows")]
+pub use shared_folder_rescan::remove_shared_folder_scan_stamp;
+#[cfg(target_os = "windows")]
+pub use shared_folder_rescan::shared_folder_scan_cli_version;
+#[cfg(target_os = "windows")]
+pub use shared_folder_rescan::write_shared_folder_scan_stamp;
 #[cfg(target_os = "windows")]
 pub use stdio_bridge::forward_sandbox_session_stdio;
 #[cfg(target_os = "windows")]

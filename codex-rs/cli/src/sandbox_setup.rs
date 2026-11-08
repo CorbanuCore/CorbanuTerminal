@@ -81,10 +81,21 @@ pub(crate) async fn run(
 
 fn remove_shared_folder_denies(cmd: &SandboxSetupCommand) -> anyhow::Result<()> {
     let identity = resolve_sandbox_setup_identity(cmd)?;
-    codex_core::windows_sandbox::run_elevated_shared_folder_deny_removal(&identity.codex_home)?;
+    // The machine's record names a home by the path its setup was given.
+    let codex_home = std::path::absolute(&identity.codex_home)
+        .with_context(|| format!("resolving {}", identity.codex_home.display()))?;
+    let sandbox_dir = codex_home.join(".sandbox");
+    if !sandbox_dir.join("setup_marker.json").is_file() {
+        anyhow::bail!(
+            "no elevated sandbox setup is recorded in {}; pass the Codex home the setup used with --codex-home (and --user for another account)",
+            codex_home.display()
+        );
+    }
+    codex_core::windows_sandbox::run_elevated_shared_folder_deny_removal(&codex_home)?;
     println!(
-        "Removed the elevated sandbox's shared-folder denies for {} (those no other Codex home relies on). Setup adds them again the next time it runs.",
-        identity.codex_home.display()
+        "Removed the shared-folder denies recorded for {} that no other Codex home relies on (details in the log in {}). The next elevated sandbox command for this home runs the setup again, which adds them back.",
+        codex_home.display(),
+        sandbox_dir.display()
     );
     Ok(())
 }

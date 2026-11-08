@@ -228,6 +228,13 @@ Every deny the setup adds is recorded in
 command after Corbanu Terminal is updated to a new version also scans, as
 you, and runs the administrator setup again (one approval prompt) only if it
 finds a folder without its deny, for example one a program installed since.
+A setup made before this protection existed gets it the same way, with one
+prompt at the first command. If you decline the prompt, or can't approve it
+(for example as a standard user whose administrator ran the setup), commands
+still run with the denies already in place, and Corbanu Terminal asks again
+the next time it starts. Folders you can't list yourself are scanned only
+when the administrator setup runs, and a folder the setup couldn't change
+isn't asked about again until it next runs.
 
 **What it doesn't cover.** Folders elsewhere (other drives, or deeper than
 the top level of the system drive outside the three folders above), single
@@ -238,33 +245,37 @@ cryptographic keys (`ProgramData\Microsoft\Crypto\...\MachineKeys`).
 **A project in such a folder is read-only to commands.** If a folder
 commands may write to (your project, or an extra writable folder) is in an
 Everyone-writable shared folder, sandboxed commands can't change files there.
-Corbanu Terminal warns you once per folder when a turn starts. Move the
-project to a folder of your own, such as one under your user profile.
+Corbanu Terminal checks each such folder once per session, when a turn
+starts, and warns you if so. (A subfolder that is itself Everyone-writable
+gets a deny of its own and isn't checked.) Move the project to a folder of
+your own, such as one under your user profile.
 
-**Removing the denies.** As an administrator, or approving the prompt:
+**Removing the denies.** Signed in as the account that uses Corbanu
+Terminal (approving the administrator prompt):
 
 ```
 corbanu sandbox setup --remove-shared-folder-denies --current-user
 ```
 
-(or `--user <name> --codex-home <dir>` for another account's Codex home).
-It removes, exactly, the denies recorded for that Codex home that no other
-Codex home relies on, and leaves any other permission alone. If you keep
-using the default sandbox, setup adds them again the next time it runs or
-after the next update.
+From another administrator account, name the account and its Codex home the
+setup used: `--user <name> --codex-home <dir>`. It removes, exactly, the
+denies recorded for that Codex home that no other Codex home relies on, and
+leaves every other permission alone; the setup log in the home's `.sandbox`
+folder says what it removed and kept. The next default-sandbox command for
+that Codex home runs the setup again, which adds them back.
 
 ## Uninstalling the Windows default sandbox
 
 There is no single uninstall command yet. In an administrator PowerShell:
 
-1. Remove the shared-folder denies first, for each Codex home you used (it
-   needs the `CodexSandboxUsers` group, which step 3 deletes):
-   `corbanu sandbox setup --remove-shared-folder-denies --current-user`
-   (or `--user`/`--codex-home` for each home). The record lists the homes
-   still relying on a deny.
+1. Switch Corbanu Terminal away from the default sandbox (or stop using it),
+   so no command runs the setup again. Then remove the shared-folder denies,
+   for each Codex home you used, before step 3 deletes the group they name:
+   `corbanu sandbox setup --remove-shared-folder-denies --user <name> --codex-home <dir>`
+   (or `--current-user` signed in as that account). The record lists the
+   homes still relying on a deny.
 2. Delete the sandbox accounts:
-   `Remove-LocalUser CodexSandboxOffline, CodexSandboxOnline` (and
-   `CodexSandboxRunner` if it exists).
+   `Remove-LocalUser CodexSandboxOffline, CodexSandboxOnline`.
 3. Delete the group: `Remove-LocalGroup CodexSandboxUsers`.
 4. Delete the firewall rules:
    `Get-NetFirewallRule -DisplayName 'codex_sandbox_*' | Remove-NetFirewallRule`.
@@ -274,9 +285,9 @@ There is no single uninstall command yet. In an administrator PowerShell:
    `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList`,
    which hide them from the sign-in screen.
 
-Permissions setup gave the sandbox on your project folders, and its network
-filters, name accounts that no longer exist once you've deleted them; they
-do nothing and you may leave them.
+Permissions setup gave the sandbox on your project folders, and its
+persistent network (WFP) filters, name accounts that no longer exist once
+you've deleted them; they do nothing and you may leave them.
 
 This page documents the shipped capability "existing general sandboxing" from
 the [product specification](corbanu-product-spec.md) heading "Shipping MVP —

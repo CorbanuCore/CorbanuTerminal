@@ -425,15 +425,16 @@ fn emit_windows_sandbox_setup_failure_metrics(
     }
 }
 
-/// D415: a warning, once per process for each folder, when the elevated
-/// sandbox's shared-folder denies (#1791, D400) leave a folder commands may
-/// write to read-only for them.
+/// D415: a warning when the elevated sandbox's shared-folder denies (#1791,
+/// D400) leave a folder commands may write to read-only for them. Each
+/// folder is checked once per process (it blocks: run it off the async
+/// runtime). A folder inside it with a deny of its own isn't checked.
 pub(crate) fn shared_folder_deny_warning(
     windows_sandbox_level: WindowsSandboxLevel,
     permission_profile: &PermissionProfile,
     cwd: &Path,
 ) -> Option<String> {
-    static WARNED: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<PathBuf>>> =
+    static CHECKED: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<PathBuf>>> =
         std::sync::LazyLock::new(Default::default);
     if windows_sandbox_level != WindowsSandboxLevel::Elevated {
         return None;
@@ -442,20 +443,21 @@ pub(crate) fn shared_folder_deny_warning(
     if policy.has_full_disk_write_access() {
         return None;
     }
-    let roots: Vec<PathBuf> = policy
-        .get_writable_roots_with_cwd(cwd)
-        .into_iter()
-        .map(|root| root.root.to_path_buf())
-        .collect();
-    let denied = shared_folder_write_denied_roots(&roots);
-    let mut warned = WARNED
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let new: Vec<PathBuf> = denied
-        .into_iter()
-        .filter(|root| warned.insert(root.clone()))
-        .collect();
-    shared_folder_deny_message(&new)
+    let unchecked: Vec<PathBuf> = {
+        let mut checked = CHECKED
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        policy
+            .get_writable_roots_with_cwd(cwd)
+            .into_iter()
+            .map(|root| root.root.to_path_buf())
+            .filter(|root| checked.insert(root.clone()))
+            .collect()
+    };
+    if unchecked.is_empty() {
+        return None;
+    }
+    shared_folder_deny_message(&shared_folder_write_denied_roots(&unchecked))
 }
 
 #[cfg(target_os = "windows")]

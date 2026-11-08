@@ -789,10 +789,27 @@ fn has_write_deny(path: &Path) -> bool {
     unsafe { has_shared_folder_deny(path, group.as_ptr(), Write) }.expect("read DACL")
 }
 
+/// The homes the machine's record says rely on `kind`'s deny on `path`.
+fn recorded_homes(path: &Path, kind: SharedFolderDenyKind) -> Vec<String> {
+    let record_dir = machine_shared_folder_record_dir().expect("record folder");
+    load_shared_folder_deny_record(&record_dir)
+        .expect("record")
+        .entries
+        .into_iter()
+        .filter(|entry| entry.kind == kind && entry.path == path)
+        .flat_map(|entry| entry.homes)
+        .collect()
+}
+
+fn home_key(home: &Path) -> String {
+    home.to_string_lossy().to_lowercase()
+}
+
 /// D414: after the CLI's version changes, the next elevated command scans
-/// the shared folders again and the setup closes a folder made since the
-/// last scan; without a version change nothing scans. Elevated only (the
-/// setup runs again without a prompt).
+/// the shared folders again, and the setup closes a folder made since the
+/// last scan and records this home on a deny another home's setup added;
+/// without a version change nothing scans. Elevated only (the setup runs
+/// again without a prompt).
 #[test]
 fn sec_win_1791_rescan_after_cli_version_change_closes_new_folders() {
     if !crate::setup::is_elevated().expect("elevation") {
@@ -802,16 +819,19 @@ fn sec_win_1791_rescan_after_cli_version_change_closes_new_folders() {
         );
         return;
     }
-    let Some(codex_home) = elevated_home("sec-win-1791-rescan") else {
+    let Some(home) = elevated_home("sec-win-1791-rescan") else {
+        return;
+    };
+    let Some(other_home) = elevated_home("sec-win-1791-rescan-other") else {
         return;
     };
     let _guard = legacy_process_test_guard();
     let root = user_owned_test_root();
     let temp = user_owned_test_root();
-    let run = |name: &str| {
+    let run = |codex_home: &Path, name: &str| {
         let (stdout, exit_code) = current_thread_runtime().block_on(run_elevated(
             root.path(),
-            codex_home.path(),
+            codex_home,
             cmd_argv(root.path(), name, "@echo off\necho ran\n"),
             &command_env(temp.path()),
             /*tty*/ false,
@@ -820,38 +840,48 @@ fn sec_win_1791_rescan_after_cli_version_change_closes_new_folders() {
             exit_code,
             0,
             "stdout={stdout:?}\n{}",
-            sandbox_log(codex_home.path())
+            sandbox_log(codex_home)
         );
     };
-    run("setup.cmd");
-    let stamp = rescan_stamp(codex_home.path());
-    let current = fs::read_to_string(&stamp).unwrap_or_else(|err| {
-        panic!(
-            "D414: no rescan stamp after the setup: {err}\n{}",
-            sandbox_log(codex_home.path())
-        )
-    });
-    assert!(current.contains(env!("CARGO_PKG_VERSION")), "{current}");
+    run(home.path(), "setup.cmd");
 
     // Same version: a folder made now stays as it is.
     let same = everyone_writable_folder("CorbanuSecWin1791Same-");
-    run("same-version.cmd");
+    run(home.path(), "same-version.cmd");
     assert!(
         !has_write_deny(same.path()),
         "D414: a command scanned again without a version change"
     );
 
-    // Another version: the next command closes the new folder.
-    let late = everyone_writable_folder("CorbanuSecWin1791Late-");
-    fs::write(&stamp, r#"{"cli_version":"0.0.0-sec-win-1791"}"#).expect("an older stamp");
-    run("new-version.cmd");
+    // Another home's setup closes it; then a folder appears that no setup
+    // has seen; then the CLI's version changes.
+    run(other_home.path(), "other-setup.cmd");
     assert!(
-        has_write_deny(late.path()),
-        "D414: after a version change the new folder {} was not closed\n{}",
-        late.path().display(),
-        sandbox_log(codex_home.path())
+        has_write_deny(same.path()),
+        "the other home's setup didn't close it"
     );
-    assert_eq!(fs::read_to_string(&stamp).expect("stamp"), current);
+    let fresh = everyone_writable_folder("CorbanuSecWin1791Fresh-");
+    let stamp = rescan_stamp(home.path());
+    let text = fs::read_to_string(&stamp).unwrap_or_default();
+    fs::write(
+        &stamp,
+        text.replace(env!("CARGO_PKG_VERSION"), "0.0.0-sec-win-1791"),
+    )
+    .expect("an older stamp");
+    run(home.path(), "new-version.cmd");
+    assert!(
+        has_write_deny(fresh.path()),
+        "D414: after a version change the new folder {} was not closed\n{}",
+        fresh.path().display(),
+        sandbox_log(home.path())
+    );
+    assert!(
+        recorded_homes(same.path(), Write).contains(&home_key(home.path())),
+        "D414: this home doesn't rely on the other home's deny on {}",
+        same.path().display()
+    );
+    let text = fs::read_to_string(&stamp).expect("stamp");
+    assert!(text.contains(env!("CARGO_PKG_VERSION")), "{text}");
     println!(
         "sec-win-1791: after a CLI version change the next command closed the new folder; without one it was left"
     );
@@ -947,6 +977,10 @@ fn sec_win_1791_removal_takes_out_recorded_denies() {
         .unwrap_or_else(|err| panic!("removal: {err:#}\n{}", sandbox_log(codex_home.path())));
     // Only this home relied on the new folder's deny: it is gone, exactly.
     assert_eq!(icacls(shared.path(), &[]), before);
+    assert!(
+        !rescan_stamp(codex_home.path()).exists(),
+        "D413: the removal left the rescan stamp"
+    );
     let left = load_shared_folder_deny_record(&record_dir).expect("record");
     assert!(
         !left.entries.iter().any(|entry| entry.path == shared.path()),
@@ -964,6 +998,21 @@ fn sec_win_1791_removal_takes_out_recorded_denies() {
             entry.path.display()
         );
     }
+    // D413/D414: the next command for this home runs the setup again.
+    let (stdout, exit_code) = current_thread_runtime().block_on(run_elevated(
+        root.path(),
+        codex_home.path(),
+        cmd_argv(root.path(), "again.cmd", "@echo off\necho ran\n"),
+        &command_env(temp.path()),
+        /*tty*/ false,
+    ));
+    assert_eq!(exit_code, 0, "stdout={stdout:?}");
+    // SAFETY: as above.
+    let back = unsafe { has_shared_folder_deny(shared.path(), group.as_ptr(), entry.kind) };
+    assert!(
+        back.expect("read DACL"),
+        "D413: the next command didn't add the deny back"
+    );
     println!(
         "sec-win-1791: the removal took out the deny only its home relied on and kept {} others",
         left.entries.len()
