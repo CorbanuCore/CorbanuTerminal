@@ -1031,5 +1031,99 @@ fn sec_win_1560_elevated_conpty_command_cannot_borrow_another_workspaces_command
     }
 }
 
+/// #1721 (a′), D392: a runner's ConPTY console host, which copied the
+/// runner's token (with `SeAssignPrimaryTokenPrivilege` in it) before the
+/// command started, no longer holds that privilege. (The runner removes it
+/// from its own token too, and fails its command if it can't.)
+#[test]
+fn sec_win_1721_console_host_drops_the_assign_primary_privilege() {
+    let Some(codex_home) = elevated_home("1721-console-privilege") else {
+        return;
+    };
+    let _guard = legacy_process_test_guard();
+    let holder_root = user_owned_test_root();
+    let root = user_owned_test_root();
+    let runtime = current_thread_runtime();
+    let (stdout, exit_code) = runtime.block_on(with_elevated_holder_tty(
+        holder_root.path(),
+        codex_home.path(),
+        /*tty*/ true,
+        async |holder_pid| {
+            run_elevated(
+                root.path(),
+                codex_home.path(),
+                probe_argv(PROBE_ENTRY),
+                &[
+                    (PROBE_ENV, "console_privileges".to_string()),
+                    (TARGET_ENV, holder_pid.to_string()),
+                ],
+                /*tty*/ false,
+            )
+            .await
+        },
+    ));
+    record_setup(codex_home.path());
+    let line = expect_line(&stdout, codex_home.path());
+    println!("\nsec-win-1721 console host privilege: exit={exit_code} {line:?}");
+    assert!(
+        line.starts_with("host=")
+            && line
+                .split(" | ")
+                .all(|host| host.contains("assign_primary=absent")),
+        "a runner's console host still holds SeAssignPrimaryTokenPrivilege: {line}"
+    );
+}
+
+/// #1721 (a′): the window station and named-object entries Core gives a
+/// command's own logon are there while it runs and gone once its runner has
+/// exited (the reaper removes them).
+#[test]
+fn sec_win_1721_command_logon_entries_go_when_the_runner_exits() {
+    let Some(codex_home) = elevated_home("1721-entries") else {
+        return;
+    };
+    let _guard = legacy_process_test_guard();
+    let holder_root = user_owned_test_root();
+    let runtime = current_thread_runtime();
+    let logon_path = holder_root.path().join("hold").join("hold.logon");
+    let (logon, while_running) = runtime.block_on(with_elevated_holder(
+        holder_root.path(),
+        codex_home.path(),
+        async |_holder_pid| {
+            let hex = fs::read_to_string(&logon_path).expect("read the holder's logon SID");
+            let logon: Vec<u8> = (0..hex.len())
+                .step_by(2)
+                .map(|at| u8::from_str_radix(&hex[at..at + 2], 16).expect("hex"))
+                .collect();
+            let entries = crate::window_station::command_logon_entries(&logon)
+                .expect("read the entries while the command runs");
+            (logon, entries)
+        },
+    ));
+    record_setup(codex_home.path());
+    let deadline = Instant::now() + Duration::from_secs(/*secs*/ 30);
+    let after = loop {
+        let entries = crate::window_station::command_logon_entries(&logon)
+            .expect("read the entries after the command");
+        if entries == (false, false) || Instant::now() >= deadline {
+            break entries;
+        }
+        std::thread::sleep(Duration::from_millis(/*millis*/ 250));
+    };
+    println!(
+        "\nsec-win-1721 entries (station, named objects): while running {while_running:?}, after {after:?}"
+    );
+    assert!(
+        while_running == (true, true),
+        "the command's logon lacked its entries while it ran\n{}",
+        sandbox_log(codex_home.path())
+    );
+    assert!(
+        after == (false, false),
+        "the command's logon kept its entries after its runner exited\n{}",
+        sandbox_log(codex_home.path())
+    );
+}
+
 #[path = "elevated_workload_tests.rs"]
 mod workloads;

@@ -287,6 +287,16 @@ fn command_identity_hold_entry() {
         let _ = child.wait();
         return;
     }
+    // #1721 (a′): this command's logon SID (hex), for the entries test.
+    // SAFETY: this process's own token, opened for query and closed here.
+    let logon = unsafe {
+        let token = crate::token::get_current_token_for_query().expect("own token");
+        let logon = crate::token::get_logon_sid_bytes(token);
+        CloseHandle(token);
+        logon.expect("own logon SID")
+    };
+    let hex: String = logon.iter().map(|byte| format!("{byte:02x}")).collect();
+    fs::write(dir.join("hold.logon"), hex).expect("write hold logon");
     fs::write(dir.join("hold.pid"), std::process::id().to_string()).expect("write hold pid");
     wait_for_path(&dir.join("hold.release"), Duration::from_secs(/*secs*/ 60));
 }
@@ -349,6 +359,8 @@ fn command_identity_probe_entry() {
     } else if mode == "borrow_console" {
         let file = file();
         console_report(target(), |host| borrow_report(host, &file))
+    } else if mode == "console_privileges" {
+        console_report(target(), console_privilege_report)
     } else if mode == "thread_borrow" {
         thread_borrow_report(target(), &file())
     } else if mode == "race" {
@@ -568,6 +580,36 @@ fn threads_of(pids: &std::collections::HashSet<u32>) -> Vec<(u32, u32)> {
         CloseHandle(snapshot);
     }
     threads
+}
+
+/// #1721 (a′): whether console host `pid` (a runner's) still holds
+/// `SeAssignPrimaryTokenPrivilege`, which its token copied from the runner's.
+fn console_privilege_report(pid: u32) -> String {
+    use windows_sys::Win32::System::Threading::OpenProcess;
+    // SAFETY: every handle is closed here.
+    unsafe {
+        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if process == 0 {
+            return format!("assign_primary=open_process_err{}", GetLastError());
+        }
+        let mut token: HANDLE = 0;
+        let opened = OpenProcessToken(process, TOKEN_QUERY, &mut token) != 0;
+        let error = GetLastError();
+        CloseHandle(process);
+        if !opened {
+            return format!("assign_primary=open_token_err{error}");
+        }
+        let held = crate::command_logon::token_holds_privilege(
+            token,
+            crate::command_logon::ASSIGN_PRIMARY_TOKEN_PRIVILEGE,
+        );
+        CloseHandle(token);
+        match held {
+            Ok(true) => "assign_primary=present".to_string(),
+            Ok(false) => "assign_primary=absent".to_string(),
+            Err(err) => format!("assign_primary=query_err({err})").replace(' ', "_"),
+        }
+    }
 }
 
 /// #1560: opens each thread of process `pid` (another workspace's command)

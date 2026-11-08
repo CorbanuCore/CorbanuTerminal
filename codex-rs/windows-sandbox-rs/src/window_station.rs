@@ -999,6 +999,31 @@ unsafe fn rebuild_dacl(
     Ok(Some(rebuilt))
 }
 
+/// Test oracle (#1721 (a′)): whether this process's window station and its
+/// session's named-object directory still hold the entries
+/// [`WindowAccess::grant_command_logon`] adds for the logon SID `sid`.
+#[cfg(test)]
+pub(crate) fn command_logon_entries(sid: &[u8]) -> Result<(bool, bool)> {
+    let station = current_window_station_name().context("read the window station's name")?;
+    let wide = to_wide(&station);
+    // SAFETY: opens this process's window station; closed below.
+    let handle = unsafe { OpenWindowStationW(wide.as_ptr(), 0, READ_CONTROL) };
+    if handle == 0 {
+        return Err(std::io::Error::last_os_error()).context("open the window station");
+    }
+    let on_station = object_access(SE_WINDOW_OBJECT, handle, sid, COMMAND_STATION_ACCESS);
+    // SAFETY: opened above.
+    unsafe { CloseWindowStation(handle) };
+    let directory = open_object_directory(&session_named_objects_directory()?, READ_CONTROL)?;
+    let in_directory = object_access(SE_KERNEL_OBJECT, directory, sid, NAMED_OBJECTS_ACCESS);
+    // SAFETY: opened above.
+    unsafe { CloseHandle(directory) };
+    Ok((
+        on_station? == AccessState::Granted,
+        in_directory? == AccessState::Granted,
+    ))
+}
+
 /// This process's session's named-object directory (what `Local\` names):
 /// `\Sessions\<id>\BaseNamedObjects`, or `\BaseNamedObjects` in session 0.
 fn session_named_objects_directory() -> Result<String> {

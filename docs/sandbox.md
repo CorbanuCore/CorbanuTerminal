@@ -28,19 +28,22 @@ using at that moment.
   different extra folders they may write to) aren't kept apart: one can
   borrow the other's access and write in that project's folders while the
   other runs (#1560), so avoid running commands in several projects at once.
-  The default sandbox keeps them apart.
+  The default sandbox closes the ways of doing this that have been measured.
 - Drives without Windows permissions, such as FAT or exFAT USB drives: neither
   sandbox can protect files there.
 
 The default sandbox runs commands as a separate account with a firewall-based
 network block, and protects more. Each of its commands runs on a logon of its
-own, so one command can't use another's access (#1560). The program that
-starts them runs as a third account, `CodexSandboxRunner`, which no command
-uses (#1721). Setup gives that account the Windows right "Replace a process
-level token" (`SeAssignPrimaryTokenPrivilege`), which it needs to start each
-command on its own logon. Its password is stored for your Windows user only,
-but a program running as you could use it to sign in as that account and,
-with that right, possibly gain full control of the computer.
+own, so one command can't borrow another's processes or token (#1560). The
+program that starts them runs as a third account, `CodexSandboxRunner`, which
+no command uses (#1721). Setup gives that account the Windows right "Replace a
+process level token" (`SeAssignPrimaryTokenPrivilege`), which it needs to
+start each command on its own logon, and denies it network, remote desktop,
+batch and service sign-in. Its password is in a file that only you,
+administrators and the system can read, so a program running as you could use
+it to sign in as that account and, with that right, possibly gain full control
+of the computer. To remove the account, delete the `CodexSandboxRunner` local
+user; setup creates it again the next time it runs.
 
 **When you will see a warning.** If your sandboxed commands run in the
 non-admin sandbox, Corbanu Terminal tells you once per session:

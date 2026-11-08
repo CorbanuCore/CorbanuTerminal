@@ -75,9 +75,8 @@ pub struct SpawnRequest {
     #[serde(default)]
     pub use_private_desktop: bool,
     /// #1721 (a′): the token of the logon Core made for this command, as a
-    /// handle value in the runner's handle table (query and duplicate
-    /// access). Core fills it in when it starts the runner; the runner
-    /// refuses a request without it.
+    /// handle value in the runner's handle table. Core fills it in when it
+    /// starts the runner; the runner refuses a request without it.
     #[serde(default)]
     pub command_token: Option<u64>,
 }

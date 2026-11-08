@@ -100,19 +100,31 @@ pub fn provision_sandbox_users(
 /// the token Core logged the command's account on with (#1721 (a′), D392).
 pub const RUNNER_ACCOUNT_RIGHT: &str = "SeAssignPrimaryTokenPrivilege";
 
+/// The logons the runner's account never needs (Core starts the runner
+/// with `CreateProcessWithLogonW`, an interactive logon), denied so its
+/// password works for nothing else.
+pub const RUNNER_DENIED_LOGON_RIGHTS: [&str; 4] = [
+    "SeDenyNetworkLogonRight",
+    "SeDenyRemoteInteractiveLogonRight",
+    "SeDenyBatchLogonRight",
+    "SeDenyServiceLogonRight",
+];
+
 /// #1721 (a′): the command runner's own account, in the sandbox users' group
-/// (for the sandbox's helper and log folders) and holding
-/// [`RUNNER_ACCOUNT_RIGHT`]. Idempotent: setup reruns reset its password and
-/// re-add the right.
+/// (for the sandbox's helper and log folders), holding
+/// [`RUNNER_ACCOUNT_RIGHT`] and denied [`RUNNER_DENIED_LOGON_RIGHTS`].
+/// Idempotent: setup reruns reset its password and re-add the rights.
 fn provision_runner_user(username: &str, password: &str, log: &mut dyn Write) -> Result<()> {
     ensure_sandbox_user(username, password, log)?;
     let sid = resolve_sid(username)?;
-    add_account_right(&sid, RUNNER_ACCOUNT_RIGHT).map_err(|err| {
-        anyhow::Error::new(SetupFailure::new(
-            SetupErrorCode::HelperUserProvisionFailed,
-            format!("grant {RUNNER_ACCOUNT_RIGHT} to {username} failed: {err:#}"),
-        ))
-    })?;
+    for right in std::iter::once(RUNNER_ACCOUNT_RIGHT).chain(RUNNER_DENIED_LOGON_RIGHTS) {
+        add_account_right(&sid, right).map_err(|err| {
+            anyhow::Error::new(SetupFailure::new(
+                SetupErrorCode::HelperUserProvisionFailed,
+                format!("grant {right} to {username} failed: {err:#}"),
+            ))
+        })?;
+    }
     super::log_line(
         log,
         &format!("runner account {username} holds {RUNNER_ACCOUNT_RIGHT}"),

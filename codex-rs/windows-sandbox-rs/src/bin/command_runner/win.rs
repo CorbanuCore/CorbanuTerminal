@@ -669,14 +669,14 @@ pub fn main() -> Result<()> {
         let spawned = spawn_ipc_process(&req, &base);
         // #1721 (a′), D392: the runner starts one command; whether or not it
         // started, the runner keeps no right to start another with a token
-        // it did not derive from its own.
-        if let Err(err) = remove_assign_primary_token_privilege(base.raw()) {
-            log_note(
-                &format!("runner: could not remove SeAssignPrimaryTokenPrivilege: {err:#}"),
-                Some(req.codex_home.as_path()),
-            );
+        // it did not derive from its own. If that fails the runner exits
+        // with an error, and its job ends the command.
+        let removed = remove_assign_primary_token_privilege(base.raw());
+        match (spawned, removed) {
+            (spawned, Ok(())) => spawned,
+            (Ok(_spawned), Err(err)) => Err(err),
+            (Err(err), Err(removal)) => Err(err.context(format!("{removal:#}"))),
         }
-        spawned
     }) {
         Ok(value) => value,
         Err(err) => {

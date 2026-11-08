@@ -127,6 +127,9 @@ pub fn spawn_conpty_process_as_user(
     let job = Arc::new(crate::process::sandbox_job().context("create process job")?);
 
     let raw = RawConPty::new(/*cols*/ 80, /*rows*/ 24)?;
+    // #1721 (a′): the console host copied the runner's token, privilege and
+    // all; it goes before any command can write to the console.
+    crate::command_logon::strip_privilege_from_console_hosts()?;
     let (pseudoconsole, input_write, output_read) = raw.into_handles();
     let hpc = pseudoconsole.raw_handle() as HANDLE;
     let conpty = ConptyInstance {
