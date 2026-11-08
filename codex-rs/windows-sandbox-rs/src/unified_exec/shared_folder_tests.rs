@@ -358,11 +358,20 @@ fn sec_win_1791_elevated_command_cannot_delete_or_write_in_shared_folders() {
                 );
             }
         }
-        // What the scan found and cost on this machine.
+        // What the scan found and cost on this machine, and every folder
+        // this machine's setups have denied so far.
         for line in sandbox_log(codex_home.path()).lines() {
             if line.contains("shared-folder") {
                 println!("sec-win-1791 setup log: {line}");
             }
+        }
+        for entry in &record.entries {
+            println!(
+                "sec-win-1791 recorded: {:?} on {} ({} homes)",
+                entry.kind,
+                entry.path.display(),
+                entry.homes.len()
+            );
         }
     }
     println!(
