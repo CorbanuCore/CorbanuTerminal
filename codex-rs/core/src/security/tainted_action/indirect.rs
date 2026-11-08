@@ -244,8 +244,6 @@ pub(super) const WRAPPERS: &[(&str, &[&str], usize)] = &[
     ("busybox", &[], 0),
     ("toybox", &[], 0),
     ("watch", &["-n", "--interval"], 0),
-    // #1808: `chroot [--userspec U] [--groups G] NEWROOT [COMMAND...]`.
-    ("chroot", &["--userspec", "--groups"], 1),
 ];
 
 /// #1482: letters known to take no value, per wrapper. A cluster is read
@@ -350,62 +348,26 @@ fn command_chain(words: &[String], wrapper: &mut dyn FnMut(usize)) -> Option<(us
         if word.starts_with('#') {
             return None;
         }
-        // #1808 review: a chroot named by a path outside the system folders
-        // (`./chroot`) is the program at that path, not the system chroot
-        // (#1302): not a wrapper. A system chroot (`/usr/sbin/chroot`)
-        // stays one.
-        if name == "chroot" && word.contains('/') && !system_chroot(word) {
-            return Some((index, name));
-        }
         let Some((_, value_options, operands)) =
             WRAPPERS.iter().find(|(wrapper, _, _)| *wrapper == name)
         else {
             return Some((index, name));
         };
-        let wrapper_at = index;
         wrapper(index);
         index += 1;
         while let Some(option) = words.get(index) {
             work::step();
             if option.starts_with('-') {
                 index += option_words(&name, option, value_options);
-            } else if option.contains('=') && name != "chroot" {
-                // An assignment (`env A=B cmd`). chroot takes none: its
-                // first other word is NEWROOT (`chroot A=B cmd`).
+            } else if option.contains('=') {
                 index += 1;
             } else {
                 break;
             }
         }
         index += *operands;
-        // #1808 review: zsh's `=word` after chroot's root is not read as its
-        // command (#1159 judges such a word wherever it is not the command
-        // word), nor is a dash word (under a launcher, the runner check
-        // skips it and judges the input after it: `xargs -I% chroot / -x
-        // %`): chroot stays the command word, as before.
-        if name == "chroot"
-            && words
-                .get(index)
-                .is_some_and(|word| word.starts_with('=') || word.starts_with('-'))
-        {
-            return Some((wrapper_at, name));
-        }
     }
     None
-}
-
-/// #1808 review: whether a chroot named by a path is the system one: a
-/// path in the system program folders (inline, like `SYSTEM_SHELLS`).
-fn system_chroot(word: &str) -> bool {
-    const SYSTEM_CHROOTS: &[&str] = &[
-        "/usr/sbin/chroot",
-        "/usr/bin/chroot",
-        "/sbin/chroot",
-        "/bin/chroot",
-        "/usr/local/sbin/chroot",
-        "/usr/local/bin/chroot",
-    ];
-    SYSTEM_CHROOTS.contains(&word)
 }
 
 /// #1159: whether `word` is zsh's `=git` (EQUALS expansion: the `git` on the
@@ -503,37 +465,55 @@ fn unredirected(command: &SimpleCommand, words: &[String], from: usize) -> Optio
     any.then_some(runs)
 }
 
-/// #1808: whether a `chroot` among the programs of these words runs code
-/// the classifier cannot judge: a command looked up under a root other than
-/// `/` (another filesystem's programs), a root it cannot see, or no command
-/// at all (chroot then runs a shell). With `/` the command is judged as
-/// usual, as a wrapper's (`chroot / ./x` asks as `./x` does). Each chroot
-/// reads only its own options and root, so the cost stays linear.
-pub(super) fn chroot_runs_unjudged(words: &[String]) -> bool {
-    programs(words).into_iter().any(|at| {
-        work::step();
-        if basename(&words[at]).to_lowercase() != "chroot" {
-            return false;
-        }
-        let mut next = at + 1;
-        while let Some(word) = words.get(next) {
+/// #1808: each `chroot [options] NEWROOT [COMMAND...]` among the programs
+/// of these words: its root, and where its command starts (`None`: no
+/// command). Each chroot reads only its own options and root.
+fn chroot_reads(words: &[String]) -> Vec<(Option<&String>, Option<usize>)> {
+    programs(words)
+        .into_iter()
+        .filter(|&at| {
             work::step();
-            if word == "--" {
-                next += 1;
-                break;
+            basename(&words[at]).eq_ignore_ascii_case("chroot")
+        })
+        .map(|at| {
+            let mut next = at + 1;
+            while let Some(word) = words.get(next) {
+                work::step();
+                if word == "--" {
+                    next += 1;
+                    break;
+                }
+                if !word.starts_with('-') || word == "-" {
+                    break;
+                }
+                // `--userspec U` / `--groups G` take the next word; `--x=v`
+                // and flags (`--skip-chdir`) do not.
+                next += 1 + usize::from(matches!(word.as_str(), "--userspec" | "--groups"));
             }
-            if !word.starts_with('-') || word == "-" {
-                break;
-            }
-            // `--userspec U` / `--groups G` take the next word; `--x=v` and
-            // flags (`--skip-chdir`) do not.
-            let takes = matches!(word.as_str(), "--userspec" | "--groups");
-            next += 1 + usize::from(takes);
-        }
-        let root = words.get(next);
-        let command = words.get(next + 1);
-        root.is_none_or(|root| root != "/") || command.is_none()
-    })
+            let root = words.get(next);
+            let command = (next + 1 < words.len()).then_some(next + 1);
+            (root, command)
+        })
+        .collect()
+}
+
+/// #1808: whether a chroot runs code the classifier cannot judge: a command
+/// looked up under a root other than `/` (another filesystem's programs), a
+/// root it cannot see, or no command at all (chroot then runs a shell).
+pub(super) fn chroot_runs_unjudged(words: &[String]) -> bool {
+    chroot_reads(words)
+        .into_iter()
+        .any(|(root, command)| root.is_none_or(|root| root != "/") || command.is_none())
+}
+
+/// #1808: where the command of each `chroot ... /` starts. The classifier
+/// judges it as a command line of its own, besides the line as read before
+/// (chroot stays the command word for every other check).
+pub(super) fn chroot_commands(words: &[String]) -> Vec<usize> {
+    chroot_reads(words)
+        .into_iter()
+        .filter_map(|(root, command)| root.is_some_and(|root| root == "/").then_some(command)?)
+        .collect()
 }
 
 /// #1482 item 4: whether a sudo among the programs of these words runs an

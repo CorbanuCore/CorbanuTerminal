@@ -2335,9 +2335,39 @@ impl Classifier {
             .as_ref()
             .filter(|(_, name)| name == "eval")
             .map(|(index, _)| index + 1);
-        // #1808: a chroot whose command cannot be judged (another root, an
-        // unseen root, or none) asks; under `/` its command is judged as a
-        // wrapper's (`WRAPPERS`).
+        // #1808: a chroot's command (`chroot / ./x`) is judged as a command
+        // line of its own, besides this line as read before (chroot stays
+        // its command word, so every check on it is kept). A chroot whose
+        // command cannot be judged (another root, an unseen root, or none)
+        // asks.
+        let chroot_lines = indirect::chroot_commands(words)
+            .into_iter()
+            .chain(operands.into_iter().flat_map(|from| {
+                indirect::chroot_commands(&words[from..])
+                    .into_iter()
+                    .map(move |start| from + start)
+            }))
+            .collect::<Vec<_>>();
+        for start in chroot_lines {
+            work::step();
+            let (run, run_unseen) = (&words[start..], unseen.get(start..).unwrap_or_default());
+            // The line-level unseen-code checks, on the chroot's command:
+            // an unseen command word (`chroot / $X`) or inline code holding
+            // an unseen value (`chroot / sh -c "$(cat f)"`).
+            let inline_unseen = indirect::invocation(run).is_some_and(|invocation| {
+                matches!(invocation.code, Code::Inline(Some(code))
+                    if run
+                        .iter()
+                        .position(|word| word.ends_with(code))
+                        .is_some_and(|at| run_unseen[at..].iter().any(|unseen| *unseen)))
+            });
+            if self.rebuilt == 0
+                && (run_unseen.first().copied().unwrap_or_default() || inline_unseen)
+            {
+                self.note(ProtectedActionKind::UnseenCode);
+            }
+            self.command(run, &folders.cwd, depth + 1);
+        }
         if indirect::chroot_runs_unjudged(words)
             || operands.is_some_and(|from| indirect::chroot_runs_unjudged(&words[from..]))
             || indirect::redirect_hides_command(simple, words, /*from*/ 0)
