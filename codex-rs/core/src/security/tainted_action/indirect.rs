@@ -711,24 +711,18 @@ fn unredirected(command: &SimpleCommand, words: &[String], from: usize) -> Optio
     any.then_some(runs)
 }
 
-/// #1821: the commands a finder's `-exec`/`-execdir`/`-ok`/`-okdir` runs
-/// (`find`/`bfs`, behind wrappers too), as `(start, end)` word ranges, each
-/// up to its `;` or a `+` after `{}`. The word lexer ends a command at `;`
-/// even when quoted, so a later exec option starts a command of its own
-/// (`find . -exec a ';' -exec sudo -e f ';'`); one that starts with an exec
-/// option is read the same way. Each word is read once.
+/// #1821: the commands a finder's `-exec`/`-execdir`/`-ok`/`-okdir` runs,
+/// as `(start, end)` word ranges, each up to its `;` or a `+` after `{}`.
+/// Read in every command, from any exec option: the word lexer ends a
+/// command at `;` (even quoted) and at the `}` of `{}`, so a later exec
+/// option may follow `-o`, `!`, `-a` or `+` in a command of its own
+/// (`find . -exec a \; -o -exec sudo -A ./x \;`), and any finder's
+/// spelling is covered (`gfind`, wrapped finders). A prompt still needs a
+/// sudo that runs a helper or chroot right there. Each word is read once.
 pub(super) fn finder_exec_commands(words: &[String]) -> Vec<(usize, usize)> {
     let exec_option = |word: &str| matches!(word, "-exec" | "-execdir" | "-ok" | "-okdir");
-    let from = if words.first().is_some_and(|word| exec_option(word)) {
-        0
-    } else {
-        match command_word(words) {
-            Some((index, name)) if matches!(name.as_str(), "find" | "bfs") => index + 1,
-            _ => return Vec::new(),
-        }
-    };
     let mut commands = Vec::new();
-    let mut at = from;
+    let mut at = 0;
     while at < words.len() {
         work::step();
         if exec_option(&words[at]) {

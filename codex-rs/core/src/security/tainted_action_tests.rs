@@ -12480,6 +12480,14 @@ fn issue1821_finder_exec_sudo_gets_line_start_checks() {
             "find . -exec sudo -A ./x {} +",
             "find . -name x -exec true ';' -exec sudo -e f ';'",
             "nice find . -exec sudo --chroot=./root true ';'",
+            // Review round 1: a later exec option after another word.
+            "find . -exec true \\; -o -exec sudo -A ./x \\;",
+            "find . -exec true ';' ! -exec sudo -e f ';'",
+            "find . -exec true \\; -a -exec sudoedit f \\;",
+            "find . -exec echo {} + -exec sudo -e f \\;",
+            "find . -name '*.sh' -exec chmod +x {} + -exec sudo -A ./install {} +",
+            // Any finder spelling.
+            "gfind . -exec sudo -e f \\;",
         ]
         .map(String::from),
     );
@@ -12523,6 +12531,8 @@ fn issue1821_finder_exec_sudo_is_linear() {
     for (label, unit) in [
         ("exec commands", "-exec sudo -p x true ';' "),
         ("option runs", "-exec sudo -u a -g b -p c -C 3 true ';' "),
+        // Review: a `;` the lexer keeps, so one command holds many ranges.
+        ("ranges in one command", "-exec sudo -p x true $';' "),
     ] {
         work::assert_linear(label, |scale| {
             let _ = script(&format!("find . {}", unit.repeat(100 * scale)));
