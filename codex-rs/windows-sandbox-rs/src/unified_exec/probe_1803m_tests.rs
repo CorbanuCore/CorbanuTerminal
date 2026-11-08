@@ -26,6 +26,12 @@ const HOLD_1803: &str =
 const PROBE_1803: &str =
     "unified_exec::tests::command_identity::elevated::probe_1803m::probe_1803m_probe_entry";
 const HOLD_DIR_ENV: &str = "CODEX_W1803M_HOLD";
+const HOST_1803: &str =
+    "unified_exec::tests::command_identity::elevated::probe_1803m::probe_1803l_legacy_host_entry";
+const HOST_ENV: &str = "CODEX_W1803L_HOST";
+const HOST_TTY_ENV: &str = "CODEX_W1803L_HOST_TTY";
+const HOST_HOME_ENV: &str = "CODEX_W1803L_HOST_HOME";
+const HOST_ROOT_ENV: &str = "CODEX_W1803L_HOST_ROOT";
 const TARGET_PID_ENV: &str = "CODEX_W1803M_TARGET";
 const MARKER_ENV: &str = "CODEX_W1803M_MARKER";
 const OUT_FILE_ENV: &str = "CODEX_W1803M_OUT";
@@ -296,6 +302,40 @@ fn targets_of(pid: u32) -> String {
         .join(";")
 }
 
+/// win-1803l: a second, unsandboxed process (a second Codex) that runs
+/// workspace A's legacy command, types its input, and waits for it. Used
+/// when B is elevated: an elevated command started while a legacy command
+/// of the same process runs never connects to its runner.
+#[test]
+fn probe_1803l_legacy_host_entry() {
+    let Some(hold_dir) = std::env::var_os(HOST_ENV).map(PathBuf::from) else {
+        return;
+    };
+    let tty = std::env::var(HOST_TTY_ENV).as_deref() == Ok("1");
+    let home = PathBuf::from(std::env::var_os(HOST_HOME_ENV).expect("host home"));
+    let root = PathBuf::from(std::env::var_os(HOST_ROOT_ENV).expect("host root"));
+    let id = fs::read_to_string(hold_dir.join("marker")).expect("marker");
+    current_thread_runtime().block_on(async {
+        let holder = spawn_as(
+            Backend::Legacy,
+            &root,
+            &home,
+            probe_argv(HOLD_1803),
+            &[(HOLD_DIR_ENV, hold_dir.display().to_string())],
+            tty,
+        )
+        .await;
+        if tty && wait_for_path(&hold_dir.join("hold.pid"), Duration::from_secs(/*secs*/ 60)) {
+            let _ = holder
+                .session
+                .writer_sender()
+                .send(format!("W1803IN{}\r", id.trim()).into_bytes())
+                .await;
+        }
+        let _ = collect_stdout_and_exit(holder, &home, Duration::from_secs(/*secs*/ 240)).await;
+    });
+}
+
 #[derive(Clone, Copy)]
 enum Backend {
     Legacy,
@@ -363,15 +403,29 @@ fn measure(tty: bool, a_home: &Path, b_home: &Path, a: Backend, b: Backend) {
     let runtime = current_thread_runtime();
     let (line, got) = runtime.block_on(async {
         let release = Release(hold_dir.join("hold.release"));
-        let holder = spawn_as(
-            a,
-            holder_root.path(),
-            a_home,
-            probe_argv(HOLD_1803),
-            &[(HOLD_DIR_ENV, hold_dir.display().to_string())],
-            tty,
-        )
-        .await;
+        let separate = matches!((a, b), (Backend::Legacy, Backend::Elevated));
+        let (holder, mut host) = if separate {
+            let host = std::process::Command::new(std::env::current_exe().expect("test exe"))
+                .args(["--exact", HOST_1803, "--nocapture", "--test-threads=1"])
+                .env(HOST_ENV, &hold_dir)
+                .env(HOST_TTY_ENV, if tty { "1" } else { "0" })
+                .env(HOST_HOME_ENV, a_home)
+                .env(HOST_ROOT_ENV, holder_root.path())
+                .spawn()
+                .expect("spawn legacy host");
+            (None, Some(host))
+        } else {
+            let holder = spawn_as(
+                a,
+                holder_root.path(),
+                a_home,
+                probe_argv(HOLD_1803),
+                &[(HOLD_DIR_ENV, hold_dir.display().to_string())],
+                tty,
+            )
+            .await;
+            (Some(holder), None)
+        };
         let deadline = Instant::now() + Duration::from_secs(/*secs*/ 60);
         let pid = loop {
             if let Ok(pid) = fs::read_to_string(hold_dir.join("hold.pid"))
@@ -386,18 +440,19 @@ fn measure(tty: bool, a_home: &Path, b_home: &Path, a: Backend, b: Backend) {
         };
         let Some(pid) = pid else {
             drop(release);
-            let (stdout, code) =
-                collect_stdout_and_exit(holder, a_home, Duration::from_secs(/*secs*/ 90))
-                    .await;
-            return (
-                format!(
-                    "holder never started exit={code} {}",
-                    String::from_utf8_lossy(&stdout)
-                ),
-                String::new(),
-            );
+            let mut detail = String::new();
+            if let Some(holder) = holder {
+                let (stdout, code) =
+                    collect_stdout_and_exit(holder, a_home, Duration::from_secs(/*secs*/ 90))
+                        .await;
+                detail = format!("exit={code} {}", String::from_utf8_lossy(&stdout));
+            }
+            if let Some(host) = host.as_mut() {
+                detail = format!("host {:?}", host.wait());
+            }
+            return (format!("holder never started {detail}"), String::new());
         };
-        if tty {
+        if tty && let Some(holder) = holder.as_ref() {
             // Typed as a user would, Enter included.
             let _ = holder
                 .session
@@ -428,7 +483,18 @@ fn measure(tty: bool, a_home: &Path, b_home: &Path, a: Backend, b: Backend) {
         let line = fs::read_to_string(&out)
             .unwrap_or_else(|_| format!("no result exit={code} {stdout}"));
         drop(release);
-        let _ = collect_stdout_and_exit(holder, a_home, Duration::from_secs(/*secs*/ 90)).await;
+        if let Some(holder) = holder {
+            let _ =
+                collect_stdout_and_exit(holder, a_home, Duration::from_secs(/*secs*/ 90)).await;
+        }
+        if let Some(mut host) = host {
+            let _ = host.wait();
+        }
+        let line = if separate {
+            format!("A in a second process || {line}")
+        } else {
+            line
+        };
         (line, got)
     });
     let mode = format!(
