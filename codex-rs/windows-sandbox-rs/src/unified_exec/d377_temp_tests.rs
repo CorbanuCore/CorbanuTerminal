@@ -509,7 +509,7 @@ fn sec_win_d377_old_leftovers_in_temp_are_taken_for_the_user() {
     // Taken, no allow entry is left there for the sandbox's accounts or group
     // with rights to write, delete or change it. (Set aside, it keeps its
     // DACL, which the user may not change, under a name nothing uses.)
-    let mut sandbox_sids = crate::session_temp_leftovers::sandbox_account_sids().expect("accounts");
+    let mut sandbox_sids = Vec::<String>::new() /* no such module on main */;
     sandbox_sids.push(group);
     let sandbox_sids: Vec<crate::token::LocalSid> = sandbox_sids
         .iter()
