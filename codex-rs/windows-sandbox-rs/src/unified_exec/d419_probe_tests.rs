@@ -259,7 +259,7 @@ fn legacy_d419_probe_sandboxed_command_and_git_links() {
         .await
     });
     let stdout = String::from_utf8_lossy(&stdout);
-    for line in stdout.lines().filter(|line| line.starts_with("D419-OP")) {
+    for line in stdout.lines().filter(|line| line.contains("D419-OP")) {
         eprintln!("D419-MEASURE {line}");
     }
 
