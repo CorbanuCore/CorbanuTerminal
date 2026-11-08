@@ -350,24 +350,38 @@ fn command_chain(words: &[String], wrapper: &mut dyn FnMut(usize)) -> Option<(us
         if word.starts_with('#') {
             return None;
         }
+        // #1808 review: a chroot named by a path (`./chroot`) is the program
+        // at that path, not the system chroot (#1302): not a wrapper.
+        if name == "chroot" && word.contains('/') {
+            return Some((index, name));
+        }
         let Some((_, value_options, operands)) =
             WRAPPERS.iter().find(|(wrapper, _, _)| *wrapper == name)
         else {
             return Some((index, name));
         };
+        let wrapper_at = index;
         wrapper(index);
         index += 1;
         while let Some(option) = words.get(index) {
             work::step();
             if option.starts_with('-') {
                 index += option_words(&name, option, value_options);
-            } else if option.contains('=') {
+            } else if option.contains('=') && name != "chroot" {
+                // An assignment (`env A=B cmd`). chroot takes none: its
+                // first other word is NEWROOT (`chroot A=B cmd`).
                 index += 1;
             } else {
                 break;
             }
         }
         index += *operands;
+        // #1808 review: zsh's `=word` after chroot's root is not read as its
+        // command (#1159 judges such a word wherever it is not the command
+        // word): chroot stays the command word, as before.
+        if name == "chroot" && words.get(index).is_some_and(|word| word.starts_with('=')) {
+            return Some((wrapper_at, name));
+        }
     }
     None
 }

@@ -12429,8 +12429,26 @@ fn issue1808_chroot_judges_its_command() {
         "grep -r chroot .",
         "env true",
     ];
+    // Review round 1: lines that ask on main must still ask.
+    let still_ask = [
+        "find . -exec chroot A=B {} \\;",
+        "find . -exec sudo chroot /srv/jail=1 {} \\;",
+        "fd . -x chroot A=B {}",
+        "printf x | strace xargs -I% chroot A=B %",
+        "xargs -I% chroot A=B %",
+        "chroot / =git log",
+        "sudo chroot --skip-chdir / =git log",
+        "env chroot -- / =git log",
+        "xargs chroot / =git log < f",
+        "./chroot / true",
+    ];
     let mut wrong = Vec::new();
     for shell in ["/bin/bash", "/bin/zsh"] {
+        for command in still_ask {
+            if kind(&[shell, "-lc", command]).is_none() {
+                wrong.push(format!("still asks {shell}: {command}"));
+            }
+        }
         for command in asks.iter().chain(&unchanged) {
             if kind(&[shell, "-lc", command]) != Some(UnseenCode) {
                 wrong.push(format!("asks {shell}: {command}"));
@@ -12456,5 +12474,17 @@ fn issue1808_chroot_reading_is_linear() {
         work::assert_linear(label, |scale| {
             let _ = script(&format!("chroot {}/ true", unit.repeat(100 * scale)));
         });
+    }
+}
+
+/// #1808 review: argv forms (no shell) keep main's verdicts: `=git` after
+/// chroot's root, and a chroot named by a path, ask.
+#[test]
+fn issue1808_chroot_argv_forms_keep_main_verdicts() {
+    for command in [
+        &["chroot", "/", "=git", "log"][..],
+        &["./chroot", "/", "true"][..],
+    ] {
+        assert!(kind(command).is_some(), "{command:?}");
     }
 }
