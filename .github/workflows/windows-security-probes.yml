@@ -301,7 +301,7 @@ jobs:
           # D414: a CLI version change rescans; D415: a read-only workspace is reported.
           check rescan_after_cli_version_change_closes_new_folders "sec-win-1791: after a CLI version change the next command closed the new folder; without one it was left" || echo "FAIL-BEFORE: rescan_after_cli_version_change_closes_new_folders failed"
           check read_only_workspace_is_reported "sec-win-1791: a workspace the denies make read-only is reported; its own is not" || echo "FAIL-BEFORE: read_only_workspace_is_reported failed"
-          check removal_takes_out_recorded_denies "sec-win-1791: the removal took out the deny only its home relied on and kept [0-9]* others"
+          check removal_takes_out_recorded_denies "sec-win-1791: the removal took out the deny only its home relied on and kept [0-9]* others" || echo "FAIL-BEFORE: removal_takes_out_recorded_denies failed"
           rm sec-1791.log
       - name: Legacy sandbox delete boundary (#158)
         if: ${{ !cancelled() }}
