@@ -407,6 +407,18 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   example a patch that was applied) was reported to the model as aborted. Its
   real output is now recorded instead.
 
+## Windows default sandbox: a runner account and one logon per command
+
+- **The default (elevated) Windows sandbox runs its command runner as a new
+  account, `CodexSandboxRunner`, and each command on a logon of its own**
+  (#1721, #1560, #1800). A command racing another command's start-up can no
+  longer reach the runner, and one command can no longer borrow another's
+  token or threads. The non-admin sandbox is unchanged.
+- **Setup runs again once** (setup version 7). It creates the account and
+  gives it the Windows right "Replace a process level token"
+  (`SeAssignPrimaryTokenPrivilege`). A program running as you could use that
+  account to try to gain full control of the computer; see `docs/sandbox.md`.
+
 ## Windows non-admin sandbox warning
 
 - **The warning now matches what the non-admin sandbox does** (#1506, D264). It
