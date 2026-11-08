@@ -27,6 +27,40 @@ const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
 pub(crate) struct NestedMetadata {
     pub(crate) path: PathBuf,
     pub(crate) identity: Option<FileIdentity>,
+    /// D419 (rule 3, #1775; needs security sign-off): for a top-level `.git`
+    /// that is a link, what it points to. The link is then identified by its
+    /// own identity together with this, and counts as changed only when one
+    /// of them changes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) link: Option<LinkTarget>,
+}
+
+/// D419 (rule 3, #1775): a link's target as stored in it, and the file that
+/// target is (`None` when it doesn't resolve).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct LinkTarget {
+    pub(crate) text: PathBuf,
+    pub(crate) identity: Option<FileIdentity>,
+}
+
+/// D419 (rule 3): what the link at `path` points to; `None` when it isn't a
+/// link or its target can't be read.
+pub(crate) fn link_target(path: &Path) -> Option<LinkTarget> {
+    let text = std::fs::read_link(path).ok()?;
+    let identity = dunce::canonicalize(path)
+        .ok()
+        .and_then(|target| identity(&target));
+    Some(LinkTarget { text, identity })
+}
+
+/// D419 (rule 3): the identity of a link at `path` (its own, not
+/// followed) and what it points to; `(None, None)` when either can't be
+/// read, so it counts as changed after every session as before.
+fn link_state(path: &Path) -> (Option<FileIdentity>, Option<LinkTarget>) {
+    match (identity(path), link_target(path)) {
+        (Some(own), Some(target)) => (Some(own), Some(target)),
+        _ => (None, None),
+    }
 }
 
 /// Volume serial number and 128-bit file ID.
@@ -117,7 +151,11 @@ pub(crate) fn find(roots: &[PathBuf]) -> Found {
                         let identity = (exact && !is_link(metadata.as_ref()))
                             .then(|| identity(&entry.path()))
                             .flatten();
-                        found.entries.push(NestedMetadata { path, identity });
+                        found.entries.push(NestedMetadata {
+                            path,
+                            identity,
+                            link: None,
+                        });
                         if exact {
                             continue;
                         }
@@ -190,9 +228,11 @@ pub(crate) fn appeared(before: &[NestedMetadata], now: Vec<NestedMetadata>) -> V
     now.into_iter()
         .filter(|entry| {
             entry.identity.is_none()
-                || !before
-                    .iter()
-                    .any(|old| same_path(&old.path, &entry.path) && old.identity == entry.identity)
+                || !before.iter().any(|old| {
+                    same_path(&old.path, &entry.path)
+                        && old.identity == entry.identity
+                        && old.link == entry.link
+                })
         })
         .map(|entry| entry.path)
         .collect()
@@ -235,12 +275,18 @@ pub(crate) fn top_level_git(roots: &[PathBuf]) -> Vec<NestedMetadata> {
         .iter()
         .filter_map(|root| {
             let path = root.join(".git");
-            let identity = match std::fs::symlink_metadata(&path) {
+            let (identity, link) = match std::fs::symlink_metadata(&path) {
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => return None,
-                Ok(metadata) if !metadata.file_type().is_symlink() => identity(&path),
-                _ => None,
+                Ok(metadata) if !metadata.file_type().is_symlink() => (identity(&path), None),
+                // D419: a link by its identity and what it points to.
+                Ok(_) => link_state(&path),
+                Err(_) => (None, None),
             };
-            Some(NestedMetadata { path, identity })
+            Some(NestedMetadata {
+                path,
+                identity,
+                link,
+            })
         })
         .collect()
 }
@@ -262,11 +308,15 @@ pub(crate) fn git_appeared_in_session(
     if !top_level {
         return false;
     }
-    let now = identity(folder).filter(|_| !crate::workspace_acl::is_link(folder));
+    let (now, link) = if crate::workspace_acl::is_link(folder) {
+        link_state(folder)
+    } else {
+        (identity(folder), None)
+    };
     now.is_none()
         || !before
             .iter()
-            .any(|old| same_path(&old.path, folder) && old.identity == now)
+            .any(|old| same_path(&old.path, folder) && old.identity == now && old.link == link)
 }
 
 /// D420 (#1775): a repository and what git would run from it, when a
@@ -301,11 +351,25 @@ pub(crate) fn repo_states(paths: &[PathBuf], roots: &[PathBuf]) -> Vec<RepoState
         .map(|path| {
             let link = std::fs::symlink_metadata(path)
                 .map_or(false, |metadata| metadata.file_type().is_symlink());
+            let mut prints = crate::git_watch::fingerprint(path, roots);
+            // D419 (rule 3): a link by its identity and what it points to.
+            let identity = if link {
+                let (own, target) = link_state(path);
+                if let Some(target) = target {
+                    prints.insert(
+                        ".git target".to_string(),
+                        format!("{} {:?}", target.text.display(), target.identity),
+                    );
+                }
+                own
+            } else {
+                identity(path)
+            };
             RepoState {
                 path: path.clone(),
-                identity: if link { None } else { identity(path) },
+                identity,
                 link,
-                prints: crate::git_watch::fingerprint(path, roots),
+                prints,
             }
         })
         .collect()
@@ -321,9 +385,9 @@ pub(crate) fn repo_changes(
 ) -> Vec<(PathBuf, Vec<String>)> {
     now.into_iter()
         .filter_map(|state| {
-            let changes = if state.link {
-                vec!["a link (checked after every command)".to_string()]
-            } else if state.identity.is_none() {
+            // D419 (rule 3): a link with an identity is compared like any
+            // other repository (its target is in its prints).
+            let changes = if state.identity.is_none() {
                 vec!["can't be inspected".to_string()]
             } else {
                 match before

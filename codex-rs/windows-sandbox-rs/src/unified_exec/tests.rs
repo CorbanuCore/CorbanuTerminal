@@ -3027,6 +3027,10 @@ mod acl_cost;
 #[path = "nested_metadata_tests.rs"]
 mod nested_metadata;
 
+/// D419 (#1775): measurement 1 of the git-watch design note, and costs.
+#[path = "d419_probe_tests.rs"]
+mod d419_probe;
+
 /// D420/D421 (#1775): repositories below the top of the writable roots.
 #[path = "repo_watch_tests.rs"]
 mod repo_watch;

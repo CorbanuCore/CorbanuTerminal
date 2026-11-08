@@ -519,8 +519,8 @@ fn legacy_configured_project_metadata_the_sandbox_makes_is_not_planted() {
 
 /// D332 (#1682): a top-level `.git` that appears, or is replaced, while a
 /// session runs counts as planted at once (it can't be confirmed meanwhile)
-/// and after the session; one left alone doesn't, and a link counts after
-/// every session. A confirmed one counts again once replaced.
+/// and after the session; one left alone doesn't, and (D419, rule 3) neither
+/// does an unchanged link. A confirmed one counts again once replaced.
 #[test]
 fn legacy_top_level_git_is_watched() {
     let _guard = legacy_process_test_guard();
@@ -568,7 +568,7 @@ fn legacy_top_level_git_is_watched() {
         (live, ended, confirmed, after_unchanged, after_replacing),
         (
             (true, false, true),
-            (true, false, true),
+            (true, false, false),
             true,
             (false, false),
             true,
