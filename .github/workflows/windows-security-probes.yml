@@ -250,8 +250,8 @@ jobs:
           bin_dir="${CARGO_TARGET_DIR}/debug"
           export CARGO_BIN_EXE_codex_windows_sandbox_setup="$(cygpath -w "${bin_dir}/codex-windows-sandbox-setup.exe")"
           export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
-          # The #1770 tests run in their own step below.
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib sec_win_ -- --skip sec_win_1770_ --nocapture --test-threads=1
+          # The #1770 and #1791 tests run in their own steps below.
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib sec_win_ -- --skip sec_win_1770_ --skip sec_win_1791_ --nocapture --test-threads=1
       - name: Sandboxed command tokens stay restricted (#1770)
         if: ${{ !cancelled() }}
         shell: bash
@@ -273,6 +273,31 @@ jobs:
             grep -qF "sec-win-1770 ${backend}: creating a file, creating a folder and appending were refused in ${CODEX_SEC_WIN_1770_SHARED_ROOT}\\" sec-1770.log
           done
           rm sec-1770.log
+      - name: Shared-folder denies (#1791, D400; needs security sign-off)
+        if: ${{ !cancelled() }}
+        shell: bash
+        # The admin setup denies the sandbox users' group deleting in shared
+        # folders that grant every signed-in account delete-child, and
+        # writing where Everyone may write; win-1791m's everyday workloads
+        # still work. The removal runs last: it takes its home's denies out
+        # everywhere (the next full setup adds them again).
+        env:
+          CODEX_SEC_WIN_341_REQUIRE: "1"
+          CODEX_SEC_WIN_1791_REQUIRE: "1"
+        run: |
+          set -euo pipefail
+          bin_dir="${CARGO_TARGET_DIR}/debug"
+          export CARGO_BIN_EXE_codex_windows_sandbox_setup="$(cygpath -w "${bin_dir}/codex-windows-sandbox-setup.exe")"
+          export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
+          check() {
+            cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- --exact "unified_exec::tests::shared_folders::sec_win_1791_$1" --nocapture --test-threads=1 2>&1 | tee sec-1791.log
+            grep -q "test result: ok. 1 passed" sec-1791.log
+            grep -q "$2" sec-1791.log
+          }
+          check elevated_command_cannot_delete_or_write_in_shared_folders "sec-win-1791 elevated session: [0-9]* folders kept their files and [0-9]* refused writes; reads worked"
+          check elevated_everyday_workloads_still_work "sec-win-1791 elevated session: all 58 everyday steps worked"
+          check removal_takes_out_recorded_denies "sec-win-1791: the removal took out all [0-9]* recorded denies"
+          rm sec-1791.log
       - name: Legacy sandbox delete boundary (#158)
         if: ${{ !cancelled() }}
         shell: bash
@@ -422,9 +447,9 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "#295 probe failed in a normal session" }
             $sandbox = Get-TestExe @('-p', 'codex-windows-sandbox', '--lib')
             # The D324 tests skip here: no elevated setup is recorded yet.
-            Assert-Tests $sandbox 'sec_win_' 45
-            # The #1770 tests run on their own below.
-            & $medium -Program $sandbox -Arguments @('sec_win_', '--skip', 'sec_win_1770_', '--nocapture', '--test-threads=1')
+            Assert-Tests $sandbox 'sec_win_' 48
+            # The #1770 and #1791 tests run on their own below.
+            & $medium -Program $sandbox -Arguments @('sec_win_', '--skip', 'sec_win_1770_', '--skip', 'sec_win_1791_', '--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "P1 hardening regressions failed in a normal session" }
             # D324 (#1648): the elevated backend from a normal session. Each test
             # reuses the setup an elevated run recorded right before it.
@@ -483,6 +508,31 @@ jobs:
               }
             }
             Remove-Item Env:CODEX_SEC_WIN_1770_SHARED_ROOT
+            # #1791 / D400: the elevated backend from a normal session, with
+            # the fixtures the elevated step made and a setup an elevated run
+            # recorded right before (its full setup scans again, so it adds
+            # back what the elevated step's removal test took out).
+            $env:CODEX_SEC_WIN_1791_REQUIRE = '1'
+            $t1791 = [ordered]@{
+              'elevated_command_cannot_delete_or_write_in_shared_folders' = 'sec-win-1791 normal session: \d+ folders kept their files and \d+ refused writes; reads worked'
+              'elevated_everyday_workloads_still_work' = 'sec-win-1791 normal session: all 58 everyday steps worked'
+            }
+            foreach ($t in $t1791.Keys) {
+              $full = "unified_exec::tests::shared_folders::sec_win_1791_$t"
+              Assert-Tests $sandbox $full 1
+              & $sandbox --exact 'unified_exec::tests::command_identity::elevated::sec_win_1648_elevated_command_keeps_write_access_to_its_own_processes' --nocapture --test-threads=1 | Out-Null
+              if ($LASTEXITCODE -ne 0) { throw "recording the elevated setup for #1791 $t failed" }
+              $env:CODEX_SEC_WIN_1648_REQUIRE = '1'
+              $out = & $medium -Program $sandbox -Arguments @('--exact', $full, '--nocapture', '--test-threads=1')
+              $code = $LASTEXITCODE
+              Remove-Item Env:CODEX_SEC_WIN_1648_REQUIRE
+              $out
+              if ($code -ne 0) { throw "#1791 $t failed in a normal session" }
+              if (-not ($out -match 'test result: ok\. 1 passed') -or -not ($out -match $t1791[$t])) {
+                throw "#1791 $t did not run in a normal session"
+              }
+            }
+            Remove-Item Env:CODEX_SEC_WIN_1791_REQUIRE
             foreach ($t in $env:LEGACY_158_TESTS.Split(' ')) {
               Assert-Tests $sandbox "unified_exec::tests::$t" 1
               $out = & $medium -Program $sandbox -Arguments @('--exact', "unified_exec::tests::$t", '--nocapture', '--test-threads=1')
