@@ -88,7 +88,7 @@ fn remove_shared_folder_denies(cmd: &SandboxSetupCommand) -> anyhow::Result<()> 
     // that is when an uninstall needs this.
     if !codex_home.join(".sandbox").is_dir() {
         anyhow::bail!(
-            "no elevated sandbox setup is recorded in {}; pass the Codex home the setup used with --codex-home (and --user for another account)",
+            "no `.sandbox` folder in {}; pass the Codex home the setup used with --codex-home (and --user for another account)",
             codex_home.display()
         );
     }

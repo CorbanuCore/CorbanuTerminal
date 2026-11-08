@@ -233,12 +233,12 @@ user whose administrator ran the setup), commands still run with the denies
 the last setup added, and Corbanu Terminal asks again the next time it
 starts; it warns you when the next turn starts (a single `corbanu exec` run
 may end first; the sandbox log in `.sandbox` always has it). If the setup
-started and then failed, later commands need it to succeed. A setup made before this protection existed (or after you
-removed the denies) needs the administrator setup at the first command, and
-commands don't run until it succeeds, as after any setup change. Folders you
-can't list yourself are scanned only when the administrator setup runs, and
-a folder the setup couldn't change isn't asked about again until it next
-runs.
+started and then failed, later commands need it to succeed. A setup made
+before this protection existed (or after you removed the denies) needs the
+administrator setup at the first command, and commands don't run until it
+succeeds, as after any setup change. Folders you can't list yourself are
+scanned only when the administrator setup runs, and a folder the setup
+couldn't change isn't asked about again until it next runs.
 
 **What it doesn't cover.** Folders elsewhere (other drives, or deeper than
 the top level of the system drive outside the three folders above), single
@@ -248,10 +248,10 @@ cryptographic keys (`ProgramData\Microsoft\Crypto\...\MachineKeys`).
 
 **A project in such a folder is read-only to commands.** If a folder
 commands may write to (your project, or an extra writable folder) is in an
-Everyone-writable shared folder, sandboxed commands can't change files there.
-Corbanu Terminal checks these folders when each turn starts and warns you
-once for each one while it runs (a setup that runs during a turn shows up at
-the next). (A subfolder that is itself Everyone-writable
+Everyone-writable shared folder, sandboxed commands can't change files
+there. Corbanu Terminal checks these folders when each turn starts and warns
+you once for each one while Corbanu Terminal runs (a setup that runs during
+a turn shows up at the next). (A subfolder that is itself Everyone-writable
 gets a deny of its own and isn't checked.) Move the project to a folder of
 your own, such as one under your user profile.
 

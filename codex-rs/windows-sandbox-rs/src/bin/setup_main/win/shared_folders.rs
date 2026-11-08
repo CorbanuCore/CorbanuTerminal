@@ -38,8 +38,8 @@ pub(super) fn deny_shared_folders(
     let scan = match scan_shared_folders(&roots) {
         Ok(scan) => scan,
         Err(err) => {
-            // D414: no stamp, so Core asks for this setup again (once per
-            // process once one has succeeded).
+            // D414: no new stamp, so Core may ask for this setup again
+            // (once per process once one has succeeded).
             log_line(log, &format!("shared-folder scan failed: {err:#}"))?;
             return Ok(());
         }

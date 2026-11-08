@@ -56,6 +56,9 @@ fn new_version_with_nothing_missing_keeps_the_setups_lists() {
             rescan_decision(Some(clean.clone()), version, |_| panic!("no scan")).expect("decision");
         assert_eq!(decision, RescanDecision::NotDue);
     }
+    // A third version scans.
+    let decision = rescan_decision(Some(clean), "3.0.0", |_| Ok(Vec::new())).expect("decision");
+    assert!(matches!(decision, RescanDecision::Clean(_)), "{decision:?}");
 }
 
 #[test]

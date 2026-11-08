@@ -14,9 +14,11 @@ use super::*;
 const SETUP_SEED_ENV: &str = "CODEX_PF27S06_SETUP_SEED";
 /// Set where a skip must fail (the normal-session gate with a recorded setup).
 const REQUIRE_ENV: &str = "CODEX_SEC_WIN_1648_REQUIRE";
-const SETUP_FILES: [(&str, &str); 2] = [
+const SETUP_FILES: [(&str, &str); 3] = [
     ("setup_marker.json", ".sandbox"),
     ("sandbox_users.json", ".sandbox-secrets"),
+    // D414: without it the first command needs the admin setup again.
+    ("shared_folder_scan.json", ".sandbox"),
 ];
 
 /// A codex home for an elevated-backend test, or `None` to skip it.
