@@ -12386,3 +12386,75 @@ fn issue1685_eval_trap_alias_text_gets_every_check() {
         }
     }
 }
+
+/// #1808: after untrusted content, `chroot` is a command-running wrapper:
+/// its command is judged (`chroot / ./x` asks as `./x` does), and it asks
+/// when the command cannot be judged (a root other than `/`, an unseen
+/// root, or no command). In bash and zsh. Only adds prompts.
+#[test]
+fn issue1808_chroot_judges_its_command() {
+    use ProtectedActionKind::UnseenCode;
+    let asks = [
+        // The reported case and its option spellings.
+        "chroot / ./x",
+        "chroot --userspec=a:b / ./x",
+        "chroot --userspec a:b / ./x",
+        "chroot --groups g / ./x",
+        "chroot --skip-chdir / ./x",
+        "chroot -- / ./x",
+        "sudo chroot / ./x",
+        "env chroot / ./x",
+        "true && chroot / ./x",
+        "eval chroot / ./x",
+        // Unjudgeable wrapped code.
+        "chroot / sh -c \"$(cat f)\"",
+        "chroot /tmp/r ls",
+        "chroot ./root true",
+        "chroot \"$(cat f)\" true",
+        "chroot /",
+        "chroot /tmp/r",
+    ];
+    // Unchanged must-ask lines (controls) and harmless lines that stay quiet.
+    let unchanged = [
+        "./x",
+        "sh -c \"$(cat f)\"",
+        "chroot / git -c core.pager=sh log",
+    ];
+    let quiet = [
+        "chroot / true",
+        "chroot / ls -la",
+        "chroot --userspec=a:b / true",
+        "chroot --skip-chdir / echo hi",
+        "echo chroot / ./x",
+        "grep -r chroot .",
+        "env true",
+    ];
+    let mut wrong = Vec::new();
+    for shell in ["/bin/bash", "/bin/zsh"] {
+        for command in asks.iter().chain(&unchanged) {
+            if kind(&[shell, "-lc", command]) != Some(UnseenCode) {
+                wrong.push(format!("asks {shell}: {command}"));
+            }
+        }
+        for command in quiet {
+            if kind(&[shell, "-lc", command]).is_some() {
+                wrong.push(format!("quiet {shell}: {command}"));
+            }
+        }
+    }
+    assert_eq!(wrong, Vec::<String>::new());
+}
+
+/// #1808: chroot reading stays linear, with chained chroots and long
+/// option runs.
+#[test]
+fn issue1808_chroot_reading_is_linear() {
+    for (label, unit) in [
+        ("chained chroots", "chroot / "),
+        ("option runs", "--userspec a:b --groups g --skip-chdir "),
+    ] {
+        work::assert_linear(label, |scale| {
+            let _ = script(&format!("chroot {}/ true", unit.repeat(100 * scale)));
+        });
+    }
+}

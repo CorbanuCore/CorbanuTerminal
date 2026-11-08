@@ -2335,7 +2335,12 @@ impl Classifier {
             .as_ref()
             .filter(|(_, name)| name == "eval")
             .map(|(index, _)| index + 1);
-        if indirect::redirect_hides_command(simple, words, /*from*/ 0)
+        // #1808: a chroot whose command cannot be judged (another root, an
+        // unseen root, or none) asks; under `/` its command is judged as a
+        // wrapper's (`WRAPPERS`).
+        if indirect::chroot_runs_unjudged(words)
+            || operands.is_some_and(|from| indirect::chroot_runs_unjudged(&words[from..]))
+            || indirect::redirect_hides_command(simple, words, /*from*/ 0)
             || indirect::sudo_runs_helper(simple, words, /*from*/ 0)
             || operands.is_some_and(|from| {
                 indirect::redirect_hides_command(simple, words, from)
