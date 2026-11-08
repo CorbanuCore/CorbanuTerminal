@@ -605,3 +605,7 @@ fn canonicalize_allowing_missing(path: &Path) -> Option<PathBuf> {
 #[cfg(test)]
 #[path = "windows_tests.rs"]
 mod tests;
+
+#[cfg(all(test, windows))]
+#[path = "windows_measure_1766_tests.rs"]
+mod measure_1766;
