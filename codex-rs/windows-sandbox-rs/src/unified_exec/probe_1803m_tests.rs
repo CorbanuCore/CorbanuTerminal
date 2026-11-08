@@ -67,23 +67,37 @@ fn probe_1803m_probe_entry() {
     let Some(target) = std::env::var_os(TARGET_PID_ENV) else {
         return;
     };
-    let pid: u32 = target.to_string_lossy().parse().expect("numeric pid");
+    if let Some(out) = std::env::var_os(OUT_FILE_ENV) {
+        std::panic::set_hook(Box::new(move |info| {
+            let _ = fs::write(&out, format!("probe panicked: {info}"));
+        }));
+    }
     let id = std::env::var(MARKER_ENV).expect("marker id");
     let markers = [
         ("out", format!("W1803OUT{id}")),
         ("in", format!("W1803IN{id}")),
     ];
-    let (runner, runner_image) = parent_of(pid);
-    let mut targets = vec![
-        ("command".to_string(), pid),
-        (format!("runner:{runner_image}"), runner),
-    ];
-    for (host, image) in console_hosts_started_by(runner) {
-        targets.push((format!("host:{image}"), host));
-    }
+    // win-1803l: the harness lists the targets and their threads (a legacy
+    // token's process snapshot is filtered): `name=pid=tid/tid;...`.
+    let targets: Vec<(String, u32, Vec<u32>)> = target
+        .to_string_lossy()
+        .split(';')
+        .map(|entry| {
+            let mut parts = entry.split('=');
+            let name = parts.next().expect("name").to_string();
+            let pid = parts.next().expect("pid").parse().expect("numeric pid");
+            let tids = parts
+                .next()
+                .unwrap_or_default()
+                .split('/')
+                .filter_map(|tid| tid.parse().ok())
+                .collect();
+            (name, pid, tids)
+        })
+        .collect();
     let line = targets
         .iter()
-        .map(|(name, pid)| format!("target={name} {}", read_report(*pid, &markers)))
+        .map(|(name, pid, tids)| format!("target={name} {}", read_report(*pid, tids, &markers)))
         .collect::<Vec<_>>()
         .join(" || ");
     if let Some(out) = std::env::var_os(OUT_FILE_ENV) {
@@ -92,7 +106,7 @@ fn probe_1803m_probe_entry() {
     println!("\nW1803PROBE {line}");
 }
 
-fn read_report(pid: u32, markers: &[(&str, String)]) -> String {
+fn read_report(pid: u32, tids: &[u32], markers: &[(&str, String)]) -> String {
     let mut parts = vec![format!("dacl={}", process_dacl_sddl(pid))];
     for (name, access) in [
         ("query_limited", 0x1000),
@@ -105,7 +119,7 @@ fn read_report(pid: u32, markers: &[(&str, String)]) -> String {
         parts.push(format!("{name}={}", open_result(pid, access)));
     }
     parts.push(scan_report(pid, markers));
-    parts.push(threads_report(pid));
+    parts.push(threads_report(tids));
     parts.join(" ")
 }
 
@@ -215,11 +229,10 @@ fn count(haystack: &[u8], needle: &[u8], kept: usize) -> usize {
 
 /// How many of `pid`'s threads open for `THREAD_GET_CONTEXT` and
 /// `THREAD_QUERY_INFORMATION`, and whether `GetThreadContext` succeeds.
-fn threads_report(pid: u32) -> String {
-    let threads = threads_of(&std::collections::HashSet::from([pid]));
+fn threads_report(threads: &[u32]) -> String {
     let (mut get_context, mut query, mut context_read) = (0, 0, 0);
     let mut first_error = String::new();
-    for (thread, _) in &threads {
+    for thread in threads {
         // SAFETY: each handle is closed right away; the context is aligned
         // by its type.
         unsafe {
@@ -251,6 +264,36 @@ fn threads_report(pid: u32) -> String {
         "threads={} thread_query={query} thread_get_context={get_context} context_read={context_read} thread_first_error={first_error}",
         threads.len()
     )
+}
+
+/// A's command, its parent (an elevated runner, or for legacy the test
+/// process standing in for Codex), the test process, and the console hosts
+/// the parent started, each with its threads: `name=pid=tid/tid;...`.
+fn targets_of(pid: u32) -> String {
+    let (parent, parent_image) = parent_of(pid);
+    let codex = std::process::id();
+    let mut targets = vec![
+        ("command".to_string(), pid),
+        (format!("runner:{parent_image}"), parent),
+    ];
+    if parent != codex {
+        targets.push(("codex".to_string(), codex));
+    }
+    for (host, image) in console_hosts_started_by(parent) {
+        targets.push((format!("host:{image}"), host));
+    }
+    targets
+        .into_iter()
+        .map(|(name, pid)| {
+            let tids = threads_of(&std::collections::HashSet::from([pid]))
+                .into_iter()
+                .map(|(tid, _)| tid.to_string())
+                .collect::<Vec<_>>()
+                .join("/");
+            format!("{name}={pid}={tids}")
+        })
+        .collect::<Vec<_>>()
+        .join(";")
 }
 
 #[derive(Clone, Copy)]
@@ -305,7 +348,7 @@ async fn spawn_as(
     }
 }
 
-fn measure(tty: bool, codex_home: &Path, a: Backend, b: Backend) {
+fn measure(tty: bool, a_home: &Path, b_home: &Path, a: Backend, b: Backend) {
     let holder_root = user_owned_test_root();
     let root = user_owned_test_root();
     let hold_dir = holder_root.path().join("hold1803");
@@ -323,7 +366,7 @@ fn measure(tty: bool, codex_home: &Path, a: Backend, b: Backend) {
         let holder = spawn_as(
             a,
             holder_root.path(),
-            codex_home,
+            a_home,
             probe_argv(HOLD_1803),
             &[(HOLD_DIR_ENV, hold_dir.display().to_string())],
             tty,
@@ -344,7 +387,7 @@ fn measure(tty: bool, codex_home: &Path, a: Backend, b: Backend) {
         let Some(pid) = pid else {
             drop(release);
             let (stdout, code) =
-                collect_stdout_and_exit(holder, codex_home, Duration::from_secs(/*secs*/ 90))
+                collect_stdout_and_exit(holder, a_home, Duration::from_secs(/*secs*/ 90))
                     .await;
             return (
                 format!(
@@ -369,10 +412,10 @@ fn measure(tty: bool, codex_home: &Path, a: Backend, b: Backend) {
         let probe = spawn_as(
             b,
             root.path(),
-            codex_home,
+            b_home,
             probe_argv(PROBE_1803),
             &[
-                (TARGET_PID_ENV, pid.to_string()),
+                (TARGET_PID_ENV, targets_of(pid)),
                 (MARKER_ENV, id.clone()),
                 (OUT_FILE_ENV, out.display().to_string()),
             ],
@@ -380,12 +423,12 @@ fn measure(tty: bool, codex_home: &Path, a: Backend, b: Backend) {
         )
         .await;
         let (stdout, code) =
-            collect_stdout_and_exit(probe, codex_home, Duration::from_secs(/*secs*/ 120)).await;
+            collect_stdout_and_exit(probe, b_home, Duration::from_secs(/*secs*/ 120)).await;
         let stdout = String::from_utf8_lossy(&stdout);
         let line = fs::read_to_string(&out)
             .unwrap_or_else(|_| format!("no result exit={code} {stdout}"));
         drop(release);
-        let _ = collect_stdout_and_exit(holder, codex_home, Duration::from_secs(/*secs*/ 90)).await;
+        let _ = collect_stdout_and_exit(holder, a_home, Duration::from_secs(/*secs*/ 90)).await;
         (line, got)
     });
     let mode = format!(
@@ -400,28 +443,49 @@ fn measure(tty: bool, codex_home: &Path, a: Backend, b: Backend) {
     }
 }
 
-/// win-1803l: legacy B against legacy A, then both cross-backend pairs, then
-/// elevated against elevated as the 1803m control. Elevated pairs need an
-/// elevated run or a recorded setup.
+/// win-1803l: legacy B against legacy A, then elevated against elevated as
+/// the 1803m control (which records the setup), then both cross-backend
+/// pairs. Each backend keeps its own codex home. A failed pair is reported
+/// and the rest still run.
 #[test]
 fn probe_1803l_cross_backend_read() {
     let _guard = legacy_process_test_guard();
     let legacy_home = sandbox_home("w1803l");
-    for tty in [true, false] {
-        measure(tty, legacy_home.path(), Backend::Legacy, Backend::Legacy);
-    }
-    let Some(codex_home) = elevated_home("w1803l") else {
-        println!("\nW1803M|{}|elevated pairs skipped", session());
-        return;
+    let elevated = elevated_home("w1803l");
+    let home_for = |backend: Backend| match backend {
+        Backend::Legacy => Some(legacy_home.path()),
+        Backend::Elevated => elevated.as_ref().map(TempDir::path),
     };
     for (a, b) in [
+        (Backend::Legacy, Backend::Legacy),
+        (Backend::Elevated, Backend::Elevated),
         (Backend::Elevated, Backend::Legacy),
         (Backend::Legacy, Backend::Elevated),
-        (Backend::Elevated, Backend::Elevated),
     ] {
         for tty in [true, false] {
-            measure(tty, codex_home.path(), a, b);
+            let (Some(a_home), Some(b_home)) = (home_for(a), home_for(b)) else {
+                println!(
+                    "\nW1803M|{}|{}>{}|skipped: no elevated setup",
+                    session(),
+                    a.name(),
+                    b.name()
+                );
+                continue;
+            };
+            let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                measure(tty, a_home, b_home, a, b)
+            }));
+            if run.is_err() {
+                println!(
+                    "\nW1803M|{}|A={}:tty={tty}>B={}|panicked",
+                    session(),
+                    a.name(),
+                    b.name()
+                );
+            }
+            if let (Backend::Elevated, Backend::Elevated, Some(home)) = (a, b, elevated.as_ref()) {
+                record_setup(home.path());
+            }
         }
     }
-    record_setup(codex_home.path());
 }
