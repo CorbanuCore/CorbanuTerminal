@@ -71,7 +71,7 @@ jobs:
           $whoami = & $medium -Program "$env:SystemRoot\System32\whoami.exe" -Arguments @('/groups')
           if (-not ($whoami -match 'Medium Mandatory Level')) { throw "the normal-session token is not medium integrity" }
           New-SmbShare -Name sec1863 -Path $temp -FullAccess 'Everyone' -ErrorAction Stop | Out-Null
-          $env:CODEX_TEST_UNC_SHARE = '\\localhost\sec1863'
+          $env:CODEX_TEST_UNC_SHARE = 'sec1863'
           $env:CODEX_TEST_UNC_SHARE_DIR = $temp
           $core = Get-TestExe @('-p', 'codex-core', '--lib')
           & $medium -Program $core -Arguments @('sec_win_1863', '--nocapture', '--test-threads=1')
