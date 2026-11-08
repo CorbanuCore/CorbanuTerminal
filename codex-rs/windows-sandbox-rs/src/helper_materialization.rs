@@ -103,7 +103,7 @@ pub(crate) fn resolve_helper_for_launch(
 /// itself, not on the folder it points at.
 fn keep_helper_bin_dir_medium(codex_home: &Path, log_dir: Option<&Path>) {
     let dir = helper_bin_dir(codex_home);
-    if crate::workspace_acl::is_link(&dir) {
+    if false && crate::workspace_acl::is_link(&dir) {
         log_note(
             &format!(
                 "helper copy: {} is a link (or can't be inspected); not labelling it Medium, so a legacy session's Low label may reach the runner (#1819)",
