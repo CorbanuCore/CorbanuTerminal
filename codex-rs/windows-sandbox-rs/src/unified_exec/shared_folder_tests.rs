@@ -853,32 +853,41 @@ fn sec_win_1791_rescan_after_cli_version_change_closes_new_folders() {
         "D414: a command scanned again without a version change"
     );
 
-    // Another home's setup closes it; then a folder appears that no setup
-    // has seen; then the CLI's version changes.
+    // Another home's setup closes it. After a version change this home's
+    // rescan finds only that deny, which no setup recorded for this home:
+    // its setup runs and records it (the removal of the other home's would
+    // otherwise take it away).
     run(other_home.path(), "other-setup.cmd");
     assert!(
         has_write_deny(same.path()),
         "the other home's setup didn't close it"
     );
-    let fresh = everyone_writable_folder("CorbanuSecWin1791Fresh-");
     let stamp = rescan_stamp(home.path());
-    let text = fs::read_to_string(&stamp).unwrap_or_default();
-    fs::write(
-        &stamp,
-        text.replace(env!("CARGO_PKG_VERSION"), "0.0.0-sec-win-1791"),
-    )
-    .expect("an older stamp");
+    let age_stamp = |version: &str| {
+        let text = fs::read_to_string(&stamp).unwrap_or_default();
+        fs::write(&stamp, text.replace(env!("CARGO_PKG_VERSION"), version))
+            .expect("an older stamp");
+    };
+    age_stamp("0.0.0-sec-win-1791-a");
+    run(home.path(), "other-home-deny.cmd");
+    assert!(
+        recorded_homes(same.path(), Write).contains(&home_key(home.path())),
+        "D414: this home doesn't rely on the other home's deny on {}\n{}",
+        same.path().display(),
+        sandbox_log(home.path())
+    );
+    let text = fs::read_to_string(&stamp).expect("stamp");
+    assert!(text.contains(env!("CARGO_PKG_VERSION")), "{text}");
+
+    // A folder no setup has seen, then another version change.
+    let fresh = everyone_writable_folder("CorbanuSecWin1791Fresh-");
+    age_stamp("0.0.0-sec-win-1791-b");
     run(home.path(), "new-version.cmd");
     assert!(
         has_write_deny(fresh.path()),
         "D414: after a version change the new folder {} was not closed\n{}",
         fresh.path().display(),
         sandbox_log(home.path())
-    );
-    assert!(
-        recorded_homes(same.path(), Write).contains(&home_key(home.path())),
-        "D414: this home doesn't rely on the other home's deny on {}",
-        same.path().display()
     );
     let text = fs::read_to_string(&stamp).expect("stamp");
     assert!(text.contains(env!("CARGO_PKG_VERSION")), "{text}");
@@ -973,7 +982,7 @@ fn sec_win_1791_removal_takes_out_recorded_denies() {
     assert!(present.expect("read DACL"));
     assert_ne!(icacls(shared.path(), &[]), before);
 
-    crate::setup::run_elevated_shared_folder_deny_removal(codex_home.path())
+    let summary = crate::setup::run_elevated_shared_folder_deny_removal(codex_home.path())
         .unwrap_or_else(|err| panic!("removal: {err:#}\n{}", sandbox_log(codex_home.path())));
     // Only this home relied on the new folder's deny: it is gone, exactly.
     assert_eq!(icacls(shared.path(), &[]), before);
@@ -1012,6 +1021,14 @@ fn sec_win_1791_removal_takes_out_recorded_denies() {
     assert!(
         back.expect("read DACL"),
         "D413: the next command didn't add the deny back"
+    );
+    // D413: what the CLI reports.
+    let summary = format!("{summary:?}");
+    assert!(
+        summary.contains("removed: ")
+            && !summary.contains("removed: 0,")
+            && summary.contains("failed: 0"),
+        "D413: the removal reported {summary}"
     );
     println!(
         "sec-win-1791: the removal took out the deny only its home relied on and kept {} others",
