@@ -2339,7 +2339,14 @@ impl Classifier {
         if indirect::sudo_option_boundaries_differ(simple, words) {
             self.note(ProtectedActionKind::UnseenCode);
         }
-        if indirect::redirect_hides_command(simple, words, /*from*/ 0)
+        // #1821: a sudo that a finder's exec option starts (`find . -exec
+        // sudo -A ./x \;`) gets the same helper and chroot checks, each read
+        // within its own command so the cost stays linear.
+        let finder_sudo = indirect::finder_exec_commands(words)
+            .into_iter()
+            .any(|(start, end)| indirect::sudo_runs_helper(simple, &words[..end], start));
+        if finder_sudo
+            || indirect::redirect_hides_command(simple, words, /*from*/ 0)
             || indirect::sudo_runs_helper(simple, words, /*from*/ 0)
             || operands.is_some_and(|from| {
                 indirect::redirect_hides_command(simple, words, from)
