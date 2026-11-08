@@ -87,6 +87,9 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   a little more slowly (so the command list opened before Enter), it ran at
   once and was refused with "Model selection is disabled until startup
   completes."
+- **`/quit` and `/exit` don't wait** (D390, #1833). Typed during startup,
+  they exit at once instead of joining the queue, so a startup that hangs can
+  still be left without Ctrl+C. Every other command still waits.
 
 ## `/cost`
 
@@ -575,13 +578,22 @@ asking and now ask first:
   `zselect -t 0 -r 0 -A $n`, `zsystem flock -t 0 -f $n file` (#1704).
   `print`, `printf` and `getopts` are now read this way too. So an
   unquoted variable, `$(…)` or pattern where `print`, `printf`, `set`,
-  `stat`, `read`, `mapfile`, `vared` or `getopts` read their options or the
+  `read`, `mapfile`, `vared` or `getopts` read their options or the
   name they write can now ask (`print -r $(cat f)`,
-  `set ?A commands ls ./x`, `stat -f %m $(cat f)`, `read -d $(cat f)`,
+  `set ?A commands ls ./x`, `read -d $(cat f)`,
   `getopts $(cat f)`), and so can a quoted one with more words after it
   (`printf "$fmt" x`). `print -r -- $x`, `set -- $(cat f)`,
-  `stat -f %m "$f"`, `printf "$fmt"`, `print -l *.png` and `wait $pid` stay
+  `printf "$fmt"`, `print -l *.png` and `wait $pid` stay
   quiet.
+- zsh's `stat` builtin, which can write those tables (`stat -A functions
+  x`), now asks only when the same action may load it: a line of it runs
+  `zmodload` or names `zsh/stat` (`zmodload zsh/stat; stat -f %m $(cat f)`
+  asks, before or after the `stat`), holds a brace range, or runs bash's
+  `enable` or a command named by a variable, command output or a pattern.
+  zsh starts without it. Elsewhere `stat` is the system program, so macOS
+  `stat -f %m $f` stays quiet. A module loaded by your zsh start-up files,
+  or by an earlier command in the same long-running shell session, isn't
+  seen (D410, #1704). `zstat` is always checked.
 - A program named by a path, or a shell or interpreter, run after a leading
   redirection (`>log ./x`, `2>log sh x`, `2>&1 ./x`, `<<EOF ./x`,
   `sudo >log ./x`, `env >log ./x`), also in `eval` text (`eval '>log ./x'`),
@@ -630,6 +642,14 @@ count as one unknown file, the cautious reading (#1587, #1132, thanks to
   outside its own sandbox restrictions (#1721), and can still read and end
   the other's processes. So still avoid running commands
   in several projects at once (see `docs/sandbox.md`).
+- **Commands in the default sandbox can no longer read a non-admin sandbox
+  command's memory** (D429, #1803). A default (elevated) sandbox command
+  could read the memory of a non-admin sandbox command running at the same
+  time, such as secrets in its environment, its output and what was typed at
+  its prompts. Other accounts (except SYSTEM and administrators using debug
+  rights) can now only wait for a non-admin command's processes. One
+  non-admin command can still read another's memory (#1838), so still avoid
+  running commands in several projects at once.
 - **Profiles the Windows sandbox can't enforce are refused, and say why**
   (D331, #1762). A profile with a writable folder inside a read-only one is
   now refused for the agent's commands in the non-admin sandbox too, as it
@@ -658,7 +678,11 @@ count as one unknown file, the cautious reading (#1587, #1132, thanks to
   now compares real paths too (`subst` drives included), for the agent's
   commands in both sandboxes and for `command/exec`. The same folder
   marked read-only and writable under two spellings is still not refused;
-  in the non-admin sandbox read-only wins (#1780).
+  in the non-admin sandbox read-only wins (#1780). Newly refused for the
+  same reason: a protected `.git`, `.codex` or `.agents` folder that is a
+  link to a folder holding another writable folder of the profile. Replace
+  the link with a folder; see "A writable folder inside a read-only one" in
+  `docs/sandbox.md`.
 - **Non-admin sandbox: a writable folder inside a protected `.git`, `.codex`
   or `.agents` folder is refused for older workspace-write profiles too**
   (#1810, D331). A profile in the older workspace-write format, for example
@@ -732,6 +756,18 @@ count as one unknown file, the cautious reading (#1587, #1132, thanks to
   and Python `multiprocessing` fail there. This is not new in this release.
   The default (elevated) sandbox runs all of them; see "Known limitations"
   in `docs/sandbox.md`.
+- **Known limitation, now documented: non-admin sandbox commands can write
+  in `C:\ProgramData\Microsoft\DeviceSync`** (#1770). Windows labels that
+  folder Low and lets everyone write to it. This is not new in this
+  release, and we accept it; don't keep files there that you rely on.
+- **Known limitation, now documented: default (elevated) sandbox commands
+  can read other projects' running commands** (#1803). A command can read
+  the memory of another project's command running at the same time
+  (secrets in its environment, what it prints) and, for one run in a
+  terminal, its console host (what you type and what it prints). It can't
+  change them. This is not new in this release. A change awaiting security
+  sign-off (#1800) stops the memory read, and a follow-up stops the console
+  read; until then, avoid running commands in several projects at once.
 - **A default (elevated) sandbox command now starts while a non-admin
   sandbox command is running** (#1819). Before, when the non-admin command's
   writable folders held the Corbanu home (for example `%TEMP%`, or a project

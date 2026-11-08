@@ -244,7 +244,7 @@ jobs:
           set -euo pipefail
           cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --bin codex-windows-sandbox-setup -- sandbox_users::tests:: --nocapture 2>&1 | tee pw-1776.log
           grep -q 'test result: ok. 3 passed' pw-1776.log
-      - name: P1 Windows hardening regressions (#301, #304, #307, #323, #341, #345, #1819)
+      - name: P1 Windows hardening regressions (#301, #304, #307, #323, #341, #345, #1819, D429)
         if: ${{ !cancelled() }}
         shell: bash
         # Elevated: the #341/#345 tests must not skip. #345 runs a command in
@@ -375,6 +375,20 @@ jobs:
             grep -q "test result: ok. 1 passed" legacy-158.log
           done
           rm legacy-158.log
+      - name: Legacy capture returns while a descendant runs (#1826)
+        if: ${{ !cancelled() }}
+        shell: bash
+        # A descendant left running holds the output pipes; the capture must
+        # return once the command exits, leaving it running.
+        run: |
+          set -euo pipefail
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- capture_pipes::tests:: --nocapture --test-threads=1 2>&1 | tee capture-1826.log
+          grep -q "test result: ok. 2 passed" capture-1826.log
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- --exact unified_exec::tests::legacy_capture_emits_output_and_preserves_descendant_after_normal_exit --nocapture --test-threads=1 2>&1 | tee capture-1826.log
+          grep -q "test result: ok. 1 passed" capture-1826.log
+          # The test passes without running when pwsh 7 is missing.
+          grep -q "capture pwsh exit_code=0" capture-1826.log
+          rm capture-1826.log
       - name: Job breakaway limits (#733)
         if: ${{ !cancelled() }}
         shell: bash
@@ -520,7 +534,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "#295 probe failed in a normal session" }
             $sandbox = Get-TestExe @('-p', 'codex-windows-sandbox', '--lib')
             # The D324 tests skip here: no elevated setup is recorded yet.
-            Assert-Tests $sandbox 'sec_win_' 57
+            Assert-Tests $sandbox 'sec_win_' 60
             # The #1770 and #1791 tests run on their own below.
             & $medium -Program $sandbox -Arguments @('sec_win_', '--skip', 'sec_win_1770_', '--skip', 'sec_win_1791_', '--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "P1 hardening regressions failed in a normal session" }
@@ -584,6 +598,19 @@ jobs:
             $out
             if ($code -ne 0) { throw "#1819 failed in a normal session" }
             if (-not ($out -match 'test result: ok\. 1 passed')) { throw "#1819 did not run in a normal session" }
+            # D429 (#1803): an elevated command can't read a legacy command's
+            # memory or thread contexts (the legacy tests ran above).
+            $tD429 = 'unified_exec::tests::command_identity::elevated::d429::sec_win_d429_elevated_command_cannot_read_a_legacy_command'
+            Assert-Tests $sandbox $tD429 1
+            & $sandbox --exact 'unified_exec::tests::command_identity::elevated::sec_win_1648_elevated_command_keeps_write_access_to_its_own_processes' --nocapture --test-threads=1 | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "recording the elevated setup for D429 failed" }
+            $env:CODEX_SEC_WIN_1648_REQUIRE = '1'
+            $out = & $medium -Program $sandbox -Arguments @('--exact', $tD429, '--nocapture', '--test-threads=1')
+            $code = $LASTEXITCODE
+            Remove-Item Env:CODEX_SEC_WIN_1648_REQUIRE
+            $out
+            if ($code -ne 0) { throw "D429 elevated failed in a normal session" }
+            if (-not ($out -match 'test result: ok\. 1 passed')) { throw "D429 elevated did not run in a normal session" }
             # #1770: a command of each backend may not write into a fresh
             # folder in the runner's D:\tmp (not this step's TEMP) that any
             # signed-in account may write to; only its restricted token keeps
