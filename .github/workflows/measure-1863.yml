@@ -38,7 +38,7 @@ jobs:
           export CARGO_BIN_EXE_codex_windows_sandbox_setup="$(cygpath -w "${bin_dir}/codex-windows-sandbox-setup.exe")"
           export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
           core=0
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --lib -- sec_win_1863 --nocapture --test-threads=1 || core=$?
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --lib -- sec_win_1863 guardian_cwd_refuses_localhost_unc --nocapture --test-threads=1 || core=$?
           uri=0
           cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-utils-path-uri --lib -- localhost_unc --nocapture || uri=$?
           echo "elevated: core=$core path-uri=$uri"
