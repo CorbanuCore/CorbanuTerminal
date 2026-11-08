@@ -218,7 +218,12 @@ jobs:
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping Windows gnullvm Bazel shard because authenticated remote execution is unavailable; the native MSVC validation job remains mandatory."
+            # #1856: say plainly what does not run. The job still succeeds.
+            disclosure="Windows Bazel integration tests (the *-windows-cross targets, crates' tests/*.rs) did NOT run: this gnullvm shard's bazel test step is skipped because authenticated remote execution (BuildBuddy) is unavailable, and the native Windows lane runs unit tests only (#1856). The native MSVC validation job remains mandatory."
+            echo "::notice::${disclosure}"
+            if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+              printf '%s\n' "${disclosure}" >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi
 
       - name: Test BuildBuddy Bazel wrapper
