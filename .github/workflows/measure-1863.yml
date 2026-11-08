@@ -1,0 +1,81 @@
+name: measure-1863
+
+# #1863 MEASUREMENT ONLY: never merged. The probe on main's code (fail-before)
+# and on the fix, in an elevated and a normal (medium-integrity) session.
+on:
+  push:
+    branches: [win-1863-failbefore, win-1863-after]
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: measure 1863 (windows-2022)
+    runs-on: windows-2022
+    timeout-minutes: 90
+    env:
+      RUST_BACKTRACE: "1"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
+      - name: Build the probe
+        shell: bash
+        run: |
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --lib --no-run
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-utils-path-uri --lib --no-run
+          cargo build --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --bins
+      - name: Elevated session
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          CODEX_TEST_1863_ELEVATED: "1"
+        run: |
+          bin_dir="${CARGO_TARGET_DIR}/debug"
+          export CARGO_BIN_EXE_codex_windows_sandbox_setup="$(cygpath -w "${bin_dir}/codex-windows-sandbox-setup.exe")"
+          export CARGO_BIN_EXE_codex_command_runner="$(cygpath -w "${bin_dir}/codex-command-runner.exe")"
+          core=0
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --lib -- sec_win_1863 --nocapture --test-threads=1 || core=$?
+          uri=0
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-utils-path-uri --lib -- localhost_unc --nocapture || uri=$?
+          echo "elevated: core=$core path-uri=$uri"
+          test "$core" = 0 && test "$uri" = 0
+      - name: Normal (medium-integrity) session
+        if: ${{ !cancelled() }}
+        shell: powershell
+        run: |
+          $medium = '.github/scripts/run-at-medium-integrity.ps1'
+          $user = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+          $temp = Join-Path $env:RUNNER_TEMP 'medium-temp'
+          New-Item -ItemType Directory $temp -ErrorAction Stop | Out-Null
+          icacls $temp /setowner "*$user" /Q | Out-Null
+          $full = [Security.AccessControl.FileSystemRights]::FullControl
+          $inherit = [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
+          $dacl = New-Object Security.AccessControl.DirectorySecurity
+          $dacl.SetAccessRuleProtection($true, $false)
+          foreach ($s in @($user, 'S-1-5-18', 'S-1-5-32-544')) {
+            $dacl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule(
+              (New-Object Security.Principal.SecurityIdentifier($s)), $full, $inherit, 'None', 'Allow')))
+          }
+          [IO.Directory]::SetAccessControl($temp, $dacl)
+          $env:TEMP = $temp
+          $env:TMP = $temp
+          $ErrorActionPreference = 'Continue'
+          function Get-TestExe([string[]]$CargoArgs) {
+            $artifacts = cargo test --locked --manifest-path codex-rs/Cargo.toml @CargoArgs --no-run --message-format=json
+            ($artifacts | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object { $_.executable } | Select-Object -Last 1).executable
+          }
+          $whoami = & $medium -Program "$env:SystemRoot\System32\whoami.exe" -Arguments @('/groups')
+          if (-not ($whoami -match 'Medium Mandatory Level')) { throw "the normal-session token is not medium integrity" }
+          New-SmbShare -Name sec1863 -Path $temp -FullAccess 'Everyone' -ErrorAction Stop | Out-Null
+          $env:CODEX_TEST_UNC_SHARE = '\\localhost\sec1863'
+          $env:CODEX_TEST_UNC_SHARE_DIR = $temp
+          $core = Get-TestExe @('-p', 'codex-core', '--lib')
+          & $medium -Program $core -Arguments @('sec_win_1863', '--nocapture', '--test-threads=1')
+          $coreCode = $LASTEXITCODE
+          Remove-SmbShare -Name sec1863 -Force
+          "normal session: core=$coreCode"
+          if ($coreCode -ne 0) { exit 1 }
