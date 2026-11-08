@@ -650,6 +650,75 @@ fn probe_377b_scan_entry() {
     println!(
         "\nP377BSCAN|total={total} write_dac={write_dac} write={write} delete={delete} regranted_then_writable={regrant}"
     );
+    for line in text.lines().filter(|line| !line.is_empty()).take(400) {
+        let path = Path::new(line);
+        let name = path.to_string_lossy();
+        if name.contains("node-compile-cache") && !name.ends_with("node-compile-cache") {
+            continue;
+        }
+        println!(
+            "\nP377BD|{}|wdac={} write={} delete={} rc={}",
+            name,
+            err_of(open_b(path, WRITE_DAC_B)),
+            err_of(open_b(path, FILE_WRITE_DATA)),
+            err_of(open_b(path, DELETE)),
+            err_of(open_b(path, READ_CONTROL_B))
+        );
+    }
+}
+
+fn sddl(path: &Path) -> String {
+    use windows_sys::Win32::Security::Authorization::ConvertSecurityDescriptorToStringSecurityDescriptorW;
+    use windows_sys::Win32::Security::Authorization::GetSecurityInfo;
+    let Ok(file) = open_b(path, READ_CONTROL_B) else {
+        return format!(
+            "open-err={:?}",
+            open_b(path, READ_CONTROL_B)
+                .err()
+                .and_then(|e| e.raw_os_error())
+        );
+    };
+    let mut sd: *mut std::ffi::c_void = std::ptr::null_mut();
+    // SAFETY: open handle; descriptor freed below.
+    unsafe {
+        let code = GetSecurityInfo(
+            file.as_raw_handle() as _,
+            1,
+            0x1 | 0x4 | 0x10,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut sd,
+        );
+        if code != 0 {
+            return format!("gsi-err={code}");
+        }
+        let mut out: *mut u16 = std::ptr::null_mut();
+        let mut len = 0u32;
+        let ok = ConvertSecurityDescriptorToStringSecurityDescriptorW(
+            sd,
+            1,
+            0x1 | 0x4 | 0x10,
+            &mut out,
+            &mut len,
+        );
+        let text = if ok != 0 {
+            String::from_utf16_lossy(std::slice::from_raw_parts(out, len as usize))
+        } else {
+            "convert-failed".to_string()
+        };
+        windows_sys::Win32::Foundation::LocalFree(out as _);
+        windows_sys::Win32::Foundation::LocalFree(sd as _);
+        text.trim_end_matches('\0').to_string()
+    }
+}
+
+fn err_of(result: std::io::Result<fs::File>) -> String {
+    match result {
+        Ok(_) => "ok".to_string(),
+        Err(err) => format!("e{}", err.raw_os_error().unwrap_or(-1)),
+    }
 }
 
 fn bucket(name: &str) -> String {
@@ -858,15 +927,57 @@ fn probe_377b_leftovers() {
             probe_argv(SCAN_B_ENTRY),
             &env,
         ));
-        let line = out
+        let mut any = false;
+        for line in out
             .lines()
-            .find(|line| line.starts_with("P377BSCAN|"))
-            .map(str::to_string)
-            .unwrap_or_else(|| format!("no scan line exit={code} {}", tail(&out)));
-        println!("\nP377B|{}|{label}|{line}", session());
+            .filter(|line| line.starts_with("P377BSCAN|") || line.starts_with("P377BD|"))
+        {
+            any = true;
+            println!("\nP377B|{}|{label}|{line}", session());
+        }
+        if !any {
+            println!(
+                "\nP377B|{}|{label}|no scan line exit={code} {}",
+                session(),
+                tail(&out)
+            );
+        }
     };
+    let dump = |label: &str, inv: &Inventory| {
+        for path in inv.sandbox.iter().filter(|p| {
+            let name = p.to_string_lossy();
+            !name.contains("node-compile-cache") || name.ends_with("node-compile-cache")
+        }) {
+            println!(
+                "\nP377B|{}|{label}|sddl|{}|{}",
+                session(),
+                path.display(),
+                sddl(path)
+            );
+        }
+    };
+    dump("after-session", &before);
+    let whoami = work.join("w-whoami.cmd");
+    fs::write(&whoami, "@echo off\r\nwhoami /user /groups /priv\r\n").expect("whoami");
+    let (out, _) = runtime.block_on(run(
+        root.path(),
+        home.path(),
+        cmd_argv(&whoami),
+        &temp_env(&work),
+    ));
+    for line in out.lines().filter(|line| !line.trim().is_empty()) {
+        println!("\nP377B|{}|whoami|{}", session(), line.trim_end());
+    }
     scan("sandbox-with-old-grant");
-    // #1857's upgrade step: the group's and the home's grants on %TEMP% go.
+    // The product's order: take first, then the old grant goes.
+    let started = Instant::now();
+    let taken = crate::session_temp_leftovers::take_sandbox_leftovers(&real_temp, &accounts);
+    println!(
+        "\nP377B|{}|take secs={:.2} result={taken:?}",
+        session(),
+        started.elapsed().as_secs_f64()
+    );
+    scan("sandbox-after-take-grant-still-there");
     let caps = crate::cap::load_or_create_cap_sids(home.path()).expect("caps");
     let mut sids: Vec<String> = caps
         .writable_root_by_path
@@ -887,17 +998,10 @@ fn probe_377b_leftovers() {
     // SAFETY: valid SIDs; the folder exists.
     let removed = unsafe { crate::acl::remove_explicit_allow_aces(&real_temp, &ptrs) };
     println!("\nP377B|{}|old grant removed={removed:?}", session());
-    scan("sandbox-after-grant-removed");
-    let started = Instant::now();
-    let taken = crate::session_temp_leftovers::take_sandbox_leftovers(&real_temp, &accounts);
-    println!(
-        "\nP377B|{}|take secs={:.2} result={taken:?}",
-        session(),
-        started.elapsed().as_secs_f64()
-    );
-    scan("sandbox-after-take");
+    scan("sandbox-after-take-and-grant-removed");
     let after = inventory(&real_temp, &accounts);
-    print_inventory("after-take", &after);
+    print_inventory("after-all", &after);
+    dump("after-all-before-list", &before);
     println!(
         "\nP377B|{}|user-dir user.txt intact={}",
         session(),
