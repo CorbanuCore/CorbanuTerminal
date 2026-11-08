@@ -49,6 +49,8 @@ jobs:
           cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib sec_win_d377_ -- --nocapture --test-threads=1 > admin.log 2>&1
           echo "exit=$?"; cat admin.log
           { echo "ADMIN $(git rev-parse HEAD)"; grep -E '^test |test result|panicked|d377 ' admin.log; } >> results.txt
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- --exact unified_exec::tests::token_boundary::sec_win_1770_elevated_command_cannot_write_to_a_shared_folder unified_exec::tests::env_case::win_1805_elevated_command_gets_one_path_and_start_process_runs --nocapture --test-threads=1 > left.log 2>&1
+          { echo "LEFTOVER-CHECK $(grep 'test result' left.log)"; echo "untracked under codex-rs: $(git status --porcelain --untracked-files=normal -- codex-rs | grep -c '^??')"; git status --porcelain --untracked-files=normal -- codex-rs; } >> results.txt
       - name: Normal session
         if: ${{ !cancelled() }}
         shell: powershell
