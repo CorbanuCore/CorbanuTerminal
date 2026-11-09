@@ -59,20 +59,11 @@ create_openai_url(None, 3);
 Install the required tooling once:
 
 ```bash
-<<<<<<< HEAD
 cargo install --locked cargo-dylint@6.1.1 dylint-link@6.1.1
 rustup toolchain install nightly-2026-08-08 \
-||||||| 413492cd6c
-cargo install --locked cargo-dylint dylint-link
-rustup toolchain install nightly-2025-09-18 \
-=======
-rustup toolchain install nightly-2026-08-20 \
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
   --component llvm-tools-preview \
   --component rustc-dev \
   --component rust-src
-rustup run nightly-2026-08-20 cargo install --locked \
-  cargo-dylint@6.1.0 dylint-link@6.1.0
 ```
 
 Run the lint crate tests:
@@ -99,13 +90,7 @@ The package is not a full Rust toolchain. Running the prebuilt path still
 requires the pinned nightly toolchain to be installed via `rustup`:
 
 ```bash
-<<<<<<< HEAD
 rustup toolchain install nightly-2026-08-08 \
-||||||| 413492cd6c
-rustup toolchain install nightly-2025-09-18 \
-=======
-rustup toolchain install nightly-2026-08-20 \
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
   --component llvm-tools-preview \
   --component rustc-dev \
   --component rust-src
@@ -139,13 +124,7 @@ argument-comment-lint/
     argument-comment-lint
     cargo-dylint
   lib/
-<<<<<<< HEAD
     libargument_comment_lint@nightly-2026-08-08-<target>.dylib|so
-||||||| 413492cd6c
-    libargument_comment_lint@nightly-2025-09-18-<target>.dylib|so
-=======
-    libargument_comment_lint@<nightly>-<target>.dylib|so
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 ```
 
 On Windows the same layout is published as a `.zip`, with `.exe` and `.dll`
@@ -154,29 +133,13 @@ filenames instead.
 DotSlash resolves the package entrypoint to `argument-comment-lint/bin/argument-comment-lint`
 (or `.exe` on Windows). That runner finds the sibling bundled `cargo-dylint`
 binary and the single packaged Dylint library under `lib/`, normalizes the
-<<<<<<< HEAD
 host-qualified nightly filename to the plain `nightly-2026-08-08` channel when
-||||||| 413492cd6c
-host-qualified nightly filename to the plain `nightly-2025-09-18` channel when
-=======
-library filename to the nightly channel without the host triple when
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 needed, and then invokes `cargo-dylint dylint --lib-path <that-library>` with
 the repo's default `DYLINT_RUSTFLAGS` and `CARGO_INCREMENTAL=0` settings.
 
-<<<<<<< HEAD
 The checked-in `run-prebuilt-linter.py` wrapper uses the fetched package
 contents directly.
 It also makes sure the `rustup` shims stay ahead of any direct toolchain
-||||||| 413492cd6c
-The checked-in `run-prebuilt-linter.py` wrapper uses the fetched package
-contents directly so the current checked-in alpha artifact works the same way.
-It also makes sure the `rustup` shims stay ahead of any direct toolchain
-=======
-The repository's `run-prebuilt-linter.py` wrapper invokes the bundled
-`cargo-dylint` and normalizes the library filename itself. It makes sure
-the `rustup` shims stay ahead of any direct toolchain
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 `cargo` binary on `PATH`, and sets `RUSTUP_HOME` from `rustup show home` when
 the environment does not already provide it. That extra `RUSTUP_HOME` export is
 required for the current Windows Dylint driver path.

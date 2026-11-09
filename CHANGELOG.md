@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # PFTerminal 0.1.26
 
 ## Fixed
@@ -243,12 +242,3 @@ The changelog can be found on the [releases page](https://github.com/agtico/PfTe
 Previous release: 0.1.20.
 
 The changelog can be found on the [releases page](https://github.com/agtico/PfTerminal/releases).
-||||||| 413492cd6c
-The changelog can be found on the [releases page](https://github.com/openai/codex/releases).
-=======
-The changelog can be found on the [releases page](https://github.com/openai/codex/releases).
-
-## Unreleased
-
-- Fix missing command lifecycle events when unified exec cannot create a process, preserving approval rejection and sandbox retry behavior. Thanks @Marvinthebored ([#44557](https://github.com/openai/codex/issues/44557)).
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

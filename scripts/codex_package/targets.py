@@ -6,13 +6,10 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
+# `just assemble-codex-package` sets CODEX_REPO_ROOT. Release workflows run
+# scripts/build_codex_package.py directly, so fall back to this checkout.
 _repo_root = os.environ.get("CODEX_REPO_ROOT")
-if _repo_root is None:
-    raise RuntimeError(
-        "CODEX_REPO_ROOT must point to the repository root; "
-        "run `just assemble-codex-package` to set it automatically"
-    )
-REPO_ROOT = Path(_repo_root)
+REPO_ROOT = Path(_repo_root) if _repo_root else Path(__file__).resolve().parents[2]
 
 
 @dataclass(frozen=True)
@@ -47,6 +44,9 @@ class PackageVariant:
     cargo_bin: str
     executable_stem: str
     extra_binaries: tuple[PackageExtraBinary, ...] = ()
+    # Upstream packages ship the standalone executor (equal to `codex
+    # exec-server`); Corbanu Terminal packages do not ship it yet.
+    ships_exec_server: bool = True
 
     def entrypoint_name(self, spec: TargetSpec) -> str:
         return f"{self.executable_stem}{spec.exe_suffix}"
@@ -56,12 +56,8 @@ class PackageVariant:
 class PackageInputs:
     entrypoint_bin: Path
     code_mode_host_bin: Path
-<<<<<<< HEAD
     extra_bins: dict[str, Path]
-||||||| 413492cd6c
-=======
-    exec_server_bin: Path
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    exec_server_bin: Path | None
     rg_bin: Path
     bwrap_bin: Path | None
     codex_command_runner_bin: Path | None
@@ -73,6 +69,7 @@ PACKAGE_VARIANTS: dict[str, PackageVariant] = {
         name="corbanu",
         cargo_bin="corbanu",
         executable_stem="corbanu",
+        ships_exec_server=False,
         extra_binaries=(
             PackageExtraBinary(
                 cargo_bin="corbanu-debug",
@@ -93,6 +90,7 @@ PACKAGE_VARIANTS: dict[str, PackageVariant] = {
         name="pfterminal",
         cargo_bin="pfterminal",
         executable_stem="pfterminal",
+        ships_exec_server=False,
         extra_binaries=(
             PackageExtraBinary(
                 cargo_bin="pfterminal-debug",
