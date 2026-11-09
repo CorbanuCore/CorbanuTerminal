@@ -130,4 +130,6 @@
 /codex-rs/core/src/config/network_proxy_credential* @corbanu-security
 /codex-rs/core/src/model_broker_auth* @corbanu-security
 /codex-rs/model-provider/src/model_key_broker.rs @corbanu-security
+/codex-rs/websocket-auth/ @corbanu-security
+/codex-rs/prompts/templates/guardian/ @corbanu-security
 # END sync-branch security owners

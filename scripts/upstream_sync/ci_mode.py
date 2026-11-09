@@ -6,10 +6,11 @@
                                  to sync-ci/**
   ci_mode.py revert <worktree>   remove exactly what apply added (every added line ends with the TAG comment)
   ci_mode.py check  <worktree>   exit 1 if any CI-mode line or file is present (S5 entry check)
-  ci_mode.py codeowners apply|revert|check <worktree> [@owner]
-                                 sync-branch CODEOWNERS block for the named security paths and the
-                                 dependency-policy files (reverted after main merge #3, as the last
-                                 sync-branch commit before the final PR)
+  ci_mode.py codeowners apply|revert|check|drift <worktree> [@owner]
+                                 sync-branch CODEOWNERS block for the named security paths, the
+                                 dependency-policy files and main's D318 paths (reverted after main
+                                 merge #3, as the last sync-branch commit before the final PR); drift
+                                 exits 1 if origin/main's D318 block names a pattern the block lacks
 
 Edits are textual so they apply on top of whatever Tier 0 resolution the skeleton produced.
 """
@@ -17,6 +18,7 @@ Edits are textual so they apply on top of whatever Tier 0 resolution the skeleto
 import os
 import re
 import shutil
+import subprocess
 import sys
 
 TAG = "# sync-ci-mode"
@@ -212,6 +214,16 @@ MAIN_D318 = (
     "/codex-rs/core/src/model_broker_auth*",
     "/codex-rs/model-provider/src/model_key_broker.rs",
 )
+# Upstream moved code that main owns to paths main's block doesn't name yet. Carry these into main's
+# D318 block in the final sync PR.
+SYNC_SUCCESSORS = (
+    # main: /codex-rs/app-server-transport/src/transport/auth.rs (upstream #47447 moved it here)
+    "/codex-rs/websocket-auth/",
+    # main: /codex-rs/core/src/guardian/policy*.md (upstream #41477 moved the guardian prompts here)
+    "/codex-rs/prompts/templates/guardian/",
+)
+MAIN_BLOCK_BEGIN = "# BEGIN Corbanu security owners"
+MAIN_BLOCK_END = "# END Corbanu security owners"
 
 
 def codeowners(action, wt, owner=None):
@@ -223,6 +235,31 @@ def codeowners(action, wt, owner=None):
     start, end = text.find(CO_BEGIN), text.find(CO_END)
     if (start == -1) != (end == -1) or end < start:
         sys.exit("error: CODEOWNERS block markers are incomplete; fix by hand")
+    if action == "drift":
+        # Every pattern in main's D318 block must be in the sync block; run after fetching origin/main.
+        main = subprocess.run(
+            ["git", "-C", wt, "show", "origin/main:.github/CODEOWNERS"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        m_start, m_end = main.find(MAIN_BLOCK_BEGIN), main.find(MAIN_BLOCK_END)
+        if m_start == -1 or m_end < m_start or start == -1:
+            sys.exit("error: main's D318 block or the sync block is missing")
+        owned = {
+            line.split()[0]
+            for line in text[start:end].splitlines()
+            if line.startswith("/")
+        }
+        missing = [
+            line.split()[0]
+            for line in main[m_start:m_end].splitlines()
+            if line.startswith("/") and line.split()[0] not in owned
+        ]
+        if missing:
+            sys.exit("sync block misses main's D318 patterns: " + ", ".join(missing))
+        print("sync block covers main's D318 block")
+        return
     if action == "check":
         if start != -1:
             sys.exit("CODEOWNERS block still present")
@@ -239,7 +276,7 @@ def codeowners(action, wt, owner=None):
         patterns = [
             codeowners_pattern(spec) for spec in [*footprint.NAMED, *DEPENDENCY_POLICY]
         ]
-        patterns += [p for p in MAIN_D318 if p not in patterns]
+        patterns += [p for p in MAIN_D318 + SYNC_SUCCESSORS if p not in patterns]
         block = [CO_BEGIN] + [f"{p} {owner}" for p in patterns] + [CO_END]
         text = text.rstrip("\n") + "\n\n" + "\n".join(block) + "\n"
     open(p, "w").write(text)
