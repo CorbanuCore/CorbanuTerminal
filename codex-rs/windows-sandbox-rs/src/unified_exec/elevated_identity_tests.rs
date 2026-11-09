@@ -1084,7 +1084,10 @@ fn sec_win_1560_elevated_conpty_command_cannot_borrow_another_workspaces_command
 /// #1721 (a′), D392: a runner's ConPTY console host, which copied the
 /// runner's token (with `SeAssignPrimaryTokenPrivilege` in it) before the
 /// command started, no longer holds that privilege. (The runner removes it
-/// from its own token too, and fails its command if it can't.)
+/// from its own token too, and fails its command if it can't.) Since #1803
+/// (D461) another command can't open the host's token at all, which keeps
+/// the privilege out of its reach too; the runner checks the removal itself
+/// (`strip_privilege_from_console_hosts` fails the command otherwise).
 #[test]
 fn sec_win_1721_console_host_drops_the_assign_primary_privilege() {
     let Some(codex_home) = elevated_home("1721-console-privilege") else {
@@ -1117,9 +1120,10 @@ fn sec_win_1721_console_host_drops_the_assign_primary_privilege() {
     println!("\nsec-win-1721 console host privilege: exit={exit_code} {line:?}");
     assert!(
         line.starts_with("host=")
-            && line
-                .split(" | ")
-                .all(|host| host.contains("assign_primary=absent")),
+            && line.split(" | ").all(|host| {
+                host.contains("assign_primary=absent")
+                    || host.contains("assign_primary=open_token_err5")
+            }),
         "a runner's console host still holds SeAssignPrimaryTokenPrivilege: {line}"
     );
 }
