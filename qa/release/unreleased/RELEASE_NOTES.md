@@ -422,10 +422,12 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   read the memory of the console host behind a project's terminal command,
   including what that command printed and what you typed at it (measured on
   a real Windows desktop). With the runner account it can no longer open
-  that process to read or end it. If your account isn't an administrator,
-  this stays open until #1847: while another project's commands run, don't
-  type secrets into a project's command or run commands that print them; see
-  `docs/sandbox.md`.
+  that process to read or end it. As a side effect, a command not running
+  in a terminal can no longer reopen, for reading, the pipes and other
+  unnamed objects of the program that starts it (no tested tool needs to).
+  If your account isn't an administrator, this stays open until #1847:
+  while another project's commands run, don't type secrets into a project's
+  command or run commands that print them; see `docs/sandbox.md`.
 - **Setup runs again once** (a new setup version). If your Windows account
   is an administrator, it creates the account and gives it the Windows right
   "Replace a process level token" (`SeAssignPrimaryTokenPrivilege`). A

@@ -269,14 +269,18 @@ access, which every elevated command holds: win-desk measured it on a real
 desktop on main and on #1800 before D461 (admin and normal sessions), and CI
 run 42581149322 the same (27.5 MB read, a printed secret found). The runner
 is told apart by holding `SeAssignPrimaryTokenPrivilege`; it must then be
-`CodexSandboxRunner`, or it fails closed (no command starts) rather than
-fall back to the D324 DACL. A standard user's runner (no privilege) keeps
+`CodexSandboxRunner`. If it isn't (or the name doesn't resolve), the
+runner's own `harden_runner` fails before it reads any request, so no
+command starts, rather than fall back to the D324 DACL; Core's earlier call
+on the suspended runner is best effort and only logs. A standard user's runner (no privilege) keeps
 the D324 DACL, so #1803 stays open there until #1847 (D392 (b)).
 `sec_win_1803_elevated_command_cannot_read_another_workspaces_console_host`
 gates it, in the admin and a normal session (`windows-security-probes`).
 Residuals: the group's `0x1000` lets another elevated command resume the
-console host's threads; and commands not on a terminal can no longer reopen
-the runner's anonymous output pipes for reading (no tested tool needs to).
+console host's threads. Compatibility: the group also lost read access to
+the runner's anonymous pipes and other unnamed objects it creates without
+explicit security, so a command not on a terminal can no longer reopen
+them for reading (none of the 18 workload tests needs to).
 Two routes still start a child outside the command's job: the COM servers
 `ShellBrowserWindow` (the child runs at Low integrity but with an
 unrestricted token) and

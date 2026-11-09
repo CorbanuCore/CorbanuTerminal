@@ -40,8 +40,9 @@ The default sandbox runs commands as a separate account with a firewall-based
 network block, and protects more. If your Windows account is an administrator,
 each of its commands runs on a logon of its own, so one command can't borrow
 another's processes or token or read its memory (#1560), including the
-terminal window of a command in another project (#1803). The program that starts them runs as a third account,
-`CodexSandboxRunner`, which no command uses (#1721). Setup gives that
+terminal window of a command in another project (#1803). The program that
+starts them runs as a third account, `CodexSandboxRunner`, which no command
+uses (#1721). Setup gives that
 account the Windows right "Replace a process level token"
 (`SeAssignPrimaryTokenPrivilege`), which it needs to start each command on
 its own logon, and denies it network, remote desktop,
