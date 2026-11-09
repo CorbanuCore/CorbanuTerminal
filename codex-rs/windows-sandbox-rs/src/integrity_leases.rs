@@ -201,6 +201,42 @@ pub(crate) fn registry_parent_dir() -> Option<PathBuf> {
     local_app_data().map(|dir| dir.join(REGISTRY_PARENT))
 }
 
+/// D453 (#1896 item 1): the records folder, made first if missing, when one
+/// of `write_roots` holds it (as the non-admin sandbox checks: a root that is
+/// it or lies inside it doesn't count), so the elevated setup denies its
+/// commands writing there. `None` where the folder can't be used for
+/// records (logged): no records are kept there then.
+pub(crate) fn records_folder_inside(write_roots: &[PathBuf], log_dir: &Path) -> Option<PathBuf> {
+    use crate::path_normalization::canonicalize_path;
+    use crate::spawn_prep::strictly_inside_a_root;
+    let local_app_data = local_app_data()?;
+    let roots: Vec<PathBuf> = write_roots
+        .iter()
+        .map(|root| canonicalize_path(root))
+        .collect();
+    // First where it would be made (it may not exist yet), so a session
+    // whose roots don't hold it never makes it here.
+    if !strictly_inside_a_root(
+        &canonicalize_path(&local_app_data).join(REGISTRY_PARENT),
+        &roots,
+    ) {
+        return None;
+    }
+    match ensure_registry() {
+        Ok(_) => {
+            let parent = local_app_data.join(REGISTRY_PARENT);
+            strictly_inside_a_root(&canonicalize_path(&parent), &roots).then_some(parent)
+        }
+        Err(err) => {
+            crate::logging::log_note(
+                &format!("D453: the records folder isn't protected or used: {err:#}"),
+                Some(log_dir),
+            );
+            None
+        }
+    }
+}
+
 fn registry_dir() -> Option<PathBuf> {
     registry_parent_dir().map(|dir| dir.join(REGISTRY_DIR))
 }

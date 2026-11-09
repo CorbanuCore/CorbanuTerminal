@@ -14,9 +14,9 @@
 //! also records what is inside each ([`with_contents`]); one whose contents
 //! differ when the session ends counts as planted too.
 
+use crate::acl::walk::Kind;
 use serde::Deserialize;
 use serde::Serialize;
-use std::os::windows::fs::MetadataExt as _;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -46,7 +46,7 @@ impl NestedMetadata {
             && self
                 .contents
                 .as_ref()
-                .is_none_or(|before| *before == contents(path))
+                .is_none_or(|before| *before == contents_of(path, identity))
     }
 }
 
@@ -108,12 +108,12 @@ pub(crate) fn find(roots: &[PathBuf]) -> Found {
     let seed = roots
         .iter()
         .enumerate()
-        .map(|(n, root)| (root.clone(), vec![n]))
+        .map(|(n, root)| (Pending::root(root), vec![n]))
         .collect();
     let walked = crate::acl::walk::par_walk(
         seed,
         crate::acl::walk::check_threads(),
-        |(dir, place): (PathBuf, Vec<usize>), more| {
+        |(dir, place): (Pending, Vec<usize>), more| {
             let mut part = Found::default();
             let mut budget = usize::MAX;
             if place.len() <= SPLIT_DEPTH {
@@ -169,54 +169,232 @@ const SPLIT_DEPTH: usize = 4;
 fn find_bounded(roots: &[PathBuf], budget: &mut usize) -> Found {
     let mut found = Found::default();
     for root in roots {
-        let mut stack = vec![root.clone()];
+        let mut stack = vec![Pending::root(root)];
         while let Some(dir) = stack.pop() {
             if *budget == 0 {
                 found.exhausted = true;
                 return found;
             }
-            let top = dir == *root;
+            let top = dir.parent.is_none();
             list(dir, top, &mut found, budget, &mut stack);
         }
     }
     found
 }
 
+/// A folder a walk still has to list: its path, and the open folder it was
+/// listed in (none for a root, which is opened by its path).
+pub(crate) struct Pending {
+    path: PathBuf,
+    parent: Option<std::sync::Arc<crate::acl::walk::Handle>>,
+    /// The file it must still be when opened, if one was recorded.
+    expected: Option<FileIdentity>,
+}
+
+impl Pending {
+    fn root(path: &Path) -> Self {
+        Self {
+            path: path.to_path_buf(),
+            parent: None,
+            expected: None,
+        }
+    }
+
+    /// The folder `path` listed in the open folder `parent`.
+    fn child(path: PathBuf, parent: &std::sync::Arc<crate::acl::walk::Handle>) -> Self {
+        Self {
+            path,
+            parent: Some(std::sync::Arc::clone(parent)),
+            expected: None,
+        }
+    }
+
+    /// #1909: the folder open for listing. A root is opened by its path,
+    /// following links as listing it by path did; any other folder through
+    /// the folder it was found in, following no link: one swapped in since
+    /// (a junction, say, perhaps to a network share) fails to open, and
+    /// nothing behind it is reached.
+    fn open(&self) -> std::io::Result<crate::acl::walk::Handle> {
+        let handle = match &self.parent {
+            None => open_by_path(&self.path, FOLDER_LIST),
+            // SAFETY: the parent folder is open.
+            Some(parent) => unsafe {
+                crate::acl::walk::open_folder_unfollowed(
+                    parent.0,
+                    &wide_name(&self.path),
+                    crate::acl::walk::FolderAccess::List,
+                )
+            },
+        }?;
+        if let Some(expected) = self.expected {
+            // SAFETY: the handle is open.
+            let (volume, id) = unsafe { handle.identity() }
+                .map_err(|err| std::io::Error::other(err.to_string()))?;
+            if (FileIdentity { volume, id }) != expected {
+                return Err(std::io::Error::other("not the folder recorded"));
+            }
+        }
+        Ok(handle)
+    }
+
+    /// Whether the folder is gone (its parent no longer holds its name).
+    fn is_gone(&self) -> bool {
+        match &self.parent {
+            None => std::fs::symlink_metadata(&self.path)
+                .is_err_and(|err| err.kind() == std::io::ErrorKind::NotFound),
+            // SAFETY: the parent folder is open.
+            Some(parent) => unsafe {
+                attributes_at(parent.0, &wide_name(&self.path))
+                    .is_err_and(|err| err.kind() == std::io::ErrorKind::NotFound)
+            },
+        }
+    }
+}
+
+/// [`open_by_path`] access to list a folder (`FILE_LIST_DIRECTORY`).
+const FOLDER_LIST: u32 = 0x1;
+/// [`open_by_path`] access to open what is inside (`FILE_TRAVERSE`).
+const FOLDER_TRAVERSE: u32 = 0x20;
+
+/// The folder `path` open for `access` ([`FOLDER_LIST`] or
+/// [`FOLDER_TRAVERSE`]), following links as a path open does.
+fn open_by_path(path: &Path, access: u32) -> std::io::Result<crate::acl::walk::Handle> {
+    use std::os::windows::fs::OpenOptionsExt as _;
+    use std::os::windows::io::IntoRawHandle as _;
+    const FILE_READ_ATTRIBUTES: u32 = 0x80;
+    const SYNCHRONIZE: u32 = 0x0010_0000;
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    let file = std::fs::OpenOptions::new()
+        .access_mode(if access == FOLDER_LIST {
+            access | FILE_READ_ATTRIBUTES | SYNCHRONIZE
+        } else {
+            access | SYNCHRONIZE
+        })
+        .share_mode(0x7)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)?;
+    Ok(crate::acl::walk::Handle(file.into_raw_handle() as _))
+}
+
+/// #1909: the folder holding `path` (absolute), reached one folder at a time
+/// from the top of its volume, following no link, and the last name of
+/// `path`; `None` if any folder on the way can't be opened that way (also a
+/// folder a volume is mounted on: such a path counts as changed every time).
+fn open_parent_unfollowed(path: &Path) -> Option<(crate::acl::walk::Handle, Vec<u16>)> {
+    use std::os::windows::ffi::OsStrExt as _;
+    use std::path::Component;
+    let mut top = PathBuf::new();
+    let mut names = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir if names.is_empty() => {
+                top.push(component.as_os_str());
+            }
+            Component::Normal(name) => names.push(name.encode_wide().collect::<Vec<u16>>()),
+            _ => return None,
+        }
+    }
+    let last = names.pop()?;
+    let mut dir = open_by_path(&top, FOLDER_TRAVERSE).ok()?;
+    for name in names {
+        // SAFETY: `dir` is open.
+        dir = unsafe {
+            crate::acl::walk::open_folder_unfollowed(
+                dir.0,
+                &name,
+                crate::acl::walk::FolderAccess::Traverse,
+            )
+        }
+        .ok()?;
+    }
+    Some((dir, last))
+}
+
+/// The last component of `path`, as the name to open in its folder.
+fn wide_name(path: &Path) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt as _;
+    path.file_name()
+        .map(|name| name.encode_wide().collect())
+        .unwrap_or_default()
+}
+
+/// The attributes and reparse tag of the entry `name` of the open folder
+/// `dir` itself (not followed).
+unsafe fn attributes_at(
+    dir: windows_sys::Win32::Foundation::HANDLE,
+    name: &[u16],
+) -> std::io::Result<crate::acl::walk::Attributes> {
+    const FILE_READ_ATTRIBUTES: u32 = 0x80;
+    crate::acl::walk::open_itself(dir, name, FILE_READ_ATTRIBUTES)?
+        .kind()
+        .map_err(|err| std::io::Error::other(err.to_string()))
+}
+
+/// The identity of the entry `name` of the open folder `dir` itself.
+unsafe fn identity_at(
+    dir: windows_sys::Win32::Foundation::HANDLE,
+    name: &[u16],
+) -> Option<FileIdentity> {
+    const FILE_READ_ATTRIBUTES: u32 = 0x80;
+    let handle = crate::acl::walk::open_itself(dir, name, FILE_READ_ATTRIBUTES).ok()?;
+    let (volume, id) = handle.identity().ok()?;
+    Some(FileIdentity { volume, id })
+}
+
+/// An entry of a listed folder: its name and its kind.
+type Entry = (Vec<u16>, std::io::Result<crate::acl::walk::Attributes>);
+
+/// The entries of `dir` (open for listing); a reparse
+/// point's attributes and tag are asked of the entry itself, since a listing
+/// that shows one may not carry its tag (#1672).
+fn entries_of(dir: &crate::acl::walk::Handle) -> anyhow::Result<Vec<Entry>> {
+    // SAFETY: the folder is open for listing.
+    let listed = unsafe { crate::acl::walk::list(dir.0) }?;
+    Ok(listed
+        .into_iter()
+        .map(|(name, attributes)| {
+            let attributes = if attributes.attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+                // SAFETY: the folder is open.
+                unsafe { attributes_at(dir.0, &name) }
+            } else {
+                Ok(attributes)
+            };
+            (name, attributes)
+        })
+        .collect())
+}
+
 /// Records what `dir` (`top`: one of the roots) holds in `found`, and adds
 /// the folders to walk next to `stack`, in the order listed.
-fn list(dir: PathBuf, top: bool, found: &mut Found, budget: &mut usize, stack: &mut Vec<PathBuf>) {
-    let entries = match std::fs::read_dir(&dir) {
-        Ok(entries) => entries,
+fn list(dir: Pending, top: bool, found: &mut Found, budget: &mut usize, stack: &mut Vec<Pending>) {
+    #[cfg(test)]
+    tests::before_list(&dir.path);
+    let entries = match dir.open() {
+        Ok(handle) => entries_of(&handle).map(|entries| (std::sync::Arc::new(handle), entries)),
         // Gone. A folder that is still there but says "not found"
         // (a ProjFS or Cloud Files provider can) is unlistable.
-        Err(err)
-            if err.kind() == std::io::ErrorKind::NotFound
-                && std::fs::symlink_metadata(&dir)
-                    .is_err_and(|err| err.kind() == std::io::ErrorKind::NotFound) =>
-        {
-            return;
-        }
-        Err(_) => {
-            found.unlistable.push(dir);
-            return;
-        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound && dir.is_gone() => return,
+        Err(err) => Err(err.into()),
     };
+    // A listing that fails partway makes the whole folder unlistable
+    // (#1909: it is listed in full before anything in it is recorded).
+    let Ok((handle, entries)) = entries else {
+        found.unlistable.push(dir.path);
+        return;
+    };
+    let dir = dir.path;
     // D420: a `HEAD` or `commondir` makes this folder a candidate
     // bare repository.
     let mut git_candidate = false;
     // Whether this folder already has its note, and its unlistable
     // record, for a name that isn't valid Unicode.
     let (mut noted, mut unlisted) = (false, false);
-    for entry in entries {
-        let Ok(entry) = entry else {
-            found.unlistable.push(dir.clone());
-            break;
-        };
+    for (wide, metadata) in entries {
         *budget = budget.saturating_sub(1);
         // D420: a name that isn't valid Unicode can't be recorded
         // (the records are JSON), so what is below it isn't walked
         // and its folder counts as changed every time.
-        if entry.file_name().to_str().is_none() {
+        let Ok(name) = String::from_utf16(&wide) else {
             if !noted {
                 noted = true;
                 found.notes.push((
@@ -229,14 +407,13 @@ fn list(dir: PathBuf, top: bool, found: &mut Found, budget: &mut usize, stack: &
             // aren't seen either, so its folder (which can be
             // recorded) counts as unlistable. A plain file hides
             // nothing.
-            if !unlisted && !entry.file_type().is_ok_and(|kind| kind.is_file()) {
+            if !unlisted && !metadata.is_ok_and(|kind| kind.kind() == Kind::File) {
                 unlisted = true;
                 found.unlistable.push(dir.clone());
             }
             continue;
-        }
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
+        };
+        let path = dir.join(&name);
         git_candidate |=
             name.eq_ignore_ascii_case("HEAD") || name.eq_ignore_ascii_case("commondir");
         // D420: a nested `.git` of any kind (the top-level one is
@@ -245,27 +422,19 @@ fn list(dir: PathBuf, top: bool, found: &mut Found, budget: &mut usize, stack: &
         if !top && (name.eq_ignore_ascii_case(".git") || folds_to(&name, ".git")) {
             found.repos.push(dir.join(".git"));
         }
-        // Not followed if it is a link. A listing that shows a
-        // reparse point may not carry its tag, which tells links
-        // apart: then the entry itself is asked (#1672).
-        let metadata = match entry.metadata() {
-            Ok(metadata) if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 => {
-                std::fs::symlink_metadata(entry.path())
-            }
-            other => other,
-        };
+        // Not followed if it is a link.
         if let Some((metadata_name, exact)) = metadata_name(&name) {
             // The top-level ones are D262's.
             if top && exact {
                 continue;
             }
             if !top {
-                let path = dir.join(metadata_name);
                 let identity = (exact && !is_link(metadata.as_ref()))
-                    .then(|| identity(&entry.path()))
+                    // SAFETY: the folder is open.
+                    .then(|| unsafe { identity_at(handle.0, &wide) })
                     .flatten();
                 found.entries.push(NestedMetadata {
-                    path,
+                    path: dir.join(metadata_name),
                     identity,
                     contents: None,
                 });
@@ -280,7 +449,7 @@ fn list(dir: PathBuf, top: bool, found: &mut Found, budget: &mut usize, stack: &
             && !folds_to(&name, ".git")
             && is_link(metadata.as_ref())
         {
-            let link = entry.path();
+            let link = path.clone();
             if std::fs::metadata(link.join(".git")).is_ok() {
                 found.repos.push(link.join(".git"));
             } else if crate::git_watch::is_git_directory(&link) {
@@ -291,16 +460,15 @@ fn list(dir: PathBuf, top: bool, found: &mut Found, budget: &mut usize, stack: &
             }
         }
         let Ok(metadata) = metadata else {
-            found.unlistable.push(entry.path());
+            found.unlistable.push(path);
             continue;
         };
-        // `is_dir` is false for links.
-        if metadata.is_dir()
+        if metadata.kind() == Kind::Folder
             // ASCII only: skipping a folded name (`.gıt`) would
             // leave an ordinary folder unwatched.
             && !name.eq_ignore_ascii_case(".git")
         {
-            stack.push(entry.path());
+            stack.push(Pending::child(path, &handle));
         }
     }
     if !top && git_candidate && crate::git_watch::is_git_directory(&dir) {
@@ -394,76 +562,112 @@ const MAX_CONTENT_BYTES: u64 = 64 * 1024 * 1024;
 /// identified one ([`contents`]), several at a time.
 pub(crate) fn with_contents(entries: Vec<NestedMetadata>) -> Vec<NestedMetadata> {
     crate::par_map::par_map(&entries, |entry| NestedMetadata {
-        contents: entry.identity.map(|_| contents(&entry.path)),
+        contents: entry
+            .identity
+            .map(|_| contents_of(&entry.path, entry.identity)),
         ..entry.clone()
     })
 }
 
-/// What is inside the `.codex`/`.agents` folder `folder`: each entry at any
-/// depth by its path from `folder`, a file by its content
-/// ([`crate::git_watch::unfollowed_file_print`], which marks hard links and
-/// reads only the file itself), a link by its target only (never followed),
-/// a folder as `dir`. A `folder` that is a file is its content (read the
-/// same way). A folder that can't be listed, a name that isn't valid
-/// Unicode, or more than [`MAX_CONTENT_ENTRIES`]
-/// entries or [`MAX_CONTENT_BYTES`] of files make it differ every time.
+/// What is inside the `.codex`/`.agents` folder `folder` (as
+/// [`contents_of`] the file it is now).
+#[cfg(test)]
 pub(crate) fn contents(folder: &Path) -> crate::git_watch::Prints {
+    contents_of(folder, identity(folder))
+}
+
+/// What is inside the `.codex`/`.agents` folder `folder`, the file
+/// `expected`: each entry at any depth by its path from `folder`, a file by
+/// its content ([`crate::git_watch::unfollowed_print_at`], which marks hard
+/// links and reads only the file itself), a link by its target only (never
+/// followed), a folder as `dir`. A `folder` that is a file is its content
+/// (read the same way). A folder that can't be listed, a name that isn't
+/// valid Unicode, or more than [`MAX_CONTENT_ENTRIES`] entries or
+/// [`MAX_CONTENT_BYTES`] of files make it differ every time.
+///
+/// #1909: nothing is looked up by path below the top of the volume:
+/// `folder` is reached one folder at a time from there, following no link
+/// ([`open_parent_unfollowed`]), and must still be the file `expected`;
+/// each folder below it is opened through the folder it was listed in.
+/// Otherwise (a folder on the way swapped for a link, say) it differs
+/// every time.
+fn contents_of(folder: &Path, expected: Option<FileIdentity>) -> crate::git_watch::Prints {
+    const FILE_READ_ATTRIBUTES: u32 = 0x80;
     let mut prints = crate::git_watch::Prints::new();
+    let reached = open_parent_unfollowed(folder).and_then(|(parent, name)| {
+        // SAFETY: the parent folder is open.
+        let itself =
+            unsafe { crate::acl::walk::open_itself(parent.0, &name, FILE_READ_ATTRIBUTES) }.ok()?;
+        // SAFETY: the handle is open.
+        let kind = unsafe { itself.kind() }.ok()?.kind();
+        // SAFETY: the handle is open.
+        let (volume, id) = unsafe { itself.identity() }.ok()?;
+        (expected == Some(FileIdentity { volume, id })).then_some((parent, name, kind))
+    });
+    let Some((parent, name, kind)) = reached else {
+        prints.insert(String::new(), crate::git_watch::truncated());
+        return prints;
+    };
     // A `.codex`/`.agents` that is a file: its content.
-    if let Ok(metadata) = std::fs::symlink_metadata(folder)
-        && !metadata.is_dir()
-    {
-        let print = if metadata.len() > MAX_CONTENT_BYTES {
-            crate::git_watch::truncated()
-        } else {
-            crate::git_watch::unfollowed_file_print(folder)
-        };
+    if kind != Kind::Folder {
+        let print = crate::git_watch::unfollowed_print_at(parent.0, &name, folder, |size| {
+            size <= MAX_CONTENT_BYTES
+        });
         prints.insert(String::new(), print);
         return prints;
     }
     let (mut seen, mut bytes) = (0_usize, 0_u64);
-    let mut stack = vec![(folder.to_path_buf(), String::new())];
+    // Checked again on the handle it is listed through.
+    let top = Pending {
+        path: folder.to_path_buf(),
+        parent: Some(std::sync::Arc::new(parent)),
+        expected,
+    };
+    let mut stack = vec![(top, String::new())];
     while let Some((dir, prefix)) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
+        #[cfg(test)]
+        tests::before_list(&dir.path);
+        let listed = dir.open().map_err(anyhow::Error::from).and_then(|handle| {
+            entries_of(&handle).map(|entries| (std::sync::Arc::new(handle), entries))
+        });
+        let Ok((handle, entries)) = listed else {
             prints.insert(prefix, crate::git_watch::truncated());
             continue;
         };
-        for entry in entries {
+        for (wide, metadata) in entries {
             seen += 1;
             if seen > MAX_CONTENT_ENTRIES {
                 prints.insert(String::new(), crate::git_watch::truncated());
                 return prints;
             }
-            let Ok(entry) = entry else {
-                prints.insert(prefix.clone(), crate::git_watch::truncated());
-                break;
-            };
-            let Some(name) = entry.file_name().to_str().map(str::to_string) else {
+            let Ok(name) = String::from_utf16(&wide) else {
                 prints.insert(prefix.clone(), crate::git_watch::truncated());
                 continue;
             };
-            let path = entry.path();
+            let path = dir.path.join(&name);
             let child = format!("{prefix}{name}");
-            match std::fs::symlink_metadata(&path) {
-                Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {
+            match metadata.map(crate::acl::walk::Attributes::kind) {
+                Ok(Kind::Folder) => {
                     prints.insert(child.clone(), "dir".to_string());
-                    stack.push((path, format!("{child}\\")));
+                    stack.push((Pending::child(path, &handle), format!("{child}\\")));
                 }
                 // A link by its target, never read through: it may name a
                 // network share (reading it would send the person's
                 // credentials there) or a device.
-                Ok(metadata) if metadata.file_type().is_symlink() => {
-                    let target = std::fs::read_link(&path)
-                        .map_or_else(|_| "?".to_string(), |target| target.display().to_string());
+                Ok(Kind::Link) => {
+                    // SAFETY: the folder is open.
+                    let target = unsafe { crate::acl::walk::link_target_at(handle.0, &wide) }
+                        .unwrap_or_else(|| "?".to_string());
                     prints.insert(child, format!("link to {target}"));
                 }
-                Ok(metadata) => {
-                    bytes = bytes.saturating_add(metadata.len());
-                    let print = if bytes > MAX_CONTENT_BYTES {
-                        crate::git_watch::truncated()
-                    } else {
-                        crate::git_watch::unfollowed_file_print(&path)
-                    };
+                // Counted at the size the open file has (the listing's may
+                // be stale).
+                Ok(Kind::File) => {
+                    let print =
+                        crate::git_watch::unfollowed_print_at(handle.0, &wide, &path, |size| {
+                            bytes = bytes.saturating_add(size);
+                            bytes <= MAX_CONTENT_BYTES
+                        });
                     prints.insert(child, print);
                 }
                 Err(_) => {
@@ -664,8 +868,8 @@ pub(crate) fn identity(path: &Path) -> Option<FileIdentity> {
 /// A link (a name-surrogate reparse point); unknown counts as one. Other
 /// reparse points, such as ProjFS folders or cloud placeholders, are the
 /// folder itself (#1672).
-fn is_link(metadata: Result<&std::fs::Metadata, &std::io::Error>) -> bool {
-    metadata.map_or(true, |metadata| metadata.file_type().is_symlink())
+fn is_link(metadata: Result<&crate::acl::walk::Attributes, &std::io::Error>) -> bool {
+    metadata.map_or(true, |metadata| metadata.kind() == Kind::Link)
 }
 
 /// `path` as [`same_path`] compares it: two paths are the same exactly when

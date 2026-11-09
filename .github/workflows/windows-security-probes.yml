@@ -152,6 +152,8 @@ env:
     cloud_placeholder::legacy_cloud_placeholders_at_or_above_a_read_only_path_cannot_be_moved
     cloud_placeholder::legacy_cloud_placeholder_root_gets_its_label_back
     cloud_placeholder::legacy_nested_project_metadata_in_cloud_placeholders_is_watched
+    legacy_cancel::legacy_spawn_cancelled_while_preparing_closes_its_token
+    legacy_cancel::legacy_spawn_cancelled_while_starting_closes_its_handles
 
 jobs:
   probes:
@@ -189,7 +191,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- nested_metadata::tests:: --nocapture --test-threads=1 2>&1 | tee d283-1541.log
-          grep -q "test result: ok. 10 passed" d283-1541.log
+          grep -q "test result: ok. 14 passed" d283-1541.log
           rm d283-1541.log
       - name: Configured read-only paths the legacy backend makes (#1686, #1708, #1780)
         if: ${{ !cancelled() }}
@@ -556,7 +558,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "#295 probe failed in a normal session" }
             $sandbox = Get-TestExe @('-p', 'codex-windows-sandbox', '--lib')
             # The D324 tests skip here: no elevated setup is recorded yet.
-            Assert-Tests $sandbox 'sec_win_' 65
+            Assert-Tests $sandbox 'sec_win_' 66
             # The #1770 tests run on their own below.
             & $medium -Program $sandbox -Arguments @('sec_win_', '--skip', 'sec_win_1770_', '--nocapture', '--test-threads=1')
             if ($LASTEXITCODE -ne 0) { throw "P1 hardening regressions failed in a normal session" }
