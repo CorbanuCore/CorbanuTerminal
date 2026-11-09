@@ -424,7 +424,8 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   a real Windows desktop). With the runner account it can no longer open
   that process to read or end it. As a side effect, a command not running
   in a terminal can no longer reopen, for reading, the pipes and other
-  unnamed objects of the program that starts it (none of the 18 tested everyday tools needs to).
+  unnamed objects of the program that starts it (none of the 18 everyday
+  workloads tested needs to).
   If your account isn't an administrator, this stays open until #1847:
   while another project's commands run, don't type secrets into a project's
   command or run commands that print them; see `docs/sandbox.md`.
