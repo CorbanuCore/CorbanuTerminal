@@ -802,8 +802,9 @@ unsafe fn create_token_with_caps_from(
 /// Which default DACL [`create_token`] gives the new token.
 #[derive(Clone, Copy)]
 enum DefaultDacl {
-    /// `GENERIC_ALL` to the logon SID, Everyone and the capability SIDs (the
-    /// pre-D259 DACL, kept for tests).
+    /// Upstream's (#47361): `GENERIC_ALL` to the logon SID only, and
+    /// `READ_CONTROL` to `OWNER RIGHTS` ([`set_default_dacl`]). Only tests
+    /// build such tokens; commands get `Legacy` or `Elevated`.
     Shared,
     /// D259: a legacy command's, with its command SID (also added as a
     /// restricting SID).

@@ -2002,16 +2002,18 @@ unsafe fn deny_ace_already_present(
 }
 
 unsafe fn add_deny_ace(path: &Path, psid: *mut c_void, kind: DenyAceKind) -> Result<bool> {
+    // D352 (#1722), as main's `SetNamedSecurityInfoW` call did: a `path` that
+    // is a link gets the entry on the link itself, never on what it points at.
     let handle = match OpenOptions::new()
         .access_mode(READ_CONTROL | WRITE_DAC)
-        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
         .open(path)
     {
         Ok(handle) => handle,
         Err(write_error) => {
             let read_handle = OpenOptions::new()
                 .access_mode(READ_CONTROL)
-                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
                 .open(path)
                 .with_context(|| format!("open deny ACL target {}", path.display()))?;
             if matches!(kind, DenyAceKind::Read) {

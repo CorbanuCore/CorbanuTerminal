@@ -28,6 +28,9 @@ use super::parse_windows_sandbox_wrapper_args;
 
 #[test]
 fn large_deny_list_uses_environment_without_changing_the_request() {
+    // These run the sandbox's setup, which tests do only holding the legacy
+    // lock (#1827).
+    let _guard = crate::unified_exec::tests::legacy_process_test_guard();
     let temp = tempfile::tempdir().expect("tempdir");
     let cwd = AbsolutePathBuf::from_absolute_path(temp.path()).expect("absolute command cwd");
     let paths = (0..1000)
@@ -93,6 +96,9 @@ fn large_deny_list_uses_environment_without_changing_the_request() {
 
 #[test]
 fn windows_wrapper_args_round_trip() {
+    // These run the sandbox's setup, which tests do only holding the legacy
+    // lock (#1827).
+    let _guard = crate::unified_exec::tests::legacy_process_test_guard();
     let temp = tempfile::tempdir().expect("tempdir");
     let command_cwd =
         AbsolutePathBuf::from_absolute_path(temp.path()).expect("absolute command cwd");

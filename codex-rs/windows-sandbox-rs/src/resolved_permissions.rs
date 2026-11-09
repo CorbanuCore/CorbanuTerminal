@@ -431,8 +431,11 @@ mod tests {
 
     /// #1708: a temp root carries the explicit read-only and deny paths
     /// inside it (missing ones too; spelled like the root, in another case,
-    /// or matching only once both are resolved), but not the root itself, the
-    /// default `.git`/`.codex`/`.agents` protections, nor paths outside it.
+    /// or matching only once both are resolved), but not the root itself nor
+    /// paths outside it. Upstream sync: upstream resolves `:tmpdir` into
+    /// ordinary entries, so `TEMP` and `TMP` naming one folder give one root,
+    /// and the default `.git`/`.codex`/`.agents` protections now apply in it
+    /// too (stricter than D283's exemption; open S3b row).
     #[test]
     fn temp_root_carries_explicit_read_only_paths_inside_it() {
         let tmp = TempDir::new().expect("tempdir");
@@ -506,13 +509,14 @@ mod tests {
             .collect();
 
         let mut expected = vec![
-            base.join("TEMP").join("CASED"),
+            temp_dir.join(".git"),
+            temp_dir.join("cased"),
             temp_dir.join("keep"),
             temp_dir.join("missing"),
             temp_dir.join("secret"),
         ];
         expected.sort();
-        assert_eq!(temp_roots, vec![expected.clone(), expected]);
+        assert_eq!(temp_roots, vec![expected]);
     }
 
     /// #1780: a writable root and explicit read-only (or deny) paths inside

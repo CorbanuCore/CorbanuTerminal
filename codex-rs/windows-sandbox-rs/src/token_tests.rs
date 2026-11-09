@@ -79,10 +79,14 @@ fn elevated_token_includes_network_proxy_restricting_sid() -> Result<()> {
     Ok(())
 }
 
-/// Upstream (#47361), for the shared default DACL (`DefaultDacl::Shared`).
-/// Corbanu's elevated builders set D324's DACL instead and refuse this test
-/// process (it isn't in the sandbox users' group, #1795), and legacy commands
-/// get D259/D429's (tested below).
+/// Upstream (#47361), for the shared default DACL (`DefaultDacl::Shared`),
+/// which only tests build. No command token gets this protection: legacy
+/// commands get D259/D429's DACL (tested below), and elevated commands get
+/// D324's, which gives the sandbox users' group `GENERIC_ALL` and Everyone,
+/// the sandbox account and the capability SIDs read and execute, so another
+/// elevated command (another logon) can read a command's processes, which
+/// this test forbids. D324's builders also refuse this test process (#1795).
+/// Open S3b row on `token.rs`.
 #[test]
 fn default_objects_deny_other_logons_even_with_the_same_owner() -> Result<()> {
     use std::os::windows::io::AsRawHandle;
