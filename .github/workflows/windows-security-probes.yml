@@ -247,7 +247,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --bin codex-windows-sandbox-setup -- sandbox_users::tests:: --nocapture 2>&1 | tee pw-1776.log
+          # Upstream moved sandbox_users into the library (setup_provisioning).
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-windows-sandbox --lib -- setup_provisioning::sandbox_users::tests:: --nocapture 2>&1 | tee pw-1776.log
           grep -q 'test result: ok. 3 passed' pw-1776.log
       - name: P1 Windows hardening regressions (#301, #304, #307, #323, #341, #345, #1819, D429, D377)
         if: ${{ !cancelled() }}
