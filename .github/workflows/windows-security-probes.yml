@@ -640,6 +640,19 @@ jobs:
             $out
             if ($code -ne 0) { throw "D429 elevated failed in a normal session" }
             if (-not ($out -match 'test result: ok\. 1 passed')) { throw "D429 elevated did not run in a normal session" }
+            # #1803: an elevated command can't read another workspace's
+            # ConPTY console host. Reuses a setup recorded right before.
+            $t1803 = 'unified_exec::tests::command_identity::elevated::d429::sec_win_1803_elevated_command_cannot_read_another_workspaces_console_host'
+            Assert-Tests $sandbox $t1803 1
+            & $sandbox --exact 'unified_exec::tests::command_identity::elevated::sec_win_1648_elevated_command_keeps_write_access_to_its_own_processes' --nocapture --test-threads=1 | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "recording the elevated setup for #1803 failed" }
+            $env:CODEX_SEC_WIN_1648_REQUIRE = '1'
+            $out = & $medium -Program $sandbox -Arguments @('--exact', $t1803, '--nocapture', '--test-threads=1')
+            $code = $LASTEXITCODE
+            Remove-Item Env:CODEX_SEC_WIN_1648_REQUIRE
+            $out
+            if ($code -ne 0) { throw "#1803 failed in a normal session" }
+            if (-not ($out -match 'test result: ok\. 1 passed')) { throw "#1803 did not run in a normal session" }
             # #1770: a command of each backend may not write into a fresh
             # folder in the runner's D:\tmp (not this step's TEMP) that any
             # signed-in account may write to; only its restricted token keeps

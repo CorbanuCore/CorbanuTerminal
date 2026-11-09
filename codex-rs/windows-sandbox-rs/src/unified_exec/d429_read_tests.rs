@@ -621,15 +621,16 @@ async fn end_a_running_command(
 /// #1803: the console host an elevated command's runner starts for its
 /// ConPTY holds what that command prints and what you type at it. Another
 /// elevated command, in another workspace, must not open it or its threads
-/// for reading (win-desk's real-desktop probe). It can today: the runner's
-/// default DACL (D324) gives the sandbox users' group, which every elevated
-/// command holds, read access, and read rights pass a write-restricted token.
-/// It asks what [`unreadable_parts`] asks of a legacy command: the host may
-/// be waited on, but not queried in full, read or ended. Un-ignoring it also
-/// needs a normal-session run with a recorded setup in
-/// `windows-security-probes`, as D429's elevated test has.
+/// for reading (win-desk's real-desktop probe). It could before D461: the
+/// runner's default DACL (D324) gave the sandbox users' group, which every
+/// elevated command holds, read access, and read rights pass a
+/// write-restricted token. A runner with its own account now gives that
+/// group only the peer mask. It asks what [`unreadable_parts`] asks of a
+/// legacy command: the host may be waited on, but not queried in full, read
+/// or ended. `windows-security-probes` also runs it in a normal session with
+/// a recorded setup, as D429's elevated test. Standard-user setups (runner
+/// as the commands' account) keep #1803 until #1847 (D392(b)).
 #[test]
-#[ignore = "#1803: an elevated command reads another workspace's ConPTY console host (what that command printed) through the sandbox users' group in the runner's default DACL; measured open on main and #1800 (win-desk, real desktop) and on CI (run 42581149322); the fix (D461) or follow-up (D417) is the owner's decision"]
 fn sec_win_1803_elevated_command_cannot_read_another_workspaces_console_host() {
     let Some(codex_home) = elevated_home("sec-win-1803") else {
         return;
