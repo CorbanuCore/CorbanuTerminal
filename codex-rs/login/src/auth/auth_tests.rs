@@ -3121,11 +3121,12 @@ struct NamedTestAuthManagerConfig {
     named_session: bool,
     /// `None`: the same as `forced_login_method`.
     configured_forced_login_method: Option<Option<ForcedLoginMethod>>,
+    managed_auth_policy: ManagedAuthPolicy,
 }
 
 impl AuthManagerConfig for NamedTestAuthManagerConfig {
     fn managed_auth_policy(&self) -> ManagedAuthPolicy {
-        ManagedAuthPolicy::default()
+        self.managed_auth_policy.clone()
     }
 
     fn codex_home(&self) -> PathBuf {
@@ -3181,6 +3182,8 @@ async fn shared_from_config_reads_openai_api_key_env_unless_chatgpt_login_is_req
         forced_chatgpt_workspace_id: None,
         named_session: false,
         configured_forced_login_method: None,
+
+        managed_auth_policy: ManagedAuthPolicy::default(),
     };
 
     for mode in [
@@ -3315,6 +3318,8 @@ async fn shared_from_config_hides_a_restricted_default_login_only_in_named_sessi
         forced_chatgpt_workspace_id: Some(vec![workspace.to_string()]),
         named_session,
         configured_forced_login_method: None,
+
+        managed_auth_policy: ManagedAuthPolicy::default(),
     };
 
     for (forced_login_method, workspace) in [
@@ -3349,6 +3354,33 @@ async fn shared_from_config_hides_a_restricted_default_login_only_in_named_sessi
         assert!(default_session.auth_cached().is_none());
         assert_eq!(default_session.hidden_default_login_reason(), None);
     }
+
+    // A login only the administrator's policy rules out is hidden with its
+    // reason too.
+    let policy_only = AuthManager::shared_from_config(
+        &NamedTestAuthManagerConfig {
+            managed_auth_policy: ManagedAuthPolicy {
+                allowed_login_methods: None,
+                allowed_chatgpt_workspaces: Some(vec![WORKSPACE_ID_ALLOWED.to_string()]),
+            },
+            ..config(
+                /*forced_login_method*/ None,
+                WORKSPACE_ID_DISALLOWED,
+                /*named_session*/ true,
+            )
+        },
+        /*enable_codex_api_key_env*/ false,
+    )
+    .await
+    .expect("auth manager");
+    assert!(policy_only.auth_cached().is_none());
+    assert!(
+        policy_only
+            .hidden_default_login_reason()
+            .is_some_and(|reason| reason.contains("administrator's login policy")),
+        "{:?}",
+        policy_only.hidden_default_login_reason()
+    );
 
     // An allowed login is used as before.
     let allowed = AuthManager::shared_from_config(
@@ -3403,6 +3435,8 @@ async fn named_chatgpt_account_follows_only_the_configured_login_method() {
         forced_chatgpt_workspace_id: None,
         named_session: false,
         configured_forced_login_method: Some(configured),
+
+        managed_auth_policy: ManagedAuthPolicy::default(),
     };
 
     let implied = AuthManager::shared_from_config(
