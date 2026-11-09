@@ -66,12 +66,7 @@ pub(super) fn parse_failed_response(response: Option<Value>) -> ApiError {
             ApiError::BioPolicy { message }
         }
         Some("misalignment_policy_violation") => {
-            let message = error
-                .message
-                .filter(|message| !message.trim().is_empty())
-                .unwrap_or_else(|| {
-                    "This request was blocked due to a misalignment policy violation.".to_string()
-                });
+            let message = crate::api_bridge::misalignment_policy_message(error.message.as_deref());
             ApiError::MisalignmentPolicyViolation {
                 message,
                 misalignment: error.misalignment.and_then(|details| {
@@ -105,26 +100,24 @@ pub(super) fn parse_failed_response(response: Option<Value>) -> ApiError {
     }
 }
 
+/// Reads "try again in 1.5s", "… 250ms" or "… 2 seconds" from the message.
+/// Corbanu parses this without a regex engine.
 fn try_parse_retry_delay(err: &Error) -> Option<Duration> {
-    let re = rate_limit_regex();
-    if let Some(message) = &err.message
-        && let Some(captures) = re.captures(message)
-    {
-        let seconds = captures.get(1);
-        let unit = captures.get(2);
-
-        if let (Some(value), Some(unit)) = (seconds, unit) {
-            let value = value.as_str().parse::<f64>().ok()?;
-            let unit = unit.as_str().to_ascii_lowercase();
-
-            if unit == "s" || unit.starts_with("second") {
-                return Duration::try_from_secs_f64(value).ok();
-            } else if unit == "ms" {
-                return Some(Duration::from_millis(value as u64));
-            }
-        }
+    let message = err.message.as_ref()?.to_ascii_lowercase();
+    let (_, delay) = message.split_once("try again in")?;
+    let delay = delay.trim_start();
+    let number_end = delay
+        .find(|ch: char| !ch.is_ascii_digit() && ch != '.')
+        .unwrap_or(delay.len());
+    let value = delay[..number_end].parse::<f64>().ok()?;
+    let unit = delay[number_end..].trim_start();
+    if unit.starts_with("ms") {
+        Some(Duration::from_millis(value as u64))
+    } else if unit.starts_with('s') {
+        Duration::try_from_secs_f64(value).ok()
+    } else {
+        None
     }
-    None
 }
 
 fn cyber_policy_fallback_message() -> String {
@@ -135,14 +128,6 @@ fn cyber_policy_message(message: Option<String>) -> String {
     message
         .filter(|message| !message.trim().is_empty())
         .unwrap_or_else(cyber_policy_fallback_message)
-}
-
-fn rate_limit_regex() -> &'static regex_lite::Regex {
-    static RE: std::sync::OnceLock<regex_lite::Regex> = std::sync::OnceLock::new();
-    #[expect(clippy::unwrap_used)]
-    RE.get_or_init(|| {
-        regex_lite::Regex::new(r"(?i)try again in\s*(\d+(?:\.\d+)?)\s*(s|ms|seconds?)").unwrap()
-    })
 }
 
 #[cfg(test)]

@@ -2510,6 +2510,7 @@ mod tests {
             session_mode: RealtimeSessionMode::Conversational,
             output_modality: RealtimeOutputModality::Text,
             voice: RealtimeVoice::Alloy,
+            delegation_ack_filler: None,
         };
         let route = |base: &str| realtime_websocket_route(base, &config).expect("route");
         let expect = |base: &str, url: &str, route: Option<&str>| RealtimeWebsocketRoute {

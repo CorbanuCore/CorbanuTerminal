@@ -162,7 +162,9 @@ fn spawn_anthropic_messages_stream(
     let response_id_hint = upstream_request_id.clone();
     let (tx_event, rx_event) = mpsc::channel::<Result<ResponseEvent, ApiError>>(1600);
     tokio::spawn(async move {
-        let _ = tx_event.send(Ok(ResponseEvent::Created)).await;
+        let _ = tx_event
+            .send(Ok(ResponseEvent::Created { response_id: None }))
+            .await;
         process_accounted_anthropic_sse(
             stream_response.bytes,
             tx_event,
@@ -177,6 +179,8 @@ fn spawn_anthropic_messages_stream(
     ResponseStream {
         rx_event,
         upstream_request_id,
+        interrupt: None,
+        routing_affinity: None,
     }
 }
 
@@ -275,6 +279,7 @@ impl AnthropicUsage {
             output_tokens: output,
             reasoning_output_tokens: 0,
             total_tokens: input.saturating_add(output),
+            codex_rollout_budget_units: None,
         }
     }
 }
@@ -648,6 +653,8 @@ impl AnthropicStreamState {
                 content: Vec::new(),
                 phase: None,
                 internal_chat_message_metadata_passthrough: None,
+                encrypted_content: None,
+                status: None,
             };
             if tx_event
                 .send(Ok(ResponseEvent::OutputItemAdded(item)))
@@ -841,6 +848,8 @@ impl AnthropicStreamState {
             encrypted_function_args: None,
             call_id,
             internal_chat_message_metadata_passthrough: None,
+            encrypted_content: None,
+            status: None,
         };
         tool_call.emitted = true;
         tx_event
@@ -877,6 +886,7 @@ impl AnthropicStreamState {
             action: anthropic_web_search_action_from_input(&input),
             anthropic_content_block: Some(block),
             internal_chat_message_metadata_passthrough: None,
+            encrypted_content: None,
         };
         server_tool_use.emitted = true;
         tx_event
@@ -913,6 +923,7 @@ impl AnthropicStreamState {
             action: None,
             anthropic_content_block: Some(block),
             internal_chat_message_metadata_passthrough: None,
+            encrypted_content: None,
         };
         result.emitted = true;
         tx_event
@@ -944,6 +955,7 @@ impl AnthropicStreamState {
                     token_usage: self.token_usage.take(),
                     end_turn: self.end_turn,
                     finish_reason: self.finish_reason.take(),
+                    usage_metadata: None,
                 }))
                 .await;
             return;
@@ -956,9 +968,15 @@ impl AnthropicStreamState {
             let item = ResponseItem::Message {
                 id: Some(ResponseItemId::from_server(self.message_id())),
                 role: "assistant".to_string(),
-                content: vec![ContentItem::OutputText { text }],
+                content: vec![ContentItem::OutputText {
+                    text,
+                    annotations: None,
+                    logprobs: None,
+                }],
                 phase: None,
                 internal_chat_message_metadata_passthrough: None,
+                encrypted_content: None,
+                status: None,
             };
             if tx_event
                 .send(Ok(ResponseEvent::OutputItemDone(item)))
@@ -992,6 +1010,7 @@ impl AnthropicStreamState {
                 token_usage: self.token_usage.take(),
                 end_turn: self.end_turn,
                 finish_reason: self.finish_reason.take(),
+                usage_metadata: None,
             }))
             .await;
     }
@@ -1414,7 +1433,7 @@ data: {"type":"message_stop"}
         assert_matches!(
             &events[3],
             Ok(ResponseEvent::OutputItemDone(ResponseItem::Message { content, .. }))
-                if content == &vec![ContentItem::OutputText { text: "OK".to_string() }]
+                if content == &vec![ContentItem::OutputText { text: "OK".to_string(), annotations: None, logprobs: None }]
         );
         assert_matches!(
             &events[4],
