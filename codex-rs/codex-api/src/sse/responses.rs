@@ -413,13 +413,17 @@ pub fn process_responses_event(
         "error" => {
             // A provider's misalignment stop is terminal by its code, whichever
             // event carries it; it must never trigger a retry or fallback.
-            if let Some(error) = event.error.as_ref()
-                && error.get("code").and_then(Value::as_str)
-                    == Some("misalignment_policy_violation")
+            if let Some((message, misalignment)) = event
+                .error
+                .as_ref()
+                .and_then(crate::api_bridge::misalignment_policy_violation)
             {
-                return Err(ResponsesEventError::Api(parse_failed_response(Some(
-                    serde_json::json!({ "error": error }),
-                ))));
+                return Err(ResponsesEventError::Api(
+                    ApiError::MisalignmentPolicyViolation {
+                        message,
+                        misalignment,
+                    },
+                ));
             }
             if let Some(error) =
                 parse_terminal_provider_error(event.error.as_ref(), /*status*/ None)
@@ -765,7 +769,9 @@ async fn process_sse_with_treatment(
                 if matches!(
                     error,
                     ApiError::InvalidRequest { .. }
+                        | ApiError::InvalidPrompt { .. }
                         | ApiError::CyberPolicy { .. }
+                        | ApiError::BioPolicy { .. }
                         | ApiError::MisalignmentPolicyViolation { .. }
                         | ApiError::FlexUnavailable
                         | ApiError::ResponseIncomplete(_)
@@ -1398,6 +1404,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn content_policy_stops_discard_later_tool_output_and_completion() {
+        for code in ["invalid_prompt", "bio_policy", "cyber_policy"] {
+            let stopped = json!({"type": "response.failed", "response": {"id": "stopped", "error": {"code": code, "message": "Refused."}}});
+            let tool = json!({"type": "response.output_item.done", "item": {"type": "function_call", "name": "shell_command", "call_id": "forbidden-after-stop", "arguments": "{}"}});
+            let completed =
+                json!({"type": "response.completed", "response": {"id": "late-completion"}});
+            let frames = format!("data: {stopped}\n\ndata: {tool}\n\ndata: {completed}\n\n");
+            let events = collect_events(&[frames.as_bytes()]).await;
+            assert_eq!(events.len(), 1, "{code}");
+            assert!(events[0].is_err(), "{code}");
+        }
+    }
+
+    #[tokio::test]
     async fn misalignment_stream_events_are_terminal_by_code() {
         for message in [Some("Review account access."), Some("Other wording."), None] {
             for kind in ["error", "response.failed"] {
@@ -1414,10 +1434,8 @@ mod tests {
                     Err(ApiError::MisalignmentPolicyViolation {
                         message: stopped, ..
                     }) => assert_eq!(
-                        stopped.as_str(),
-                        message.unwrap_or(
-                            "This request was blocked due to a misalignment policy violation."
-                        )
+                        stopped,
+                        &crate::api_bridge::misalignment_policy_message(message)
                     ),
                     other => panic!("policy stop must be terminal: {other:?}"),
                 }
@@ -1438,7 +1456,12 @@ mod tests {
                 message,
                 misalignment,
             }) => {
-                assert_eq!(message, "This request violated the misalignment policy.");
+                assert_eq!(
+                    message,
+                    &crate::api_bridge::misalignment_policy_message(Some(
+                        "This request violated the misalignment policy."
+                    ))
+                );
                 assert_eq!(misalignment, &None);
             }
             other => panic!("unexpected event: {other:?}"),
@@ -1467,7 +1490,7 @@ mod tests {
             match &events[0] {
                 Err(ApiError::MisalignmentPolicyViolation { message, .. }) => assert_eq!(
                     message,
-                    "This request was blocked due to a misalignment policy violation."
+                    &crate::api_bridge::misalignment_policy_message(/*message*/ None)
                 ),
                 other => panic!("unexpected event: {other:?}"),
             }
@@ -1501,7 +1524,12 @@ mod tests {
                 message,
                 misalignment,
             }) => {
-                assert_eq!(message, "This request violated the misalignment policy.");
+                assert_eq!(
+                    message,
+                    &crate::api_bridge::misalignment_policy_message(Some(
+                        "This request violated the misalignment policy."
+                    ))
+                );
                 assert_eq!(
                     misalignment,
                     &Some(MisalignmentErrorDetails {

@@ -474,7 +474,12 @@ fn assert_misalignment_policy_violation_from_http_body(status: http::StatusCode)
     else {
         panic!("expected CodexErrorDetails::MisalignmentPolicyViolation, got {err:?}");
     };
-    assert_eq!(message, "This request violated the misalignment policy.");
+    assert_eq!(
+        message,
+        &crate::api_bridge::misalignment_policy_message(Some(
+            "This request violated the misalignment policy."
+        ))
+    );
     assert_eq!(misalignment, &None);
     assert_eq!(err.retry_delay(/*retry_count*/ 1), None);
 }
@@ -509,7 +514,12 @@ fn map_api_error_preserves_misalignment_details_from_403_body() {
     else {
         panic!("expected CodexErrorDetails::MisalignmentPolicyViolation, got {err:?}");
     };
-    assert_eq!(message, "This request violated the misalignment policy.");
+    assert_eq!(
+        message,
+        &crate::api_bridge::misalignment_policy_message(Some(
+            "This request violated the misalignment policy."
+        ))
+    );
     assert_eq!(
         misalignment,
         &Some(MisalignmentErrorDetails {
@@ -558,7 +568,9 @@ fn map_api_error_preserves_misalignment_details_from_wrapped_websocket_error() {
     };
     assert_eq!(
         message,
-        "This websocket request violated the misalignment policy."
+        &crate::api_bridge::misalignment_policy_message(Some(
+            "This websocket request violated the misalignment policy."
+        ))
     );
     assert_eq!(
         misalignment,
@@ -998,7 +1010,12 @@ fn map_api_error_extracts_identity_auth_details_from_headers() {
 
 #[test]
 fn misalignment_http_policy_stop_is_terminal_by_code() {
-    for status in [http::StatusCode::FORBIDDEN, http::StatusCode::BAD_REQUEST] {
+    for status in [
+        http::StatusCode::FORBIDDEN,
+        http::StatusCode::BAD_REQUEST,
+        http::StatusCode::TOO_MANY_REQUESTS,
+        http::StatusCode::SERVICE_UNAVAILABLE,
+    ] {
         for message in [Some("Review account access."), Some(""), None] {
             let body = serde_json::json!({"error": {"code": "misalignment_policy_violation", "message": message}}).to_string();
             let err = map_api_error(ApiError::Transport(TransportError::Http {
@@ -1013,6 +1030,7 @@ fn misalignment_http_policy_stop_is_terminal_by_code() {
                 CodexErrorDetails::MisalignmentPolicyViolation { .. }
             ));
             assert_eq!(err.retry_delay(/*retry_count*/ 1), None);
+            assert!(err.to_string().contains("Automatic retries are disabled"));
         }
     }
 }

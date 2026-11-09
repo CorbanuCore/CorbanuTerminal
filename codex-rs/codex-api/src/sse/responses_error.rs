@@ -66,12 +66,7 @@ pub(super) fn parse_failed_response(response: Option<Value>) -> ApiError {
             ApiError::BioPolicy { message }
         }
         Some("misalignment_policy_violation") => {
-            let message = error
-                .message
-                .filter(|message| !message.trim().is_empty())
-                .unwrap_or_else(|| {
-                    "This request was blocked due to a misalignment policy violation.".to_string()
-                });
+            let message = crate::api_bridge::misalignment_policy_message(error.message.as_deref());
             ApiError::MisalignmentPolicyViolation {
                 message,
                 misalignment: error.misalignment.and_then(|details| {

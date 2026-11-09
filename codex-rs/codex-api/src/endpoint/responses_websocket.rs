@@ -1274,16 +1274,18 @@ mod tests {
             serde_json::json!({"type": "error", "status": status, "error": {"code": "misalignment_policy_violation", "message": "Review account access."}}).to_string()
         };
         // With an HTTP status the wrapped error maps through the HTTP path.
-        let with_status = payload(Some(403));
-        let event = parse_wrapped_websocket_error_event(&with_status).unwrap();
-        let error = crate::api_bridge::map_api_error(
-            map_wrapped_websocket_error_event(event, with_status).unwrap(),
-        );
-        assert!(matches!(
-            error.details(),
-            codex_protocol::error::CodexErrorDetails::MisalignmentPolicyViolation { .. }
-        ));
-        assert_eq!(error.retry_delay(/*retry_count*/ 1), None);
+        for status in [403, 429, 503] {
+            let with_status = payload(Some(status));
+            let event = parse_wrapped_websocket_error_event(&with_status).unwrap();
+            let error = crate::api_bridge::map_api_error(
+                map_wrapped_websocket_error_event(event, with_status).unwrap(),
+            );
+            assert!(matches!(
+                error.details(),
+                codex_protocol::error::CodexErrorDetails::MisalignmentPolicyViolation { .. }
+            ));
+            assert_eq!(error.retry_delay(/*retry_count*/ 1), None, "{status}");
+        }
         // Without one it is an ordinary `error` event, which is terminal by its code.
         let event: crate::sse::ResponsesStreamEvent =
             serde_json::from_str(&payload(/*status*/ None)).unwrap();
