@@ -18,6 +18,7 @@ use std::sync::OnceLock;
 
 use crate::allow::AllowDenyPaths;
 use crate::allow::compute_allow_paths_for_permissions;
+use crate::allow::protected_metadata_made_on_the_way;
 use crate::app_package::registered_core_requested;
 use crate::helper_materialization::bundled_executable_path_for_exe;
 use crate::helper_materialization::helper_bin_dir;
@@ -950,6 +951,14 @@ fn run_setup_exe(
     codex_home: &Path,
     retained_handles: &[BorrowedHandle<'_>],
 ) -> Result<()> {
+    // #1827: this setup resets the sandbox users' passwords, which other
+    // tests' logons use, so tests run it only under the shared lock (and in
+    // the nextest group that serializes its holders).
+    #[cfg(test)]
+    assert!(
+        crate::unified_exec::tests::legacy_process_test_guard_is_held(),
+        "the sandbox's setup ran in a test without legacy_process_test_guard() (#1827)"
+    );
     let payload_json = serde_json::to_string(payload).map_err(|err| {
         failure(
             SetupErrorCode::OrchestratorPayloadSerializeFailed,
@@ -1289,11 +1298,43 @@ pub fn run_elevated_provisioning_setup_with_retained_handles(
     )
 }
 
+/// D377: the request's environment with the session's own temp folder as
+/// the temp folder, never the user's whole `%TEMP%` (unchanged where the
+/// command's environment already has it). Where the folder cannot be made
+/// (logged), with no temp folder, so none is granted: unlike a command's
+/// launch, which then fails, a setup refresh goes on without it.
+fn env_with_session_temp(request: &SandboxSetupRequest<'_>) -> HashMap<String, String> {
+    let mut env_map = request.env_map.clone();
+    if let Err(err) =
+        crate::session_temp::use_session_temp(request.permissions, &mut env_map, request.codex_home)
+    {
+        log_note(
+            &format!("D377: no session temp folder: {err:#}"),
+            Some(&sandbox_dir(request.codex_home)),
+        );
+        for key in ["TEMP", "TMP"] {
+            env_map.retain(|name, _| !name.eq_ignore_ascii_case(key));
+            env_map.insert(key.to_string(), String::new());
+        }
+    }
+    env_map
+}
+
 pub(crate) fn build_payload_roots(
     request: &SandboxSetupRequest<'_>,
     overrides: &SetupRootOverrides,
     runtime: SetupRuntime,
 ) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    let env_map = if overrides.write_roots.is_none() || overrides.read_roots.is_none() {
+        env_with_session_temp(request)
+    } else {
+        request.env_map.clone()
+    };
+    let request = SandboxSetupRequest {
+        env_map: &env_map,
+        ..*request
+    };
+    let request = &request;
     let write_roots = effective_write_roots_for_setup(
         request.permissions,
         request.command_cwd,
@@ -1351,18 +1392,28 @@ pub(crate) fn build_payload_deny_write_paths(
     request: &SandboxSetupRequest<'_>,
     explicit_deny_write_paths: Option<Vec<PathBuf>>,
 ) -> Vec<PathBuf> {
-    let allow_deny_paths: AllowDenyPaths = compute_allow_paths_for_permissions(
-        request.permissions,
-        request.command_cwd,
-        request.env_map,
-    );
-    let mut deny_write_paths: Vec<PathBuf> = explicit_deny_write_paths
+    let env_map = env_with_session_temp(request);
+    let allow_deny_paths: AllowDenyPaths =
+        compute_allow_paths_for_permissions(request.permissions, request.command_cwd, &env_map);
+    let deny_write_paths: Vec<PathBuf> = explicit_deny_write_paths
         .unwrap_or_default()
         .into_iter()
         .map(|path| canonicalize_path(&path))
         .collect();
-    deny_write_paths.extend(allow_deny_paths.deny);
-    deny_write_paths
+    // #1758: the setup helper makes missing ones before the command starts;
+    // a `.git` it makes on the way (for `.git\hooks`) is protected from that
+    // command on, as it is from the next (and in the non-admin sandbox, #1705).
+    // Listed first, so the helper protects it right after making it, before
+    // making the path below it (narrowing the gap for a command already
+    // running).
+    let mut made_on_the_way = protected_metadata_made_on_the_way(
+        request.permissions,
+        request.command_cwd,
+        &deny_write_paths,
+    );
+    made_on_the_way.extend(deny_write_paths);
+    made_on_the_way.extend(allow_deny_paths.deny);
+    made_on_the_way
 }
 
 /// #323: a launch with deny-read rules registers this process as a session
@@ -1406,7 +1457,10 @@ fn expand_user_profile_root(roots: Vec<PathBuf>) -> Vec<PathBuf> {
     expand_user_profile_root_for(roots, Path::new(&user_profile))
 }
 
-fn expand_user_profile_root_for(roots: Vec<PathBuf>, user_profile: &Path) -> Vec<PathBuf> {
+pub(crate) fn expand_user_profile_root_for(
+    roots: Vec<PathBuf>,
+    user_profile: &Path,
+) -> Vec<PathBuf> {
     let user_profile_key = canonical_path_key(user_profile);
     let mut expanded = Vec::new();
     for root in roots {
@@ -2768,6 +2822,59 @@ mod tests {
             .collect::<HashSet<PathBuf>>(),
             deny_write_paths.into_iter().collect()
         );
+    }
+
+    /// #1758: a top-level `.git`/`.codex`/`.agents` the setup helper makes on
+    /// the way to a missing configured read-only path is protected from the
+    /// first command on, in any writable root but the temp ones (D283).
+    #[test]
+    fn payload_deny_write_paths_protect_metadata_made_on_the_way() {
+        let tmp = TempDir::new().expect("tempdir");
+        let base = dunce::canonicalize(tmp.path()).expect("canonical tempdir");
+        let codex_home = base.join("codex-home");
+        let command_cwd = base.join("workspace");
+        let other = base.join("other");
+        let temp = base.join("temp");
+        for dir in [&command_cwd, &other, &temp] {
+            fs::create_dir_all(dir).expect("create root");
+        }
+        let explicit = vec![
+            command_cwd.join(".git\\hooks"),
+            other.join(".Agents\\skills"),
+            other.join(".codex"),
+            command_cwd.join("deep\\.codex\\hooks"),
+            temp.join(".git\\hooks"),
+        ];
+        let writable_roots =
+            vec![AbsolutePathBuf::from_absolute_path(&other).expect("absolute writable root")];
+        let permission_profile = workspace_write_profile(
+            &writable_roots,
+            /*exclude_tmpdir_env_var*/ false,
+            /*exclude_slash_tmp*/ true,
+        );
+        let workspace_roots = workspace_roots_for(command_cwd.as_path());
+        let permissions = permissions_for(&permission_profile, workspace_roots.as_slice());
+        // Both, so the session temp folder (D377) is made in `temp`, not in
+        // this process's temp folder.
+        let env_map = HashMap::from([
+            ("TEMP".to_string(), temp.display().to_string()),
+            ("TMP".to_string(), temp.display().to_string()),
+        ]);
+        let request = super::SandboxSetupRequest {
+            permissions: &permissions,
+            command_cwd: &command_cwd,
+            env_map: &env_map,
+            codex_home: &codex_home,
+            proxy_enforced: false,
+        };
+
+        let deny_write_paths =
+            super::build_payload_deny_write_paths(&request, Some(explicit.clone()));
+        crate::session_temp::end_session_temp_in(&temp);
+
+        let mut expected: HashSet<PathBuf> = explicit.into_iter().collect();
+        expected.extend([command_cwd.join(".git"), other.join(".Agents")]);
+        assert_eq!(expected, deny_write_paths.into_iter().collect());
     }
 
     #[test]

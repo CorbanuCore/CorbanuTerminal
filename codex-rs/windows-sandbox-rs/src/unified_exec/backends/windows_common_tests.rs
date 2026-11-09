@@ -29,6 +29,7 @@ fn runner_result_reporting_preserves_exit_and_closed_pipe_results() -> Result<()
         let (exit_tx, exit_rx) = oneshot::channel();
         start_runner_stdout_reader(
             frames, stdout_tx, /*stderr_tx*/ None, exit_tx, /*credential_watch*/ None,
+            /*planted_watch*/ None,
         );
         assert_eq!(exit_rx.blocking_recv()?, exit_code.unwrap_or(-1));
     }

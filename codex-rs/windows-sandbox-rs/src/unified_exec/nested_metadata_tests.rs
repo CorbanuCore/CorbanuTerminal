@@ -180,7 +180,7 @@ fn legacy_workspace_write_cannot_change_nested_project_metadata() {
                 script_path.display().to_string(),
             ],
             &workspace,
-            env_map,
+            with_session_temp(codex_home.path(), env_map),
             /*timeout_ms*/ Some(10_000),
             &[],
             &[],
@@ -264,6 +264,39 @@ fn legacy_unlistable_folder_counts_as_planted() {
             counts_now(&x.join("y\\.agents")),
         ),
         (false, true, true, true)
+    );
+}
+
+/// #1877 item 2: a `.codex` planted below a folder whose name isn't valid
+/// Unicode (the walk doesn't go there) counts as planted: the folder holding
+/// it does. A folder elsewhere, left alone, doesn't.
+#[test]
+fn legacy_metadata_below_names_that_are_not_unicode_counts_as_planted() {
+    use std::os::windows::ffi::OsStringExt as _;
+    let _guard = legacy_process_test_guard();
+    let test_root = user_owned_test_root();
+    let root = test_root.path().join("root");
+    fs::create_dir_all(root.join("sub")).expect("create sub");
+    fs::create_dir_all(root.join("kept\\.codex")).expect("create kept");
+    let root = canonical(&root);
+    let sub = root.join("sub");
+    // A lone surrogate: valid on NTFS, not valid Unicode.
+    let new = sub
+        .join(std::ffi::OsString::from_wide(&[0xD800, u16::from(b'x')]))
+        .join("y\\.codex");
+    let lease =
+        crate::integrity_leases::acquire(std::slice::from_ref(&root), /*log_dir*/ None)
+            .expect("lease");
+    fs::create_dir_all(&new).expect("plant");
+    drop(lease);
+
+    assert_eq!(
+        (
+            planted(&sub),
+            counts_now(&new),
+            counts_now(&root.join("kept\\.codex"))
+        ),
+        (true, true, false)
     );
 }
 
@@ -396,4 +429,244 @@ fn legacy_workspace_stays_watched_when_temp_resolves_to_it() {
     let _ = fs::remove_dir(&temp);
 
     assert_eq!((exit_code, planted_here), (0, true));
+}
+
+/// A configured read-only `.codex`/`.agents` that doesn't exist yet, which
+/// the host makes before the command starts (#1686), isn't reported as
+/// planted: at the top of the command's root, deeper in it, and at the top of
+/// another writable root. Nor is a top-level one the host makes on the way to
+/// a deeper read-only path; that one gets the protection of one that was
+/// there (#1705 review), as does a `.git` made that way. The command can't
+/// write in any of them, and the
+/// folders it makes itself (at the top of a third root, and deeper in its
+/// own) are still reported. Before, the host made them after the session had
+/// recorded them as absent, so each was reported as possibly planted.
+#[test]
+fn legacy_configured_project_metadata_the_sandbox_makes_is_not_planted() {
+    use codex_protocol::permissions::FileSystemAccessMode;
+    use codex_protocol::permissions::FileSystemPath;
+    use codex_protocol::permissions::FileSystemSandboxEntry;
+    use codex_protocol::permissions::FileSystemSandboxPolicy;
+    use codex_protocol::permissions::FileSystemSpecialPath;
+    use codex_protocol::permissions::NetworkSandboxPolicy;
+    let _guard = legacy_process_test_guard();
+    let test_root = user_owned_test_root();
+    let roots = ["workspace", "other", "third"].map(|name| {
+        let root = test_root.path().join(name);
+        fs::create_dir_all(&root).expect("create root");
+        canonical(&root)
+    });
+    let [workspace, other, third] = &roots;
+    let configured = [
+        workspace.join(".agents"),
+        workspace.join("sub\\.codex"),
+        other.join(".codex"),
+        workspace.join(".codex\\hooks"),
+        other.join(".agents\\skills"),
+    ];
+    let git_hooks = workspace.join(".git\\hooks");
+    // Made on the way to the last two.
+    let on_the_way = [workspace.join(".codex"), other.join(".agents")];
+    let absolute = |path: &Path| AbsolutePathBuf::from_absolute_path(path).expect("absolute");
+    let mut entries = vec![FileSystemSandboxEntry::new(
+        FileSystemPath::Special {
+            value: FileSystemSpecialPath::Root,
+        },
+        FileSystemAccessMode::Read,
+    )];
+    entries.extend(roots.iter().map(|root| {
+        FileSystemSandboxEntry::new(
+            FileSystemPath::Path {
+                path: absolute(root).into(),
+            },
+            FileSystemAccessMode::Write,
+        )
+    }));
+    entries.extend(configured.iter().chain([&git_hooks]).map(|path| {
+        FileSystemSandboxEntry::new(
+            FileSystemPath::Path {
+                path: absolute(path).into(),
+            },
+            FileSystemAccessMode::Read,
+        )
+    }));
+    let profile = PermissionProfile::from_runtime_permissions(
+        &FileSystemSandboxPolicy::restricted(entries),
+        NetworkSandboxPolicy::Restricted,
+    );
+    let script: String = configured
+        .iter()
+        .chain(&on_the_way)
+        .map(|path| format!("echo planted> \"{}\\config.toml\"\r\n", path.display()))
+        .chain([
+            format!(
+                "echo planted> \"{}\"\r\n",
+                workspace.join(".git\\config").display()
+            ),
+            format!("mkdir \"{}\"\r\n", third.join(".agents").display()),
+            format!(
+                "mkdir \"{}\"\r\n",
+                workspace.join("deep\\.agents").display()
+            ),
+        ])
+        .collect();
+    let started =
+        super::carve_out_link::run_script(&profile, workspace, &[], HashMap::new(), &script);
+    let host_made: Vec<_> = configured
+        .iter()
+        .chain(&on_the_way)
+        .map(|path| {
+            (
+                path.is_dir(),
+                path.join("config.toml").exists(),
+                planted(path),
+                counts_now(path),
+            )
+        })
+        .collect();
+    // D332: nor is the `.git` the host made for `.git\\hooks`.
+    let git = (
+        git_hooks.is_dir(),
+        workspace.join(".git\\config").exists(),
+        planted(&workspace.join(".git")),
+        counts_now(&workspace.join(".git")),
+    );
+    let command_made: Vec<_> = [third.join(".agents"), workspace.join("deep\\.agents")]
+        .iter()
+        .map(|path| (path.is_dir(), planted(path)))
+        .collect();
+
+    assert_eq!(
+        (started, host_made, git, command_made),
+        (
+            Ok(0),
+            vec![(true, false, false, false); configured.len() + on_the_way.len()],
+            (true, false, false, false),
+            vec![(true, true); 2],
+        )
+    );
+}
+
+/// D332 (#1682): a top-level `.git` that appears, or is replaced, while a
+/// session runs counts as planted at once (it can't be confirmed meanwhile)
+/// and after the session; one left alone doesn't, and a link counts after
+/// every session. A confirmed one counts again once replaced.
+#[test]
+fn legacy_top_level_git_is_watched() {
+    let _guard = legacy_process_test_guard();
+    let test_root = user_owned_test_root();
+    let base = test_root.path().join("roots");
+    for dir in ["new", "kept\\.git", "linked", "target"] {
+        fs::create_dir_all(base.join(dir)).expect("create test directory");
+    }
+    let base = canonical(&base);
+    let (new, kept, linked) = (
+        base.join("new\\.git"),
+        base.join("kept\\.git"),
+        base.join("linked\\.git"),
+    );
+    let status = std::process::Command::new("cmd")
+        .args(["/d", "/c", "mklink", "/J"])
+        .arg(&linked)
+        .arg(base.join("target"))
+        .stdout(std::process::Stdio::null())
+        .status()
+        .expect("mklink");
+    assert!(status.success(), "mklink /J failed");
+    let roots = ["new", "kept", "linked"].map(|root| base.join(root));
+
+    let lease = crate::integrity_leases::acquire(&roots, /*log_dir*/ None).expect("lease");
+    fs::create_dir(&new).expect("plant");
+    let live = (
+        counts_now(&new),
+        counts_now(&kept),
+        crate::confirm_planted_project_metadata(&new).is_err(),
+    );
+    drop(lease);
+    let ended = (planted(&new), planted(&kept), planted(&linked));
+    let confirmed = crate::confirm_planted_project_metadata(&new).expect("confirm");
+    drop(crate::integrity_leases::acquire(&roots, /*log_dir*/ None).expect("unchanged session"));
+    let after_unchanged = (planted(&new), planted(&kept));
+    let lease =
+        crate::integrity_leases::acquire(&roots, /*log_dir*/ None).expect("replacing session");
+    fs::remove_dir(&new).expect("remove");
+    fs::create_dir(&new).expect("replace");
+    drop(lease);
+    let after_replacing = planted(&new);
+
+    assert_eq!(
+        (live, ended, confirmed, after_unchanged, after_replacing),
+        (
+            (true, false, true),
+            (true, false, true),
+            true,
+            (false, false),
+            true,
+        )
+    );
+}
+
+/// D332: a legacy command may create a `.git` where there was none (`git
+/// init` must work), and it then counts as planted.
+#[test]
+fn legacy_command_creating_git_is_recorded_as_planted() {
+    let _guard = legacy_process_test_guard();
+    let test_root = user_owned_test_root();
+    let workspace = test_root.path().join("workspace");
+    fs::create_dir_all(&workspace).expect("create workspace");
+    let script = concat!(
+        "mkdir \"%WORKSPACE%\\.git\\hooks\"\r\n",
+        "echo planted> \"%WORKSPACE%\\.git\\hooks\\post-checkout\"\r\n",
+    );
+    let runtime = current_thread_runtime();
+    let mark = crate::planted_records_mark();
+    let exit_code = runtime.block_on(async {
+        let codex_home = sandbox_home("legacy-top-level-git");
+        let script_path = codex_home.path().join("top-level-git.cmd");
+        fs::write(&script_path, format!("@echo off\r\n{script}exit /b 0\r\n"))
+            .expect("write script");
+        let env_map = HashMap::from([(
+            "WORKSPACE".to_string(),
+            workspace.to_string_lossy().into_owned(),
+        )]);
+        let spawned = spawn_windows_sandbox_session_legacy(
+            &PermissionProfile::workspace_write(),
+            workspace_roots_for(&workspace).as_slice(),
+            codex_home.path(),
+            vec![
+                "C:\\Windows\\System32\\cmd.exe".to_string(),
+                "/d".to_string(),
+                "/c".to_string(),
+                script_path.display().to_string(),
+            ],
+            &workspace,
+            with_session_temp(codex_home.path(), env_map),
+            /*timeout_ms*/ Some(10_000),
+            &[],
+            &[],
+            /*tty*/ false,
+            /*stdin_open*/ false,
+        )
+        .await
+        .expect("spawn legacy session");
+        let (_stdout, exit_code) =
+            collect_stdout_and_exit(spawned, codex_home.path(), Duration::from_secs(/*secs*/ 20))
+                .await;
+        exit_code
+    });
+    let git = canonical(&workspace).join(".git");
+
+    // D424 (#1775): recorded by the time the command's result is back, so
+    // Core can tell the person right after it.
+    assert_eq!(
+        (
+            exit_code,
+            git.join("hooks\\post-checkout").is_file(),
+            planted(&git),
+            crate::planted_records_since(mark)
+                .iter()
+                .any(|record| record.path == git),
+        ),
+        (0, true, true, true)
+    );
 }

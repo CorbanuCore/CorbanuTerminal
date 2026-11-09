@@ -50,6 +50,20 @@ pub enum ConsoleMode {
     NoWindow,
 }
 
+/// The environment block for `CreateProcess*`: sorted, each name once.
+///
+/// Windows names ignore case, so `Path` and `PATH` are one variable, and a
+/// block holding both breaks programs that read it into a case-insensitive
+/// table (Windows PowerShell's `Start-Process` fails with "Item has already
+/// been added", #1805). Of several spellings of one name the block keeps the
+/// one that sorts first (by its upper-case form, then ordinally: `PATH`
+/// before `Path` before `path`); the block was already in that order, and
+/// only the later spellings go. The product spells the variables it sets in
+/// capitals, so its own values win, and it replaces the other spellings of
+/// `PATH` and `PATHEXT` when it changes them (`env.rs`). Lower-case twins
+/// the product sets on purpose (the managed proxy's `http_proxy`, say) go
+/// too: Windows programs read the capitals, but a program that reads only
+/// the lower-case name (MSYS2 `curl`) no longer sees it.
 pub fn make_env_block(env: &HashMap<String, String>) -> Vec<u16> {
     let mut w: Vec<u16> = Vec::new();
     for (k, v) in ordered_env_entries(env) {

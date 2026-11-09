@@ -2,6 +2,13 @@
 // from the eventual unsafe cleanup.
 #![allow(unsafe_op_in_unsafe_fn)]
 
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+mod git_config_targets;
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+mod git_watch;
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+mod par_map;
+mod planted_log;
 #[cfg(any(target_os = "windows", test))]
 mod ssh_config_dependencies;
 mod unlabelled_roots;
@@ -72,6 +79,8 @@ pub use app_package::registered_core_needs_refresh;
 pub use app_package::registered_core_requested;
 #[cfg(target_os = "windows")]
 mod cap;
+#[cfg(target_os = "windows")]
+mod capture_pipes;
 #[cfg(target_os = "windows")]
 mod deny_read_acl;
 #[cfg(target_os = "windows")]
@@ -212,6 +221,11 @@ pub use setup_provisioning::main as setup_helper_main;
 pub use setup_provisioning::provision_sandbox_in_process;
 
 #[cfg(target_os = "windows")]
+mod session_temp;
+#[cfg(target_os = "windows")]
+mod session_temp_leftovers;
+
+#[cfg(target_os = "windows")]
 mod spawn_prep;
 
 #[cfg(target_os = "windows")]
@@ -288,6 +302,12 @@ pub use cap::workspace_write_root_contains_path;
 #[cfg(target_os = "windows")]
 pub use cap::workspace_write_root_overlaps_path;
 #[cfg(target_os = "windows")]
+pub use capture_pipes::OUTPUT_DRAIN_TIMEOUT;
+#[cfg(target_os = "windows")]
+pub use capture_pipes::PipeReader as OutputPipeReader;
+#[cfg(target_os = "windows")]
+pub use capture_pipes::finish_each as finish_output_readers;
+#[cfg(target_os = "windows")]
 pub use conpty::ConptyInstance;
 #[cfg(target_os = "windows")]
 pub use conpty::spawn_conpty_process_as_user;
@@ -346,6 +366,8 @@ pub use identity::sandbox_setup_is_complete;
 pub use identity::sandbox_setup_is_complete_with_settings;
 #[cfg(target_os = "windows")]
 pub use integrity_leases::confirm_planted_project_metadata;
+#[cfg(target_os = "windows")]
+pub use integrity_leases::planted_git_changes;
 #[cfg(target_os = "windows")]
 pub use integrity_leases::planted_project_metadata;
 #[cfg(target_os = "windows")]
@@ -422,6 +444,9 @@ pub use no_reparse_dir::validate_local_directory_path;
 pub use package_identity::process_package_family;
 #[cfg(target_os = "windows")]
 pub use path_normalization::canonicalize_path;
+pub use planted_log::PlantedRecord;
+pub use planted_log::planted_records_mark;
+pub use planted_log::planted_records_since;
 #[cfg(target_os = "windows")]
 pub use process::ConsoleMode;
 #[cfg(target_os = "windows")]
@@ -484,6 +509,8 @@ pub use runtime_ownership::SandboxRuntimeAccount;
 pub use service_identity::windows_sandbox_service_name;
 #[cfg(target_os = "windows")]
 pub use service_identity::windows_sandbox_service_pipe_name;
+#[cfg(target_os = "windows")]
+pub use session_temp::end_session_temp_folders;
 #[cfg(target_os = "windows")]
 pub use setup::OFFLINE_USERNAME;
 #[cfg(target_os = "windows")]
@@ -551,6 +578,10 @@ pub use token::create_workspace_write_token_with_caps_and_user_from;
 pub use token::create_workspace_write_token_with_caps_from;
 #[cfg(target_os = "windows")]
 pub use token::get_current_token_for_restriction;
+#[cfg(target_os = "windows")]
+pub use token::restrict_current_default_dacl;
+#[cfg(target_os = "windows")]
+pub use token::restrict_current_token_access;
 #[cfg(target_os = "windows")]
 pub use token::token_groups;
 #[cfg(target_os = "windows")]
@@ -665,18 +696,6 @@ mod windows_impl {
     use windows_sys::Win32::System::Threading::WaitForSingleObject;
 
     type PipeHandles = ((HANDLE, HANDLE), (HANDLE, HANDLE), (HANDLE, HANDLE));
-
-    struct NonOwningPipeHandle(HANDLE);
-
-    // SAFETY: Pipe handles are opaque process-wide tokens that may be used from
-    // any thread. This wrapper does not own the handle or extend its lifetime.
-    unsafe impl Send for NonOwningPipeHandle {}
-
-    impl NonOwningPipeHandle {
-        fn raw(&self) -> HANDLE {
-            self.0
-        }
-    }
 
     enum WaitOutcome {
         Exited,
@@ -904,52 +923,13 @@ mod windows_impl {
             CloseHandle(err_w);
         }
 
-        let (tx_out, rx_out) = std::sync::mpsc::channel::<Vec<u8>>();
-        let (tx_err, rx_err) = std::sync::mpsc::channel::<Vec<u8>>();
-        let out_r = NonOwningPipeHandle(out_r);
-        let err_r = NonOwningPipeHandle(err_r);
-        let t_out = std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            let mut tmp = [0u8; 8192];
-            loop {
-                let mut read_bytes: u32 = 0;
-                let ok = unsafe {
-                    windows_sys::Win32::Storage::FileSystem::ReadFile(
-                        out_r.raw(),
-                        tmp.as_mut_ptr(),
-                        tmp.len() as u32,
-                        &mut read_bytes,
-                        std::ptr::null_mut(),
-                    )
-                };
-                if ok == 0 || read_bytes == 0 {
-                    break;
-                }
-                buf.extend_from_slice(&tmp[..read_bytes as usize]);
-            }
-            let _ = tx_out.send(buf);
-        });
-        let t_err = std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            let mut tmp = [0u8; 8192];
-            loop {
-                let mut read_bytes: u32 = 0;
-                let ok = unsafe {
-                    windows_sys::Win32::Storage::FileSystem::ReadFile(
-                        err_r.raw(),
-                        tmp.as_mut_ptr(),
-                        tmp.len() as u32,
-                        &mut read_bytes,
-                        std::ptr::null_mut(),
-                    )
-                };
-                if ok == 0 || read_bytes == 0 {
-                    break;
-                }
-                buf.extend_from_slice(&tmp[..read_bytes as usize]);
-            }
-            let _ = tx_err.send(buf);
-        });
+        // SAFETY: the read ends were just created and are handed to their readers.
+        let readers = unsafe {
+            [
+                super::capture_pipes::PipeReader::spawn(out_r),
+                super::capture_pipes::PipeReader::spawn(err_r),
+            ]
+        };
 
         let wait_outcome = wait_for_process(pi.hProcess, timeout_ms, cancellation.as_ref());
         let timed_out = matches!(wait_outcome, WaitOutcome::TimedOut);
@@ -1001,10 +981,10 @@ mod windows_impl {
             }
             CloseHandle(security.h_token);
         }
-        let _ = t_out.join();
-        let _ = t_err.join();
-        let stdout = rx_out.recv().unwrap_or_default();
-        let stderr = rx_err.recv().unwrap_or_default();
+        // A process left running may hold the pipes open (#1826): read what
+        // is left for a bounded time, not until it exits.
+        let [stdout, stderr] =
+            super::capture_pipes::finish(readers, super::capture_pipes::OUTPUT_DRAIN_TIMEOUT);
         let exit_code = if timed_out {
             128 + 64
         } else {

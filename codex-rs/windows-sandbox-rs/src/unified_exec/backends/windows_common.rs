@@ -93,6 +93,7 @@ pub(crate) fn start_runner_stdout_reader(
     stderr_tx: Option<broadcast::Sender<Vec<u8>>>,
     exit_tx: oneshot::Sender<i32>,
     credential_watch: Option<crate::credential_watch::CredentialWatch>,
+    planted_watch: Option<crate::integrity_leases::IntegrityLease>,
 ) {
     std::thread::spawn(move || {
         let stopped_by_watch = || {
@@ -172,6 +173,9 @@ pub(crate) fn start_runner_stdout_reader(
             (exit_code, timed_out)
         });
         crate::elevated::runner_metrics::record_command(exit);
+        // D425 (#1846): the command has ended; what it planted is recorded
+        // before its exit is reported, so the post-command notice finds it.
+        drop(planted_watch);
         let _ = exit_tx.send(exit.map_or(-1, |(code, _)| code));
     });
 }

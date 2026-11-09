@@ -16,7 +16,7 @@ use codex_windows_sandbox::ConsoleMode;
 use codex_windows_sandbox::LaunchDesktop;
 use codex_windows_sandbox::LocalSid;
 use codex_windows_sandbox::create_process_as_user;
-use codex_windows_sandbox::create_readonly_token_with_caps_and_user_from;
+use codex_windows_sandbox::create_readonly_token_with_caps_from;
 use codex_windows_sandbox::get_current_token_for_restriction;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
@@ -406,11 +406,16 @@ fn run_restricted_child_blocking(
     let route_sid = LocalSid::from_string(route_sid)?;
     let capability_sid = LocalSid::from_string("S-1-5-21-10-20-30-40")?;
     let base_token = unsafe { OwnedHandle::from_raw_handle(get_current_token_for_restriction()?) };
+    // The route SID only has to be one of the child's restricting SIDs: the
+    // proxy matches it among them in any position. The elevated builder
+    // (`create_readonly_token_with_caps_and_user_from`) refuses this test
+    // process, which isn't in the sandbox users' group (D324, #1795);
+    // windows-sandbox-rs's own tests check that it puts the route SID among
+    // an elevated token's restricting SIDs.
     let restricted_token = unsafe {
-        create_readonly_token_with_caps_and_user_from(
+        create_readonly_token_with_caps_from(
             base_token.as_raw_handle(),
-            &[capability_sid.as_ptr()],
-            &[route_sid.as_ptr()],
+            &[capability_sid.as_ptr(), route_sid.as_ptr()],
         )?
     };
     let restricted_token = unsafe { OwnedHandle::from_raw_handle(restricted_token) };
