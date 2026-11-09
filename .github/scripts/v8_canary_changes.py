@@ -21,6 +21,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CANARY_PATH_PATTERNS = {
     ".bazelrc",
     ".github/actions/prepare-bazel-ci/**",
+    # Corbanu: v8-canary.yml and rusty-v8-release.yml still use setup-bazel-ci.
+    ".github/actions/setup-bazel-ci/**",
     ".github/actions/setup-ci/**",
     ".github/scripts/run_bazel_with_buildbuddy.py",
     ".github/scripts/rusty_v8_bazel.py",
