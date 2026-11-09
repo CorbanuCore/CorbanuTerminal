@@ -625,7 +625,6 @@ async fn end_a_running_command(
 /// default DACL (D324) gives the sandbox users' group, which every elevated
 /// command holds, read access, and read rights pass a write-restricted token.
 #[test]
-#[ignore = "#1803: an elevated command reads another workspace's ConPTY console host (what that command printed) through the sandbox users' group in the runner's default DACL; measured open on main and #1800 (win-desk, real desktop) and on CI; the fix (D461) or follow-up (D417) is the owner's decision"]
 fn sec_win_1803_elevated_command_cannot_read_another_workspaces_console_host() {
     let Some(codex_home) = elevated_home("sec-win-1803") else {
         return;
