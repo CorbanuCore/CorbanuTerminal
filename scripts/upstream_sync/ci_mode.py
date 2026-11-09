@@ -10,7 +10,8 @@
                                  sync-branch CODEOWNERS block for the named security paths, the
                                  dependency-policy files and main's D318 paths (reverted after main
                                  merge #3, as the last sync-branch commit before the final PR); drift
-                                 exits 1 if origin/main's D318 block names a pattern the block lacks
+                                 exits 1 if origin/main's D318 block names a pattern the block lacks,
+                                 the block isn't last, or (given @owner) another owner appears
 
 Edits are textual so they apply on top of whatever Tier 0 resolution the skeleton produced.
 """
@@ -221,12 +222,22 @@ SYNC_SUCCESSORS = (
     "/codex-rs/websocket-auth/",
     # main: /codex-rs/core/src/guardian/policy*.md (upstream #41477 moved the guardian prompts here)
     "/codex-rs/prompts/templates/guardian/",
+    # main: /codex-rs/core/src/guardian/ (upstream #44227, #44252, #44544 moved the review engine here)
+    "/codex-rs/ext/guardian-reviewer/",
+    # main: /codex-rs/core/src/guardian/prompt.rs (upstream #46026 moved prompt assembly here)
+    "/codex-rs/prompts/src/guardian_instructions.rs",
+    "/codex-rs/prompts/src/model_messages/guardian.rs",
+    # New upstream crate (#41392: guardian authorization, enforcement, trusted tools); not a move, owned
+    # here pending the security owner's decision for main.
+    "/codex-rs/guardian-context/",
 )
 MAIN_BLOCK_BEGIN = "# BEGIN Corbanu security owners"
 MAIN_BLOCK_END = "# END Corbanu security owners"
 
 
 def codeowners(action, wt, owner=None):
+    if action not in ("apply", "revert", "check", "drift"):
+        sys.exit(f"error: unknown codeowners action {action!r}")
     sys.path.insert(0, HERE)
     import footprint
 
@@ -246,6 +257,15 @@ def codeowners(action, wt, owner=None):
         m_start, m_end = main.find(MAIN_BLOCK_BEGIN), main.find(MAIN_BLOCK_END)
         if m_start == -1 or m_end < m_start or start == -1:
             sys.exit("error: main's D318 block or the sync block is missing")
+        if text[end + len(CO_END) :].strip():
+            sys.exit("error: the sync block is not last in CODEOWNERS")
+        owners = {
+            line.split()[1]
+            for line in text[start:end].splitlines()
+            if line.startswith("/")
+        }
+        if owner and owners != {owner}:
+            sys.exit(f"error: sync block owners {sorted(owners)} != {owner}")
         owned = {
             line.split()[0]
             for line in text[start:end].splitlines()
@@ -287,4 +307,7 @@ if __name__ == "__main__":
     if sys.argv[1] == "codeowners":
         codeowners(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else None)
     else:
-        {"apply": apply, "revert": revert, "check": check}[sys.argv[1]](sys.argv[2])
+        actions = {"apply": apply, "revert": revert, "check": check}
+        if sys.argv[1] not in actions:
+            sys.exit(f"error: unknown action {sys.argv[1]!r}")
+        actions[sys.argv[1]](sys.argv[2])

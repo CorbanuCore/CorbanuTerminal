@@ -132,4 +132,8 @@
 /codex-rs/model-provider/src/model_key_broker.rs @corbanu-security
 /codex-rs/websocket-auth/ @corbanu-security
 /codex-rs/prompts/templates/guardian/ @corbanu-security
+/codex-rs/ext/guardian-reviewer/ @corbanu-security
+/codex-rs/prompts/src/guardian_instructions.rs @corbanu-security
+/codex-rs/prompts/src/model_messages/guardian.rs @corbanu-security
+/codex-rs/guardian-context/ @corbanu-security
 # END sync-branch security owners
