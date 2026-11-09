@@ -336,13 +336,8 @@ async fn responses_client_stream_request_preserves_item_ids() -> Result<()> {
     let client = ResponsesClient::new(transport, provider("openai"), Arc::new(NoAuth));
     let request = ResponsesApiRequest {
         model: "gpt-test".into(),
-<<<<<<< HEAD
         instructions: "Say hi".into(),
         previous_response_id: None,
-||||||| 413492cd6c
-        instructions: "Say hi".into(),
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         input: vec![ResponseItem::Message {
             status: None,
             encrypted_content: None,
@@ -364,16 +359,12 @@ async fn responses_client_stream_request_preserves_item_ids() -> Result<()> {
         prompt_cache_key: None,
         text: None,
         client_metadata: None,
-<<<<<<< HEAD
         thinking_budget: None,
         emit_usage: None,
         enable_thinking: None,
         reasoning_effort: None,
         provider_options: None,
-||||||| 413492cd6c
-=======
         access_programs: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
     let expected = serde_json::to_value(&request)?;
 
@@ -430,6 +421,13 @@ async fn responses_client_stream_request_sends_routing_fields_ahead_of_large_inp
         text: None,
         client_metadata: None,
         access_programs: None,
+        instructions: String::new(),
+        previous_response_id: None,
+        thinking_budget: None,
+        emit_usage: None,
+        enable_thinking: None,
+        reasoning_effort: None,
+        provider_options: None,
     };
     let expected = serde_json::to_value(&request)?;
 
@@ -506,13 +504,8 @@ async fn streaming_client_retries_on_transport_error() -> Result<()> {
 
     let request = ResponsesApiRequest {
         model: "gpt-test".into(),
-<<<<<<< HEAD
         instructions: "Say hi".into(),
         previous_response_id: None,
-||||||| 413492cd6c
-        instructions: "Say hi".into(),
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         input: Vec::new(),
         tools: Some(empty_tools().into()),
         tool_choice: "auto".into(),
@@ -526,16 +519,12 @@ async fn streaming_client_retries_on_transport_error() -> Result<()> {
         prompt_cache_key: None,
         text: None,
         client_metadata: None,
-<<<<<<< HEAD
         thinking_budget: None,
         emit_usage: None,
         enable_thinking: None,
         reasoning_effort: None,
         provider_options: None,
-||||||| 413492cd6c
-=======
         access_programs: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
     let client = ResponsesClient::new(transport.clone(), provider, Arc::new(NoAuth));
 
@@ -639,13 +628,8 @@ async fn azure_store_sends_ids_and_headers() -> Result<()> {
 
     let request = ResponsesApiRequest {
         model: "gpt-test".into(),
-<<<<<<< HEAD
         instructions: "Say hi".into(),
         previous_response_id: None,
-||||||| 413492cd6c
-        instructions: "Say hi".into(),
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         input: vec![ResponseItem::Message {
             status: None,
             encrypted_content: None,
@@ -667,16 +651,12 @@ async fn azure_store_sends_ids_and_headers() -> Result<()> {
         prompt_cache_key: None,
         text: None,
         client_metadata: None,
-<<<<<<< HEAD
         thinking_budget: None,
         emit_usage: None,
         enable_thinking: None,
         reasoning_effort: None,
         provider_options: None,
-||||||| 413492cd6c
-=======
         access_programs: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
 
     let mut extra_headers = HeaderMap::new();

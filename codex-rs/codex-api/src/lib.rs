@@ -33,7 +33,7 @@ pub use crate::auth::AuthProviderFuture;
 pub use crate::auth::AuthRefreshFuture;
 pub use crate::auth::SharedAuthProvider;
 pub use crate::auth::auth_header_telemetry;
-<<<<<<< HEAD
+pub use crate::common::AccessPrograms;
 pub use crate::common::AnthropicMessagesRequest;
 pub use crate::common::ChatCacheControl;
 pub use crate::common::ChatCompletionsRequest;
@@ -45,11 +45,6 @@ pub use crate::common::ChatToolCall;
 pub use crate::common::ChatToolFunction;
 pub use crate::common::CompactionInput;
 pub use crate::common::CompletionFinishReason;
-||||||| 413492cd6c
-pub use crate::common::CompactionInput;
-=======
-pub use crate::common::AccessPrograms;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use crate::common::MemorySummarizeInput;
 pub use crate::common::MemorySummarizeOutput;
 pub use crate::common::OpenAiVerbosity;
@@ -72,17 +67,11 @@ pub use crate::common::WS_REQUEST_HEADER_TRACEPARENT_CLIENT_METADATA_KEY;
 pub use crate::common::WS_REQUEST_HEADER_TRACESTATE_CLIENT_METADATA_KEY;
 pub use crate::common::create_text_param_for_request;
 pub use crate::common::response_create_client_metadata;
-<<<<<<< HEAD
 pub use crate::endpoint::AnthropicMessagesClient;
 pub use crate::endpoint::AnthropicMessagesOptions;
 pub use crate::endpoint::ChatCompletionsClient;
 pub use crate::endpoint::ChatCompletionsOptions;
-pub use crate::endpoint::CompactClient;
-||||||| 413492cd6c
-pub use crate::endpoint::CompactClient;
-=======
 pub use crate::endpoint::ImageRequestError;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use crate::endpoint::ImagesClient;
 pub use crate::endpoint::MemoriesClient;
 pub use crate::endpoint::ModelsClient;

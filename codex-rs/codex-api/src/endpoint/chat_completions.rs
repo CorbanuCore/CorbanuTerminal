@@ -206,7 +206,9 @@ fn spawn_chat_completions_stream(
     let (tx_event, rx_event) = mpsc::channel::<Result<ResponseEvent, ApiError>>(1600);
     let response_id_hint = upstream_request_id.clone();
     tokio::spawn(async move {
-        let _ = tx_event.send(Ok(ResponseEvent::Created)).await;
+        let _ = tx_event
+            .send(Ok(ResponseEvent::Created { response_id: None }))
+            .await;
         process_chat_sse_observed(
             stream_response.bytes,
             tx_event,
@@ -223,6 +225,8 @@ fn spawn_chat_completions_stream(
     ResponseStream {
         rx_event,
         upstream_request_id,
+        interrupt: None,
+        routing_affinity: None,
     }
 }
 
@@ -327,6 +331,7 @@ impl From<ChatUsage> for TokenUsage {
                 .map(|details| details.reasoning_tokens)
                 .unwrap_or(0),
             total_tokens: value.total_tokens,
+            codex_rollout_budget_units: None,
         }
     }
 }
@@ -838,9 +843,13 @@ impl ChatStreamState {
                             role: "assistant".to_string(),
                             content: vec![ContentItem::OutputText {
                                 text: self.message_text,
+                                annotations: None,
+                                logprobs: None,
                             }],
                             phase: None,
                             internal_chat_message_metadata_passthrough: None,
+                            encrypted_content: None,
+                            status: None,
                         };
                         if tx_event
                             .send(Ok(ResponseEvent::OutputItemDone(item)))
@@ -881,6 +890,8 @@ impl ChatStreamState {
                 encrypted_function_args: None,
                 call_id,
                 internal_chat_message_metadata_passthrough: None,
+                encrypted_content: None,
+                status: None,
             };
             if tx_event
                 .send(Ok(ResponseEvent::OutputItemDone(item)))
@@ -911,6 +922,7 @@ impl ChatStreamState {
                 token_usage,
                 end_turn,
                 finish_reason,
+                usage_metadata: None,
             }))
             .await;
     }
@@ -1008,6 +1020,8 @@ impl ChatStreamState {
                 content: Vec::new(),
                 phase: None,
                 internal_chat_message_metadata_passthrough: None,
+                encrypted_content: None,
+                status: None,
             };
             if tx_event
                 .send(Ok(ResponseEvent::OutputItemAdded(item)))
@@ -1166,6 +1180,8 @@ fn parse_serialized_function_call_text(
         encrypted_function_args: None,
         call_id,
         internal_chat_message_metadata_passthrough: None,
+        encrypted_content: None,
+        status: None,
     }))
 }
 
@@ -1626,7 +1642,7 @@ mod tests {
         assert_matches!(
             &events[4],
             Ok(ResponseEvent::OutputItemDone(ResponseItem::Message { content, .. }))
-                if content == &vec![ContentItem::OutputText { text: "hello".to_string() }]
+                if content == &vec![ContentItem::OutputText { text: "hello".to_string(), annotations: None, logprobs: None }]
         );
         assert_matches!(
             &events[5],
@@ -1666,6 +1682,8 @@ mod tests {
             Ok(ResponseEvent::OutputItemDone(ResponseItem::Message { content, .. }))
                 if content == &vec![ContentItem::OutputText {
                     text: "partial answer".to_string(),
+                    annotations: None,
+                    logprobs: None,
                 }]
         );
         assert_matches!(
@@ -1717,6 +1735,8 @@ mod tests {
             Ok(ResponseEvent::OutputItemDone(ResponseItem::Message { content, .. }))
                 if content == &vec![ContentItem::OutputText {
                     text: "RENTED_GPU_OK".to_string(),
+                    annotations: None,
+                    logprobs: None,
                 }]
         );
         assert_matches!(
@@ -1875,6 +1895,8 @@ mod tests {
             Ok(ResponseEvent::OutputItemDone(ResponseItem::Message { content, .. }))
                 if content == &vec![ContentItem::OutputText {
                     text: "visible answer".to_string(),
+                    annotations: None,
+                    logprobs: None,
                 }]
         );
         assert_matches!(
@@ -1933,7 +1955,7 @@ mod tests {
         assert_matches!(
             &events[2],
             Ok(ResponseEvent::OutputItemDone(ResponseItem::Message { content: final_content, .. }))
-                if final_content == &vec![ContentItem::OutputText { text: content }]
+                if final_content == &vec![ContentItem::OutputText { text: content, annotations: None, logprobs: None }]
         );
         assert_matches!(
             &events[3],
@@ -1956,7 +1978,7 @@ mod tests {
         assert_matches!(
             &events[2],
             Ok(ResponseEvent::OutputItemDone(ResponseItem::Message { content: final_content, .. }))
-                if final_content == &vec![ContentItem::OutputText { text: content.to_string() }]
+                if final_content == &vec![ContentItem::OutputText { text: content.to_string(), annotations: None, logprobs: None }]
         );
         assert_matches!(
             &events[3],

@@ -169,6 +169,7 @@ async fn retry_of(status: u16, headers: &[(&'static str, HeaderValue)]) -> (u64,
                         url: None,
                         headers: Some(map),
                         body: None,
+                        retry_after: None,
                     })
                 } else {
                     Ok(())

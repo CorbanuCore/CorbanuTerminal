@@ -3,7 +3,9 @@ use codex_protocol::ResponseUsageMetadata;
 use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
 use codex_protocol::config_types::Verbosity as VerbosityConfig;
 use codex_protocol::models::AgentMessageInputContent;
+use codex_protocol::models::AudioReference;
 use codex_protocol::models::ContentItem;
+use codex_protocol::models::ImageReference;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::protocol::ModelVerification;
@@ -29,39 +31,6 @@ use tokio::sync::oneshot;
 pub const WS_REQUEST_HEADER_TRACEPARENT_CLIENT_METADATA_KEY: &str = "ws_request_header_traceparent";
 pub const WS_REQUEST_HEADER_TRACESTATE_CLIENT_METADATA_KEY: &str = "ws_request_header_tracestate";
 
-<<<<<<< HEAD
-/// Canonical input payload for the compaction endpoint.
-#[derive(Debug, Clone)]
-pub struct CompactionInput<'a> {
-    pub model: &'a str,
-    pub input: &'a [ResponseItem],
-    pub instructions: &'a str,
-    pub tools: Option<ResponsesApiTools>,
-    pub parallel_tool_calls: bool,
-    pub reasoning: Option<Reasoning>,
-    pub service_tier: Option<&'a str>,
-    pub prompt_cache_key: Option<&'a str>,
-    pub text: Option<TextControls>,
-||||||| 413492cd6c
-/// Canonical input payload for the compaction endpoint.
-#[derive(Debug, Clone, Serialize)]
-pub struct CompactionInput<'a> {
-    pub model: &'a str,
-    pub input: &'a [ResponseItem],
-    #[serde(skip_serializing_if = "str::is_empty")]
-    pub instructions: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tools: Option<ResponsesApiTools>,
-    pub parallel_tool_calls: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reasoning: Option<Reasoning>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub service_tier: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub prompt_cache_key: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub text: Option<TextControls>,
-=======
 /// Explicit per-request access selection using the Responses API wire values.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct AccessPrograms {
@@ -78,7 +47,20 @@ impl From<CyberAccessProgram> for AccessPrograms {
             },
         }
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+}
+
+/// Canonical input payload for the compaction endpoint.
+#[derive(Debug, Clone)]
+pub struct CompactionInput<'a> {
+    pub model: &'a str,
+    pub input: &'a [ResponseItem],
+    pub instructions: &'a str,
+    pub tools: Option<ResponsesApiTools>,
+    pub parallel_tool_calls: bool,
+    pub reasoning: Option<Reasoning>,
+    pub service_tier: Option<&'a str>,
+    pub prompt_cache_key: Option<&'a str>,
+    pub text: Option<TextControls>,
 }
 
 impl Serialize for CompactionInput<'_> {
@@ -276,18 +258,12 @@ pub enum ReasoningContext {
 
 #[derive(Debug, Serialize, Clone, PartialEq)]
 pub struct Reasoning {
-<<<<<<< HEAD
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-||||||| 413492cd6c
-    #[serde(skip_serializing_if = "Option::is_none")]
-=======
     #[serde(
         skip_serializing_if = "Option::is_none",
         serialize_with = "serialize_reasoning_effort"
     )]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub effort: Option<ReasoningEffortConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<i64>,
@@ -409,37 +385,18 @@ impl Serialize for ResponsesApiTools {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResponsesApiRequest {
-    // Keep routing fields first: serde serializes struct fields in declaration order, and
-    // gateways may inspect request bodies incrementally before potentially multi-megabyte input.
     pub model: String,
-<<<<<<< HEAD
     pub instructions: String,
     pub previous_response_id: Option<String>,
-||||||| 413492cd6c
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub instructions: String,
-=======
-    pub stream: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub service_tier: Option<String>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub input: Vec<ResponseItem>,
     pub tools: Option<ResponsesApiTools>,
     pub tool_choice: String,
     pub parallel_tool_calls: bool,
     pub reasoning: Option<Reasoning>,
     pub store: bool,
-<<<<<<< HEAD
     pub stream: bool,
-||||||| 413492cd6c
-    pub stream: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-=======
-    #[serde(skip_serializing_if = "Option::is_none")]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub stream_options: Option<StreamOptions>,
     pub include: Vec<String>,
-<<<<<<< HEAD
     pub service_tier: Option<String>,
     pub prompt_cache_key: Option<String>,
     pub text: Option<TextControls>,
@@ -451,6 +408,7 @@ pub struct ResponsesApiRequest {
     /// Gateway-level routing/provider controls, serialized as `providerOptions`.
     /// Used by the Vercel AI Gateway to pin an upstream host.
     pub provider_options: Option<serde_json::Value>,
+    pub access_programs: Option<AccessPrograms>,
 }
 
 impl ResponsesApiRequest {
@@ -482,9 +440,16 @@ impl Serialize for ResponsesApiRequest {
         field_count += usize::from(self.enable_thinking.is_some());
         field_count += usize::from(self.reasoning_effort.is_some());
         field_count += usize::from(self.provider_options.is_some());
+        field_count += usize::from(self.access_programs.is_some());
 
+        // Keep routing fields first: gateways may inspect request bodies
+        // incrementally before potentially multi-megabyte input.
         let mut state = serializer.serialize_struct("ResponsesApiRequest", field_count)?;
         state.serialize_field("model", &self.model)?;
+        state.serialize_field("stream", &self.stream)?;
+        if let Some(service_tier) = &self.service_tier {
+            state.serialize_field("service_tier", service_tier)?;
+        }
         if !self.instructions.is_empty() {
             state.serialize_field("instructions", &self.instructions)?;
         }
@@ -505,14 +470,10 @@ impl Serialize for ResponsesApiRequest {
             state.serialize_field("reasoning", reasoning)?;
         }
         state.serialize_field("store", &self.store)?;
-        state.serialize_field("stream", &self.stream)?;
         if let Some(stream_options) = &self.stream_options {
             state.serialize_field("stream_options", stream_options)?;
         }
         state.serialize_field("include", &self.include)?;
-        if let Some(service_tier) = &self.service_tier {
-            state.serialize_field("service_tier", service_tier)?;
-        }
         if let Some(prompt_cache_key) = &self.prompt_cache_key {
             state.serialize_field("prompt_cache_key", prompt_cache_key)?;
         }
@@ -536,6 +497,9 @@ impl Serialize for ResponsesApiRequest {
         }
         if let Some(provider_options) = &self.provider_options {
             state.serialize_field("providerOptions", provider_options)?;
+        }
+        if let Some(access_programs) = &self.access_programs {
+            state.serialize_field("access_programs", access_programs)?;
         }
         state.end()
     }
@@ -590,6 +554,8 @@ fn ambient_chunk_from_response_item(item: &ResponseItem) -> Option<AmbientReason
         // string input makes the next turn treat private chain-of-thought as user
         // visible context and can amplify a single provider leak into a loop.
         ResponseItem::Reasoning { .. } => None,
+        // A request control, not conversation content.
+        ResponseItem::ConfigurationUpdate { .. } => None,
         ResponseItem::AdditionalTools { .. }
         | ResponseItem::FunctionCall { .. }
         | ResponseItem::CustomToolCall { .. }
@@ -655,6 +621,7 @@ fn response_item_for_non_anthropic_request(item: &ResponseItem) -> ResponseItem 
         | ResponseItem::Compaction { .. }
         | ResponseItem::CompactionTrigger { .. }
         | ResponseItem::ContextCompaction { .. }
+        | ResponseItem::ConfigurationUpdate { .. }
         | ResponseItem::Other => {}
     }
     item.clear_local_provenance();
@@ -665,9 +632,21 @@ fn ambient_text_from_content_items(content: &[ContentItem]) -> Option<String> {
     let parts: Vec<_> = content
         .iter()
         .map(|item| match item {
-            ContentItem::InputText { text } | ContentItem::OutputText { text } => text.clone(),
-            ContentItem::InputImage { image_url, .. } => format!("[image: {image_url}]"),
-            ContentItem::InputAudio { audio_url } => format!("[audio: {audio_url}]"),
+            ContentItem::InputText { text } | ContentItem::OutputText { text, .. } => text.clone(),
+            ContentItem::InputImage {
+                image: ImageReference::Inline { image_url },
+                ..
+            } => format!("[image: {image_url}]"),
+            ContentItem::InputImage {
+                image: ImageReference::File { file_id },
+                ..
+            } => format!("[image file: {file_id}]"),
+            ContentItem::InputAudio {
+                audio: AudioReference::Inline { audio_url },
+            } => format!("[audio: {audio_url}]"),
+            ContentItem::InputAudio {
+                audio: AudioReference::File { file_id },
+            } => format!("[audio file: {file_id}]"),
         })
         .filter(|text| !text.trim().is_empty())
         .collect();
@@ -699,18 +678,11 @@ pub struct ChatCompletionsRequest {
     pub tool_choice: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parallel_tool_calls: Option<bool>,
-||||||| 413492cd6c
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub service_tier: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_format: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-<<<<<<< HEAD
     pub emit_usage: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enable_thinking: Option<bool>,
@@ -862,19 +834,13 @@ pub struct ChatToolCall {
 pub struct ChatToolFunction {
     pub name: String,
     pub arguments: String,
-||||||| 413492cd6c
-    pub client_metadata: Option<HashMap<String, String>>,
-=======
-    pub client_metadata: Option<HashMap<String, String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub access_programs: Option<AccessPrograms>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl<'a> From<&'a ResponsesApiRequest> for ResponseCreateWsRequest<'a> {
     fn from(request: &'a ResponsesApiRequest) -> Self {
         Self {
             model: &request.model,
+            instructions: &request.instructions,
             previous_response_id: None,
             input: &request.input,
             tools: request.tools.as_ref().map(ResponsesApiTools::as_raw_value),
@@ -890,36 +856,19 @@ impl<'a> From<&'a ResponsesApiRequest> for ResponseCreateWsRequest<'a> {
             text: request.text.as_ref(),
             generate: None,
             client_metadata: request.client_metadata.clone(),
-<<<<<<< HEAD
             thinking_budget: request.thinking_budget,
             emit_usage: request.emit_usage,
             enable_thinking: request.enable_thinking,
             reasoning_effort: request.reasoning_effort.clone(),
-||||||| 413492cd6c
-=======
             access_programs: request.access_programs,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 }
 
 #[derive(Debug)]
 pub struct ResponseCreateWsRequest<'a> {
-    // Keep routing fields first: serde serializes struct fields in declaration order, and
-    // gateways may inspect request bodies incrementally before potentially multi-megabyte input.
     pub model: &'a str,
-<<<<<<< HEAD
     pub instructions: &'a str,
-||||||| 413492cd6c
-    #[serde(skip_serializing_if = "str::is_empty")]
-    pub instructions: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-=======
-    pub stream: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub service_tier: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub previous_response_id: Option<String>,
     pub input: &'a [ResponseItem],
     pub tools: Option<&'a RawValue>,
@@ -927,34 +876,19 @@ pub struct ResponseCreateWsRequest<'a> {
     pub parallel_tool_calls: bool,
     pub reasoning: Option<&'a Reasoning>,
     pub store: bool,
-<<<<<<< HEAD
     pub stream: bool,
-||||||| 413492cd6c
-    pub stream: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-=======
-    #[serde(skip_serializing_if = "Option::is_none")]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub stream_options: Option<&'a StreamOptions>,
     pub include: &'a [String],
-<<<<<<< HEAD
     pub service_tier: Option<&'a str>,
-||||||| 413492cd6c
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub service_tier: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-=======
-    #[serde(skip_serializing_if = "Option::is_none")]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub prompt_cache_key: Option<&'a str>,
     pub text: Option<&'a TextControls>,
     pub generate: Option<bool>,
     pub client_metadata: Option<HashMap<String, String>>,
-<<<<<<< HEAD
     pub thinking_budget: Option<i64>,
     pub emit_usage: Option<bool>,
     pub enable_thinking: Option<bool>,
     pub reasoning_effort: Option<String>,
+    pub access_programs: Option<AccessPrograms>,
 }
 
 impl Serialize for ResponseCreateWsRequest<'_> {
@@ -977,9 +911,16 @@ impl Serialize for ResponseCreateWsRequest<'_> {
         field_count += usize::from(self.emit_usage.is_some());
         field_count += usize::from(self.enable_thinking.is_some());
         field_count += usize::from(self.reasoning_effort.is_some());
+        field_count += usize::from(self.access_programs.is_some());
 
         let mut state = serializer.serialize_struct("ResponseCreateWsRequest", field_count)?;
+        // Keep routing fields first: gateways may inspect request bodies
+        // incrementally before potentially multi-megabyte input.
         state.serialize_field("model", &self.model)?;
+        state.serialize_field("stream", &self.stream)?;
+        if let Some(service_tier) = &self.service_tier {
+            state.serialize_field("service_tier", service_tier)?;
+        }
         if !self.instructions.is_empty() {
             state.serialize_field("instructions", &self.instructions)?;
         }
@@ -996,14 +937,10 @@ impl Serialize for ResponseCreateWsRequest<'_> {
             state.serialize_field("reasoning", reasoning)?;
         }
         state.serialize_field("store", &self.store)?;
-        state.serialize_field("stream", &self.stream)?;
         if let Some(stream_options) = &self.stream_options {
             state.serialize_field("stream_options", stream_options)?;
         }
         state.serialize_field("include", &self.include)?;
-        if let Some(service_tier) = &self.service_tier {
-            state.serialize_field("service_tier", service_tier)?;
-        }
         if let Some(prompt_cache_key) = &self.prompt_cache_key {
             state.serialize_field("prompt_cache_key", prompt_cache_key)?;
         }
@@ -1028,13 +965,11 @@ impl Serialize for ResponseCreateWsRequest<'_> {
         if let Some(reasoning_effort) = &self.reasoning_effort {
             state.serialize_field("reasoning_effort", reasoning_effort)?;
         }
+        if let Some(access_programs) = &self.access_programs {
+            state.serialize_field("access_programs", access_programs)?;
+        }
         state.end()
     }
-||||||| 413492cd6c
-=======
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub access_programs: Option<AccessPrograms>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 pub fn response_create_client_metadata(
@@ -1142,6 +1077,8 @@ mod tests {
                     ..Default::default()
                 },
             ),
+            encrypted_content: None,
+            status: None,
         };
         let attributed = [message(Some(vec![Some("host_skills".to_string())]))];
         let unattributed = [message(/*sources*/ None)];
@@ -1168,6 +1105,7 @@ mod tests {
                 emit_usage: None,
                 enable_thinking: None,
                 reasoning_effort: None,
+                access_programs: None,
             })
             .expect("serialize websocket request")
         };
@@ -1204,6 +1142,8 @@ mod tests {
                 }],
                 phase: None,
                 internal_chat_message_metadata_passthrough: None,
+                encrypted_content: None,
+                status: None,
             };
             if let Some(producer) = producer {
                 item.set_producer(producer);
@@ -1321,6 +1261,8 @@ mod tests {
                 }],
                 phase: None,
                 internal_chat_message_metadata_passthrough: None,
+                encrypted_content: None,
+                status: None,
             },
         ];
 
@@ -1366,6 +1308,7 @@ mod tests {
                 "input": { "query": "yield" }
             })),
             internal_chat_message_metadata_passthrough: None,
+            encrypted_content: None,
         }
     }
 
@@ -1387,6 +1330,8 @@ mod tests {
                     }],
                     phase: None,
                     internal_chat_message_metadata_passthrough: None,
+                    encrypted_content: None,
+                    status: None,
                 },
             ],
             tools: None,
@@ -1406,6 +1351,7 @@ mod tests {
             enable_thinking: None,
             reasoning_effort: None,
             provider_options: None,
+            access_programs: None,
         }
     }
 

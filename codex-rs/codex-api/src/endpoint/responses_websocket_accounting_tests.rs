@@ -98,6 +98,7 @@ fn request() -> ResponsesWsRequest<'static> {
         emit_usage: None,
         enable_thinking: None,
         reasoning_effort: None,
+        access_programs: None,
     })
 }
 type Server = tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>;
@@ -112,15 +113,15 @@ async fn pair() -> anyhow::Result<(ResponsesWebsocketConnection, Server)> {
     };
     let factory =
         HttpClientFactory::new(codex_http_client::OutboundProxyPolicy::RespectSystemProxy);
-    let connect = connect_websocket(url, HeaderMap::new(), &factory, /*turn_state*/ None);
+    let connector = WebSocketConnector::new(&factory)?;
+    let connect = connect_websocket(url, HeaderMap::new(), &connector, /*turn_state*/ None);
     let (connected, server) = tokio::join!(connect, accept);
-    let (stream, _, _, _, _) = connected?;
+    let (stream, _, _, _) = connected.map_err(|error| anyhow::anyhow!("{error:?}"))?;
     Ok((
         ResponsesWebsocketConnection::new(
             stream,
             Duration::from_secs(5),
             /*server_reasoning_included*/ false,
-            /*models_etag*/ None,
             /*server_model*/ None,
             /*telemetry*/ None,
         ),

@@ -185,13 +185,8 @@ pub struct ResponsesStreamEvent {
     pub(crate) headers: Option<Value>,
     metadata: Option<Value>,
     response: Option<Value>,
-<<<<<<< HEAD
-    error: Option<Error>,
-||||||| 413492cd6c
-=======
     response_id: Option<Value>,
     error: Option<Value>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     item: Option<Value>,
     item_id: Option<String>,
     call_id: Option<String>,
@@ -416,23 +411,24 @@ pub fn process_responses_event(
 ) -> std::result::Result<Option<ResponseEvent>, ResponsesEventError> {
     match event.kind.as_str() {
         "error" => {
-<<<<<<< HEAD
-            if let Some(error) = event.error
-                && let Some(message) = crate::api_bridge::misalignment_policy_message(
-                    error.code.as_deref(),
-                    error.message.as_deref(),
-                )
+            // A provider's misalignment stop is terminal by its code, whichever
+            // event carries it; it must never trigger a retry or fallback.
+            if let Some((message, misalignment)) = event
+                .error
+                .as_ref()
+                .and_then(crate::api_bridge::misalignment_policy_violation)
             {
-                return Err(ResponsesEventError::Api(ApiError::InvalidRequest {
-                    message,
-                }));
-||||||| 413492cd6c
-=======
+                return Err(ResponsesEventError::Api(
+                    ApiError::MisalignmentPolicyViolation {
+                        message,
+                        misalignment,
+                    },
+                ));
+            }
             if let Some(error) =
                 parse_terminal_provider_error(event.error.as_ref(), /*status*/ None)
             {
                 return Err(ResponsesEventError::Api(error));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
         }
         "response.output_item.done" => {
@@ -499,83 +495,8 @@ pub fn process_responses_event(
             }
         }
         "response.failed" => {
-<<<<<<< HEAD
-            if let Some(resp_val) = event.response {
-                let mut response_error = ApiError::Stream("response.failed event received".into());
-                if let Some(error) = resp_val.get("error")
-                    && let Ok(error) = serde_json::from_value::<Error>(error.clone())
-                {
-                    if let Some(message) = crate::api_bridge::misalignment_policy_message(
-                        error.code.as_deref(),
-                        error.message.as_deref(),
-                    ) {
-                        response_error = ApiError::InvalidRequest { message };
-                    } else if is_context_window_error(&error) {
-                        response_error = ApiError::ContextWindowExceeded;
-                    } else if is_quota_exceeded_error(&error) {
-                        response_error = ApiError::QuotaExceeded;
-                    } else if is_usage_not_included(&error) {
-                        response_error = ApiError::UsageNotIncluded;
-                    } else if is_cyber_policy_error(&error) {
-                        let message = cyber_policy_message(error.message);
-                        response_error = ApiError::CyberPolicy { message };
-                    } else if matches!(error.code.as_deref(), Some("invalid_prompt" | "bio_policy"))
-                    {
-                        let message = error
-                            .message
-                            .unwrap_or_else(|| "Invalid request.".to_string());
-                        response_error = ApiError::InvalidRequest { message };
-                    } else if is_server_overloaded_error(&error) {
-                        response_error = ApiError::ServerOverloaded;
-                    } else {
-                        let delay = try_parse_retry_after(&error);
-                        let message = error.message.unwrap_or_default();
-                        response_error = ApiError::Retryable { message, delay };
-                    }
-                }
-                return Err(ResponsesEventError::Api(response_error));
-            }
-
-            return Err(ResponsesEventError::Api(ApiError::Stream(
-                "response.failed event received".into(),
-||||||| 413492cd6c
-            if let Some(resp_val) = event.response {
-                let mut response_error = ApiError::Stream("response.failed event received".into());
-                if let Some(error) = resp_val.get("error")
-                    && let Ok(error) = serde_json::from_value::<Error>(error.clone())
-                {
-                    if is_context_window_error(&error) {
-                        response_error = ApiError::ContextWindowExceeded;
-                    } else if is_quota_exceeded_error(&error) {
-                        response_error = ApiError::QuotaExceeded;
-                    } else if is_usage_not_included(&error) {
-                        response_error = ApiError::UsageNotIncluded;
-                    } else if is_cyber_policy_error(&error) {
-                        let message = cyber_policy_message(error.message);
-                        response_error = ApiError::CyberPolicy { message };
-                    } else if matches!(error.code.as_deref(), Some("invalid_prompt" | "bio_policy"))
-                    {
-                        let message = error
-                            .message
-                            .unwrap_or_else(|| "Invalid request.".to_string());
-                        response_error = ApiError::InvalidRequest { message };
-                    } else if is_server_overloaded_error(&error) {
-                        response_error = ApiError::ServerOverloaded;
-                    } else {
-                        let delay = try_parse_retry_after(&error);
-                        let message = error.message.unwrap_or_default();
-                        response_error = ApiError::Retryable { message, delay };
-                    }
-                }
-                return Err(ResponsesEventError::Api(response_error));
-            }
-
-            return Err(ResponsesEventError::Api(ApiError::Stream(
-                "response.failed event received".into(),
-=======
             return Err(ResponsesEventError::Api(parse_failed_response(
                 event.response,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             )));
         }
         "response.completed" | "response.incomplete" => {
@@ -634,19 +555,13 @@ pub fn process_responses_event(
                         return Ok(Some(ResponseEvent::Completed {
                             response_id: resp.id,
                             token_usage: resp.usage.map(Into::into),
-<<<<<<< HEAD
-                            end_turn: resp.end_turn,
-                            finish_reason: None,
-||||||| 413492cd6c
-                            end_turn: resp.end_turn,
-=======
                             usage_metadata: resp.usage_metadata,
                             end_turn: if interrupted {
                                 Some(false)
                             } else {
                                 resp.end_turn
                             },
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                            finish_reason: None,
                         }));
                     }
                     Err(err) => {
@@ -853,13 +768,13 @@ async fn process_sse_with_treatment(
                 let error = error.into_api_error();
                 if matches!(
                     error,
-<<<<<<< HEAD
-                    ApiError::InvalidRequest { .. } | ApiError::CyberPolicy { .. }
-||||||| 413492cd6c
-                response_error = Some(error.into_api_error());
-=======
-                    ApiError::FlexUnavailable | ApiError::ResponseIncomplete(_)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                    ApiError::InvalidRequest { .. }
+                        | ApiError::InvalidPrompt { .. }
+                        | ApiError::CyberPolicy { .. }
+                        | ApiError::BioPolicy { .. }
+                        | ApiError::MisalignmentPolicyViolation { .. }
+                        | ApiError::FlexUnavailable
+                        | ApiError::ResponseIncomplete(_)
                 ) {
                     let _ = tx_event.send(Err(error)).await;
                     return;
@@ -870,129 +785,9 @@ async fn process_sse_with_treatment(
     }
 }
 
-<<<<<<< HEAD
-fn try_parse_retry_after(err: &Error) -> Option<Duration> {
-    if err.code.as_deref() != Some("rate_limit_exceeded") {
-        return None;
-    }
-
-    let message = err.message.as_ref()?.to_ascii_lowercase();
-    let (_, delay) = message.split_once("try again in")?;
-    let delay = delay.trim_start();
-    let number_end = delay.find(|ch: char| !ch.is_ascii_digit() && ch != '.')?;
-    let value = delay[..number_end].parse::<f64>().ok()?;
-    let unit = delay[number_end..].trim_start();
-    let seconds = if unit.starts_with("ms") {
-        value / 1000.0
-    } else if unit.starts_with('s') {
-        value
-    } else {
-        return None;
-    };
-    Duration::try_from_secs_f64(seconds).ok()
-}
-
-fn is_context_window_error(error: &Error) -> bool {
-    error.code.as_deref() == Some("context_length_exceeded")
-}
-
-fn is_quota_exceeded_error(error: &Error) -> bool {
-    error.code.as_deref() == Some("insufficient_quota")
-}
-
-fn is_usage_not_included(error: &Error) -> bool {
-    error.code.as_deref() == Some("usage_not_included")
-}
-
-fn is_cyber_policy_error(error: &Error) -> bool {
-    error.code.as_deref() == Some("cyber_policy")
-}
-
-fn is_server_overloaded_error(error: &Error) -> bool {
-    error.code.as_deref() == Some("server_is_overloaded")
-        || error.code.as_deref() == Some("slow_down")
-}
-
-fn cyber_policy_fallback_message() -> String {
-    "This request has been flagged for possible cybersecurity risk.".to_string()
-}
-
-fn cyber_policy_message(message: Option<String>) -> String {
-    message
-        .filter(|message| !message.trim().is_empty())
-        .unwrap_or_else(cyber_policy_fallback_message)
-}
-||||||| 413492cd6c
-fn try_parse_retry_after(err: &Error) -> Option<Duration> {
-    if err.code.as_deref() != Some("rate_limit_exceeded") {
-        return None;
-    }
-
-    let re = rate_limit_regex();
-    if let Some(message) = &err.message
-        && let Some(captures) = re.captures(message)
-    {
-        let seconds = captures.get(1);
-        let unit = captures.get(2);
-
-        if let (Some(value), Some(unit)) = (seconds, unit) {
-            let value = value.as_str().parse::<f64>().ok()?;
-            let unit = unit.as_str().to_ascii_lowercase();
-
-            if unit == "s" || unit.starts_with("second") {
-                return Some(Duration::from_secs_f64(value));
-            } else if unit == "ms" {
-                return Some(Duration::from_millis(value as u64));
-            }
-        }
-    }
-    None
-}
-
-fn is_context_window_error(error: &Error) -> bool {
-    error.code.as_deref() == Some("context_length_exceeded")
-}
-
-fn is_quota_exceeded_error(error: &Error) -> bool {
-    error.code.as_deref() == Some("insufficient_quota")
-}
-
-fn is_usage_not_included(error: &Error) -> bool {
-    error.code.as_deref() == Some("usage_not_included")
-}
-
-fn is_cyber_policy_error(error: &Error) -> bool {
-    error.code.as_deref() == Some("cyber_policy")
-}
-
-fn is_server_overloaded_error(error: &Error) -> bool {
-    error.code.as_deref() == Some("server_is_overloaded")
-        || error.code.as_deref() == Some("slow_down")
-}
-
-fn cyber_policy_fallback_message() -> String {
-    "This request has been flagged for possible cybersecurity risk.".to_string()
-}
-
-fn cyber_policy_message(message: Option<String>) -> String {
-    message
-        .filter(|message| !message.trim().is_empty())
-        .unwrap_or_else(cyber_policy_fallback_message)
-}
-
-fn rate_limit_regex() -> &'static regex_lite::Regex {
-    static RE: std::sync::OnceLock<regex_lite::Regex> = std::sync::OnceLock::new();
-    #[expect(clippy::unwrap_used)]
-    RE.get_or_init(|| {
-        regex_lite::Regex::new(r"(?i)try again in\s*(\d+(?:\.\d+)?)\s*(s|ms|seconds?)").unwrap()
-    })
-}
-
-=======
 #[cfg(test)]
 #[path = "responses_error_tests.rs"]
 mod error_tests;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 #[cfg(test)]
 mod tests {
@@ -1103,7 +898,7 @@ mod tests {
             Ok(ResponseEvent::OutputItemAdded(ResponseItem::Message {
                 phase: Some(MessagePhase::PartialAnswer), content: start_content, ..
             })),
-            Ok(ResponseEvent::OutputTextDelta(text)),
+            Ok(ResponseEvent::OutputTextDelta { delta: text, .. }),
             Ok(ResponseEvent::OutputItemDone(ResponseItem::Message {
                 phase: Some(MessagePhase::PartialAnswer), content: done_content, ..
             })),
@@ -1246,6 +1041,7 @@ mod tests {
                     input_tokens: 100,
                     cached_input_tokens: 40,
                     cache_write_input_tokens: 60,
+                    codex_rollout_budget_units: None,
                     output_tokens: 10,
                     reasoning_output_tokens: 5,
                     total_tokens: 110,
@@ -1596,7 +1392,6 @@ mod tests {
     }
 
     #[tokio::test]
-<<<<<<< HEAD
     async fn misalignment_stop_discards_later_tool_output_and_completion() {
         let stopped = json!({"type": "response.failed", "response": {"id": "stopped", "error": {"code": "misalignment_policy_violation", "message": "Review agent activity."}}});
         let tool = json!({"type": "response.output_item.done", "item": {"type": "function_call", "name": "shell_command", "call_id": "forbidden-after-stop", "arguments": "{}"}});
@@ -1605,7 +1400,21 @@ mod tests {
         let frames = format!("data: {stopped}\n\ndata: {tool}\n\ndata: {completed}\n\n");
         let events = collect_events(&[frames.as_bytes()]).await;
         assert_eq!(events.len(), 1);
-        assert_matches!(events[0], Err(ApiError::InvalidRequest { .. }));
+        assert_matches!(events[0], Err(ApiError::MisalignmentPolicyViolation { .. }));
+    }
+
+    #[tokio::test]
+    async fn content_policy_stops_discard_later_tool_output_and_completion() {
+        for code in ["invalid_prompt", "bio_policy", "cyber_policy"] {
+            let stopped = json!({"type": "response.failed", "response": {"id": "stopped", "error": {"code": code, "message": "Refused."}}});
+            let tool = json!({"type": "response.output_item.done", "item": {"type": "function_call", "name": "shell_command", "call_id": "forbidden-after-stop", "arguments": "{}"}});
+            let completed =
+                json!({"type": "response.completed", "response": {"id": "late-completion"}});
+            let frames = format!("data: {stopped}\n\ndata: {tool}\n\ndata: {completed}\n\n");
+            let events = collect_events(&[frames.as_bytes()]).await;
+            assert_eq!(events.len(), 1, "{code}");
+            assert!(events[0].is_err(), "{code}");
+        }
     }
 
     #[tokio::test]
@@ -1622,9 +1431,12 @@ mod tests {
                 let events = collect_events(&[frame.as_bytes()]).await;
                 assert_eq!(events.len(), 1);
                 match &events[0] {
-                    Err(ApiError::InvalidRequest { message }) => {
-                        assert!(message.contains("Automatic retries are disabled"))
-                    }
+                    Err(ApiError::MisalignmentPolicyViolation {
+                        message: stopped, ..
+                    }) => assert_eq!(
+                        stopped,
+                        &crate::api_bridge::misalignment_policy_message(message)
+                    ),
                     other => panic!("policy stop must be terminal: {other:?}"),
                 }
             }
@@ -1632,10 +1444,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn content_policy_errors_without_type_are_invalid_requests() {
-||||||| 413492cd6c
-    async fn content_policy_errors_without_type_are_invalid_requests() {
-=======
     async fn misalignment_policy_violation_error_is_fatal() {
         let raw_error = r#"{"type":"response.failed","sequence_number":3,"response":{"id":"resp_fatal_misalignment","object":"response","status":"failed","error":{"type":"invalid_request_error","code":"misalignment_policy_violation","message":"This request violated the misalignment policy."}}}"#;
 
@@ -1648,7 +1456,12 @@ mod tests {
                 message,
                 misalignment,
             }) => {
-                assert_eq!(message, "This request violated the misalignment policy.");
+                assert_eq!(
+                    message,
+                    &crate::api_bridge::misalignment_policy_message(Some(
+                        "This request violated the misalignment policy."
+                    ))
+                );
                 assert_eq!(misalignment, &None);
             }
             other => panic!("unexpected event: {other:?}"),
@@ -1677,7 +1490,7 @@ mod tests {
             match &events[0] {
                 Err(ApiError::MisalignmentPolicyViolation { message, .. }) => assert_eq!(
                     message,
-                    "This request was blocked due to a misalignment policy violation."
+                    &crate::api_bridge::misalignment_policy_message(/*message*/ None)
                 ),
                 other => panic!("unexpected event: {other:?}"),
             }
@@ -1711,7 +1524,12 @@ mod tests {
                 message,
                 misalignment,
             }) => {
-                assert_eq!(message, "This request violated the misalignment policy.");
+                assert_eq!(
+                    message,
+                    &crate::api_bridge::misalignment_policy_message(Some(
+                        "This request violated the misalignment policy."
+                    ))
+                );
                 assert_eq!(
                     misalignment,
                     &Some(MisalignmentErrorDetails {
@@ -1759,7 +1577,6 @@ mod tests {
 
     #[tokio::test]
     async fn content_policy_errors_without_type_preserve_their_classification() {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         for (code, expected_message) in [
             (
                 "invalid_prompt",

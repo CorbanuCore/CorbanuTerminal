@@ -8,6 +8,7 @@ use codex_client::RequestTelemetry;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::ModelInfo;
+use codex_protocol::openai_models::ModelMessages;
 use codex_protocol::openai_models::ModelVisibility;
 use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::openai_models::TruncationPolicyConfig;
@@ -83,16 +84,16 @@ impl<T: HttpTransport> ModelsClient<T> {
         let (body, header_etag) = self
             .list_models_raw(request_url, extra_headers, response_body_limit_bytes)
             .await?;
-        let ModelsResponse { models } =
-            serde_json::from_slice::<ModelsResponse>(&body).map_err(|e| {
-                ApiError::Stream(format!(
-                    "failed to decode models response: {:?} at line {} column {} (body: {} bytes)",
-                    e.classify(),
-                    e.line(),
-                    e.column(),
-                    body.len()
-                ))
-            })?;
+        // Corbanu: also accept an OpenAI-style `{"data": [...]}` model list.
+        let models = decode_models_response(&body).map_err(|e| {
+            ApiError::Stream(format!(
+                "failed to decode models response: {:?} at line {} column {} (body: {} bytes)",
+                e.classify(),
+                e.line(),
+                e.column(),
+                body.len()
+            ))
+        })?;
 
         Ok((models, header_etag))
     }
@@ -127,28 +128,7 @@ impl<T: HttpTransport> ModelsClient<T> {
             .and_then(|value| value.to_str().ok())
             .map(ToString::to_string);
 
-<<<<<<< HEAD
-        let models = decode_models_response(&resp.body).map_err(|e| {
-            ApiError::Stream(format!(
-                "failed to decode models response: {e}; body: {}",
-                String::from_utf8_lossy(&resp.body)
-            ))
-        })?;
-
-        Ok((models, header_etag))
-||||||| 413492cd6c
-        let ModelsResponse { models } = serde_json::from_slice::<ModelsResponse>(&resp.body)
-            .map_err(|e| {
-                ApiError::Stream(format!(
-                    "failed to decode models response: {e}; body: {}",
-                    String::from_utf8_lossy(&resp.body)
-                ))
-            })?;
-
-        Ok((models, header_etag))
-=======
         Ok((resp.body, header_etag))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 
@@ -183,6 +163,7 @@ fn decode_models_response(body: &[u8]) -> Result<Vec<ModelInfo>, serde_json::Err
 fn openai_model_item_to_info(item: OpenAiModelListItem) -> ModelInfo {
     let context_window = item.context_length;
     ModelInfo {
+        guardian: None,
         slug: item.id.clone(),
         orchestration: None,
         chat_completions: Default::default(),
@@ -190,18 +171,23 @@ fn openai_model_item_to_info(item: OpenAiModelListItem) -> ModelInfo {
         description: item.description,
         default_reasoning_level: None,
         supported_reasoning_levels: Vec::new(),
-        shell_type: ConfigShellToolType::Default,
+        shell_type: ConfigShellToolType::UnifiedExec,
         visibility: ModelVisibility::List,
         supported_in_api: true,
         priority: 99,
         additional_speed_tiers: Vec::new(),
         service_tiers: Vec::new(),
         default_service_tier: None,
+        available_access_programs: None,
         availability_nux: None,
         upgrade: None,
-        base_instructions: "You are Codex, a coding agent.".to_string(),
-        model_messages: None,
+        model_messages: Some(ModelMessages {
+            instructions_template: Some("You are Codex, a coding agent.".to_string()),
+            ..Default::default()
+        }),
         include_skills_usage_instructions: false,
+        include_plugin_usage_instructions: false,
+        include_apps_usage_instructions: false,
         supports_reasoning_summary_parameter: false,
         default_reasoning_summary: ReasoningSummary::Auto,
         support_verbosity: false,
@@ -209,7 +195,6 @@ fn openai_model_item_to_info(item: OpenAiModelListItem) -> ModelInfo {
         apply_patch_tool_type: None,
         web_search_tool_type: WebSearchToolType::Text,
         truncation_policy: TruncationPolicyConfig::bytes(/*limit*/ 10_000),
-        supports_parallel_tool_calls: false,
         supports_image_detail_original: false,
         context_window,
         max_context_window: context_window,
@@ -219,12 +204,17 @@ fn openai_model_item_to_info(item: OpenAiModelListItem) -> ModelInfo {
         effective_context_window_percent: 95,
         experimental_supported_tools: Vec::new(),
         input_modalities: default_input_modalities(),
-        used_fallback_model_metadata: true,
         supports_search_tool: false,
+        supports_experimental_context: false,
         use_responses_lite: false,
+        supports_reasoning_effort_updates: false,
+        node_repl_auto_review_required: false,
+        node_repl_disabled: false,
         auto_review_model_override: None,
+        model_specialty: None,
         tool_mode: None,
         multi_agent_version: None,
+        multi_agent_reasoning_effort: None,
     }
 }
 
@@ -533,7 +523,13 @@ mod tests {
         assert_eq!(models[0].context_window, Some(202752));
         assert_eq!(models[0].max_context_window, Some(202752));
         assert!(models[0].supported_in_api);
-        assert!(!models[0].base_instructions.is_empty());
+        assert!(
+            models[0]
+                .model_messages
+                .as_ref()
+                .and_then(|messages| messages.instructions_template.as_deref())
+                .is_some_and(|instructions| !instructions.is_empty())
+        );
     }
 
     #[tokio::test]

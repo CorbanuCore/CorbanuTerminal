@@ -119,14 +119,14 @@ fn map_api_error_details(err: ApiError) -> CodexErr {
                     return map_api_error_details(error);
                 }
 
-                if let Ok(parsed) = serde_json::from_str::<Value>(&body_text)
-                    && let Some(error) = parsed.get("error")
-                    && let Some(message) = misalignment_policy_message(
-                        error.get("code").and_then(Value::as_str),
-                        error.get("message").and_then(Value::as_str),
-                    )
+                // Corbanu (0.1.40): terminal by its code, whatever the status.
+                if let Some((message, misalignment)) =
+                    provider_error.and_then(misalignment_policy_violation)
                 {
-                    return CodexErr::InvalidRequest(message);
+                    return CodexErr::new(CodexErrorDetails::MisalignmentPolicyViolation {
+                        message,
+                        misalignment,
+                    });
                 }
 
                 if status == http::StatusCode::SERVICE_UNAVAILABLE
@@ -148,28 +148,6 @@ fn map_api_error_details(err: ApiError) -> CodexErr {
                         }
                         _ => {}
                     }
-                }
-
-                if (status == http::StatusCode::BAD_REQUEST
-                    || status == http::StatusCode::FORBIDDEN)
-                    && let Some(error) = provider_error
-                    && error.get("code").and_then(Value::as_str)
-                        == Some(MISALIGNMENT_POLICY_VIOLATION_ERROR_CODE)
-                {
-                    let message = error
-                        .get("message")
-                        .and_then(Value::as_str)
-                        .filter(|message| !message.trim().is_empty())
-                        .map(str::to_string)
-                        .unwrap_or_else(|| {
-                            MISALIGNMENT_POLICY_VIOLATION_FALLBACK_MESSAGE.to_string()
-                        });
-                    return CodexErr::new(CodexErrorDetails::MisalignmentPolicyViolation {
-                        message,
-                        misalignment: error.get("misalignment").cloned().and_then(|details| {
-                            serde_json::from_value::<MisalignmentErrorDetails>(details).ok()
-                        }),
-                    });
                 }
 
                 if status == http::StatusCode::BAD_REQUEST {
@@ -330,7 +308,7 @@ const BIO_POLICY_ERROR_CODE: &str = "bio_policy";
 const BIO_POLICY_FALLBACK_MESSAGE: &str = "This content was flagged for possible biological risk.";
 const MISALIGNMENT_POLICY_VIOLATION_ERROR_CODE: &str = "misalignment_policy_violation";
 const MISALIGNMENT_POLICY_VIOLATION_FALLBACK_MESSAGE: &str =
-    "This request was blocked due to a misalignment policy violation.";
+    "The provider stopped this conversation for review of agent activity.";
 const CLOUDFLARE_BLOCKED_MESSAGE: &str =
     "Access blocked by Cloudflare. This usually happens when connecting from a restricted region";
 
@@ -450,19 +428,32 @@ struct UsageErrorBody {
     limit_window_minutes: Option<Value>,
 }
 
-/// Recognizes the provider's terminal conversation stop by its protocol code.
-/// The refusal is preserved; it must never trigger transport or model fallback.
-pub(crate) fn misalignment_policy_message(
-    code: Option<&str>,
-    message: Option<&str>,
-) -> Option<String> {
-    if code != Some("misalignment_policy_violation") {
+/// Corbanu (0.1.40): a provider's misalignment stop is terminal by its code on
+/// every path (HTTP of any status, WebSocket, SSE `error` and
+/// `response.failed`); it must never trigger a retry or a fallback. Returns the
+/// message to show and the provider's public continuation details.
+pub(crate) fn misalignment_policy_violation(
+    error: &Value,
+) -> Option<(String, Option<MisalignmentErrorDetails>)> {
+    if error.get("code").and_then(Value::as_str) != Some(MISALIGNMENT_POLICY_VIOLATION_ERROR_CODE) {
         return None;
     }
+    Some((
+        misalignment_policy_message(error.get("message").and_then(Value::as_str)),
+        error
+            .get("misalignment")
+            .cloned()
+            .and_then(|details| serde_json::from_value::<MisalignmentErrorDetails>(details).ok()),
+    ))
+}
+
+/// The provider's words, then why nothing is retried.
+pub(crate) fn misalignment_policy_message(message: Option<&str>) -> String {
+    // Main's 0.1.40 fallback: it names the stop without accusing the user.
     let message = message
         .filter(|text| !text.trim().is_empty())
-        .unwrap_or("The provider stopped this conversation for review of agent activity.");
-    Some(format!(
+        .unwrap_or(MISALIGNMENT_POLICY_VIOLATION_FALLBACK_MESSAGE);
+    format!(
         "{message} [misalignment_policy_violation] Automatic retries are disabled. Review the conversation's account access, tool actions, and changes before continuing work. This flag does not establish a user policy violation."
-    ))
+    )
 }
