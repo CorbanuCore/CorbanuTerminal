@@ -58,11 +58,14 @@ fn sign_in(user: &str, access: &str, refresh: &str) -> AuthDotJson {
             access_token: access.to_string(),
             refresh_token: refresh.to_string(),
             account_id: Some(format!("{user}-workspace")),
+            login_owner_id: None,
+            oauth_provenance: None,
         }),
         last_refresh: Some(Utc::now() - Duration::days(30)),
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        bedrock_access_keys: None,
     }
 }
 

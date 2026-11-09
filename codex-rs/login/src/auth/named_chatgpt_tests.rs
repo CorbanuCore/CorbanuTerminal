@@ -22,6 +22,7 @@ fn api_key_login(key: &str) -> AuthDotJson {
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        bedrock_access_keys: None,
     }
 }
 
@@ -111,11 +112,14 @@ fn chatgpt_sign_in(user: &str, workspace: &str) -> AuthDotJson {
             access_token: "access-canary".to_string(),
             refresh_token: "refresh-canary".to_string(),
             account_id: Some(workspace.to_string()),
+            login_owner_id: None,
+            oauth_provenance: None,
         }),
         last_refresh: None,
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        bedrock_access_keys: None,
     }
 }
 

@@ -71,11 +71,33 @@ fn blocking_client() -> (OAuthSessionManager, tempfile::TempDir, Arc<BlockingKey
     (manager, home, keyring)
 }
 
+/// Corbanu's secrets backend serves an unchanged encrypted file from its
+/// in-process cache without reading the keyring. Rewriting each file (same
+/// bytes, new inode) makes the next read decrypt it through the keyring, the
+/// read these tests block.
+fn force_keyring_read(home: &std::path::Path) {
+    let mut pending = vec![home.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.extension().is_some_and(|extension| extension == "age") {
+                let bytes = std::fs::read(&path).unwrap();
+                let rewritten = path.with_extension("age.rewrite");
+                std::fs::write(&rewritten, bytes).unwrap();
+                std::fs::rename(&rewritten, &path).unwrap();
+            }
+        }
+    }
+}
+
 #[tokio::test]
 async fn readiness_does_not_block_cached_requests_or_overwrite_newer_credentials() {
-    let (manager, _home, keyring) = blocking_client();
+    let (manager, home, keyring) = blocking_client();
     save_token(&manager, "old", /*refresh_token*/ None, i64::MAX);
     assert_eq!(manager.resolve_access_token().await.unwrap(), "old");
+    force_keyring_read(home.path());
     keyring.check_thread.store(/*val*/ true, Ordering::Relaxed);
     let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel();
@@ -129,9 +151,10 @@ async fn readiness_does_not_block_cached_requests_or_overwrite_newer_credentials
 
 #[tokio::test]
 async fn cancel_during_keyring_read_releases_login_and_cached_credentials() {
-    let (manager, _home, keyring) = blocking_client();
+    let (manager, home, keyring) = blocking_client();
     save_token(&manager, "existing", /*refresh_token*/ None, i64::MAX);
     assert_eq!(manager.resolve_access_token().await.unwrap(), "existing");
+    force_keyring_read(home.path());
     let mut events = manager.state.status_tx.subscribe();
     keyring.check_thread.store(/*val*/ true, Ordering::Relaxed);
     let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();

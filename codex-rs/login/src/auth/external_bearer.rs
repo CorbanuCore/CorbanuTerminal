@@ -30,27 +30,21 @@ pub enum ExternalBearerCachePolicy {
 }
 
 impl BearerTokenRefresher {
-<<<<<<< HEAD
     /// `account` (PF-84) is the named account the command must serve; it is
     /// passed as `CORBANU_PROVIDER_ACCOUNT` and never inherited otherwise.
     pub(crate) fn new(
         config: ModelProviderAuthInfo,
         cache_policy: ExternalBearerCachePolicy,
         account: Option<ExternalBearerAccount>,
+        env: HashMap<String, OsString>,
     ) -> Self {
-||||||| 413492cd6c
-    pub(crate) fn new(config: ModelProviderAuthInfo) -> Self {
-=======
-    pub(crate) fn new(config: ModelProviderAuthInfo, env: HashMap<String, OsString>) -> Self {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         Self {
-<<<<<<< HEAD
-            state: Arc::new(ExternalBearerAuthState::new(config, cache_policy, account)),
-||||||| 413492cd6c
-            state: Arc::new(ExternalBearerAuthState::new(config)),
-=======
-            state: Arc::new(ExternalBearerAuthState::new(config, env)),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            state: Arc::new(ExternalBearerAuthState::new(
+                config,
+                cache_policy,
+                account,
+                env,
+            )),
         }
     }
 
@@ -74,7 +68,6 @@ impl BearerTokenRefresher {
                 }
             }
 
-<<<<<<< HEAD
             let (access_token, revision_after) = self
                 .state
                 .run_for_stable_revision(/*force_refresh*/ false, revision_before)
@@ -90,27 +83,12 @@ impl BearerTokenRefresher {
             } else {
                 *cached = None;
             }
-||||||| 413492cd6c
-            let access_token = run_provider_auth_command(&self.state.config).await?;
-            *cached = Some(CachedExternalBearerToken {
-                access_token: access_token.clone(),
-                fetched_at: Instant::now(),
-            });
-=======
-            let access_token =
-                run_provider_auth_command(&self.state.config, &self.state.env).await?;
-            *cached = Some(CachedExternalBearerToken {
-                access_token: access_token.clone(),
-                fetched_at: Instant::now(),
-            });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             access_token
         };
         Ok(CodexAuth::from_api_key(access_token.as_str()))
     }
 
     async fn refresh(&self, _context: ExternalAuthRefreshContext) -> io::Result<CodexAuth> {
-<<<<<<< HEAD
         let revision_before = self.state.cache_revision();
         let (access_token, revision_after) = self
             .state
@@ -128,21 +106,6 @@ impl BearerTokenRefresher {
         } else {
             *self.state.cached_token.lock().await = None;
         }
-||||||| 413492cd6c
-        let access_token = run_provider_auth_command(&self.state.config).await?;
-        let mut cached = self.state.cached_token.lock().await;
-        *cached = Some(CachedExternalBearerToken {
-            access_token: access_token.clone(),
-            fetched_at: Instant::now(),
-        });
-=======
-        let access_token = run_provider_auth_command(&self.state.config, &self.state.env).await?;
-        let mut cached = self.state.cached_token.lock().await;
-        *cached = Some(CachedExternalBearerToken {
-            access_token: access_token.clone(),
-            fetched_at: Instant::now(),
-        });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         Ok(CodexAuth::from_api_key(access_token.as_str()))
     }
 }
@@ -241,37 +204,24 @@ impl ExternalBearerAccount {
 
 struct ExternalBearerAuthState {
     config: ModelProviderAuthInfo,
-<<<<<<< HEAD
     account: Option<ExternalBearerAccount>,
     cache_policy: ExternalBearerCachePolicy,
-||||||| 413492cd6c
-=======
     env: HashMap<String, OsString>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     cached_token: Mutex<Option<CachedExternalBearerToken>>,
 }
 
 impl ExternalBearerAuthState {
-<<<<<<< HEAD
     fn new(
         config: ModelProviderAuthInfo,
         cache_policy: ExternalBearerCachePolicy,
         account: Option<ExternalBearerAccount>,
+        env: HashMap<String, OsString>,
     ) -> Self {
-||||||| 413492cd6c
-    fn new(config: ModelProviderAuthInfo) -> Self {
-=======
-    fn new(config: ModelProviderAuthInfo, env: HashMap<String, OsString>) -> Self {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         Self {
             config,
-<<<<<<< HEAD
             account,
             cache_policy,
-||||||| 413492cd6c
-=======
             env,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             cached_token: Mutex::new(None),
         }
     }
@@ -300,6 +250,7 @@ impl ExternalBearerAuthState {
                 &self.config,
                 force_refresh,
                 self.account.as_ref().map(|account| account.name.as_str()),
+                &self.env,
             )
             .await?;
             let revision_after = self.cache_revision();
@@ -324,7 +275,6 @@ struct CachedExternalBearerToken {
     revision: Option<Vec<u8>>,
 }
 
-<<<<<<< HEAD
 /// PF-84: names the account a provider auth command must serve.
 pub const PROVIDER_ACCOUNT_ENV_VAR: &str = "CORBANU_PROVIDER_ACCOUNT";
 
@@ -334,44 +284,26 @@ pub use codex_model_provider_info::CLAUDE_PLAN_TOKEN_HELPER_SUBCOMMAND;
 /// Whether `config` runs Corbanu's own Claude Plan token helper, which takes
 /// the account in argv as well (#414).
 pub fn is_claude_plan_token_helper(config: &ModelProviderAuthInfo) -> bool {
-    config.args.first().map(String::as_str) == Some(CLAUDE_PLAN_TOKEN_HELPER_SUBCOMMAND)
+    config.args.first().map(|arg| arg.as_str()) == Some(CLAUDE_PLAN_TOKEN_HELPER_SUBCOMMAND)
 }
 
 async fn run_provider_auth_command(
     config: &ModelProviderAuthInfo,
     force_refresh: bool,
     account: Option<&str>,
-||||||| 413492cd6c
-async fn run_provider_auth_command(config: &ModelProviderAuthInfo) -> io::Result<String> {
-=======
-async fn run_provider_auth_command(
-    config: &ModelProviderAuthInfo,
     env: &HashMap<String, OsString>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 ) -> io::Result<String> {
     let program = resolve_provider_auth_program(&config.command, &config.cwd)?;
-<<<<<<< HEAD
-    let mut command = Command::new(&program);
-    command.args(&config.args);
+    let mut command = Command::from(codex_utils_process::background_command(&program));
+    command.args(config.args.iter().map(Deref::deref));
     // A helper that predates named accounts ignores the environment variable
     // and would print the default account's token; in argv it is rejected.
     let helper_account = account.filter(|_| is_claude_plan_token_helper(config));
     if let Some(account) = helper_account {
         command.args(["--account", account, "--enable", "named_accounts"]);
     }
-||||||| 413492cd6c
-    let mut command = Command::new(&program);
-=======
-    let mut command = Command::from(codex_utils_process::background_command(&program));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     command
-<<<<<<< HEAD
-||||||| 413492cd6c
-        .args(&config.args)
-=======
-        .args(config.args.iter().map(Deref::deref))
         .envs(env)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         .current_dir(config.cwd.as_path())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -537,9 +469,14 @@ pub async fn validate_provider_auth_command_for_account(
     config: &ModelProviderAuthInfo,
     account: Option<&str>,
 ) -> io::Result<()> {
-    run_provider_auth_command(config, /*force_refresh*/ false, account)
-        .await
-        .map(drop)
+    run_provider_auth_command(
+        config,
+        /*force_refresh*/ false,
+        account,
+        &HashMap::new(),
+    )
+    .await
+    .map(drop)
 }
 
 fn resolve_provider_auth_program(command: &str, cwd: &Path) -> io::Result<PathBuf> {

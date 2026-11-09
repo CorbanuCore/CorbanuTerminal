@@ -235,36 +235,8 @@ pub async fn complete_device_code_login_with_persistence_guard(
         return Err(io::Error::new(io::ErrorKind::PermissionDenied, message));
     }
 
-<<<<<<< HEAD
     before_persist()?;
-    crate::server::persist_tokens_async(
-        &opts.codex_home,
-        /*api_key*/ None,
-        tokens.id_token,
-        tokens.access_token,
-        tokens.refresh_token,
-        opts.cli_auth_credentials_store_mode,
-        opts.auth_keyring_backend_kind,
-        opts.named_account
-            .clone()
-            .map(|account| (account, opts.named_account_must_be_new)),
-        &opts.auth_route_config,
-    )
-    .await
-||||||| 413492cd6c
-    crate::server::persist_tokens_async(
-        &opts.codex_home,
-        /*api_key*/ None,
-        tokens.id_token,
-        tokens.access_token,
-        tokens.refresh_token,
-        opts.cli_auth_credentials_store_mode,
-        opts.auth_keyring_backend_kind,
-    )
-    .await
-=======
     crate::server::persist_tokens_async(&opts, /*api_key*/ None, &tokens).await
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 pub async fn run_device_code_login(opts: ServerOptions) -> std::io::Result<()> {

@@ -92,8 +92,27 @@ impl GatedAuthStorage {
 }
 
 impl AuthStorageBackend for GatedAuthStorage {
+    // The wrapped store's commit lock and generation checks apply unchanged.
+    fn persistent_home(&self) -> Option<&std::path::Path> {
+        self.inner.persistent_home()
+    }
+
+    fn lock_for_write(
+        &self,
+    ) -> std::io::Result<(std::sync::MutexGuard<'static, ()>, Option<std::fs::File>)> {
+        self.inner.lock_for_write()
+    }
+
     fn load(&self) -> std::io::Result<Option<AuthDotJson>> {
         let auth = self.inner.load()?;
+        if let Some(auth) = &auth {
+            self.protect(auth)?;
+        }
+        Ok(auth)
+    }
+
+    fn load_account_grant(&self) -> std::io::Result<Option<AuthDotJson>> {
+        let auth = self.inner.load_account_grant()?;
         if let Some(auth) = &auth {
             self.protect(auth)?;
         }
@@ -103,6 +122,11 @@ impl AuthStorageBackend for GatedAuthStorage {
     fn save(&self, auth: &AuthDotJson) -> std::io::Result<()> {
         self.protect(auth)?;
         self.inner.save(auth)
+    }
+
+    fn compare_and_save(&self, expected: &AuthDotJson, auth: &AuthDotJson) -> std::io::Result<()> {
+        self.protect(auth)?;
+        self.inner.compare_and_save(expected, auth)
     }
 
     fn delete(&self) -> std::io::Result<bool> {
@@ -138,6 +162,10 @@ fn auth_values(auth: &AuthDotJson) -> Vec<(&'static str, Zeroizing<String>)> {
         "bedrock_api_key",
         auth.bedrock_api_key.as_ref().map(|key| &key.api_key),
     );
+    if let Some(keys) = &auth.bedrock_access_keys {
+        push("bedrock_secret_access_key", Some(&keys.secret_access_key));
+        push("bedrock_session_token", keys.session_token.as_ref());
+    }
     if let Some(tokens) = &auth.tokens {
         push("id_token", Some(&tokens.id_token.raw_jwt));
         push("access_token", Some(&tokens.access_token));
@@ -183,7 +211,35 @@ mod tests {
             agent_identity: None,
             personal_access_token: None,
             bedrock_api_key: None,
+            bedrock_access_keys: None,
         }
+    }
+
+    /// Upstream's stored Bedrock access keys: the secret key and session
+    /// token are protected; the access key id is not a secret.
+    #[test]
+    fn bedrock_access_keys_are_protected_values() {
+        let mut auth = api_key_auth("sk-unused");
+        auth.openai_api_key = None;
+        auth.bedrock_access_keys = Some(crate::auth::BedrockAccessKeysAuth {
+            access_key_id: "AKIDEXAMPLEID".to_string(),
+            secret_access_key: "secret-access-key-value".to_string(),
+            session_token: Some("session-token-value".to_string()),
+        });
+        let values = auth_values(&auth)
+            .into_iter()
+            .map(|(field, value)| (field, value.to_string()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            values,
+            vec![
+                (
+                    "bedrock_secret_access_key",
+                    "secret-access-key-value".to_string()
+                ),
+                ("bedrock_session_token", "session-token-value".to_string()),
+            ]
+        );
     }
 
     /// Set in the child process that runs

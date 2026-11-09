@@ -84,17 +84,13 @@ mod tests {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
-<<<<<<< HEAD
             billing: None,
             runtime_policy: Default::default(),
-||||||| 413492cd6c
-=======
             capabilities: None,
             project_id: None,
             location: None,
             credential_file: None,
             include_internal_metadata: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
 
         let telemetry =

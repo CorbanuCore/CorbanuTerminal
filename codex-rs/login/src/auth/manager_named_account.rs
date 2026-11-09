@@ -339,17 +339,23 @@ impl AuthManager {
                 permanent_refresh_failure: None,
             }),
             auth_change_tx,
+            auth_change_state_tx: watch::channel(super::AuthChangeState::default()).0,
+            workspace_routing_resolver: std::sync::OnceLock::new(),
             enable_codex_api_key_env: false,
             openai_api_key_env: OpenAiApiKeyEnv::Ignore,
             auth_credentials_store_mode: self.auth_credentials_store_mode,
             keyring_backend_kind: self.keyring_backend_kind,
             forced_chatgpt_workspace_id: RwLock::new(self.forced_chatgpt_workspace_id()),
+            managed_auth_policy: self.managed_auth_policy.clone(),
             chatgpt_base_url: self.chatgpt_base_url.clone(),
             agent_identity_authapi_base_url: self.agent_identity_authapi_base_url.clone(),
-            refresh_lock: Semaphore::new(/*permits*/ 1),
+            refresh_lock: Arc::new(Semaphore::new(/*permits*/ 1)),
+            unsettled_chatgpt_refresh: Mutex::new(None),
             agent_identity_lock: Semaphore::new(/*permits*/ 1),
             agent_identity_bootstrap_cooldown: Default::default(),
             external_auth: RwLock::new(None),
+            workload_identity_selected: false,
+            allowed_auth_modes: RwLock::new(None),
             provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
             auth_route_config: self.auth_route_config.clone(),
             named_store: Some(NamedAccountStore::new(codex_vault::Vault::new(
@@ -395,6 +401,7 @@ impl AuthManager {
                 self.forced_login_method,
                 forced_workspace.as_deref(),
             )
+            .or_else(|| self.named_sign_in_policy_restriction(account, &auth_dot_json))
         {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
@@ -402,6 +409,59 @@ impl AuthManager {
             ));
         }
         Ok(Some((storage, auth_dot_json)))
+    }
+
+    /// D499 (provisional, pending the owner's decision): the administrator
+    /// login policy (allowed login methods and ChatGPT workspaces) and the
+    /// allowed credential kinds apply to a named account's sign-in as they do
+    /// to the default login.
+    fn named_sign_in_policy_restriction(
+        &self,
+        account: &NamedChatgptAccount,
+        auth_dot_json: &AuthDotJson,
+    ) -> Option<String> {
+        let name = &account.name;
+        let mode = auth_dot_json.resolved_mode();
+        // Read from the base manager each time, so a later restriction on it
+        // applies too.
+        let policy: &AuthManager = self.base_manager.as_deref().unwrap_or(self);
+        let modes_allowed = policy
+            .allowed_auth_modes
+            .read()
+            .is_ok_and(|modes| modes.as_ref().is_none_or(|modes| modes.contains(&mode)));
+        if !modes_allowed {
+            return Some(format!(
+                "account `{name}` holds a sign-in of a kind this session does not allow"
+            ));
+        }
+        let allowed_login_methods = policy.allowed_login_methods();
+        if !super::auth_mode_is_allowed(Some(&allowed_login_methods), mode) {
+            return Some(format!(
+                "account `{name}` holds a sign-in the administrator's login policy does not allow"
+            ));
+        }
+        let workspaces = policy.effective_chatgpt_workspaces()?;
+        if !mode.uses_codex_backend() {
+            return None;
+        }
+        let workspace = auth_dot_json.tokens.as_ref().and_then(|tokens| {
+            tokens
+                .account_id
+                .clone()
+                .or_else(|| tokens.id_token.chatgpt_account_id.clone())
+        });
+        if workspace
+            .as_ref()
+            .is_some_and(|workspace| workspaces.contains(workspace))
+        {
+            None
+        } else {
+            Some(format!(
+                "account `{name}` is signed in to a ChatGPT workspace the administrator's login \
+                 policy does not allow; sign in to an allowed workspace with \
+                 `corbanu login --account {name}`"
+            ))
+        }
     }
 
     /// A ChatGPT or API-key sign-in, built without awaiting so a manager
@@ -419,7 +479,12 @@ impl AuthManager {
                     .map(CodexAuth::from_api_key)),
                 AuthMode::Chatgpt => {
                     let client = create_default_auth_client(
-                        &refresh_token_endpoint(),
+                        &refresh_token_endpoint(
+                            auth_dot_json
+                                .tokens
+                                .as_ref()
+                                .and_then(|tokens| tokens.oauth_provenance.as_ref()),
+                        ),
                         &self.auth_route_config,
                     )?;
                     Ok(Some(CodexAuth::Chatgpt(ChatgptAuth {
@@ -467,6 +532,7 @@ impl AuthManager {
             self.keyring_backend_kind,
             self.agent_identity_authapi_base_url.as_deref(),
             &self.auth_route_config,
+            /*cached_auth*/ None,
             Some(storage),
         )
         .await

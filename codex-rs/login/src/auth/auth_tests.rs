@@ -95,6 +95,7 @@ async fn cancelled_refresh_marks_only_started_exchanges_as_unsettled() -> anyhow
             )
             .await,
             /*enable_codex_api_key_env*/ false,
+            OpenAiApiKeyEnv::Ignore,
             /*allowed_auth_modes*/ None,
         )
         .await,
@@ -203,13 +204,8 @@ async fn refresh_without_id_token() -> anyhow::Result<()> {
         .context("stored tokens")?;
     let updated = super::persist_tokens(
         &storage,
-<<<<<<< HEAD
-        /*refreshed_from*/ "unused-for-the-default-login",
-||||||| 413492cd6c
-=======
         &initial,
         Some(provenance.clone()),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         /*id_token*/ None,
         Some("new-access-token".to_string()),
         Some("new-refresh-token".to_string()),
@@ -1307,11 +1303,14 @@ async fn product_homes_fall_back_to_legacy_codex_auth() {
             &product_home,
             /*enable_codex_api_key_env*/ false,
             AuthCredentialsStoreMode::File,
+            /*allowed_login_methods*/ None,
             /*forced_chatgpt_workspace_id*/ None,
             /*chatgpt_base_url*/ None,
             AuthKeyringBackendKind::Direct,
             /*agent_identity_authapi_base_url*/ None,
             &crate::test_support::transport_default_auth_route_config(),
+            /*cached_auth*/ None,
+            /*allowed_auth_modes*/ None,
         )
         .await
         .expect("load auth")
@@ -1557,6 +1556,7 @@ async fn external_bearer_command_receives_the_named_account() {
                 registry_home: None,
                 server: crate::auth::ExternalBearerAccountServer::Command,
             }),
+            HashMap::new(),
         );
         async move {
             manager
@@ -1593,6 +1593,7 @@ async fn external_bearer_command_never_runs_for_an_unenrolled_account() {
             registry_home: Some(empty_home.path().to_path_buf()),
             server: crate::auth::ExternalBearerAccountServer::Command,
         }),
+        HashMap::new(),
     );
     assert!(manager.auth().await.is_none());
     assert!(!canary.exists(), "the command must not run");
@@ -1623,6 +1624,7 @@ async fn claude_plan_helper_never_runs_for_an_unenrolled_account() {
         config.clone(),
         ExternalBearerCachePolicy::FreshPerRequest,
         Some(account.clone()),
+        HashMap::new(),
     );
     assert!(manager.auth().await.is_none());
     let error = account
@@ -1674,6 +1676,7 @@ async fn claude_plan_helper_that_predates_named_accounts_is_refused() {
                 registry_home: None,
                 server: crate::auth::ExternalBearerAccountServer::ClaudePlanHelper,
             }),
+            HashMap::new(),
         );
         async move {
             manager
@@ -1843,7 +1846,6 @@ async fn external_bearer_only_auth_manager_returns_none_when_command_fails() {
 }
 
 #[tokio::test]
-<<<<<<< HEAD
 async fn provider_auth_command_validation_accepts_a_usable_token_without_returning_it() {
     let script = ProviderAuthScript::new(&["provider-token"]).unwrap();
 
@@ -2015,8 +2017,9 @@ async fn internal_helper_exit_75_marks_an_unreadable_home() {
         marked.push(codex_protocol::home_unreadable::is_home_unreadable(&error));
     }
     assert_eq!(marked, vec![true, false]);
-||||||| 413492cd6c
-=======
+}
+
+#[tokio::test]
 async fn unauthorized_recovery_retries_provider_command_after_initial_failure() {
     let script = ProviderAuthScript::new(&["provider-token"]).unwrap();
     std::fs::write(script.tempdir.path().join("fail-once"), "").unwrap();
@@ -2052,7 +2055,6 @@ fn unauthorized_recovery_without_an_external_provider_still_requires_refreshable
         assert!(!recovery.has_next());
         assert_eq!(recovery.unavailable_reason(), "not_chatgpt_auth");
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test]
@@ -2415,21 +2417,9 @@ tail -n +2 tokens.txt > tokens.next
 mv tokens.next tokens.txt
 "#,
             )?;
-<<<<<<< HEAD
             // Execute the stable interpreter, not a just-written script whose write
             // descriptor another test's fork may still hold (ETXTBSY on Linux).
             ("/bin/sh".to_string(), vec!["./print-token.sh".to_string()])
-||||||| 413492cd6c
-            let mut permissions = std::fs::metadata(&script_path)?.permissions();
-            {
-                use std::os::unix::fs::PermissionsExt;
-                permissions.set_mode(0o755);
-            }
-            std::fs::set_permissions(&script_path, permissions)?;
-            ("./print-token.sh".to_string(), Vec::new())
-=======
-            ("./print-token.sh".to_string(), Vec::new())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
 
         #[cfg(windows)]
@@ -2487,19 +2477,7 @@ move /y tokens.next tokens.txt >nul
 exit 1
 "#,
             )?;
-<<<<<<< HEAD
             ("/bin/sh".to_string(), vec!["./fail.sh".to_string()])
-||||||| 413492cd6c
-            let mut permissions = std::fs::metadata(&script_path)?.permissions();
-            {
-                use std::os::unix::fs::PermissionsExt;
-                permissions.set_mode(0o755);
-            }
-            std::fs::set_permissions(&script_path, permissions)?;
-            ("./fail.sh".to_string(), Vec::new())
-=======
-            ("./fail.sh".to_string(), Vec::new())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
 
         #[cfg(windows)]
@@ -3036,11 +3014,14 @@ async fn load_auth_reads_ambient_api_key_from_env() {
         codex_home.path(),
         /*enable_codex_api_key_env*/ true,
         AuthCredentialsStoreMode::File,
+        /*allowed_login_methods*/ None,
         /*forced_chatgpt_workspace_id*/ None,
         /*chatgpt_base_url*/ None,
         AuthKeyringBackendKind::Direct,
         /*agent_identity_authapi_base_url*/ None,
         &crate::test_support::transport_default_auth_route_config(),
+        /*cached_auth*/ None,
+        /*allowed_auth_modes*/ None,
     )
     .await
     .expect("env auth should load")
@@ -3132,7 +3113,7 @@ async fn codex_api_key_env_takes_precedence_over_openai_api_key_env() {
     assert_eq!(auth.api_key_env_var(), Some(CODEX_API_KEY_ENV_VAR));
 }
 
-struct TestAuthManagerConfig {
+struct NamedTestAuthManagerConfig {
     codex_home: PathBuf,
     forced_login_method: Option<ForcedLoginMethod>,
     auth_credentials_store_mode: AuthCredentialsStoreMode,
@@ -3140,9 +3121,14 @@ struct TestAuthManagerConfig {
     named_session: bool,
     /// `None`: the same as `forced_login_method`.
     configured_forced_login_method: Option<Option<ForcedLoginMethod>>,
+    managed_auth_policy: ManagedAuthPolicy,
 }
 
-impl AuthManagerConfig for TestAuthManagerConfig {
+impl AuthManagerConfig for NamedTestAuthManagerConfig {
+    fn managed_auth_policy(&self) -> ManagedAuthPolicy {
+        self.managed_auth_policy.clone()
+    }
+
     fn codex_home(&self) -> PathBuf {
         self.codex_home.clone()
     }
@@ -3189,13 +3175,15 @@ async fn shared_from_config_reads_openai_api_key_env_unless_chatgpt_login_is_req
     let _codex_api_key_guard = EnvVarGuard::remove(CODEX_API_KEY_ENV_VAR);
     let _ambient_api_key_guard = EnvVarGuard::remove(AMBIENT_API_KEY_ENV_VAR);
     let _openai_api_key_guard = EnvVarGuard::set(OPENAI_API_KEY_ENV_VAR, "sk-openai-env");
-    let config = |forced_login_method, auth_credentials_store_mode| TestAuthManagerConfig {
+    let config = |forced_login_method, auth_credentials_store_mode| NamedTestAuthManagerConfig {
         codex_home: codex_home.path().to_path_buf(),
         forced_login_method,
         auth_credentials_store_mode,
         forced_chatgpt_workspace_id: None,
         named_session: false,
         configured_forced_login_method: None,
+
+        managed_auth_policy: ManagedAuthPolicy::default(),
     };
 
     for mode in [
@@ -3206,7 +3194,8 @@ async fn shared_from_config_reads_openai_api_key_env_unless_chatgpt_login_is_req
             &config(None, mode),
             /*enable_codex_api_key_env*/ false,
         )
-        .await;
+        .await
+        .expect("auth manager");
         assert!(manager.openai_api_key_env_enabled());
         assert_eq!(
             manager
@@ -3223,7 +3212,8 @@ async fn shared_from_config_reads_openai_api_key_env_unless_chatgpt_login_is_req
         ),
         /*enable_codex_api_key_env*/ true,
     )
-    .await;
+    .await
+    .expect("auth manager");
     assert!(!forced.openai_api_key_env_enabled());
     assert!(forced.auth_cached().is_none());
 
@@ -3301,7 +3291,7 @@ async fn enforce_login_restrictions_logs_out_for_method_mismatch() {
 /// PF-84-S06 (#570): in a process whose session runs on a named sign-in
 /// account (so startup left the default login alone), the default login's
 /// manager treats a login the restrictions rule out as absent, also after a
-/// reload, and never deletes it. Other processes load it as before.
+/// reload, records why, and never deletes it.
 #[tokio::test]
 #[serial(codex_auth_env)]
 async fn shared_from_config_hides_a_restricted_default_login_only_in_named_sessions() {
@@ -3321,13 +3311,15 @@ async fn shared_from_config_hides_a_restricted_default_login_only_in_named_sessi
     )
     .expect("failed to write auth file");
     let before = std::fs::read(&auth_file).unwrap();
-    let config = |forced_login_method, workspace: &str, named_session| TestAuthManagerConfig {
+    let config = |forced_login_method, workspace: &str, named_session| NamedTestAuthManagerConfig {
         codex_home: codex_home.path().to_path_buf(),
         forced_login_method,
         auth_credentials_store_mode: AuthCredentialsStoreMode::File,
         forced_chatgpt_workspace_id: Some(vec![workspace.to_string()]),
         named_session,
         configured_forced_login_method: None,
+
+        managed_auth_policy: ManagedAuthPolicy::default(),
     };
 
     for (forced_login_method, workspace) in [
@@ -3338,7 +3330,8 @@ async fn shared_from_config_hides_a_restricted_default_login_only_in_named_sessi
             &config(forced_login_method, workspace, /*named_session*/ true),
             /*enable_codex_api_key_env*/ false,
         )
-        .await;
+        .await
+        .expect("auth manager");
         assert!(named.auth_cached().is_none());
         assert!(named.hides_restricted_default_login());
         assert!(
@@ -3354,10 +3347,41 @@ async fn shared_from_config_hides_a_restricted_default_login_only_in_named_sessi
             &config(forced_login_method, workspace, /*named_session*/ false),
             /*enable_codex_api_key_env*/ false,
         )
-        .await;
-        assert!(default_session.auth_cached().is_some());
+        .await
+        .expect("auth manager");
+        // Upstream's login policy drops a restricted login at load in every
+        // process (it is not deleted); only a named session records why.
+        assert!(default_session.auth_cached().is_none());
         assert_eq!(default_session.hidden_default_login_reason(), None);
     }
+
+    // A login only the administrator's policy rules out is hidden with its
+    // reason too.
+    let policy_only = AuthManager::shared_from_config(
+        &NamedTestAuthManagerConfig {
+            managed_auth_policy: ManagedAuthPolicy {
+                allowed_login_methods: None,
+                allowed_chatgpt_workspaces: Some(vec![WORKSPACE_ID_ALLOWED.to_string()]),
+            },
+            forced_chatgpt_workspace_id: None,
+            ..config(
+                /*forced_login_method*/ None,
+                WORKSPACE_ID_DISALLOWED,
+                /*named_session*/ true,
+            )
+        },
+        /*enable_codex_api_key_env*/ false,
+    )
+    .await
+    .expect("auth manager");
+    assert!(policy_only.auth_cached().is_none());
+    assert!(
+        policy_only
+            .hidden_default_login_reason()
+            .is_some_and(|reason| reason.contains("restricted to workspace")),
+        "{:?}",
+        policy_only.hidden_default_login_reason()
+    );
 
     // An allowed login is used as before.
     let allowed = AuthManager::shared_from_config(
@@ -3368,7 +3392,8 @@ async fn shared_from_config_hides_a_restricted_default_login_only_in_named_sessi
         ),
         /*enable_codex_api_key_env*/ false,
     )
-    .await;
+    .await
+    .expect("auth manager");
     assert!(allowed.auth_cached().is_some());
     assert_eq!(std::fs::read(&auth_file).unwrap(), before);
 }
@@ -3404,20 +3429,23 @@ async fn named_chatgpt_account_follows_only_the_configured_login_method() {
         /*must_be_new*/ true,
     )
     .expect("named sign-in");
-    let config = |configured| TestAuthManagerConfig {
+    let config = |configured| NamedTestAuthManagerConfig {
         codex_home: codex_home.path().to_path_buf(),
         forced_login_method: Some(ForcedLoginMethod::Api),
         auth_credentials_store_mode: AuthCredentialsStoreMode::File,
         forced_chatgpt_workspace_id: None,
         named_session: false,
         configured_forced_login_method: Some(configured),
+
+        managed_auth_policy: ManagedAuthPolicy::default(),
     };
 
     let implied = AuthManager::shared_from_config(
         &config(/*configured*/ None),
         /*enable_codex_api_key_env*/ false,
     )
-    .await;
+    .await
+    .expect("auth manager");
     assert!(
         implied
             .for_named_account(work.clone())
@@ -3428,7 +3456,8 @@ async fn named_chatgpt_account_follows_only_the_configured_login_method() {
         &config(Some(ForcedLoginMethod::Api)),
         /*enable_codex_api_key_env*/ false,
     )
-    .await;
+    .await
+    .expect("auth manager");
     let refused = configured.for_named_account(work);
     assert!(refused.auth().await.is_none());
     assert!(
@@ -4278,11 +4307,14 @@ async fn provider_api_key_login_is_provider_scoped_and_not_primary_auth() {
         codex_home.path(),
         /*enable_codex_api_key_env*/ false,
         AuthCredentialsStoreMode::File,
+        /*allowed_login_methods*/ None,
         /*forced_chatgpt_workspace_id*/ None,
         /*chatgpt_base_url*/ None,
         AuthKeyringBackendKind::default(),
         /*agent_identity_authapi_base_url*/ None,
         &crate::test_support::transport_default_auth_route_config(),
+        /*cached_auth*/ None,
+        /*allowed_auth_modes*/ None,
     )
     .await
     .expect("primary auth load should succeed");

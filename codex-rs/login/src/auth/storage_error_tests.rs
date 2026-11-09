@@ -37,6 +37,7 @@ fn secure_storage_errors_display_the_underlying_cause() -> anyhow::Result<()> {
                     &key,
                     KeyringError::PlatformFailure(Box::new(std::io::Error::new(error_kind, cause))),
                 );
+                force_keyring_read(home.path())?;
                 let error = match operation {
                     Operation::Load => storage.load().unwrap_err(),
                     Operation::Save => storage.save(&auth).unwrap_err(),
