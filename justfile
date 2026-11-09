@@ -169,7 +169,6 @@ bazel-argument-comment-lint:
 build-for-release:
     bazel build //codex-rs/cli:release_binaries
 
-<<<<<<< HEAD
 # Build and qualify Manager/Worker pane injection through the real tmux-driven TUI.
 [no-cd]
 [unix]
@@ -177,30 +176,13 @@ orchestrate-tui-matrix:
     cd {{ justfile_directory() }}/codex-rs && cargo build -p codex-cli
     {{ justfile_directory() }}/qa/orchestrate_tui_matrix.sh
 
-# Run the MCP server
-mcp-server-run *args:
-    cargo run -p codex-mcp-server -- {args}
-
-||||||| 413492cd6c
-# Run the MCP server
-mcp-server-run *args:
-    cargo run -p codex-mcp-server -- {args}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 # Regenerate the json schema for config.toml from the current config types.
 write-config-schema:
     cargo run -p codex-config-schema --bin codex-write-config-schema
 
 # Regenerate app-server protocol schemas and the Python SDK derived from them.
 write-app-server-schema *args:
-<<<<<<< HEAD
-    python3 app-server-protocol/scripts/write_schema_fixtures.py {args}
-||||||| 413492cd6c
-    cargo run -p codex-app-server-protocol --bin write_schema_fixtures -- {args}
-=======
     {{ python }} app-server-protocol/scripts/write_schema_fixtures.py {args}
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 [no-cd]
 write-hooks-schema:
