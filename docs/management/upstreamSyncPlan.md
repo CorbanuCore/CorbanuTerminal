@@ -174,9 +174,10 @@ newer releases wait for the cadence.
   reaches `main` and the full run tests the final head. `.github/CODEOWNERS` isn't in `security_paths.txt`, so the
   revert doesn't change the SG3 diff.
 - **Main merges** happen at tier exits (end of S1, end of S2) and in S5. The integrator merges `origin/main` into the
-  sync branch. For a path that still carries skeleton markers, the integrator keeps the sync side and adds a ledger
-  row "re-apply `git diff <old-main>..<new-main> -- <path>`" for the path's owner; this avoids nested markers and keeps
-  one owner per path. S5 entry requires every re-apply row done. New main changes to security paths (including the
+  sync branch. Where `main`'s change to a path that still carries skeleton markers conflicts, the integrator keeps the
+  sync side and adds a ledger row "re-apply `git diff <old-main>..<new-main> -- <path>`" for the path's owner; this
+  avoids nested markers and keeps one owner per path. Where it merges cleanly, git places it in the ours side and the
+  path gets an open `main-merge` row so its owner keeps it (main merge #1, #1915). S5 entry requires every re-apply row done. New main changes to security paths (including the
   P1 security hardening plan's work) get rows for the security owner.
 - **Final merge:** PR `sync/upstream-<tag>` → `main`, merged with `gh pr merge N --merge --match-head-commit <sha>`
   only when every check is green and SG2/SG3 are recorded. Before it, tag `main` as `pre-upstream-sync-<tag>`.
