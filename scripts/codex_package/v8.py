@@ -11,18 +11,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.request import urlopen
 
-<<<<<<< HEAD
 from .cargo_lock import package_versions
 from .targets import REPO_ROOT
 from .targets import TargetSpec
 
-||||||| 413492cd6c
-from .targets import REPO_ROOT
-from .targets import TargetSpec
-
-=======
-from .targets import REPO_ROOT, TargetSpec
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 DOWNLOAD_TIMEOUT_SECS = 120
 V8_ARTIFACT_PROFILE = "ptrcomp_sandbox_release"
