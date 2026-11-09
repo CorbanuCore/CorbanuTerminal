@@ -236,20 +236,22 @@ class CacheSavePolicyTest(unittest.TestCase):
         files += sorted((REPO_ROOT / ".github" / "actions").glob("*/action.yml"))
         return [path for path in files if self.relative(path) not in self.EXEMPT]
 
-    def test_exempt_files_exist_and_actions_serve_only_exempt_workflows(self) -> None:
+    def test_exempt_files_exist_and_only_exempt_files_use_them(self) -> None:
         for name in sorted(self.EXEMPT):
             with self.subTest(file=name):
                 self.assertTrue((REPO_ROOT / name).is_file())
-        exempt_actions = [
-            "./" + name.removesuffix("/action.yml")
-            for name in sorted(self.EXEMPT)
-            if name.startswith(".github/actions/")
+        # Exempt actions and reusable workflows must not be reachable from a checked file.
+        exempt_uses = [
+            "./" + name.removesuffix("/action.yml") for name in sorted(self.EXEMPT)
         ]
         for path in self.ci_files():
             text = path.read_text()
-            for action in exempt_actions:
-                with self.subTest(file=self.relative(path), action=action):
-                    self.assertNotRegex(text, rf"(?m)uses:\s*{re.escape(action)}/?\s*$")
+            for target in exempt_uses:
+                with self.subTest(file=self.relative(path), uses=target):
+                    self.assertNotRegex(
+                        text,
+                        rf"(?m)uses:\s*[\"']?{re.escape(target)}/?[\"']?\s*(#.*)?$",
+                    )
 
     @staticmethod
     def step_containing(lines: list[str], index: int) -> str:
