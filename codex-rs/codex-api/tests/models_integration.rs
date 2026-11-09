@@ -53,12 +53,9 @@ fn provider(base_url: &str) -> Provider {
 #[tokio::test]
 async fn invalid_models_response_reports_bounded_decode_metadata() {
     let server = MockServer::start().await;
+    // Corbanu accepts an OpenAI-style `{"data": [...]}` list, so it is not an
+    // invalid catalog here.
     for (body, category, column_offset) in [
-        (
-            json!({ "data": [{ "id": "private-model" }] }).to_string(),
-            "Data",
-            0,
-        ),
         (
             json!({ "models": "private-value".repeat(4096) }).to_string(),
             "Data",

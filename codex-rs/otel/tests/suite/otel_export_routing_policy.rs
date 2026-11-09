@@ -516,6 +516,7 @@ fn otel_export_routing_policy_routes_tool_result_log_and_trace_events() {
                 agent_path: Some(AgentPath::try_from("/root/reviewer").expect("agent path")),
                 agent_nickname: Some("legacy nickname".to_string()),
                 agent_role: None,
+                agent_class: None,
             }),
         )
         .with_product_sku(Some("customer-specific-value"));
@@ -537,6 +538,7 @@ fn otel_export_routing_policy_routes_tool_result_log_and_trace_events() {
                 agent_path: None,
                 agent_nickname: Some("Mendel".to_string()),
                 agent_role: None,
+                agent_class: None,
             }),
         );
         let unnamed = make_manager(unnamed_id, SessionSource::SubAgent(SubAgentSource::Review));

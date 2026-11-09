@@ -64,6 +64,7 @@ async fn corbanu_retry_rotates_only_confirmed_released_attempts() {
                                     url: None,
                                     headers: Some(headers),
                                     body: Some("upstream unavailable".into()),
+                                    retry_after: None,
                                 })
                             }
                         },

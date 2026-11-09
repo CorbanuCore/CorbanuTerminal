@@ -19,6 +19,7 @@ fn map_api_error_classifies_entitlement_401_separately_from_bad_credential() {
         url: Some("https://api.kimi.com/coding/v1/chat/completions".to_string()),
         headers: None,
         body: Some(entitlement_body),
+        retry_after: None,
     }));
     assert!(
         matches!(err.details(), CodexErrorDetails::PlanEntitlementExceeded(_)),
@@ -37,6 +38,7 @@ fn map_api_error_classifies_entitlement_401_separately_from_bad_credential() {
         url: Some("https://api.kimi.com/coding/v1/chat/completions".to_string()),
         headers: None,
         body: Some(auth_body),
+        retry_after: None,
     }));
     assert!(
         matches!(err.details(), CodexErrorDetails::UnexpectedStatus(_)),
@@ -195,7 +197,8 @@ async fn http_retry_deadline_survives_mapping_and_respects_terminal_errors() {
                         http_status_code: Some(429),
                     },
                     Some(429),
-                    "exceeded retry limit, last status: 429 Too Many Requests".to_string(),
+                    // Corbanu words a provider 429 as a rate limit, not a retry count.
+                    "rate limited by provider (429 Too Many Requests). Wait before continuing; immediate retry may fail again".to_string(),
                 ),
             );
         }
@@ -231,7 +234,8 @@ fn map_http_error_classifies_provider_codes() {
             CodexErrorInfo::HttpConnectionFailed {
                 http_status_code: Some(404),
             },
-            true,
+            // Corbanu retries HTTP errors only on 5xx, 408 and 429.
+            false,
         ),
     ] {
         let err = map_api_error(ApiError::Transport(TransportError::Http {
@@ -729,6 +733,7 @@ fn map_api_error_maps_pfterminal_plan_limit_contract() {
         url: Some("http://127.0.0.1:4021/v1/chat/completions".to_string()),
         headers: Some(headers),
         body: Some(body),
+        retry_after: None,
     }));
 
     let CodexErrorDetails::UsageLimitReached(usage_limit) = err.details() else {
@@ -765,6 +770,7 @@ fn map_api_error_maps_retry_after_ms_for_generic_429() {
             })
             .to_string(),
         ),
+        retry_after: None,
     }));
 
     let CodexErrorDetails::RetryLimit(retry_limit) = err.details() else {
@@ -807,6 +813,7 @@ fn map_api_error_preserves_pfterminal_plan_limit_name_and_reset() {
         url: Some("http://127.0.0.1:4021/v1/chat/completions".to_string()),
         headers: Some(headers),
         body: Some(body),
+        retry_after: None,
     }));
 
     let CodexErrorDetails::UsageLimitReached(limit) = err.details() else {
@@ -999,20 +1006,13 @@ fn misalignment_http_policy_stop_is_terminal_by_code() {
                 url: None,
                 headers: None,
                 body: Some(body),
+                retry_after: None,
             }));
             assert!(matches!(
                 err.details(),
-                CodexErrorDetails::InvalidRequest(_)
+                CodexErrorDetails::MisalignmentPolicyViolation { .. }
             ));
-            assert!(!err.is_retryable());
-            assert!(err.to_string().contains("Automatic retries are disabled"));
+            assert_eq!(err.retry_delay(/*retry_count*/ 1), None);
         }
     }
-    assert_eq!(
-        misalignment_policy_message(
-            Some("rate_limit_exceeded"),
-            Some("misalignment_policy_violation")
-        ),
-        None
-    );
 }

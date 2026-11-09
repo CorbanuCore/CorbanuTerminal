@@ -1,11 +1,5 @@
-<<<<<<< HEAD
 pub(crate) mod anthropic_messages;
 pub(crate) mod chat_completions;
-pub(crate) mod compact;
-||||||| 413492cd6c
-pub(crate) mod compact;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub(crate) mod images;
 pub(crate) mod memories;
 pub(crate) mod models;
@@ -17,17 +11,11 @@ mod responses_websocket_probe;
 pub(crate) mod search;
 mod session;
 
-<<<<<<< HEAD
 pub use anthropic_messages::AnthropicMessagesClient;
 pub use anthropic_messages::AnthropicMessagesOptions;
 pub use chat_completions::ChatCompletionsClient;
 pub use chat_completions::ChatCompletionsOptions;
-pub use compact::CompactClient;
-||||||| 413492cd6c
-pub use compact::CompactClient;
-=======
 pub use images::ImageRequestError;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use images::ImagesClient;
 pub use memories::MemoriesClient;
 pub use models::ModelsClient;

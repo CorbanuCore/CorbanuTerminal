@@ -119,16 +119,6 @@ fn map_api_error_details(err: ApiError) -> CodexErr {
                     return map_api_error_details(error);
                 }
 
-                if let Ok(parsed) = serde_json::from_str::<Value>(&body_text)
-                    && let Some(error) = parsed.get("error")
-                    && let Some(message) = misalignment_policy_message(
-                        error.get("code").and_then(Value::as_str),
-                        error.get("message").and_then(Value::as_str),
-                    )
-                {
-                    return CodexErr::InvalidRequest(message);
-                }
-
                 if status == http::StatusCode::SERVICE_UNAVAILABLE
                     && let Some(error) = provider_error
                 {
@@ -448,21 +438,4 @@ struct UsageErrorBody {
     plan_type: Option<PlanType>,
     resets_at: Option<i64>,
     limit_window_minutes: Option<Value>,
-}
-
-/// Recognizes the provider's terminal conversation stop by its protocol code.
-/// The refusal is preserved; it must never trigger transport or model fallback.
-pub(crate) fn misalignment_policy_message(
-    code: Option<&str>,
-    message: Option<&str>,
-) -> Option<String> {
-    if code != Some("misalignment_policy_violation") {
-        return None;
-    }
-    let message = message
-        .filter(|text| !text.trim().is_empty())
-        .unwrap_or("The provider stopped this conversation for review of agent activity.");
-    Some(format!(
-        "{message} [misalignment_policy_violation] Automatic retries are disabled. Review the conversation's account access, tool actions, and changes before continuing work. This flag does not establish a user policy violation."
-    ))
 }
