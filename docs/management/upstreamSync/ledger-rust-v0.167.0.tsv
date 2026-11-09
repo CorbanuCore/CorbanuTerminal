@@ -234,7 +234,7 @@ codex-rs/core/src/compact_remote_v2_attempt.rs	content	UU	core	S2a core session/
 codex-rs/core/src/compact_tests.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	333	true	false	false	true	
 codex-rs/core/src/config/config_loader_tests.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		1	393	true	false	false	true	
 codex-rs/core/src/config/config_tests.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		6	193	true	false	false	true	
-codex-rs/core/src/config/mod.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		20	723	false	false	true	false	
+codex-rs/core/src/config/mod.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		20	723	false	false	true	false	D483 (#1945, main #1996): a project .codex/config.toml may not set sqlite_home or log_dir (PROJECT_LOCAL_CONFIG_DENYLIST, plus debug.config_lockfile); keep both keys denied when resolving (loader/mod.rs, S1b). On this branch an explicit log_dir also moves pfterminal_logs_2.sqlite, so S2 adds a test that a project log_dir moves neither the TUI log nor the logs database.
 codex-rs/core/src/config/network_proxy_spec.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		3	50	false	false	true	true	
 codex-rs/core/src/config/permissions.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		2	10	false	false	true	false	
 codex-rs/core/src/connectors.rs	content	UU	core	S2a core session/client/turn	2	unassigned	no	open		3	29	false	false	false	false	
