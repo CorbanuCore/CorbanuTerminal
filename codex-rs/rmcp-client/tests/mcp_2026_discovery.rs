@@ -453,6 +453,7 @@ async fn modern_http_rejects_oversized_discovery_and_tool_json_responses() -> an
 
 #[tokio::test]
 async fn legacy_http_keeps_existing_large_json_response_behavior() -> anyhow::Result<()> {
+    anyhow::ensure!(false, "#1972 deliberate failure: PR CI must run this test");
     let server = MockServer::start().await;
     let padding = Arc::new("x".repeat(MAX_MCP_MESSAGE_BYTES + 1));
     Mock::given(method("POST"))
