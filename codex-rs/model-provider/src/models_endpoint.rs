@@ -90,12 +90,8 @@ impl OpenAiModelsEndpoint {
     }
 
     async fn auth(&self) -> Option<CodexAuth> {
-        match self.auth_manager.as_ref() {
-            Some(auth_manager) => {
-                crate::provider::auth_for_provider(auth_manager.auth().await, &self.provider_info)
-            }
-            None => None,
-        }
+        crate::provider::configured_provider_auth(&self.provider_info, self.auth_manager.as_ref())
+            .await
     }
 
     async fn uses_codex_backend(&self) -> bool {
@@ -134,6 +130,7 @@ impl OpenAiModelsEndpoint {
         let (auth, selected_runtime_auth) = tokio::spawn(async move {
             let selected_runtime_auth = match runtime_auth {
                 Some((runtime, mode)) => {
+                    crate::provider::refuse_runtime_auth_when_brokered()?;
                     crate::validate_runtime_destination(
                         provider_info
                             .model_catalog_url
@@ -160,10 +157,12 @@ impl OpenAiModelsEndpoint {
             };
             let auth = match &selected_runtime_auth {
                 Some((selected_runtime_auth, _)) => Some(selected_runtime_auth.auth().clone()),
-                None => match auth_manager {
-                    Some(auth_manager) => auth_manager.auth().await,
-                    None => None,
-                },
+                // The provider's own login, as its requests use (a provider
+                // key for an env_key provider), never the ambient login.
+                None => {
+                    crate::provider::configured_provider_auth(&provider_info, auth_manager.as_ref())
+                        .await
+                }
             };
             Ok::<_, CodexErr>((auth, selected_runtime_auth))
         })
@@ -345,10 +344,11 @@ impl ModelsEndpointClient for OpenAiModelsEndpoint {
     }
 
     fn identity(&self) -> Option<String> {
-        let auth = self
-            .auth_manager
-            .as_ref()
-            .and_then(|manager| manager.auth_cached());
+        // The same login the fetch uses, so a fetched catalog is published.
+        let auth = crate::provider::configured_provider_auth_cached(
+            &self.provider_info,
+            self.auth_manager.as_ref(),
+        );
         crate::models_identity::identity(&self.provider_info, auth.as_ref()).ok()
     }
 

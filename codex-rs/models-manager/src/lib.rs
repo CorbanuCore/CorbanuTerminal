@@ -66,6 +66,20 @@ mod tests {
         assert!(instructions(&resolved).len() < 40_000);
     }
 
+    /// Templates are literal text now; none may still carry the retired
+    /// personality placeholder.
+    #[test]
+    fn bundled_templates_carry_no_personality_placeholder() {
+        let stale = bundled_models_response()
+            .expect("bundled models")
+            .models
+            .into_iter()
+            .filter(|model| instructions(model).contains("{{ personality }}"))
+            .map(|model| model.slug)
+            .collect::<Vec<_>>();
+        assert_eq!(stale, Vec::<String>::new());
+    }
+
     #[test]
     fn template_only_catalog_preserves_instructions() {
         let mut model = model_info::model_info_from_slug("template-only-fixture");

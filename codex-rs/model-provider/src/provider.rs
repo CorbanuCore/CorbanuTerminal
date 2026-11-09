@@ -516,6 +516,83 @@ fn configured_provider_helper_model(info: &ModelProviderInfo) -> Option<&'static
     }
 }
 
+/// The login a configured provider's requests (and its model list) use: a
+/// provider key for an `env_key` provider (the broker placeholder in a
+/// brokered process; only the named account's own key for PF-84), otherwise
+/// the auth manager's login without the ambient `OPENAI_API_KEY` fallback for
+/// providers that don't use OpenAI sign-in.
+pub(crate) async fn configured_provider_auth(
+    info: &ModelProviderInfo,
+    auth_manager: Option<&Arc<AuthManager>>,
+) -> Option<CodexAuth> {
+    let auth_manager = auth_manager?;
+    if let Some(provider_key_id) = info.env_key.as_deref() {
+        return provider_env_auth(info, auth_manager, provider_key_id);
+    }
+    auth_for_provider(auth_manager.auth().await, info)
+}
+
+/// [`configured_provider_auth`] from the cached login, for synchronous
+/// callers such as the model catalog's identity.
+pub(crate) fn configured_provider_auth_cached(
+    info: &ModelProviderInfo,
+    auth_manager: Option<&Arc<AuthManager>>,
+) -> Option<CodexAuth> {
+    let auth_manager = auth_manager?;
+    if let Some(provider_key_id) = info.env_key.as_deref() {
+        return provider_env_auth(info, auth_manager, provider_key_id);
+    }
+    auth_for_provider(auth_manager.auth_cached(), info)
+}
+
+fn provider_env_auth(
+    info: &ModelProviderInfo,
+    auth_manager: &AuthManager,
+    provider_key_id: &str,
+) -> Option<CodexAuth> {
+    // PF-27-S05: the broker reads this key; Core holds only a placeholder.
+    if crate::model_key_broker::model_key_broker_required() {
+        return Some(CodexAuth::from_api_key(
+            crate::model_key_broker::BROKERED_KEY_PLACEHOLDER,
+        ));
+    }
+    // PF-84: a named account reads only its own stored key.
+    if let Some(account) = info.account.as_ref() {
+        return auth_manager
+            .provider_account_api_key(&account.provider_id, &account.name)
+            .unwrap_or_else(|error| {
+                tracing::warn!(%error, "named account key unavailable");
+                None
+            })
+            .map(|api_key| CodexAuth::from_api_key(&api_key));
+    }
+    if let Ok(api_key) = std::env::var(provider_key_id)
+        && !api_key.trim().is_empty()
+    {
+        return Some(CodexAuth::from_api_key(&api_key));
+    }
+
+    auth_manager
+        .provider_api_key(provider_key_id)
+        .ok()
+        .flatten()
+        .map(|api_key| CodexAuth::from_api_key(&api_key))
+}
+
+/// PF-27-S05: in a brokered process sign-in tokens are attached only by the
+/// broker, so upstream's runtime agent identity (which attaches them itself)
+/// is refused there.
+pub(crate) fn refuse_runtime_auth_when_brokered() -> codex_protocol::error::Result<()> {
+    if crate::model_key_broker::model_key_broker_required() {
+        return Err(CodexErr::Fatal(
+            "runtime agent identity is not available while the credential broker protects \
+             sign-in tokens"
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// Creates the default model provider for configured provider metadata.
 /// Harnesses with runtime identity use [`crate::ProviderAuthContext::model_provider`].
 pub fn create_model_provider(
@@ -641,6 +718,12 @@ impl ConfiguredModelProvider {
         scope: Option<ProviderAuthScope>,
     ) -> codex_protocol::error::Result<ResolvedProviderAuth> {
         let resolved = if let Some((runtime, mode)) = &self.runtime_auth {
+            // PF-27-S05 / #570: runtime identity attaches the sign-in token
+            // itself, so it is refused where Corbanu would not send it.
+            refuse_runtime_auth_when_brokered()?;
+            if let Some(error) = self.missing_sign_in_refusal() {
+                return Err(error);
+            }
             crate::validate_runtime_destination(self.info.base_url.as_deref())?;
             crate::validate_runtime_provider(&self.info, self.auth_manager.as_ref(), runtime)?;
             let headers = self.info.build_header_map()?;
@@ -716,41 +799,6 @@ impl ConfiguredModelProvider {
             Some(_) => Arc::new(manager.with_provider_catalog()),
             None => Arc::new(manager),
         }
-    }
-
-    fn provider_env_auth(&self, provider_key_id: &str) -> Option<CodexAuth> {
-        // PF-27-S05: the broker reads this key; Core holds only a placeholder.
-        if crate::model_key_broker::model_key_broker_required() {
-            return Some(CodexAuth::from_api_key(
-                crate::model_key_broker::BROKERED_KEY_PLACEHOLDER,
-            ));
-        }
-        // PF-84: a named account reads only its own stored key.
-        if let Some(account) = self.info.account.as_ref() {
-            return self
-                .auth_manager
-                .as_ref()
-                .and_then(|auth_manager| {
-                    auth_manager
-                        .provider_account_api_key(&account.provider_id, &account.name)
-                        .unwrap_or_else(|error| {
-                            tracing::warn!(%error, "named account key unavailable");
-                            None
-                        })
-                })
-                .map(|api_key| CodexAuth::from_api_key(&api_key));
-        }
-        if let Ok(api_key) = std::env::var(provider_key_id)
-            && !api_key.trim().is_empty()
-        {
-            return Some(CodexAuth::from_api_key(&api_key));
-        }
-
-        self.auth_manager
-            .as_ref()
-            .and_then(|auth_manager| auth_manager.provider_api_key(provider_key_id).ok())
-            .flatten()
-            .map(|api_key| CodexAuth::from_api_key(&api_key))
     }
 }
 
@@ -884,11 +932,12 @@ impl ModelProvider for ConfiguredModelProvider {
         if let Some(model) = configured_provider_helper_model(&self.info) {
             return model;
         }
-        if self
-            .auth_manager
-            .as_ref()
-            .and_then(|auth_manager| auth_manager.auth_cached())
-            .is_some_and(|auth| auth.is_api_key_auth())
+        if provider_uses_first_party_auth_path(&self.info)
+            && self
+                .auth_manager
+                .as_ref()
+                .and_then(|auth_manager| auth_manager.auth_cached())
+                .is_some_and(|auth| auth.is_api_key_auth())
         {
             API_KEY_APPROVAL_REVIEW_PREFERRED_MODEL
         } else {
@@ -925,15 +974,10 @@ impl ModelProvider for ConfiguredModelProvider {
     }
 
     fn auth(&self) -> ModelProviderFuture<'_, Option<CodexAuth>> {
-        Box::pin(async move {
-            let auth_manager = self.auth_manager.as_ref()?;
-
-            if let Some(provider_key_id) = self.info.env_key.as_deref() {
-                return self.provider_env_auth(provider_key_id);
-            }
-
-            auth_for_provider(auth_manager.auth().await, &self.info)
-        })
+        Box::pin(configured_provider_auth(
+            &self.info,
+            self.auth_manager.as_ref(),
+        ))
     }
 
     fn runtime_auth(&self) -> Option<&(Arc<RuntimeAuthManager>, RuntimeAuthMode)> {
@@ -2682,6 +2726,66 @@ printf '%s\n' '{"AccessKeyId":"exported","SecretAccessKey":"secret"}'
                     .await;
                 assert_eq!(catalog, expected);
             }
+        }
+    }
+
+    /// An env_key provider's model list is fetched with its own key, never
+    /// with the ambient OpenAI/ChatGPT login the base manager holds.
+    #[tokio::test]
+    async fn env_key_provider_catalog_uses_its_own_key_not_the_ambient_login() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/models"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(ModelsResponse {
+                        models: vec![remote_model("provider-model")],
+                    }),
+            )
+            .mount(&server)
+            .await;
+        let key_var = "CORBANU_TEST_S1B2_CATALOG_PROVIDER_KEY";
+        let _key = EnvVarGuard::set(key_var, "provider-catalog-key");
+        let mut provider_info = provider_for(server.uri());
+        provider_info.env_key = Some(key_var.to_string());
+        provider_info.model_catalog_url = Some(format!("{}/models", server.uri()).into());
+        let provider = create_model_provider(
+            provider_info,
+            Some(AuthManager::from_auth_for_testing(
+                CodexAuth::create_dummy_chatgpt_auth_for_testing(),
+            )),
+        );
+        let home = tempfile::tempdir().expect("home");
+        let manager = provider.models_manager(
+            home.path().to_path_buf(),
+            /*config_model_catalog*/ None,
+        );
+        manager.set_api_key_model_discovery_enabled(/*enabled*/ true);
+        let catalog = manager
+            .raw_model_catalog(
+                RefreshStrategy::Online,
+                HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
+            )
+            .await;
+
+        assert!(
+            catalog
+                .models
+                .iter()
+                .any(|model| model.slug == "provider-model")
+        );
+        let requests = server.received_requests().await.expect("requests");
+        assert!(!requests.is_empty());
+        for request in requests {
+            assert_eq!(
+                request
+                    .headers
+                    .get("authorization")
+                    .and_then(|value| value.to_str().ok()),
+                Some("Bearer provider-catalog-key")
+            );
+            assert!(request.headers.get("chatgpt-account-id").is_none());
         }
     }
 

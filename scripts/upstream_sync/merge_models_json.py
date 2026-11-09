@@ -55,6 +55,17 @@ for kind, path in log: print(kind, path)
 # $2 / $0.10 / $7.50, cache write $2.50).
 import copy
 rows = out['models']
+# Upstream's instructions_template is literal text now (personality variables
+# were removed). Corbanu rows still holding the old placeholder get its
+# default value, as main rendered them without a personality.
+for row in rows:
+    messages = row.get('model_messages') or {}
+    template = messages.get('instructions_template')
+    if template and '{{ personality }}' in template:
+        default = (messages.get('instructions_variables') or {}).get('personality_default') or ''
+        messages['instructions_template'] = template.replace('{{ personality }}', default)
+        print('corbanu-row personality placeholder rendered', row['slug'])
+open(OUT, 'w').write(json.dumps(out, indent=2, ensure_ascii=False) + '\n')
 if not any(r['slug'] == 'gpt-6.1-terra' for r in rows):
     sol_index = next(i for i, r in enumerate(rows) if r['slug'] == 'gpt-6.1-sol')
     terra = copy.deepcopy(rows[sol_index])

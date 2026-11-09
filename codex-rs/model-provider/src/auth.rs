@@ -794,8 +794,12 @@ pub(crate) fn uses_fedramp_api_key(
     if !provider.is_openai() || provider.has_command_auth() {
         return Ok(false);
     }
-    if let Some(api_key) = provider.api_key()? {
-        return Ok(codex_login::auth::is_fedramp_api_key(&api_key));
+    // An env_key provider's login is its provider key as resolved for its
+    // requests (the broker placeholder when brokered, a named account's own
+    // key), so Core reads no key here.
+    if provider.env_key.is_some() {
+        return Ok(matches!(auth, Some(CodexAuth::ApiKey(_)))
+            && auth.is_some_and(CodexAuth::is_fedramp_account));
     }
     if let Some(token) = provider.experimental_bearer_token.clone() {
         return Ok(codex_login::auth::is_fedramp_api_key(&token.into_inner()));
