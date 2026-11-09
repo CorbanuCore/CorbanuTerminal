@@ -100,7 +100,7 @@ class PackageGuardTests(unittest.TestCase):
             clean, marked = Path(directory) / "clean", Path(directory) / "marked"
             clean.write_bytes(b"ordinary executable fixture")
             marked.write_bytes(b"prefix\0" + MARKER + b"\0suffix")
-            outputs = SourceBuildOutputs(clean, clean, {}, clean, clean, clean)
+            outputs = SourceBuildOutputs(clean, clean, {}, clean, clean, clean, clean)
             for field in vars(outputs):
                 with self.subTest(field=field):
                     value = {"extra": marked} if field == "extra_bins" else marked
@@ -119,7 +119,7 @@ class PackageGuardTests(unittest.TestCase):
             clean = Path(directory) / "clean"
             clean.write_bytes(b"ordinary executable fixture")
             outputs = SourceBuildOutputs(
-                clean, clean, {"extra": clean}, clean, clean, clean
+                clean, clean, {"extra": clean}, clean, clean, clean, clean
             )
             with patch.object(package, "build_source_binaries", return_value=outputs):
                 self.assertIs(package.distribution_source_binaries(), outputs)

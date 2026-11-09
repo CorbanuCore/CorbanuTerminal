@@ -11,7 +11,6 @@ from .layout import build_package_dir
 from .layout import prepare_package_dir
 from .layout import validate_package_dir
 from .ripgrep import resolve_rg_bin
-from .symbols import strip_binary
 from .targets import PACKAGE_VARIANTS
 from .targets import TARGET_SPECS
 from .targets import PackageInputs
@@ -118,21 +117,6 @@ def create_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--strip",
-        choices=("auto", "all", "none"),
-        default="auto",
-        help=(
-            "Strip Unix first-party package binaries: auto strips source-built "
-            "release-profile inputs, all also strips other profiles and prebuilt "
-            "inputs, none preserves symbols. "
-            "Original inputs and third-party resources are never modified."
-        ),
-    )
-    parser.add_argument(
-        "--strip-tool",
-        help="Target-compatible strip executable override, for example llvm-strip.",
-    )
-    parser.add_argument(
         "--entrypoint-bin",
         type=Path,
         help=(
@@ -161,7 +145,10 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--exec-server-bin",
         type=Path,
-        help="Optional prebuilt codex-exec-server executable. If omitted, build it with Cargo.",
+        help=(
+            "Optional prebuilt codex-exec-server executable for variants that ship "
+            "it (not corbanu or pfterminal). If omitted, it is built with Cargo."
+        ),
     )
     parser.add_argument(
         "--bwrap-bin",
@@ -259,52 +246,25 @@ def assemble_package(args: argparse.Namespace) -> Path:
     inputs = PackageInputs(
         entrypoint_bin=source_outputs.entrypoint_bin,
         code_mode_host_bin=source_outputs.code_mode_host_bin,
-<<<<<<< HEAD
         extra_bins=source_outputs.extra_bins,
-||||||| 413492cd6c
-=======
         exec_server_bin=source_outputs.exec_server_bin,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         rg_bin=resolve_rg_bin(spec, args.rg_bin),
         bwrap_bin=source_outputs.bwrap_bin,
         codex_command_runner_bin=source_outputs.codex_command_runner_bin,
         codex_windows_sandbox_setup_bin=source_outputs.codex_windows_sandbox_setup_bin,
     )
     prepare_package_dir(package_dir, force=args.force)
-<<<<<<< HEAD
     symbols_dir = args.symbols_dir.resolve() if args.symbols_dir is not None else None
     build_package_dir(
         package_dir,
-        version,
+        args.package_version,
         variant,
         spec,
         inputs,
         symbols_dir=symbols_dir,
     )
-    validate_package_dir(
-        package_dir, variant, spec, include_zsh=inputs.zsh_bin is not None
-    )
-||||||| 413492cd6c
-    build_package_dir(package_dir, version, variant, spec, inputs)
-    validate_package_dir(
-        package_dir, variant, spec, include_zsh=inputs.zsh_bin is not None
-    )
-=======
-    build_package_dir(package_dir, args.package_version, variant, spec, inputs)
-    for filename, prebuilt in (
-        (variant.entrypoint_name(spec), args.entrypoint_bin),
-        (f"codex-code-mode-host{spec.exe_suffix}", args.code_mode_host_bin),
-        (f"codex-exec-server{spec.exe_suffix}", args.exec_server_bin),
-    ):
-        if args.strip == "all" or (
-            args.strip == "auto"
-            and args.cargo_profile == "release"
-            and prebuilt is None
-        ):
-            strip_binary(package_dir / "bin" / filename, spec, tool=args.strip_tool)
     validate_package_dir(package_dir, variant, spec)
     return package_dir
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 
 def archive_package(package_dir: Path, args: argparse.Namespace) -> None:
