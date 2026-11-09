@@ -75,6 +75,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 profile="release",
                 entrypoint_bin=entrypoint,
                 code_mode_host_bin=code_mode_host,
+                exec_server_bin=None,
                 extra_bins={"corbanu-acp": acp, "corbanu-walletd": walletd},
                 bwrap_bin=None,
                 codex_command_runner_bin=None,
@@ -84,6 +85,27 @@ class SourceBinariesForTargetTest(unittest.TestCase):
         self.assertEqual(outputs.extra_bins["corbanu-debug"], entrypoint)
         self.assertEqual(outputs.extra_bins["corbanu-acp"], acp)
         self.assertEqual(outputs.extra_bins["corbanu-walletd"], walletd)
+        # Corbanu packages do not ship the standalone executor, so nothing is built.
+        self.assertIsNone(outputs.exec_server_bin)
+
+    def test_corbanu_package_refuses_a_prebuilt_executor(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            with self.assertRaisesRegex(
+                RuntimeError, "does not ship codex-exec-server"
+            ):
+                build_source_binaries(
+                    TARGET_SPECS["aarch64-apple-darwin"],
+                    PACKAGE_VARIANTS["corbanu"],
+                    cargo=str(root / "cargo-that-should-not-run"),
+                    profile="release",
+                    entrypoint_bin=touch_file(root / "corbanu"),
+                    code_mode_host_bin=touch_file(root / "codex-code-mode-host"),
+                    exec_server_bin=touch_file(root / "codex-exec-server"),
+                    bwrap_bin=None,
+                    codex_command_runner_bin=None,
+                    codex_windows_sandbox_setup_bin=None,
+                )
 
     def test_release_workflow_can_reuse_qualified_platform_artifacts(self) -> None:
         workflow = (
@@ -129,6 +151,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 build_entrypoint=False,
                 extra_cargo_bins=["pfterminal-debug", "pfterminal-walletd"],
                 build_code_mode_host=False,
+                build_exec_server=False,
                 build_bwrap=False,
                 build_codex_command_runner=False,
                 build_codex_windows_sandbox_setup=False,
@@ -153,6 +176,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 profile="release",
                 entrypoint_bin=entrypoint,
                 code_mode_host_bin=code_mode_host,
+                exec_server_bin=None,
                 extra_bins={
                     "pfterminal-debug": debug_entrypoint,
                     "pfterminal-walletd": wallet_daemon,
