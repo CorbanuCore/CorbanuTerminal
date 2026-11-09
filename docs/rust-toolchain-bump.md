@@ -21,10 +21,7 @@ These are the known places. Search for the old version as a backstop:
   in `cargo-deny.yml`'s comment.
 - `MODULE.bazel`: `toolchains.toolchain(version = ...)` and the
   `rust_windows_x86_64_gnullvm_stable` set's `versions`.
-- Dev environments: `.devcontainer/Dockerfile.secure` (`RUST_TOOLCHAIN`),
-  `.devcontainer/devcontainer.secure.json`,
-  `codex-rs/scripts/setup-windows.ps1` (`$toolchain`) and
-  `.codex/environments/environment.toml` (`cargo +<version>`).
+- Dev environments: `codex-rs/scripts/setup-windows.ps1` (`$toolchain`).
 
 Bazel lockfile and checksums (#1032), in this order:
 
