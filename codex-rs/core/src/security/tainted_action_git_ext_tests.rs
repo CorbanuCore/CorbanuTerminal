@@ -448,3 +448,39 @@ fn issue_1876_remote_scan_is_linear() {
         });
     }
 }
+
+/// #1975: an ordinary brace value must not hide the remote after `--`.
+#[test]
+fn issue_1975_brace_option_value_before_dashes_asks() {
+    let lines = [
+        "git fetch -o {} -- e\"$r\"",
+        "git fetch -o '{}' -- e\"$r\"",
+        "git pull -o {} -- e\"$r\"",
+        "git fetch -o {} -- \"$r\"",
+    ];
+    assert_eq!(
+        wrong(&lines, Some(ProtectedActionKind::UnseenCode)),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn issue_1975_option_value_controls() {
+    assert_eq!(
+        wrong(
+            &["git fetch -o x -- e\"$r\"", "git fetch -o {} e\"$r\""],
+            Some(ProtectedActionKind::UnseenCode)
+        ),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        wrong(
+            &[
+                "git fetch -o {} -- origin",
+                "r=origin; git fetch -o {} -- \"$r\""
+            ],
+            None
+        ),
+        Vec::<String>::new()
+    );
+}
