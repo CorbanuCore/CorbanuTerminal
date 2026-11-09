@@ -12,12 +12,14 @@ use std::collections::BTreeMap;
 fn every_built_in_provider_declares_its_default_basis() {
     let expected = BTreeMap::from([
         ("amazon-bedrock", PayPerUse),
+        ("amazon-bedrock-runtime", PayPerUse),
         ("ambient", PayPerUse),
         ("anthropic", PayPerUse),
         ("baseten", PayPerUse),
         ("baseten-anthropic", PayPerUse),
         ("claude-plan", Subscription),
         ("deepseek", PayPerUse),
+        ("gcp", PayPerUse),
         ("kimi-code", Subscription),
         ("lmstudio", Local),
         ("meta", PayPerUse),
@@ -50,7 +52,7 @@ fn every_built_in_provider_declares_its_default_basis() {
         })
         .collect();
     assert_eq!(declared, expected);
-    assert_eq!(declared.len(), 21);
+    assert_eq!(declared.len(), 23);
 }
 
 /// Requirement (a): the basis follows the declared table, not the auth type.

@@ -8,35 +8,21 @@
 //! API provider construction applies the process-wide managed residency policy also
 //! used by default HTTP headers.
 
-<<<<<<< HEAD
-use codex_api::Provider as ApiProvider;
-use codex_api::RetryConfig as ApiRetryConfig;
-use codex_api::is_azure_responses_provider;
-use codex_product_brand::PLAN_NAME;
-
-/// Provider-neutral display name for Corbanu API's Messages-wire routes.
-const PLAN_ANTHROPIC_NAME: &str = "Corbanu API";
-||||||| 413492cd6c
-use codex_api::Provider as ApiProvider;
-use codex_api::RetryConfig as ApiRetryConfig;
-use codex_api::is_azure_responses_provider;
-=======
 use codex_client::OPENAI_ORGANIZATION_HEADER;
 use codex_client::OPENAI_PROJECT_HEADER;
 use codex_client::Provider as ApiProvider;
 use codex_client::RetryConfig as ApiRetryConfig;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_product_brand::PLAN_NAME;
+
+/// Provider-neutral display name for Corbanu API's Messages-wire routes.
+const PLAN_ANTHROPIC_NAME: &str = "Corbanu API";
 use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::ModelProviderAuthInfo;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::EnvVarError;
 use codex_protocol::error::Result as CodexResult;
-<<<<<<< HEAD
 use codex_utils_absolute_path::AbsolutePathBuf;
-||||||| 413492cd6c
-=======
 use codex_utils_redacted_string::RedactedString;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use http::HeaderMap;
 use http::header::HeaderName;
 use http::header::HeaderValue;
@@ -47,18 +33,13 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
 use std::num::NonZeroU64;
-<<<<<<< HEAD
-||||||| 413492cd6c
-=======
 use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::PoisonError;
 use std::sync::RwLock;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use std::time::Duration;
 
-<<<<<<< HEAD
 mod billing;
 mod model_routes;
 mod provider_debug;
@@ -83,9 +64,6 @@ const DEFAULT_STREAM_IDLE_TIMEOUT_MS: u64 = 600_000;
 const DEFAULT_STREAM_ACTIONABLE_TIMEOUT_MS: u64 = 180_000;
 const DEFAULT_STREAM_LONG_FAILURE_RETRY_THRESHOLD_MS: u64 = 60_000;
 const DEFAULT_STREAM_LONG_FAILURE_MAX_RETRIES: u64 = 1;
-||||||| 413492cd6c
-const DEFAULT_STREAM_IDLE_TIMEOUT_MS: u64 = 300_000;
-=======
 mod capabilities;
 mod gateway_oauth;
 mod oauth_session;
@@ -121,8 +99,6 @@ pub fn read_managed_residency_requirement() -> Option<ResidencyRequirement> {
         .unwrap_or_else(PoisonError::into_inner)
 }
 
-const DEFAULT_STREAM_IDLE_TIMEOUT_MS: u64 = 300_000;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 const DEFAULT_STREAM_MAX_RETRIES: u64 = 5;
 const DEFAULT_REQUEST_MAX_RETRIES: u64 = 4;
 const DEFAULT_AWS_CREDENTIAL_EXPORT_TIMEOUT_MS: u64 = 30_000;
@@ -512,10 +488,7 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     ) {
         return Some(VERCEL_PROVIDER_ID);
     }
-    if matches!(
-        model,
-        AMAZON_BEDROCK_GPT_5_5_MODEL_ID | AMAZON_BEDROCK_GPT_5_4_MODEL_ID
-    ) {
+    if matches!(model, AMAZON_BEDROCK_GPT_5_5_MODEL_ID) {
         return Some(AMAZON_BEDROCK_PROVIDER_ID);
     }
     if model.starts_with("gpt-") || model.starts_with("codex-auto-") {
@@ -897,7 +870,7 @@ const AMAZON_BEDROCK_MANTLE_CLIENT_AGENT_VALUE: &str = "codex";
 pub const LEGACY_OLLAMA_CHAT_PROVIDER_ID: &str = "ollama-chat";
 pub const OLLAMA_CHAT_PROVIDER_REMOVED_ERROR: &str = "`ollama-chat` is no longer supported.\nHow to fix: replace `ollama-chat` with `ollama` in `model_provider`, `oss_provider`, or `--local-provider`.\nMore info: https://github.com/openai/codex/discussions/7782";
 const OSS_PROVIDER_NAME: &str = "gpt-oss";
-pub const BUILT_IN_MODEL_PROVIDER_NAMES: [&str; 16] = [
+pub const BUILT_IN_MODEL_PROVIDER_NAMES: [&str; 18] = [
     OPENAI_PROVIDER_NAME,
     ANTHROPIC_PROVIDER_NAME,
     CLAUDE_PLAN_PROVIDER_NAME,
@@ -913,6 +886,10 @@ pub const BUILT_IN_MODEL_PROVIDER_NAMES: [&str; 16] = [
     VERCEL_ANTHROPIC_PROVIDER_NAME,
     VERCEL_ANTHROPIC_FAST_PROVIDER_NAME,
     AMAZON_BEDROCK_PROVIDER_NAME,
+    // Provider behaviour follows these names (`is_amazon_bedrock_runtime`,
+    // `is_gcp`), so a custom provider must not take them.
+    AMAZON_BEDROCK_RUNTIME_PROVIDER_NAME,
+    GCP_PROVIDER_NAME,
     OSS_PROVIDER_NAME,
 ];
 
@@ -1106,7 +1083,6 @@ pub struct ModelProviderInfo {
     /// Whether this provider supports the standalone web-search endpoint.
     #[serde(default)]
     pub supports_standalone_web_search: bool,
-<<<<<<< HEAD
     /// How this provider's work is paid for: `subscription`, `pay_per_use` or
     /// `local`. Overrides the built-in declaration for unusual setups; when
     /// unset, the built-in table decides from the route and credential used,
@@ -1120,6 +1096,11 @@ pub struct ModelProviderInfo {
     #[serde(skip)]
     #[schemars(skip)]
     pub account: Option<NamedProviderAccount>,
+    /// Runtime-only opt-in for internal metadata, independent of the destination check.
+    /// This cannot be loaded from or written to serialized provider configuration.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub include_internal_metadata: bool,
 }
 
 /// PF-84: a selected named account of one provider. Holds names only, never
@@ -1169,14 +1150,6 @@ pub fn named_account_rejection_message(
     format!(
         "{display_name} ({provider_id}) account `{name}` was rejected. {recovery}, or choose another account. The default {display_name} credential is unchanged."
     )
-||||||| 413492cd6c
-=======
-    /// Runtime-only opt-in for internal metadata, independent of the destination check.
-    /// This cannot be loaded from or written to serialized provider configuration.
-    #[serde(skip)]
-    #[schemars(skip)]
-    pub include_internal_metadata: bool,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 /// AWS SigV4 auth configuration for a model provider.
@@ -1248,7 +1221,6 @@ fn default_aws_auth_refresh_timeout_ms() -> NonZeroU64 {
 }
 
 impl ModelProviderInfo {
-<<<<<<< HEAD
     /// Whether this configured entry only declares a billing basis (and
     /// nothing else), so it may name a built-in provider.
     pub fn is_billing_override_only(&self) -> bool {
@@ -1283,8 +1255,8 @@ impl ModelProviderInfo {
         } else {
             ModelProviderCredentialSource::None
         }
-||||||| 413492cd6c
-=======
+    }
+
     /// Checks that a configured Bedrock entry only customizes supported fields.
     /// Call this on the override before merging it with the built-in provider.
     pub fn validate_bedrock_override(&self) -> Result<(), String> {
@@ -1293,12 +1265,13 @@ impl ModelProviderInfo {
             auth: None,
             aws: None,
             http_headers: None,
+            billing: None,
             ..self.clone()
         };
         if unsupported_fields != Self::default() {
             return Err("only supports changing \
 `base_url`, `auth`, `http_headers`, `aws.profile`, `aws.region`, `aws.credential_export`, \
-and `aws.auth_refresh`; \
+`aws.auth_refresh`, and `billing`; \
 other non-default provider fields are not supported"
                 .to_string());
         }
@@ -1313,11 +1286,9 @@ other non-default provider fields are not supported"
             return Err("provider credential_file must be an absolute path".to_string());
         }
         Ok(())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub fn validate(&self) -> std::result::Result<(), String> {
-<<<<<<< HEAD
         if self.runtime_policy.request_body_max_bytes == 0 {
             return Err("runtime_policy.request_body_max_bytes must be greater than zero".into());
         }
@@ -1339,10 +1310,6 @@ other non-default provider fields are not supported"
             return Err("chat_completions_provider must be a JSON object".to_string());
         }
 
-        if self.aws.is_some() {
-||||||| 413492cd6c
-        if self.aws.is_some() {
-=======
         if self.is_gcp() {
             self.validate_gcp_credential_file()?;
         }
@@ -1350,7 +1317,6 @@ other non-default provider fields are not supported"
             gateway.validate(self)?;
         }
         if let Some(aws) = self.aws.as_ref() {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             if self.supports_websockets {
                 // TODO(celia-oai): Support AWS SigV4 signing for WebSocket
                 // upgrade requests before allowing AWS-authenticated providers
@@ -1451,20 +1417,12 @@ other non-default provider fields are not supported"
         let mut headers = HeaderMap::with_capacity(capacity);
         if let Some(extra) = &self.http_headers {
             for (k, v) in extra {
-<<<<<<< HEAD
                 if let (Ok(name), Ok(mut value)) =
-                    (HeaderName::try_from(k), HeaderValue::try_from(v))
+                    (HeaderName::try_from(k), HeaderValue::try_from(v.as_str()))
                 {
                     // Provider headers can carry credentials; keep them out of
                     // `HeaderMap` Debug output.
                     value.set_sensitive(true);
-||||||| 413492cd6c
-                if let (Ok(name), Ok(value)) = (HeaderName::try_from(k), HeaderValue::try_from(v)) {
-=======
-                if let (Ok(name), Ok(value)) =
-                    (HeaderName::try_from(k), HeaderValue::try_from(v.as_str()))
-                {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     headers.insert(name, value);
                 }
             }
@@ -1672,22 +1630,9 @@ other non-default provider fields are not supported"
             wire_api: WireApi::Responses,
             query_params: None,
             http_headers: Some(
-<<<<<<< HEAD
-                [(
-                    "version".to_string(),
-                    OPENAI_CODEX_COMPAT_VERSION.to_string(),
-                )]
-                .into_iter()
-                .collect(),
-||||||| 413492cd6c
-                [("version".to_string(), env!("CARGO_PKG_VERSION").to_string())]
+                [("version".to_string(), OPENAI_CODEX_COMPAT_VERSION.into())]
                     .into_iter()
                     .collect(),
-=======
-                [("version".to_string(), env!("CARGO_PKG_VERSION").into())]
-                    .into_iter()
-                    .collect(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             ),
             env_http_headers: Some(
                 [
@@ -1716,8 +1661,12 @@ other non-default provider fields are not supported"
             requires_openai_auth: true,
             supports_websockets,
             supports_standalone_web_search: true,
-<<<<<<< HEAD
             billing: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: true,
         }
     }
 
@@ -1748,6 +1697,13 @@ other non-default provider fields are not supported"
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     }
 
@@ -1761,7 +1717,7 @@ other non-default provider fields are not supported"
             experimental_bearer_token: None,
             auth: Some(ModelProviderAuthInfo {
                 command: CORBANU_PROVIDER_AUTH_COMMAND.to_string(),
-                args: vec![CLAUDE_PLAN_TOKEN_HELPER_SUBCOMMAND.to_string()],
+                args: vec![CLAUDE_PLAN_TOKEN_HELPER_SUBCOMMAND.into()],
                 timeout_ms: claude_provider_auth_timeout_ms(),
                 // The selected Claude source has its own revision marker and
                 // 401 recovery path. Proactive reruns add no freshness while
@@ -1775,7 +1731,7 @@ other non-default provider fields are not supported"
             query_params: None,
             http_headers: Some(HashMap::from([(
                 "anthropic-beta".to_string(),
-                "claude-code-20250219,oauth-2025-04-20".to_string(),
+                "claude-code-20250219,oauth-2025-04-20".into(),
             )])),
             env_http_headers: None,
             chat_completions_provider: None,
@@ -1791,6 +1747,13 @@ other non-default provider fields are not supported"
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     }
 
@@ -1821,6 +1784,13 @@ other non-default provider fields are not supported"
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     }
 
@@ -1855,6 +1825,13 @@ other non-default provider fields are not supported"
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     }
 
@@ -1896,6 +1873,13 @@ other non-default provider fields are not supported"
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     }
 
@@ -1926,6 +1910,13 @@ other non-default provider fields are not supported"
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     }
 
@@ -1956,6 +1947,13 @@ other non-default provider fields are not supported"
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     }
 
@@ -1986,6 +1984,13 @@ other non-default provider fields are not supported"
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     }
 
@@ -2016,6 +2021,13 @@ other non-default provider fields are not supported"
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     }
 
@@ -2046,6 +2058,13 @@ other non-default provider fields are not supported"
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     }
 
@@ -2076,6 +2095,13 @@ other non-default provider fields are not supported"
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     }
 
@@ -2106,6 +2132,13 @@ other non-default provider fields are not supported"
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     }
 
@@ -2136,6 +2169,13 @@ other non-default provider fields are not supported"
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     }
 
@@ -2166,6 +2206,13 @@ other non-default provider fields are not supported"
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     }
 
@@ -2196,6 +2243,13 @@ other non-default provider fields are not supported"
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     }
 
@@ -2226,14 +2280,13 @@ other non-default provider fields are not supported"
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
-||||||| 413492cd6c
-=======
             capabilities: None,
             project_id: None,
             location: None,
             credential_file: None,
-            include_internal_metadata: true,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            include_internal_metadata: false,
+            model_catalog_url: None,
+            gateway_oauth: None,
         }
     }
 
@@ -2278,16 +2331,12 @@ other non-default provider fields are not supported"
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
-<<<<<<< HEAD
             billing: None,
-||||||| 413492cd6c
-=======
             capabilities: None,
             project_id: None,
             location: None,
             credential_file: None,
             include_internal_metadata: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 
@@ -2327,6 +2376,13 @@ other non-default provider fields are not supported"
             location: None,
             credential_file: None,
             include_internal_metadata: false,
+            account: None,
+            chat_completions_provider: None,
+            stream_actionable_timeout_ms: None,
+            stream_long_failure_retry_threshold_ms: None,
+            stream_long_failure_max_retries: None,
+            runtime_policy: Default::default(),
+            billing: None,
         }
     }
 
@@ -2342,7 +2398,6 @@ other non-default provider fields are not supported"
         self.name == OPENAI_PROVIDER_NAME
     }
 
-<<<<<<< HEAD
     pub fn is_anthropic(&self) -> bool {
         self.name == ANTHROPIC_PROVIDER_NAME
     }
@@ -2407,8 +2462,8 @@ other non-default provider fields are not supported"
         self.base_url
             .as_deref()
             .is_some_and(is_vercel_gateway_base_url)
-||||||| 413492cd6c
-=======
+    }
+
     pub fn supports_codex_backend_routes(&self) -> bool {
         self.is_openai()
             && self.base_url.as_deref().is_none_or(|base_url| {
@@ -2416,7 +2471,6 @@ other non-default provider fields are not supported"
                     .trim_end_matches('/')
                     .ends_with("/backend-api/codex")
             })
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub fn uses_openai_actor_authorization(&self) -> bool {
@@ -2434,7 +2488,6 @@ other non-default provider fields are not supported"
             || self.name == AMAZON_BEDROCK_RUNTIME_PROVIDER_NAME
     }
 
-<<<<<<< HEAD
     /// Z.AI answers a transient overload (code 1305) with a 429, so its
     /// transport retries one. A 429 with a `Retry-After` over a few seconds is
     /// not retried there: the provider-request throttle owns that wait (#510).
@@ -2442,19 +2495,12 @@ other non-default provider fields are not supported"
         self.is_zai()
     }
 
-    pub fn supports_remote_compaction(&self) -> bool {
-        self.is_openai() || is_azure_responses_provider(&self.name, self.base_url.as_deref())
-||||||| 413492cd6c
-    pub fn supports_remote_compaction(&self) -> bool {
-        self.is_openai() || is_azure_responses_provider(&self.name, self.base_url.as_deref())
-=======
     pub fn is_amazon_bedrock_runtime(&self) -> bool {
         self.name == AMAZON_BEDROCK_RUNTIME_PROVIDER_NAME
     }
 
     pub fn is_gcp(&self) -> bool {
         self.name == GCP_PROVIDER_NAME
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub fn has_command_auth(&self) -> bool {
@@ -2491,28 +2537,14 @@ pub fn built_in_model_providers(
     let vercel_anthropic_provider = P::create_vercel_anthropic_provider();
     let vercel_anthropic_fast_provider = P::create_vercel_anthropic_fast_provider();
     let amazon_bedrock_provider = P::create_amazon_bedrock_provider(/*aws*/ None);
-<<<<<<< HEAD
     let pfterminal_plan_anthropic_provider = P::create_pfterminal_plan_anthropic_provider();
-||||||| 413492cd6c
-=======
     let amazon_bedrock_runtime_provider =
         P::create_amazon_bedrock_runtime_provider(/*aws*/ None);
     let gcp_provider = P::create_gcp_provider();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
-<<<<<<< HEAD
     // Corbanu Terminal bundles the first-party OpenAI provider, the local OSS
     // providers, and the curated third-party coding providers exposed in the
     // login/model picker UX. Users can still add more providers in config.toml.
-||||||| 413492cd6c
-    // We do not want to be in the business of adjucating which third-party
-    // providers are bundled with Codex CLI, so we only include the OpenAI and
-    // open source ("oss") providers by default. Users are encouraged to add to
-    // `model_providers` in config.toml to add their own providers.
-=======
-    // Bundle OpenAI, supported cloud-hosted OpenAI backends, and local OSS providers.
-    // Other compatible providers can be added through `model_providers` in config.toml.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     [
         (ANTHROPIC_PROVIDER_ID, anthropic_provider),
         (CLAUDE_PLAN_PROVIDER_ID, claude_plan_provider),
@@ -2595,7 +2627,6 @@ pub fn merge_configured_model_providers(
         (canonical_provider_id(a) == a, a).cmp(&(canonical_provider_id(b) == b, b))
     });
     for (key, mut provider) in configured_model_providers {
-<<<<<<< HEAD
         // A billing-only entry may name a built-in provider by an alias; it
         // adjusts that provider.
         let key = if provider.is_billing_override_only() {
@@ -2603,11 +2634,6 @@ pub fn merge_configured_model_providers(
         } else {
             key
         };
-        if key == AMAZON_BEDROCK_PROVIDER_ID {
-            let billing_override = provider.billing.take();
-||||||| 413492cd6c
-        if key == AMAZON_BEDROCK_PROVIDER_ID {
-=======
         if key == "openai" {
             // Keep the built-in identity, inference routing, and authentication.
             // Only catalog routing is configurable through this provider entry.
@@ -2628,42 +2654,26 @@ pub fn merge_configured_model_providers(
                 }
                 built_in_provider.model_catalog_url = Some(catalog_url);
             }
+            if let Some(built_in_provider) = model_providers.get_mut(&key) {
+                apply_transport_overrides(built_in_provider, provider);
+            }
         } else if matches!(
             key.as_str(),
             AMAZON_BEDROCK_PROVIDER_ID | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID
         ) {
+            // Corbanu: `billing` may be set on the built-in Bedrock entries too.
+            let billing_override = provider.billing.take();
             provider
                 .validate_bedrock_override()
                 .map_err(|message| format!("model_providers.{key} {message}"))?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             let base_url_override = provider.base_url.take();
             let auth_override = provider.auth.take();
             let aws_override = provider.aws.take();
             let http_headers_override = provider.http_headers.take();
-<<<<<<< HEAD
-            if provider != ModelProviderInfo::default() {
-                return Err(format!(
-                    "model_providers.{AMAZON_BEDROCK_PROVIDER_ID} only supports changing \
-`base_url`, `auth`, `http_headers`, `aws.profile`, `aws.region`, and `billing`; other non-default \
-provider fields are not supported"
-                ));
-            }
-
-            if let Some(built_in_provider) = model_providers.get_mut(AMAZON_BEDROCK_PROVIDER_ID) {
-                built_in_provider.billing = billing_override;
-||||||| 413492cd6c
-            if provider != ModelProviderInfo::default() {
-                return Err(format!(
-                    "model_providers.{AMAZON_BEDROCK_PROVIDER_ID} only supports changing \
-`base_url`, `auth`, `http_headers`, `aws.profile`, and `aws.region`; other non-default \
-provider fields are not supported"
-                ));
-            }
-
-            if let Some(built_in_provider) = model_providers.get_mut(AMAZON_BEDROCK_PROVIDER_ID) {
-=======
             if let Some(built_in_provider) = model_providers.get_mut(&key) {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                if billing_override.is_some() {
+                    built_in_provider.billing = billing_override;
+                }
                 built_in_provider.base_url = base_url_override;
                 built_in_provider.auth = auth_override;
                 if let Some(aws_override) = aws_override {
@@ -2676,14 +2686,16 @@ provider fields are not supported"
                         .extend(http_headers_override);
                 }
             }
-<<<<<<< HEAD
+        } else if key == GCP_PROVIDER_ID {
+            let billing_override = provider.billing.take();
+            merge_gcp_provider_overrides(model_providers.get_mut(&key), provider)?;
+            if let Some(built_in_provider) = model_providers.get_mut(&key)
+                && billing_override.is_some()
+            {
+                built_in_provider.billing = billing_override;
+            }
         } else if let Some(built_in_provider) = model_providers.get_mut(&key) {
             apply_transport_overrides(built_in_provider, provider);
-||||||| 413492cd6c
-=======
-        } else if key == GCP_PROVIDER_ID {
-            merge_gcp_provider_overrides(model_providers.get_mut(&key), provider)?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         } else {
             model_providers.insert(key, provider);
         }
@@ -2692,7 +2704,6 @@ provider fields are not supported"
     Ok(model_providers)
 }
 
-<<<<<<< HEAD
 fn apply_transport_overrides(
     built_in_provider: &mut ModelProviderInfo,
     configured_provider: ModelProviderInfo,
@@ -2731,8 +2742,8 @@ fn apply_transport_overrides(
         built_in_provider.websocket_connect_timeout_ms =
             configured_provider.websocket_connect_timeout_ms;
     }
-||||||| 413492cd6c
-=======
+}
+
 /// Validates GCP overrides and applies them when the built-in provider is present.
 pub fn merge_gcp_provider_overrides(
     built_in: Option<&mut ModelProviderInfo>,
@@ -2773,7 +2784,6 @@ pub fn merge_gcp_provider_overrides(
         }
     }
     Ok(())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 pub fn create_oss_provider(default_provider_port: u16, wire_api: WireApi) -> ModelProviderInfo {
@@ -2823,16 +2833,12 @@ pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> M
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
-<<<<<<< HEAD
         billing: None,
-||||||| 413492cd6c
-=======
         capabilities: None,
         project_id: None,
         location: None,
         credential_file: None,
         include_internal_metadata: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 

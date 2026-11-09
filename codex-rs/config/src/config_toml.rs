@@ -34,16 +34,12 @@ use crate::types::UriBasedFileOpener;
 use crate::types::WindowsToml;
 use codex_features::FeaturesToml;
 use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
-<<<<<<< HEAD
+use codex_model_provider_info::AMAZON_BEDROCK_RUNTIME_PROVIDER_ID;
 use codex_model_provider_info::AMBIENT_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
 use codex_model_provider_info::BUILT_IN_MODEL_PROVIDER_NAMES;
-||||||| 413492cd6c
-=======
-use codex_model_provider_info::AMAZON_BEDROCK_RUNTIME_PROVIDER_ID;
 use codex_model_provider_info::GCP_PROVIDER_ID;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
 use codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
@@ -80,23 +76,13 @@ use serde::Serialize;
 use serde::de::Error as SerdeError;
 use serde_json::Value as JsonValue;
 
-<<<<<<< HEAD
-const RESERVED_MODEL_PROVIDER_IDS: [&str; 13] = [
+const RESERVED_MODEL_PROVIDER_IDS: [&str; 15] = [
     AMBIENT_PROVIDER_ID,
-||||||| 413492cd6c
-const RESERVED_MODEL_PROVIDER_IDS: [&str; 4] = [
-=======
-const RESERVED_MODEL_PROVIDER_IDS: [&str; 6] = [
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     AMAZON_BEDROCK_PROVIDER_ID,
-<<<<<<< HEAD
     BASETEN_ANTHROPIC_PROVIDER_ID,
     BASETEN_PROVIDER_ID,
-||||||| 413492cd6c
-=======
     AMAZON_BEDROCK_RUNTIME_PROVIDER_ID,
     GCP_PROVIDER_ID,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     OPENAI_PROVIDER_ID,
     OPENROUTER_PROVIDER_ID,
     OLLAMA_OSS_PROVIDER_ID,
@@ -372,19 +358,13 @@ pub struct ConfigToml {
     #[serde(default, deserialize_with = "deserialize_model_providers")]
     pub model_providers: HashMap<String, ModelProviderInfo>,
 
-<<<<<<< HEAD
     /// PF-84 (`named_accounts` feature): the account each provider uses,
     /// keyed by provider id, for example `zai = "work"`. Unlisted providers
     /// and `"default"` use today's credentials.
     #[serde(default)]
     pub provider_accounts: Option<BTreeMap<String, String>>,
 
-    /// Maximum number of bytes to include from an AGENTS.md project doc file.
-||||||| 413492cd6c
-    /// Maximum number of bytes to include from an AGENTS.md project doc file.
-=======
     /// Maximum total bytes of project instruction content across all selected environments.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     #[serde(default = "default_project_doc_max_bytes")]
     pub project_doc_max_bytes: Option<usize>,
 
@@ -1046,24 +1026,14 @@ pub fn validate_reserved_model_provider_ids(
     // An entry that only declares `billing` adjusts the built-in provider
     // rather than replacing it.
     let mut conflicts = model_providers
-<<<<<<< HEAD
         .iter()
         .filter(|(key, provider)| {
-            key.as_str() != AMAZON_BEDROCK_PROVIDER_ID
-                && key.as_str() != AMBIENT_PROVIDER_ID
-                && RESERVED_MODEL_PROVIDER_IDS.contains(&key.as_str())
-                && !provider.is_billing_override_only()
-||||||| 413492cd6c
-        .keys()
-        .filter(|key| {
-            key.as_str() != AMAZON_BEDROCK_PROVIDER_ID
-                && RESERVED_MODEL_PROVIDER_IDS.contains(&key.as_str())
-=======
-        .keys()
-        .filter(|key| {
-            if key.as_str() == "openai" {
-                let provider = &model_providers[*key];
-                return provider
+            if provider.is_billing_override_only() {
+                return false;
+            }
+            if key.as_str() == OPENAI_PROVIDER_ID {
+                // The built-in OpenAI entry may only redirect its catalog.
+                return *provider
                     != &ModelProviderInfo {
                         model_catalog_url: provider.model_catalog_url.clone(),
                         ..Default::default()
@@ -1071,9 +1041,11 @@ pub fn validate_reserved_model_provider_ids(
             }
             !matches!(
                 key.as_str(),
-                AMAZON_BEDROCK_PROVIDER_ID | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID | GCP_PROVIDER_ID
+                AMAZON_BEDROCK_PROVIDER_ID
+                    | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID
+                    | GCP_PROVIDER_ID
+                    | AMBIENT_PROVIDER_ID
             ) && RESERVED_MODEL_PROVIDER_IDS.contains(&key.as_str())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         })
         .map(|(key, _)| format!("`{key}`"))
         .collect::<Vec<_>>();
@@ -1095,11 +1067,15 @@ pub fn validate_reserved_model_provider_names(
     let mut conflicts = model_providers
         .iter()
         .filter(|(key, provider)| {
-            key.as_str() != AMAZON_BEDROCK_PROVIDER_ID
-                && key.as_str() != AMBIENT_PROVIDER_ID
-                && BUILT_IN_MODEL_PROVIDER_NAMES
-                    .iter()
-                    .any(|reserved_name| provider.name.trim().eq_ignore_ascii_case(reserved_name))
+            !matches!(
+                key.as_str(),
+                AMAZON_BEDROCK_PROVIDER_ID
+                    | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID
+                    | GCP_PROVIDER_ID
+                    | AMBIENT_PROVIDER_ID
+            ) && BUILT_IN_MODEL_PROVIDER_NAMES
+                .iter()
+                .any(|reserved_name| provider.name.trim().eq_ignore_ascii_case(reserved_name))
         })
         .map(|(key, provider)| format!("`{key}` (`{}`)", provider.name.trim()))
         .collect::<Vec<_>>();
@@ -1121,37 +1097,6 @@ pub fn validate_model_providers(
     validate_reserved_model_provider_ids(model_providers)?;
     validate_reserved_model_provider_names(model_providers)?;
     for (key, provider) in model_providers {
-<<<<<<< HEAD
-        if key != AMAZON_BEDROCK_PROVIDER_ID {
-            if provider.aws.is_some() {
-                return Err(format!(
-                    "model_providers.{key}: provider aws is only supported for `{AMAZON_BEDROCK_PROVIDER_ID}`"
-                ));
-            }
-            // A built-in provider may be named with only `billing` set.
-            let built_in_billing = provider.is_billing_override_only()
-                && codex_model_provider_info::built_in_model_providers(
-                    /*openai_base_url*/ None,
-                )
-                .contains_key(codex_model_provider_info::canonical_provider_id(key));
-            if provider.name.trim().is_empty() && !built_in_billing {
-                return Err(format!(
-                    "model_providers.{key}: provider name must not be empty"
-                ));
-            }
-||||||| 413492cd6c
-        if key != AMAZON_BEDROCK_PROVIDER_ID {
-            if provider.aws.is_some() {
-                return Err(format!(
-                    "model_providers.{key}: provider aws is only supported for `{AMAZON_BEDROCK_PROVIDER_ID}`"
-                ));
-            }
-            if provider.name.trim().is_empty() {
-                return Err(format!(
-                    "model_providers.{key}: provider name must not be empty"
-                ));
-            }
-=======
         if matches!(
             key.as_str(),
             AMAZON_BEDROCK_PROVIDER_ID | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID
@@ -1165,11 +1110,16 @@ pub fn validate_model_providers(
 `{AMAZON_BEDROCK_PROVIDER_ID}` or `{AMAZON_BEDROCK_RUNTIME_PROVIDER_ID}`"
             ));
         }
+        // A built-in provider may be named with only `billing` set.
+        let built_in_billing = provider.is_billing_override_only()
+            && codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)
+                .contains_key(codex_model_provider_info::canonical_provider_id(key));
         if !matches!(
             key.as_str(),
             AMAZON_BEDROCK_PROVIDER_ID | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID | GCP_PROVIDER_ID
-        ) && key != "openai"
+        ) && key != OPENAI_PROVIDER_ID
             && provider.name.trim().is_empty()
+            && !built_in_billing
         {
             return Err(format!(
                 "model_providers.{key}: provider name must not be empty"
@@ -1179,7 +1129,6 @@ pub fn validate_model_providers(
             provider
                 .validate_gcp_credential_file()
                 .map_err(|message| format!("model_providers.{key}: {message}"))?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
         provider
             .validate()
@@ -1330,7 +1279,6 @@ command = "   "
     }
 
     #[test]
-<<<<<<< HEAD
     fn security_settings_round_trip_stable_values() {
         let config: ConfigToml = toml::from_str(
             r#"
@@ -1364,8 +1312,26 @@ level = "moderate"
                 toml::from_str::<ConfigToml>(invalid).is_err(),
                 "explicit invalid state should fail: {invalid}"
             );
-||||||| 413492cd6c
-=======
+        }
+    }
+
+    #[test]
+    fn custom_providers_cannot_take_cloud_provider_names() {
+        for name in ["Amazon Bedrock Runtime", "Google Cloud Vertex AI"] {
+            let error = toml::from_str::<ConfigToml>(&format!(
+                "[model_providers.custom]\nname = \"{name}\"\nbase_url = \"https://example.com/v1\"\n"
+            ))
+            .expect_err("a custom provider must not reuse a built-in provider name");
+            assert!(
+                error
+                    .to_string()
+                    .contains("reserved built-in provider names"),
+                "{name}: {error}"
+            );
+        }
+    }
+
+    #[test]
     fn gcp_provider_accepts_partial_endpoint_and_auth_overrides() {
         let config = toml::from_str::<ConfigToml>(
             r#"
@@ -1405,7 +1371,6 @@ credential_file = "{credential_file}"
             assert!(error.to_string().contains(
                 "model_providers.gcp: provider credential_file must be an absolute path"
             ));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 }

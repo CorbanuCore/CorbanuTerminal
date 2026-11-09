@@ -201,13 +201,7 @@ pub async fn load_config_layers_state(
         )
     };
     let active_user_profile = overrides.user_config_profile.clone();
-<<<<<<< HEAD
     let user_home_dir = overrides.user_home_dir.clone();
-    let ignore_managed_requirements = overrides.ignore_managed_requirements;
-||||||| 413492cd6c
-    let ignore_managed_requirements = overrides.ignore_managed_requirements;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let ignore_user_config = overrides.ignore_user_config;
     let ignore_project_config = overrides.ignore_project_config;
     let ignore_user_and_project_exec_policy_rules =
@@ -1711,7 +1705,6 @@ fn apply_resolved_values(original: &mut TomlValue, resolved: TomlValue) {
     }
 }
 
-<<<<<<< HEAD
 /// The user's home directory. Its `.codex` folder is the Codex CLI's own
 /// home, never a project config.
 fn user_home_dirs(explicit: Option<&Path>) -> Vec<PathBuf> {
@@ -1730,14 +1723,9 @@ fn user_home_dirs(explicit: Option<&Path>) -> Vec<PathBuf> {
         .collect()
 }
 
-async fn find_project_root(
-||||||| 413492cd6c
-async fn find_project_root(
-=======
 /// Finds the nearest ancestor with a configured project marker, or returns `cwd`.
 /// Callers must use markers from configuration loaded before project layers.
 pub async fn find_project_root(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     fs: &dyn ExecutorFileSystem,
     cwd: &AbsolutePathBuf,
     project_root_markers: &[String],
@@ -1761,21 +1749,6 @@ pub async fn discover_project_root(
         for marker in project_root_markers {
             let marker_path = ancestor.join(marker);
             let marker_path_uri = PathUri::from_abs_path(&marker_path);
-<<<<<<< HEAD
-            let Ok(metadata) = fs.get_metadata(&marker_path_uri, /*sandbox*/ None).await else {
-                continue;
-            };
-            if marker == ".git"
-                && metadata.is_directory
-                && fs
-                    .get_metadata(
-                        &PathUri::from_abs_path(&marker_path.join("HEAD")),
-||||||| 413492cd6c
-            if fs
-                .get_metadata(&marker_path_uri, /*sandbox*/ None)
-                .await
-                .is_ok()
-=======
             let Ok(metadata) = fs
                 .get_metadata(&marker_path_uri, Default::default(), /*sandbox*/ None)
                 .await
@@ -1788,7 +1761,6 @@ pub async fn discover_project_root(
                     .get_metadata(
                         &PathUri::from_abs_path(&marker_path.join("HEAD")),
                         Default::default(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                         /*sandbox*/ None,
                     )
                     .await
@@ -1796,12 +1768,7 @@ pub async fn discover_project_root(
             {
                 continue;
             }
-<<<<<<< HEAD
-            return Ok(ancestor);
-||||||| 413492cd6c
-=======
             return Ok(Some(ancestor));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
     Ok(None)
@@ -1823,20 +1790,6 @@ async fn find_git_checkout_root(
     for dir in base.ancestors() {
         let dot_git = dir.join(".git");
         let dot_git_uri = PathUri::from_abs_path(&dot_git);
-<<<<<<< HEAD
-        let Ok(metadata) = fs.get_metadata(&dot_git_uri, /*sandbox*/ None).await else {
-            continue;
-        };
-        if metadata.is_directory
-            && fs
-                .get_metadata(
-                    &PathUri::from_abs_path(&dot_git.join("HEAD")),
-||||||| 413492cd6c
-        if fs
-            .get_metadata(&dot_git_uri, /*sandbox*/ None)
-            .await
-            .is_ok()
-=======
         let Ok(metadata) = fs
             .get_metadata(&dot_git_uri, Default::default(), /*sandbox*/ None)
             .await
@@ -1848,7 +1801,6 @@ async fn find_git_checkout_root(
                 .get_metadata(
                     &PathUri::from_abs_path(&dot_git.join("HEAD")),
                     Default::default(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     /*sandbox*/ None,
                 )
                 .await
@@ -1901,6 +1853,7 @@ async fn load_project_layers(
         project_root,
         trust_context,
         codex_home,
+        user_home_dir,
         strict_config,
     )
     .await?;
@@ -1939,6 +1892,7 @@ async fn discover_project_layers(
     project_root: &AbsolutePathBuf,
     trust_context: &ProjectTrustContext,
     codex_home: &Path,
+    user_home_dir: Option<&Path>,
     strict_config: bool,
 ) -> io::Result<DiscoveredProjectLayers> {
     let codex_home_abs = AbsolutePathBuf::from_absolute_path(codex_home)?;
@@ -2061,35 +2015,11 @@ async fn discover_project_layers(
                         dot_codex_abs.as_path(),
                     )?;
                 }
-<<<<<<< HEAD
-                let ignored_project_config_keys = sanitize_project_config(&mut config);
-                let config =
-                    resolve_relative_paths_in_config_toml(config, dot_codex_abs.as_path())?;
-                let config = merge_root_checkout_project_hooks(
-                    fs,
-                    config,
-                    hooks_config_folder_override.as_ref(),
-                    loads_project_config,
-                )
-                .await?;
-||||||| 413492cd6c
-                let ignored_project_config_keys = sanitize_project_config(&mut config);
-                let config =
-                    resolve_relative_paths_in_config_toml(config, dot_codex_abs.as_path())?;
-                let config = merge_root_checkout_project_hooks(
-                    fs,
-                    config,
-                    hooks_config_folder_override.as_ref(),
-                    decision.is_trusted(),
-                )
-                .await?;
-=======
                 let ignored_project_config_keys = sanitize_project_config(
                     &mut config,
                     trust_context.credential_broker,
                     &trust_context.credential_broker_provider_env_keys,
                 );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 if disabled_reason.is_none() && !ignored_project_config_keys.is_empty() {
                     startup_warnings.push(project_ignored_config_keys_warning(
                         &dot_codex_abs,
@@ -2109,33 +2039,9 @@ async fn discover_project_layers(
                     // If there is no config.toml file, record an empty entry
                     // for this project layer, as this may still have subfolders
                     // that are significant in the overall ConfigLayerStack.
-<<<<<<< HEAD
-                    let config = merge_root_checkout_project_hooks(
-                        fs,
-                        TomlValue::Table(toml::map::Map::new()),
-                        hooks_config_folder_override.as_ref(),
-                        loads_project_config,
-                    )
-                    .await?;
-                    layers.push(project_layer_entry(
-                        &dot_codex_abs,
-                        config,
-||||||| 413492cd6c
-                    let config = merge_root_checkout_project_hooks(
-                        fs,
-                        TomlValue::Table(toml::map::Map::new()),
-                        hooks_config_folder_override.as_ref(),
-                        decision.is_trusted(),
-                    )
-                    .await?;
-                    layers.push(project_layer_entry(
-                        &dot_codex_abs,
-                        config,
-=======
                     layers.push(DiscoveredProjectLayer {
                         dot_codex_folder: dot_codex_abs,
                         config: TomlValue::Table(toml::map::Map::new()),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                         disabled_reason,
                         hooks_config_folder_override,
                         load_root_checkout_hooks: true,

@@ -89,6 +89,7 @@ pub(crate) async fn load_named_profile(
     profile: &str,
     region_override: Option<String>,
     service: &str,
+    factory: codex_http_client::HttpClientFactory,
     files: Option<ProfileFiles>,
 ) -> Result<AwsAuthContext, AwsAuthError> {
     if service.trim().is_empty() {
@@ -96,8 +97,11 @@ pub(crate) async fn load_named_profile(
     }
     let region = named_profile_region(profile, region_override, files.clone()).await;
     // Role chains call STS, which needs the region.
+    // STS and SSO calls go through the application-owned client, so the
+    // account's network policy applies to them.
     let provider_config = ProviderConfig::without_region()
-        .with_region(region.as_ref().ok().cloned().map(Region::new));
+        .with_region(region.as_ref().ok().cloned().map(Region::new))
+        .with_http_client(crate::transport::http_client(factory.clone()));
     let mut builder = ProfileFileCredentialsProvider::builder()
         .configure(&provider_config)
         .profile_name(profile);
@@ -136,6 +140,7 @@ pub(crate) async fn load_named_profile(
         });
     }
     Ok(AwsAuthContext {
+        network_policy: factory.network_policy().clone(),
         credentials_provider: SharedCredentialsProvider::new(provider),
         region: region?,
         service: service.trim().to_string(),

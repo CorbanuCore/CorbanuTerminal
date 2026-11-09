@@ -67,7 +67,6 @@ def build_package_dir(
         bin_dir / f"codex-code-mode-host{spec.exe_suffix}",
         is_windows=spec.is_windows,
     )
-<<<<<<< HEAD
     strip_packaged_executable(
         bin_dir / f"codex-code-mode-host{spec.exe_suffix}",
         spec,
@@ -98,14 +97,14 @@ def build_package_dir(
                 symbols_dir=symbols_dir,
             )
             placed_binaries.append((source, destination))
-||||||| 413492cd6c
-=======
-    copy_executable(
-        inputs.exec_server_bin,
-        bin_dir / f"codex-exec-server{spec.exe_suffix}",
-        is_windows=spec.is_windows,
-    )
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    if inputs.exec_server_bin is not None:
+        exec_server_path = bin_dir / f"codex-exec-server{spec.exe_suffix}"
+        copy_executable(
+            inputs.exec_server_bin,
+            exec_server_path,
+            is_windows=spec.is_windows,
+        )
+        strip_packaged_executable(exec_server_path, spec, symbols_dir=symbols_dir)
     copy_executable(inputs.rg_bin, path_dir / spec.rg_name, is_windows=spec.is_windows)
 
     if inputs.bwrap_bin is not None:
@@ -134,17 +133,14 @@ def build_package_dir(
         "target": spec.target,
         "variant": variant.name,
         "entrypoint": f"bin/{entrypoint_name}",
-<<<<<<< HEAD
         "extraBinaries": [
             f"bin/{extra.entrypoint_name(spec)}" for extra in variant.extra_binaries
         ],
-||||||| 413492cd6c
-=======
-        "execServer": f"bin/codex-exec-server{spec.exe_suffix}",
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         "resourcesDir": "codex-resources",
         "pathDir": "codex-path",
     }
+    if inputs.exec_server_bin is not None:
+        metadata["execServer"] = f"bin/codex-exec-server{spec.exe_suffix}"
     if variant.name in TERMINAL_PACKAGE_VARIANTS:
         metadata["telegramResourcesDir"] = "codex-resources/telegram"
     write_json(package_dir / "codex-package.json", metadata)
@@ -177,17 +173,16 @@ def validate_package_dir(
         "target": spec.target,
         "variant": variant.name,
         "entrypoint": f"bin/{variant.entrypoint_name(spec)}",
-<<<<<<< HEAD
         "extraBinaries": [
             f"bin/{extra.entrypoint_name(spec)}" for extra in variant.extra_binaries
         ],
-||||||| 413492cd6c
-=======
-        "execServer": f"bin/codex-exec-server{spec.exe_suffix}",
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         "resourcesDir": "codex-resources",
         "pathDir": "codex-path",
     }
+    # A variant that does not ship the executor must not name one.
+    expected_metadata["execServer"] = (
+        f"bin/codex-exec-server{spec.exe_suffix}" if variant.ships_exec_server else None
+    )
     if variant.name in TERMINAL_PACKAGE_VARIANTS:
         expected_metadata["telegramResourcesDir"] = "codex-resources/telegram"
     for key, expected in expected_metadata.items():
@@ -200,9 +195,10 @@ def validate_package_dir(
     required_files = [
         Path("bin") / variant.entrypoint_name(spec),
         Path("bin") / f"codex-code-mode-host{spec.exe_suffix}",
-        Path("bin") / f"codex-exec-server{spec.exe_suffix}",
         Path("codex-path") / spec.rg_name,
     ]
+    if variant.ships_exec_server:
+        required_files.append(Path("bin") / f"codex-exec-server{spec.exe_suffix}")
     executable_files = list(required_files)
     for extra in variant.extra_binaries:
         extra_path = Path("bin") / extra.entrypoint_name(spec)
