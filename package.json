@@ -11,16 +11,10 @@
     "prettier": "^3.5.3"
   },
   "resolutions": {
-<<<<<<< HEAD
-    "@modelcontextprotocol/sdk": "1.26.0",
+    "@modelcontextprotocol/sdk": "1.32.0",
     "@eslint/eslintrc>ajv": "6.12.6",
     "ajv": "8.18.0",
     "eslint>ajv": "6.12.6",
-||||||| 413492cd6c
-    "@modelcontextprotocol/sdk": "1.26.0",
-=======
-    "@modelcontextprotocol/sdk": "1.32.0",
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     "braces": "^3.0.3",
     "esbuild": "0.28.1",
     "fast-uri": "3.1.1",
@@ -36,7 +30,9 @@
     "picomatch@4.0.3": "4.0.4",
     "qs": "6.15.2",
     "rollup": "4.59.0",
-    "semver": "^7.7.1"
+    "semver": "^7.7.1",
+    "undici": "7.30.1",
+    "@modelcontextprotocol/conformance>zod": "4.6.7"
   },
   "overrides": {
     "punycode": "^2.3.1"
