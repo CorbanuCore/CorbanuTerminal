@@ -31,12 +31,12 @@ path	kind	code	area	slice	tier	owner	contributor	status	resolution	hunks	lines	t
 AGENTS.md	modify/delete	UD	other	S1d tooling/repo	1	unassigned	yes	open		0	0	false	false	false	false	deleted upstream; skeleton keeps ours
 CHANGELOG.md	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		1	249	false	false	false	false	
 MODULE.bazel	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	7	100	false	false	false	false	v8 crate archive from CorbanuCore/rusty_v8, same sha256 (D317); voice crate annotations and the voice_sources extension are unused after D316: confirm Bazel tolerates them or drop them in S4
-MODULE.bazel.lock	content	UU	schemas/locks	S0 manifests/locks/CI	0	integrator	no	resolved	merged	30	461	false	false	false	false	regenerated from main's lock
+MODULE.bazel.lock	content	UU	schemas/locks	S0 manifests/locks/CI	0	integrator	no	resolved	merged	30	461	false	false	false	false	regenerated from main's lock; ci-1982 (#1982): openssl crate facts 0.10.75 -> 0.10.78 (bazel mod deps --lockfile_mode=update)
 codex-cli/bin/codex.js	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		4	21	false	false	false	false	
 codex-rs/.cargo/audit.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	20	false	false	false	true	main's ignores; duplicate RUSTSEC-2024-0449 dropped
 codex-rs/.config/nextest.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	14	false	false	false	false	
 codex-rs/.gitignore	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	19	false	false	false	false	
-codex-rs/Cargo.lock	content	UU	schemas/locks	S0 manifests/locks/CI	0	integrator	no	resolved	merged	77	755	false	false	false	false	regenerated from main's lock; S3a (sync-s3a) edit: codex-network-proxy gains codex-log-guard (workspace crate; no third-party change)
+codex-rs/Cargo.lock	content	UU	schemas/locks	S0 manifests/locks/CI	0	integrator	no	resolved	merged	77	755	false	false	false	false	regenerated from main's lock; S3a (sync-s3a) edit: codex-network-proxy gains codex-log-guard (workspace crate; no third-party change); ci-1982 (#1982): openssl 0.10.75 -> 0.10.78 (RUSTSEC-2026-0463; cargo update -p openssl --precise 0.10.78, nothing else moved, openssl-sys stays 0.9.118)
 codex-rs/Cargo.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	19	179	false	false	false	false	union of workspaces; v8 patch points at CorbanuCore/rusty_v8 (D317); voice-host excluded (D316)
 codex-rs/agent-roles/src/loader.rs	content	UU	other	S2c core agents	2	unassigned	no	open		2	137	false	false	false	false	
 codex-rs/analytics/src/analytics_client_tests.rs	modify/delete	UD	other	S1c other crates	1	sync-s1c2 (maintainer)	yes	resolved	deleted	0	0	true	false	false	false	followed upstream's split of these tests into src/tests/suite (#46488); main's edits here were only compile fixes for new fields, re-applied in the suite files (follow-up rows)
