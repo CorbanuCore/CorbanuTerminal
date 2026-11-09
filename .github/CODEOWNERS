@@ -136,4 +136,6 @@
 /codex-rs/prompts/src/guardian_instructions.rs @corbanu-security
 /codex-rs/prompts/src/model_messages/guardian.rs @corbanu-security
 /codex-rs/guardian-context/ @corbanu-security
+/codex-rs/ext/guardian-v2/ @corbanu-security
+/codex-rs/ext/guardian-v3/ @corbanu-security
 # END sync-branch security owners

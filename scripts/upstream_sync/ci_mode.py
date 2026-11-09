@@ -227,9 +227,13 @@ SYNC_SUCCESSORS = (
     # main: /codex-rs/core/src/guardian/prompt.rs (upstream #46026 moved prompt assembly here)
     "/codex-rs/prompts/src/guardian_instructions.rs",
     "/codex-rs/prompts/src/model_messages/guardian.rs",
-    # New upstream crate (#41392: guardian authorization, enforcement, trusted tools); not a move, owned
-    # here pending the security owner's decision for main.
+    # New upstream guardian code that isn't a move of main-owned files, owned here pending the security
+    # owner's decision for main: guardian-context (#41392: authorization, enforcement, trusted tools),
+    # guardian-v2 (async scorer authorization/trusted tools/approval; reviewer config and permission
+    # profile, #45729) and guardian-v3 (guardian evidence).
     "/codex-rs/guardian-context/",
+    "/codex-rs/ext/guardian-v2/",
+    "/codex-rs/ext/guardian-v3/",
 )
 MAIN_BLOCK_BEGIN = "# BEGIN Corbanu security owners"
 MAIN_BLOCK_END = "# END Corbanu security owners"
@@ -259,18 +263,22 @@ def codeowners(action, wt, owner=None):
             sys.exit("error: main's D318 block or the sync block is missing")
         if text[end + len(CO_END) :].strip():
             sys.exit("error: the sync block is not last in CODEOWNERS")
-        owners = {
-            line.split()[1]
+        lines = [
+            line.split()
             for line in text[start:end].splitlines()
             if line.startswith("/")
-        }
-        if owner and owners != {owner}:
-            sys.exit(f"error: sync block owners {sorted(owners)} != {owner}")
-        owned = {
-            line.split()[0]
-            for line in text[start:end].splitlines()
-            if line.startswith("/")
-        }
+        ]
+        unowned = [parts[0] for parts in lines if len(parts) < 2]
+        if unowned:
+            sys.exit(
+                "error: sync block patterns without an owner: " + ", ".join(unowned)
+            )
+        if not owner:
+            sys.exit("error: codeowners drift needs the expected @owner")
+        others = sorted({o for parts in lines for o in parts[1:]} - {owner})
+        if others:
+            sys.exit(f"error: sync block names owners other than {owner}: {others}")
+        owned = {parts[0] for parts in lines}
         missing = [
             line.split()[0]
             for line in main[m_start:m_end].splitlines()
