@@ -624,8 +624,12 @@ async fn end_a_running_command(
 /// for reading (win-desk's real-desktop probe). It can today: the runner's
 /// default DACL (D324) gives the sandbox users' group, which every elevated
 /// command holds, read access, and read rights pass a write-restricted token.
+/// It asks what [`unreadable_parts`] asks of a legacy command: the host may
+/// be waited on, but not queried in full, read or ended. Un-ignoring it also
+/// needs a normal-session run with a recorded setup in
+/// `windows-security-probes`, as D429's elevated test has.
 #[test]
-#[ignore = "#1803: an elevated command reads another workspace's ConPTY console host (what that command printed) through the sandbox users' group in the runner's default DACL; measured open on main and #1800 (win-desk, real desktop) and on CI; the fix (D461) or follow-up (D417) is the owner's decision"]
+#[ignore = "#1803: an elevated command reads another workspace's ConPTY console host (what that command printed) through the sandbox users' group in the runner's default DACL; measured open on main and #1800 (win-desk, real desktop) and on CI (run 42581149322); the fix (D461) or follow-up (D417) is the owner's decision"]
 fn sec_win_1803_elevated_command_cannot_read_another_workspaces_console_host() {
     let Some(codex_home) = elevated_home("sec-win-1803") else {
         return;

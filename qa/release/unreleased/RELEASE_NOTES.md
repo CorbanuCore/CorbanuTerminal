@@ -420,9 +420,9 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
 - **Not fixed yet: another project's terminal window** (#1803). A command
   can still read the memory of the console host behind another project's
   terminal command, including what that command printed and what you typed
-  at it. Measured on a real Windows desktop before and after this change.
-  Avoid typing secrets into one project's command while another project's
-  commands run; see `docs/sandbox.md`.
+  at it. Measured on a real Windows desktop in this version and the previous
+  one. While another project's commands run, don't type secrets into a
+  project's command or run commands that print them; see `docs/sandbox.md`.
 - **Setup runs again once** (a new setup version). If your Windows account
   is an administrator, it creates the account and gives it the Windows right
   "Replace a process level token" (`SeAssignPrimaryTokenPrivilege`). A

@@ -265,10 +265,14 @@ workspace's terminal output and typed input), as before: the runner's
 default DACL (D324) gives the sandbox users' group read access, which every
 elevated command holds. win-desk measured it on a real desktop on main and on
 #1800, admin and normal sessions alike: another workspace's command opened
-the host for `PROCESS_VM_READ` and `THREAD_GET_CONTEXT` and found a secret
-the holding command had printed. The ignored
+the host for `PROCESS_VM_READ`, `PROCESS_TERMINATE` and `THREAD_GET_CONTEXT`
+and found a secret the holding command had printed; CI run 42581149322
+measured the same in both sessions (27.5 MB read, the secret found). The
+ignored
 `sec_win_1803_elevated_command_cannot_read_another_workspaces_console_host`
-is that probe; it flips when the fix lands (D461/D417). Two routes
+is that probe; it flips when the fix lands (D461/D417), and then also needs
+a normal-session run with a recorded setup in `windows-security-probes`, as
+D429's elevated test has. Two routes
 still start a child
 outside the command's job: the COM servers `ShellBrowserWindow` (the child
 runs at Low integrity but with an unrestricted token) and

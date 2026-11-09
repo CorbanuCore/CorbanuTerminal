@@ -29,21 +29,22 @@ using at that moment.
   borrow the other's access and write in that project's folders while the
   other runs (#1560), and read the other's memory, such as secrets in its
   environment or what you type at its prompts (#1838), so avoid running
-  commands in several projects at once. The default sandbox closes the ways
-  of doing this that have been measured, if your account is an administrator
-  (see below).
+  commands in several projects at once. If your account is an
+  administrator, the default sandbox closes most of these, but not reading
+  another project's terminal window (#1803; see below).
 - Drives without Windows permissions, such as FAT or exFAT USB drives: neither
   sandbox can protect files there.
 
 The default sandbox runs commands as a separate account with a firewall-based
 network block, and protects more. If your Windows account is an administrator,
 each of its commands runs on a logon of its own, so one command can't borrow
-another's processes or token or read the memory of another's processes (#1560,
-#1803). It can still read another project's terminal window (see below). The
-program that starts them runs as a third account, `CodexSandboxRunner`, which no
-command uses (#1721). Setup gives that account the Windows right "Replace a
-process level token" (`SeAssignPrimaryTokenPrivilege`), which it needs to
-start each command on its own logon, and denies it network, remote desktop,
+another's processes or token or read the memory of another command's own
+processes (#1560). It can still read another project's terminal window (#1803;
+see below). The program that starts them runs as a third account,
+`CodexSandboxRunner`, which no command uses (#1721). Setup gives that
+account the Windows right "Replace a process level token"
+(`SeAssignPrimaryTokenPrivilege`), which it needs to start each command on
+its own logon, and denies it network, remote desktop,
 batch and service sign-in. Its password is stored, encrypted for this
 computer, in the sandbox's secrets folder under your Codex home. That folder
 gives you, administrators and the system access; if your Codex home is
@@ -90,14 +91,16 @@ Two gaps remain with the runner account too:
 
 - **Another project's terminal window** (#1803). A command that runs in a
   terminal (a pseudo-console) gets a console host process (`conhost.exe`),
-  which the program that starts commands creates. Any other default-sandbox command, in
-  any project, can read that process's memory: what the command printed and
-  what you typed at its prompts, such as a password. This was measured on a
-  real Windows desktop: a command in one project found a secret that a
-  command in another project had printed, both before and after this change,
-  and in both an administrator's and a normal session. Until this is fixed,
-  avoid typing secrets into one project's command while commands from another
-  project run.
+  which the program that starts commands creates. Any other default-sandbox
+  command, in any project, can read that process's memory: what the command
+  printed and what you typed at its prompts, such as a password. It can
+  probably also end that process, and with it the terminal command. This was
+  measured on a real Windows desktop: a command in one project found a secret
+  that a command in another project had printed, in this version and the
+  previous one, and whether Corbanu Terminal ran elevated ("Run as
+  administrator") or not. Until this is fixed, while commands from another
+  project run, don't type secrets into a project's command and don't run
+  commands that print them (tokens, `env`, credential helpers).
 - Another elevated command can resume a command's suspended threads.
   Commands aren't started suspended, so this matters only for threads a
   command suspends itself.
