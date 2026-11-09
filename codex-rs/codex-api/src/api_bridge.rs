@@ -308,7 +308,7 @@ const BIO_POLICY_ERROR_CODE: &str = "bio_policy";
 const BIO_POLICY_FALLBACK_MESSAGE: &str = "This content was flagged for possible biological risk.";
 const MISALIGNMENT_POLICY_VIOLATION_ERROR_CODE: &str = "misalignment_policy_violation";
 const MISALIGNMENT_POLICY_VIOLATION_FALLBACK_MESSAGE: &str =
-    "This request was blocked due to a misalignment policy violation.";
+    "The provider stopped this conversation for review of agent activity.";
 const CLOUDFLARE_BLOCKED_MESSAGE: &str =
     "Access blocked by Cloudflare. This usually happens when connecting from a restricted region";
 
@@ -449,6 +449,7 @@ pub(crate) fn misalignment_policy_violation(
 
 /// The provider's words, then why nothing is retried.
 pub(crate) fn misalignment_policy_message(message: Option<&str>) -> String {
+    // Main's 0.1.40 fallback: it names the stop without accusing the user.
     let message = message
         .filter(|text| !text.trim().is_empty())
         .unwrap_or(MISALIGNMENT_POLICY_VIOLATION_FALLBACK_MESSAGE);
