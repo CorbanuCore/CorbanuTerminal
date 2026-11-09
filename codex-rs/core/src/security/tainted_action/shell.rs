@@ -122,7 +122,7 @@ pub(super) struct Lexed {
     /// quoted or escaped redirection file holding a blank as one word,
     /// `&>` as one redirection, a redirection's words moved last, a second
     /// `<` or `<<<`, or a substitution with its stdout redirected left
-    /// unspliced (see `simple_commands_read`).
+    /// unspliced, or literal empty braces retained (see `simple_commands_read`).
     pub(super) read_newly: bool,
 }
 
@@ -148,15 +148,18 @@ pub(super) fn simple_commands(command: &[String]) -> Lexed {
     simple_commands_read(command, /*main_reading*/ true)
 }
 
-/// [`simple_commands`], with `main_reading`: as main reads redirections.
+/// [`simple_commands`], with `main_reading`: as main reads redirections and empty braces.
 /// #1772 review 1: the lexer cannot tell whether the `>` or `<` before a
 /// quote was inside quotes, a comment, a `case` pattern or a here-document
 /// (`echo '>"'; ./x; echo '"'`), and `&>` splits under `sh` and `dash`
 /// (`true &>f ./x` runs `./x`). So a quoted or escaped redirection file is
 /// one word and `&>` one redirection only when `main_reading` is off; the
 /// classifier then also judges the action with it on and keeps the
-/// stricter verdict (`Lexed::read_newly`). #1772 review 2: with
-/// `main_reading` on, nothing is read otherwise than on main: no word moves
+/// stricter verdict (`Lexed::read_newly`).
+/// #1975: literal `{}` is retained only in the new reading, with the same
+/// baseline verdict floor (including for xargs replacement words).
+/// #1772 review 2: with `main_reading` on, nothing is read otherwise than
+/// on main: no word moves
 /// (`SimpleCommand::redirections_last`), only the last `<` and `<<<` are
 /// kept, and a substitution with its stdout redirected is spliced.
 pub(super) fn simple_commands_read(command: &[String], main_reading: bool) -> Lexed {
@@ -674,7 +677,7 @@ struct Lexer {
     real_open: usize,
     /// D194: the operators since the last word (`None`: a word).
     joint: Option<Joint>,
-    /// #1772 review 1: redirections are read as on main
+    /// #1772/#1975: redirections and empty braces are read as on main
     /// (`simple_commands_read`).
     main_reading: bool,
     /// #1772 review 1: see `Lexed::read_newly`.
@@ -1111,6 +1114,14 @@ impl Lexer {
                 }
                 ')' if self.open.last().is_some_and(|open| !open.backtick) => {
                     self.close_substitution(/*arithmetic_close*/ next == Some(')'));
+                }
+                // Empty braces are literal text, including inside quotes. Dropping
+                // them can split `git fetch -o {} -- "$r"` before the remote.
+                '{' if next == Some('}') && !self.main_reading => {
+                    self.read_newly = true;
+                    self.word.push_str("{}");
+                    index += 2;
+                    continue;
                 }
                 '{' if self.word.is_empty() && next.is_none_or(char::is_whitespace) => {
                     self.open_bracket();

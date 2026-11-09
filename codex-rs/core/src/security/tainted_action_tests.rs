@@ -5202,10 +5202,11 @@ fn issue_1268_git_given_input_words_asks() {
             "printf 'core.pager sh\\n' | xargs -i sh -c 'cd . && git config {}'",
             UnseenCode,
         ),
-        ("xargs -i sh -c 'cd . && git config {}' < keys", UnseenCode),
+        // #1975: retaining the placeholder exposes the input-fed config write.
+        ("xargs -i sh -c 'cd . && git config {}' < keys", Persistence),
         (
             "xargs --replace sh -c 'cd . && git config {}' < keys",
-            UnseenCode,
+            Persistence,
         ),
         (
             "printf 'core.pager\\nsh\\n' | parallel -N2 'cd . && git config'",
