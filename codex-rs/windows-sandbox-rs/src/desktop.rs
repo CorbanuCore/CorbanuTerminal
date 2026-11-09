@@ -9,6 +9,7 @@ use crate::setup::build_payload_deny_write_paths;
 use crate::setup::build_payload_roots;
 use crate::setup::gather_read_roots;
 use crate::spawn_prep::LegacySessionSecurity;
+use crate::token::get_current_token_for_query;
 use crate::token::get_current_token_for_restriction;
 use crate::token::get_logon_sid_bytes;
 use crate::token::get_user_sid_bytes;
@@ -444,7 +445,7 @@ impl PrivateDesktop {
 }
 
 unsafe fn grant_desktop_access(handle: HDESK, logs_base_dir: Option<&Path>) -> Result<()> {
-    let token = get_current_token_for_restriction()?;
+    let token = get_current_token_for_query()?;
     let mut logon_sid = get_logon_sid_bytes(token)?;
     CloseHandle(token);
 
