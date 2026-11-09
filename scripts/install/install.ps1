@@ -338,7 +338,22 @@ function Test-ArchiveDigest {
         [string]$ExpectedDigest
     )
 
-    $actualDigest = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    # A native launcher can pass PowerShell 7 module paths to Windows PowerShell,
+    # preventing Get-FileHash from loading. Hash directly without module lookup
+    # (upstream #51257).
+    $providerPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ArchivePath)
+    $sha256 = [System.Security.Cryptography.SHA256CryptoServiceProvider]::new()
+    try {
+        $stream = [System.IO.File]::OpenRead($providerPath)
+        try {
+            $actualDigest = [System.BitConverter]::ToString($sha256.ComputeHash($stream)).Replace("-", "").ToLowerInvariant()
+        } finally {
+            $stream.Dispose()
+        }
+    } finally {
+        $sha256.Dispose()
+    }
+
     if ($actualDigest -ne $ExpectedDigest) {
         throw "Downloaded Corbanu Terminal archive checksum did not match expected digest. Expected $ExpectedDigest but got $actualDigest."
     }
@@ -806,7 +821,9 @@ function Ensure-Junction {
     if (Test-IsJunction -Path $LinkPath) {
         $existingTarget = [string]$item.Target
         if (-not [string]::IsNullOrWhiteSpace($InstallerOwnedTargetPrefix)) {
-            $ownedTargetPrefix = $InstallerOwnedTargetPrefix.TrimEnd("\\")
+            # The trailing separator keeps a sibling such as `releases-x` from
+            # counting as installer-owned.
+            $ownedTargetPrefix = $InstallerOwnedTargetPrefix.TrimEnd("\\") + "\"
             if (-not $existingTarget.StartsWith($ownedTargetPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
                 throw "Refusing to retarget junction at $LinkPath because it is not managed by this installer."
             }

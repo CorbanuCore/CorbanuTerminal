@@ -227,6 +227,18 @@ class PackageLayoutTest(unittest.TestCase):
                         ).is_file()
                     )
 
+                    # Terminal packages ship no executor and must not name one.
+                    metadata_path = package_dir / "codex-package.json"
+                    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                    self.assertNotIn("execServer", metadata)
+                    self.assertFalse(
+                        (package_dir / "bin" / "codex-exec-server").exists()
+                    )
+                    metadata["execServer"] = "bin/codex-exec-server"
+                    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+                    with self.assertRaisesRegex(RuntimeError, "execServer"):
+                        validate_package_dir(package_dir, variant, spec)
+
     def test_app_server_package_places_code_mode_host_beside_entrypoint(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

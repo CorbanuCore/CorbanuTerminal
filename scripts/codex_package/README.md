@@ -77,9 +77,10 @@ override was provided:
 
 The default cargo profile is `dev-small` because local iteration should favor
 fast, small builds. Release jobs should pass `--cargo-profile release` and an
-explicit target. Release jobs that already built and signed/notarized the
-entrypoint should pass `--entrypoint-bin` so the package contains that exact
-binary instead of rebuilding it.
+explicit target. Release jobs that already built the entrypoint should pass
+`--entrypoint-bin` so the package is made from that binary instead of
+rebuilding it. The package copy is stripped (below), so sign the packaged
+binaries, not the inputs.
 
 Release jobs should likewise pass `--code-mode-host-bin`, `--extra-bin NAME=PATH`
 for each extra binary and, for variants that ship it, `--exec-server-bin`.

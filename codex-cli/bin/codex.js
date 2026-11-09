@@ -123,14 +123,23 @@ function isPnpmOwnedCorbanuInstall(nodeModulesDir) {
     return false;
   }
 
-  try {
-    return (
-      realpathSync(path.join(nodeModulesDir, "@agticorp", "pfterminal")) ===
-      codexPackageRoot
-    );
-  } catch {
-    return false;
+  // `@agticorp/pfterminal` is the package's previous name.
+  for (const [scope, name] of [
+    ["@corbanucore", "terminal"],
+    ["@agticorp", "pfterminal"],
+  ]) {
+    try {
+      if (
+        realpathSync(path.join(nodeModulesDir, scope, name)) ===
+        codexPackageRoot
+      ) {
+        return true;
+      }
+    } catch {
+      // Not installed under this name.
+    }
   }
+  return false;
 }
 
 function isVitePlusOwnedCorbanuInstall(packagesDir) {
