@@ -234,8 +234,10 @@ fn remove_privilege(token: HANDLE) -> Result<()> {
 /// the token of each console host this process started. Those run as the
 /// runner's account, read what the command writes to its console, and copied
 /// the runner's token with the privilege in it. Fails unless at least one
-/// was found and none still holds it. Does nothing outside such a runner.
-pub(crate) fn strip_privilege_from_console_hosts() -> Result<()> {
+/// was found and none still holds it; logs each host it checked to
+/// `log_dir` (#1803: no other command may open their tokens to check).
+/// Does nothing outside such a runner.
+pub(crate) fn strip_privilege_from_console_hosts(log_dir: Option<&Path>) -> Result<()> {
     if !RUNNER_HOLDS_PRIVILEGE.load(Ordering::SeqCst) {
         return Ok(());
     }
@@ -247,6 +249,10 @@ pub(crate) fn strip_privilege_from_console_hosts() -> Result<()> {
         strip_process(host).with_context(|| {
             format!("remove {ASSIGN_PRIMARY_TOKEN_PRIVILEGE} from console host {host}")
         })?;
+        crate::logging::log_note(
+            &format!("console host {host} no longer holds {ASSIGN_PRIMARY_TOKEN_PRIVILEGE}"),
+            log_dir,
+        );
     }
     Ok(())
 }
