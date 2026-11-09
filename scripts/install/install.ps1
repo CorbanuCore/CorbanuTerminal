@@ -338,21 +338,7 @@ function Test-ArchiveDigest {
         [string]$ExpectedDigest
     )
 
-    # A native launcher can pass PowerShell 7 module paths to Windows PowerShell,
-    # preventing Get-FileHash from loading. Hash directly without module lookup.
-    $providerPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ArchivePath)
-    $sha256 = [System.Security.Cryptography.SHA256CryptoServiceProvider]::new()
-    try {
-        $stream = [System.IO.File]::OpenRead($providerPath)
-        try {
-            $actualDigest = [System.BitConverter]::ToString($sha256.ComputeHash($stream)).Replace("-", "").ToLowerInvariant()
-        } finally {
-            $stream.Dispose()
-        }
-    } finally {
-        $sha256.Dispose()
-    }
-
+    $actualDigest = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actualDigest -ne $ExpectedDigest) {
         throw "Downloaded Corbanu Terminal archive checksum did not match expected digest. Expected $ExpectedDigest but got $actualDigest."
     }
@@ -669,8 +655,7 @@ function Move-OldStandaloneBinIfApproved {
 }
 
 function Add-JunctionSupportType {
-    # Older installer types remain loaded when users rerun irm | iex in one session.
-    if (([System.Management.Automation.PSTypeName]'CodexInstaller.JunctionV3').Type) {
+    if (([System.Management.Automation.PSTypeName]'CodexInstaller.Junction').Type) {
         return
     }
 
@@ -684,7 +669,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace CodexInstaller
 {
-    public static class JunctionV3
+    public static class Junction
     {
         private const uint GENERIC_WRITE = 0x40000000;
         private const uint FILE_SHARE_READ = 0x00000001;
@@ -717,54 +702,6 @@ namespace CodexInstaller
             int nOutBufferSize,
             out int lpBytesReturned,
             IntPtr lpOverlapped);
-
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern uint GetFinalPathNameByHandleW(
-            SafeFileHandle file, StringBuilder path, uint length, uint flags);
-
-        // Read the journal entry for the junction itself, never the target.
-        // Unlike a timestamp this changes on an in-place retarget, including away and back.
-        public static string SelectionIdentity(string path)
-        {
-            using (SafeFileHandle handle = CreateFileW(
-                path, 0x80, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                IntPtr.Zero, OPEN_EXISTING,
-                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, IntPtr.Zero))
-            {
-                if (handle.IsInvalid) { throw new Win32Exception(Marshal.GetLastWin32Error()); }
-                IntPtr buffer = Marshal.AllocHGlobal(1024);
-                try {
-                    int returned;
-                    // No input requests USN_RECORD_V2. current's filename fits in 1024 bytes.
-                    if (!DeviceIoControl(handle, 0x000900eb, null, 0, buffer, 1024, out returned, IntPtr.Zero)) {
-                        throw new Win32Exception(Marshal.GetLastWin32Error());
-                    }
-                    long usn = Marshal.ReadInt64(buffer, 24);
-                    if (returned < 32 || Marshal.ReadInt16(buffer, 4) != 2 || usn <= 0) {
-                        throw new IOException("No reliable daemon selection journal record.");
-                    }
-                    return Marshal.ReadInt64(buffer, 8).ToString("x")
-                        + " " + usn.ToString("x");
-                } finally {
-                    Marshal.FreeHGlobal(buffer);
-                }
-            }
-        }
-
-        public static string ResolveDirectory(string path)
-        {
-            using (SafeFileHandle handle = CreateFileW(
-                path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                IntPtr.Zero, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, IntPtr.Zero))
-            {
-                if (handle.IsInvalid) { throw new Win32Exception(Marshal.GetLastWin32Error()); }
-                StringBuilder resolved = new StringBuilder(32768);
-                uint length = GetFinalPathNameByHandleW(handle, resolved, (uint)resolved.Capacity, 0);
-                if (length == 0) { throw new Win32Exception(Marshal.GetLastWin32Error()); }
-                if (length >= resolved.Capacity) { throw new IOException("Resolved path is too long."); }
-                return resolved.ToString().TrimEnd('\\');
-            }
-        }
 
         public static void SetTarget(string linkPath, string targetPath)
         {
@@ -837,7 +774,7 @@ function Set-JunctionTarget {
     )
 
     Add-JunctionSupportType
-    [CodexInstaller.JunctionV3]::SetTarget($LinkPath, $TargetPath)
+    [CodexInstaller.Junction]::SetTarget($LinkPath, $TargetPath)
 }
 
 function Test-IsJunction {
@@ -867,15 +804,14 @@ function Ensure-Junction {
 
     $item = Get-Item -LiteralPath $LinkPath -Force
     if (Test-IsJunction -Path $LinkPath) {
-        Add-JunctionSupportType
-        $existingTarget = [CodexInstaller.JunctionV3]::ResolveDirectory($LinkPath)
+        $existingTarget = [string]$item.Target
         if (-not [string]::IsNullOrWhiteSpace($InstallerOwnedTargetPrefix)) {
-            $ownedTargetPrefix = [CodexInstaller.JunctionV3]::ResolveDirectory($InstallerOwnedTargetPrefix) + "\"
+            $ownedTargetPrefix = $InstallerOwnedTargetPrefix.TrimEnd("\\")
             if (-not $existingTarget.StartsWith($ownedTargetPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
                 throw "Refusing to retarget junction at $LinkPath because it is not managed by this installer."
             }
         }
-        if ($existingTarget.Equals([CodexInstaller.JunctionV3]::ResolveDirectory($TargetPath), [System.StringComparison]::OrdinalIgnoreCase)) {
+        if ($existingTarget.Equals($TargetPath, [System.StringComparison]::OrdinalIgnoreCase)) {
             return
         }
 
@@ -990,16 +926,6 @@ function Test-PackageContentsAreComplete {
         "codex-resources\codex-command-runner.exe",
         "codex-resources\codex-windows-sandbox-setup.exe"
     )
-    try {
-        $metadataPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $PackageDir "codex-package.json"))
-        $metadata = [System.IO.File]::ReadAllText($metadataPath)
-        # Older canonical packages do not advertise or contain the executor.
-        if ([regex]::IsMatch($metadata, '"execServer"\s*:')) {
-            $expectedFiles += "bin\codex-exec-server.exe"
-        }
-    } catch {
-        return $false
-    }
     foreach ($name in $expectedFiles) {
         if (-not (Test-Path -LiteralPath (Join-Path $PackageDir $name) -PathType Leaf)) {
             return $false
@@ -1210,16 +1136,9 @@ $codexHome = if (-not [string]::IsNullOrWhiteSpace($env:CORBANU_HOME)) {
 } else {
     $newDefaultHome
 }
-$daemonOnly = $env:CODEX_INSTALL_DAEMON_ONLY -eq "1"
-$standaloneRoot = Join-Path $codexHome $(if ($daemonOnly) { "packages\app-server-daemon" } else { "packages\standalone" })
+$standaloneRoot = Join-Path $codexHome "packages\standalone"
 $releasesDir = Join-Path $standaloneRoot "releases"
 $currentDir = Join-Path $standaloneRoot "current"
-$deferSelection = $env:CODEX_INSTALL_DEFER_SELECTION -eq "1"
-if ($deferSelection) {
-    if (-not $daemonOnly) { throw "Deferred selection requires a daemon-only installation." }
-    $currentDir = Join-Path $standaloneRoot ".migration-current"
-}
-$autoUpdateVersion = Join-Path $standaloneRoot "auto-update-version"
 $lockPath = Join-Path $standaloneRoot "install.lock"
 
 $newDefaultVisibleBinDir = Join-Path $env:LOCALAPPDATA "Programs\Corbanu Terminal\bin"
@@ -1257,7 +1176,7 @@ if (-not [string]::IsNullOrWhiteSpace($currentVersion) -and $currentVersion -ne 
 Write-Step "Detected platform: $platformLabel"
 Write-Step "Resolved version: $resolvedVersion"
 
-$conflictingInstall = if ($daemonOnly) { $null } else { Get-ConflictingInstall -VisibleBinDir $visibleBinDir }
+$conflictingInstall = Get-ConflictingInstall -VisibleBinDir $visibleBinDir
 $oldStandaloneBackup = $null
 
 $assetSelection = Resolve-ReleaseAssetSelection -ResolvedRelease $resolvedRelease -Target $target -NpmTag $npmTag
@@ -1268,69 +1187,13 @@ $checksumMetadata = $assetSelection.ChecksumMetadata
 $installLayout = $assetSelection.InstallLayout
 $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-install-" + [System.Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
-$guardRejected = $false
 
 try {
     Invoke-WithInstallLock -LockPath $lockPath -Script {
-        $updaterRecord = Join-Path $codexHome "app-server-daemon\app-server-updater.pid"
-        if ($daemonOnly) { $updaterRecord = Join-Path $codexHome "app-server-daemon\daemon-updater.pid" }
-        $oldUpdaterParent = $false
-        if ($Release -eq "latest" -and $env:CODEX_INSTALL_IF_LATEST -ne "1" -and $env:CODEX_INSTALL_IF_CURRENT -ne "1" -and (Test-Path -LiteralPath $updaterRecord)) {
-            $updaterPid = $null
-            $updaterStartTime = $null
-            try {
-                $record = Get-Content -LiteralPath $updaterRecord -Raw | ConvertFrom-Json
-                $updaterPid = [long]$record.pid
-                $updaterStartTime = [string]$record.processStartTime
-            } catch {
-                # Empty or stale PID reservations must not block a manual install.
-            }
-            if ($null -ne $updaterPid -and $updaterPid -gt 0 -and -not [string]::IsNullOrEmpty($updaterStartTime)) {
-                $updaterProcess = Get-Process -Id $updaterPid -ErrorAction SilentlyContinue
-                if ($null -ne $updaterProcess -and $updaterStartTime -eq [string]$updaterProcess.StartTime.ToFileTimeUtc()) {
-                    try {
-                        $parentPid = (Get-CimInstance Win32_Process -Filter "ProcessId = $PID" -ErrorAction Stop).ParentProcessId
-                        if ([long]$parentPid -le 0) { throw "Missing updater parent process." }
-                    } catch {
-                        try {
-                            $parentPid = (Get-WmiObject Win32_Process -Filter "ProcessId = $PID" -ErrorAction Stop).ParentProcessId
-                            if ([long]$parentPid -le 0) { throw "Missing updater parent process." }
-                        } catch {
-                            throw "Cannot verify whether the standalone installer was launched by an older updater."
-                        }
-                    }
-                    $oldUpdaterParent = $updaterPid -eq $parentPid
-                }
-            }
-        }
-        if ($env:CODEX_INSTALL_IF_LATEST -eq "1" -or $env:CODEX_INSTALL_IF_CURRENT -eq "1" -or $oldUpdaterParent) {
-            $previousRelease = if ($oldUpdaterParent -and (Test-Path -LiteralPath $autoUpdateVersion)) {
-                [System.IO.File]::ReadAllText($autoUpdateVersion)
-            } else {
-                $env:CODEX_UPDATE_FROM_RELEASE
-            }
-            Add-JunctionSupportType
-            $currentTarget = if (Test-Path -LiteralPath $currentDir) { (Get-Item -LiteralPath $currentDir).Target } else { $null }
-            if ($Release -ne "latest" -or [string]::IsNullOrEmpty($previousRelease) -or [string]::IsNullOrEmpty($currentTarget) -or
-                -not (Test-Path -LiteralPath (Join-Path $releasesDir $previousRelease)) -or
-                [CodexInstaller.JunctionV3]::ResolveDirectory($currentDir) -ne [CodexInstaller.JunctionV3]::ResolveDirectory((Join-Path $releasesDir $previousRelease))) {
-                if ($env:CODEX_INSTALL_IF_CURRENT -eq "1") { throw "Daemon selection changed; retry the update." }
-                $script:guardRejected = $true
-                return
-            }
-            # Explicit daemon updates may leave a local or pinned release.
-            if ($env:CODEX_INSTALL_IF_CURRENT -ne "1" -and
-                (-not (Test-Path -LiteralPath $autoUpdateVersion) -or
-                [System.IO.File]::ReadAllText($autoUpdateVersion) -cne $previousRelease)) {
-                $script:guardRejected = $true
-                return
-            }
-        }
         Remove-StaleInstallArtifacts -ReleasesDir $releasesDir
 
         if (-not (Test-ReleaseIsComplete -ReleaseDir $releaseDir -ExpectedVersion $resolvedVersion -ExpectedTarget $target -Layout $installLayout)) {
             if (Test-Path -LiteralPath $releaseDir) {
-                if ($daemonOnly) { throw "Refusing to overwrite existing daemon release $releaseDir." }
                 Write-WarningStep "Found incomplete existing release at $releaseDir. Reinstalling."
             }
 
@@ -1395,47 +1258,8 @@ try {
         }
 
         New-Item -ItemType Directory -Force -Path $standaloneRoot | Out-Null
-        if ($deferSelection -and (Get-Item -LiteralPath (Join-Path $standaloneRoot "current") -Force -ErrorAction SilentlyContinue)) {
-            throw "A dedicated daemon is already selected; retry the update."
-        }
-        if ($daemonOnly -and -not $deferSelection) {
-            $installedCodex = Join-Path $releaseDir $(if ($installLayout -eq "Package") { "bin\codex.exe" } else { "codex.exe" })
-            & $installedCodex app-server daemon pid-update-loop --check-package-ownership | Out-Null
-            if ($LASTEXITCODE -ne 0) {
-                throw "The production release does not support daemon-owned packages; the current selection was left unchanged."
-            }
-        }
-        $previousDirectory = $null
-        if ($daemonOnly -and -not $deferSelection) {
-            Add-JunctionSupportType
-            if (Test-Path -LiteralPath $currentDir) {
-                $previousDirectory = [CodexInstaller.JunctionV3]::ResolveDirectory($currentDir)
-            }
-        }
         Ensure-Junction -LinkPath $currentDir -TargetPath $releaseDir -InstallerOwnedTargetPrefix $releasesDir
-        if ($daemonOnly -and -not $deferSelection -and
-            $previousDirectory -cne [CodexInstaller.JunctionV3]::ResolveDirectory($currentDir)) {
-            try {
-                $previousName = if ($null -eq $previousDirectory) { "" } else { Split-Path -Leaf $previousDirectory }
-                $selectionId = [CodexInstaller.JunctionV3]::SelectionIdentity($currentDir)
-                $history = Join-Path $standaloneRoot "selection-history"
-                [System.IO.File]::WriteAllText("$history.tmp.$PID", "$releaseName`n$previousName`n$selectionId`n")
-                Move-Item -LiteralPath "$history.tmp.$PID" -Destination $history -Force -ErrorAction Stop
-            } catch {
-                Write-WarningStep "Could not record daemon selection; pruning will be skipped."
-            }
-        }
-        if ($Release -eq "latest") {
-            $tempMarker = "$autoUpdateVersion.tmp.$PID"
-            [System.IO.File]::WriteAllText($tempMarker, $releaseName)
-            Move-Item -LiteralPath $tempMarker -Destination $autoUpdateVersion -Force
-        } else {
-            if (Test-Path -LiteralPath $autoUpdateVersion) {
-                Remove-Item -LiteralPath $autoUpdateVersion -Force -ErrorAction Stop
-            }
-        }
 
-        if ($daemonOnly) { return }
         $visibleParent = Split-Path -Parent $visibleBinDir
         $currentBinDir = if ($installLayout -eq "Package") {
             Join-Path $currentDir "bin"
@@ -1464,7 +1288,6 @@ try {
 } finally {
     Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
 }
-if ($guardRejected -or $daemonOnly) { return }
 
 Maybe-HandleConflictingInstall -Conflict $conflictingInstall
 

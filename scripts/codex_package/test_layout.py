@@ -1,15 +1,10 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
-<<<<<<< HEAD
-import os
-||||||| 413492cd6c
-=======
 import hashlib
 import io
-import tarfile
 import json
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+import os
 import shutil
 import subprocess
 import sys
@@ -19,13 +14,8 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-<<<<<<< HEAD
-from codex_package.archive import write_archive
-||||||| 413492cd6c
-=======
 from build_winget_package import prepare_winget_package
 from codex_package.archive import write_archive, resolve_zstd_command
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 from codex_package.layout import build_package_dir
 from codex_package.layout import validate_package_dir
 from codex_package.targets import PACKAGE_VARIANTS
@@ -35,7 +25,6 @@ from codex_package.targets import default_target
 
 
 class PackageLayoutTest(unittest.TestCase):
-<<<<<<< HEAD
     def test_telegram_powershell_installer_uses_identifier_safe_parameters(
         self,
     ) -> None:
@@ -56,77 +45,6 @@ class PackageLayoutTest(unittest.TestCase):
                 declaration,
                 r"^\s*\[string\]\$[A-Za-z_][A-Za-z0-9_]*\s*=",
             )
-||||||| 413492cd6c
-=======
-    @unittest.skipIf(sys.platform == "win32", "MSVC symbols are separate PDB files")
-    def test_strip_policy_preserves_inputs_and_runs_packaged_executables(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            source = root / "input-executable"
-            # System executables may already be stripped. Compile with debug
-            # information so a no-op strip cannot pass this regression test.
-            subprocess.run(
-                ["cc", "-g", "-O0", "-x", "c", "-", "-o", str(source)],
-                input=r"""#include <stdio.h>
-int main(void) {
-    fputs("package-ok", stdout);
-    return 0;
-}
-""",
-                text=True,
-                check=True,
-                capture_output=True,
-            )
-            original = source.read_bytes()
-            target = default_target()
-            for mode in ("auto", "all", "none"):
-                with self.subTest(mode=mode):
-                    package = root / mode
-                    command = [
-                        sys.executable,
-                        str(
-                            Path(__file__).resolve().parents[1]
-                            / "build_codex_package.py"
-                        ),
-                        "--target",
-                        target,
-                        "--cargo-profile",
-                        "release",
-                        "--package-dir",
-                        str(package),
-                        "--strip",
-                        mode,
-                    ]
-                    flags = [
-                        "--entrypoint-bin",
-                        "--code-mode-host-bin",
-                        "--exec-server-bin",
-                        "--rg-bin",
-                    ]
-                    if "linux" in target:
-                        flags.append("--bwrap-bin")
-                    for flag in flags:
-                        command.extend((flag, str(source)))
-                    if mode != "all":
-                        # Preserved prebuilt inputs must not even need a strip tool.
-                        command.extend(("--strip-tool", str(root / "absent-strip")))
-                    subprocess.run(command, check=True, capture_output=True)
-                    for name in ("codex", "codex-code-mode-host", "codex-exec-server"):
-                        executable = package / "bin" / name
-                        self.assertEqual(
-                            subprocess.check_output([str(executable)]),
-                            b"package-ok",
-                        )
-                        if mode != "all":
-                            self.assertEqual(executable.read_bytes(), original)
-                        else:
-                            self.assertLess(executable.stat().st_size, len(original))
-                    self.assertEqual(source.read_bytes(), original)
-                    self.assertEqual((package / "codex-path/rg").read_bytes(), original)
-                    if "linux" in target:
-                        self.assertEqual(
-                            (package / "codex-resources/bwrap").read_bytes(), original
-                        )
 
     def test_winget_preserves_signed_files_and_voice_hashes(self) -> None:
         for target in ("x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"):
@@ -191,7 +109,6 @@ int main(void) {
                 self.assertEqual(actual_manifest, manifest)
                 for name, digest in actual_manifest["sha256"].items():
                     self.assertEqual(hashlib.sha256(actual[name]).hexdigest(), digest)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     def test_macos_package_preserves_prebuilt_resource_binaries(self) -> None:
         for variant_name in ("corbanu", "pfterminal", "codex", "codex-app-server"):
@@ -212,17 +129,15 @@ int main(void) {
                             code_mode_host_bin=touch_executable(
                                 root / "codex-code-mode-host"
                             ),
-<<<<<<< HEAD
                             extra_bins={
                                 extra.entrypoint_name(spec): touch_executable(
                                     root / extra.entrypoint_name(spec)
                                 )
                                 for extra in variant.extra_binaries
                             },
-||||||| 413492cd6c
-=======
-                            exec_server_bin=rg_bin,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                            exec_server_bin=(
+                                rg_bin if variant.ships_exec_server else None
+                            ),
                             rg_bin=rg_bin,
                             bwrap_bin=None,
                             codex_command_runner_bin=None,
@@ -249,6 +164,11 @@ int main(void) {
                             with tarfile.open(
                                 fileobj=io.BytesIO(data), mode="r:*"
                             ) as archive:
+                                if not variant.ships_exec_server:
+                                    self.assertNotIn(
+                                        "bin/codex-exec-server", archive.getnames()
+                                    )
+                                    continue
                                 member = archive.getmember("bin/codex-exec-server")
                                 self.assertTrue(member.mode & 0o111)
                                 self.assertEqual(
@@ -257,17 +177,16 @@ int main(void) {
                                 )
 
                         self.assertEqual(
-                            {
-                                "rg": (package_dir / "codex-path" / "rg").read_bytes(),
-                                "executor": (
-                                    package_dir / "bin/codex-exec-server"
-                                ).read_bytes(),
-                            },
-                            {
-                                "rg": b"signed ripgrep binary",
-                                "executor": b"signed ripgrep binary",
-                            },
+                            (package_dir / "codex-path" / "rg").read_bytes(),
+                            b"signed ripgrep binary",
                         )
+                        executor = package_dir / "bin/codex-exec-server"
+                        if variant.ships_exec_server:
+                            self.assertEqual(
+                                executor.read_bytes(), b"signed ripgrep binary"
+                            )
+                        else:
+                            self.assertFalse(executor.exists())
 
     def test_terminal_packages_include_telegram_resources(self) -> None:
         for variant_name in ("corbanu", "pfterminal"):
@@ -290,14 +209,14 @@ int main(void) {
                             for extra in variant.extra_binaries
                         },
                         rg_bin=touch_executable(root / "rg"),
-                        zsh_bin=None,
+                        exec_server_bin=None,
                         bwrap_bin=touch_executable(root / "bwrap"),
                         codex_command_runner_bin=None,
                         codex_windows_sandbox_setup_bin=None,
                     )
 
                     build_package_dir(package_dir, "1.2.3", variant, spec, inputs)
-                    validate_package_dir(package_dir, variant, spec, include_zsh=False)
+                    validate_package_dir(package_dir, variant, spec)
 
                     self.assertTrue(
                         (
@@ -316,12 +235,8 @@ int main(void) {
             inputs = PackageInputs(
                 entrypoint_bin=touch_executable(root / "codex-app-server"),
                 code_mode_host_bin=touch_executable(root / "codex-code-mode-host"),
-<<<<<<< HEAD
                 extra_bins={},
-||||||| 413492cd6c
-=======
                 exec_server_bin=touch_executable(root / "codex-exec-server"),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 rg_bin=touch_executable(root / "rg"),
                 bwrap_bin=touch_executable(root / "bwrap"),
                 codex_command_runner_bin=None,
@@ -358,7 +273,7 @@ int main(void) {
                     for extra in variant.extra_binaries
                 },
                 rg_bin=touch_executable(root / "rg"),
-                zsh_bin=None,
+                exec_server_bin=touch_executable(root / "codex-exec-server"),
                 bwrap_bin=touch_executable(root / "bwrap"),
                 codex_command_runner_bin=None,
                 codex_windows_sandbox_setup_bin=None,
@@ -366,12 +281,12 @@ int main(void) {
             package = root / "package"
             package.mkdir()
             build_package_dir(package, "1.2.3", variant, spec, inputs)
-            validate_package_dir(package, variant, spec, include_zsh=False)
+            validate_package_dir(package, variant, spec)
             companion = package / "bin" / "pfterminal-walletd"
             self.assertTrue(companion.is_file())
             companion.unlink()
             with self.assertRaises(RuntimeError):
-                validate_package_dir(package, variant, spec, include_zsh=False)
+                validate_package_dir(package, variant, spec)
 
     def test_corbanu_debug_alias_is_relative_and_survives_archive(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -402,14 +317,14 @@ int main(void) {
                     for extra in variant.extra_binaries
                 },
                 rg_bin=touch_executable(root / "rg"),
-                zsh_bin=None,
+                exec_server_bin=None,
                 bwrap_bin=touch_executable(root / "bwrap"),
                 codex_command_runner_bin=None,
                 codex_windows_sandbox_setup_bin=None,
             )
 
             build_package_dir(package_dir, "1.2.3", variant, spec, inputs)
-            validate_package_dir(package_dir, variant, spec, include_zsh=False)
+            validate_package_dir(package_dir, variant, spec)
 
             expected_aliases = {
                 "corbanu-debug": "corbanu",
@@ -479,7 +394,7 @@ int main(void) {
                 code_mode_host_bin=code_mode_host,
                 extra_bins={},
                 rg_bin=touch_executable(root / "rg"),
-                zsh_bin=None,
+                exec_server_bin=code_mode_host,
                 bwrap_bin=touch_executable(root / "bwrap"),
                 codex_command_runner_bin=None,
                 codex_windows_sandbox_setup_bin=None,
@@ -498,7 +413,11 @@ int main(void) {
                 (package_dir / "bin" / "codex-app-server").stat().st_size,
                 unstripped_size,
             )
-            for name in ("codex-app-server", "codex-code-mode-host"):
+            for name in (
+                "codex-app-server",
+                "codex-code-mode-host",
+                "codex-exec-server",
+            ):
                 sidecar = (
                     symbols_dir
                     / f"{name}.dSYM"

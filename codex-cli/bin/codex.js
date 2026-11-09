@@ -4,12 +4,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "fs";
 import { createRequire } from "node:module";
-<<<<<<< HEAD
-import os from "node:os";
-||||||| 413492cd6c
-=======
 import { constants } from "node:os";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -112,18 +107,10 @@ function findCorbanuExecutable() {
     packageManager === "bun"
       ? "bun install -g @corbanucore/terminal@latest"
       : packageManager === "pnpm"
-<<<<<<< HEAD
         ? "pnpm add -g @corbanucore/terminal@latest"
-        : "npm install -g @corbanucore/terminal@latest";
-||||||| 413492cd6c
-        ? "pnpm add -g @openai/codex@latest"
-        : "npm install -g @openai/codex@latest";
-=======
-        ? "pnpm add -g @openai/codex@latest"
         : packageManager === "vite-plus"
-          ? "vp install -g @openai/codex@latest"
-          : "npm install -g @openai/codex@latest";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+          ? "vp install -g @corbanucore/terminal@latest"
+          : "npm install -g @corbanucore/terminal@latest";
   throw new Error(
     `Missing optional dependency ${platformPackage}. Reinstall Corbanu Terminal: ${updateCommand}`,
   );
@@ -131,25 +118,7 @@ function findCorbanuExecutable() {
 
 const binaryPath = findCorbanuExecutable();
 
-<<<<<<< HEAD
-// Use an asynchronous spawn instead of spawnSync so that Node is able to
-// respond to signals (e.g. Ctrl-C / SIGINT) while the native binary is
-// executing. This allows us to forward those signals to the child process
-// and guarantees that when either the child terminates or the parent
-// receives a fatal signal, both processes exit in a predictable manner.
-
 function isPnpmOwnedCorbanuInstall(nodeModulesDir) {
-||||||| 413492cd6c
-// Use an asynchronous spawn instead of spawnSync so that Node is able to
-// respond to signals (e.g. Ctrl-C / SIGINT) while the native binary is
-// executing. This allows us to forward those signals to the child process
-// and guarantees that when either the child terminates or the parent
-// receives a fatal signal, both processes exit in a predictable manner.
-
-function isPnpmOwnedCodexInstall(nodeModulesDir) {
-=======
-function isPnpmOwnedCodexInstall(nodeModulesDir) {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
   if (!existsSync(path.join(nodeModulesDir, ".modules.yaml"))) {
     return false;
   }
@@ -164,31 +133,34 @@ function isPnpmOwnedCodexInstall(nodeModulesDir) {
   }
 }
 
-function isVitePlusOwnedCodexInstall(packagesDir) {
+function isVitePlusOwnedCorbanuInstall(packagesDir) {
   if (path.basename(packagesDir) !== "packages") {
     return false;
   }
 
   try {
     const metadata = JSON.parse(
-      readFileSync(path.join(packagesDir, "@openai", "codex.json"), "utf8"),
+      readFileSync(
+        path.join(packagesDir, "@corbanucore", "terminal.json"),
+        "utf8",
+      ),
     );
-    if (metadata.name !== "@openai/codex") {
+    if (metadata.name !== "@corbanucore/terminal") {
       return false;
     }
 
-    // Vite+ records the active global installation in packages/@openai/codex.json.
+    // Vite+ records the active global installation in packages/@corbanucore/terminal.json.
     // Older installs have no ID or append a #-prefixed ID to the package name;
     // newer installs put the ID in a subdirectory of the package prefix.
     const installId = metadata.installId || "";
     const installDir = installId.startsWith("#")
-      ? path.join(packagesDir, `@openai/codex${installId}`)
-      : path.join(packagesDir, "@openai/codex", installId);
+      ? path.join(packagesDir, `@corbanucore/terminal${installId}`)
+      : path.join(packagesDir, "@corbanucore/terminal", installId);
     for (const nodeModulesDir of [
       path.join(installDir, "lib", "node_modules"),
       path.join(installDir, "node_modules"),
     ]) {
-      const packageRoot = path.join(nodeModulesDir, "@openai", "codex");
+      const packageRoot = path.join(nodeModulesDir, "@corbanucore", "terminal");
       if (
         existsSync(packageRoot) &&
         realpathSync(packageRoot) === codexPackageRoot
@@ -197,7 +169,7 @@ function isVitePlusOwnedCodexInstall(packagesDir) {
       }
     }
   } catch {
-    // Missing or unreadable ownership metadata must not prevent Codex starting.
+    // Missing or unreadable ownership metadata must not prevent Corbanu Terminal starting.
   }
   return false;
 }
@@ -218,16 +190,10 @@ function detectPackageManager() {
       currentDir !== filesystemRoot;
       currentDir = path.dirname(currentDir)
     ) {
-<<<<<<< HEAD
-      if (isPnpmOwnedCorbanuInstall(path.join(currentDir, "node_modules"))) {
-||||||| 413492cd6c
-      if (isPnpmOwnedCodexInstall(path.join(currentDir, "node_modules"))) {
-=======
-      if (isVitePlusOwnedCodexInstall(currentDir)) {
+      if (isVitePlusOwnedCorbanuInstall(currentDir)) {
         return "vite-plus";
       }
-      if (isPnpmOwnedCodexInstall(path.join(currentDir, "node_modules"))) {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+      if (isPnpmOwnedCorbanuInstall(path.join(currentDir, "node_modules"))) {
         return "pnpm";
       }
     }

@@ -32,7 +32,7 @@ AGENTS.md	modify/delete	UD	other	S1d tooling/repo	1	unassigned	yes	open		0	0	fal
 CHANGELOG.md	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		1	249	false	false	false	false	
 MODULE.bazel	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	7	100	false	false	false	false	v8 crate archive from CorbanuCore/rusty_v8, same sha256 (D317); voice crate annotations and the voice_sources extension are unused after D316: confirm Bazel tolerates them or drop them in S4
 MODULE.bazel.lock	content	UU	schemas/locks	S0 manifests/locks/CI	0	integrator	no	resolved	merged	30	461	false	false	false	false	regenerated from main's lock
-codex-cli/bin/codex.js	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		4	21	false	false	false	false	
+codex-cli/bin/codex.js	content	UU	other	S1d tooling/repo	1	sync-s1d (maintainer)	yes	resolved	merged	4	21	false	false	false	false	Corbanu package names kept; upstream's execve launch, signal exit code and Vite+ detection adopted with @corbanucore/terminal names; unused os import dropped
 codex-rs/.cargo/audit.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	20	false	false	false	true	main's ignores; duplicate RUSTSEC-2024-0449 dropped
 codex-rs/.config/nextest.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	14	false	false	false	false	
 codex-rs/.gitignore	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	1	19	false	false	false	false	
@@ -940,15 +940,15 @@ justfile	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		2	13	false	fal
 package.json	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		1	5	false	false	false	false	
 patches/BUILD.bazel	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	merged	3	14	false	false	false	false	
 pnpm-lock.yaml	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		14	38	false	false	false	false	
-scripts/codex_package/README.md	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		2	24	false	false	false	false	
-scripts/codex_package/cargo.py	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		3	10	false	false	false	false	
-scripts/codex_package/cli.py	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		2	28	false	false	false	false	
-scripts/codex_package/layout.py	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		3	43	false	false	false	false	
-scripts/codex_package/targets.py	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		1	2	false	false	false	false	
-scripts/codex_package/test_layout.py	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		5	170	false	false	false	false	
-scripts/codex_package/v8.py	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		1	5	false	false	false	false	
-scripts/install/install.sh	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		4	22	false	false	false	false	
-scripts/install/test_install_sh.py	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		4	57	false	false	false	false	
+scripts/codex_package/README.md	content	UU	other	S1d tooling/repo	1	sync-s1d (maintainer)	yes	resolved	merged	2	24	false	false	false	false	documents the corbanu variant, --package-version, the executor only for codex/codex-app-server, and main's strip + --symbols-dir behaviour
+scripts/codex_package/cargo.py	content	UU	other	S1d tooling/repo	1	sync-s1d (maintainer)	yes	resolved	merged	3	10	false	false	false	false	main's extra_bins plus upstream's exec_server_bin, built only for variants with ships_exec_server; --exec-server-bin refused for corbanu/pfterminal
+scripts/codex_package/cli.py	content	UU	other	S1d tooling/repo	1	sync-s1d (maintainer)	yes	resolved	merged	2	28	false	false	false	false	main's --extra-bin/--symbols-dir and strip-in-layout kept; upstream's --package-version adopted; upstream's --strip/--strip-tool pass dropped (duplicated main's always-strip with symbol sidecars)
+scripts/codex_package/layout.py	content	UU	other	S1d tooling/repo	1	sync-s1d (maintainer)	yes	resolved	merged	3	43	false	false	false	false	executor copied, stripped and named in codex-package.json only when shipped; validation requires it for codex/codex-app-server and forbids the field otherwise; zsh resource dropped with upstream
+scripts/codex_package/targets.py	content	UU	other	S1d tooling/repo	1	sync-s1d (maintainer)	yes	resolved	merged	1	2	false	false	false	false	PackageInputs has both extra_bins and exec_server_bin; PackageVariant.ships_exec_server (False for corbanu/pfterminal); REPO_ROOT falls back to the checkout when CODEX_REPO_ROOT is unset (release workflows run build_codex_package.py directly)
+scripts/codex_package/test_layout.py	content	UU	other	S1d tooling/repo	1	sync-s1d (maintainer)	yes	resolved	merged	5	170	false	false	false	false	main's tests kept and moved off zsh_bin/include_zsh; upstream's winget test kept; upstream's --strip policy test dropped with the flag; executor assertions per variant
+scripts/codex_package/v8.py	content	UU	other	S1d tooling/repo	1	sync-s1d (maintainer)	yes	resolved	ours	1	5	false	false	false	false	main's cargo_lock import kept (upstream only joined two imports)
+scripts/install/install.sh	content	UU	other	S1d tooling/repo	1	sync-s1d (maintainer)	yes	resolved	ours	4	22	false	false	false	false	Corbanu installer kept (plan: keep packaging/release scripts); upstream's daemon-only mode and standalone pruning target upstream's app-server daemon/releases (owner decision); Corbanu packages ship no executor
+scripts/install/test_install_sh.py	content	UU	other	S1d tooling/repo	1	sync-s1d (maintainer)	yes	resolved	ours	4	57	false	false	false	false	follows install.sh
 tools/argument-comment-lint/Cargo.lock	content	UU	schemas/locks	S0 manifests/locks/CI	0	integrator	no	resolved	ours	19	66	false	false	false	false	skeleton keeps main's file; port upstream changes in S4
 tools/argument-comment-lint/Cargo.toml	content	UU	other	S0 manifests/locks/CI	0	integrator	no	resolved	ours	2	7	false	false	false	false	skeleton keeps main's file; port upstream changes in S4
 tools/argument-comment-lint/README.md	content	UU	other	S1d tooling/repo	1	unassigned	yes	open		5	15	false	false	false	false	
@@ -1953,3 +1953,7 @@ codex-rs/windows-sandbox-rs/src/acl.rs	security-review	--	windows-sandbox	S3b se
 .github/workflows/rust-ci.yml	follow-up	--	CI/workflows	S0 manifests/locks/CI	S4	sync-s0c (maintainer)	no	resolved	merged	0	0	false	false	false	false	S0c: app-server schema fixture watch list adds the crates the merged protocol graph now reaches (codex-api, git-utils, history, network-proxy, secrets, utils/redacted-string); test_watches_every_schema_deriving_dependency passes
 .github/scripts/test_ci_timeout_budgets.py	follow-up	--	CI/workflows	S0 manifests/locks/CI	S4	sync-s0c (maintainer)	no	resolved	merged	0	0	true	false	false	false	S0c: cache-save policy exempts upstream's release-only workflows/actions by path (new test: exempt actions aren't used by any checked file) and accepts setup-uv enable-cache: false; SCHEMA_CRATES follows rust-ci.yml
 .github/workflows/sync-package-ci.yml	follow-up	--	CI/workflows	S0 manifests/locks/CI	S4	sync-s0c (maintainer)	no	resolved	merged	0	0	false	false	false	false	S0c: explicit userns opt-in for the Linux package tests (upstream's setup-ci step dropped); same edit in scripts/upstream_sync/ci_mode/sync-package-ci.yml; removed with the CI mode in S4
+scripts/codex_package/symbols.py	follow-up	--	other	S1d tooling/repo	1	sync-s1d (maintainer)	no	resolved	deleted	0	0	false	false	false	false	upstream's strip helper for the dropped --strip flag; layout.strip_packaged_executable (main) strips every first-party copy
+scripts/codex_package/test_cargo.py	follow-up	--	other	S1d tooling/repo	1	sync-s1d (maintainer)	no	resolved	merged	0	0	false	false	false	false	main's tests pass exec_server_bin/build_exec_server; new test: corbanu refuses --exec-server-bin
+scripts/test_build_codex_package.py	follow-up	--	other	S1d tooling/repo	1	sync-s1d (maintainer)	no	resolved	merged	0	0	false	false	false	false	SourceBuildOutputs gained exec_server_bin; the developer-accounting guard covers it
+scripts/install/install.ps1	follow-up	--	other	S1d tooling/repo	1	sync-s1d (maintainer)	no	resolved	ours	0	0	false	false	false	false	reset to main with install.sh: the clean merge had added upstream's daemon-only and pruning code to the Corbanu installer
