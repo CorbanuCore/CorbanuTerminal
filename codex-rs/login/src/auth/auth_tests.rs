@@ -3363,6 +3363,7 @@ async fn shared_from_config_hides_a_restricted_default_login_only_in_named_sessi
                 allowed_login_methods: None,
                 allowed_chatgpt_workspaces: Some(vec![WORKSPACE_ID_ALLOWED.to_string()]),
             },
+            forced_chatgpt_workspace_id: None,
             ..config(
                 /*forced_login_method*/ None,
                 WORKSPACE_ID_DISALLOWED,
@@ -3377,7 +3378,7 @@ async fn shared_from_config_hides_a_restricted_default_login_only_in_named_sessi
     assert!(
         policy_only
             .hidden_default_login_reason()
-            .is_some_and(|reason| reason.contains("administrator's login policy")),
+            .is_some_and(|reason| reason.contains("restricted to workspace")),
         "{:?}",
         policy_only.hidden_default_login_reason()
     );

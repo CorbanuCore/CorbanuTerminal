@@ -2128,14 +2128,6 @@ enum LoginRestrictionViolation {
     Workspace(String),
 }
 
-impl LoginRestrictionViolation {
-    fn reason(&self) -> &str {
-        match self {
-            Self::Method(reason) | Self::Workspace(reason) => reason,
-        }
-    }
-}
-
 fn login_restriction_violation(
     auth: &CodexAuth,
     forced_login_method: Option<ForcedLoginMethod>,
@@ -2207,6 +2199,48 @@ fn login_restriction_violation(
             ),
         },
     ))
+}
+
+/// Why a stored login breaks these login restrictions, from the stored
+/// record alone (no network call). `None` when it is allowed.
+fn stored_login_restriction(
+    auth: &AuthDotJson,
+    allowed_login_methods: &[ForcedLoginMethod],
+    workspaces: Option<&[String]>,
+) -> Option<String> {
+    let mode = auth.resolved_mode();
+    if !auth_mode_is_allowed(Some(allowed_login_methods), mode) {
+        return Some(
+            if allowed_login_methods.is_empty() {
+                "No login method is allowed."
+            } else if mode.uses_codex_backend() {
+                "API key login is required, but ChatGPT is currently being used."
+            } else {
+                "ChatGPT login is required, but an API key is currently being used."
+            }
+            .to_string(),
+        );
+    }
+    let workspaces = workspaces?;
+    if !mode.uses_codex_backend() {
+        return None;
+    }
+    let actual = auth.tokens.as_ref().and_then(|tokens| {
+        tokens
+            .account_id
+            .clone()
+            .or_else(|| tokens.id_token.chatgpt_account_id.clone())
+    });
+    let expected = workspaces.join(", ");
+    match actual {
+        Some(actual) if workspaces.contains(&actual) => None,
+        Some(actual) => Some(format!(
+            "Login is restricted to workspace(s) {expected}, but current credentials belong to {actual}."
+        )),
+        None => Some(format!(
+            "Login is restricted to workspace(s) {expected}, but current credentials lack a workspace identifier."
+        )),
+    }
 }
 
 fn logout_with_message(
@@ -4054,21 +4088,14 @@ impl AuthManager {
             .clone();
         let allowed_login_methods = self.allowed_login_methods();
         let effective_chatgpt_workspaces = self.effective_chatgpt_workspaces();
-        // PF-84-S06 (#570): a manager that hides a restricted default login
-        // loads it unfiltered, as main did, so the reason it is hidden is
-        // recorded before the login policy below drops it.
         let hides_restricted = self.hides_restricted_default_login();
-        let auth = load_auth_with_openai_api_key_env(
+        let loaded = load_auth_with_openai_api_key_env(
             &self.codex_home,
             self.enable_codex_api_key_env,
             self.openai_api_key_env,
             self.auth_credentials_store_mode,
-            (!hides_restricted).then_some(allowed_login_methods.as_slice()),
-            if hides_restricted {
-                None
-            } else {
-                effective_chatgpt_workspaces.as_deref()
-            },
+            Some(&allowed_login_methods),
+            effective_chatgpt_workspaces.as_deref(),
             self.chatgpt_base_url.as_deref(),
             self.keyring_backend_kind,
             self.agent_identity_authapi_base_url.as_deref(),
@@ -4076,32 +4103,29 @@ impl AuthManager {
             cached_auth,
             allowed_auth_modes.as_deref(),
         )
-        .await?;
-        let auth = self.without_restricted_default_login(auth);
-        let policy_violation = auth.as_ref().and_then(|auth| {
+        .await;
+        let auth = match loaded {
+            Ok(auth) => auth,
+            // A hiding manager treats a refused login as hidden (#570).
+            Err(error)
+                if hides_restricted && error.kind() == std::io::ErrorKind::PermissionDenied =>
+            {
+                None
+            }
+            Err(error) => return Err(error),
+        };
+        let auth = auth.filter(|auth| {
             validate_auth_restrictions(
                 Some(&allowed_login_methods),
                 effective_chatgpt_workspaces.as_deref(),
                 auth,
             )
-            .err()
+            .is_ok()
         });
-        let Some(violation) = policy_violation else {
-            return Ok(auth);
-        };
-        // A login ruled out only by the administrator's policy is hidden with
-        // its reason too, so requests are refused instead of going out
-        // without credentials (#570).
         if hides_restricted {
-            let reason = default_login_unusable_message(&format!(
-                "the administrator's login policy does not allow it ({violation})."
-            ));
-            tracing::warn!("the default login is not used in this process: {reason}");
-            if let Ok(mut current) = self.hidden_default_login_reason.write() {
-                *current = Some(reason);
-            }
+            self.record_hidden_default_login(auth.is_none());
         }
-        Ok(None)
+        Ok(auth)
     }
 
     /// PF-84-S06 (#570): whether this default-login manager treats a login
@@ -4121,25 +4145,38 @@ impl AuthManager {
             .and_then(|reason| reason.clone())
     }
 
-    /// PF-84-S06 (#570): drops a default login the login restrictions rule
-    /// out when this process left it in place for a named-account session.
-    fn without_restricted_default_login(&self, auth: Option<CodexAuth>) -> Option<CodexAuth> {
-        if !self.hides_restricted_default_login() {
-            return auth;
-        }
-        let forced_workspace = self.forced_chatgpt_workspace_id();
-        let reason = auth.as_ref().and_then(|auth| {
-            login_restriction_violation(auth, self.forced_login_method, forced_workspace.as_deref())
-                .map(|violation| default_login_unusable_message(violation.reason()))
-        });
+    /// PF-84-S06 (#570): records why a hiding manager has no default login,
+    /// when the stored login is one the login restrictions rule out. The
+    /// reason comes from the stored login alone (no network call); the login
+    /// itself is left in place.
+    fn record_hidden_default_login(&self, absent: bool) {
+        let reason = absent
+            .then(|| self.stored_default_login_restriction())
+            .flatten()
+            .map(|reason| default_login_unusable_message(&reason));
         if let Some(reason) = &reason {
             tracing::warn!("the default login is not used in this process: {reason}");
         }
-        let hidden = reason.is_some();
         if let Ok(mut current) = self.hidden_default_login_reason.write() {
             *current = reason;
         }
-        if hidden { None } else { auth }
+    }
+
+    fn stored_default_login_restriction(&self) -> Option<String> {
+        let stored = create_auth_storage(
+            self.codex_home.clone(),
+            self.auth_credentials_store_mode,
+            self.keyring_backend_kind,
+        )
+        .load()
+        .ok()
+        .flatten()
+        .filter(AuthDotJson::has_primary_auth_material)?;
+        stored_login_restriction(
+            &stored,
+            &self.allowed_login_methods(),
+            self.effective_chatgpt_workspaces().as_deref(),
+        )
     }
 
     fn set_cached_auth(&self, new_auth: Option<CodexAuth>) -> bool {
@@ -4451,18 +4488,11 @@ impl AuthManager {
         manager.workload_identity_selected = external_auth.is_some();
         // PF-84-S06 (#570): a session on a named sign-in account left the
         // default login in place; one the restrictions rule out is absent here.
-        // The initial load applied the login policy, which would drop such a
-        // login before its reason is recorded, so reload it the hiding way.
+        // The initial load applied the login policy; record why a restricted
+        // stored login is not used.
         manager.hide_restricted_default_login = session.hide_restricted_default_login;
-        if manager.hide_restricted_default_login {
-            let auth = manager
-                .try_load_managed_auth(/*cached_auth*/ None)
-                .await
-                .ok()
-                .flatten();
-            if let Ok(mut cached) = manager.inner.write() {
-                cached.auth = auth;
-            }
+        if manager.hides_restricted_default_login() {
+            manager.record_hidden_default_login(manager.auth_cached().is_none());
         }
         let manager = Arc::new(manager);
         if let Some(external_auth) = external_auth {

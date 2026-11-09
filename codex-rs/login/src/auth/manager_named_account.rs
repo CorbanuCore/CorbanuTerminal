@@ -355,14 +355,7 @@ impl AuthManager {
             agent_identity_bootstrap_cooldown: Default::default(),
             external_auth: RwLock::new(None),
             workload_identity_selected: false,
-            // D499 (provisional): the session's credential kinds bind the
-            // named account too.
-            allowed_auth_modes: RwLock::new(
-                self.allowed_auth_modes
-                    .read()
-                    .ok()
-                    .and_then(|modes| modes.clone()),
-            ),
+            allowed_auth_modes: RwLock::new(None),
             provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
             auth_route_config: self.auth_route_config.clone(),
             named_store: Some(NamedAccountStore::new(codex_vault::Vault::new(
@@ -429,7 +422,10 @@ impl AuthManager {
     ) -> Option<String> {
         let name = &account.name;
         let mode = auth_dot_json.resolved_mode();
-        let modes_allowed = self
+        // Read from the base manager each time, so a later restriction on it
+        // applies too.
+        let policy: &AuthManager = self.base_manager.as_deref().unwrap_or(self);
+        let modes_allowed = policy
             .allowed_auth_modes
             .read()
             .is_ok_and(|modes| modes.as_ref().is_none_or(|modes| modes.contains(&mode)));
@@ -438,13 +434,13 @@ impl AuthManager {
                 "account `{name}` holds a sign-in of a kind this session does not allow"
             ));
         }
-        let allowed_login_methods = self.allowed_login_methods();
+        let allowed_login_methods = policy.allowed_login_methods();
         if !super::auth_mode_is_allowed(Some(&allowed_login_methods), mode) {
             return Some(format!(
                 "account `{name}` holds a sign-in the administrator's login policy does not allow"
             ));
         }
-        let workspaces = self.effective_chatgpt_workspaces()?;
+        let workspaces = policy.effective_chatgpt_workspaces()?;
         if !mode.uses_codex_backend() {
             return None;
         }
