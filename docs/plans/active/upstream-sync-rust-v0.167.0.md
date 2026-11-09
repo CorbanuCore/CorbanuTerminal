@@ -166,7 +166,7 @@ Code-blind functional gate: designed and executed in S5 per `qa/code-blind-funct
 
 | Item | Type | Owner | Needed by | State / decision |
 | --- | --- | --- | --- | --- |
-| Separate security-owner reviewer account | decision | Travis | S3 | D318 pending; CODEOWNERS block is request-only |
+| Separate security-owner reviewer account | decision | Travis | S3 | D318 decided (@corbanu-security, #1914); the sync-branch CODEOWNERS block names it (sync-s0c) and is request-only on `sync/**` |
 | `age` 0.11 and reduced `zip` decoders | decision | security owner | S1 | D319: decide in S1 with hard backward compatibility |
 | Review budget | decision | Travis | S3, S5 | D307: up to 8 rounds for the S3 PR and the final PR |
 

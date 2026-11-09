@@ -136,6 +136,8 @@ class PrChangedPathsTest(unittest.TestCase):
                 "argument_comment_lint",
                 "windows_native_tests",
                 "windows_native_sandbox",
+                # Its types are in the app-server schema since the upstream sync.
+                "app_server_schema",
             ),
             "codex-rs/process-hardening/src": (
                 "codex",

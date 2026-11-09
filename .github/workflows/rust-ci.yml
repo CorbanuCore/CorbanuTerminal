@@ -77,9 +77,11 @@ jobs:
           windows_native_app_server=false
           # Schema fixture tests run on PRs that change the protocol crates,
           # a crate whose types they export (security-policy, absolute-path,
-          # path-uri, ext/items), the experimental API macros, the workspace
-          # manifest or lockfile, or this workflow; postmerge rust-ci-full
-          # runs them on main.
+          # path-uri, ext/items; since the upstream sync also codex-api,
+          # git-utils, history, network-proxy, secrets, redacted-string, see
+          # test_watches_every_schema_deriving_dependency), the experimental
+          # API macros, the workspace manifest or lockfile, or this workflow;
+          # postmerge rust-ci-full runs them on main.
           app_server_schema=false
           for f in "${files[@]}"; do
             [[ $f == codex-rs/* ]] && codex=true
@@ -95,6 +97,7 @@ jobs:
             [[ $f == .github/workflows/rust-ci-windows-native-tests.yml ]] && windows_native_core=true windows_native_sandbox=true windows_native_other=true windows_native_pty=true windows_native_app_server=true windows_native_tests=true
             [[ $f == codex-rs/protocol/* || $f == codex-rs/app-server-protocol/* || $f == .github/workflows/rust-ci.yml ]] && app_server_schema=true
             [[ $f == codex-rs/security-policy/* || $f == codex-rs/utils/absolute-path/* || $f == codex-rs/utils/path-uri/* || $f == codex-rs/ext/items/* ]] && app_server_schema=true
+            [[ $f == codex-rs/codex-api/* || $f == codex-rs/git-utils/* || $f == codex-rs/history/* || $f == codex-rs/network-proxy/* || $f == codex-rs/secrets/* || $f == codex-rs/utils/redacted-string/* ]] && app_server_schema=true
             [[ $f == codex-rs/codex-experimental-api-macros/* || $f == codex-rs/Cargo.toml || $f == codex-rs/Cargo.lock ]] && app_server_schema=true
           done
 

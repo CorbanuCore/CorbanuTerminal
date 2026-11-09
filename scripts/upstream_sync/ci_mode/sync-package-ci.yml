@@ -75,6 +75,16 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends pkg-config libcap-dev bubblewrap
+      # Like main's core-security and full-suite lanes: opt in here, not in setup-ci,
+      # so other Linux lanes keep Ubuntu 24.04's default AppArmor restriction.
+      - name: Enable unprivileged user namespaces (Linux)
+        if: ${{ runner.os == 'Linux' }}
+        working-directory: .
+        run: |
+          sudo sysctl -w kernel.unprivileged_userns_clone=1
+          if sudo sysctl -a 2>/dev/null | grep -q '^kernel.apparmor_restrict_unprivileged_userns'; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
         with:
           targets: ${{ matrix.target }}

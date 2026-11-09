@@ -6,10 +6,12 @@
                                  to sync-ci/**
   ci_mode.py revert <worktree>   remove exactly what apply added (every added line ends with the TAG comment)
   ci_mode.py check  <worktree>   exit 1 if any CI-mode line or file is present (S5 entry check)
-  ci_mode.py codeowners apply|revert|check <worktree> [@owner]
-                                 sync-branch CODEOWNERS block for the named security paths and the
-                                 dependency-policy files (reverted after main merge #3, as the last
-                                 sync-branch commit before the final PR)
+  ci_mode.py codeowners apply|revert|check|drift <worktree> [@owner]
+                                 sync-branch CODEOWNERS block for the named security paths, the
+                                 dependency-policy files and main's D318 paths (reverted after main
+                                 merge #3, as the last sync-branch commit before the final PR); drift
+                                 exits 1 if origin/main's D318 block names a pattern the block lacks,
+                                 the block isn't last, or (given @owner) another owner appears
 
 Edits are textual so they apply on top of whatever Tier 0 resolution the skeleton produced.
 """
@@ -17,6 +19,7 @@ Edits are textual so they apply on top of whatever Tier 0 resolution the skeleto
 import os
 import re
 import shutil
+import subprocess
 import sys
 
 TAG = "# sync-ci-mode"
@@ -168,9 +171,77 @@ DEPENDENCY_POLICY = (
     "pnpm-lock.yaml",
     ".github/workflows/cargo-deny.yml",
 )
+# Paths `main` assigns to @corbanu-security (D318, #1914) that the named list above doesn't already cover, as
+# CODEOWNERS patterns. Keeps the sync branch's coverage a superset of `main`'s until main's own block arrives
+# with a main merge. Update when main's block changes.
+MAIN_D318 = (
+    "/.github/CODEOWNERS",
+    "/codex-rs/bwrap/",
+    "/codex-rs/cli/src/debug_sandbox/",
+    "/codex-rs/cli/src/debug_sandbox.rs",
+    "/codex-rs/core/src/sandboxing/",
+    "/codex-rs/core/src/exec_env.rs",
+    "/codex-rs/core/src/windows_sandbox*",
+    "/codex-rs/exec-server/src/fs_sandbox.rs",
+    "/codex-rs/exec-server/src/process_sandbox.rs",
+    "/codex-rs/exec-server/src/sandboxed_file_system.rs",
+    "/codex-rs/protocol/src/secretless_launch.rs",
+    "/codex-rs/shell-command/src/command_safety/",
+    "/codex-rs/core/src/tools/approvals.rs",
+    "/codex-rs/core/src/tools/handlers/request_permissions.rs",
+    "/codex-rs/core/src/state/granted_permissions.rs",
+    "/codex-rs/core/src/tools/handlers/mod.rs",
+    "/codex-rs/hooks/src/events/permission_request.rs",
+    "/codex-rs/telegram/src/approvals.rs",
+    "/codex-rs/telegram/src/auth.rs",
+    "/codex-rs/app-server-transport/src/transport/auth.rs",
+    "/codex-rs/protocol/src/permissions.rs",
+    "/codex-rs/protocol/src/permissions/",
+    "/codex-rs/core/src/config/resolved_permission_profile.rs",
+    "/codex-rs/core/src/config/permission_profile_catalog.rs",
+    "/codex-rs/config/src/permissions_toml.rs",
+    "/codex-rs/config/src/requirements_layers/",
+    "/codex-rs/config/src/security_state.rs",
+    "/codex-rs/tui/src/security/",
+    "/codex-rs/cli/src/nested_security.rs",
+    "/codex-rs/vault/",
+    "/codex-rs/keyring-store/",
+    "/codex-rs/wallet/",
+    "/codex-rs/wallet-daemon/",
+    "/codex-rs/login/src/auth/storage*",
+    "/codex-rs/login/src/auth/provider_key_vault.rs",
+    "/codex-rs/core/src/config/auth_keyring.rs",
+    "/codex-rs/core/src/config/network_proxy_credential*",
+    "/codex-rs/core/src/model_broker_auth*",
+    "/codex-rs/model-provider/src/model_key_broker.rs",
+)
+# Upstream moved code that main owns to paths main's block doesn't name yet. Carry these into main's
+# D318 block in the final sync PR.
+SYNC_SUCCESSORS = (
+    # main: /codex-rs/app-server-transport/src/transport/auth.rs (upstream #47447 moved it here)
+    "/codex-rs/websocket-auth/",
+    # main: /codex-rs/core/src/guardian/policy*.md (upstream #41477 moved the guardian prompts here)
+    "/codex-rs/prompts/templates/guardian/",
+    # main: /codex-rs/core/src/guardian/ (upstream #44227, #44252, #44544 moved the review engine here)
+    "/codex-rs/ext/guardian-reviewer/",
+    # main: /codex-rs/core/src/guardian/prompt.rs (upstream #46026 moved prompt assembly here)
+    "/codex-rs/prompts/src/guardian_instructions.rs",
+    "/codex-rs/prompts/src/model_messages/guardian.rs",
+    # New upstream guardian code that isn't a move of main-owned files, owned here pending the security
+    # owner's decision for main: guardian-context (#41392: authorization, enforcement, trusted tools),
+    # guardian-v2 (async scorer authorization/trusted tools/approval; reviewer config and permission
+    # profile, #45729) and guardian-v3 (guardian evidence).
+    "/codex-rs/guardian-context/",
+    "/codex-rs/ext/guardian-v2/",
+    "/codex-rs/ext/guardian-v3/",
+)
+MAIN_BLOCK_BEGIN = "# BEGIN Corbanu security owners"
+MAIN_BLOCK_END = "# END Corbanu security owners"
 
 
 def codeowners(action, wt, owner=None):
+    if action not in ("apply", "revert", "check", "drift"):
+        sys.exit(f"error: unknown codeowners action {action!r}")
     sys.path.insert(0, HERE)
     import footprint
 
@@ -179,6 +250,44 @@ def codeowners(action, wt, owner=None):
     start, end = text.find(CO_BEGIN), text.find(CO_END)
     if (start == -1) != (end == -1) or end < start:
         sys.exit("error: CODEOWNERS block markers are incomplete; fix by hand")
+    if action == "drift":
+        # Every pattern in main's D318 block must be in the sync block; run after fetching origin/main.
+        main = subprocess.run(
+            ["git", "-C", wt, "show", "origin/main:.github/CODEOWNERS"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        m_start, m_end = main.find(MAIN_BLOCK_BEGIN), main.find(MAIN_BLOCK_END)
+        if m_start == -1 or m_end < m_start or start == -1:
+            sys.exit("error: main's D318 block or the sync block is missing")
+        if text[end + len(CO_END) :].strip():
+            sys.exit("error: the sync block is not last in CODEOWNERS")
+        lines = [
+            line.split()
+            for line in text[start:end].splitlines()
+            if line.startswith("/")
+        ]
+        unowned = [parts[0] for parts in lines if len(parts) < 2]
+        if unowned:
+            sys.exit(
+                "error: sync block patterns without an owner: " + ", ".join(unowned)
+            )
+        if not owner:
+            sys.exit("error: codeowners drift needs the expected @owner")
+        others = sorted({o for parts in lines for o in parts[1:]} - {owner})
+        if others:
+            sys.exit(f"error: sync block names owners other than {owner}: {others}")
+        owned = {parts[0] for parts in lines}
+        missing = [
+            line.split()[0]
+            for line in main[m_start:m_end].splitlines()
+            if line.startswith("/") and line.split()[0] not in owned
+        ]
+        if missing:
+            sys.exit("sync block misses main's D318 patterns: " + ", ".join(missing))
+        print("sync block covers main's D318 block")
+        return
     if action == "check":
         if start != -1:
             sys.exit("CODEOWNERS block still present")
@@ -192,12 +301,11 @@ def codeowners(action, wt, owner=None):
         ):
             sys.exit("error: codeowners apply needs an @owner")
         # Last matching pattern wins, so this block goes at the end.
-        block = (
-            [CO_BEGIN]
-            + [f"{codeowners_pattern(spec)} {owner}" for spec in footprint.NAMED]
-            + [f"{codeowners_pattern(spec)} {owner}" for spec in DEPENDENCY_POLICY]
-            + [CO_END]
-        )
+        patterns = [
+            codeowners_pattern(spec) for spec in [*footprint.NAMED, *DEPENDENCY_POLICY]
+        ]
+        patterns += [p for p in MAIN_D318 + SYNC_SUCCESSORS if p not in patterns]
+        block = [CO_BEGIN] + [f"{p} {owner}" for p in patterns] + [CO_END]
         text = text.rstrip("\n") + "\n\n" + "\n".join(block) + "\n"
     open(p, "w").write(text)
     print(f"CODEOWNERS block {'added' if action == 'apply' else 'removed'}")
@@ -207,4 +315,7 @@ if __name__ == "__main__":
     if sys.argv[1] == "codeowners":
         codeowners(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else None)
     else:
-        {"apply": apply, "revert": revert, "check": check}[sys.argv[1]](sys.argv[2])
+        actions = {"apply": apply, "revert": revert, "check": check}
+        if sys.argv[1] not in actions:
+            sys.exit(f"error: unknown action {sys.argv[1]!r}")
+        actions[sys.argv[1]](sys.argv[2])
