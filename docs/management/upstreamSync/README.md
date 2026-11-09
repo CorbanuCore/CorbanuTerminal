@@ -24,11 +24,31 @@ skeleton merge is up as #1690 into it.
 
 Known red lanes on sync PRs until their slices land (expected; a red lane on a slice whose own paths are
 marker-free is real): `Blob size policy` (`tui/src/bottom_pane/chat_composer.rs` is 548 KiB with markers, S4b);
-`repo-checks` (markers in `scripts/codex_package`, `scripts/install`, S1d; upstream's new release workflows fail
-our cache-save and schema-watch policy tests and `test_verify_pypi_release` needs `packaging`, `ci-review` rows,
-S4); `corbanu-terminal-ci` and the `v8-canary` builds (crates with markers). Upstream's new
-`python-sdk-cli-release.yml` (`workflow_run` on `rust-release`) and `python-sdk-release.yml` (`python-v*` tags)
-are inert until they reach `main`; S4 decides whether we keep them.
+`repo-checks` (markers in `scripts/codex_package`, `scripts/install`, S1d; `test_bazel_unit_test_alone` needs
+S1d's `defs.bzl`, three `windows_sandbox_nextest_groups` tests need S2's core tests); `corbanu-terminal-ci` and
+the `v8-canary` builds (crates with markers). The cache-save and schema-watch failures from upstream's CI files
+are fixed by sync-s0c (below).
+
+## S0 `ci-review` rows (sync-s0c, 2026-11-09)
+
+All 77 open `ci-review` rows (upstream `.github/` changes that merged without conflict) are resolved, in two PRs:
+27 rows for files Corbanu's lanes use (#1929, with 3 `follow-up` rows) and 50 inert rows (this ledger-only PR).
+The rule: take upstream where a lane we run gains or loses nothing Corbanu decided; keep Corbanu's behaviour
+where it differs. Corbanu-specific choices (each in its row's note, `S0c:`):
+
+- `setup-ci` drops upstream's global unprivileged-userns sysctl: our Linux lanes keep Ubuntu 24.04's AppArmor
+  restriction (the #581 path users hit); lanes that need user namespaces opt in per workflow, as on `main`.
+- `prepare-bazel-ci` keeps the main-only cache save (#636); `blocking-ci` keeps Bazel in `CI required`;
+  `blob-size-policy` doesn't run `openai/fence`; `run-argument-comment-lint` skips upstream's voice setup (D316).
+- Kept Corbanu files that still use upstream-deleted files keep them: `rust-release-zsh.yml` (zsh config and
+  build script, removed with zsh in S3b, D275), `rust-release.yml` (rcodesign notarizers), `.devcontainer`
+  (dependabot entry, S1d).
+- Inert upstream files are taken as they are: the Python SDK/runtime and issue-labeler workflows (jobs guarded by
+  `github.repository == 'openai/codex'`), `rust-release-provisioned-macos.yml` (called only by upstream's
+  `rust-release.yml`), AKV/provisioned macOS signing, voice tooling, release packaging helpers.
+
+Still open from S0's rows: the `main-merge` rows `test_bazel_unit_test_alone.py` (S1d `defs.bzl`) and
+`test_windows_sandbox_nextest_groups.py` (S2 core tests), and the `re-apply` row `state/BUILD.bazel` (S1d).
 
 ## Ledger previews (`main` `23be0b3883b1`; superseded by the skeleton ledger)
 
