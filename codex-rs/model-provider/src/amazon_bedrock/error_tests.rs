@@ -204,17 +204,17 @@ fn credential_export_errors_distinguish_configuration_failures_from_retryable_au
         (
             http_error(StatusCode::UNAUTHORIZED, "ExpiredTokenException"),
             true,
-            true,
+            false,
         ),
         (
             http_error(StatusCode::FORBIDDEN, "ExpiredTokenException"),
             true,
-            true,
+            false,
         ),
         (
             http_error(StatusCode::FORBIDDEN, "AccessDeniedException"),
             false,
-            true,
+            false,
         ),
         (
             ApiError::Transport(TransportError::Network("offline".to_string())),
@@ -222,6 +222,9 @@ fn credential_export_errors_distinguish_configuration_failures_from_retryable_au
             true,
         ),
     ] {
+        // Corbanu retries an unexpected HTTP status only when it is a server
+        // error, 408 or 429; a 401/403 is recovered by the provider's auth
+        // recovery (above), not by the generic retry.
         let ApiError::Transport(transport) = &error else {
             unreachable!("all test cases are transport errors");
         };

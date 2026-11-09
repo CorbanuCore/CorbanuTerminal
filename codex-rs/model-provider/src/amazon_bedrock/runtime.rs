@@ -8,7 +8,7 @@ use super::auth::BedrockAuthSource;
 use super::auth::resolve_region;
 use super::mantle::region_from_config;
 
-const BEDROCK_RUNTIME_SERVICE_NAME: &str = "bedrock";
+pub(super) const BEDROCK_RUNTIME_SERVICE_NAME: &str = "bedrock";
 
 pub(super) fn aws_auth_config(aws: &ModelProviderAwsAuthInfo) -> AwsAuthConfig {
     AwsAuthConfig {

@@ -4,14 +4,10 @@ mod catalog;
 mod credential_export;
 mod error;
 mod mantle;
-<<<<<<< HEAD
 mod named_account;
-||||||| 413492cd6c
-=======
 mod region;
 mod runtime;
 mod runtime_catalog;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -47,27 +43,33 @@ use crate::provider::ProviderAuthRecoveryMessages;
 use crate::provider::ProviderUnauthorizedRecovery;
 use crate::shared_state::process_shared_state;
 use auth::resolve_provider_auth as resolve_bedrock_provider_auth;
-<<<<<<< HEAD
-pub use catalog::model_presets as amazon_bedrock_model_presets;
-||||||| 413492cd6c
-=======
 pub(crate) use auth_refresh::AwsAuthRecovery;
+pub use catalog::model_presets as amazon_bedrock_model_presets;
 use catalog::normalize_bedrock_catalog;
 use catalog::static_gov_model_catalog;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub(crate) use catalog::static_model_catalog;
 pub(crate) use credential_export::AwsCredentialExport;
 use mantle::bedrock_mantle_runtime_base_url;
 pub use mantle::is_amazon_bedrock_gov_cloud_region;
 pub use mantle::is_supported_amazon_bedrock_region;
-<<<<<<< HEAD
 use named_account::NamedBedrockAccount;
-||||||| 413492cd6c
-=======
 pub use region::resolve_amazon_bedrock_region;
 use runtime::bedrock_runtime_base_url;
 use runtime_catalog::static_runtime_model_catalog;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+
+/// PF-84-S06: a named account signs with its own AWS profile only, so it never
+/// takes the managed, environment or credential-export sources.
+fn auth_source_for(
+    named_account: bool,
+    info: &ModelProviderInfo,
+    auth_manager: Option<&AuthManager>,
+) -> auth::BedrockAuthSource {
+    if named_account {
+        auth::BedrockAuthSource::ConfiguredAwsProfile
+    } else {
+        auth::auth_source(info, auth_manager, std::env::var)
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum BedrockEndpoint {
@@ -83,14 +85,10 @@ pub(crate) struct AmazonBedrockModelProvider {
     aws: ModelProviderAwsAuthInfo,
     endpoint: BedrockEndpoint,
     auth_manager: Option<Arc<AuthManager>>,
-<<<<<<< HEAD
     /// PF-84-S06: the named account (an AWS profile) this provider uses.
     named_account: Option<NamedBedrockAccount>,
-||||||| 413492cd6c
-=======
     credential_export: Option<Arc<AwsCredentialExport>>,
     auth_recovery: Option<Arc<AwsAuthRecovery>>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl AmazonBedrockModelProvider {
@@ -98,21 +96,15 @@ impl AmazonBedrockModelProvider {
         provider_info: ModelProviderInfo,
         auth_manager: Option<Arc<AuthManager>>,
     ) -> Self {
-<<<<<<< HEAD
         let account_home = auth_manager
             .as_ref()
             .map(|auth_manager| auth_manager.codex_home().to_path_buf());
         let named_account = NamedBedrockAccount::for_provider(&provider_info, account_home);
-        let auth_manager = auth_manager_for_provider(auth_manager, &provider_info);
-||||||| 413492cd6c
-        let auth_manager = auth_manager_for_provider(auth_manager, &provider_info);
-=======
         let endpoint = if provider_info.is_amazon_bedrock_runtime() {
             BedrockEndpoint::Runtime
         } else {
             BedrockEndpoint::Mantle
         };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let aws = provider_info
             .aws
             .clone()
@@ -122,8 +114,16 @@ impl AmazonBedrockModelProvider {
                 credential_export: None,
                 auth_refresh: None,
             });
-        let auth_source = auth::auth_source(&provider_info, auth_manager.as_deref(), std::env::var);
-        let credential_export = if auth_source == auth::BedrockAuthSource::CredentialExport {
+        let auth_source = auth_source_for(
+            named_account.is_some(),
+            &provider_info,
+            auth_manager.as_deref(),
+        );
+        // A named account signs with its own profile only: no credential
+        // export and no configured refresh command (they serve the default).
+        let credential_export = if named_account.is_none()
+            && auth_source == auth::BedrockAuthSource::CredentialExport
+        {
             process_shared_state().aws_credential_export(&aws)
         } else {
             None
@@ -134,11 +134,12 @@ impl AmazonBedrockModelProvider {
                 | auth::BedrockAuthSource::ConfiguredAwsProfile
                 | auth::BedrockAuthSource::AwsSdk
         );
-        let auth_recovery = if uses_aws_sdk_auth && aws.auth_refresh.is_some() {
-            process_shared_state().aws_auth_recovery(&aws)
-        } else {
-            None
-        };
+        let auth_recovery =
+            if named_account.is_none() && uses_aws_sdk_auth && aws.auth_refresh.is_some() {
+                process_shared_state().aws_auth_recovery(&aws)
+            } else {
+                None
+            };
         let http_client_factory = auth_manager
             .as_ref()
             .map(|manager| {
@@ -158,32 +159,26 @@ impl AmazonBedrockModelProvider {
             aws,
             endpoint,
             auth_manager,
-<<<<<<< HEAD
             named_account,
-||||||| 413492cd6c
-=======
             credential_export,
             auth_recovery,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 
-<<<<<<< HEAD
+    fn auth_source(&self) -> auth::BedrockAuthSource {
+        auth_source_for(
+            self.named_account.is_some(),
+            &self.info,
+            self.auth_manager.as_deref(),
+        )
+    }
+
     /// A named account never uses the managed Bedrock key.
-    fn managed_auth(&self) -> Option<BedrockApiKeyAuth> {
+    fn managed_auth(&self) -> Option<CodexAuth> {
         if self.named_account.is_some() {
             return None;
         }
-||||||| 413492cd6c
-    fn managed_auth(&self) -> Option<BedrockApiKeyAuth> {
-=======
-    fn auth_source(&self) -> auth::BedrockAuthSource {
-        auth::auth_source(&self.info, self.auth_manager.as_deref(), std::env::var)
-    }
-
-    fn managed_auth(&self) -> Option<CodexAuth> {
         let source = self.auth_source();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         self.auth_manager
             .as_deref()
             .and_then(AuthManager::auth_cached)
@@ -237,20 +232,20 @@ impl AmazonBedrockModelProvider {
         if let Some(base_url) = self.info.base_url.clone() {
             return Ok(Some(base_url));
         }
-<<<<<<< HEAD
-        if let Some(account) = self.named_account.as_ref() {
-            return Ok(Some(mantle::base_url(&account.region(&self.aws).await?)?));
-        }
-||||||| 413492cd6c
-=======
         let http_client_factory = self.http_client_factory.clone().with_network_policy(
             self.http_client_factory
                 .network_policy()
                 .clone()
                 .for_current_account(),
         );
+        if let Some(account) = self.named_account.as_ref() {
+            let region = account.region(&self.aws).await?;
+            return Ok(Some(match self.endpoint {
+                BedrockEndpoint::Mantle => mantle::base_url(&region)?,
+                BedrockEndpoint::Runtime => runtime::base_url(&region),
+            }));
+        }
         let auth_source = self.auth_source();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let managed_auth = self.managed_auth();
         let base_url = match self.endpoint {
             BedrockEndpoint::Mantle => {
@@ -287,14 +282,12 @@ impl AmazonBedrockModelProvider {
             let auth = self.auth().await;
             return resolve_configured_provider_auth(auth.as_ref(), &self.info);
         }
-<<<<<<< HEAD
         if let Some(account) = self.named_account.as_ref() {
-            return Ok(auth::sigv4_auth_provider(account.context(&self.aws).await?));
+            let context = account
+                .context(&self.aws, self.endpoint, http_client_factory)
+                .await?;
+            return Ok(auth::sigv4_auth_provider(context, self.endpoint));
         }
-||||||| 413492cd6c
-=======
-
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let managed_auth = self.managed_auth();
         resolve_bedrock_provider_auth(
             source,
@@ -339,6 +332,7 @@ impl ModelProvider for AmazonBedrockModelProvider {
 
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
+            namespace_tools: true,
             reasoning_summaries: true,
             image_generation: false,
             web_search: self.endpoint == BedrockEndpoint::Mantle,
@@ -759,6 +753,7 @@ mod tests {
         assert_eq!(
             provider.capabilities(),
             ProviderCapabilities {
+                namespace_tools: true,
                 reasoning_summaries: true,
                 image_generation: false,
                 web_search: true,
@@ -778,6 +773,7 @@ mod tests {
         assert_eq!(
             provider.capabilities(),
             ProviderCapabilities {
+                namespace_tools: true,
                 reasoning_summaries: true,
                 image_generation: false,
                 web_search: false,

@@ -138,11 +138,12 @@ impl ApiKeyHeaderAuthProvider {
 }
 
 impl AuthProvider for ApiKeyHeaderAuthProvider {
-    fn add_auth_headers(&self, headers: &mut HeaderMap) {
+    fn add_auth_headers(&self, headers: &mut HeaderMap) -> Result<(), AuthError> {
         if let Ok(mut header) = HeaderValue::from_str(&self.api_key) {
             header.set_sensitive(true);
             let _ = headers.insert(self.header_name.clone(), header);
         }
+        Ok(())
     }
 }
 
@@ -304,15 +305,24 @@ pub(crate) fn auth_manager_for_provider(
     let cache_policy = external_bearer_cache_policy(auth_manager.as_deref(), provider);
     match provider.auth.clone() {
         Some(config) => {
-<<<<<<< HEAD
             let account = external_bearer_account(
                 provider,
                 auth_manager.as_deref().map(AuthManager::codex_home),
             );
+            let mut env = HashMap::new();
+            if provider.is_gcp()
+                && let Some(credential_file) = &provider.credential_file
+            {
+                env.insert(
+                    "GOOGLE_APPLICATION_CREDENTIALS".to_string(),
+                    credential_file.as_os_str().to_os_string(),
+                );
+            }
             Some(AuthManager::external_bearer_only_for_account(
                 config,
                 cache_policy,
                 account,
+                env,
             ))
         }
         // PF-84-S06: a named sign-in account uses its own manager (its own
@@ -417,23 +427,6 @@ fn external_bearer_cache_policy(
         })
     } else {
         ExternalBearerCachePolicy::Timed
-||||||| 413492cd6c
-        Some(config) => Some(AuthManager::external_bearer_only(config)),
-        None => auth_manager,
-=======
-            let mut env = HashMap::new();
-            if provider.is_gcp()
-                && let Some(credential_file) = &provider.credential_file
-            {
-                env.insert(
-                    "GOOGLE_APPLICATION_CREDENTIALS".to_string(),
-                    credential_file.as_os_str().to_os_string(),
-                );
-            }
-            Some(AuthManager::external_bearer_only_with_env(config, env))
-        }
-        None => auth_manager,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 
@@ -441,13 +434,17 @@ pub(crate) fn resolve_provider_auth(
     auth: Option<&CodexAuth>,
     provider: &ModelProviderInfo,
 ) -> codex_protocol::error::Result<SharedAuthProvider> {
-    if let Some(auth) = bearer_auth_for_provider(provider)? {
-        return Ok(Arc::new(auth));
-    }
-
-    if !provider.requires_openai_auth && provider.auth.is_none() {
-        return Ok(unauthenticated_auth_provider());
-    }
+    // A provider that takes neither OpenAI sign-in, command auth nor a
+    // provider key never inherits the ambient login (upstream #2xxxx); its
+    // explicit bearer token, if any, still applies below (brokered first).
+    let auth = if !provider.requires_openai_auth
+        && provider.auth.is_none()
+        && provider.env_key.is_none()
+    {
+        None
+    } else {
+        auth
+    };
 
     if matches!(
         auth,
@@ -458,7 +455,6 @@ pub(crate) fn resolve_provider_auth(
         ));
     }
 
-<<<<<<< HEAD
     // PF-27-S05: in a brokered process, plain keys and sign-in tokens are
     // attached by the broker only; before the broker is running they are not
     // attached at all.
@@ -483,13 +479,6 @@ pub(crate) fn resolve_provider_auth(
         return Ok(auth);
     }
 
-||||||| 413492cd6c
-    if let Some(auth) = bearer_auth_for_provider(provider)? {
-        return Ok(Arc::new(auth));
-    }
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     Ok(match auth {
         // Command and AWS auth are not brokered: sent as before.
         Some(auth) if provider.auth.is_some() || provider.aws.is_some() => {
@@ -614,7 +603,7 @@ fn brokered_auth_request(
         }
     } else if let Some(token) = provider.experimental_bearer_token.clone() {
         let key = ProviderApiKey {
-            value: token,
+            value: token.into_inner(),
             header: ProviderApiKeyHeader::Bearer,
         };
         return request(
@@ -638,7 +627,10 @@ fn brokered_auth_request(
         | CodexAuth::PersonalAccessToken(_) => {
             format!("sign-in:{}", auth.get_account_id().unwrap_or_default())
         }
-        CodexAuth::AgentIdentity(_) | CodexAuth::Headers(_) | CodexAuth::BedrockApiKey(_) => {
+        CodexAuth::AgentIdentity(_)
+        | CodexAuth::Headers(_)
+        | CodexAuth::BedrockApiKey(_)
+        | CodexAuth::BedrockAccessKeys(_) => {
             return Ok(None);
         }
     };
@@ -650,7 +642,9 @@ fn brokered_auth_request(
     let (header, extra_headers) = if provider.env_key.is_some() {
         (header, HeaderMap::new())
     } else {
-        let mut extra_headers = direct_auth_provider_from_auth(auth).to_auth_headers();
+        let mut extra_headers = direct_auth_provider_from_auth(auth)
+            .to_auth_headers()
+            .map_err(|error| CodexErr::Fatal(error.to_string()))?;
         extra_headers.remove(http::header::AUTHORIZATION);
         (ProviderApiKeyHeader::Bearer, extra_headers)
     };
@@ -726,7 +720,7 @@ pub fn provider_api_key(
     }
     if let Some(token) = provider.experimental_bearer_token.clone() {
         return Ok(Some(ProviderApiKey {
-            value: token,
+            value: token.into_inner(),
             header: ProviderApiKeyHeader::Bearer,
         }));
     }
@@ -758,19 +752,12 @@ fn bearer_auth_for_provider(
     }
 
     if let Some(token) = provider.experimental_bearer_token.clone() {
-<<<<<<< HEAD
-        return Ok(Some(Arc::new(BearerAuthProvider::new(token))));
-||||||| 413492cd6c
-        return Ok(Some(BearerAuthProvider::new(token)));
-=======
-        return Ok(Some(BearerAuthProvider::new(token.into_inner())));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        return Ok(Some(Arc::new(BearerAuthProvider::new(token.into_inner()))));
     }
 
     Ok(None)
 }
 
-<<<<<<< HEAD
 fn auth_provider_from_provider_key_auth(
     auth: &CodexAuth,
     provider: &ModelProviderInfo,
@@ -796,8 +783,8 @@ fn api_key_auth_provider(
     }
 
     Ok(Arc::new(BearerAuthProvider::new(api_key)))
-||||||| 413492cd6c
-=======
+}
+
 /// Whether the selected API key enables OpenAI's default FedRAMP endpoints.
 /// Command-backed providers retain their configured routing across token refreshes.
 pub(crate) fn uses_fedramp_api_key(
@@ -807,13 +794,15 @@ pub(crate) fn uses_fedramp_api_key(
     if !provider.is_openai() || provider.has_command_auth() {
         return Ok(false);
     }
-    if let Some(auth) = bearer_auth_for_provider(provider)? {
-        return Ok(auth.is_fedramp_account);
+    if let Some(api_key) = provider.api_key()? {
+        return Ok(codex_login::auth::is_fedramp_api_key(&api_key));
+    }
+    if let Some(token) = provider.experimental_bearer_token.clone() {
+        return Ok(codex_login::auth::is_fedramp_api_key(&token.into_inner()));
     }
     Ok(provider.requires_openai_auth
         && matches!(auth, Some(CodexAuth::ApiKey(_)))
         && auth.is_some_and(CodexAuth::is_fedramp_account))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 /// Builds request-header auth for a first-party Codex auth snapshot.
@@ -1210,7 +1199,8 @@ mod tests {
         assert_eq!(key.header, expected_header);
         let direct = resolve_provider_auth(auth, provider)
             .expect("direct auth")
-            .to_auth_headers();
+            .to_auth_headers()
+            .unwrap();
         let (name, value) = match expected_header {
             ProviderApiKeyHeader::Bearer => ("authorization", format!("Bearer {}", key.value)),
             ProviderApiKeyHeader::XApiKey => ("x-api-key", key.value.clone()),
@@ -1242,7 +1232,7 @@ mod tests {
         );
         let mut bearer =
             create_oss_provider_with_base_url("https://llm.example/v1", WireApi::Responses);
-        bearer.experimental_bearer_token = Some("bearer-pf27s05".to_string());
+        bearer.experimental_bearer_token = Some("bearer-pf27s05".into());
         assert_brokered_matches_direct(/*auth*/ None, &bearer, ProviderApiKeyHeader::Bearer);
     }
 
@@ -1281,7 +1271,8 @@ mod tests {
             for auth in [None, Some(&placeholder)] {
                 let headers = resolve_provider_auth(auth, &zai)
                     .expect("brokered auth")
-                    .to_auth_headers();
+                    .to_auth_headers()
+                    .unwrap();
                 assert!(headers.is_empty(), "Core attaches nothing: {headers:?}");
             }
             let uses = broker.uses.lock().expect("uses");
@@ -1316,7 +1307,7 @@ mod tests {
             let chatgpt = CodexAuth::create_dummy_chatgpt_auth_for_testing();
             let mut bearer =
                 create_oss_provider_with_base_url("https://llm.example/v1", WireApi::Responses);
-            bearer.experimental_bearer_token = Some("bearer-pf27s05".to_string());
+            bearer.experimental_bearer_token = Some("bearer-pf27s05".into());
             for (auth, provider) in [
                 (Some(&api_key), &openai),
                 (Some(&chatgpt), &openai),
@@ -1326,6 +1317,7 @@ mod tests {
                     resolve_provider_auth(auth, provider)
                         .expect("brokered auth")
                         .to_auth_headers()
+                        .unwrap()
                         .is_empty()
                 );
             }
@@ -1380,7 +1372,8 @@ mod tests {
             let chatgpt = CodexAuth::create_dummy_chatgpt_auth_for_testing();
             let headers = resolve_provider_auth(Some(&chatgpt), &provider)
                 .expect("brokered auth")
-                .to_auth_headers();
+                .to_auth_headers()
+                .unwrap();
             assert!(headers.is_empty(), "Core attaches nothing: {headers:?}");
             let uses = broker.uses.lock().expect("uses");
             assert_eq!(uses.len(), 1);
@@ -1404,7 +1397,7 @@ mod tests {
         crate::model_key_broker::set_test_broker_required(/*required*/ true);
         let mut provider =
             create_oss_provider_with_base_url("https://llm.example/v1", WireApi::Responses);
-        provider.experimental_bearer_token = Some("bearer-pf27s05".to_string());
+        provider.experimental_bearer_token = Some("bearer-pf27s05".into());
         let result = resolve_provider_auth(/*auth*/ None, &provider);
         crate::model_key_broker::set_test_broker_required(/*required*/ false);
         let Err(error) = result else {
@@ -1435,7 +1428,8 @@ mod tests {
             let token = CodexAuth::from_api_key("pf27s05-command-token");
             let headers = resolve_provider_auth(Some(&token), &provider)
                 .expect("command auth")
-                .to_auth_headers();
+                .to_auth_headers()
+                .unwrap();
             assert_eq!(
                 headers
                     .get(AUTHORIZATION)
@@ -1451,10 +1445,11 @@ mod tests {
     fn pf_27_s05_flag_off_direct_auth_is_unchanged() {
         let mut provider =
             create_oss_provider_with_base_url("https://llm.example/v1", WireApi::Responses);
-        provider.experimental_bearer_token = Some("bearer-pf27s05".to_string());
+        provider.experimental_bearer_token = Some("bearer-pf27s05".into());
         let headers = resolve_provider_auth(/*auth*/ None, &provider)
             .expect("direct auth")
-            .to_auth_headers();
+            .to_auth_headers()
+            .unwrap();
         assert_eq!(
             headers
                 .get(AUTHORIZATION)
@@ -1462,7 +1457,7 @@ mod tests {
             Some("Bearer bearer-pf27s05")
         );
         let api_key = CodexAuth::from_api_key("sk-pf27s05-direct");
-        let headers = auth_provider_from_auth(&api_key).to_auth_headers();
+        let headers = auth_provider_from_auth(&api_key).to_auth_headers().unwrap();
         assert_eq!(
             headers
                 .get(AUTHORIZATION)
@@ -1482,12 +1477,18 @@ mod tests {
                 CodexAuth::from_api_key("sk-pf27s05-header-only"),
                 CodexAuth::create_dummy_chatgpt_auth_for_testing(),
             ] {
-                assert!(auth_provider_from_auth(&auth).to_auth_headers().is_empty());
+                assert!(
+                    auth_provider_from_auth(&auth)
+                        .to_auth_headers()
+                        .unwrap()
+                        .is_empty()
+                );
             }
             // Auth that is not brokered is unchanged.
             assert_eq!(
                 auth_provider_from_auth(&headers)
                     .to_auth_headers()
+                    .unwrap()
                     .get("x-custom")
                     .and_then(|value| value.to_str().ok()),
                 Some("kept")
@@ -1497,6 +1498,7 @@ mod tests {
                 resolve_provider_auth(Some(&headers), &openai)
                     .expect("header auth")
                     .to_auth_headers()
+                    .unwrap()
                     .get("x-custom")
                     .and_then(|value| value.to_str().ok()),
                 Some("kept")

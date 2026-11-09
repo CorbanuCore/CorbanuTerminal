@@ -89,7 +89,6 @@ pub(crate) fn static_model_catalog() -> ModelsResponse {
     normalize_bundled_bedrock_catalog(catalog, BedrockEndpoint::Mantle)
 }
 
-<<<<<<< HEAD
 /// PF-84-S06 (#572): Bedrock's built-in models as picker presets, so a
 /// session on another provider can offer a switch to Bedrock.
 pub fn model_presets() -> Vec<codex_protocol::openai_models::ModelPreset> {
@@ -101,10 +100,6 @@ pub fn model_presets() -> Vec<codex_protocol::openai_models::ModelPreset> {
         .collect()
 }
 
-pub(crate) fn with_default_only_service_tier(mut catalog: ModelsResponse) -> ModelsResponse {
-||||||| 413492cd6c
-pub(crate) fn with_default_only_service_tier(mut catalog: ModelsResponse) -> ModelsResponse {
-=======
 pub(super) fn static_gov_model_catalog() -> ModelsResponse {
     let mut catalog = static_model_catalog();
     catalog.models.retain(|model| {
@@ -120,7 +115,6 @@ pub(super) fn normalize_bundled_bedrock_catalog(
     mut catalog: ModelsResponse,
     endpoint: BedrockEndpoint,
 ) -> ModelsResponse {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     for model in &mut catalog.models {
         // Bundled defaults must not inherit OpenAI-only tiers or opt into a premium tier.
         model.additional_speed_tiers.clear();
@@ -177,12 +171,26 @@ fn gpt_5_bedrock_model(
     model
 }
 
+/// Bedrock's context windows for these models: 872K at most, with a 272K
+/// default (500K for GPT-6.1 Terra). Corbanu's OpenAI rows carry the OpenAI
+/// API's own windows, which Bedrock must not inherit.
+const BEDROCK_MAX_CONTEXT_WINDOW: i64 = 872_000;
+
+fn bedrock_default_context_window(openai_slug: &str) -> i64 {
+    match openai_slug {
+        GPT_6_1_TERRA_OPENAI_MODEL_ID => 500_000,
+        _ => 272_000,
+    }
+}
+
 fn bedrock_model(
     mut model: ModelInfo,
     bedrock_slug: &str,
     display_name: &str,
     priority: i32,
 ) -> ModelInfo {
+    model.context_window = Some(bedrock_default_context_window(&model.slug));
+    model.max_context_window = Some(BEDROCK_MAX_CONTEXT_WINDOW);
     model.slug = bedrock_slug.to_string();
     model.display_name = display_name.to_string();
     model.priority = priority;
@@ -407,6 +415,8 @@ mod tests {
                 1,
             ),
         ] {
+            expected.context_window = Some(bedrock_default_context_window(&expected.slug));
+            expected.max_context_window = Some(BEDROCK_MAX_CONTEXT_WINDOW);
             expected.slug = slug.to_string();
             expected.display_name = display_name.to_string();
             expected.priority = priority;

@@ -272,9 +272,10 @@ async fn bundled_vertex_models_filter_catalog_and_normalize_unsupported_tool_met
             .into_iter()
             .map(|model| (model.model, model.show_in_picker))
             .collect::<Vec<_>>(),
+        // Picker order follows Corbanu's catalog priorities.
         vec![
-            ("gpt-6.1-sol".to_string(), true),
             ("gpt-6-astra".to_string(), true),
+            ("gpt-6.1-sol".to_string(), true),
             ("gpt-6-luna".to_string(), true),
             ("gpt-6.1-terra".to_string(), true),
         ]

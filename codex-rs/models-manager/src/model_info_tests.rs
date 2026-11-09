@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn curated_gpu_models_have_conservative_non_fallback_metadata() {
     let deepseek = model_info_from_slug("deepseek-ai/DeepSeek-V4-Flash-0731");
-    assert!(!deepseek.used_fallback_model_metadata);
+    assert!(is_curated_gpu_model("deepseek-ai/DeepSeek-V4-Flash-0731"));
     assert_eq!(deepseek.context_window, Some(384_000));
     assert!(deepseek.model_messages.is_some());
     assert_eq!(
@@ -24,10 +24,10 @@ fn curated_gpu_models_have_conservative_non_fallback_metadata() {
     );
 
     let glm = model_info_from_slug("zai-org/GLM-5.2-FP8");
-    assert!(!glm.used_fallback_model_metadata);
+    assert!(is_curated_gpu_model("zai-org/GLM-5.2-FP8"));
     assert_eq!(glm.context_window, Some(131_072));
 
-    assert!(model_info_from_slug("unregistered-gpu-model").used_fallback_model_metadata);
+    assert!(!is_curated_gpu_model("unregistered-gpu-model"));
     assert_eq!(
         model_info_from_slug("deepseek-ai/DeepSeek-V4-Pro").default_reasoning_level,
         None
@@ -62,7 +62,6 @@ fn config_with_personality(personality: Option<Personality>) -> ModelsManagerCon
 }
 
 #[test]
-<<<<<<< HEAD
 fn max_output_override_only_lowers_the_catalog_limit() {
     let mut model = model_info_from_slug("claude-fable-5");
     model.max_output_tokens = Some(128_000);
@@ -87,15 +86,10 @@ fn max_output_override_only_lowers_the_catalog_limit() {
 }
 
 #[test]
-fn base_instruction_override_preserves_catalog_approval_messages() {
-||||||| 413492cd6c
-fn base_instruction_override_preserves_catalog_approval_messages() {
-=======
 fn base_instruction_override_is_literal_and_preserves_catalog_messages() {
     let override_instructions = "override {{ personality }}\n# Personality\nKeep me";
     let persistent_instructions = "Follow up on the active task.";
     let async_message_description = "Catalog async message description.";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut model = model_info_from_slug("unknown-model");
     let approvals = ApprovalMessages {
         on_request: Some("user approvals".to_string()),

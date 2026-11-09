@@ -14,6 +14,7 @@ plus `git`, `gh`, `cargo`, `bazel` and `actionlint` where noted. Nothing here pu
 | `footprint.py` | Rebuilds `security_paths.txt` (named paths, then the fork-patch footprint) and `security_footprint_prs.tsv` from merged security PRs (needs `gh`). |
 | `tier0.py prep/save/extra/apply/check` | Prepares and checks the Tier 0 resolutions (manifests, lockfiles, CI files) the skeleton commit needs. |
 | `lock_max.py <codex-rs> <tag>` | After cargo regenerates the merged `Cargo.lock` from `main`'s, raises crates to the tag's newer patch versions. |
+| `merge_models_json.py <base> <tag> <main> <out>` | JSON-level three-way merge of `models-manager/models.json`: Corbanu's rows and changed fields win, untouched fields take the tag's; adds `gpt-6.1-terra` (needed by the Bedrock and Vertex catalogs). |
 | `skeleton_merge.sh <tag> --resolutions DIR [--security-owner @h] [--push]` | The S0 skeleton merge as one command (below). |
 | `ci_mode.py apply/revert/check`, `ci_mode.py codeowners apply/revert/check` | Sync-branch CI mode and CODEOWNERS block; `ci_mode/sync-package-ci.yml` is the package-scoped workflow it adds. |
 | `baseline.py <sha> [--out f.md]` | CI baseline for one `main` commit: every lane's job conclusions and test counts. |

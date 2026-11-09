@@ -10,6 +10,9 @@ use codex_model_provider_info::RemoteCompactionSupport;
 /// can further restrict the functionality exposed to the model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProviderCapabilities {
+    /// Whether the wire accepts Responses namespace-tool containers; core
+    /// offers namespaced tools under flat names when it does not (#515, #547).
+    pub namespace_tools: bool,
     /// Whether requests may include the Responses API `reasoning.summary` parameter.
     pub reasoning_summaries: bool,
     pub image_generation: bool,
@@ -21,6 +24,7 @@ pub struct ProviderCapabilities {
 impl Default for ProviderCapabilities {
     fn default() -> Self {
         Self {
+            namespace_tools: true,
             reasoning_summaries: true,
             image_generation: true,
             web_search: true,

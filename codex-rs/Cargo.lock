@@ -4281,6 +4281,7 @@ dependencies = [
  "codex-agent-identity",
  "codex-api",
  "codex-aws-auth",
+ "codex-config",
  "codex-features",
  "codex-feedback",
  "codex-http-client",

@@ -11,7 +11,9 @@ use codex_api::TransportError;
 use codex_features::RuntimeAuthMode;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
-<<<<<<< HEAD
+use codex_login::GatewayAuthManager;
+use codex_login::WorkspaceRoutingRequest;
+use codex_login::default_client::ClientRedirectPolicy;
 use codex_login::validate_provider_auth_command_for_account;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
@@ -20,23 +22,13 @@ use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::DEEPSEEK_DEFAULT_MODEL;
 use codex_model_provider_info::KIMI_CODE_K3_MODEL;
 use codex_model_provider_info::META_DEFAULT_MODEL;
-||||||| 413492cd6c
-=======
-use codex_login::GatewayAuthManager;
-use codex_login::WorkspaceRoutingRequest;
-use codex_login::default_client::ClientRedirectPolicy;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_model_provider_info::ModelProviderInfo;
-<<<<<<< HEAD
 use codex_model_provider_info::OPENROUTER_DEFAULT_MODEL;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
 use codex_model_provider_info::WireApi;
 use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 use codex_models_manager::bundled_models_response;
-||||||| 413492cd6c
-=======
 use codex_models_manager::cache::ModelsCache;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_models_manager::manager::OpenAiModelsManager;
 use codex_models_manager::manager::SharedModelsManager;
 use codex_models_manager::manager::StaticModelsManager;
@@ -450,8 +442,19 @@ pub type ModelProviderFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a
 /// Shared runtime model provider handle.
 pub type SharedModelProvider = Arc<dyn ModelProvider>;
 
-<<<<<<< HEAD
-fn provider_uses_first_party_auth_path(provider: &ModelProviderInfo) -> bool {
+/// Resolve credential-dependent defaults without changing configured endpoints.
+pub fn resolve_api_provider(
+    info: &ModelProviderInfo,
+    auth: Option<&CodexAuth>,
+) -> codex_protocol::error::Result<Provider> {
+    let mut provider = info.to_api_provider(auth.map(CodexAuth::auth_mode))?;
+    if info.base_url.is_none() && uses_fedramp_api_key(auth, info)? {
+        provider.base_url = FEDRAMP_API_BASE_URL.to_string();
+    }
+    Ok(provider)
+}
+
+pub fn provider_uses_first_party_auth_path(provider: &ModelProviderInfo) -> bool {
     provider.uses_first_party_openai_auth()
 }
 
@@ -511,33 +514,6 @@ fn configured_provider_helper_model(info: &ModelProviderInfo) -> Option<&'static
     } else {
         None
     }
-||||||| 413492cd6c
-fn provider_uses_first_party_auth_path(provider: &ModelProviderInfo) -> bool {
-    provider.requires_openai_auth
-        && provider.env_key.is_none()
-        && provider.experimental_bearer_token.is_none()
-        && provider.auth.is_none()
-        && provider.aws.is_none()
-=======
-/// Resolve credential-dependent defaults without changing configured endpoints.
-pub fn resolve_api_provider(
-    info: &ModelProviderInfo,
-    auth: Option<&CodexAuth>,
-) -> codex_protocol::error::Result<Provider> {
-    let mut provider = info.to_api_provider(auth.map(CodexAuth::auth_mode))?;
-    if info.base_url.is_none() && uses_fedramp_api_key(auth, info)? {
-        provider.base_url = FEDRAMP_API_BASE_URL.to_string();
-    }
-    Ok(provider)
-}
-
-pub fn provider_uses_first_party_auth_path(provider: &ModelProviderInfo) -> bool {
-    provider.requires_openai_auth
-        && provider.env_key.is_none()
-        && provider.experimental_bearer_token.is_none()
-        && provider.auth.is_none()
-        && provider.aws.is_none()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 /// Creates the default model provider for configured provider metadata.
@@ -572,12 +548,21 @@ pub(crate) fn create_model_provider_with_runtime(
 struct ConfiguredModelProvider {
     info: ModelProviderInfo,
     auth_manager: Option<Arc<AuthManager>>,
-<<<<<<< HEAD
     /// PF-84: the Corbanu home holding the named-account registry (the
     /// command-auth manager has no home of its own).
     account_home: Option<PathBuf>,
     /// PF-84: why the selected command account cannot be used.
     account_error: Option<String>,
+    // Construct eagerly; report setup failures when auth is requested because the factory is infallible.
+    gateway_auth_manager: Option<Result<Arc<GatewayAuthManager>, String>>,
+    runtime_auth: Option<(Arc<RuntimeAuthManager>, RuntimeAuthMode)>,
+    catalog_runtime_auth: Option<(Arc<RuntimeAuthManager>, RuntimeAuthMode)>,
+}
+
+enum ModelsCacheConfig {
+    Disk { codex_home: PathBuf },
+    Disabled,
+    Custom(Arc<dyn ModelsCache>),
 }
 
 /// PF-84: a named account of an `auth.command` provider (including Claude
@@ -599,41 +584,21 @@ fn command_account_error(
         .ensure_enrolled()
         .err()
         .map(|error| error.to_string())
-||||||| 413492cd6c
-=======
-    // Construct eagerly; report setup failures when auth is requested because the factory is infallible.
-    gateway_auth_manager: Option<Result<Arc<GatewayAuthManager>, String>>,
-    runtime_auth: Option<(Arc<RuntimeAuthManager>, RuntimeAuthMode)>,
-    catalog_runtime_auth: Option<(Arc<RuntimeAuthManager>, RuntimeAuthMode)>,
-}
-
-enum ModelsCacheConfig {
-    Disk { codex_home: PathBuf },
-    Disabled,
-    Custom(Arc<dyn ModelsCache>),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl ConfiguredModelProvider {
-<<<<<<< HEAD
-    fn new(provider_info: ModelProviderInfo, auth_manager: Option<Arc<AuthManager>>) -> Self {
-        let account_home = auth_manager
-            .as_ref()
-            .map(|auth_manager| auth_manager.codex_home().to_path_buf());
-        let account_error = command_account_error(&provider_info, account_home.as_deref());
-        // PF-84: the account-bound manager itself refuses an unenrolled
-        // account before running the command; `account_error` only gives
-        // requests the precise message early.
-        let auth_manager = auth_manager_for_provider(auth_manager, &provider_info);
-||||||| 413492cd6c
-    fn new(provider_info: ModelProviderInfo, auth_manager: Option<Arc<AuthManager>>) -> Self {
-        let auth_manager = auth_manager_for_provider(auth_manager, &provider_info);
-=======
     fn new(
         info: ModelProviderInfo,
         auth_manager: Option<Arc<AuthManager>>,
         runtime_auth: Option<(Arc<RuntimeAuthManager>, RuntimeAuthMode)>,
     ) -> Self {
+        let account_home = auth_manager
+            .as_ref()
+            .map(|auth_manager| auth_manager.codex_home().to_path_buf());
+        let account_error = command_account_error(&info, account_home.as_deref());
+        // PF-84: the account-bound manager itself refuses an unenrolled
+        // account before running the command; `account_error` only gives
+        // requests the precise message early.
         let gateway_auth_manager = info.gateway_oauth.as_ref().map(|config| {
             info.validate()?;
             let manager = auth_manager
@@ -660,15 +625,11 @@ impl ConfiguredModelProvider {
                 .map(String::as_str)
                 .or(info.base_url.as_deref()),
         );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         Self {
             info,
             auth_manager,
-<<<<<<< HEAD
             account_home,
             account_error,
-||||||| 413492cd6c
-=======
             gateway_auth_manager,
             runtime_auth: inference_runtime_auth,
             catalog_runtime_auth,
@@ -693,7 +654,7 @@ impl ConfiguredModelProvider {
                 runtime: Some(selected),
             }
         } else {
-            let auth = self.auth().await;
+            let auth = self.checked_auth().await?;
             match scope {
                 Some(scope) if provider_uses_first_party_auth_path(&self.info) => {
                     resolve_provider_auth_for_scope(
@@ -722,6 +683,15 @@ impl ConfiguredModelProvider {
                 codex_models_manager::ModelOrigin::ExplicitConfig,
             ));
         }
+        // Anthropic and Claude Plan serve no OpenAI-style `/models`; they use
+        // the bundled catalog.
+        if self.info.is_anthropic() || self.info.is_claude_plan() {
+            return Arc::new(StaticModelsManager::new(
+                self.auth_manager.clone(),
+                bundled_static_model_catalog(),
+                codex_models_manager::ModelOrigin::Bundled,
+            ));
+        }
         let endpoint = Arc::new(
             OpenAiModelsEndpoint::new(
                 self.info.clone(),
@@ -745,7 +715,6 @@ impl ConfiguredModelProvider {
         match &self.info.model_catalog_url {
             Some(_) => Arc::new(manager.with_provider_catalog()),
             None => Arc::new(manager),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 
@@ -786,6 +755,53 @@ impl ConfiguredModelProvider {
 }
 
 impl ConfiguredModelProvider {
+    /// The login a request on this provider uses, with Corbanu's checks: an
+    /// unenrolled command account (PF-84), a command that produced no
+    /// credential, and a missing named or hidden default sign-in (PF-84-S06,
+    /// D171) are refused instead of sending the request unauthenticated.
+    async fn checked_auth(&self) -> codex_protocol::error::Result<Option<CodexAuth>> {
+        if let Some(message) = &self.account_error {
+            return Err(CodexErr::Fatal(message.clone()));
+        }
+        let mut auth = self.auth().await;
+        if auth.is_none()
+            && let Some(command_auth) = self.info.auth.as_ref()
+        {
+            // AuthManager's compatibility API represents provider-command failures as
+            // `None`. Never turn that into an anonymous upstream request: rerun the
+            // command through its validating path so the actionable helper error reaches
+            // the user. A transient first failure may recover here, in which case resolve
+            // once more and use the recovered credential.
+            validate_provider_auth_command_for_account(
+                command_auth,
+                self.info
+                    .account
+                    .as_ref()
+                    .map(|account| account.name.as_str()),
+            )
+            .await
+            .map_err(|error| match error.kind() {
+                // PF-84: an outdated helper refused the account; retrying cannot help.
+                std::io::ErrorKind::Unsupported => CodexErr::Fatal(error.to_string()),
+                _ => error.into(),
+            })?;
+            auth = self.auth().await;
+            if auth.is_none() {
+                return Err(std::io::Error::other(format!(
+                    "provider auth command `{}` produced no usable credential",
+                    command_auth.command
+                ))
+                .into());
+            }
+        }
+        if auth.is_none()
+            && let Some(error) = self.missing_sign_in_refusal()
+        {
+            return Err(error);
+        }
+        Ok(auth)
+    }
+
     /// Why a request that found no sign-in is refused instead of being sent
     /// without credentials; `None` when it may go out unauthenticated.
     fn missing_sign_in_refusal(&self) -> Option<CodexErr> {
@@ -820,7 +836,7 @@ impl ModelProvider for ConfiguredModelProvider {
     }
 
     fn capabilities(&self) -> ProviderCapabilities {
-<<<<<<< HEAD
+        let capabilities = ProviderCapabilities::from_config(&self.info);
         if self.info.is_ambient()
             || self.info.is_kimi_code()
             || self.info.is_baseten()
@@ -830,12 +846,14 @@ impl ModelProvider for ConfiguredModelProvider {
                 namespace_tools: false,
                 image_generation: false,
                 web_search: false,
+                ..capabilities
             }
         } else if self.info.is_zai() || self.info.is_openrouter() {
             ProviderCapabilities {
                 namespace_tools: false,
                 image_generation: false,
                 web_search: true,
+                ..capabilities
             }
         } else if self.info.wire_api == WireApi::Anthropic {
             // Anthropic Messages accepts ordinary function tools but has no
@@ -847,6 +865,7 @@ impl ModelProvider for ConfiguredModelProvider {
                 namespace_tools: false,
                 image_generation: false,
                 web_search: true,
+                ..capabilities
             }
         } else if self.info.wire_api == WireApi::Chat {
             // Chat Completions has no namespace container either. Core offers
@@ -854,32 +873,17 @@ impl ModelProvider for ConfiguredModelProvider {
             ProviderCapabilities {
                 namespace_tools: false,
                 image_generation: false,
-                ..ProviderCapabilities::default()
+                ..capabilities
             }
         } else {
-            ProviderCapabilities::default()
+            capabilities
         }
     }
 
     fn approval_review_preferred_model(&self) -> &'static str {
-        configured_provider_helper_model(&self.info)
-            .unwrap_or(DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL)
-    }
-
-    fn memory_extraction_preferred_model(&self) -> &'static str {
-        configured_provider_helper_model(&self.info)
-            .unwrap_or(DEFAULT_MEMORY_EXTRACTION_PREFERRED_MODEL)
-    }
-
-    fn memory_consolidation_preferred_model(&self) -> &'static str {
-        configured_provider_helper_model(&self.info)
-            .unwrap_or(DEFAULT_MEMORY_CONSOLIDATION_PREFERRED_MODEL)
-||||||| 413492cd6c
-=======
-        ProviderCapabilities::from_config(&self.info)
-    }
-
-    fn approval_review_preferred_model(&self) -> &'static str {
+        if let Some(model) = configured_provider_helper_model(&self.info) {
+            return model;
+        }
         if self
             .auth_manager
             .as_ref()
@@ -890,7 +894,16 @@ impl ModelProvider for ConfiguredModelProvider {
         } else {
             DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    }
+
+    fn memory_extraction_preferred_model(&self) -> &'static str {
+        configured_provider_helper_model(&self.info)
+            .unwrap_or(DEFAULT_MEMORY_EXTRACTION_PREFERRED_MODEL)
+    }
+
+    fn memory_consolidation_preferred_model(&self) -> &'static str {
+        configured_provider_helper_model(&self.info)
+            .unwrap_or(DEFAULT_MEMORY_CONSOLIDATION_PREFERRED_MODEL)
     }
 
     fn auth_manager(&self) -> Option<Arc<AuthManager>> {
@@ -923,74 +936,6 @@ impl ModelProvider for ConfiguredModelProvider {
         })
     }
 
-    fn api_auth(
-        &self,
-    ) -> ModelProviderFuture<'_, codex_protocol::error::Result<SharedAuthProvider>> {
-        Box::pin(async move {
-            if let Some(message) = &self.account_error {
-                return Err(CodexErr::Fatal(message.clone()));
-            }
-            let mut auth = self.auth().await;
-            if auth.is_none()
-                && let Some(command_auth) = self.info.auth.as_ref()
-            {
-                // AuthManager's compatibility API represents provider-command failures as
-                // `None`. Never turn that into an anonymous upstream request: rerun the
-                // command through its validating path so the actionable helper error reaches
-                // the user. A transient first failure may recover here, in which case resolve
-                // once more and use the recovered credential.
-                validate_provider_auth_command_for_account(
-                    command_auth,
-                    self.info
-                        .account
-                        .as_ref()
-                        .map(|account| account.name.as_str()),
-                )
-                .await
-                .map_err(|error| match error.kind() {
-                    // PF-84: an outdated helper refused the account; retrying cannot help.
-                    std::io::ErrorKind::Unsupported => CodexErr::Fatal(error.to_string()),
-                    _ => error.into(),
-                })?;
-                auth = self.auth().await;
-                if auth.is_none() {
-                    return Err(std::io::Error::other(format!(
-                        "provider auth command `{}` produced no usable credential",
-                        command_auth.command
-                    ))
-                    .into());
-                }
-            }
-            if auth.is_none()
-                && let Some(error) = self.missing_sign_in_refusal()
-            {
-                return Err(error);
-            }
-            resolve_provider_auth(auth.as_ref(), self.info())
-        })
-    }
-
-    fn api_auth_for_scope(
-        &self,
-        scope: ProviderAuthScope,
-    ) -> ModelProviderFuture<'_, codex_protocol::error::Result<ResolvedProviderAuth>> {
-        Box::pin(async move {
-            if !provider_uses_first_party_auth_path(self.info()) {
-                return self.api_auth().await.map(ResolvedProviderAuth::new);
-            }
-            let auth = self.auth().await;
-            // D171 (#1286): the first-party path refuses a missing sign-in
-            // as `api_auth` does, instead of sending the request without it.
-            if auth.is_none()
-                && let Some(error) = self.missing_sign_in_refusal()
-            {
-                return Err(error);
-            }
-            resolve_provider_auth_for_scope(self.auth_manager(), auth.as_ref(), self.info(), scope)
-                .await
-        })
-    }
-
     fn runtime_auth(&self) -> Option<&(Arc<RuntimeAuthManager>, RuntimeAuthMode)> {
         self.runtime_auth.as_ref()
     }
@@ -1015,7 +960,7 @@ impl ModelProvider for ConfiguredModelProvider {
     ) -> ModelProviderFuture<'_, codex_protocol::error::Result<(Provider, SharedAuthProvider)>>
     {
         Box::pin(async move {
-            let auth = self.auth().await;
+            let auth = self.checked_auth().await?;
             let provider = self.api_provider_for_auth(auth.as_ref())?;
             let primary = resolve_provider_auth(auth.as_ref(), &self.info)?;
             let auth = self
@@ -1128,51 +1073,7 @@ impl ModelProvider for ConfiguredModelProvider {
         codex_home: PathBuf,
         config_model_catalog: Option<ModelsResponse>,
     ) -> SharedModelsManager {
-<<<<<<< HEAD
-        let static_catalog = if self.info.is_anthropic() || self.info.is_claude_plan() {
-            Some(config_model_catalog.unwrap_or_else(bundled_static_model_catalog))
-        } else {
-            config_model_catalog
-        };
-
-        match static_catalog {
-            Some(model_catalog) => Arc::new(StaticModelsManager::new(
-                self.auth_manager.clone(),
-                model_catalog,
-            )),
-            None => {
-                let endpoint = Arc::new(OpenAiModelsEndpoint::new(
-                    self.info.clone(),
-                    self.auth_manager.clone(),
-                ));
-                Arc::new(OpenAiModelsManager::new(
-                    codex_home,
-                    endpoint,
-                    self.auth_manager.clone(),
-                ))
-            }
-        }
-||||||| 413492cd6c
-        match config_model_catalog {
-            Some(model_catalog) => Arc::new(StaticModelsManager::new(
-                self.auth_manager.clone(),
-                model_catalog,
-            )),
-            None => {
-                let endpoint = Arc::new(OpenAiModelsEndpoint::new(
-                    self.info.clone(),
-                    self.auth_manager.clone(),
-                ));
-                Arc::new(OpenAiModelsManager::new(
-                    codex_home,
-                    endpoint,
-                    self.auth_manager.clone(),
-                ))
-            }
-        }
-=======
         self.create_models_manager(config_model_catalog, ModelsCacheConfig::Disk { codex_home })
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn models_manager_without_cache(
@@ -1206,20 +1107,16 @@ mod tests {
     use codex_login::AuthKeyringBackendKind;
     use codex_login::auth::AgentIdentityAuthPolicy;
     use codex_login::auth::BedrockApiKeyAuth;
-<<<<<<< HEAD
     use codex_login::login_with_provider_api_key;
     use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
     use codex_model_provider_info::ANTHROPIC_API_KEY_ENV_VAR;
+    use codex_model_provider_info::AwsAuthRefreshConfig;
+    use codex_model_provider_info::AwsCredentialExportConfig;
     use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
     use codex_model_provider_info::CLAUDE_FABLE_5_1_MODEL;
     use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
     use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
     use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
-||||||| 413492cd6c
-=======
-    use codex_model_provider_info::AwsAuthRefreshConfig;
-    use codex_model_provider_info::AwsCredentialExportConfig;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     use codex_model_provider_info::ModelProviderAwsAuthInfo;
     use codex_model_provider_info::OPENROUTER_DEFAULT_MODEL;
     use codex_model_provider_info::ProviderRuntimePolicy;
@@ -1320,16 +1217,12 @@ mod tests {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
-<<<<<<< HEAD
             billing: None,
-||||||| 413492cd6c
-=======
             capabilities: None,
             project_id: None,
             location: None,
             credential_file: None,
             include_internal_metadata: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 
@@ -1405,6 +1298,7 @@ mod tests {
                 .await
                 .expect("oss auth")
                 .to_auth_headers()
+                .unwrap()
                 .is_empty()
         );
         assert_eq!(
@@ -1489,6 +1383,7 @@ mod tests {
                 namespace_tools: false,
                 image_generation: false,
                 web_search: false,
+                ..ProviderCapabilities::default()
             }
         );
         assert_eq!(
@@ -1538,6 +1433,8 @@ mod tests {
                 namespace_tools: false,
                 image_generation: false,
                 web_search: true,
+                remote_compaction: codex_model_provider_info::RemoteCompactionSupport::V2,
+                ..ProviderCapabilities::default()
             }
         );
     }
@@ -1548,6 +1445,7 @@ mod tests {
             namespace_tools: false,
             image_generation: false,
             web_search: true,
+            ..ProviderCapabilities::default()
         };
 
         for provider_info in [
@@ -1664,6 +1562,7 @@ mod tests {
                 namespace_tools: false,
                 image_generation: false,
                 web_search: true,
+                ..ProviderCapabilities::default()
             }
         );
     }
@@ -1681,6 +1580,7 @@ mod tests {
                 namespace_tools: false,
                 image_generation: false,
                 web_search: true,
+                ..ProviderCapabilities::default()
             }
         );
         assert_eq!(
@@ -1710,6 +1610,7 @@ mod tests {
                 namespace_tools: false,
                 image_generation: false,
                 web_search: false,
+                ..ProviderCapabilities::default()
             }
         );
         assert_eq!(
@@ -1739,6 +1640,7 @@ mod tests {
                 namespace_tools: false,
                 image_generation: false,
                 web_search: false,
+                ..ProviderCapabilities::default()
             }
         );
         assert_eq!(
@@ -1768,6 +1670,7 @@ mod tests {
                 namespace_tools: false,
                 image_generation: false,
                 web_search: false,
+                ..ProviderCapabilities::default()
             }
         );
         assert_eq!(
@@ -1798,7 +1701,6 @@ mod tests {
     }
 
     #[test]
-<<<<<<< HEAD
     fn configured_builtin_providers_keep_helper_models_on_their_own_backends() {
         let cases = [
             (
@@ -1928,8 +1830,9 @@ mod tests {
             ),
             "private-active-model"
         );
-||||||| 413492cd6c
-=======
+    }
+
+    #[test]
     fn configured_provider_uses_luna_for_approval_review_with_api_key_auth() {
         let provider = create_model_provider(
             ModelProviderInfo::create_openai_provider(/*base_url*/ None),
@@ -1976,7 +1879,6 @@ mod tests {
         ) -> codex_login::ExternalAuthFuture<'_, CodexAuth> {
             self.resolve()
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     #[tokio::test]
@@ -2401,6 +2303,7 @@ printf '%s\n' '{"AccessKeyId":"exported","SecretAccessKey":"secret"}'
 
         assert_eq!(
             auth.to_auth_headers()
+                .unwrap()
                 .get(http::header::AUTHORIZATION)
                 .and_then(|value| value.to_str().ok()),
             Some("Bearer env-provider-key")
@@ -2441,7 +2344,7 @@ printf '%s\n' '{"AccessKeyId":"exported","SecretAccessKey":"secret"}'
         crate::model_key_broker::set_test_model_key_broker(/*broker*/ None);
 
         assert_eq!(auth.api_key(), Some(crate::BROKERED_KEY_PLACEHOLDER));
-        assert!(api_auth.to_auth_headers().is_empty());
+        assert!(api_auth.to_auth_headers().unwrap().is_empty());
         assert_eq!(account.account, Some(ProviderAccount::ApiKey));
         let uses = broker.uses.lock().expect("uses");
         assert_eq!(uses.len(), 1);
@@ -2496,6 +2399,7 @@ printf '%s\n' '{"AccessKeyId":"exported","SecretAccessKey":"secret"}'
 
         assert_eq!(
             auth.to_auth_headers()
+                .unwrap()
                 .get(http::header::AUTHORIZATION)
                 .and_then(|value| value.to_str().ok()),
             Some("Bearer stored-provider-key")
@@ -2516,7 +2420,7 @@ printf '%s\n' '{"AccessKeyId":"exported","SecretAccessKey":"secret"}'
             .api_auth()
             .await
             .expect("provider auth should resolve");
-        let headers = auth.to_auth_headers();
+        let headers = auth.to_auth_headers().unwrap();
 
         assert_eq!(headers.get(http::header::AUTHORIZATION), None);
         assert_eq!(
@@ -2832,12 +2736,15 @@ printf '%s\n' '{"AccessKeyId":"exported","SecretAccessKey":"secret"}'
                     )
                     .await;
 
-                assert_eq!(
+                // Corbanu always lists a bearer-token provider's own models
+                // (its token counts as command auth for discovery), so the
+                // catalog cached by the enabled run stays in use.
+                assert!(
                     catalog
                         .models
                         .iter()
                         .any(|model| model.slug == "provider-model"),
-                    enabled
+                    "discovery enabled: {enabled}"
                 );
             }
         }

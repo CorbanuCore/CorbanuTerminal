@@ -15,8 +15,10 @@ use codex_model_provider_info::ModelProviderInfo;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result;
 
+use super::BedrockEndpoint;
 use super::mantle::BEDROCK_MANTLE_SERVICE_NAME;
 use super::mantle::region_from_config;
+use super::runtime::BEDROCK_RUNTIME_SERVICE_NAME;
 
 /// Reads the profile name a named account stores (`Ok(None)`: none).
 pub(super) type ProfileSource = fn(&Path, &str, &str) -> std::io::Result<Option<String>>;
@@ -81,7 +83,7 @@ impl NamedBedrockAccount {
         }
     }
 
-    /// The Mantle region: `aws.region` when configured, else the profile's.
+    /// The endpoint region: `aws.region` when configured, else the profile's.
     pub(super) async fn region(&self, aws: &ModelProviderAwsAuthInfo) -> Result<String> {
         let profile = self.profile()?;
         if let Some(context) = self.loaded_context(&profile) {
@@ -95,16 +97,26 @@ impl NamedBedrockAccount {
     /// The profile's signing context. When the profile is first loaded (or
     /// the account's profile changes) its credentials are resolved once
     /// before any request, so a broken profile is refused up front.
-    pub(super) async fn context(&self, aws: &ModelProviderAwsAuthInfo) -> Result<AwsAuthContext> {
+    pub(super) async fn context(
+        &self,
+        aws: &ModelProviderAwsAuthInfo,
+        endpoint: BedrockEndpoint,
+        http_client_factory: codex_http_client::HttpClientFactory,
+    ) -> Result<AwsAuthContext> {
         let profile = self.profile()?;
         if let Some(context) = self.loaded_context(&profile) {
             return Ok(context);
         }
         // Not locked while loading; a concurrent first load just loads twice.
+        let service = match endpoint {
+            BedrockEndpoint::Mantle => BEDROCK_MANTLE_SERVICE_NAME,
+            BedrockEndpoint::Runtime => BEDROCK_RUNTIME_SERVICE_NAME,
+        };
         let context = AwsAuthContext::load_named_profile(
             &profile,
             region_from_config(aws),
-            BEDROCK_MANTLE_SERVICE_NAME,
+            service,
+            http_client_factory,
         )
         .await
         .map_err(|error| self.profile_error(&profile, &error))?;

@@ -68,7 +68,7 @@ async fn api_key_discovery_flag_controls_fetches_and_cached_catalogs() {
             .raw_model_catalog(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
             .await
             .models,
-        models
+        with_bundled(models.clone())
     );
     assert_eq!(endpoint.fetch_count(), 1);
     assert_eq!(
@@ -100,7 +100,8 @@ async fn api_key_discovery_flag_controls_fetches_and_cached_catalogs() {
         let restarted =
             OpenAiModelsManager::new(home.path().into(), endpoint.clone(), Some(auth.clone()));
         restarted.set_api_key_model_discovery_enabled(enabled);
-        let expected = if enabled { &models } else { &bundled };
+        let merged = with_bundled(models.clone());
+        let expected = if enabled { &merged } else { &bundled };
         for strategy in [RefreshStrategy::Offline, RefreshStrategy::OnlineIfUncached] {
             assert_eq!(
                 &restarted

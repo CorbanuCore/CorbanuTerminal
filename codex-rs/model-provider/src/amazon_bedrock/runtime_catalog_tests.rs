@@ -52,6 +52,7 @@ fn runtime_catalog_includes_supported_cross_region_models_in_priority_order() {
 
 #[test]
 fn runtime_catalog_disables_web_search_without_overriding_review_models() {
+    // Corbanu's catalog runs GPT-5.6 Luna on multi-agent v2.
     let catalog = static_runtime_model_catalog();
 
     assert_eq!(
@@ -112,7 +113,7 @@ fn runtime_catalog_disables_web_search_without_overriding_review_models() {
                 "global.openai.gpt-5.6-luna",
                 None,
                 false,
-                Some(MultiAgentVersion::V1),
+                Some(MultiAgentVersion::V2),
             ),
             (
                 "us.openai.gpt-6.1-sol",
@@ -160,7 +161,7 @@ fn runtime_catalog_disables_web_search_without_overriding_review_models() {
                 "us.openai.gpt-5.6-luna",
                 None,
                 false,
-                Some(MultiAgentVersion::V1),
+                Some(MultiAgentVersion::V2),
             ),
         ]
     );
