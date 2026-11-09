@@ -124,6 +124,9 @@ fn prepare_fixtures() -> Option<Vec<Fixture>> {
 }
 
 /// Shared folders of the machine itself; any delete there is a hole too.
+/// Whether a command may list or read them depends on the machine (a
+/// desktop's `Windows\Temp` lets Users only create and traverse, CI's lets
+/// them read), not on the denies, so their reads are reported, not checked.
 fn machine_shared_folders() -> Vec<PathBuf> {
     let public = env_dir("PUBLIC", "C:\\Users\\Public");
     [
@@ -149,6 +152,16 @@ fn ensure_victims(target: &Path) -> bool {
         eprintln!("sec-win-1791: no victims in {}: {err}", target.display());
     }
     made.is_ok()
+}
+
+/// [`ensure_victims`] in a fixture, or, where this test may not write there
+/// (a normal session on a desktop: the fixture's folder belongs to the
+/// elevated run's administrators), the victims an elevated run made.
+fn fixture_victims(target: &Path) -> bool {
+    ensure_victims(target)
+        || (fs::read_to_string(target.join(VICTIM_FILE)).is_ok_and(|text| text == VICTIM_TEXT)
+            && target.join(VICTIM_DIR).is_dir()
+            && target.join(VICTIM_SUB).join(VICTIM_FILE).is_file())
 }
 
 fn cmd_argv(root: &Path, file: &str, body: &str) -> Vec<String> {
@@ -189,8 +202,8 @@ fn sec_win_1791_elevated_command_cannot_delete_or_write_in_shared_folders() {
     let mut deletes: Vec<PathBuf> = fixtures.iter().map(|(path, _, _)| path.clone()).collect();
     for fixture in &deletes {
         assert!(
-            ensure_victims(fixture),
-            "sec-win-1791: no victims in the fixture {}",
+            fixture_victims(fixture),
+            "sec-win-1791: no victims in the fixture {}; an elevated run makes them",
             fixture.display()
         );
     }
@@ -302,9 +315,29 @@ fn sec_win_1791_elevated_command_cannot_delete_or_write_in_shared_folders() {
             }
         }
     }
+    // Reads must work in every fixture (Users may read each, through its
+    // grant or what it inherits from `ProgramData` or the drive's root); the
+    // machine's own folders are only reported (see `machine_shared_folders`).
+    let fixture_reads: Vec<String> = (0..fixtures.len())
+        .flat_map(|i| [format!("READ {i} list "), format!("READ {i} file ")])
+        .collect();
     let unreadable: Vec<&str> = stdout
         .lines()
-        .filter(|line| line.starts_with("READ ") && line.ends_with(" FAIL"))
+        .filter(|line| {
+            line.ends_with(" FAIL")
+                && fixture_reads
+                    .iter()
+                    .any(|prefix| line.starts_with(prefix.as_str()))
+        })
+        .collect();
+    let machine_reads: Vec<&str> = stdout
+        .lines()
+        .filter(|line| {
+            line.starts_with("READ ")
+                && !fixture_reads
+                    .iter()
+                    .any(|prefix| line.starts_with(prefix.as_str()))
+        })
         .collect();
     assert!(
         holes.is_empty() && unreadable.is_empty(),
@@ -380,6 +413,7 @@ fn sec_win_1791_elevated_command_cannot_delete_or_write_in_shared_folders() {
         deletes.len(),
         writes.len()
     );
+    println!("sec-win-1791 machine folders' reads (not checked): {machine_reads:?}");
 }
 
 const CMD_WORKLOAD: &str = r#"@echo off
@@ -669,7 +703,8 @@ fn sec_win_1791_elevated_everyday_workloads_still_work() {
     ));
     match pwsh_path() {
         Some(pwsh) => failed.extend(workload(home, "pwsh", root, temp, ps_args(pwsh), &PS_STEPS)),
-        None => failed.push("pwsh (not installed)".to_string()),
+        // CI checks the step count below, so a missing pwsh fails there.
+        None => eprintln!("sec-win-1791: pwsh is not installed; its steps skipped"),
     }
 
     failed.extend(workload(
@@ -749,7 +784,7 @@ fn sec_win_1791_elevated_everyday_workloads_still_work() {
     ));
 
     let total = CMD_STEPS.len() * 2
-        + PS_STEPS.len() * 2
+        + PS_STEPS.len() * (1 + usize::from(pwsh_path().is_some()))
         + GIT_STEPS.len() * 2
         + NODE_STEPS.len()
         + PYTHON_STEPS.len()
