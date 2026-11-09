@@ -57,6 +57,11 @@ fn file_name_from_path_falls_back_to_full_path() {
     assert_eq!(file_name_from_path(""), "");
 }
 
+/// Ceiling for a wait on a session's report. Each wait returns as soon as
+/// the session reports, so this only bounds a hung session; loaded Windows
+/// CI runners have missed tighter bounds (#1839).
+const SESSION_WAIT: Duration = Duration::from_secs(60);
+
 #[derive(Default)]
 pub(super) struct RecordingReporter {
     updates: Mutex<Vec<FileSearchSnapshot>>,
@@ -170,7 +175,7 @@ fn session_scanned_file_count_is_monotonic_across_queries() {
     session.update_query("file-01");
     thread::sleep(Duration::from_millis(20));
     let second_snapshot = reporter.snapshot();
-    let _ = reporter.wait_for_complete(Duration::from_secs(5));
+    assert!(reporter.wait_for_complete(SESSION_WAIT));
     let completed_snapshot = reporter.snapshot();
 
     assert!(second_snapshot.scanned_file_count >= first_snapshot.scanned_file_count);
@@ -190,7 +195,7 @@ fn session_streams_updates_before_walk_complete() {
     .expect("session");
 
     session.update_query("file-0");
-    let completed = reporter.wait_for_complete(Duration::from_secs(5));
+    let completed = reporter.wait_for_complete(SESSION_WAIT);
 
     assert!(completed);
     let updates = reporter.updates();
@@ -212,11 +217,11 @@ fn session_accepts_query_updates_after_walk_complete() {
     .expect("session");
 
     session.update_query("alpha");
-    assert!(reporter.wait_for_complete(Duration::from_secs(5)));
+    assert!(reporter.wait_for_complete(SESSION_WAIT));
     let updates_before = reporter.updates().len();
 
     session.update_query("beta");
-    assert!(reporter.wait_for_updates_at_least(updates_before + 1, Duration::from_secs(5),));
+    assert!(reporter.wait_for_updates_at_least(updates_before + 1, SESSION_WAIT));
 
     let updates = reporter.updates();
     let last_update = updates.last().cloned().expect("update");
@@ -243,7 +248,7 @@ fn session_emits_complete_when_query_changes_with_no_matches() {
     .expect("session");
 
     session.update_query("asdf");
-    assert!(reporter.wait_for_complete(Duration::from_secs(5)));
+    assert!(reporter.wait_for_complete(SESSION_WAIT));
 
     let completed_snapshot = reporter.snapshot();
     assert_eq!(completed_snapshot.matches, Vec::new());
@@ -252,7 +257,7 @@ fn session_emits_complete_when_query_changes_with_no_matches() {
     reporter.clear();
 
     session.update_query("asdfa");
-    assert!(reporter.wait_for_complete(Duration::from_secs(5)));
+    assert!(reporter.wait_for_complete(SESSION_WAIT));
     assert!(!reporter.updates().is_empty());
 }
 
@@ -286,7 +291,7 @@ fn dropping_session_does_not_cancel_siblings_with_shared_cancel_flag() {
     thread::sleep(Duration::from_millis(5));
     drop(session_a);
 
-    let completed = reporter_b.wait_for_complete(Duration::from_secs(5));
+    let completed = reporter_b.wait_for_complete(SESSION_WAIT);
     assert_eq!(completed, true);
 }
 
@@ -303,13 +308,13 @@ fn session_emits_updates_when_query_changes() {
     .expect("session");
 
     session.update_query("zzzzzzzz");
-    let completed = reporter.wait_for_complete(Duration::from_secs(5));
+    let completed = reporter.wait_for_complete(SESSION_WAIT);
     assert!(completed);
 
     reporter.clear();
 
     session.update_query("zzzzzzzzq");
-    let completed = reporter.wait_for_complete(Duration::from_secs(5));
+    let completed = reporter.wait_for_complete(SESSION_WAIT);
     assert!(completed);
 
     let updates = reporter.updates();
@@ -409,8 +414,13 @@ fn cancel_exits_run() {
         let _ = tx.send(result);
     });
 
+    // `recv_timeout` returns as soon as `run` exits, so this is only a
+    // ceiling for a hung run. It is generous because loaded Windows CI
+    // runners have missed a 2 s bound (#1839). If cancellation were
+    // ignored, `run` would finish the walk and report matches, which the
+    // assertions below reject.
     let result = rx
-        .recv_timeout(Duration::from_secs(2))
+        .recv_timeout(Duration::from_secs(30))
         .expect("run should exit after cancellation");
     handle.join().unwrap();
 

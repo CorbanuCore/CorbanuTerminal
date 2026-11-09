@@ -16,9 +16,16 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
 - **Usage includes observed descendant work** (#290, #1601, thanks to
   @white-guy-01). Repeated cumulative reports are counted once. Every
   history-forked descendant makes the total `null`, as do a descendant with no
-  report,
-  a failed or timed-out ancestry read, or dropped events (`Lagged`). The selected
-  thread's own totals are not a difference from the start of the invocation.
+  report, a failed or timed-out ancestry read, or dropped events (`Lagged`).
+  The selected thread's own totals are not a difference from the start of the
+  invocation, so its first report needs no inherited baseline: a resumed
+  thread whose first report follows a compaction estimate keeps a known total
+  (#1637). A history-forked subagent that is not saved to disk yet is now also
+  recognized as a fork (the app server's `thread/read` returns its
+  `forkedFromId`), so it too makes the total `null` (#1637).
+  A resumed (non-fork) descendant whose first report carries in earlier usage
+  (its total differs from its last request) makes the total `null` too
+  (#1637, #1750, thanks to @citadelculture).
   Detached children can incur further usage after this snapshot.
 - **Default multi-agent spawns copy history.** In MultiAgentV2, `spawn_agent`
   defaults to `fork_turns: "all"` when omitted, so these default multi-agent runs
@@ -71,6 +78,19 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   `thread/items/list` and `thread/turns/items/list` fail with "failed to
   deserialize stored thread item"). Newer builds read older history unchanged.
 
+## Slash commands typed while the session starts
+
+- **A slash command entered during startup always waits for it** (D376,
+  #1748). While the header still reads `model: loading`, a command such as
+  `/model` is queued and runs once startup completes, like an ordinary prompt.
+  Before, it was queued only when its keys arrived in one quick burst; typed
+  a little more slowly (so the command list opened before Enter), it ran at
+  once and was refused with "Model selection is disabled until startup
+  completes."
+- **`/quit` and `/exit` don't wait** (D390, #1833). Typed during startup,
+  they exit at once instead of joining the queue, so a startup that hangs can
+  still be left without Ctrl+C. Every other command still waits.
+
 ## `/cost`
 
 - **Codex Auto Review is named as unpriced.** On an OpenAI API key, requests
@@ -104,6 +124,68 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   older builds then treat it as written by a newer build and leave
   collection off. A home with no ledger yet gets none: its `/cost` already
   shows as unavailable (#314, D228).
+
+## Moderate: waiting on and starting agents after untrusted content
+
+- **Waiting on an agent never asks** (D320, #1653). On Z.AI and other
+  providers without namespace tools, `wait_agent_v1` used to ask (or, with
+  approvals off as in `corbanu exec`, was refused) as "a tool the security
+  level has not classified" once untrusted content had entered the session,
+  so a parent couldn't wait for its child. It now goes ahead, as `wait_agent`
+  already did.
+- **Starting an agent asks, on every route.** After untrusted content under
+  Moderate (and Aggressive), `spawn_agent` (and `spawn_agent_v1`,
+  `spawn_agent_plaintext`) asks for your approval, and the prompt says it is
+  "a request to start a new agent". With approvals off it is refused. This is
+  new on the OpenAI Responses route, where `spawn_agent` used to go ahead.
+- **The `_v1` agent aliases act like their usual names** (D334, #1702). On
+  Z.AI, Chat Completions and Claude-style routes, `send_input_v1` and
+  `close_agent_v1` now go ahead after untrusted content, as `send_input` and
+  `close_agent` do; before, they asked (or were refused with approvals off) as
+  unclassified tools.
+- **Restarting a finished agent asks, like starting one** (D334). After
+  untrusted content, `resume_agent` (and `resume_agent_v1`) asks for your
+  approval on every route, and so does a MultiAgentV2 `followup_task` (and
+  `followup_task_plaintext`) to an agent that isn't running, since it starts a
+  new turn there; the prompt says it is "a request to restart a finished
+  agent", and with approvals off it is refused. A follow-up to an agent with a
+  turn running goes ahead. Before, `resume_agent` and `followup_task` went
+  ahead on every route that offers them, and `resume_agent_v1` asked as an
+  unclassified tool.
+- **`send_input` to an agent that isn't running asks too** (D388, #1832).
+  After untrusted content, V1 `send_input` (and `send_input_v1`) to a
+  finished or idle agent starts a new turn there, so it now asks like
+  `followup_task`; with approvals off it is refused. To a running agent it
+  still goes ahead.
+- **Interrupting an agent that isn't running no longer wakes it** (D404,
+  #1796), at every security level. `interrupt_agent` on a finished or idle
+  agent only reports its status; before, the interrupt notice started a new
+  turn there, with the caller's reason as its message.
+- **Known limit** (D389): a follow-up or `send_input` to an agent that is
+  running when checked goes ahead; if that turn ends just before the message
+  arrives, the message starts a new turn without asking. Likewise, at any
+  level, if an agent's turn ends just before an interrupt reaches it, the
+  interrupt notice can start a new turn.
+- **The same rules apply under Aggressive** (D335).
+
+## Agent tools act only on the caller's own agents
+
+- **A sub-agent's `list_agents` shows only itself and its own agents**
+  (D320, #1756, #1767, thanks to @citadelculture). With MultiAgentV2,
+  `list_agents` used to list every live agent, including the caller's parent
+  and siblings and other root threads' agents; it now lists the caller and
+  the agents it started (and theirs), loaded or not. This is the intended
+  tightening of D320. `close_agent` and `send_input` (and their `_v1`
+  aliases) likewise refuse an agent the caller didn't start, directly or
+  through its own agents.
+- **`wait_agent` waits only for the caller's own agents** (#1744, #1701,
+  thanks to @citadelculture). `wait_agent` (and `wait_agent_v1`) could wait
+  for any loaded agent, including another root thread's, and return its final
+  status. It now refuses an agent the caller didn't start, directly or
+  through its own agents, with "wait_agent can only wait for agents spawned
+  by this agent or by its sub-agents". With MultiAgentV2, `wait_agent` used
+  to report every live agent with its last result; it now reports only the
+  caller's agents.
 
 ## `/security` wording
 
@@ -306,6 +388,9 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   `corbanu mcp remove` for a server that isn't configured. The warning for a
   skipped skill dependency now says which kind of reserved namespace it would
   take and no longer suggests "limiting" `server_names`.
+  An MCP import from another agent that skips such a server now says it was
+  not imported and suggests adding it under another name, instead of
+  `corbanu mcp remove` (#1681, #1738, thanks to @citadelculture).
 
 ## `NO_PROXY` IP ranges apply to WebSocket connections
 
@@ -338,6 +423,49 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   In the same rare case, a tool that completed just before the interrupt (for
   example a patch that was applied) was reported to the model as aborted. Its
   real output is now recorded instead.
+
+## Windows sandbox: commands get a temp folder of their own (D377, #304)
+
+- **The default (elevated) Windows sandbox no longer lets sandboxed commands
+  write anywhere in your `%TEMP%`.** Each Corbanu session makes a folder of
+  its own there (`corbanu-sandbox-tmp-…`), open only to you, SYSTEM and
+  Administrators, and its sandboxed commands get it as `TEMP` and `TMP` (and
+  as `TMPDIR` when that named `%TEMP%`). Only that folder is granted to the
+  sandbox. Before, the sandbox's accounts kept lasting write access to all of
+  `%TEMP%`: other programs' temp files, and other sessions'.
+- **Upgrading needs no setup rerun.** The first time a session uses
+  `%TEMP%`, it removes the grant older versions left there, as you (no UAC
+  prompt). This also removes the non-admin sandbox's entry for that Corbanu
+  home from `%TEMP%` itself (it adds it back when it next runs). Where you
+  cannot change `%TEMP%`'s permissions, the old grant stays and is logged.
+  Running an older version again puts it back.
+- **A sandboxed command cannot turn its temp folder into a link** to make
+  a later setup grant the sandbox somewhere else: the session keeps a file in
+  the folder open, so it cannot be emptied or renamed, and checks the folder
+  is still the one it made before each command.
+- **Cleanup.** The folder is removed when the session ends; one a crashed
+  session left behind is removed by a later session.
+- On native Windows CI, in an administrator's and a normal session, Python
+  (temp files, venv and pip), cargo, Node and npm, Windows PowerShell and
+  PowerShell 7, git and Git Bash, and MSBuild work as before.
+- **What older versions' sandboxed commands left in `%TEMP%` becomes yours**
+  (#1871). The sandbox's accounts owned those files and folders, and an
+  owner can change their permissions: a command could give its account,
+  the sandbox's group or its workspace entries there that later commands
+  carry, and keep changing them after the upgrade (shown on native Windows
+  CI). In the same upgrade step, before the old grant is removed, the
+  session, as you (no UAC prompt), makes you their owner and removes every
+  allow entry other than yours, SYSTEM's, Administrators' and OWNER
+  RIGHTS' (deny entries stay; a "no DACL" becomes one inherited from the
+  folder). Nothing is deleted. One whose permissions stop you from doing
+  that is renamed in place (`….corbanu-sandbox-leftover-…`), so programs
+  that look for it by name make a new one of yours. The counts are logged
+  in the Corbanu home's `.sandbox` log. A typical session leaves several
+  hundred (Node's `node-compile-cache`, `MSBuildTemp`, temp files tools
+  kept); on CI all were taken in under a second.
+- Not changed: the non-admin sandbox still uses `%TEMP%` itself, and
+  sandboxed commands can still read (not write) other sessions' temp
+  folders.
 
 ## Windows non-admin sandbox warning
 
@@ -394,9 +522,12 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   When the window is exceeded, `Context` shows the full window and
   `Thread total` stays the provider-reported usage, computed from the
   provider's counters, which the fill now keeps (#1583; #1586, thanks to
-  @sendoeth). After compaction,
-  `Context` shows the new, smaller estimate rather than a full window, and
-  `/new` starts the new thread without the previous thread's total.
+  @sendoeth). When the first update the bridge sees for a thread is a fill
+  (for example after a bridge restart), `Context` shows the full window if
+  the thread had already reached it (#1638), and otherwise what the fill
+  added.
+  After compaction, `Context` shows core's token estimate, and `/new` starts
+  the new thread without the previous thread's total.
 
 ## Usage totals survive a full context window
 
@@ -419,6 +550,11 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
 - **A reply that opens with such JSON and goes on in prose is a message**
   (#1659, #1654). It used to fail with `trailing characters` after five
   retries.
+- **A reply that opens with JSON-like text that does not parse is a message**
+  (#1728, #1660, thanks to @bradsbots), for example `{"function_call": auto} …`.
+  It used to fail with `malformed function-call JSON` after five retries. A
+  broken reply that names a tool-call `type` still counts as a broken call and
+  is retried.
 - **Text already shown stays a message** (#1656, #1608, thanks to
   @bradsbots), even if it turns out to parse as a tool call.
 - **A `null` usage counter no longer drops its chunk** (#1589, #1588, thanks
@@ -475,6 +611,60 @@ asking and now ask first:
   expansion produces (`git clone r d {-q,--upload-pack=./x}`; #1644, #1636).
 - zsh's `>!`, `>>!`, `&>!` and `>&!` clobber redirections, read as writes
   (`echo x >! ~/.zshrc`; #1640, #1607).
+- Commands in `eval`, `trap` and `alias` text, which now get every check
+  the same command gets on a line of its own (D341, #1698, #1685): writes
+  to shell start-up files (`trap 'tee -a ~/.zshrc' EXIT`,
+  `eval 'tee -a ~/.zshrc'`), output options (`curl -o`, `time -o`), sending
+  a file (`curl -d @f`), recursive reads of your home, scripts it runs
+  (`./x.sh`, `source`, `python3 x.py`), a wrapper's folder option
+  (`eval 'sudo -D sub ./run.sh'`), and, in an alias, git settings that run
+  code. Before, only some of these were checked there. A `cd` in such text
+  isn't followed: the folder it leaves counts as unknown. Ordinary text such
+  as `trap 'rm -f x' EXIT` or `alias ll='ls -l'` stays quiet.
+- Later uses of variables set in such text
+  (`eval 'F=~/.zshrc'; tee -a "$F"`), settings there of variables that run
+  code (`eval 'export GIT_PAGER=sh'`), and code written into the shells'
+  tables of code run by name (zsh's `functions`, `commands` and alias
+  tables, bash's `BASH_ALIASES` and `BASH_CMDS`), which is now checked as a
+  line of its own (`functions[f]='tee -a ~/.zshrc'; f`; D341, #1698,
+  #1685, #1704). Ordinary settings such as `eval "x=1"` or
+  `aliases[ll]='ls -l'` stay quiet.
+- A word the check can't see into (`$o`, `$(cat f)`) where a command that
+  can write code into those tables still reads its options:
+  `o=$(cat f); zstyle $o :x y functions`, `zstyle -a $(cat f)`,
+  `zselect -t 0 -r 0 -A $n`, `zsystem flock -t 0 -f $n file` (#1704).
+  `print`, `printf` and `getopts` are now read this way too. So an
+  unquoted variable, `$(…)` or pattern where `print`, `printf`, `set`,
+  `read`, `mapfile`, `vared` or `getopts` read their options or the
+  name they write can now ask (`print -r $(cat f)`,
+  `set ?A commands ls ./x`, `read -d $(cat f)`,
+  `getopts $(cat f)`), and so can a quoted one with more words after it
+  (`printf "$fmt" x`). `print -r -- $x`, `set -- $(cat f)`,
+  `printf "$fmt"`, `print -l *.png` and `wait $pid` stay
+  quiet.
+- zsh's `stat` builtin, which can write those tables (`stat -A functions
+  x`), now asks only when the same action may load it: a line of it runs
+  `zmodload` or names `zsh/stat` (`zmodload zsh/stat; stat -f %m $(cat f)`
+  asks, before or after the `stat`), holds a brace range, or runs bash's
+  `enable` or a command named by a variable, command output or a pattern.
+  zsh starts without it. Elsewhere `stat` is the system program, so macOS
+  `stat -f %m $f` stays quiet. A module loaded by your zsh start-up files,
+  or by an earlier command in the same long-running shell session, isn't
+  seen (D410, #1704). `zstat` is always checked.
+- A program named by a path, or a shell or interpreter, run after a leading
+  redirection (`>log ./x`, `2>log sh x`, `2>&1 ./x`, `<<EOF ./x`,
+  `sudo >log ./x`, `env >log ./x`), also in `eval` text (`eval '>log ./x'`),
+  where the check used to read the redirection as the command (#1719,
+  #1482, thanks to @darkmatter-sudo). `ls >log` and `2>/dev/null ls` are
+  read as before.
+- `sudo -A`/`--askpass`, `sudo -e`/`--edit` and `sudoedit`, which run a
+  helper or editor named by the environment, also in `eval` text
+  (`eval sudo -A ./x`) (#1719, #1482, thanks to @darkmatter-sudo).
+- A command given as an argument list whose elements up to the program
+  don't each read as one word (`["true ./x"]`, `["true;./x"]`,
+  `["env", "A=1 ./y", "./x"]`) (#1719, #1482, thanks to @darkmatter-sudo).
+  A shell's `-c` script is read as before. This doesn't apply under Windows
+  path rules, where program paths hold spaces.
 
 One line asks less: `git add src/{a,b}.rs && git commit -m "msg"` no longer
 asks just because a quoted message follows the brace word (#1580, #1514,
@@ -483,6 +673,15 @@ names is now checked within a fixed size budget; past it, its output files
 count as one unknown file, the cautious reading (#1587, #1132, thanks to
 @0xzoz).
 
+## Bare git repositories a command plants
+
+- **New advice in `docs/sandbox.md`** (#1775). A sandboxed command can make a
+  bare repository in any folder it may write to, and git run there or in a
+  folder below it later runs what its config names. Corbanu Terminal
+  doesn't check for these, on Windows or elsewhere. The guide recommends
+  `git config --global safe.bareRepository explicit` (git 2.45 or later)
+  and explains what it doesn't cover.
+
 ## Windows sandbox
 
 - **The default (elevated) sandbox's commands can't break away from their
@@ -490,12 +689,160 @@ count as one unknown file, the cautious reading (#1587, #1132, thanks to
   they start in their job; a program that asks to break away gets "access
   denied" unless it retries without the flag. The non-admin sandbox already
   worked this way.
+- **Default (elevated) sandbox: each command gets its own identity** (D324,
+  #1717, #1648), as non-admin sandbox commands already do. Commands running
+  at the same time, for example in different projects, can no longer write
+  to each other's processes or the helper processes that start them, or
+  start programs under them. Projects are still not fully kept apart: a
+  command can still borrow another command's access and write in its
+  folders (#1560), or, by racing another command's start-up, run code
+  outside its own sandbox restrictions (#1721), and can still read and end
+  the other's processes. So still avoid running commands
+  in several projects at once (see `docs/sandbox.md`).
+- **Commands in the default sandbox can no longer read a non-admin sandbox
+  command's memory** (D429, #1803). A default (elevated) sandbox command
+  could read the memory of a non-admin sandbox command running at the same
+  time, such as secrets in its environment, its output and what was typed at
+  its prompts. Other accounts (except SYSTEM and administrators using debug
+  rights) can now only wait for a non-admin command's processes. One
+  non-admin command can still read another's memory (#1838), so still avoid
+  running commands in several projects at once.
+- **Profiles the Windows sandbox can't enforce are refused, and say why**
+  (D331, #1762). A profile with a writable folder inside a read-only one is
+  now refused for the agent's commands in the non-admin sandbox too, as it
+  already was in the default sandbox and for app-server `command/exec`; in
+  our measurements this changes the outcome only under Permissive. On both
+  sandboxes the message now names both folders, notes that the protected
+  `.git`, `.codex` and `.agents` folders count as read-only, and says to
+  change the profile so that no writable folder lies in a read-only one. In
+  the non-admin sandbox, `command/exec` (and the exec server) now refuse a
+  profile that blocks or limits reading files with a clear message that
+  says how to switch to the default sandbox, instead of an unclear error
+  from the sandbox.
+- **Non-admin sandbox: a working folder reached through a junction no
+  longer bypasses a read-only folder** (#1780, #1792). With the working
+  folder given as a junction, a read-only folder given by its real path was
+  writable, and so was a read-only folder spelled through a junction inside
+  a working folder given by its real path. Read-only paths are now matched
+  to writable folders by their real (link-resolved) path too. When one
+  profile marks the same folder read-only under one spelling and writable
+  under another, read-only wins.
+- **A `\\localhost` network working folder gets a clear error** (#1863).
+  `command/exec` refused a working folder given as a `\\localhost\...`
+  network (UNC) path with an unclear "not valid on this host" error (debug
+  builds crashed). It still refuses it, in both sandboxes, now saying to use
+  the folder's local path instead. Other network paths are unchanged: the
+  command starts sandboxed as before.
+- **A writable folder inside a read-only one is refused through links too**
+  (#1801, D331). D331's refusal compared folders by spelling, so a
+  writable folder that lay inside a read-only one only through a junction
+  or folder symbolic link (on either folder, or on the working folder)
+  wasn't refused, and the non-admin sandbox let commands write there. It
+  now compares real paths too (`subst` drives included), for the agent's
+  commands in both sandboxes and for `command/exec`. The same folder
+  marked read-only and writable under two spellings is still not refused;
+  in the non-admin sandbox read-only wins (#1780). Newly refused for the
+  same reason: a protected `.git`, `.codex` or `.agents` folder that is a
+  link to a folder holding another writable folder of the profile. Replace
+  the link with a folder; see "A writable folder inside a read-only one" in
+  `docs/sandbox.md`.
+- **Non-admin sandbox: a writable folder inside a protected `.git`, `.codex`
+  or `.agents` folder is refused for older workspace-write profiles too**
+  (#1810, D331). A profile in the older workspace-write format, for example
+  with a writable root at the workspace's `.git\hooks`, skipped D331's
+  check, so the agent's commands and `command/exec` ran and could write
+  there. Such profiles are now refused, as the default sandbox already
+  refused them. Naming `.git` itself writable is still allowed.
 - **Non-admin sandbox: nested `.codex` and `.agents` folders are watched**
   (#1642, D283, #1541). One that appears or is replaced deeper in your
   workspace while a command runs isn't loaded until you confirm it, like one
   at the top. Commands can't rename, move or delete existing ones or the
   folders above them, so a `git checkout` or `npm ci` that does is refused
   there.
+- **Non-admin sandbox: a `.git` that appears or changes is reported**
+  (D332, #1682). When a `.git` at the top of a writable folder is new, or
+  was replaced, when a command ends, Corbanu Terminal warns at startup and
+  the TUI asks you to confirm it once you have checked its hooks and config:
+  git runs them outside the sandbox. Commands can still create a `.git`
+  (`git init` works). A `.git` that is a link is reported after every
+  command. `.git` folders deeper inside aren't checked.
+- **Non-admin sandbox: possibly planted folders are reported where you see
+  them** (D424, #1775). A `.git`, `.codex` or `.agents` folder a command may
+  have planted is now named in a warning right after that command ends (for
+  one that leaves processes running, after a later command), not only at the
+  next start. At startup, a flagged `.git` is shown (and the TUI
+  asks about it) when it lies in any folder commands may write to,
+  `%TEMP%` included, or below the working folder; before, only one in the
+  working folder or a folder above it was.
+- **Non-admin sandbox: nested and bare repositories are watched** (D420,
+  D421, #1775). Repositories deeper in a writable folder (a nested `.git`,
+  or a folder that is a bare repository), and a writable folder that is
+  itself a bare repository, are reported like the top-level `.git` when they
+  are new or replaced, or when their config, hooks or other files git runs
+  programs from change (compared by content, submodules and worktrees
+  included). The warning says what changed. A new repository with exactly
+  the shape `git init` or `git clone` leave isn't reported, so cloning a
+  project to look at it doesn't ask; later changes to it are. Nothing is
+  refused: agents can still commit and run `git config` there. Going back
+  to an older build drops these records the next time it saves its own.
+- **Non-admin sandbox: `.codex`/`.agents` below a folder whose name isn't
+  valid Unicode count as planted** (#1877). The folder holding a folder with
+  such a name is flagged after every command, so what lies below it isn't
+  loaded until you confirm it; before, nested folders below it weren't
+  recorded at all. (When that is the workspace itself, its own
+  `.codex`/`.agents` count too until the folder is renamed or removed.) Such a
+  folder now gets one "isn't valid Unicode" note, not one per entry, so many
+  such names no longer push earlier warnings out of the post-command notice.
+- **Non-admin sandbox: the repository checks cost about half as much**
+  (#1877). The checks for planted `.codex`/`.agents` folders and nested
+  repositories that run at each command's start and end now use several
+  threads. On a 38,000-file tree with 100 repositories (native Windows CI,
+  4 CPUs) each side went from about 80-90 ms to about 40 ms. They find
+  exactly the same things, in the same order.
+- **Non-admin sandbox: hooks folders a git config names are watched** (D422,
+  #1775). A `core.hooksPath` folder in the project (Husky, `.githooks`), an
+  included config file, or a script a program key names, when it lies in a
+  writable folder, is recorded by content; a new or changed file there is
+  reported like a changed repository. Nothing is refused: Husky still
+  installs inside the sandbox.
+- **Default (elevated) sandbox: possibly planted folders are reported too**
+  (D425, #1846). The `.codex`, `.agents` and `.git` folders, repositories
+  and hooks folders the non-admin sandbox watches are now watched in the
+  default sandbox as well: when a command ends, what it created or changed
+  there gets the same warning right after the command, at startup and in the
+  TUI prompt. Nothing is refused. Processes a command leaves running aren't
+  waited for.
+- **Default (elevated) sandbox: a change inside an existing nested `.codex`
+  or `.agents` folder is reported too** (#1896). The non-admin sandbox
+  keeps such a folder (below the top of a writable folder) unchanged; the
+  default sandbox doesn't protect it, so it now records what is inside each
+  one when a command starts and reports the folder, like a planted one,
+  when its contents differ after the command. Nothing is refused. A folder
+  too large to compare (over 20,000 entries or 64 MiB) is reported after
+  every command.
+- **Default (elevated) sandbox: a `.git` made for a read-only `.git\hooks`
+  is protected from the first command** (#1758). At the top of a writable
+  folder (other than `%TEMP%`) with no `.git`, a configured read-only
+  `.git\hooks` makes the sandbox create `.git` before the command starts.
+  The command that caused this could still write `.git\config`, `HEAD` or
+  `objects`; only later commands found `.git` protected. Now that first
+  command can't either, as in the non-admin sandbox. The same holds for a
+  `.codex` or `.agents` folder made this way. A deeper one, such as
+  `sub\.git` for `sub\.git\hooks`, still has only `hooks` protected.
+- **Default (elevated) sandbox: starting a command no longer holds up
+  other work** (#1896). Its preparation, which includes walking the
+  writable folders for the planted-folder records (about 0.06–0.08 s on a
+  38,000-file repository, 0.5–0.7 s on a `repo` client with 100 projects) and
+  the credential watch's first scan, ran on the thread that drives other
+  tasks; it now runs on its own. What is flagged is unchanged.
+- **Default (elevated) sandbox setup no longer fails now and then where
+  Windows requires complex passwords** (#1776). Setup gives the sandbox's
+  user accounts a fresh random password, and about one setup in 4,500 drew
+  one without the mix of characters that Windows' "Password must meet
+  complexity requirements" policy needs (the Windows Server default, and
+  common under domain policy), so setup failed with
+  `helper_user_create_or_update_failed`. Passwords now always hold
+  upper-case and lower-case letters, digits and symbols.
 - **Non-admin sandbox: links can't undo a read-only path** (#1645, D293,
   #1542; #1670, #1667). A command doesn't start when a configured read-only
   path, or a folder above it, is a link (junction, symbolic link or mount
@@ -505,8 +852,107 @@ count as one unknown file, the cautious reading (#1587, #1132, thanks to
   placeholder folders (OneDrive) at or above a read-only path, or as one, now
   get the same denies as plain folders, and a writable root that is a
   placeholder gets its label back (#1671, #1668).
+- **Non-admin sandbox: a configured read-only path that doesn't exist is
+  created and protected** (#1687, #1686, #1705; D333, D342), as the default
+  sandbox already did. Before the command starts, it's made as an empty
+  folder, so a command can't create it and fill it. A path meant to be a
+  file (`.env`, say) therefore becomes an empty folder, and a read-only
+  `.git\hooks` in a folder with no `.git` creates a protected `.git` with
+  only an empty `hooks` folder, which git doesn't treat as a repository. To
+  keep a file there, create it before you start a session. See "Read-only
+  paths that don't exist yet" in `docs/sandbox.md`.
 - **Non-admin sandbox commands start faster in large workspaces** (#1612,
   D285). Their delete protections are now written without rewriting the
   permissions of every file below (each is still checked, and anything
   unexpected falls back to the old method). In the PR's measurement on a
   101,000-file repository, a command took about 20 s instead of 31 s.
+- **Non-admin sandbox: the faster protection walks don't start at a link**
+  (D352, #1754, #1722). When the folder a walk starts at is itself a
+  junction or symbolic link, or is swapped for one as the walk starts, it
+  now leaves that folder to Windows' own walk, so the result always matches
+  what Windows does. Corbanu doesn't normally start a walk at a link, so
+  nothing changes in normal use.
+- **Known limitation, now documented: the non-admin sandbox breaks tools that
+  use named pipes** (#1797, #1561, #1778). Its commands can't write to
+  named pipes they create, so Node.js child processes with piped output
+  (`EPERM`), Git Bash (`couldn't create signal pipe`), a local `git clone`
+  and Python `multiprocessing` fail there. This is not new in this release.
+  The default (elevated) sandbox runs all of them; see "Known limitations"
+  in `docs/sandbox.md`.
+- **Known limitation, now documented: non-admin sandbox commands can write
+  in `C:\ProgramData\Microsoft\DeviceSync`** (#1770). Windows labels that
+  folder Low and lets everyone write to it. This is not new in this
+  release, and we accept it; don't keep files there that you rely on.
+- **Known limitation, now documented: default (elevated) sandbox commands
+  can read other projects' running commands** (#1803). A command can read
+  the memory of another project's command running at the same time
+  (secrets in its environment, what it prints) and, for one run in a
+  terminal, its console host (what you type and what it prints). It can't
+  change them. This is not new in this release. A change awaiting security
+  sign-off (#1800) stops the memory read, and a follow-up stops the console
+  read; until then, avoid running commands in several projects at once.
+- **Default (elevated) sandbox: a command that leaves a process running
+  returns when it exits** (#1830). A process started with the command's
+  output handles (PowerShell's `Start-Process -RedirectStandardOutput`, for
+  example) kept the command "running" until that process exited too, with no
+  time limit. Now one-shot commands and unified exec sessions in the default
+  sandbox finish at most about 2 seconds after the command exits, and the
+  process it started keeps running; output that process writes later is not
+  shown. The non-admin sandbox's one-shot commands behave this way since
+  #1826, and its unified exec sessions now do too (#1861).
+- **A default (elevated) sandbox command now starts while a non-admin
+  sandbox command is running** (#1819). Before, when the non-admin command's
+  writable folders held the Corbanu home (for example `%TEMP%`, or a project
+  folder above it), the elevated command failed after 15 seconds with
+  `timed out after 15000ms connecting runner pipe-out`. The folder with the
+  sandbox's helper programs now keeps its normal (Medium) integrity level.
+  If that folder is a link, it is left alone and the sandbox log says so. If
+  copying the helper fails and the one next to `codex.exe` is used instead,
+  a Low label on it is fixed the same way, or the log names it as the cause.
+- **Windows PowerShell's `Start-Process` works in both sandboxes** (#1805).
+  Corbanu passes commands your environment, where Windows spells the search
+  path `Path`, and both sandboxes added a second copy spelled `PATH`. Windows
+  PowerShell 5.1's `Start-Process` then failed with "Item has already been
+  added", and the copy that counted could miss folders added by
+  `shell_environment_policy.set`. Each variable now reaches a command once,
+  and a value you set wins over the inherited spelling; no folder is added
+  to or removed from what you configured. Where Corbanu sets a proxy
+  variable in both cases (`HTTP_PROXY` and `http_proxy`), sandboxed
+  commands get only the capitals, so tools that read only the lower-case
+  name (MSYS2 or Git Bash `curl`) no longer see that proxy.
+- **Remote and exec-server commands on Windows also get each variable once**
+  (#1817). The exec-server added Corbanu's variables beside the ones it
+  inherited with exact case, so an inherited `Term` next to Corbanu's `TERM`
+  reached the command twice and either value could count. Corbanu's value
+  now replaces every inherited spelling, as in the sandboxes since #1805.
+
+## Windows sandbox: capability SIDs are recorded under a lock (#1871)
+
+- **Two Corbanu processes on one Corbanu home no longer lose each other's
+  sandbox capability SIDs** when they record them at the same time. Each
+  update of the home's `cap_sid` file now holds a lock (`cap_sid.lock`) from
+  reading the file to replacing it, and the sandbox audit no longer rewrites
+  the file. Before, the later write could drop a SID the other process had
+  just recorded and granted, and two first uses could each make a different
+  set.
+- An update waits at most 5 seconds for the lock, then goes ahead unlocked,
+  as all updates did before. So a program that holds the lock (anything that
+  can read the Corbanu home) can delay updates by 5 seconds and bring back
+  the old race, but cannot stop them.
+
+## Windows sandbox tests no longer pile up entries on `%TEMP%` (#1890)
+
+- **Running the `codex-windows-sandbox` and `codex-core` Windows tests no
+  longer adds lasting permission entries to your `%TEMP%`.** Each test that
+  ran a non-admin sandbox command left one there for good (about 25 per run
+  of the `codex-windows-sandbox` tests), and every file later made in
+  `%TEMP%` inherited all of them. The tests now give those commands a temp
+  folder of their own, and a `codex-windows-sandbox` test fails if one still
+  adds an entry to the real `%TEMP%` or `%TMP%`.
+- Not changed: the non-admin sandbox itself keeps one lasting entry on
+  `%TEMP%` per Corbanu home (measured: one after many sessions in several
+  projects). On a machine that ran the tests before, `icacls "%TEMP%"` lists
+  the old entries as bare `S-1-5-21-…` SIDs with `(OI)(CI)(M)`;
+  `icacls "%TEMP%" /remove:g *S-1-5-21-…` (with the `*`) removes one. Remove
+  only such bare-SID entries. If one was your Corbanu home's, the sandbox adds
+  it back the next time it runs.

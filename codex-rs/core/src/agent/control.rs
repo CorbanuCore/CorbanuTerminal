@@ -1094,6 +1094,71 @@ impl LocalAgentControl {
         Ok(())
     }
 
+    /// #1701: whether `agent_id` is a loaded thread that `caller` did not
+    /// spawn, directly or through its own agents. `wait_agent` reads only
+    /// the caller's own agents; an id that is not loaded is not foreign
+    /// (waiting reports it as not found).
+    pub(crate) async fn is_foreign_loaded_thread(
+        &self,
+        caller: ThreadId,
+        agent_id: ThreadId,
+    ) -> CodexResult<bool> {
+        let state = self.upgrade()?;
+        if state.get_thread(agent_id).await.is_err() {
+            return Ok(false);
+        }
+        Ok(!self
+            .live_thread_spawn_descendants(caller)
+            .await?
+            .contains(&agent_id))
+    }
+
+    /// #1701: the names `list_agents` gives the loaded agents `caller`
+    /// spawned, directly or through its own agents.
+    pub(crate) async fn spawn_descendant_agent_names(
+        &self,
+        caller: ThreadId,
+    ) -> CodexResult<Vec<String>> {
+        Ok(self
+            .live_thread_spawn_descendants(caller)
+            .await?
+            .into_iter()
+            .map(|thread_id| {
+                self.get_agent_metadata(thread_id)
+                    .and_then(|metadata| metadata.agent_path)
+                    .map(|path| path.to_string())
+                    .unwrap_or_else(|| thread_id.to_string())
+            })
+            .collect())
+    }
+
+    /// #1756: the names `list_agents` gives the agents `caller` spawned,
+    /// directly or through its own agents: the loaded ones, and those not
+    /// loaded now (open edges in the agent graph, listed as unloaded).
+    pub(crate) async fn own_agent_names(&self, caller: ThreadId) -> CodexResult<Vec<String>> {
+        let mut thread_ids = self.live_thread_spawn_descendants(caller).await?;
+        let state = self.upgrade()?;
+        if let Some(agent_graph_store) = state.agent_graph_store()
+            && let Ok(persisted) = agent_graph_store
+                .list_thread_spawn_descendants(
+                    caller,
+                    Some(codex_agent_graph_store::ThreadSpawnEdgeStatus::Open),
+                )
+                .await
+        {
+            thread_ids.extend(persisted);
+        }
+        Ok(thread_ids
+            .into_iter()
+            .map(|thread_id| {
+                self.get_agent_metadata(thread_id)
+                    .and_then(|metadata| metadata.agent_path)
+                    .map(|path| path.to_string())
+                    .unwrap_or_else(|| thread_id.to_string())
+            })
+            .collect())
+    }
+
     pub(crate) async fn list_live_agent_subtree_thread_ids(
         &self,
         agent_id: ThreadId,

