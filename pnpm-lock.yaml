@@ -25,7 +25,7 @@ overrides:
   qs: 6.15.2
   rollup: 4.59.0
   semver: ^7.7.1
-  undici: 7.30.1
+  '@modelcontextprotocol/conformance>undici': 7.30.1
   '@modelcontextprotocol/conformance>zod': 4.6.7
 
 importers:
@@ -582,7 +582,7 @@ packages:
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
   '@modelcontextprotocol/conformance@https://codeload.github.com/modelcontextprotocol/conformance/tar.gz/49103de6ed70804e940637bf3e9e29e4a3f54e64':
-    resolution: {gitHosted: true, tarball: https://codeload.github.com/modelcontextprotocol/conformance/tar.gz/49103de6ed70804e940637bf3e9e29e4a3f54e64}
+    resolution: {gitHosted: true, integrity: sha512-zzqxa/sCnMMhlE69TqfWx4vTZ9eMHHwF/gKjcJtAbeYWtYi4UuSQfPWCwiP5bnHPF0ZyGfvuWvYx1W1hJppI4w==, tarball: https://codeload.github.com/modelcontextprotocol/conformance/tar.gz/49103de6ed70804e940637bf3e9e29e4a3f54e64}
     version: 0.2.0-alpha.10
     hasBin: true
 
