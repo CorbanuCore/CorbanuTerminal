@@ -4,11 +4,6 @@ This package contains the implementation behind `scripts/build_codex_package.py`
 The top-level script is the stable executable entry point; these modules keep the
 package-building logic split by responsibility.
 
-<<<<<<< HEAD
-The builder creates a canonical package directory inherited from Codex:
-||||||| 413492cd6c
-The builder creates a canonical Codex package directory:
-=======
 Run the builder through `just`:
 
 ```bash
@@ -17,8 +12,7 @@ just assemble-codex-package --variant codex-app-server
 just assemble-codex-package --target x86_64-unknown-linux-gnu
 ```
 
-The builder creates a canonical Codex package directory:
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+The builder creates a canonical package directory inherited from Codex:
 
 ```text
 .
@@ -26,7 +20,7 @@ The builder creates a canonical Codex package directory:
 ├── bin
 │   ├── <entrypoint>[.exe]
 │   ├── codex-code-mode-host[.exe]
-│   └── codex-exec-server[.exe]
+│   └── codex-exec-server[.exe]           # codex and codex-app-server variants
 ├── codex-resources
 │   ├── bwrap                             # Linux only
 │   ├── codex-command-runner.exe          # Windows only
@@ -48,26 +42,24 @@ artifacts; pass a GNU Linux target explicitly for native glibc local builds. If
 prints its path after the package is built.
 
 The `--variant` flag selects the package entrypoint. Supported variants are
-<<<<<<< HEAD
-`pfterminal`, `codex`, and `codex-app-server`. PFTerminal release jobs should
-use the `pfterminal` variant so the product-facing binary is the package
-entrypoint. The `codex` variant remains available for upstream compatibility.
-The `version` field in `codex-package.json` is read from
-`[workspace.package].version` in `codex-rs/Cargo.toml`.
+`corbanu`, `pfterminal`, `codex`, and `codex-app-server`. Corbanu Terminal
+release jobs use the `corbanu` variant so the product-facing binary is the
+package entrypoint; `pfterminal` keeps the previous product name and `codex`
+remains available for upstream compatibility. The `--package-version` flag sets
+the version in `codex-package.json`; it defaults to `[workspace.package].version`
+in `codex-rs/Cargo.toml`.
 
-The `pfterminal` variant always includes `pfterminal-debug` and
-`pfterminal-walletd` beside the main entrypoint. The debug entrypoint selects
-its isolated state home inside the binary. Wallet operations start the companion
-process from the main executable's directory, so package validation treats both
-artifacts as required rather than optional resources.
-||||||| 413492cd6c
-`codex` and `codex-app-server`. The `version` field in `codex-package.json` is
-read from `[workspace.package].version` in `codex-rs/Cargo.toml`.
-=======
-`codex` and `codex-app-server`. The `--package-version` flag sets the version in
-`codex-package.json`; it defaults to `[workspace.package].version` in
-`codex-rs/Cargo.toml`.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+The `corbanu` variant always includes `corbanu-debug`, `corbanu-acp` and
+`corbanu-walletd` beside the main entrypoint (`pfterminal`: `pfterminal-debug`
+and `pfterminal-walletd`). The debug entrypoint selects its isolated state home
+inside the binary. Wallet operations start the companion process from the main
+executable's directory, so package validation treats these artifacts as
+required rather than optional resources.
+
+The `corbanu` and `pfterminal` variants do not ship `codex-exec-server` (the
+same program as `corbanu exec-server`): their `codex-package.json` has no
+`execServer` field, which the installers accept, and `--exec-server-bin` is
+refused for them.
 
 ## Source-built artifacts
 
@@ -77,35 +69,33 @@ override was provided:
 
 - all targets: the selected entrypoint, unless `--entrypoint-bin` is provided
 - all targets: `codex-code-mode-host`, unless `--code-mode-host-bin` is provided
-- all targets: `codex-exec-server`, unless `--exec-server-bin` is provided
+- `codex` and `codex-app-server`: `codex-exec-server`, unless `--exec-server-bin`
+  is provided
 - Linux targets: `bwrap`, unless `--bwrap-bin` is provided
 - Windows targets: `codex-command-runner` and `codex-windows-sandbox-setup`,
   unless the corresponding prebuilt helper flags are provided
 
 The default cargo profile is `dev-small` because local iteration should favor
 fast, small builds. Release jobs should pass `--cargo-profile release` and an
-explicit target. Release jobs that already built and signed/notarized the
-entrypoint should pass `--entrypoint-bin` so the package contains that exact
-binary instead of rebuilding it.
+explicit target. Release jobs that already built the entrypoint should pass
+`--entrypoint-bin` so the package is made from that binary instead of
+rebuilding it. The package copy is stripped (below), so sign the packaged
+binaries, not the inputs.
 
-Release jobs should likewise pass `--code-mode-host-bin` and `--exec-server-bin`
-so the package preserves the signed host and executor beside the entrypoint.
+Release jobs should likewise pass `--code-mode-host-bin`, `--extra-bin NAME=PATH`
+for each extra binary and, for variants that ship it, `--exec-server-bin`.
 
 On Linux and macOS, the builder strips symbols from the **package copies** of
-source-built release-profile entrypoint, code-mode host, and executor binaries. Cargo outputs
-retain their symbols for debugging. The default `--strip auto` also preserves
-development/profiling builds and prebuilt inputs
-byte-for-byte, including signatures. Use `--strip all` to also strip prebuilt
-first-party executable copies, or `--strip none` to keep symbols in every package copy.
-Strip before production signing; `--strip all` is not appropriate for inputs
-whose release signatures must be preserved. Windows MSVC symbols are separate
-PDB files and are not included in the package.
+every first-party executable (entrypoint, extra binaries, code-mode host and
+executor), whatever the profile and whether or not the input was prebuilt; the
+inputs themselves are not modified. Pass `--symbols-dir DIR` to keep the symbols
+outside the archive: ELF binaries get `<name>.debug` (`objcopy --only-keep-debug`
+plus a GNU debuglink), Mach-O binaries get `<name>.dSYM` (`dsymutil`). The tools
+come from the `STRIP`, `OBJCOPY` and `DSYMUTIL` environment variables, or else
+the first of `llvm-strip`/`strip`, `llvm-objcopy`/`objcopy` and `dsymutil` on
+`PATH`. Strip before production signing. Windows MSVC symbols are separate PDB
+files and are not included in the package.
 
-macOS uses `xcrun strip -S -x`, matching the release pipeline and preserving
-executable ad-hoc signatures. Linux uses `llvm-strip`, a target-prefixed GNU
-strip, or native GNU strip when the host architecture matches. For cross builds,
-install `llvm-strip` or pass `--strip-tool /path/to/target-strip`. Missing tools
-or strip failures fail the build; use `--strip none` to deliberately opt out.
 Third-party resources are copied unchanged. In particular, never strip `bwrap`
 after its integrity digest has been embedded in Codex.
 
