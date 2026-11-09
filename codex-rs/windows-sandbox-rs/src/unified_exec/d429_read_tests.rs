@@ -8,6 +8,9 @@
 //! A holding legacy command keeps a secret in its environment; a second
 //! command, in another workspace, opens it and its threads and scans its
 //! memory for the secret.
+//!
+//! #1803's other route, an elevated runner's ConPTY console host, is probed
+//! the same way at the end of this file.
 
 use super::*;
 use windows_sys::Win32::System::Diagnostics::Debug::CONTEXT;
@@ -613,4 +616,100 @@ async fn end_a_running_command(
     session.terminate();
     drain.abort();
     result
+}
+
+/// #1803: the console host an elevated command's runner starts for its
+/// ConPTY holds what that command prints and what you type at it. Another
+/// elevated command, in another workspace, must not open it or its threads
+/// for reading (win-desk's real-desktop probe). It can today: the runner's
+/// default DACL (D324) gives the sandbox users' group, which every elevated
+/// command holds, read access, and read rights pass a write-restricted token.
+#[test]
+#[ignore = "#1803: an elevated command reads another workspace's ConPTY console host (what that command printed) through the sandbox users' group in the runner's default DACL; measured open on main and #1800 (win-desk, real desktop) and on CI; the fix (D461) or follow-up (D417) is the owner's decision"]
+fn sec_win_1803_elevated_command_cannot_read_another_workspaces_console_host() {
+    let Some(codex_home) = elevated_home("sec-win-1803") else {
+        return;
+    };
+    let _guard = legacy_process_test_guard();
+    let holder_root = user_owned_test_root();
+    let root = user_owned_test_root();
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let secret = format!("SEC1803SECRET{nanos:x}{:x}", std::process::id());
+    // The holder prints it reversed back, so only its output holds `secret`.
+    let printed: String = secret.chars().rev().collect();
+    let runtime = current_thread_runtime();
+    let reports = runtime.block_on(with_elevated_holder_env(
+        holder_root.path(),
+        codex_home.path(),
+        /*tty*/ true,
+        &[(HOLD_PRINT_ENV, printed)],
+        async |holder_pid| {
+            let deadline = Instant::now() + Duration::from_secs(/*secs*/ 10);
+            let hosts = loop {
+                let hosts = console_hosts_of(holder_pid);
+                if !hosts.is_empty() || Instant::now() >= deadline {
+                    break hosts;
+                }
+                tokio::time::sleep(Duration::from_millis(/*millis*/ 100)).await;
+            };
+            // Let the console host take in what the holder printed.
+            tokio::time::sleep(Duration::from_millis(/*millis*/ 1500)).await;
+            let mut reports = Vec::new();
+            for (host, image) in hosts {
+                let control = scan_for(host, &secret);
+                let tids = threads_of(&std::collections::HashSet::from([host]))
+                    .into_iter()
+                    .map(|(tid, _)| tid.to_string())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                let env = [
+                    (READ_TARGET_ENV, format!("{host}={tids}")),
+                    (NEEDLE_ENV, secret.clone()),
+                ];
+                let (stdout, _) = run_elevated(
+                    root.path(),
+                    codex_home.path(),
+                    probe_argv(READ_PROBE),
+                    &env,
+                    /*tty*/ false,
+                )
+                .await;
+                let line = expect_line(&stdout, codex_home.path());
+                reports.push((format!("{image} {host}"), control, line));
+            }
+            reports
+        },
+    ));
+    record_setup(codex_home.path());
+    assert!(
+        !reports.is_empty(),
+        "found no console host of the holding command's runner\n{}",
+        sandbox_log(codex_home.path())
+    );
+    let mut failures = Vec::new();
+    for (host, control, line) in &reports {
+        println!("\nsec-win-1803: {host} harness_{control} reader: {line}");
+        // Where this test may read the host (an elevated session), the
+        // printed secret must be there, or the probe proves nothing.
+        if control.starts_with("scan=ok") && control.ends_with(" secret_found=0") {
+            failures.push(format!(
+                "{host}: the printed secret isn't in it ({control})"
+            ));
+        }
+        let missing = unreadable_parts(line);
+        if !missing.is_empty() {
+            failures.push(format!("{host}: {line} missing={missing:?}"));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "#1803: an elevated command read another workspace's console host: {failures:?}"
+    );
+    println!(
+        "\nsec-win-1803: {} console host(s) closed to another workspace's command",
+        reports.len()
+    );
 }

@@ -259,9 +259,16 @@ account and the runner makes the command's token
 from its own (`ElevatedBaseLogon::RunnerLogon`), with the D324 default DACL,
 exactly as before #1800: #1721, #1560 and #1803 stay open for them, and the
 TUI and `codex sandbox setup` tell the user so. A runner that holds the
-privilege refuses a request without a command logon. Elevated commands
-can still read a runner's ConPTY console host (another workspace's terminal
-output), as before. Two routes
+privilege refuses a request without a command logon. Not closed (#1803):
+elevated commands can still read a runner's ConPTY console host (another
+workspace's terminal output and typed input), as before: the runner's
+default DACL (D324) gives the sandbox users' group read access, which every
+elevated command holds. win-desk measured it on a real desktop on main and on
+#1800, admin and normal sessions alike: another workspace's command opened
+the host for `PROCESS_VM_READ` and `THREAD_GET_CONTEXT` and found a secret
+the holding command had printed. The ignored
+`sec_win_1803_elevated_command_cannot_read_another_workspaces_console_host`
+is that probe; it flips when the fix lands (D461/D417). Two routes
 still start a child
 outside the command's job: the COM servers `ShellBrowserWindow` (the child
 runs at Low integrity but with an unrestricted token) and

@@ -43,6 +43,9 @@ const OUT_ENV: &str = "CODEX_D259_OUT";
 /// #1560: set for a holding command that holds in a child it starts, so a
 /// probe targets a process the command started rather than its first one.
 const HOLD_CHILD_ENV: &str = "CODEX_1560_HOLD_CHILD";
+/// #1803: text a holding command prints, reversed, before it reports its pid,
+/// so the printed form is in its output but not in any environment.
+const HOLD_PRINT_ENV: &str = "CODEX_1803_HOLD_PRINT";
 const RESULT: &str = "d259: ";
 
 /// Process rights that are write rights for a write-restricted token (in the
@@ -286,6 +289,11 @@ fn command_identity_hold_entry() {
         wait_for_path(&dir.join("hold.release"), Duration::from_secs(/*secs*/ 60));
         let _ = child.wait();
         return;
+    }
+    if let Ok(text) = std::env::var(HOLD_PRINT_ENV) {
+        use std::io::Write as _;
+        println!("{}", text.chars().rev().collect::<String>());
+        let _ = std::io::stdout().flush();
     }
     // #1721 (a′): this command's logon SID (hex), for the entries test.
     // SAFETY: this process's own token, opened for query and closed here.
