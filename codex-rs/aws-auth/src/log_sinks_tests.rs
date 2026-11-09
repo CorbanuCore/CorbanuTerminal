@@ -147,7 +147,10 @@ async fn credential_process_output_reaches_no_log_sink() {
     )
     .await
     .expect("state runtime");
-    let log_db = codex_state::log_db::start(Arc::clone(&state_db));
+    let log_db = codex_state::log_db::start(
+        Arc::clone(&state_db),
+        Arc::new(codex_feedback::CodexFeedback::new()),
+    );
     let feedback = codex_feedback::CodexFeedback::new();
     let file = Buffer::default();
     let file_writer = file.clone();
