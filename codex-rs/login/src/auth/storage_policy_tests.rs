@@ -588,7 +588,7 @@ fn auto_auth_storage_delete_falls_back_when_keyring_errors() -> anyhow::Result<(
         Arc::new(mock_keyring.clone()),
         AuthKeyringBackendKind::Secrets,
     );
-    let key = compute_keyring_account(codex_home.path());
+    let key = compute_keyring_account(codex_home.path(), LocalSecretsNamespace::CodexAuth);
     mock_keyring.set_error(&key, KeyringError::Invalid("error".into(), "delete".into()));
 
     let auth = auth_with_prefix("fallback");

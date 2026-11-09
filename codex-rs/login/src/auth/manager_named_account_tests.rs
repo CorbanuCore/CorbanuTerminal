@@ -104,11 +104,14 @@ fn chatgpt_sign_in_of(access_token: &str, user: &str) -> crate::auth::storage::A
             access_token: access_token.to_string(),
             refresh_token: "refresh-canary".to_string(),
             account_id: Some("ws-work".to_string()),
+            login_owner_id: None,
+            oauth_provenance: None,
         }),
         last_refresh: None,
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        bedrock_access_keys: None,
     }
 }
 
@@ -336,9 +339,11 @@ fn a_refresh_save_racing_a_removal_never_brings_the_account_back() {
         home: home.path().to_path_buf(),
     });
 
+    let refreshed_from = chatgpt_sign_in("access-before").tokens.expect("tokens");
     let _ = super::super::persist_tokens(
         &storage,
-        "refresh-canary",
+        &refreshed_from,
+        /*provenance*/ None,
         /*id_token*/ None,
         Some("access-refreshed".to_string()),
         Some("refresh-refreshed".to_string()),
@@ -366,10 +371,13 @@ fn refreshed_tokens_never_replace_a_newer_sign_in_or_recreate_the_account() {
     .expect("sign-in");
     let storage: Arc<dyn AuthStorageBackend> =
         Arc::new(VaultAccountAuthStorage::new(home.path(), &account("work")).expect("storage"));
+    // Refreshed from the earlier sign-in, whose refresh token was "refresh-canary".
+    let refreshed_from = chatgpt_sign_in("access-new").tokens.expect("tokens");
     let persist = || {
         super::super::persist_tokens(
             &storage,
-            "refresh-canary",
+            &refreshed_from,
+            /*provenance*/ None,
             /*id_token*/ None,
             Some("access-refreshed".to_string()),
             Some("refresh-refreshed".to_string()),
