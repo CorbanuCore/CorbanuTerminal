@@ -78,3 +78,62 @@ fn issue_1975_option_value_controls() {
         Vec::<String>::new()
     );
 }
+
+#[test]
+fn issue_1975_other_brace_spellings_ask() {
+    let lines = [
+        r#"git fetch -o '}' -- e"$r""#,
+        r#"git fetch -o \{\} -- e"$r""#,
+        r#"git fetch -o {""} -- e"$r""#,
+        r#"git fetch -o } -- e"$r""#,
+        r#"git fetch -o { -- e"$r""#,
+        r#"git fetch -o '{'}' -- e"$r""#,
+        r#"git pull -o '}' -- e"$r""#,
+        r#"git pull -o \{\} -- e"$r""#,
+        r#"git pull -o {""} -- e"$r""#,
+        r#"git pull -o } -- e"$r""#,
+        r#"git pull -o { -- e"$r""#,
+        r#"git pull -o '{'}' -- e"$r""#,
+    ];
+    assert_eq!(
+        wrong(&lines, Some(ProtectedActionKind::UnseenCode)),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn issue_1975_groups_options_and_placeholders_still_ask() {
+    let lines = [
+        r#"{ git fetch e"$r"; }"#,
+        r#"zsh -c 'git fetch -o {} -- e"$r"'"#,
+        r#"git -c x={} fetch "$r""#,
+        r#"git fetch --upload-pack={} "$r""#,
+        r#"xargs -I{} sh -c 'git fetch "{}"' < remotes"#,
+        // Parameter-looking data must not hide a later literal brace argument.
+        r#"echo '${'; git fetch -o '}' -- e"$r""#,
+    ];
+    assert_eq!(
+        wrong(&lines, Some(ProtectedActionKind::UnseenCode)),
+        Vec::<String>::new()
+    );
+    // A nested substitution can also be classified as Persistence; either
+    // finding must still require approval.
+    assert!(script(r#"echo "${x:-$(git fetch -o {""} -- e"$r")}""#).is_some());
+}
+
+#[test]
+fn issue_1975_literal_brace_values_stay_quiet() {
+    let lines = [
+        "git fetch -o '}' -- origin",
+        r"git fetch -o \{\} -- origin",
+        r#"git fetch -o {""} -- origin"#,
+        "git pull -o '}' -- origin",
+        r"git pull -o \{\} -- origin",
+        r#"git pull -o {""} -- origin"#,
+        "{ git fetch origin; }",
+        // Review round 1: the old redirection reading split at `{}` and
+        // mistook data passed to echo for a workspace program.
+        "echo {} >'a b' ./x",
+    ];
+    assert_eq!(wrong(&lines, /*expected*/ None), Vec::<String>::new());
+}

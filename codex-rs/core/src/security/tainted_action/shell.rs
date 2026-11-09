@@ -121,8 +121,8 @@ pub(super) struct Lexed {
     /// #1772 review 1: some text was read where main reads it otherwise: a
     /// quoted or escaped redirection file holding a blank as one word,
     /// `&>` as one redirection, a redirection's words moved last, a second
-    /// `<` or `<<<`, or a substitution with its stdout redirected left
-    /// unspliced, or literal empty braces retained (see `simple_commands_read`).
+    /// `<` or `<<<`, a substitution with its stdout redirected left
+    /// unspliced, or literal braces retained (see `simple_commands_read`).
     pub(super) read_newly: bool,
 }
 
@@ -148,7 +148,7 @@ pub(super) fn simple_commands(command: &[String]) -> Lexed {
     simple_commands_read(command, /*main_reading*/ true)
 }
 
-/// [`simple_commands`], with `main_reading`: as main reads redirections and empty braces.
+/// [`simple_commands`], with `main_reading`: as main reads redirections and braces.
 /// #1772 review 1: the lexer cannot tell whether the `>` or `<` before a
 /// quote was inside quotes, a comment, a `case` pattern or a here-document
 /// (`echo '>"'; ./x; echo '"'`), and `&>` splits under `sh` and `dash`
@@ -156,10 +156,10 @@ pub(super) fn simple_commands(command: &[String]) -> Lexed {
 /// one word and `&>` one redirection only when `main_reading` is off; the
 /// classifier then also judges the action with it on and keeps the
 /// stricter verdict (`Lexed::read_newly`).
-/// #1975: literal `{}` is retained only in the new reading, with the same
-/// baseline verdict floor (including for xargs replacement words).
-/// #1772 review 2: with `main_reading` on, nothing is read otherwise than
-/// on main: no word moves
+/// #1975: braces outside command-word position are literal in the new
+/// reading. The main reading's verdict is still a floor, including for
+/// zsh's less restrictive group closings and xargs replacement words.
+/// #1772 review 2: with `main_reading` on, nothing is read otherwise than on main: no word moves
 /// (`SimpleCommand::redirections_last`), only the last `<` and `<<<` are
 /// kept, and a substitution with its stdout redirected is spliced.
 pub(super) fn simple_commands_read(command: &[String], main_reading: bool) -> Lexed {
@@ -677,7 +677,7 @@ struct Lexer {
     real_open: usize,
     /// D194: the operators since the last word (`None`: a word).
     joint: Option<Joint>,
-    /// #1772/#1975: redirections and empty braces are read as on main
+    /// #1772/#1975: redirections and braces are read as on main
     /// (`simple_commands_read`).
     main_reading: bool,
     /// #1772 review 1: see `Lexed::read_newly`.
@@ -1014,6 +1014,10 @@ impl Lexer {
         // a line break: a `((` in a comment or here-document is not
         // arithmetic, and the lines after it are code.
         let mut arithmetic_end = 0;
+        // Parameter delimiters keep the old normalization (`${tmp}` ->
+        // `$tmp`), which the variable and mktemp checks expect. Other braces
+        // are remembered too, so a nested literal does not close a parameter.
+        let mut parameter_braces = Vec::new();
         // #1772 item 2: a quote of this kind (`[single, double]`) has no
         // closing one later in the text.
         let mut unclosed = [false; 2];
@@ -1028,6 +1032,15 @@ impl Lexer {
             let ch = chars[index];
             let next = chars.get(index + 1).copied();
             let previous = index.checked_sub(1).map(|at| chars[at]);
+            let parameter_brace = match ch {
+                '{' => {
+                    let parameter = previous == Some('$');
+                    parameter_braces.push(parameter);
+                    parameter
+                }
+                '}' => parameter_braces.pop().unwrap_or(false),
+                _ => false,
+            };
             match ch {
                 '$' if index >= arithmetic_end && misread_parameter(&chars[index + 1..]) => {
                     self.operated = true;
@@ -1115,18 +1128,24 @@ impl Lexer {
                 ')' if self.open.last().is_some_and(|open| !open.backtick) => {
                     self.close_substitution(/*arithmetic_close*/ next == Some(')'));
                 }
-                // Empty braces are literal text, including inside quotes. Dropping
-                // them can split `git fetch -o {} -- "$r"` before the remote.
-                '{' if next == Some('}') && !self.main_reading => {
-                    self.read_newly = true;
-                    self.word.push_str("{}");
-                    index += 2;
-                    continue;
-                }
-                '{' if self.word.is_empty() && next.is_none_or(char::is_whitespace) => {
+                // #1975: in bash a brace argument cannot delimit a group.
+                // Closing one at `git fetch -o '}' -- "$r"` splits off the
+                // remote. Keep the main reading for its separate judgment.
+                '{' if self.word.is_empty()
+                    && next.is_none_or(char::is_whitespace)
+                    && (self.main_reading || self.current.words.is_empty()) =>
+                {
                     self.open_bracket();
                 }
-                '}' if self.word.is_empty() => self.close_bracket(),
+                '}' if self.word.is_empty()
+                    && (self.main_reading || self.current.words.is_empty()) =>
+                {
+                    self.close_bracket();
+                }
+                '{' | '}' if !self.main_reading && (!parameter_brace || self.word.is_empty()) => {
+                    self.read_newly = true;
+                    self.word.push(ch);
+                }
                 '\\' => self.current.escaped = true,
                 HIDDEN => self.hidden = true,
                 '\'' | '"' | '{' | '}' => {}
