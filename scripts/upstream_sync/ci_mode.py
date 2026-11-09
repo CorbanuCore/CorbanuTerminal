@@ -168,6 +168,50 @@ DEPENDENCY_POLICY = (
     "pnpm-lock.yaml",
     ".github/workflows/cargo-deny.yml",
 )
+# Paths `main` assigns to @corbanu-security (D318, #1914) that the named list above doesn't already cover, as
+# CODEOWNERS patterns. Keeps the sync branch's coverage a superset of `main`'s until main's own block arrives
+# with a main merge. Update when main's block changes.
+MAIN_D318 = (
+    "/.github/CODEOWNERS",
+    "/codex-rs/bwrap/",
+    "/codex-rs/cli/src/debug_sandbox/",
+    "/codex-rs/cli/src/debug_sandbox.rs",
+    "/codex-rs/core/src/sandboxing/",
+    "/codex-rs/core/src/exec_env.rs",
+    "/codex-rs/core/src/windows_sandbox*",
+    "/codex-rs/exec-server/src/fs_sandbox.rs",
+    "/codex-rs/exec-server/src/process_sandbox.rs",
+    "/codex-rs/exec-server/src/sandboxed_file_system.rs",
+    "/codex-rs/protocol/src/secretless_launch.rs",
+    "/codex-rs/shell-command/src/command_safety/",
+    "/codex-rs/core/src/tools/approvals.rs",
+    "/codex-rs/core/src/tools/handlers/request_permissions.rs",
+    "/codex-rs/core/src/state/granted_permissions.rs",
+    "/codex-rs/core/src/tools/handlers/mod.rs",
+    "/codex-rs/hooks/src/events/permission_request.rs",
+    "/codex-rs/telegram/src/approvals.rs",
+    "/codex-rs/telegram/src/auth.rs",
+    "/codex-rs/app-server-transport/src/transport/auth.rs",
+    "/codex-rs/protocol/src/permissions.rs",
+    "/codex-rs/protocol/src/permissions/",
+    "/codex-rs/core/src/config/resolved_permission_profile.rs",
+    "/codex-rs/core/src/config/permission_profile_catalog.rs",
+    "/codex-rs/config/src/permissions_toml.rs",
+    "/codex-rs/config/src/requirements_layers/",
+    "/codex-rs/config/src/security_state.rs",
+    "/codex-rs/tui/src/security/",
+    "/codex-rs/cli/src/nested_security.rs",
+    "/codex-rs/vault/",
+    "/codex-rs/keyring-store/",
+    "/codex-rs/wallet/",
+    "/codex-rs/wallet-daemon/",
+    "/codex-rs/login/src/auth/storage*",
+    "/codex-rs/login/src/auth/provider_key_vault.rs",
+    "/codex-rs/core/src/config/auth_keyring.rs",
+    "/codex-rs/core/src/config/network_proxy_credential*",
+    "/codex-rs/core/src/model_broker_auth*",
+    "/codex-rs/model-provider/src/model_key_broker.rs",
+)
 
 
 def codeowners(action, wt, owner=None):
@@ -192,12 +236,11 @@ def codeowners(action, wt, owner=None):
         ):
             sys.exit("error: codeowners apply needs an @owner")
         # Last matching pattern wins, so this block goes at the end.
-        block = (
-            [CO_BEGIN]
-            + [f"{codeowners_pattern(spec)} {owner}" for spec in footprint.NAMED]
-            + [f"{codeowners_pattern(spec)} {owner}" for spec in DEPENDENCY_POLICY]
-            + [CO_END]
-        )
+        patterns = [
+            codeowners_pattern(spec) for spec in [*footprint.NAMED, *DEPENDENCY_POLICY]
+        ]
+        patterns += [p for p in MAIN_D318 if p not in patterns]
+        block = [CO_BEGIN] + [f"{p} {owner}" for p in patterns] + [CO_END]
         text = text.rstrip("\n") + "\n\n" + "\n".join(block) + "\n"
     open(p, "w").write(text)
     print(f"CODEOWNERS block {'added' if action == 'apply' else 'removed'}")
