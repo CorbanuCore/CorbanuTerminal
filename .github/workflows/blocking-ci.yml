@@ -57,9 +57,10 @@ jobs:
     # Without `always()`, GitHub skips this job after a failed dependency and a
     # required check can appear successful instead of reporting the failure.
     if: ${{ always() }}
-    # Bazel is advisory while the BuildBuddy key is revoked. Restore its dependency
-    # once the suite can run without BuildBuddy.
+    # Corbanu keeps Bazel required: our Bazel lane runs without BuildBuddy
+    # (upstream made it advisory when its BuildBuddy key was revoked).
     needs:
+      - bazel
       - blob-size-policy
       - cargo-deny
       - codespell

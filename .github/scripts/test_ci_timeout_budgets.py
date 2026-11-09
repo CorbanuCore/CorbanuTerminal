@@ -215,13 +215,41 @@ class CacheSavePolicyTest(unittest.TestCase):
     """#636: only main saves Actions caches; PRs restore main's."""
 
     MAIN = "github.ref == 'refs/heads/main'"
-    # Release workflows run on tags or by hand, never on PRs.
-    EXEMPT = {"rusty-v8-release.yml"}
+    # Release workflows run on tags, by hand or from another release workflow,
+    # never on PRs; the actions are used only by upstream's release workflows.
+    EXEMPT = {
+        ".github/workflows/rusty-v8-release.yml",
+        ".github/workflows/python-runtime-release.yml",
+        ".github/workflows/python-sdk-cli-release.yml",
+        ".github/workflows/python-sdk-release.yml",
+        ".github/workflows/rust-release-provisioned-macos.yml",
+        ".github/actions/build-codex-packages/action.yml",
+        ".github/actions/publish-dotslash/action.yml",
+    }
+
+    @staticmethod
+    def relative(path: Path) -> str:
+        return path.relative_to(REPO_ROOT).as_posix()
 
     def ci_files(self) -> list[Path]:
         files = sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
         files += sorted((REPO_ROOT / ".github" / "actions").glob("*/action.yml"))
-        return [path for path in files if path.name not in self.EXEMPT]
+        return [path for path in files if self.relative(path) not in self.EXEMPT]
+
+    def test_exempt_files_exist_and_actions_serve_only_exempt_workflows(self) -> None:
+        for name in sorted(self.EXEMPT):
+            with self.subTest(file=name):
+                self.assertTrue((REPO_ROOT / name).is_file())
+        exempt_actions = [
+            "./" + name.removesuffix("/action.yml")
+            for name in sorted(self.EXEMPT)
+            if name.startswith(".github/actions/")
+        ]
+        for path in self.ci_files():
+            text = path.read_text()
+            for action in exempt_actions:
+                with self.subTest(file=self.relative(path), action=action):
+                    self.assertNotRegex(text, rf"(?m)uses:\s*{re.escape(action)}/?\s*$")
 
     @staticmethod
     def step_containing(lines: list[str], index: int) -> str:
@@ -275,7 +303,10 @@ class CacheSavePolicyTest(unittest.TestCase):
                 checked += 1
                 with self.subTest(file=path.name, line=index + 1):
                     self.assertTrue(
-                        self.MAIN in step or "use-cache: false" in step, step
+                        self.MAIN in step
+                        or "use-cache: false" in step
+                        or "enable-cache: false" in step,
+                        step,
                     )
         self.assertGreaterEqual(checked, 6)
 
@@ -380,6 +411,13 @@ class PrAppServerSchemaFixturesTest(unittest.TestCase):
         "utils/absolute-path",
         "utils/path-uri",
         "ext/items",
+        # Reached through the upstream-merged protocol crates (upstream sync).
+        "codex-api",
+        "git-utils",
+        "history",
+        "network-proxy",
+        "secrets",
+        "utils/redacted-string",
     )
 
     def workflow(self, name: str) -> str:

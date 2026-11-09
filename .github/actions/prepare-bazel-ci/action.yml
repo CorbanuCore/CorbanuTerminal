@@ -30,6 +30,8 @@ runs:
       # and Windows can use the runner's standalone Bazel, ignoring .bazelversion.
       with:
         bazelisk-version: 1.30.0
+        # Only main saves caches; PRs restore main's (#636).
+        cache-save: ${{ github.ref == 'refs/heads/main' }}
         # setup-bazel writes an explicit output_base, which otherwise overrides
         # BAZEL_OUTPUT_USER_ROOT and leaves Bazel's I/O-heavy trees on C:.
         output-base: ${{ steps.setup_ci.outputs.bazel-output-base }}
