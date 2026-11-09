@@ -4123,7 +4123,7 @@ impl AuthManager {
             .is_ok()
         });
         if hides_restricted {
-            self.record_hidden_default_login(auth.is_none());
+            self.record_hidden_default_login(auth.is_none()).await;
         }
         Ok(auth)
     }
@@ -4149,11 +4149,14 @@ impl AuthManager {
     /// when the stored login is one the login restrictions rule out. The
     /// reason comes from the stored login alone (no network call); the login
     /// itself is left in place.
-    fn record_hidden_default_login(&self, absent: bool) {
-        let reason = absent
-            .then(|| self.stored_default_login_restriction())
-            .flatten()
-            .map(|reason| default_login_unusable_message(&reason));
+    async fn record_hidden_default_login(&self, absent: bool) {
+        let reason = if absent {
+            self.stored_default_login_restriction()
+                .await
+                .map(|reason| default_login_unusable_message(&reason))
+        } else {
+            None
+        };
         if let Some(reason) = &reason {
             tracing::warn!("the default login is not used in this process: {reason}");
         }
@@ -4162,16 +4165,19 @@ impl AuthManager {
         }
     }
 
-    fn stored_default_login_restriction(&self) -> Option<String> {
-        let stored = create_auth_storage(
+    /// Reads the stored login off the async thread, as upstream reads
+    /// credential storage (a keyring read can block).
+    async fn stored_default_login_restriction(&self) -> Option<String> {
+        let storage = create_auth_storage(
             self.codex_home.clone(),
             self.auth_credentials_store_mode,
             self.keyring_backend_kind,
-        )
-        .load()
-        .ok()
-        .flatten()
-        .filter(AuthDotJson::has_primary_auth_material)?;
+        );
+        let stored = load_stored_auth(storage)
+            .await
+            .ok()
+            .flatten()
+            .filter(AuthDotJson::has_primary_auth_material)?;
         stored_login_restriction(
             &stored,
             &self.allowed_login_methods(),
@@ -4492,7 +4498,8 @@ impl AuthManager {
         // stored login is not used.
         manager.hide_restricted_default_login = session.hide_restricted_default_login;
         if manager.hides_restricted_default_login() {
-            manager.record_hidden_default_login(manager.auth_cached().is_none());
+            let absent = manager.auth_cached().is_none();
+            manager.record_hidden_default_login(absent).await;
         }
         let manager = Arc::new(manager);
         if let Some(external_auth) = external_auth {
