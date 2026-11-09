@@ -259,23 +259,27 @@ account and the runner makes the command's token
 from its own (`ElevatedBaseLogon::RunnerLogon`), with the D324 default DACL,
 exactly as before #1800: #1721, #1560 and #1803 stay open for them, and the
 TUI and `codex sandbox setup` tell the user so. A runner that holds the
-privilege refuses a request without a command logon. Not closed (#1803):
-elevated commands can still read a runner's ConPTY console host (another
-workspace's terminal output and typed input), as before: the runner's
-default DACL (D324) gives the sandbox users' group read access, which every
-elevated command holds. win-desk measured it on a real desktop on main and on
-#1800, admin and normal sessions alike: another workspace's command opened
-the host for `PROCESS_VM_READ`, `PROCESS_TERMINATE` and `THREAD_GET_CONTEXT`
-and found a secret the holding command had printed; CI run 42581149322
-measured the same in both sessions (27.5 MB read, the secret found). The
-ignored
+privilege refuses a request without a command logon. #1803 (D461): a
+runner with its own account gives the sandbox users' group only
+`ELEVATED_PEER_ACCESS` in its default DACL, and its account full access
+(`restrict_runner_default_dacl`), so no other elevated command can read its
+ConPTY console host (another workspace's terminal output and typed input),
+query it in full or end it. Before, the D324 DACL gave the group read
+access, which every elevated command holds: win-desk measured it on a real
+desktop on main and on #1800 before D461 (admin and normal sessions), and CI
+run 42581149322 the same (27.5 MB read, a printed secret found). The runner
+is told apart by holding `SeAssignPrimaryTokenPrivilege`; it must then be
+`CodexSandboxRunner`, or it fails closed (no command starts) rather than
+fall back to the D324 DACL. A standard user's runner (no privilege) keeps
+the D324 DACL, so #1803 stays open there until #1847 (D392 (b)).
 `sec_win_1803_elevated_command_cannot_read_another_workspaces_console_host`
-is that probe; it flips when the fix lands (D461/D417), and then also needs
-a normal-session run with a recorded setup in `windows-security-probes`, as
-D429's elevated test has. Two routes
-still start a child
-outside the command's job: the COM servers `ShellBrowserWindow` (the child
-runs at Low integrity but with an unrestricted token) and
+gates it, in the admin and a normal session (`windows-security-probes`).
+Residuals: the group's `0x1000` lets another elevated command resume the
+console host's threads; and commands not on a terminal can no longer reopen
+the runner's anonymous output pipes for reading (no tested tool needs to).
+Two routes still start a child outside the command's job: the COM servers
+`ShellBrowserWindow` (the child runs at Low integrity but with an
+unrestricted token) and
 `MMC20.Application` (Low, restricted). Closing them waits on a measurement
 on a real desktop (D260); their tests are ignored until then.
 

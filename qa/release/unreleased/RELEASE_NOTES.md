@@ -417,12 +417,15 @@ them into `qa/release/<version>/RELEASE_NOTES.md` and empties this file.
   (#1721, #1560, #1800). A command racing another command's start-up can no
   longer reach the runner, and one command can no longer borrow another's
   token or threads. The non-admin sandbox is unchanged.
-- **Not fixed yet: another project's terminal window** (#1803). A command
-  can still read the memory of the console host behind another project's
-  terminal command, including what that command printed and what you typed
-  at it. Measured on a real Windows desktop in this version and the previous
-  one. While another project's commands run, don't type secrets into a
-  project's command or run commands that print them; see `docs/sandbox.md`.
+- **Another project's terminal window is closed too, if your account is an
+  administrator** (#1803, #1800). Another command, in any project, could
+  read the memory of the console host behind a project's terminal command,
+  including what that command printed and what you typed at it (measured on
+  a real Windows desktop). With the runner account it can no longer open
+  that process to read or end it. If your account isn't an administrator,
+  this stays open until #1847: while another project's commands run, don't
+  type secrets into a project's command or run commands that print them; see
+  `docs/sandbox.md`.
 - **Setup runs again once** (a new setup version). If your Windows account
   is an administrator, it creates the account and gives it the Windows right
   "Replace a process level token" (`SeAssignPrimaryTokenPrivilege`). A

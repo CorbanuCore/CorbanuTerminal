@@ -30,17 +30,17 @@ using at that moment.
   other runs (#1560), and read the other's memory, such as secrets in its
   environment or what you type at its prompts (#1838), so avoid running
   commands in several projects at once. If your account is an
-  administrator, the default sandbox closes most of these, but not reading
-  another project's terminal window (#1803; see below).
+  administrator, the default sandbox closes the ways of doing this that have
+  been measured, including reading another project's terminal window
+  (#1803; see below).
 - Drives without Windows permissions, such as FAT or exFAT USB drives: neither
   sandbox can protect files there.
 
 The default sandbox runs commands as a separate account with a firewall-based
 network block, and protects more. If your Windows account is an administrator,
 each of its commands runs on a logon of its own, so one command can't borrow
-another's processes or token or read the memory of another command's own
-processes (#1560). It can still read another project's terminal window (#1803;
-see below). The program that starts them runs as a third account,
+another's processes or token or read its memory (#1560), including the
+terminal window of a command in another project (#1803). The program that starts them runs as a third account,
 `CodexSandboxRunner`, which no command uses (#1721). Setup gives that
 account the Windows right "Replace a process level token"
 (`SeAssignPrimaryTokenPrivilege`), which it needs to start each command on
@@ -69,8 +69,8 @@ account, and the command starts from that program's logon. Corbanu Terminal
 tells you so after setup. Commands in different projects can then still
 interfere with each other: one can run code with the sandbox account's full
 access while another command starts (#1721), borrow another's access (#1560)
-and read its memory (#1803), so avoid running commands in several projects at
-once. You keep the default sandbox rather than being moved to the non-admin
+and read its memory and its terminal window (#1803, until #1847), so avoid
+running commands in several projects at once. You keep the default sandbox rather than being moved to the non-admin
 one, which leaves the same gaps (#1560, #1838) and protects less otherwise.
 For the stronger isolation, run Corbanu Terminal from an administrator account.
 If your own account becomes an administrator later, delete `sandbox_users.json`
@@ -87,23 +87,21 @@ administrator, run another account's program on your own desktop and approve
 the setup prompt it raises, that account gets the runner account: approve
 only prompts you started.
 
-Two gaps remain with the runner account too:
+One gap remains with the runner account too: another elevated command can
+resume a command's suspended threads, or those of the console host behind a
+command's terminal window (#1803). Commands aren't started suspended, so
+this matters only for threads a command or that host suspends itself.
 
-- **Another project's terminal window** (#1803). A command that runs in a
-  terminal (a pseudo-console) gets a console host process (`conhost.exe`),
-  which the program that starts commands creates. Any other default-sandbox
-  command, in any project, can read that process's memory: what the command
-  printed and what you typed at its prompts, such as a password. It can
-  probably also end that process, and with it the terminal command. This was
-  measured on a real Windows desktop: a command in one project found a secret
-  that a command in another project had printed, in this version and the
-  previous one, and whether Corbanu Terminal ran elevated ("Run as
-  administrator") or not. Until this is fixed, while commands from another
-  project run, don't type secrets into a project's command and don't run
-  commands that print them (tokens, `env`, credential helpers).
-- Another elevated command can resume a command's suspended threads.
-  Commands aren't started suspended, so this matters only for threads a
-  command suspends itself.
+**Another project's terminal window** (#1803). A command that runs in a
+terminal (a pseudo-console) gets a console host process (`conhost.exe`),
+which holds what the command printed and what you typed at it. Until this
+version, any other default-sandbox command, in any project, could read that
+process's memory; this was measured on a real Windows desktop. With the
+runner account, other commands can no longer open that process (or its
+threads) to read it or end it. Without the runner account (your account
+isn't an administrator, see above) they still can: while commands from
+another project run, don't type secrets into a project's command and don't
+run commands that print them (tokens, `env`, credential helpers).
 
 **When you will see a warning.** If your sandboxed commands run in the
 non-admin sandbox, Corbanu Terminal tells you once per session:
