@@ -1350,9 +1350,10 @@ impl DenyReadObject {
     }
 }
 
-/// [`add_deny_read_ace`] on the object `path` resolves to (following links,
-/// as by name), through one handle. Returns whether the entry was added and
-/// which object has it.
+/// A deny-read entry like [`add_deny_read_ace`]'s, but on the object `path`
+/// resolves to (following links, unlike [`add_deny_read_ace`], which since
+/// D352 writes a link itself), through one handle. Returns whether the entry
+/// was added and which object has it.
 ///
 /// # Safety
 /// Caller must ensure `psid` points to a valid SID and `path` exists.
