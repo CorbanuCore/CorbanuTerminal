@@ -27,7 +27,7 @@ note`. `kind` is `content`, `modify/delete` (deleted upstream, the skeleton keep
 `main` inside a directory upstream renamed; git placed it at the new path), `add/add`, `security-review` (merged
 cleanly, on a security path, reviewed diff-level in S3b), `ci-review` (an upstream change or deletion under
 `.github/` that merged cleanly; integrator, S4) or `migration` (renumbering proposed in `note`). `status` is
-`open` or `resolved`; `resolution` is one of `ours`, `theirs`, `merged`, `ported`, `deleted`. Slice PRs update their
+`open` or `resolved`. Rows added after the skeleton: `follow-up` (a slice PR changed a path outside its conflicted rows), `re-apply` (a main merge kept the sync side of a path; the note gives the `git diff <old-main>..<new-main>` its owner re-applies) and `main-merge` (a main merge brought `main`'s change in through git; `open` while the path still has markers). `resolution` is one of `ours`, `theirs`, `merged`, `ported`, `deleted`. Slice PRs update their
 rows; the integrator owns the file.
 
 ## Skeleton merge (S0 exit)
@@ -71,6 +71,19 @@ sync branch with `gh workflow run <file> --ref sync/upstream-<tag>`. They are ex
 they build still have conflict markers; a red security lane on a slice PR whose own crates are marker-free is a
 real failure. Package CI tests exactly the packages listed;
 to cover "codex-core and its dependencies", list them.
+
+Skipping `rust-ci` also skips its `rust-ci-core-security` job on sync PRs. Until the workspace compiles, S2 runs
+the `codex-core` tests (security tests included) through package CI. The lane itself can be dispatched directly:
+`gh workflow run rust-ci-core-security.yml --ref sync/upstream-<tag> -f runner=ubuntu-24.04 -f
+target=x86_64-unknown-linux-gnu` (and `macos-15` / `aarch64-apple-darwin`); it must be green before SG2 (plan §6,
+S3). A full `rust-ci.yml` dispatch needs `-f cold_bazel=false` to skip the 180-minute cold Bazel lints.
+`corbanu-terminal-ci` runs on every branch push, `sync/**` and `sync-ci/**` included, and stays red until the
+workspace compiles.
+
+The CODEOWNERS block lists the named security paths plus the dependency-policy files (`codex-rs/Cargo.toml`,
+`Cargo.lock`, `deny.toml`, `.cargo/audit.toml`, `MODULE.bazel`, `MODULE.bazel.lock`, `pnpm-lock.yaml`,
+`cargo-deny.yml`). Per-crate `Cargo.toml` files aren't listed; a new third-party crate still changes a lockfile, and
+the S5 SG1 re-run is the backstop.
 
 ## Security paths
 

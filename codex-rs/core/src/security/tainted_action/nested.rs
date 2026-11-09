@@ -18,6 +18,7 @@ use super::ProtectedActionKind;
 use super::WRITERS;
 use super::braces;
 use super::certain_cd;
+use super::code_tables;
 use super::code_variables;
 use super::git_config;
 use super::git_helpers;
@@ -83,6 +84,9 @@ const PURE_FILTERS: &[&str] = &[
 /// What the pass found in one command line.
 #[derive(Default)]
 struct Found {
+    /// #1704: the text read is the code `eval` or `trap` runs, read as
+    /// shell like a line's own words.
+    evaluated: bool,
     /// Scripts that nested shells run, with the folder they run in, and
     /// what a launcher does with its input there (#1268).
     /// #1283: and whether that folder is unknown.
@@ -98,6 +102,9 @@ struct Found {
     /// Text it could not read in full: substitutions nested too deeply, a
     /// quote left open, or too many places a command may start.
     unreadable: bool,
+    /// D410: a `stat` would write a table were its builtin loaded
+    /// ([`code_tables::Writes::StatIfLoaded`]).
+    stat_writes: bool,
     /// Files the line writes (`None`: one it cannot name).
     written: Vec<Option<String>>,
     /// A command other than sed writes a file (a copy, move, download or
@@ -204,12 +211,11 @@ impl Classifier {
         let mut argv = Command::default();
         let mut scripts = Vec::new();
         let mut previous: Option<&str> = None;
+        // #1774: whether a word so far names a shell, kept as words are
+        // added rather than checked again for each argument.
+        let mut in_shell = false;
         for arg in command {
             work::step();
-            let in_shell = argv
-                .words
-                .iter()
-                .any(|word| SHELLS.contains(&name(&word.text).as_str()));
             let script = in_shell
                 && previous.is_some_and(|flag| {
                     flag.starts_with('-') && !flag.starts_with("--") && flag.contains('c')
@@ -217,6 +223,7 @@ impl Classifier {
             if script {
                 scripts.push(arg.as_str());
             } else {
+                in_shell |= SHELLS.contains(&name(arg).as_str());
                 argv.words.push(Word {
                     text: arg.clone(),
                     quoted: true,
@@ -280,6 +287,7 @@ impl Classifier {
         if found.unreadable || folders.unfollowed {
             self.note(ProtectedActionKind::UnseenCode);
         }
+        self.stat_pending |= found.stat_writes;
         for kind in std::mem::take(&mut found.git) {
             work::step();
             self.note(kind);
@@ -601,6 +609,67 @@ impl Classifier {
             // Words before it were checked as wrappers (starts ascend).
             let mut wrappers_checked = 0;
             let mut joined_left = MAX_JOINED_BYTES;
+            // #1685: a value set in zsh's `functions`, `aliases`,
+            // `galiases` or `saliases` or bash's `BASH_ALIASES` is code run
+            // by name later (`functions[f]='tee -a ~/.zshrc'; f`): a line of
+            // its own too, within the same budget.
+            let mut tables = 0;
+            // An array form (`aliases+=(x '…')`) is not read, nor is a
+            // command writing a table by name (`zparseopts -a functions`,
+            // `set -A aliases …`), nor any other write to one: they fail
+            // closed (#1704).
+            // #1704: words that may be any or several where a writer reads
+            // its options count where text is read as shell: at this
+            // reading's own level or for `eval`/`trap` text (not `awk
+            // '{print $2}'` read again as code), as for #937's arithmetic.
+            let seen: Option<Vec<code_tables::Seen>> = ((level == 0 || found.evaluated)
+                && self.not_shell == 0
+                && self.rebuilt == 0)
+                .then(|| {
+                    command
+                        .words
+                        .iter()
+                        .map(|word| {
+                            work::step();
+                            code_tables::Seen::of(word)
+                        })
+                        .collect()
+                });
+            // Main's reading stays a floor: the reading with quotes reads
+            // some words otherwise (`eval $'getln *.png'`).
+            let writes = [
+                code_tables::writes_table(&texts, &texts, /*seen*/ None),
+                seen.map_or(code_tables::Writes::No, |seen| {
+                    code_tables::writes_table(&texts, &texts, Some(&seen))
+                }),
+            ];
+            found.unreadable |= writes.contains(&code_tables::Writes::Table);
+            found.stat_writes |= writes.contains(&code_tables::Writes::StatIfLoaded);
+            'tables: for (at, text) in texts.iter().enumerate() {
+                work::step();
+                let (values, array) = code_table_values(text);
+                found.unreadable |=
+                    array || code_tables::sets_table_otherwise(text, !values.is_empty());
+                for value in values {
+                    work::step();
+                    tables += 1;
+                    let Some(rest) = joined_left
+                        .checked_sub(value.len() + 1)
+                        .filter(|_| tables <= outbound::MAX_JUDGED_POSITIONS)
+                    else {
+                        found.unreadable = true;
+                        break 'tables;
+                    };
+                    joined_left = rest;
+                    push_script(
+                        found,
+                        folders,
+                        value.to_string(),
+                        replaced(launches[at]),
+                        unknown,
+                    );
+                }
+            }
             let mut runners = 0;
             // #1449: one runner's options are read to the end of the
             // command; any other's up to `MAX_JUDGED_POSITIONS` words.
@@ -681,14 +750,41 @@ impl Classifier {
                         // folder; a wrapper before the command moved it
                         // (`sudo -D ~ git config -f .zshenv …`).
                         let moved = elsewhere_from.is_some_and(|from| from < at);
+                        // #1661: and a `submodule foreach` or `bisect run`
+                        // runs its inner git in the submodule or an unknown
+                        // folder, so the inner git's relative outputs ask
+                        // even where the outer git was told a folder (`git
+                        // -C ~/r submodule foreach git log
+                        // --output=../../.zshenv`).
+                        let wrapped = git_helpers::runs_wrapped_git(&texts, at);
                         if files.iter().any(|file| {
-                            self.unknown_folder_file(folders, moved || folders.unchecked, file)
+                            self.unknown_folder_file(
+                                folders,
+                                moved || wrapped || folders.unchecked,
+                                file,
+                            )
                         }) {
                             note_git(found, ProtectedActionKind::Persistence);
                         }
                         if files.iter().any(|file| self.relative_place(file)) {
                             found.relative_outputs += 1;
                         }
+                    }
+                    // #1661: the script a wrapped git runs (`git submodule
+                    // foreach 'git fetch; git log --output=...'`, `git
+                    // bisect run '...'`): its commands run in a submodule
+                    // or an unknown folder, so push it as a script with
+                    // the folder unknown, as `-execdir` does.
+                    if let Some(operand) = git_helpers::wrapped_git_operand(&texts, at)
+                        && operand < texts.len()
+                    {
+                        push_script(
+                            found,
+                            folders,
+                            texts[operand..].join(" "),
+                            replaced(launches[operand]),
+                            /*unknown*/ true,
+                        );
                     }
                     if WRITERS.contains(&resolved_name.as_str())
                         || outputs.is_some()
@@ -750,6 +846,60 @@ impl Classifier {
                         push_script(found, folders, line, replaced(launches[at]), unknown);
                     }
                     continue;
+                }
+                // #1685: an alias's value is a line of its own, run later
+                // (`alias x='tee -a ~/.zshrc'`): every check of a line counts
+                // on it. (The word lexer reads `eval`'s and `trap`'s text.)
+                // Within the command's budget for joined lines.
+                if resolved_name == "alias" {
+                    for (nth, value) in texts[at + 1..]
+                        .iter()
+                        .filter_map(|arg| arg.split_once('=').map(|(_, value)| value))
+                        .enumerate()
+                    {
+                        work::step();
+                        let Some(rest) = joined_left
+                            .checked_sub(value.len() + 1)
+                            .filter(|_| nth < outbound::MAX_JUDGED_POSITIONS)
+                        else {
+                            found.unreadable = true;
+                            break;
+                        };
+                        joined_left = rest;
+                        push_script(
+                            found,
+                            folders,
+                            value.to_string(),
+                            replaced(launches[at]),
+                            unknown,
+                        );
+                    }
+                }
+                // #1685: trap's action, when it holds quotes or backslashes
+                // the word lexer drops, is a line of its own read with them
+                // (as `eval`'s, #1283). Not on a line where D191 found every
+                // trap only removes temp paths, whose variables a line of its
+                // own would not know.
+                if resolved_name == "trap" && !self.temp_traps {
+                    let args = &texts[at + 1..];
+                    let args = args.strip_prefix(&["--".to_string()]).unwrap_or(args);
+                    if let Some(action) = args.first()
+                        && action.contains(['\'', '"', '\\'])
+                    {
+                        match joined_left.checked_sub(action.len() + 1) {
+                            Some(rest) => {
+                                joined_left = rest;
+                                push_script(
+                                    found,
+                                    folders,
+                                    action.clone(),
+                                    replaced(launches[at]),
+                                    unknown,
+                                );
+                            }
+                            None => found.unreadable = true,
+                        }
+                    }
                 }
                 // #1422: `compgen -C cmd` runs `cmd` as shell code.
                 if resolved_name == "compgen" {
@@ -827,6 +977,26 @@ impl Classifier {
                 }
                 continue;
             }
+            // #1704: `eval` and `trap` run their text as shell, also behind
+            // zsh's modifiers and `repeat` (`noglob eval '…'`).
+            let mut evaluates = false;
+            let mut program = command_at.clone();
+            while let Some((at, name)) = program {
+                work::step();
+                if matches!(name.as_str(), "eval" | "trap") {
+                    evaluates = true;
+                    break;
+                }
+                // zsh's `repeat N` runs the command after its count.
+                let skip = match name.as_str() {
+                    "repeat" => 2,
+                    name if unknown_folder::MODIFIERS.contains(&name) => 1,
+                    _ => break,
+                };
+                let from = (at + skip).min(texts.len());
+                program =
+                    indirect::command_word(&texts[from..]).map(|(next, name)| (from + next, name));
+            }
             // Also redirection files, comments and other text the shell
             // does not pass on as words.
             let quoted = command
@@ -869,7 +1039,12 @@ impl Classifier {
                     // command lines do not count: a decoy (`echo 'sed p'`)
                     // must not make up for a command this reading missed.
                     let counts = (found.sed_commands, found.shell_commands);
+                    // Only its words; not its input, files or comments.
+                    let words = command.words.as_ptr_range();
+                    let own = words.contains(&std::ptr::from_ref(word));
+                    let evaluated = std::mem::replace(&mut found.evaluated, evaluates && own);
                     self.walk(&reading.commands, &mut inner, level + 1, found);
+                    found.evaluated = evaluated;
                     found.unreadable |= inner.unfollowed;
                     if !word.lines {
                         (found.sed_commands, found.shell_commands) = counts;
@@ -886,6 +1061,7 @@ impl Classifier {
                     found.shell_commands += counted.shell_commands;
                 }
                 found.unreadable |= counted.unreadable || inner.unfollowed;
+                found.stat_writes |= counted.stat_writes;
             }
         }
         certain_cd::finish(folders);
@@ -971,6 +1147,8 @@ impl Classifier {
             },
         );
         let mut git_programs_read = false;
+        // #1876: the git commands' first words and dashed helpers' subcommands.
+        let mut git_starts: Vec<(usize, Option<String>)> = Vec::new();
         let mut local_config = git_config::Writes::new(texts);
         let command_at = indirect::command_word(texts);
         // D156/D258: the other lexer may cut this command at quoted text
@@ -1029,6 +1207,10 @@ impl Classifier {
             let inspecting = command_at.as_ref().is_some_and(|(at, _)| {
                 *at == index && git_config::inspection_only_prefix(&texts[..index])
             });
+            // #1876: where a git command starts, for the remote scan below.
+            if is_git || helper.is_some() {
+                git_starts.push((index, subcommand.map(str::to_string)));
+            }
             let launched_kind = launched.judge(index, helper.as_ref());
             if (basename(git_word) == "git" || helper.is_some())
                 && !inspecting
@@ -1042,6 +1224,43 @@ impl Classifier {
             for kind in kinds {
                 work::step();
                 note_git(found, kind);
+            }
+        }
+        // #1876: as `simple_command` scans each transport's words for a
+        // remote or option the line does not show, here for the words the
+        // shell may split or glob into options, which only this reading
+        // knows (`git push . HEAD:$b`, `git fetch --depth=$n .`, `git fetch
+        // origin *`).
+        if !git_starts.is_empty() {
+            let marks: Vec<rerun::GitWordMark> = words
+                .iter()
+                .map(|word| rerun::GitWordMark {
+                    // Other unseen words are `simple_command`'s, which knows
+                    // the values the line sets (`r=origin; git fetch "$r"`).
+                    seen: true,
+                    loose: (word.dynamic && word.splits)
+                        // A glob whose first characters may match `-` (`*`,
+                        // `-*`, `"-"*`).
+                        // A glob that starts with `-` or a glob character may
+                        // match `--upload-pack=…` (`*`, `--up*`, `"-"*`).
+                        || (word.globs && word.text.starts_with(['-', '*', '?', '[', '^'])),
+                })
+                .collect();
+            let options_after = rerun::git_options_after(texts, &marks);
+            for (at, (index, subcommand)) in git_starts.iter().enumerate() {
+                work::step();
+                let end = git_starts
+                    .get(at + 1)
+                    .map_or(texts.len(), |(next, _)| *next);
+                if rerun::git_remote_unseen(
+                    &texts[index + 1..end],
+                    subcommand.as_deref(),
+                    &options_after[index + 1..],
+                    &marks[index + 1..],
+                ) {
+                    note_git(found, ProtectedActionKind::UnseenCode);
+                    break;
+                }
             }
         }
     }
@@ -2107,6 +2326,43 @@ fn code_writes_zsh_program(texts: &[String], command_at: Option<&(usize, String)
     })
 }
 
+/// #1685: the values an assignment to an entry of a table of code run by
+/// name may set (`functions[f]=…`, `aliases[x]+=…`, `BASH_ALIASES[x]=…`):
+/// the text after each `]=` or `]+=`, since a subscript may hold one
+/// (`functions[f]+='… #]=x'` sets the text after the first). And whether
+/// it is an array form of such a table (`aliases+=(…)`, `functions=(…)`)
+/// or an empty value.
+fn code_table_values(text: &str) -> (Vec<&str>, bool) {
+    const TABLES: &[&str] = &[
+        "functions",
+        "aliases",
+        "galiases",
+        "saliases",
+        "BASH_ALIASES",
+    ];
+    let name_end = text.find(['[', '+', '=']).unwrap_or(text.len());
+    if !TABLES.contains(&&text[..name_end]) {
+        return (Vec::new(), false);
+    }
+    let rest = &text[name_end..];
+    // The reading ends the word before an array's `(` (`aliases=`).
+    if matches!(rest, "=" | "+=") || rest.starts_with("=(") || rest.starts_with("+=(") {
+        return (Vec::new(), true);
+    }
+    if !rest.starts_with('[') {
+        return (Vec::new(), false);
+    }
+    let values = rest
+        .match_indices(']')
+        .filter_map(|(at, _)| {
+            work::step();
+            let after = &rest[at + 1..];
+            after.strip_prefix('=').or_else(|| after.strip_prefix("+="))
+        })
+        .collect();
+    (values, false)
+}
+
 /// #1620: see [`code_writes_zsh_program`].
 fn writes_in(line: &str) -> bool {
     quoted::commands(line).commands.iter().any(|command| {
@@ -2319,5 +2575,30 @@ mod pipeline_tests {
             byte_bounded_targets(vec![Some("a".repeat(MAX_SAVED_TARGET_BYTES))]),
             vec![None]
         );
+    }
+
+    /// #1132: allocation accounting includes both String bytes and the
+    /// `Option<String>` vector slots. Keep mixed long and short names below
+    /// and at the byte limit, but collapse an over-limit list to unknown.
+    #[test]
+    fn issue_1132_mixed_target_byte_boundaries_are_fail_closed() {
+        let slots = 3 * std::mem::size_of::<Option<String>>();
+        assert!(MAX_SAVED_TARGET_BYTES > slots + 2);
+        let targets = |long_bytes| {
+            vec![
+                Some("l".repeat(long_bytes)),
+                Some("s".to_string()),
+                Some(String::new()),
+            ]
+        };
+
+        let below = targets(MAX_SAVED_TARGET_BYTES - slots - 2);
+        assert_eq!(byte_bounded_targets(below.clone()), below);
+
+        let at_limit = targets(MAX_SAVED_TARGET_BYTES - slots - 1);
+        assert_eq!(byte_bounded_targets(at_limit.clone()), at_limit);
+
+        let above = targets(MAX_SAVED_TARGET_BYTES - slots);
+        assert_eq!(byte_bounded_targets(above), vec![None]);
     }
 }

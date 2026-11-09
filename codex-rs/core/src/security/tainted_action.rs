@@ -32,6 +32,7 @@ mod aliases;
 mod arithmetic;
 mod braces;
 mod certain_cd;
+mod code_tables;
 mod code_variables;
 mod git_config;
 mod git_helpers;
@@ -84,6 +85,11 @@ pub(crate) enum ProtectedActionKind {
     ValueTransfer,
     /// A tool route the security level has not classified (PF-23-S01).
     UnclassifiedTool,
+    /// Starting a new agent (D320, #1653).
+    AgentLaunch,
+    /// Restarting a finished agent: resuming it or waking it with a
+    /// follow-up task (D334, #1702).
+    AgentRestart,
     /// Writing a file that runs code or sets policy later, outside the
     /// sandbox: shell start-up files, login items, git hooks (PF-23-S02).
     Persistence,
@@ -114,6 +120,8 @@ impl ProtectedActionKind {
             Self::Disclosure => "sending local data to another machine or service",
             Self::ValueTransfer => "a value transfer",
             Self::UnclassifiedTool => "a tool the security level has not classified",
+            Self::AgentLaunch => "a request to start a new agent",
+            Self::AgentRestart => "a request to restart a finished agent",
             Self::Persistence => {
                 "changing a file that runs code later (shell start-up, login items, git hooks)"
             }
@@ -371,6 +379,8 @@ const PATH_BUILTINS: &[&str] = &[
 ];
 /// Bytes of command text one classification lexes; more fail closed.
 const MAX_COMMAND_BYTES: usize = 1024 * 1024;
+/// #1774: `<<` in a line beyond which `SedScope::of` does not parse it.
+const MAX_SED_SCOPE_HEREDOCS: usize = 256;
 /// Script files one classification reads; more fail closed.
 const MAX_SCRIPT_FILES: usize = 16;
 /// Bytes of variable values one classification substitutes (#1065): a
@@ -455,9 +465,9 @@ fn classified(
     user_home: Option<&Path>,
     as_named: bool,
 ) -> Classifier {
-    let mut classifier = judged(action, Homes::new(codex_home, user_home), as_named);
+    let mut classifier = judged_both(action, || Homes::new(codex_home, user_home), as_named);
     if cfg!(windows) {
-        let windows = judged(action, Homes::windows(codex_home, user_home), as_named);
+        let windows = judged_both(action, || Homes::windows(codex_home, user_home), as_named);
         if let Some(kind) = windows.found {
             classifier.note(kind);
         }
@@ -517,24 +527,56 @@ pub(super) fn classify_as_windows(
     codex_home: &Path,
     user_home: Option<&Path>,
 ) -> Option<ProtectedActionKind> {
+    indirect::reset_sudo_option_boundary_changed();
     let mut classifier = Classifier::new(
         Homes::windows_first(codex_home, user_home),
         /*avoids_zsh*/ false,
     );
     classifier.judge_command(command, cwd);
+    if indirect::sudo_option_boundary_changed() {
+        classifier.note(ProtectedActionKind::UnseenCode);
+    }
+    indirect::reset_sudo_option_boundary_changed();
     let mut windows = Classifier::new(
         Homes::windows(codex_home, user_home),
         /*avoids_zsh*/ false,
     );
     windows.judge_command(command, cwd);
+    if indirect::sudo_option_boundary_changed() {
+        windows.note(ProtectedActionKind::UnseenCode);
+    }
+    indirect::reset_sudo_option_boundary_changed();
     if let Some(kind) = windows.found {
         classifier.note(kind);
     }
     classifier.found
 }
 
+/// #1772 review 1: [`judged`], and when it read some text where main reads
+/// it otherwise (`shell::simple_commands_read`), the action judged again
+/// with main's reading: the stronger finding is kept, so the new reading
+/// only adds findings (`echo '>"'; ./x; echo '"'`, `sh -c 'true &>f ./x'`).
+/// #1772 review 2: the second judgment is main's reading exactly (every
+/// change of reading sets `read_newly`, and the helper lexers read as
+/// main), so the verdict is never quieter than main's.
+fn judged_both(action: &ApprovalAction, homes: impl Fn() -> Homes, as_named: bool) -> Classifier {
+    let mut classifier = judged(action, homes(), as_named, /*main_reading*/ false);
+    if classifier.read_newly {
+        let main = judged(action, homes(), as_named, /*main_reading*/ true);
+        if let Some(kind) = main.found {
+            classifier.note(kind);
+        }
+    }
+    classifier
+}
+
 /// One judgment of the action, under the path rules of `homes`.
-fn judged(action: &ApprovalAction, homes: Homes, as_named: bool) -> Classifier {
+/// `main_reading`: redirections are lexed as on main
+/// (`shell::simple_commands_read`).
+fn judged(action: &ApprovalAction, homes: Homes, as_named: bool, main_reading: bool) -> Classifier {
+    // `avoids_zsh` reads command words too, so reset before any reader can
+    // observe a changed #1773 sudo option boundary.
+    indirect::reset_sudo_option_boundary_changed();
     let avoids_zsh = as_named
         && match action {
             ApprovalAction::Shell { command, .. } | ApprovalAction::ExecCommand { command, .. } => {
@@ -542,13 +584,41 @@ fn judged(action: &ApprovalAction, homes: Homes, as_named: bool) -> Classifier {
             }
             ApprovalAction::ApplyPatch { .. } => false,
         };
-    judged_avoiding(action, homes, avoids_zsh)
+    judged_avoiding_read(action, homes, avoids_zsh, main_reading)
 }
 
 /// [`judged`] with the zsh-only checks skipped at the top level when
-/// `avoids_zsh` (#932's measuring harness also judges with it forced).
-fn judged_avoiding(action: &ApprovalAction, homes: Homes, avoids_zsh: bool) -> Classifier {
+/// `avoids_zsh` (#932's measuring harness also judges with it forced), and
+/// judged again with main's reading as [`judged_both`] does.
+#[cfg(test)]
+fn judged_avoiding(
+    action: &ApprovalAction,
+    homes: impl Fn() -> Homes,
+    avoids_zsh: bool,
+) -> Classifier {
+    indirect::reset_sudo_option_boundary_changed();
+    let mut classifier =
+        judged_avoiding_read(action, homes(), avoids_zsh, /*main_reading*/ false);
+    if classifier.read_newly {
+        indirect::reset_sudo_option_boundary_changed();
+        let main = judged_avoiding_read(action, homes(), avoids_zsh, /*main_reading*/ true);
+        if let Some(kind) = main.found {
+            classifier.note(kind);
+        }
+    }
+    classifier
+}
+
+/// One judgment, with the zsh-only checks skipped at the top level when
+/// `avoids_zsh`, and `main_reading` (see [`judged`]).
+fn judged_avoiding_read(
+    action: &ApprovalAction,
+    homes: Homes,
+    avoids_zsh: bool,
+    main_reading: bool,
+) -> Classifier {
     let mut classifier = Classifier::new(homes, avoids_zsh);
+    classifier.main_reading = main_reading;
     match action {
         ApprovalAction::Shell { command, cwd, .. }
         | ApprovalAction::ExecCommand { command, cwd, .. } => {
@@ -587,12 +657,22 @@ fn judged_avoiding(action: &ApprovalAction, homes: Homes, avoids_zsh: bool) -> C
             }
         }
     }
+    // D410: a `stat` writing a table where the action may load its builtin.
+    if classifier.stat_pending && classifier.stat_builtin {
+        classifier.note(ProtectedActionKind::UnseenCode);
+    }
     // #1064: an interactive POSIX shell sources the file `ENV` names.
     if classifier.sets_env && classifier.interactive_shell {
         classifier.note(ProtectedActionKind::UnseenCode);
     }
     // A lookup budget ran out: something was not followed.
     if classifier.homes.exhausted() {
+        classifier.note(ProtectedActionKind::UnseenCode);
+    }
+    // #1773: a reader actually crossed a sudo option boundary that main read
+    // differently. Preserve its old prompt without scanning past sudo's own
+    // command (which would turn ordinary command options into sudo options).
+    if indirect::sudo_option_boundary_changed() {
         classifier.note(ProtectedActionKind::UnseenCode);
     }
     // D191: an action that asks anyway asks as on main.
@@ -610,6 +690,8 @@ impl Classifier {
             avoids_zsh,
             homes,
             found: None,
+            main_reading: false,
+            read_newly: false,
             scripts_read: 0,
             rebuilt: 0,
             not_shell: 0,
@@ -622,6 +704,8 @@ impl Classifier {
             unknown_folder: 0,
             unseen_folder: false,
             sudo_redefined: false,
+            stat_builtin: false,
+            stat_pending: false,
             quoted_text: false,
             brace_unsure: false,
             launched: launched_git::Launch::default(),
@@ -639,6 +723,7 @@ impl Classifier {
             in_file: 0,
             reads_follow: false,
             temp: None,
+            temp_traps: false,
             held: None,
             workspace: String::new(),
             cut_values: HashSet::new(),
@@ -658,6 +743,22 @@ impl Classifier {
         }
         self.homes.allow_lookups_under(cwd);
         self.path(cwd);
+        // #1482 item 5: each element of the action's argv is one word. An
+        // element up to the command that the lexer below reads otherwise
+        // (`["true ./x"]`, one file of that whole name; `["env", "A=1 ./y",
+        // "./x"]`, which sets `A` and runs `./x`; `["./{x,y}"]`) is not the
+        // word judged: it asks. A shell's `-c` script comes after its
+        // command. Windows program paths hold spaces.
+        if !self.homes.windows_paths()
+            && indirect::programs(command).last().is_some_and(|last| {
+                command[..=*last].iter().any(|element| {
+                    work::step();
+                    !shell::one_word(element)
+                })
+            })
+        {
+            self.note(ProtectedActionKind::UnseenCode);
+        }
         self.command(command, cwd, /*depth*/ 0);
     }
 }
@@ -671,15 +772,71 @@ fn path_text(path: &PathUri) -> String {
 fn rank(kind: ProtectedActionKind) -> u8 {
     match kind {
         ProtectedActionKind::UnclassifiedTool => 0,
-        ProtectedActionKind::UnseenCode => 1,
-        ProtectedActionKind::UnconfinedProcess => 2,
-        ProtectedActionKind::Disclosure => 3,
-        ProtectedActionKind::Persistence => 4,
-        ProtectedActionKind::SecurityPolicy => 5,
-        ProtectedActionKind::Credentials => 6,
-        ProtectedActionKind::ValueTransfer => 7,
-        ProtectedActionKind::Vault => 8,
+        ProtectedActionKind::AgentRestart => 1,
+        ProtectedActionKind::AgentLaunch => 2,
+        ProtectedActionKind::UnseenCode => 3,
+        ProtectedActionKind::UnconfinedProcess => 4,
+        ProtectedActionKind::Disclosure => 5,
+        ProtectedActionKind::Persistence => 6,
+        ProtectedActionKind::SecurityPolicy => 7,
+        ProtectedActionKind::Credentials => 8,
+        ProtectedActionKind::ValueTransfer => 9,
+        ProtectedActionKind::Vault => 10,
     }
+}
+
+/// #1685: what the text of `eval` or `trap` runs, from the command
+/// `from`, read past a leading `--`, zsh's precommand modifiers and more
+/// such commands (the word lexer splits the quoted text): also bash/zsh
+/// `coproc` and zsh `repeat N`, which run the command after them.
+#[derive(Default)]
+struct Carried {
+    /// The command it runs, if any.
+    command: Option<(usize, String)>,
+    /// Where each piece of text starts, and where its command word is
+    /// (`words.len()` for none): the words between are read as
+    /// assignments and wrappers (`eval '=tee …'`, `trap './env ls' EXIT`).
+    spans: Vec<(usize, usize)>,
+}
+
+fn carried_command(words: &[String], from: Option<&(usize, String)>) -> Carried {
+    let mut carried = Carried::default();
+    let Some((mut index, mut name)) = from.cloned() else {
+        return carried;
+    };
+    loop {
+        work::step();
+        let skip = match name.as_str() {
+            "eval" | "trap" => 1 + usize::from(words.get(index + 1).is_some_and(|w| w == "--")),
+            "coproc" => 1,
+            "repeat" => 2,
+            name if !carried.spans.is_empty() && unknown_folder::MODIFIERS.contains(&name) => 1,
+            _ => break,
+        };
+        let after = (index + skip).min(words.len());
+        let Some((at, next)) = indirect::command_word(&words[after..]) else {
+            carried.spans.push((after, words.len()));
+            return carried;
+        };
+        carried.spans.push((after, after + at));
+        (index, name) = (after + at, next);
+    }
+    if !carried.spans.is_empty() {
+        carried.command = Some((index, name));
+    }
+    carried
+}
+
+/// #1685: whether word `at` is in a piece of `eval` or `trap` text before
+/// its command word ([`Carried::spans`], which ascend).
+fn before_carried_command(spans: &[(usize, usize)], at: usize) -> bool {
+    spans
+        .get(
+            spans
+                .partition_point(|(start, _)| *start <= at)
+                .wrapping_sub(1),
+        )
+        .is_some_and(|(_, end)| at < *end)
 }
 
 /// Commands that install something to run later outside the sandbox:
@@ -1282,6 +1439,11 @@ struct Folders {
 struct Classifier {
     homes: Homes,
     found: Option<ProtectedActionKind>,
+    /// #1772 review 1: lex redirections as on main (`judged`).
+    main_reading: bool,
+    /// #1772 review 1: some lexed text was read where main reads it
+    /// otherwise (`shell::Lexed::read_newly`).
+    read_newly: bool,
     scripts_read: usize,
     /// #1261: under Windows path rules, whether the first judgment lexed
     /// text holding a backslash. Its POSIX lexer drops every backslash
@@ -1374,6 +1536,12 @@ struct Classifier {
     /// D85: the action's own command line never reaches zsh
     /// ([`named_shell::avoids_zsh`]); nested lines are not covered.
     avoids_zsh: bool,
+    /// D410 (#1704): a line of the action may load zsh's `stat` builtin
+    /// ([`code_tables::may_load_stat`]), and a `stat` would then write a
+    /// table ([`code_tables::Writes::StatIfLoaded`]). Both are judged once
+    /// every line is, so a load in a line judged later counts too.
+    stat_builtin: bool,
+    stat_pending: bool,
     /// #932: comparisons left with the grammar.
     compared: shadow::Budget,
     /// #1240: PowerShell encoded commands the Windows view judged, with
@@ -1384,6 +1552,9 @@ struct Classifier {
     windows_budget: usize,
     /// D191: the action's own line's variables that hold a `mktemp` path.
     temp: Option<mktemp::Scope>,
+    /// #1685: the line being read by the quote-aware reading had a D191
+    /// scope: each of its traps only removes temp paths.
+    temp_traps: bool,
     /// D191: prompts only a temp path raised, dropped only when the action
     /// asks for nothing else (else it asks as on main, for the strongest).
     held: Option<ProtectedActionKind>,
@@ -1408,9 +1579,25 @@ impl SedScope {
     /// command there has a text-only program, and the line's other words
     /// carry no backslash or brace.
     fn of(command: &[String]) -> Option<Self> {
+        // #1774: a scope needs a command named `sed` or `gsed`, and the
+        // parse takes a command's name as written (a plain word, never a
+        // quoted one), so a script without `sed` has none. Skipping the parse
+        // then gives the same answer without its cost, which grows faster
+        // than the text for some inputs (long runs of `<<E`).
+        let (_, script) = codex_shell_command::bash::extract_bash_command(command)?;
+        let piped = script.contains('|');
+        if !script.contains("sed") {
+            return None;
+        }
+        // The bash grammar takes time growing with the square of the
+        // here-documents left open (`sed 1d f <<E <<E …`), and the parse
+        // finds no plain line in a here-document anyway: past
+        // `MAX_SED_SCOPE_HEREDOCS` `<<`, no word is sed's data (stricter).
+        if script.matches("<<").count() > MAX_SED_SCOPE_HEREDOCS {
+            return None;
+        }
+        work::parse();
         let commands = codex_shell_command::bash::parse_shell_lc_plain_commands(command)?;
-        let piped = codex_shell_command::bash::extract_bash_command(command)
-            .is_some_and(|(_, script)| script.contains('|'));
         let mut scope = Self {
             programs: Vec::new(),
             others: Vec::new(),
@@ -1693,7 +1880,11 @@ impl Classifier {
             .any(|part| unknown_folder::may_redefine_sudo(part));
         // #841: this line's own sed programs (nested lines have theirs).
         let outer_scope = std::mem::replace(&mut self.sed_scope, SedScope::of(command));
-        let lexed = shell::simple_commands(command);
+        let lexed = shell::simple_commands_read(command, self.main_reading);
+        self.read_newly |= lexed.read_newly;
+        if !self.stat_builtin {
+            self.stat_builtin = code_tables::may_load_stat(command, &lexed.commands);
+        }
         // D191: only the action's own line, judged under POSIX path rules.
         let outer_temp = std::mem::replace(
             &mut self.temp,
@@ -1914,13 +2105,40 @@ impl Classifier {
                     simple.after
                 },
                 &simple.words,
-                simple.stdin_from.is_some()
-                    || simple.here_string.is_some()
+                !simple.stdin_from.is_empty()
+                    || !simple.here_string.is_empty()
                     || !simple.writes_to.is_empty(),
             );
             // #1422: an alias the line defines runs text neither reading
             // reads as the shell does (`alias b=bash` then `b run.sh`).
-            if aliases.read(&words) {
+            // #1704: so does a command writing such a table by name, its
+            // name known from a value (`t=functions; zparseopts -a $t`).
+            // #1845: command walks skip redirection operands and zsh `[[ … ]]`
+            // tests; keep main's unfiltered reading as a compatibility floor,
+            // then consider both shells where their redirections differ.
+            let table_readings = [
+                code_tables::writes_table(&words, &simple.words, /*seen*/ None),
+                code_tables::writes_table(
+                    &code_tables::run_words(&words, simple, /*zsh*/ false),
+                    &code_tables::run_words(&simple.words, simple, /*zsh*/ false),
+                    /*seen*/ None,
+                ),
+                code_tables::writes_table(
+                    &code_tables::run_words(&words, simple, /*zsh*/ true),
+                    &code_tables::run_words(&simple.words, simple, /*zsh*/ true),
+                    /*seen*/ None,
+                ),
+            ];
+            self.stat_pending |= table_readings.contains(&code_tables::Writes::StatIfLoaded);
+            let tables = table_readings.contains(&code_tables::Writes::Table);
+            // D410: with known values substituted (`a=zmod b=load; $a$b`).
+            if !self.stat_builtin {
+                self.stat_builtin = words.iter().any(|word| {
+                    work::step();
+                    code_tables::names_stat_load(word)
+                });
+            }
+            if aliases.read(&words) || tables {
                 self.note(ProtectedActionKind::UnseenCode);
             }
             self.simple_command(
@@ -2118,6 +2336,7 @@ impl Classifier {
         }
         // D191: the prompts only a temp path raised, kept now unless its
         // variable kept that path (see `release_held`).
+        let temp_traps = self.temp.is_some();
         if let Some(scope) = std::mem::replace(&mut self.temp, outer_temp) {
             match scope.finish(arithmetic.assigns_unseen_name(command)) {
                 (Some(kind), true) => self.note(kind),
@@ -2143,7 +2362,9 @@ impl Classifier {
         }
         self.rebuilt_foreign = outer_foreign;
         // #885: nested shells' scripts and sed programs, read with quotes.
+        let outer_temp_traps = std::mem::replace(&mut self.temp_traps, temp_traps);
         self.quoted_pass(command, cwd, depth, (lexed_seds, lexed_shells));
+        self.temp_traps = outer_temp_traps;
         self.sed_scope = outer_scope;
         self.sudo_redefined = outer_sudo_redefined;
         self.quoted_text = outer_quoted_text;
@@ -2236,6 +2457,27 @@ impl Classifier {
             variables.insert(name.to_string(), shell::UNSEEN_OUTPUT.to_string());
         }
         if self.rebuilt == 0 && indirect::misread_command(simple, words) {
+            self.note(ProtectedActionKind::UnseenCode);
+        }
+        // #1482 items 2 and 4, also in the line `eval` runs (`eval '>log
+        // ./x'`, `eval sudo -A ./x`).
+        let operands = command
+            .as_ref()
+            .filter(|(_, name)| name == "eval")
+            .map(|(index, _)| index + 1);
+        // #1773: the compatibility floor runs once over every quote-blind
+        // word, not at individual command-word readers. It therefore covers
+        // direct, carried, `-exec`, precommand, and redirection paths alike.
+        if indirect::sudo_option_boundaries_differ(simple, words) {
+            self.note(ProtectedActionKind::UnseenCode);
+        }
+        if indirect::redirect_hides_command(simple, words, /*from*/ 0)
+            || indirect::sudo_runs_helper(simple, words, /*from*/ 0)
+            || operands.is_some_and(|from| {
+                indirect::redirect_hides_command(simple, words, from)
+                    || indirect::sudo_runs_helper(simple, words, from)
+            })
+        {
             self.note(ProtectedActionKind::UnseenCode);
         }
         // #1436: as the quote-aware reading reads them, when set.
@@ -2388,6 +2630,59 @@ impl Classifier {
         let modified = after_modifiers.and_then(|after| {
             indirect::command_word(&words[after..]).map(|(at, name)| (after + at, name))
         });
+        // #1685: the command `eval` runs now, or `trap` later, from its
+        // text (`eval 'tee -a ~/.zshrc'`, `trap -- 'cp x ~/.zshrc' EXIT`,
+        // `noglob eval …`, `eval eval …`). It stays the command word, as
+        // before: this only adds what that command writes.
+        let Carried {
+            command: carried,
+            spans: carried_spans,
+        } = carried_command(words, modified.as_ref().or(command.as_ref()));
+        // #1685: a variable that text sets has a value this reading does
+        // not follow (`eval 'F=~/.zshrc'; tee -a "$F"`): unseen, as for
+        // output it cannot see. One with a value already keeps it, since
+        // `trap` text runs later (`trap 'HOME=/x' EXIT; grep -r t "$HOME"`),
+        // and the line asks.
+        let declares = carried.as_ref().is_some_and(|(_, name)| {
+            matches!(
+                name.as_str(),
+                "export" | "local" | "declare" | "readonly" | "typeset"
+            )
+        });
+        for (at, word) in words.iter().enumerate() {
+            work::step();
+            let in_text = before_carried_command(&carried_spans, at)
+                || (declares && carried.as_ref().is_some_and(|(index, _)| at > *index));
+            if in_text
+                && let Some((name, _)) = word.split_once('=')
+                && !name.is_empty()
+                && name
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+            {
+                match variables.get(name) {
+                    None => {
+                        variables.insert(name.to_string(), shell::UNSEEN_OUTPUT.to_string());
+                    }
+                    Some(value) if !value.contains(shell::UNSEEN_OUTPUT) => {
+                        self.note(ProtectedActionKind::UnseenCode);
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
+        // #1685: a folder change in that text is not followed (`trap` runs
+        // it later): the folder is one this reading cannot know.
+        if carried
+            .as_ref()
+            .is_some_and(|(_, name)| unknown_folder::CHANGERS.contains(&name.as_str()))
+        {
+            if simple.substituted {
+                folders.unseen_in_substitution = true;
+            } else {
+                folders.unseen = true;
+            }
+        }
         let skipped_to = match (after_modifiers, &modified, &command) {
             (Some(_), Some((at, _)), _) | (None, _, Some((at, _))) => *at,
             _ => lower.len(),
@@ -2408,13 +2703,18 @@ impl Classifier {
                     && word.starts_with('=')
                     && (at < skipped_to
                         || (exec_wrapped && at > skipped_to)
-                        || (at > 0 && runs_next(&lower[at - 1])))
+                        || (at > 0 && runs_next(&lower[at - 1]))
+                        // #1685: or before the command of `eval` or
+                        // `trap` text (`eval '=tee -a ~/.zshrc'`).
+                        || before_carried_command(&carried_spans, at))
             })
         {
             self.note(ProtectedActionKind::UnseenCode);
         }
         let mut later = LaterWords::new(&lower);
         let mut git_programs_read = false;
+        // #1876: the git commands' first words and dashed helpers' subcommands.
+        let mut git_starts: Vec<(usize, Option<String>)> = Vec::new();
         // Not only at command position: wrappers (`nice -n 5`, `sudo -u x`,
         // `timeout 9`, `eval`, `npx`, nested `sh -c`) put the real command later.
         for (index, word) in lower.iter().enumerate() {
@@ -2500,6 +2800,10 @@ impl Classifier {
             let hidden_git = (is_git || helper.is_some())
                 && self.quoted_text
                 && hidden.get(index).copied().unwrap_or(false);
+            // #1876: where a git command starts, for the remote scan below.
+            if is_git || helper.is_some() {
+                git_starts.push((index, subcommand.map(str::to_string)));
+            }
             if (is_git && code_variables::git_runs_code_after_git(git_args.0, git_args.1))
                 || (helper == Some(None) && code_variables::git_runs_code(git_args.0, git_args.1))
                 || git_program
@@ -2514,21 +2818,49 @@ impl Classifier {
                 }
             }
         }
-        let stdin_fed =
-            simple.pipe_from.is_some() || simple.stdin_from.is_some() || simple.reads_outer_output;
-        if let Some((index, _)) = &command
-            && let Some(kind) = outbound::classify(
+        // #1876: a transport subcommand whose remote the line does not show.
+        // Each git command's scan ends where the next starts, so the words
+        // are read once in all (`sudo -u git git fetch "$r"`: the scan from
+        // the user name `git` ends at the git that runs).
+        if !git_starts.is_empty() {
+            // The word lexer knows no marks: it does not skip redirection
+            // words, since a quoted `>` may look like one to it (`git fetch
+            // origin 'x>' "$v"`).
+            let options_after = rerun::git_options_after(words, &[]);
+            for (at, (index, subcommand)) in git_starts.iter().enumerate() {
+                work::step();
+                let end = git_starts
+                    .get(at + 1)
+                    .map_or(words.len(), |(next, _)| *next);
+                if rerun::git_remote_unseen(
+                    &words[index + 1..end],
+                    subcommand.as_deref(),
+                    &options_after[index + 1..],
+                    &[],
+                ) {
+                    self.note(ProtectedActionKind::UnseenCode);
+                    break;
+                }
+            }
+        }
+        let stdin_fed = simple.pipe_from.is_some()
+            || !simple.stdin_from.is_empty()
+            || simple.reads_outer_output;
+        // #1685: and the command `eval` or `trap` text runs.
+        for (index, _) in command.iter().chain(&carried) {
+            work::step();
+            if let Some(kind) = outbound::classify(
                 words,
                 *index,
                 stdin_fed,
                 variables
                     .keys()
                     .any(|name| name.to_lowercase().ends_with("_proxy")),
-            )
-        {
-            self.note(kind);
+            ) {
+                self.note(kind);
+            }
         }
-        let recursive = command.as_ref().is_some_and(|(_, name)| {
+        let recursive = command.iter().chain(&carried).any(|(_, name)| {
             RECURSIVE_READERS.iter().any(|(reader, flags)| {
                 *reader == name.as_str()
                     && (flags.is_empty()
@@ -2539,7 +2871,13 @@ impl Classifier {
             })
         });
         // #1142: setting a variable whose value git or a pager runs.
-        if code_variables::sets_code_variable(simple, words, command.as_ref()) {
+        // #1685: also in the text of `eval` or `trap` (`eval 'export
+        // GIT_PAGER=sh'`).
+        if code_variables::sets_code_variable(simple, words, command.as_ref())
+            || carried.as_ref().is_some_and(|carried| {
+                code_variables::sets_code_variable(simple, words, Some(carried))
+            })
+        {
             #[cfg(test)]
             named_shell::measure_tests::detail(|| {
                 code_variables::sets_code_variable_why(
@@ -2568,12 +2906,27 @@ impl Classifier {
             self.homes.windows_paths(),
             &|entry| !self.visited_all || self.writable_folder(entry, &here, &roots),
         );
+        // #1685: and in the text of `eval` or `trap` (`eval 'X=1
+        // LD_PRELOAD=./x.so ls'`, `trap 'export NODE_OPTIONS=…' DEBUG`).
+        let carried_judgment = carried.as_ref().map(|carried| {
+            loader_variables::judge(
+                simple,
+                words,
+                Some(carried),
+                &mut cut,
+                self.homes.windows_paths(),
+                &|entry| !self.visited_all || self.writable_folder(entry, &here, &roots),
+            )
+        });
         self.cut_values = cut;
         self.loader_judgment(&judgment);
+        if let Some(judgment) = &carried_judgment {
+            self.loader_judgment(judgment);
+        }
         if !self.interactive_shell {
             let fed = simple.pipe_from.is_some()
-                || simple.stdin_from.is_some()
-                || simple.here_string.is_some()
+                || !simple.stdin_from.is_empty()
+                || !simple.here_string.is_empty()
                 || simple.reads_outer_output;
             self.interactive_shell = loader_variables::starts_interactive_shell(&lower, fed);
         }
@@ -2592,9 +2945,15 @@ impl Classifier {
                 hidden[*index] || folders.unchecked || unchecked.iter().any(|word| *word);
             outputs::output_files(name, &words[index + 1..], unchecked)
         });
+        let carried_outputs = carried.as_ref().and_then(|(index, name)| {
+            let unchecked =
+                hidden[*index] || folders.unchecked || unchecked.iter().any(|word| *word);
+            outputs::output_files(name, &words[index + 1..], unchecked)
+        });
         if command
-            .as_ref()
-            .is_some_and(|(index, name)| outputs::joins_names(name, &words[index + 1..]))
+            .iter()
+            .chain(&carried)
+            .any(|(index, name)| outputs::joins_names(name, &words[index + 1..]))
         {
             self.note(ProtectedActionKind::Persistence);
         }
@@ -2604,18 +2963,22 @@ impl Classifier {
                 WRITERS.contains(&name.as_str())
                     || outputs.is_some()
                     || modified_outputs.is_some()
+                    || carried_outputs.is_some()
                     || modified
-                        .as_ref()
-                        .is_some_and(|(_, name)| WRITERS.contains(&name.as_str())),
+                        .iter()
+                        .chain(&carried)
+                        .any(|(_, name)| WRITERS.contains(&name.as_str())),
             )
         });
         let path_writer = command
-            .as_ref()
-            .filter(|(_, name)| outputs::PATH_WRITERS.contains(&name.as_str()))
+            .iter()
+            .chain(&carried)
+            .find(|(_, name)| outputs::PATH_WRITERS.contains(&name.as_str()))
             .map(|(index, _)| *index);
         // #1159: `time -o FILE cmd` writes FILE.
-        let wrapper_outputs = command
+        let wrapper_outputs = carried
             .as_ref()
+            .or(command.as_ref())
             .map(|(index, _)| outputs::wrapper_output_files(&words[..*index]))
             .unwrap_or_default();
         let cwd = folders.cwd.clone();
@@ -2635,9 +2998,19 @@ impl Classifier {
         let mut other_bases = std::borrow::Cow::Borrowed(folders.others.as_slice());
         // D217: sudo's `-C N` names no folder.
         let closes = unknown_folder::sudo_close_from(words, self.sudo_unsure());
+        // #1774: which words are written to (`>file`), marked once: looking
+        // each word up in `writes_to`, which holds one index per output
+        // redirection, made a long run of them (`>a >a … ./x`) quadratic.
+        let mut writes_here = vec![false; words.len()];
+        for at in &simple.writes_to {
+            work::step();
+            if let Some(written) = writes_here.get_mut(*at) {
+                *written = true;
+            }
+        }
         for (position, word) in words.iter().enumerate() {
             work::step();
-            let written = simple.writes_to.contains(&position)
+            let written = writes_here[position]
                 || writer.is_some_and(|(index, writes)| writes && position > index);
             // A folder flag's value is where the command runs, not what it reads.
             let mut folder_value = false;
@@ -2667,10 +3040,10 @@ impl Classifier {
             previous = Some(word.as_str());
             // #1159: a file written whose name holds output the classifier
             // cannot see (`tee "$(cat f)"`, `> $(cat f)`) may be any file.
-            if (simple.writes_to.contains(&position)
+            if (writes_here[position]
                 || (path_writer.is_some_and(|index| position > index)
-                    && simple.stdin_from != Some(position)
-                    && simple.here_string != Some(position)))
+                    && simple.stdin_from.binary_search(&position).is_err()
+                    && simple.here_string.binary_search(&position).is_err()))
                 && outputs::unseen_place(word)
             {
                 self.note_or_hold(ProtectedActionKind::Persistence, self.temp_place(word));
@@ -2727,7 +3100,7 @@ impl Classifier {
         // a home. D195 (#1309): or in one the classifier cannot know,
         // unless git's own leading `-C` names one (`git -C /x pull`; not a
         // value elsewhere, `merge -m --cd=/x`).
-        if let Some((index, name)) = &command
+        if let Some((index, name)) = carried.as_ref().or(command.as_ref())
             && outputs::writes_working_tree(name, &words[index + 1..])
             && (bases
                 .iter()
@@ -2747,10 +3120,20 @@ impl Classifier {
         }
         // #1309: a wrapper before the command moved it (`sudo -D ~ git log
         // --output=f`); git's own `-C` comes after and is followed above.
-        let moved = command.as_ref().is_some_and(|(index, _)| {
-            unknown_folder::elsewhere_at(words, self.sudo_unsure())
-                .is_some_and(|from| from < *index)
-        });
+        let moved = carried
+            .as_ref()
+            .or(command.as_ref())
+            .is_some_and(|(index, _)| {
+                unknown_folder::elsewhere_at(words, self.sudo_unsure())
+                    .is_some_and(|from| from < *index)
+            });
+        // #1661: and a `submodule foreach` or `bisect run` runs its inner
+        // git in the submodule or an unknown folder, so the inner git's
+        // relative outputs ask even where the outer git was told a folder.
+        let wrapped = carried
+            .as_ref()
+            .or(command.as_ref())
+            .is_some_and(|(index, _)| git_helpers::runs_wrapped_git(words, *index));
         // #1607: zsh's file after a `>!`, with the line's variables
         // substituted as in the words.
         let zsh_writes: Vec<String> = simple
@@ -2773,6 +3156,7 @@ impl Classifier {
             .flatten()
             .chain(&wrapper_outputs)
             .chain(modified_outputs.iter().flatten())
+            .chain(carried_outputs.iter().flatten())
             .chain(&zsh_writes)
         {
             work::step();
@@ -2787,14 +3171,33 @@ impl Classifier {
                 // ~`, `--output-directory ~/`) may be the home's.
                 if self.homes.is_persistence(&resolved)
                     || (file.ends_with('/') && self.homes.holds_a_home(&resolved))
-                    || self.unknown_folder_file(folders, moved, file)
+                    || self.unknown_folder_file(folders, moved || wrapped, file)
                 {
                     self.note_or_hold(ProtectedActionKind::Persistence, self.temp_place(file));
                 }
             }
         }
-        self.scripts_of(simple, words, unseen, command.as_ref(), &cwd, depth);
-        self.path_programs(words, command.as_ref(), &cwd, depth);
+        self.scripts_of(
+            simple,
+            words,
+            unseen,
+            command.as_ref(),
+            /*from*/ 0,
+            &cwd,
+            depth,
+        );
+        // #1685: and those the command `eval` or `trap` text runs.
+        if let Some((index, _)) = &carried {
+            self.scripts_of(simple, words, unseen, carried.as_ref(), *index, &cwd, depth);
+        }
+        self.path_programs(
+            words,
+            command.as_ref(),
+            carried.as_ref(),
+            &carried_spans,
+            &cwd,
+            depth,
+        );
         self.unseen_folder = outer_unseen_folder;
     }
 
@@ -2803,10 +3206,14 @@ impl Classifier {
     /// by its path, besides what its name would run. A shell builtin named
     /// by a path (`./cd`, `./source`) runs that file, not the builtin, so
     /// the rest of the line is not known: it asks.
+    /// `carried`, `spans`: see [`Carried`]; the programs of each piece of
+    /// `eval` or `trap` text are read too (#1685: `trap './env ls' EXIT`).
     fn path_programs(
         &mut self,
         words: &[String],
         command: Option<&(usize, String)>,
+        carried: Option<&(usize, String)>,
+        spans: &[(usize, usize)],
         cwd: &str,
         depth: usize,
     ) {
@@ -2818,8 +3225,19 @@ impl Classifier {
         let read = command
             .filter(|_| indirect::invocation(words).is_none())
             .map(|(index, _)| *index);
+        let carried_read = carried
+            .filter(|(index, _)| indirect::invocation(&words[*index..]).is_none())
+            .map(|(index, _)| *index);
         let elsewhere = unknown_folder::elsewhere_at(words, self.sudo_unsure());
-        for at in indirect::programs(words) {
+        let carried_programs = spans.iter().flat_map(|&(start, _)| {
+            indirect::programs(&words[start..])
+                .into_iter()
+                .map(move |at| start + at)
+        });
+        for at in indirect::programs(words)
+            .into_iter()
+            .chain(carried_programs)
+        {
             work::step();
             let word = &words[at];
             if !word.contains('/') {
@@ -2828,7 +3246,10 @@ impl Classifier {
             // #1403: also when `scripts_of` read it (`./cd`, `./export`).
             if PATH_BUILTINS.contains(&basename(&word.to_lowercase())) {
                 self.note(ProtectedActionKind::UnseenCode);
-            } else if Some(at) != read && !self.runs_elsewhere(elsewhere, at, word) {
+            } else if Some(at) != read
+                && Some(at) != carried_read
+                && !self.runs_elsewhere(elsewhere, at, word)
+            {
                 self.named_program_file(word, cwd, depth);
             }
         }
@@ -2959,12 +3380,14 @@ impl Classifier {
     /// module, preloaded files, a redirected stdin, or the command itself when
     /// it is a path. A required path the classifier cannot resolve (it holds
     /// a variable) fails closed.
+    #[allow(clippy::too_many_arguments)]
     fn scripts_of(
         &mut self,
         simple: &SimpleCommand,
         words: &[String],
         unseen: &[bool],
         command: Option<&(usize, String)>,
+        from: usize,
         cwd: &str,
         depth: usize,
     ) {
@@ -2977,7 +3400,9 @@ impl Classifier {
         } else {
             unknown_folder::elsewhere_at(words, self.sudo_unsure())
         };
-        let Some(invocation) = indirect::invocation(words) else {
+        // `from`: where the words naming the command start (#1685: the
+        // text of `eval` or `trap`).
+        let Some(invocation) = indirect::invocation(&words[from..]) else {
             let word = &words[*index];
             // `env -C sub ./run.sh` runs `sub/run.sh`.
             if word.contains('/') && !self.runs_elsewhere(elsewhere, *index, word) {
@@ -3028,13 +3453,14 @@ impl Classifier {
                 }
             }
             Code::Stdin => {
-                // #1436: the file the shell opens, in its folder.
-                if let Some(at) = simple.stdin_from
+                // #1436: the file the shell opens, in its folder (the
+                // last `<` is its stdin: `bash <a <b` reads `b`).
+                if let Some(&at) = simple.stdin_from.last()
                     && !self.runs_elsewhere(/*from*/ None, at, &words[at])
                 {
                     self.required_script(&words[at], cwd, depth, shell);
                 }
-                if simple.here_string.is_some_and(|at| unseen[at]) {
+                if simple.here_string.iter().any(|at| unseen[*at]) {
                     self.note(ProtectedActionKind::UnseenCode);
                 }
             }
@@ -3503,5 +3929,25 @@ fn level_name(level: SecurityLevel) -> &'static str {
 mod tests;
 
 #[cfg(test)]
+#[path = "tainted_action_sudo_tests.rs"]
+mod sudo_tests;
+
+#[cfg(test)]
 #[path = "tainted_action_refusal_tests.rs"]
 mod tainted_action_refusal_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_redirect_tests.rs"]
+mod tainted_action_redirect_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_reading_tests.rs"]
+mod tainted_action_reading_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_linear_tests.rs"]
+mod tainted_action_linear_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_git_ext_tests.rs"]
+mod tainted_action_git_ext_tests;

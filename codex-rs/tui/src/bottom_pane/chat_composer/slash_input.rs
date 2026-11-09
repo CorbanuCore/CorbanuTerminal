@@ -322,6 +322,9 @@ impl ChatComposer {
                     if selected_command_dispatches_immediately_on_tab(&selected_cmd)
                         && let CommandItem::Builtin(cmd) = &selected_cmd
                     {
+                        if self.queue_submissions {
+                            return self.queue_selected_slash_command(&selected_cmd);
+                        }
                         self.stage_selected_slash_command_history(&selected_cmd);
                         self.draft.textarea.set_text_clearing_elements("");
                         self.draft.is_bash_mode = false;
@@ -416,6 +419,9 @@ impl ChatComposer {
                             return (InputResult::ParentOwnedInputBlocked, true);
                         }
                     }
+                    if self.queue_submissions && !runs_during_startup(&sel) {
+                        return self.queue_selected_slash_command(&sel);
+                    }
                     if self
                         .complete_selected_slash_command_preserving_existing_draft_tail_as_inline_args(
                             &sel,
@@ -446,6 +452,44 @@ impl ChatComposer {
             }
             input => self.handle_input_basic(input),
         }
+    }
+
+    /// D390: whether the composer should run `/quit` or `/exit` at once
+    /// rather than queue it until startup completes.
+    pub(super) fn startup_exit_command(&self) -> bool {
+        self.queue_submissions
+            && matches!(
+                self.slash_input().bare_command(self.draft.textarea.text()),
+                Some(SlashCommandItem::Builtin(
+                    SlashCommand::Quit | SlashCommand::Exit
+                ))
+            )
+    }
+
+    /// D376 (#1748): while the session is still starting, a command picked in
+    /// the popup is queued like one typed in a single burst (which never opens
+    /// the popup), so it runs once startup completes whatever the keystroke
+    /// timing.
+    fn queue_selected_slash_command(&mut self, selected_cmd: &CommandItem) -> (InputResult, bool) {
+        if !self.complete_selected_slash_command_preserving_existing_draft_tail_as_inline_args(
+            selected_cmd,
+        ) {
+            let first_line = self
+                .draft
+                .textarea
+                .text()
+                .lines()
+                .next()
+                .unwrap_or("")
+                .to_owned();
+            if let Some(completed_text) = selected_command_completion(&first_line, selected_cmd) {
+                self.draft
+                    .textarea
+                    .set_text_clearing_elements(&completed_text);
+            }
+        }
+        self.popups.active = ActivePopup::None;
+        self.handle_submission(/*should_queue*/ true)
     }
 
     fn complete_selected_slash_command_preserving_existing_draft_tail_as_inline_args(
@@ -634,6 +678,15 @@ fn command_under_cursor(first_line: &str, cursor: usize) -> Option<(&str, &str)>
     let rest = &first_line[cursor..];
 
     Some((name, rest))
+}
+
+/// D390: `/quit` and `/exit` run at once during startup, so a stuck startup
+/// can still be left; every other command waits for the session (D376).
+fn runs_during_startup(command: &CommandItem) -> bool {
+    matches!(
+        command,
+        CommandItem::Builtin(SlashCommand::Quit | SlashCommand::Exit)
+    )
 }
 
 #[cfg(test)]

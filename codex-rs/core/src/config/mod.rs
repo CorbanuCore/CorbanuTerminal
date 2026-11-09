@@ -3023,6 +3023,16 @@ impl NonPrefixedMcpServerNameClash {
         format!("{reason}. Choose another name, such as `corbanu mcp add {suggested} ...`.")
     }
 
+    /// #1681: the external-agent import wording. The server was skipped,
+    /// never written to this config, so there is nothing to remove here.
+    pub fn import_message(&self) -> String {
+        let reason = self.reason();
+        let suggested = self.suggested_name();
+        format!(
+            "{reason}. It was not imported. Rename it in the other agent's config, or add it here under another name, such as `corbanu mcp add {suggested} ...`."
+        )
+    }
+
     /// The warning when a skill's MCP server dependency is not installed.
     pub fn skill_dependency_message(&self) -> String {
         let name = &self.name;
@@ -6033,6 +6043,17 @@ impl Config {
             profile_workspace_roots,
         )
         .map_err(std::io::Error::from)?;
+        // D424 (#1775): possibly planted `.git` entries in the folders
+        // Windows sandbox commands may write to, and below `cwd`.
+        for warning in crate::windows_sandbox::planted_git_startup_warnings(
+            &effective_file_system_sandbox_policy,
+            &workspace_roots,
+            resolved_cwd.as_path(),
+        ) {
+            if !startup_warnings.contains(&warning) {
+                startup_warnings.push(warning);
+            }
+        }
         let otel = otel::resolve_config(cfg.otel.unwrap_or_default(), &mut startup_warnings);
 <<<<<<< HEAD
         let config = Self {
