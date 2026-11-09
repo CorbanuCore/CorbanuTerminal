@@ -610,7 +610,31 @@ impl AuthStorageBackend for AutoAuthStorage {
                 "Credentials changed before refresh commit.",
             ));
         }
-        self.save(auth)
+        // D500 (provisional, pending the owner's decision): Corbanu may have
+        // read the keyring generation from its secrets cache while the keyring
+        // itself is now unusable. Then, as upstream does for an unreadable
+        // keyring, refreshed tokens go to the file copy only when it still
+        // holds the expected login; an older copy is never overwritten.
+        let mut telemetry = storage_telemetry::telemetry(
+            AuthCredentialsStoreMode::Auto,
+            self.keyring_backend_kind,
+            Operation::Save,
+        );
+        let result = self.keyring_storage.save(auth);
+        telemetry.record_save_attempt(
+            storage_telemetry::keyring_store(self.keyring_backend_kind),
+            &result,
+        );
+        match result {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                warn!("failed to save refreshed auth to keyring; trying the file copy: {error}");
+                telemetry.record_secure_error(&error);
+                let result = self.file_storage.compare_and_save(expected, auth);
+                telemetry.record_save_attempt(Store::File, &result);
+                result
+            }
+        }
     }
 
     fn load(&self) -> std::io::Result<Option<AuthDotJson>> {

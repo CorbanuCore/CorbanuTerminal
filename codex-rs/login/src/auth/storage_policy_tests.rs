@@ -294,6 +294,7 @@ fn auto_auth_storage_load_falls_back_when_keyring_errors() -> anyhow::Result<()>
     seed_secrets_backend_with_auth(&mock_keyring, codex_home.path(), &encrypted)?;
     assert_eq!(storage.load()?, Some(encrypted.clone()));
     mock_keyring.set_error(&key, KeyringError::Invalid("error".into(), "load".into()));
+    force_keyring_read(codex_home.path())?;
 
     let expected = auth_with_prefix("fallback");
     storage.file_storage.save(&expected)?;
@@ -301,10 +302,12 @@ fn auto_auth_storage_load_falls_back_when_keyring_errors() -> anyhow::Result<()>
     let loaded = storage.load()?;
     assert_eq!(loaded, Some(expected.clone()));
     mock_keyring.set_error(&key, KeyringError::Invalid("error".into(), "load".into()));
+    force_keyring_read(codex_home.path())?;
     assert!(storage.load_account_grant().is_err());
     assert_eq!(storage.load()?, Some(encrypted.clone()));
     assert_eq!(storage.file_storage.load()?, Some(expected.clone()));
     mock_keyring.set_error(&key, KeyringError::Invalid("error".into(), "load".into()));
+    force_keyring_read(codex_home.path())?;
     let refreshed_fallback = auth_with_prefix("refreshed-fallback");
     storage.compare_and_save(&expected, &refreshed_fallback)?;
     // Recovery must not promote the fallback over an unread keyring generation.
@@ -327,6 +330,7 @@ fn auto_auth_storage_load_falls_back_when_keyring_errors() -> anyhow::Result<()>
         }
         storage.file_storage.save(&cached)?;
         mock_keyring.set_error(&key, KeyringError::Invalid("error".into(), "load".into()));
+        force_keyring_read(codex_home.path())?;
         if recover_before_persist {
             assert_eq!(storage.load()?, Some(cached.clone()));
         }
@@ -374,6 +378,7 @@ fn auto_auth_storage_load_falls_back_when_keyring_errors() -> anyhow::Result<()>
     // An absent fallback must not select a plaintext destination for cached credentials.
     storage.file_storage.delete()?;
     mock_keyring.set_error(&key, KeyringError::Invalid("error".into(), "load".into()));
+    force_keyring_read(codex_home.path())?;
     assert_eq!(storage.load()?, None);
     storage.save(&auth_with_prefix("cached"))?;
     assert_keyring_saved_auth_and_removed_fallback(
@@ -602,5 +607,43 @@ fn auto_auth_storage_delete_falls_back_when_keyring_errors() -> anyhow::Result<(
         !auth_file.exists(),
         "fallback auth.json should be removed when keyring delete fails"
     );
+    Ok(())
+}
+
+/// D500 (provisional): a keyring generation read from Corbanu's secrets cache
+/// while the keyring itself fails. Refreshed tokens then go to the file copy
+/// only when it holds the expected login; an older copy is left unchanged.
+#[test]
+fn auto_auth_storage_refresh_commit_after_a_cached_read_uses_the_file_copy_only_when_current()
+-> anyhow::Result<()> {
+    let codex_home = tempdir()?;
+    let mock_keyring = MockKeyringStore::default();
+    let storage = AutoAuthStorage::new(
+        codex_home.path().to_path_buf(),
+        Arc::new(mock_keyring.clone()),
+        AuthKeyringBackendKind::Secrets,
+    );
+    let key = compute_keyring_account(codex_home.path(), LocalSecretsNamespace::CodexAuth);
+    let current = auth_with_prefix("current");
+    seed_secrets_backend_with_auth(&mock_keyring, codex_home.path(), &current)?;
+    assert_eq!(storage.load()?, Some(current.clone()));
+
+    // The file copy holds the expected login: the refresh is kept there.
+    storage.file_storage.save(&current)?;
+    mock_keyring.set_error(&key, KeyringError::Invalid("error".into(), "load".into()));
+    let refreshed = auth_with_prefix("refreshed");
+    storage.compare_and_save(&current, &refreshed)?;
+    assert_eq!(storage.file_storage.load()?, Some(refreshed));
+
+    // The file copy is older: nothing is overwritten.
+    let older = auth_with_prefix("older");
+    storage.file_storage.save(&older)?;
+    mock_keyring.set_error(&key, KeyringError::Invalid("error".into(), "load".into()));
+    assert!(
+        storage
+            .compare_and_save(&current, &auth_with_prefix("refreshed-again"))
+            .is_err()
+    );
+    assert_eq!(storage.file_storage.load()?, Some(older));
     Ok(())
 }

@@ -524,6 +524,21 @@ fn encrypted_auth_file(codex_home: &Path) -> PathBuf {
     codex_home.join("secrets").join("codex_auth.age")
 }
 
+/// Corbanu's secrets backend serves an unchanged encrypted auth file from its
+/// in-process cache without reading the keyring. Rewriting the file (same
+/// bytes, new inode) makes the next read go through the keyring, so these
+/// tests see a keyring failure as upstream's do.
+fn force_keyring_read(codex_home: &Path) -> std::io::Result<()> {
+    let path = encrypted_auth_file(codex_home);
+    if !path.exists() {
+        return Ok(());
+    }
+    let bytes = std::fs::read(&path)?;
+    let rewritten = path.with_extension("age.rewrite");
+    std::fs::write(&rewritten, bytes)?;
+    std::fs::rename(&rewritten, &path)
+}
+
 fn id_token_with_prefix(prefix: &str) -> IdTokenInfo {
     #[derive(Serialize)]
     struct Header {

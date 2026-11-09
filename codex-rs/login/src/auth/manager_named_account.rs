@@ -355,7 +355,14 @@ impl AuthManager {
             agent_identity_bootstrap_cooldown: Default::default(),
             external_auth: RwLock::new(None),
             workload_identity_selected: false,
-            allowed_auth_modes: RwLock::new(None),
+            // D499 (provisional): the session's credential kinds bind the
+            // named account too.
+            allowed_auth_modes: RwLock::new(
+                self.allowed_auth_modes
+                    .read()
+                    .ok()
+                    .and_then(|modes| modes.clone()),
+            ),
             provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
             auth_route_config: self.auth_route_config.clone(),
             named_store: Some(NamedAccountStore::new(codex_vault::Vault::new(
@@ -401,6 +408,7 @@ impl AuthManager {
                 self.forced_login_method,
                 forced_workspace.as_deref(),
             )
+            .or_else(|| self.named_sign_in_policy_restriction(account, &auth_dot_json))
         {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
@@ -408,6 +416,56 @@ impl AuthManager {
             ));
         }
         Ok(Some((storage, auth_dot_json)))
+    }
+
+    /// D499 (provisional, pending the owner's decision): the administrator
+    /// login policy (allowed login methods and ChatGPT workspaces) and the
+    /// allowed credential kinds apply to a named account's sign-in as they do
+    /// to the default login.
+    fn named_sign_in_policy_restriction(
+        &self,
+        account: &NamedChatgptAccount,
+        auth_dot_json: &AuthDotJson,
+    ) -> Option<String> {
+        let name = &account.name;
+        let mode = auth_dot_json.resolved_mode();
+        let modes_allowed = self
+            .allowed_auth_modes
+            .read()
+            .is_ok_and(|modes| modes.as_ref().is_none_or(|modes| modes.contains(&mode)));
+        if !modes_allowed {
+            return Some(format!(
+                "account `{name}` holds a sign-in of a kind this session does not allow"
+            ));
+        }
+        let allowed_login_methods = self.allowed_login_methods();
+        if !super::auth_mode_is_allowed(Some(&allowed_login_methods), mode) {
+            return Some(format!(
+                "account `{name}` holds a sign-in the administrator's login policy does not allow"
+            ));
+        }
+        let workspaces = self.effective_chatgpt_workspaces()?;
+        if !mode.uses_codex_backend() {
+            return None;
+        }
+        let workspace = auth_dot_json.tokens.as_ref().and_then(|tokens| {
+            tokens
+                .account_id
+                .clone()
+                .or_else(|| tokens.id_token.chatgpt_account_id.clone())
+        });
+        if workspace
+            .as_ref()
+            .is_some_and(|workspace| workspaces.contains(workspace))
+        {
+            None
+        } else {
+            Some(format!(
+                "account `{name}` is signed in to a ChatGPT workspace the administrator's login \
+                 policy does not allow; sign in to an allowed workspace with \
+                 `corbanu login --account {name}`"
+            ))
+        }
     }
 
     /// A ChatGPT or API-key sign-in, built without awaiting so a manager
