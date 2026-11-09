@@ -141,12 +141,14 @@ impl StreamableHttpClient for StreamableHttpClientAdapter {
             )?;
         }
 
-        let maximum_response_bytes = (mcp_method.as_deref() == Some(DiscoverRequestMethod::VALUE)
-            || headers
-                .get(HEADER_MCP_PROTOCOL_VERSION)
-                .and_then(|value| value.to_str().ok())
-                == Some(ProtocolVersion::V_2026_07_28.as_str()))
-        .then_some(MAX_MCP_STDIO_LINE_BYTES);
+        // Custom HTTP clients do not inherit rmcp's built-in response-body
+        // cap. Apply the same bounded collection to legacy initialize and
+        // error responses before authentication or protocol negotiation.
+        let modern_session = headers
+            .get(HEADER_MCP_PROTOCOL_VERSION)
+            .and_then(|value| value.to_str().ok())
+            == Some(ProtocolVersion::V_2026_07_28.as_str());
+        let maximum_response_bytes = Some(MAX_MCP_STDIO_LINE_BYTES);
         let redirect_policy = if mcp_method.as_deref() == Some(DiscoverRequestMethod::VALUE) {
             HttpRedirectPolicy::Stop
         } else {
@@ -268,7 +270,8 @@ impl StreamableHttpClient for StreamableHttpClientAdapter {
         }
         match content_type.as_deref() {
             Some(content_type) if content_type.starts_with(EVENT_STREAM_MIME_TYPE) => {
-                let mut event_stream = sse_stream_from_body(body_stream, maximum_response_bytes);
+                let mut event_stream =
+                    sse_stream_from_body(body_stream, maximum_response_bytes, modern_session);
                 if mcp_method.as_deref() == Some(DiscoverRequestMethod::VALUE) {
                     while let Some(event) = event_stream.next().await {
                         let event = event.map_err(StreamableHttpError::Sse)?;
@@ -466,12 +469,15 @@ impl StreamableHttpClient for StreamableHttpClientAdapter {
             }
         }
 
-        let maximum_response_bytes = headers
+        let modern_session = headers
             .get(HEADER_MCP_PROTOCOL_VERSION)
             .and_then(|value| value.to_str().ok())
-            .is_some_and(|version| version == ProtocolVersion::V_2026_07_28.as_str())
-            .then_some(MAX_MCP_STDIO_LINE_BYTES);
-        Ok(sse_stream_from_body(body_stream, maximum_response_bytes))
+            .is_some_and(|version| version == ProtocolVersion::V_2026_07_28.as_str());
+        Ok(sse_stream_from_body(
+            body_stream,
+            Some(MAX_MCP_STDIO_LINE_BYTES),
+            modern_session,
+        ))
     }
 }
 
@@ -680,7 +686,7 @@ fn legacy_discovery_fallback_response(
     {
         return ServerJsonRpcMessage::error(
             ErrorData::new(
-                ErrorCode::INVALID_REQUEST,
+                ErrorCode::HEADER_MISMATCH,
                 "server/discover method-not-found response did not match its request ID",
                 None,
             ),
@@ -733,6 +739,21 @@ fn legacy_discovery_fallback_response(
             Some(request.id.clone()),
         )
     } else {
+        let mut response = response;
+        if let JsonRpcMessage::Error(error) = &mut response
+            && !matches!(
+                error.error.code,
+                ErrorCode::METHOD_NOT_FOUND
+                    | ErrorCode::UNSUPPORTED_PROTOCOL_VERSION
+                    | ErrorCode::HEADER_MISMATCH
+                    | ErrorCode::MISSING_REQUIRED_CLIENT_CAPABILITY
+            )
+        {
+            // rmcp >= 3.1.3 falls back to legacy initialize on any other correlated
+            // discovery error, so mark unproven rejections as modern failures while
+            // preserving their diagnostics (same shim as upstream Codex).
+            error.error.code = ErrorCode::HEADER_MISMATCH;
+        }
         response
     }
 }
@@ -816,8 +837,8 @@ async fn collect_body(
 fn sse_stream_from_body(
     body_stream: HttpResponseBodyStream,
     maximum_event_bytes: Option<usize>,
+    modern_session: bool,
 ) -> BoxStream<'static, std::result::Result<Sse, sse_stream::Error>> {
-    let modern_session = maximum_event_bytes.is_some();
     SseStream::from_bytes_stream(stream::unfold(
         (body_stream, SseEventSizeLimit::new(maximum_event_bytes)),
         |(mut body_stream, mut size_limit)| async move {

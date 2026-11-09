@@ -27,6 +27,7 @@ use super::invocation;
 use super::invocation::Code;
 use super::launched_git;
 use super::launched_input;
+use super::option_globs;
 use super::outbound;
 use super::outputs;
 use super::quoted;
@@ -399,6 +400,13 @@ impl Classifier {
             // before it left.
             found.deferred |= unknown_folder::starts_loop(&texts);
             let command_at = indirect::command_word(&texts);
+            // #1912: a glob that may match a file named as an option
+            // (`tar cf a.tar *` with `--checkpoint-action=exec=sh x`).
+            if let Some((index, name)) = &command_at
+                && option_globs::runs_option_glob(name, *index, &texts, &command.words)
+            {
+                note_git(found, ProtectedActionKind::UnseenCode);
+            }
             // #1620: zsh expands `=mytool` in any word, so a writer's operand
             // names the installed program too (`tee -a =mytool`, `cp x
             // =mytool`). And the text `eval`, `trap` and `alias` run is a
@@ -1232,18 +1240,36 @@ impl Classifier {
         // knows (`git push . HEAD:$b`, `git fetch --depth=$n .`, `git fetch
         // origin *`).
         if !git_starts.is_empty() {
+            // #1910: the word lexer may cut words where the shell does not,
+            // so past such a word `simple_command` may miscount the operands
+            // and not take the remote for one: it splits any word at a blank
+            // (any Unicode one), a comma or a bracket (`--refmap='x y'`,
+            // `--refmap=x,y`), ends its command at a word starting with `}`
+            // or a lone `{`, and reads a quoted separator, backtick or `$`
+            // as code (`'x;y'`, `'x$'` starts a `$'…'` string to the end).
+            let mut lexer_split = false;
             let marks: Vec<rerun::GitWordMark> = words
                 .iter()
-                .map(|word| rerun::GitWordMark {
+                .map(|word| {
                     // Other unseen words are `simple_command`'s, which knows
-                    // the values the line sets (`r=origin; git fetch "$r"`).
-                    seen: true,
-                    loose: (word.dynamic && word.splits)
-                        // A glob whose first characters may match `-` (`*`,
-                        // `-*`, `"-"*`).
-                        // A glob that starts with `-` or a glob character may
-                        // match `--upload-pack=…` (`*`, `--up*`, `"-"*`).
-                        || (word.globs && word.text.starts_with(['-', '*', '?', '[', '^'])),
+                    // the values the line sets (`r=origin; git fetch "$r"`),
+                    // unless it may have miscounted (#1910: `git fetch
+                    // --refmap='x y' e"$r"`).
+                    let seen = !(lexer_split && word.dynamic);
+                    let text = word.text.as_str();
+                    lexer_split |= text.contains(char::is_whitespace)
+                        || text.contains([',', '(', ')'])
+                        || text.starts_with('}')
+                        || text == "{"
+                        || (word.quoted && text.contains([';', '|', '&', '<', '>', '`', '$']));
+                    rerun::GitWordMark {
+                        seen,
+                        loose: (word.dynamic && word.splits)
+                            // A glob that starts with `-` or a glob character
+                            // may match `--upload-pack=…` (`*`, `--up*`, `"-"*`).
+                            || (word.globs
+                                && word.text.starts_with(['-', '*', '?', '[', '^'])),
+                    }
                 })
                 .collect();
             let options_after = rerun::git_options_after(texts, &marks);

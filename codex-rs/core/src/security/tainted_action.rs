@@ -45,6 +45,7 @@ mod loader_variables;
 mod mktemp;
 mod named_shell;
 mod nested;
+mod option_globs;
 mod outbound;
 mod outputs;
 mod paths;
@@ -434,6 +435,62 @@ pub(crate) fn classify_as_named(
     codex_home: &Path,
 ) -> Option<ProtectedActionKind> {
     classify_as_named_with(action, codex_home, dirs::home_dir().as_deref())
+}
+
+/// #1897 follow-up: a hint for the approval prompt when the line pushes a
+/// branch named by a variable (`git push origin "$b"`), which asks because
+/// git would read a value starting with `-` as an option. Text only; it
+/// decides nothing.
+pub(crate) const PUSH_BRANCH_HINT: &str = "Tip: git may read a branch held in a variable after \
+     `git push` (`git push origin \"$b\"`) as an option; `refs/heads/\"$b\"` or `-- \"$b\"` \
+     names it as a branch and avoids that check.";
+
+/// [`PUSH_BRANCH_HINT`] for an action judged `kind`, when one of its
+/// command lines has `git push` (with git options but no option values
+/// before `push`), then, after the first operand (the remote), a word
+/// starting with `$` (after quotes) in the same command.
+pub(crate) fn approval_hint(
+    action: &ApprovalAction,
+    kind: ProtectedActionKind,
+) -> Option<&'static str> {
+    let (ApprovalAction::Shell { command, .. } | ApprovalAction::ExecCommand { command, .. }) =
+        action
+    else {
+        return None;
+    };
+    if kind != ProtectedActionKind::UnseenCode {
+        return None;
+    }
+    for line in command.iter().flat_map(|part| part.split('\n')) {
+        work::step();
+        // None: no `git … push` yet; Some(n): after it, with n operands.
+        let (mut git, mut operands) = (false, None);
+        for word in line.split_whitespace() {
+            work::step();
+            match operands {
+                Some(n) if !word.starts_with('-') => {
+                    if n >= 1 && word.trim_start_matches(['"', '\'']).starts_with('$') {
+                        return Some(PUSH_BRANCH_HINT);
+                    }
+                    operands = Some(n + 1);
+                }
+                Some(_) => {}
+                None if basename(word) == "git" => git = true,
+                // `push` as git's subcommand, its first word.
+                None if git && !word.starts_with('-') => {
+                    git = false;
+                    if word == "push" {
+                        operands = Some(0);
+                    }
+                }
+                None => {}
+            }
+            if word.contains([';', '&', '|']) {
+                (git, operands) = (false, None);
+            }
+        }
+    }
+    None
 }
 
 pub(super) fn classify_with(
@@ -3955,6 +4012,10 @@ mod tainted_action_git_ext_tests;
 #[cfg(test)]
 #[path = "tainted_action_git_option_value_tests.rs"]
 mod tainted_action_git_option_value_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_option_glob_tests.rs"]
+mod tainted_action_option_glob_tests;
 
 #[cfg(test)]
 #[path = "tainted_action_timing_probe_tests.rs"]
