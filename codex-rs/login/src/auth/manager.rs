@@ -2723,6 +2723,7 @@ impl AuthDotJson {
                 .is_some_and(AgentIdentityStorage::has_auth_material)
             || self.personal_access_token.is_some()
             || self.bedrock_api_key.is_some()
+            || self.bedrock_access_keys.is_some()
     }
 
     fn from_external_access_token(
@@ -3895,7 +3896,13 @@ impl AuthManager {
         loop {
             let generation = self.auth_change_state_tx.borrow().generation;
             let cached = self.auth_cached();
-            let new_auth = self.try_load_managed_auth(cached.as_ref()).await?;
+            // PF-84-S06: a named account's manager reloads only that
+            // account's store, never the default login.
+            let new_auth = if self.named_account.is_some() {
+                self.load_named_account_auth().await
+            } else {
+                self.try_load_managed_auth(cached.as_ref()).await?
+            };
             if let Some(publication) = self.publish_reloaded_auth(generation, new_auth) {
                 return Ok(publication.changed);
             }
@@ -4047,13 +4054,21 @@ impl AuthManager {
             .clone();
         let allowed_login_methods = self.allowed_login_methods();
         let effective_chatgpt_workspaces = self.effective_chatgpt_workspaces();
+        // PF-84-S06 (#570): a manager that hides a restricted default login
+        // loads it unfiltered, as main did, so the reason it is hidden is
+        // recorded before the login policy below drops it.
+        let hides_restricted = self.hides_restricted_default_login();
         let auth = load_auth_with_openai_api_key_env(
             &self.codex_home,
             self.enable_codex_api_key_env,
             self.openai_api_key_env,
             self.auth_credentials_store_mode,
-            Some(&allowed_login_methods),
-            effective_chatgpt_workspaces.as_deref(),
+            (!hides_restricted).then_some(allowed_login_methods.as_slice()),
+            if hides_restricted {
+                None
+            } else {
+                effective_chatgpt_workspaces.as_deref()
+            },
             self.chatgpt_base_url.as_deref(),
             self.keyring_backend_kind,
             self.agent_identity_authapi_base_url.as_deref(),
@@ -4062,15 +4077,15 @@ impl AuthManager {
             allowed_auth_modes.as_deref(),
         )
         .await?;
-        let auth = auth.filter(|auth| {
+        let auth = self.without_restricted_default_login(auth);
+        Ok(auth.filter(|auth| {
             validate_auth_restrictions(
                 Some(&allowed_login_methods),
                 effective_chatgpt_workspaces.as_deref(),
                 auth,
             )
             .is_ok()
-        });
-        Ok(self.without_restricted_default_login(auth))
+        }))
     }
 
     /// PF-84-S06 (#570): whether this default-login manager treats a login
@@ -4420,11 +4435,18 @@ impl AuthManager {
         manager.workload_identity_selected = external_auth.is_some();
         // PF-84-S06 (#570): a session on a named sign-in account left the
         // default login in place; one the restrictions rule out is absent here.
+        // The initial load applied the login policy, which would drop such a
+        // login before its reason is recorded, so reload it the hiding way.
         manager.hide_restricted_default_login = session.hide_restricted_default_login;
-        if manager.hide_restricted_default_login
-            && let Ok(mut cached) = manager.inner.write()
-        {
-            cached.auth = manager.without_restricted_default_login(cached.auth.take());
+        if manager.hide_restricted_default_login {
+            let auth = manager
+                .try_load_managed_auth(/*cached_auth*/ None)
+                .await
+                .ok()
+                .flatten();
+            if let Ok(mut cached) = manager.inner.write() {
+                cached.auth = auth;
+            }
         }
         let manager = Arc::new(manager);
         if let Some(external_auth) = external_auth {

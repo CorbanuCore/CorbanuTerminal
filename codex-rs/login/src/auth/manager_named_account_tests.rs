@@ -718,3 +718,90 @@ fn auth_cached_rechecks_a_skipped_clear_before_returning() {
         );
     }
 }
+
+async fn file_base(home: &std::path::Path) -> AuthManager {
+    AuthManager::new(
+        home.to_path_buf(),
+        /*enable_codex_api_key_env*/ false,
+        crate::AuthCredentialsStoreMode::File,
+        /*forced_chatgpt_workspace_id*/ None,
+        /*chatgpt_base_url*/ None,
+        crate::AuthKeyringBackendKind::default(),
+        crate::test_support::transport_default_auth_route_config(),
+    )
+    .await
+}
+
+/// D499 (provisional): the administrator's login policy binds a named
+/// account's sign-in as it binds the default login.
+#[tokio::test]
+#[serial_test::serial(codex_auth_env)]
+async fn the_administrator_login_policy_binds_named_sign_ins() {
+    let home = tempfile::tempdir().expect("home");
+    login_named_account_with_api_key(home.path(), &account("work"), "sk-canary-policy")
+        .expect("sign-in");
+    let mut base = file_base(home.path()).await;
+    base.managed_auth_policy = codex_config::ManagedAuthPolicy {
+        allowed_login_methods: Some(vec![ForcedLoginMethod::Chatgpt]),
+        allowed_chatgpt_workspaces: None,
+    };
+    let work = Arc::new(base)
+        .for_named_account_loaded(account("work"))
+        .await;
+    assert!(work.auth().await.is_none());
+    assert!(
+        work.named_sign_in_unavailable()
+            .is_some_and(|reason| reason.contains("administrator's login policy")),
+        "{:?}",
+        work.named_sign_in_unavailable()
+    );
+
+    let home = tempfile::tempdir().expect("home");
+    vault(home.path())
+        .write_provider_account(
+            "openai",
+            &work_name(),
+            codex_vault::ProviderAccountKind::ChatgptAuth,
+            &serde_json::to_string(&chatgpt_sign_in("access-canary")).expect("json"),
+        )
+        .expect("write");
+    let mut base = file_base(home.path()).await;
+    base.managed_auth_policy = codex_config::ManagedAuthPolicy {
+        allowed_login_methods: None,
+        allowed_chatgpt_workspaces: Some(vec!["ws-other".to_string()]),
+    };
+    let work = Arc::new(base)
+        .for_named_account_loaded(account("work"))
+        .await;
+    assert!(work.auth().await.is_none());
+    assert!(
+        work.named_sign_in_unavailable()
+            .is_some_and(|reason| reason.contains("workspace")),
+        "{:?}",
+        work.named_sign_in_unavailable()
+    );
+}
+
+/// A named account's manager reloads its own store, never the default login.
+#[tokio::test]
+#[serial_test::serial(codex_auth_env)]
+async fn reload_with_cached_auth_keeps_a_named_manager_on_its_account() {
+    let home = tempfile::tempdir().expect("home");
+    crate::auth::login_with_api_key(
+        home.path(),
+        "sk-canary-default",
+        crate::AuthCredentialsStoreMode::File,
+        crate::AuthKeyringBackendKind::default(),
+    )
+    .expect("default login");
+    login_named_account_with_api_key(home.path(), &account("work"), "sk-canary-named")
+        .expect("sign-in");
+    let base = Arc::new(file_base(home.path()).await);
+    let work = base.for_named_account_loaded(account("work")).await;
+    work.reload_with_cached_auth().await.expect("reload");
+    assert_eq!(
+        work.auth_cached()
+            .and_then(|auth| auth.api_key().map(str::to_string)),
+        Some("sk-canary-named".to_string())
+    );
+}

@@ -3288,7 +3288,7 @@ async fn enforce_login_restrictions_logs_out_for_method_mismatch() {
 /// PF-84-S06 (#570): in a process whose session runs on a named sign-in
 /// account (so startup left the default login alone), the default login's
 /// manager treats a login the restrictions rule out as absent, also after a
-/// reload, and never deletes it. Other processes load it as before.
+/// reload, records why, and never deletes it.
 #[tokio::test]
 #[serial(codex_auth_env)]
 async fn shared_from_config_hides_a_restricted_default_login_only_in_named_sessions() {
@@ -3344,7 +3344,9 @@ async fn shared_from_config_hides_a_restricted_default_login_only_in_named_sessi
         )
         .await
         .expect("auth manager");
-        assert!(default_session.auth_cached().is_some());
+        // Upstream's login policy drops a restricted login at load in every
+        // process (it is not deleted); only a named session records why.
+        assert!(default_session.auth_cached().is_none());
         assert_eq!(default_session.hidden_default_login_reason(), None);
     }
 
