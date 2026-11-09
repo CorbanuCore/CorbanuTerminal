@@ -1086,8 +1086,9 @@ fn sec_win_1560_elevated_conpty_command_cannot_borrow_another_workspaces_command
 /// command started, no longer holds that privilege. (The runner removes it
 /// from its own token too, and fails its command if it can't.) Since #1803
 /// (D461) another command can't open the host's token at all, which keeps
-/// the privilege out of its reach too; the runner checks the removal itself
-/// (`strip_privilege_from_console_hosts` fails the command otherwise).
+/// the privilege out of its reach too; the runner then reports the removal
+/// it checked (`strip_privilege_from_console_hosts`, which fails the command
+/// otherwise) in the sandbox log.
 #[test]
 fn sec_win_1721_console_host_drops_the_assign_primary_privilege() {
     let Some(codex_home) = elevated_home("1721-console-privilege") else {
@@ -1118,11 +1119,15 @@ fn sec_win_1721_console_host_drops_the_assign_primary_privilege() {
     record_setup(codex_home.path());
     let line = expect_line(&stdout, codex_home.path());
     println!("\nsec-win-1721 console host privilege: exit={exit_code} {line:?}");
+    let log = sandbox_log(codex_home.path());
+    let checked = log
+        .lines()
+        .any(|entry| entry.contains("no longer holds SeAssignPrimaryTokenPrivilege"));
     assert!(
         line.starts_with("host=")
             && line.split(" | ").all(|host| {
                 host.contains("assign_primary=absent")
-                    || host.contains("assign_primary=open_token_err5")
+                    || (host.contains("assign_primary=open_token_err5") && checked)
             }),
         "a runner's console host still holds SeAssignPrimaryTokenPrivilege: {line}"
     );

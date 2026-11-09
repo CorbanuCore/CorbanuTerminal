@@ -232,7 +232,8 @@ unsafe fn sandbox_users_group_of(token: HANDLE) -> Result<Vec<u8>> {
 /// impersonating it gets identification level only, so it can't act as it
 /// (writes and process creation fail with 1346, measured). Before, they got
 /// full access through the sandbox account. Fails if the runner isn't in the
-/// group.
+/// group. A runner with its own account (#1721 (a′)) gets a narrower DACL
+/// since #1803 (D461); see [`restrict_runner_default_dacl`].
 pub fn restrict_current_default_dacl() -> Result<()> {
     // SAFETY: the token handle is closed below.
     unsafe {
@@ -260,10 +261,13 @@ pub fn restrict_current_default_dacl() -> Result<()> {
 /// gets full access through that account instead, and the group only
 /// [`ELEVATED_PEER_ACCESS`], as on another command's objects. So no other
 /// elevated command can read its ConPTY console host (what its command
-/// printed and what was typed at it) or that host's threads. Without that
-/// account (a standard user's setup, D392 (b)) the runner runs as its
-/// commands' account and keeps the D324 DACL: the group is then the only
-/// SID that tells it apart from them.
+/// printed and what was typed at it) or that host's threads. Such a runner
+/// is told apart by `SeAssignPrimaryTokenPrivilege`, which only that account
+/// holds and which its token keeps until it has started its command; it
+/// must then be that account, or this fails (closed) rather than fall back.
+/// Without the privilege (a standard user's setup, D392 (b)) the runner runs
+/// as its commands' account and keeps the D324 DACL: the group is then the
+/// only SID that tells it apart from them.
 ///
 /// # Safety
 /// `token` must be a valid token handle with those rights.
@@ -271,8 +275,20 @@ pub(crate) unsafe fn restrict_runner_default_dacl(token: HANDLE) -> Result<()> {
     let mut group = sandbox_users_group_of(token)?;
     let mut system = well_known_sid(WIN_LOCAL_SYSTEM_SID)?;
     let mut owner_rights = well_known_sid(WIN_CREATOR_OWNER_RIGHTS_SID)?;
-    let mut user = get_user_sid_bytes(token)?;
-    if is_runner_account(&mut user) {
+    if crate::command_logon::token_holds_privilege(
+        token,
+        crate::command_logon::ASSIGN_PRIMARY_TOKEN_PRIVILEGE,
+    )? {
+        let mut user = get_user_sid_bytes(token)?;
+        let mut runner = crate::winutil::resolve_sid(crate::setup::RUNNER_USERNAME)
+            .context("resolve the runner account")?;
+        if EqualSid(user.as_mut_ptr().cast(), runner.as_mut_ptr().cast()) == 0 {
+            return Err(anyhow!(
+                "a runner holding {} isn't the {} account",
+                crate::command_logon::ASSIGN_PRIMARY_TOKEN_PRIVILEGE,
+                crate::setup::RUNNER_USERNAME
+            ));
+        }
         return set_default_dacl_grants(
             token,
             &[
@@ -294,15 +310,6 @@ pub(crate) unsafe fn restrict_runner_default_dacl(token: HANDLE) -> Result<()> {
             (owner_rights.as_mut_ptr() as *mut c_void, READ_CONTROL),
         ],
     )
-}
-
-/// Whether `sid` is the runner's own account. False when it doesn't exist.
-fn is_runner_account(sid: &mut [u8]) -> bool {
-    let Ok(mut runner) = crate::winutil::resolve_sid(crate::setup::RUNNER_USERNAME) else {
-        return false;
-    };
-    // SAFETY: both buffers hold SIDs and outlive the call.
-    unsafe { EqualSid(sid.as_mut_ptr().cast(), runner.as_mut_ptr().cast()) != 0 }
 }
 
 /// D324 (#1648): limits the elevated runner's own token to `TOKEN_QUERY` for
