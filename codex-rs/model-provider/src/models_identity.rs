@@ -82,6 +82,8 @@ pub(crate) fn identity(
     if !has_stable_account || explicit_bearer {
         if explicit_bearer && crate::model_key_broker::model_key_broker_required() {
             // PF-27-S05: the broker holds the key; name its source instead.
+            // A rotated key under the same source keeps the cached catalog
+            // until it expires (the broker gives Core no key fingerprint).
             field(b"brokered-provider-key");
             field(format!("{:?}", provider_info.env_key).as_bytes());
             field(format!("{:?}", provider_info.account).as_bytes());
