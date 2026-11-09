@@ -255,12 +255,34 @@ pub fn restrict_current_default_dacl() -> Result<()> {
 /// `TOKEN_QUERY | TOKEN_ADJUST_DEFAULT`: Core does it too while the runner
 /// is still suspended, where it may (#1721).
 ///
+/// #1803 (D461): a runner running as its own account
+/// ([`crate::setup::RUNNER_USERNAME`], #1721 (a′)), which no command holds,
+/// gets full access through that account instead, and the group only
+/// [`ELEVATED_PEER_ACCESS`], as on another command's objects. So no other
+/// elevated command can read its ConPTY console host (what its command
+/// printed and what was typed at it) or that host's threads. Without that
+/// account (a standard user's setup, D392 (b)) the runner runs as its
+/// commands' account and keeps the D324 DACL: the group is then the only
+/// SID that tells it apart from them.
+///
 /// # Safety
 /// `token` must be a valid token handle with those rights.
 pub(crate) unsafe fn restrict_runner_default_dacl(token: HANDLE) -> Result<()> {
     let mut group = sandbox_users_group_of(token)?;
     let mut system = well_known_sid(WIN_LOCAL_SYSTEM_SID)?;
     let mut owner_rights = well_known_sid(WIN_CREATOR_OWNER_RIGHTS_SID)?;
+    let mut user = get_user_sid_bytes(token)?;
+    if is_runner_account(&mut user) {
+        return set_default_dacl_grants(
+            token,
+            &[
+                (system.as_mut_ptr() as *mut c_void, GENERIC_ALL),
+                (user.as_mut_ptr() as *mut c_void, GENERIC_ALL),
+                (group.as_mut_ptr() as *mut c_void, ELEVATED_PEER_ACCESS),
+                (owner_rights.as_mut_ptr() as *mut c_void, READ_CONTROL),
+            ],
+        );
+    }
     set_default_dacl_grants(
         token,
         &[
@@ -272,6 +294,15 @@ pub(crate) unsafe fn restrict_runner_default_dacl(token: HANDLE) -> Result<()> {
             (owner_rights.as_mut_ptr() as *mut c_void, READ_CONTROL),
         ],
     )
+}
+
+/// Whether `sid` is the runner's own account. False when it doesn't exist.
+fn is_runner_account(sid: &mut [u8]) -> bool {
+    let Ok(mut runner) = crate::winutil::resolve_sid(crate::setup::RUNNER_USERNAME) else {
+        return false;
+    };
+    // SAFETY: both buffers hold SIDs and outlive the call.
+    unsafe { EqualSid(sid.as_mut_ptr().cast(), runner.as_mut_ptr().cast()) != 0 }
 }
 
 /// D324 (#1648): limits the elevated runner's own token to `TOKEN_QUERY` for
