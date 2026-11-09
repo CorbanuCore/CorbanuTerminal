@@ -1067,11 +1067,15 @@ pub fn validate_reserved_model_provider_names(
     let mut conflicts = model_providers
         .iter()
         .filter(|(key, provider)| {
-            key.as_str() != AMAZON_BEDROCK_PROVIDER_ID
-                && key.as_str() != AMBIENT_PROVIDER_ID
-                && BUILT_IN_MODEL_PROVIDER_NAMES
-                    .iter()
-                    .any(|reserved_name| provider.name.trim().eq_ignore_ascii_case(reserved_name))
+            !matches!(
+                key.as_str(),
+                AMAZON_BEDROCK_PROVIDER_ID
+                    | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID
+                    | GCP_PROVIDER_ID
+                    | AMBIENT_PROVIDER_ID
+            ) && BUILT_IN_MODEL_PROVIDER_NAMES
+                .iter()
+                .any(|reserved_name| provider.name.trim().eq_ignore_ascii_case(reserved_name))
         })
         .map(|(key, provider)| format!("`{key}` (`{}`)", provider.name.trim()))
         .collect::<Vec<_>>();
@@ -1307,6 +1311,22 @@ level = "moderate"
             assert!(
                 toml::from_str::<ConfigToml>(invalid).is_err(),
                 "explicit invalid state should fail: {invalid}"
+            );
+        }
+    }
+
+    #[test]
+    fn custom_providers_cannot_take_cloud_provider_names() {
+        for name in ["Amazon Bedrock Runtime", "Google Cloud Vertex AI"] {
+            let error = toml::from_str::<ConfigToml>(&format!(
+                "[model_providers.custom]\nname = \"{name}\"\nbase_url = \"https://example.com/v1\"\n"
+            ))
+            .expect_err("a custom provider must not reuse a built-in provider name");
+            assert!(
+                error
+                    .to_string()
+                    .contains("reserved built-in provider names"),
+                "{name}: {error}"
             );
         }
     }

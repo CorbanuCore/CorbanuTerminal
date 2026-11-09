@@ -65,11 +65,11 @@ impl fmt::Debug for ModelProviderInfo {
         f.debug_struct("ModelProviderInfo")
             .field("name", name)
             .field("base_url", &base_url.as_deref().map(redact_url))
+            // Fully hidden, as upstream's `RedactedString` does: a catalog URL
+            // may carry a token anywhere in it.
             .field(
                 "model_catalog_url",
-                &model_catalog_url
-                    .as_ref()
-                    .map(|url| redact_url(url.as_str())),
+                &model_catalog_url.as_ref().map(|_| REDACTED),
             )
             .field("env_key", env_key)
             .field("env_key_instructions", env_key_instructions)
