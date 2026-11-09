@@ -29,6 +29,7 @@ impl FilesystemConstraints {
                 let path = if deny_read.contains_glob() {
                     FileSystemPath::GlobPattern {
                         pattern: deny_read.as_str().to_string(),
+                        scan: None,
                     }
                 } else {
                     let mut path = LegacyAppPathString::from_string(deny_read.as_str())

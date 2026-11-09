@@ -15,8 +15,8 @@ const REDACTED: &str = "<redacted>";
 impl fmt::Debug for ModelProviderInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         /// Keeps the map's keys and hides its values.
-        struct RedactedValues<'a>(&'a HashMap<String, String>);
-        impl fmt::Debug for RedactedValues<'_> {
+        struct RedactedValues<'a, V>(&'a HashMap<String, V>);
+        impl<V> fmt::Debug for RedactedValues<'_, V> {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 let mut keys = self.0.keys().collect::<Vec<_>>();
                 keys.sort();
@@ -31,12 +31,18 @@ impl fmt::Debug for ModelProviderInfo {
         let Self {
             name,
             base_url,
+            model_catalog_url,
             env_key,
             env_key_instructions,
             experimental_bearer_token,
             auth,
+            gateway_oauth,
             aws,
+            project_id,
+            location,
+            credential_file,
             wire_api,
+            capabilities,
             query_params,
             http_headers,
             env_http_headers,
@@ -54,10 +60,17 @@ impl fmt::Debug for ModelProviderInfo {
             supports_standalone_web_search,
             billing,
             account,
+            include_internal_metadata,
         } = self;
         f.debug_struct("ModelProviderInfo")
             .field("name", name)
             .field("base_url", &base_url.as_deref().map(redact_url))
+            .field(
+                "model_catalog_url",
+                &model_catalog_url
+                    .as_ref()
+                    .map(|url| redact_url(url.as_str())),
+            )
             .field("env_key", env_key)
             .field("env_key_instructions", env_key_instructions)
             .field(
@@ -65,8 +78,13 @@ impl fmt::Debug for ModelProviderInfo {
                 &experimental_bearer_token.as_ref().map(|_| REDACTED),
             )
             .field("auth", auth)
+            .field("gateway_oauth", gateway_oauth)
             .field("aws", aws)
+            .field("project_id", project_id)
+            .field("location", location)
+            .field("credential_file", credential_file)
             .field("wire_api", wire_api)
+            .field("capabilities", capabilities)
             .field("query_params", &query_params.as_ref().map(RedactedValues))
             .field("http_headers", &http_headers.as_ref().map(RedactedValues))
             .field("env_http_headers", env_http_headers)
@@ -93,6 +111,7 @@ impl fmt::Debug for ModelProviderInfo {
             )
             .field("billing", billing)
             .field("account", account)
+            .field("include_internal_metadata", include_internal_metadata)
             .finish()
     }
 }

@@ -10,12 +10,14 @@
 //! billing-basis-defaults.md`.
 
 use crate::AMAZON_BEDROCK_PROVIDER_ID;
+use crate::AMAZON_BEDROCK_RUNTIME_PROVIDER_ID;
 use crate::AMBIENT_PROVIDER_ID;
 use crate::ANTHROPIC_PROVIDER_ID;
 use crate::BASETEN_ANTHROPIC_PROVIDER_ID;
 use crate::BASETEN_PROVIDER_ID;
 use crate::CLAUDE_PLAN_PROVIDER_ID;
 use crate::DEEPSEEK_PROVIDER_ID;
+use crate::GCP_PROVIDER_ID;
 use crate::KIMI_CODE_PROVIDER_ID;
 use crate::LMSTUDIO_OSS_PROVIDER_ID;
 use crate::META_PROVIDER_ID;
@@ -78,7 +80,7 @@ impl BillingCredential {
                     AuthMode::Headers | AuthMode::AgentIdentity | AuthMode::PersonalAccessToken,
                 ) => Self::OtherAccountToken,
                 // A Bedrock key is not an OpenAI credential.
-                Some(AuthMode::BedrockApiKey) | None => Self::None,
+                Some(AuthMode::BedrockApiKey | AuthMode::BedrockAccessKeys) | None => Self::None,
             },
             ModelProviderCredentialSource::EnvironmentApiKey { .. } => Self::ApiKey,
             ModelProviderCredentialSource::Command => Self::ProviderLogin,
@@ -139,6 +141,16 @@ const BUILT_IN: &[(&str, BillingCredential, BillingBasis)] = &[
     (VERCEL_ANTHROPIC_FAST_PROVIDER_ID, C::ApiKey, PayPerUse),
     (AMAZON_BEDROCK_PROVIDER_ID, C::Aws, PayPerUse),
     (AMAZON_BEDROCK_PROVIDER_ID, C::ProviderLogin, PayPerUse),
+    (AMAZON_BEDROCK_RUNTIME_PROVIDER_ID, C::Aws, PayPerUse),
+    (
+        AMAZON_BEDROCK_RUNTIME_PROVIDER_ID,
+        C::ProviderLogin,
+        PayPerUse,
+    ),
+    // Vertex AI bills the Google Cloud project. Config loading adds the
+    // provider's command auth; the bare built-in entry has none yet.
+    (GCP_PROVIDER_ID, C::ProviderLogin, PayPerUse),
+    (GCP_PROVIDER_ID, C::None, PayPerUse),
     (OLLAMA_OSS_PROVIDER_ID, C::None, Local),
     (LMSTUDIO_OSS_PROVIDER_ID, C::None, Local),
 ];

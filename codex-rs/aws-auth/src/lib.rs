@@ -1,10 +1,6 @@
 mod config;
-<<<<<<< HEAD
-mod named_profile;
-||||||| 413492cd6c
-=======
 mod discovery;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+mod named_profile;
 mod signing;
 mod transport;
 
@@ -138,7 +134,6 @@ pub enum AwsAuthError {
     MissingCredentialsProvider,
     #[error("AWS SDK config did not resolve a region")]
     MissingRegion,
-<<<<<<< HEAD
     #[error(
         "AWS profile `{0}` sets no region, or is not defined in the AWS config files; set `region` in that profile or `aws.region` for the provider"
     )]
@@ -147,11 +142,8 @@ pub enum AwsAuthError {
         "`credential_source = {0}` is not allowed for a named account: it would use environment, instance or container credentials; give the profile its own keys, a `source_profile`, SSO or `credential_process`"
     )]
     RefusedCredentialSource(String),
-||||||| 413492cd6c
-=======
     #[error("failed to load AWS profiles: {0}")]
     ProfileLoad(#[from] aws_config::profile::ProfileFileLoadError),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     #[error("failed to load AWS credentials: {0}")]
     Credentials(#[from] aws_credential_types::provider::error::CredentialsError),
     #[error("request URL is not a valid URL: {0}")]
@@ -230,7 +222,6 @@ impl AwsAuthContext {
         })
     }
 
-<<<<<<< HEAD
     /// PF-84-S06: credentials and region from `profile` only, never from
     /// environment keys, `AWS_PROFILE` or another profile. Credentials are
     /// resolved once here (and again for each signature), so a missing or
@@ -239,8 +230,16 @@ impl AwsAuthContext {
         profile: &str,
         region_override: Option<String>,
         service: &str,
+        factory: codex_http_client::HttpClientFactory,
     ) -> Result<Self, AwsAuthError> {
-        named_profile::load_named_profile(profile, region_override, service, /*files*/ None).await
+        named_profile::load_named_profile(
+            profile,
+            region_override,
+            service,
+            factory,
+            /*files*/ None,
+        )
+        .await
     }
 
     /// PF-84-S06: the region a named profile uses (`region_override`, then
@@ -250,8 +249,8 @@ impl AwsAuthContext {
         region_override: Option<String>,
     ) -> Result<String, AwsAuthError> {
         named_profile::named_profile_region(profile, region_override, /*files*/ None).await
-||||||| 413492cd6c
-=======
+    }
+
     pub async fn load_with_credentials_provider(
         config: AwsAuthConfig,
         provider: Arc<impl AwsCredentialsProvider + 'static>,
@@ -274,7 +273,6 @@ impl AwsAuthContext {
             discovery::profile_credentials_provider(&profile, &context.region, factory),
         );
         Ok(context)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub fn region(&self) -> &str {
@@ -327,7 +325,6 @@ impl std::fmt::Debug for AwsAuthError {
 }
 
 impl AwsAuthError {
-<<<<<<< HEAD
     /// This error and its sources, for messages that must say why (the
     /// SDK's top-level credential errors are terse). A `credential_process`
     /// helper's stderr, which the SDK copies into its error after `Stderr:`,
@@ -351,8 +348,8 @@ impl AwsAuthError {
         }
         // Other SDK credential errors can quote what they failed to parse.
         codex_log_guard::redact_credentials(&message).into_owned()
-||||||| 413492cd6c
-=======
+    }
+
     /// Returns the caller-supplied credential error without exposing SDK error sources.
     pub fn credentials_provider_error(&self) -> Option<&std::io::Error> {
         let Self::Credentials(error) = self else {
@@ -361,7 +358,6 @@ impl AwsAuthError {
         std::error::Error::source(error)?
             .downcast_ref::<ProvidedCredentialsError>()
             .map(|error| &error.0)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// Returns whether retrying the outbound request can reasonably recover from this auth error.
@@ -377,14 +373,10 @@ impl AwsAuthError {
             | AwsAuthError::MissingProfile
             | AwsAuthError::MissingCredentialsProvider
             | AwsAuthError::MissingRegion
-<<<<<<< HEAD
             | AwsAuthError::MissingProfileRegion(_)
             | AwsAuthError::RefusedCredentialSource(_)
-||||||| 413492cd6c
-=======
             | AwsAuthError::ProfileLoad(_)
             | AwsAuthError::InvalidUrl(_)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             | AwsAuthError::InvalidUri(_)
             | AwsAuthError::BuildHttpRequest(_)
             | AwsAuthError::InvalidHeaderValue(_)
@@ -396,339 +388,5 @@ impl AwsAuthError {
 }
 
 #[cfg(test)]
-<<<<<<< HEAD
-mod tests {
-    use std::time::Duration;
-    use std::time::UNIX_EPOCH;
-
-    use aws_credential_types::Credentials;
-    use aws_credential_types::provider::error::CredentialsError;
-    use pretty_assertions::assert_eq;
-
-    use super::*;
-
-    fn test_context(session_token: Option<&str>) -> AwsAuthContext {
-        AwsAuthContext {
-            credentials_provider: SharedCredentialsProvider::new(Credentials::new(
-                "AKIDEXAMPLE",
-                "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
-                session_token.map(str::to_string),
-                /*expires_after*/ None,
-                "unit-test",
-            )),
-            region: "us-east-1".to_string(),
-            service: "bedrock".to_string(),
-        }
-    }
-
-    fn test_request() -> AwsRequestToSign {
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            http::header::CONTENT_TYPE,
-            http::HeaderValue::from_static("application/json"),
-        );
-        headers.insert("x-test-header", http::HeaderValue::from_static("present"));
-        AwsRequestToSign {
-            method: Method::POST,
-            url: "https://bedrock-runtime.us-east-1.amazonaws.com/v1/responses".to_string(),
-            headers,
-            body: Bytes::from_static(br#"{"model":"openai.gpt-oss-120b-1:0"}"#),
-        }
-    }
-
-    #[tokio::test]
-    async fn sign_adds_sigv4_headers_and_preserves_existing_headers() {
-        let signed = test_context(/*session_token*/ None)
-            .sign_at(
-                test_request(),
-                UNIX_EPOCH + Duration::from_secs(1_700_000_000),
-            )
-            .await
-            .expect("request should sign");
-
-        assert_eq!(
-            signing::header_value(&signed.headers, http::header::CONTENT_TYPE.as_str()),
-            Some("application/json".to_string())
-        );
-        assert_eq!(
-            signing::header_value(&signed.headers, "x-test-header"),
-            Some("present".to_string())
-        );
-        assert_eq!(
-            signed.url,
-            "https://bedrock-runtime.us-east-1.amazonaws.com/v1/responses"
-        );
-        assert!(
-            signing::header_value(&signed.headers, http::header::AUTHORIZATION.as_str())
-                .is_some_and(|value| value.starts_with("AWS4-HMAC-SHA256 "))
-        );
-        assert!(signing::header_value(&signed.headers, "x-amz-date").is_some());
-    }
-
-    #[test]
-    fn credentials_provider_failures_are_retryable() {
-        assert!(
-            AwsAuthError::Credentials(CredentialsError::provider_error("temporarily unavailable"))
-                .is_retryable()
-        );
-        assert!(
-            AwsAuthError::Credentials(CredentialsError::provider_timed_out(Duration::from_secs(1)))
-                .is_retryable()
-        );
-    }
-
-    #[test]
-    fn deterministic_aws_auth_errors_are_not_retryable() {
-        assert!(!AwsAuthError::EmptyService.is_retryable());
-        assert!(
-            !AwsAuthError::Credentials(CredentialsError::not_loaded_no_source()).is_retryable()
-        );
-        assert!(
-            !AwsAuthError::Credentials(CredentialsError::invalid_configuration("bad profile"))
-                .is_retryable()
-        );
-        assert!(
-            !AwsAuthError::Credentials(CredentialsError::unhandled("unexpected response"))
-                .is_retryable()
-        );
-    }
-
-    #[tokio::test]
-    async fn sign_includes_session_token_when_credentials_have_one() {
-        let signed = test_context(Some("session-token"))
-            .sign_at(
-                test_request(),
-                UNIX_EPOCH + Duration::from_secs(1_700_000_000),
-            )
-            .await
-            .expect("request should sign");
-
-        assert_eq!(
-            signing::header_value(&signed.headers, "x-amz-security-token"),
-            Some("session-token".to_string())
-        );
-    }
-
-    /// Every event as the logs database and `/feedback` capture them
-    /// (TRACE for every target, no `RUST_LOG` needed).
-    #[derive(Clone, Default)]
-    struct CaptureAll(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
-
-    impl std::io::Write for CaptureAll {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            self.0.lock().unwrap().extend_from_slice(buf);
-            Ok(buf.len())
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl CaptureAll {
-        fn subscriber(&self) -> impl tracing::Subscriber + Send + Sync + use<> {
-            use tracing_subscriber::Layer;
-            use tracing_subscriber::layer::SubscriberExt;
-            let writer = self.clone();
-            tracing_subscriber::registry().with(
-                tracing_subscriber::fmt::layer()
-                    .with_writer(move || writer.clone())
-                    .with_ansi(false)
-                    .with_filter(
-                        tracing_subscriber::filter::Targets::new()
-                            .with_default(tracing::Level::TRACE),
-                    ),
-            )
-        }
-
-        fn contains(&self, needle: &str) -> bool {
-            String::from_utf8_lossy(&self.0.lock().unwrap()).contains(needle)
-        }
-    }
-
-    /// #380 review: aws-sigv4 logs the canonical request, session token
-    /// included, at TRACE on every signed request.
-    #[tokio::test]
-    async fn guarded_sinks_never_see_the_session_token() {
-        const SESSION_TOKEN: &str = "fake-aws-session-token-380-7c2d41";
-        let sign = || async {
-            test_context(Some(SESSION_TOKEN))
-                .sign_at(
-                    test_request(),
-                    UNIX_EPOCH + Duration::from_secs(1_700_000_000),
-                )
-                .await
-                .expect("request should sign")
-        };
-
-        // Parallel tests without a subscriber can register these callsites
-        // as `never`: sign once so they exist, then rebuild their interest.
-        sign().await;
-        tracing::callsite::rebuild_interest_cache();
-
-        let unguarded = CaptureAll::default();
-        {
-            let _default = tracing::subscriber::set_default(unguarded.subscriber());
-            sign().await;
-        }
-        assert!(
-            unguarded.contains(SESSION_TOKEN),
-            "control: aws-sigv4 should log the token at TRACE"
-        );
-
-        let guarded = CaptureAll::default();
-        let signed = {
-            let _default =
-                tracing::subscriber::set_default(codex_log_guard::guard(guarded.subscriber()));
-            sign().await
-        };
-        assert_eq!(
-            signing::header_value(&signed.headers, "x-amz-security-token"),
-            Some(SESSION_TOKEN.to_string())
-        );
-        assert!(!guarded.contains(SESSION_TOKEN), "session token was logged");
-    }
-
-    #[tokio::test]
-    async fn load_rejects_empty_service_name() {
-        let err = AwsAuthContext::load(AwsAuthConfig {
-            profile: None,
-            region: None,
-            service: "   ".to_string(),
-        })
-        .await
-        .expect_err("empty service should be rejected");
-
-        assert_eq!(err.to_string(), "AWS service name must not be empty");
-    }
-}
-||||||| 413492cd6c
-mod tests {
-    use std::time::Duration;
-    use std::time::UNIX_EPOCH;
-
-    use aws_credential_types::Credentials;
-    use aws_credential_types::provider::error::CredentialsError;
-    use pretty_assertions::assert_eq;
-
-    use super::*;
-
-    fn test_context(session_token: Option<&str>) -> AwsAuthContext {
-        AwsAuthContext {
-            credentials_provider: SharedCredentialsProvider::new(Credentials::new(
-                "AKIDEXAMPLE",
-                "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
-                session_token.map(str::to_string),
-                /*expires_after*/ None,
-                "unit-test",
-            )),
-            region: "us-east-1".to_string(),
-            service: "bedrock".to_string(),
-        }
-    }
-
-    fn test_request() -> AwsRequestToSign {
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            http::header::CONTENT_TYPE,
-            http::HeaderValue::from_static("application/json"),
-        );
-        headers.insert("x-test-header", http::HeaderValue::from_static("present"));
-        AwsRequestToSign {
-            method: Method::POST,
-            url: "https://bedrock-runtime.us-east-1.amazonaws.com/v1/responses".to_string(),
-            headers,
-            body: Bytes::from_static(br#"{"model":"openai.gpt-oss-120b-1:0"}"#),
-        }
-    }
-
-    #[tokio::test]
-    async fn sign_adds_sigv4_headers_and_preserves_existing_headers() {
-        let signed = test_context(/*session_token*/ None)
-            .sign_at(
-                test_request(),
-                UNIX_EPOCH + Duration::from_secs(1_700_000_000),
-            )
-            .await
-            .expect("request should sign");
-
-        assert_eq!(
-            signing::header_value(&signed.headers, http::header::CONTENT_TYPE.as_str()),
-            Some("application/json".to_string())
-        );
-        assert_eq!(
-            signing::header_value(&signed.headers, "x-test-header"),
-            Some("present".to_string())
-        );
-        assert_eq!(
-            signed.url,
-            "https://bedrock-runtime.us-east-1.amazonaws.com/v1/responses"
-        );
-        assert!(
-            signing::header_value(&signed.headers, http::header::AUTHORIZATION.as_str())
-                .is_some_and(|value| value.starts_with("AWS4-HMAC-SHA256 "))
-        );
-        assert!(signing::header_value(&signed.headers, "x-amz-date").is_some());
-    }
-
-    #[test]
-    fn credentials_provider_failures_are_retryable() {
-        assert!(
-            AwsAuthError::Credentials(CredentialsError::provider_error("temporarily unavailable"))
-                .is_retryable()
-        );
-        assert!(
-            AwsAuthError::Credentials(CredentialsError::provider_timed_out(Duration::from_secs(1)))
-                .is_retryable()
-        );
-    }
-
-    #[test]
-    fn deterministic_aws_auth_errors_are_not_retryable() {
-        assert!(!AwsAuthError::EmptyService.is_retryable());
-        assert!(
-            !AwsAuthError::Credentials(CredentialsError::not_loaded_no_source()).is_retryable()
-        );
-        assert!(
-            !AwsAuthError::Credentials(CredentialsError::invalid_configuration("bad profile"))
-                .is_retryable()
-        );
-        assert!(
-            !AwsAuthError::Credentials(CredentialsError::unhandled("unexpected response"))
-                .is_retryable()
-        );
-    }
-
-    #[tokio::test]
-    async fn sign_includes_session_token_when_credentials_have_one() {
-        let signed = test_context(Some("session-token"))
-            .sign_at(
-                test_request(),
-                UNIX_EPOCH + Duration::from_secs(1_700_000_000),
-            )
-            .await
-            .expect("request should sign");
-
-        assert_eq!(
-            signing::header_value(&signed.headers, "x-amz-security-token"),
-            Some("session-token".to_string())
-        );
-    }
-
-    #[tokio::test]
-    async fn load_rejects_empty_service_name() {
-        let err = AwsAuthContext::load(AwsAuthConfig {
-            profile: None,
-            region: None,
-            service: "   ".to_string(),
-        })
-        .await
-        .expect_err("empty service should be rejected");
-
-        assert_eq!(err.to_string(), "AWS service name must not be empty");
-    }
-}
-=======
 #[path = "lib_tests.rs"]
 mod tests;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

@@ -65,6 +65,7 @@ async fn load_failing_profile(files: &ProfileFiles) -> AwsAuthError {
             "canary",
             /*region_override*/ None,
             "bedrock-mantle",
+            test_factory(),
             Some(files.clone()),
         )
         .await
@@ -216,4 +217,10 @@ async fn credential_process_output_reaches_no_log_sink() {
             assert!(!contains(bytes, canary), "leaked into {}", path.display());
         }
     }
+}
+
+fn test_factory() -> codex_http_client::HttpClientFactory {
+    codex_http_client::HttpClientFactory::new(
+        codex_http_client::OutboundProxyPolicy::ReqwestDefault,
+    )
 }

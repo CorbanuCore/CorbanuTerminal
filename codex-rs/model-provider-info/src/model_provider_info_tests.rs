@@ -8,7 +8,6 @@ use std::time::Duration;
 use tempfile::tempdir;
 
 #[test]
-<<<<<<< HEAD
 fn corbanu_environment_precedence_and_blank_fallback_match_both_wire_providers() {
     let providers = built_in_model_providers(/*openai_base_url*/ None);
     for provider in [
@@ -34,8 +33,9 @@ fn corbanu_environment_precedence_and_blank_fallback_match_both_wire_providers()
             None
         );
     }
-||||||| 413492cd6c
-=======
+}
+
+#[test]
 fn runtime_internal_metadata_opt_in_is_not_serialized_or_configurable() {
     let trusted = ModelProviderInfo {
         include_internal_metadata: true,
@@ -97,7 +97,6 @@ fn test_api_provider_applies_current_managed_residency() {
         ])
     );
     assert_eq!(info, original_info);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[test]
@@ -133,16 +132,12 @@ base_url = "http://localhost:11434/v1"
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
-<<<<<<< HEAD
         billing: None,
-||||||| 413492cd6c
-=======
         capabilities: None,
         project_id: None,
         location: None,
         credential_file: None,
         include_internal_metadata: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
 
     let provider: ModelProviderInfo = toml::from_str(azure_provider_toml).unwrap();
@@ -186,16 +181,12 @@ query_params = { api-version = "2025-04-01-preview" }
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: false,
-<<<<<<< HEAD
         billing: None,
-||||||| 413492cd6c
-=======
         capabilities: None,
         project_id: None,
         location: None,
         credential_file: None,
         include_internal_metadata: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
 
     let provider: ModelProviderInfo = toml::from_str(azure_provider_toml).unwrap();
@@ -243,16 +234,12 @@ supports_standalone_web_search = true
         requires_openai_auth: false,
         supports_websockets: false,
         supports_standalone_web_search: true,
-<<<<<<< HEAD
         billing: None,
-||||||| 413492cd6c
-=======
         capabilities: None,
         project_id: None,
         location: None,
         credential_file: None,
         include_internal_metadata: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
 
     let provider: ModelProviderInfo = toml::from_str(azure_provider_toml).unwrap();
@@ -342,14 +329,6 @@ supports_websockets = true
 }
 
 #[test]
-<<<<<<< HEAD
-fn test_supports_remote_compaction_for_openai() {
-    let provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
-
-    assert!(provider.supports_remote_compaction());
-}
-
-#[test]
 fn openai_provider_uses_codex_compat_version_header() {
     let provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
 
@@ -358,7 +337,7 @@ fn openai_provider_uses_codex_compat_version_header() {
             .http_headers
             .as_ref()
             .and_then(|headers| headers.get("version"))
-            .map(String::as_str),
+            .map(|value| value.as_str()),
         Some(OPENAI_CODEX_COMPAT_VERSION)
     );
 }
@@ -373,16 +352,6 @@ fn openai_provider_base_url_override_conservatively_disables_websockets() {
 }
 
 #[test]
-||||||| 413492cd6c
-fn test_supports_remote_compaction_for_openai() {
-    let provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
-
-    assert!(provider.supports_remote_compaction());
-}
-
-#[test]
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 fn test_personal_access_token_uses_chatgpt_codex_base_url() {
     let api_provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None)
         .to_api_provider(Some(AuthMode::PersonalAccessToken))
@@ -401,121 +370,6 @@ fn test_header_auth_uses_chatgpt_codex_base_url() {
 }
 
 #[test]
-<<<<<<< HEAD
-fn test_supports_remote_compaction_for_azure_name() {
-    let provider = ModelProviderInfo {
-        account: None,
-        name: "Azure".into(),
-        base_url: Some("https://example.com/openai".into()),
-        env_key: Some("AZURE_OPENAI_API_KEY".into()),
-        env_key_instructions: None,
-        experimental_bearer_token: None,
-        auth: None,
-        aws: None,
-        wire_api: WireApi::Responses,
-        query_params: None,
-        http_headers: None,
-        env_http_headers: None,
-        chat_completions_provider: None,
-        request_max_retries: None,
-        stream_max_retries: None,
-        stream_idle_timeout_ms: None,
-        stream_actionable_timeout_ms: None,
-        stream_long_failure_retry_threshold_ms: None,
-        stream_long_failure_max_retries: None,
-        runtime_policy: ProviderRuntimePolicy::default(),
-        websocket_connect_timeout_ms: None,
-        requires_openai_auth: false,
-        supports_websockets: false,
-        supports_standalone_web_search: false,
-        billing: None,
-    };
-
-    assert!(provider.supports_remote_compaction());
-}
-
-#[test]
-fn test_supports_remote_compaction_for_non_openai_non_azure_provider() {
-    let provider = ModelProviderInfo {
-        account: None,
-        name: "Example".into(),
-        base_url: Some("https://example.com/v1".into()),
-        env_key: Some("API_KEY".into()),
-        env_key_instructions: None,
-        experimental_bearer_token: None,
-        auth: None,
-        aws: None,
-        wire_api: WireApi::Responses,
-        query_params: None,
-        http_headers: None,
-        env_http_headers: None,
-        chat_completions_provider: None,
-        request_max_retries: None,
-        stream_max_retries: None,
-        stream_idle_timeout_ms: None,
-        stream_actionable_timeout_ms: None,
-        stream_long_failure_retry_threshold_ms: None,
-        stream_long_failure_max_retries: None,
-        runtime_policy: ProviderRuntimePolicy::default(),
-        websocket_connect_timeout_ms: None,
-        requires_openai_auth: false,
-        supports_websockets: false,
-        supports_standalone_web_search: false,
-        billing: None,
-    };
-
-    assert!(!provider.supports_remote_compaction());
-||||||| 413492cd6c
-fn test_supports_remote_compaction_for_azure_name() {
-    let provider = ModelProviderInfo {
-        name: "Azure".into(),
-        base_url: Some("https://example.com/openai".into()),
-        env_key: Some("AZURE_OPENAI_API_KEY".into()),
-        env_key_instructions: None,
-        experimental_bearer_token: None,
-        auth: None,
-        aws: None,
-        wire_api: WireApi::Responses,
-        query_params: None,
-        http_headers: None,
-        env_http_headers: None,
-        request_max_retries: None,
-        stream_max_retries: None,
-        stream_idle_timeout_ms: None,
-        websocket_connect_timeout_ms: None,
-        requires_openai_auth: false,
-        supports_websockets: false,
-        supports_standalone_web_search: false,
-    };
-
-    assert!(provider.supports_remote_compaction());
-}
-
-#[test]
-fn test_supports_remote_compaction_for_non_openai_non_azure_provider() {
-    let provider = ModelProviderInfo {
-        name: "Example".into(),
-        base_url: Some("https://example.com/v1".into()),
-        env_key: Some("API_KEY".into()),
-        env_key_instructions: None,
-        experimental_bearer_token: None,
-        auth: None,
-        aws: None,
-        wire_api: WireApi::Responses,
-        query_params: None,
-        http_headers: None,
-        env_http_headers: None,
-        request_max_retries: None,
-        stream_max_retries: None,
-        stream_idle_timeout_ms: None,
-        websocket_connect_timeout_ms: None,
-        requires_openai_auth: false,
-        supports_websockets: false,
-        supports_standalone_web_search: false,
-    };
-
-    assert!(!provider.supports_remote_compaction());
-=======
 fn codex_backend_routes_require_codex_base_url() {
     for (base_url, expected) in [
         (None, true),
@@ -528,7 +382,6 @@ fn codex_backend_routes_require_codex_base_url() {
         let provider = ModelProviderInfo::create_openai_provider(base_url.map(str::to_owned));
         assert_eq!(provider.supports_codex_backend_routes(), expected);
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[test]
@@ -662,16 +515,12 @@ fn test_create_amazon_bedrock_provider() {
             requires_openai_auth: false,
             supports_websockets: false,
             supports_standalone_web_search: false,
-<<<<<<< HEAD
             billing: None,
-||||||| 413492cd6c
-=======
             capabilities: None,
             project_id: None,
             location: None,
             credential_file: None,
             include_internal_metadata: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     );
 }
@@ -735,7 +584,6 @@ fn provider_auth_for_test() -> ModelProviderAuthInfo {
 }
 
 #[test]
-<<<<<<< HEAD
 fn test_create_ambient_provider() {
     assert_eq!(
         ModelProviderInfo::create_ambient_provider(),
@@ -765,6 +613,13 @@ fn test_create_ambient_provider() {
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     );
     assert_eq!(AMBIENT_DEFAULT_MODEL, "z-ai/glm-5.2");
@@ -860,6 +715,13 @@ fn test_create_zai_provider() {
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     );
     assert_eq!(ZAI_DEFAULT_MODEL, "glm-5.2");
@@ -895,6 +757,13 @@ fn test_create_anthropic_provider() {
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     );
     assert_eq!(ANTHROPIC_DEFAULT_MODEL, "claude-opus-5");
@@ -919,7 +788,7 @@ fn test_create_claude_plan_provider() {
             experimental_bearer_token: None,
             auth: Some(ModelProviderAuthInfo {
                 command: CORBANU_PROVIDER_AUTH_COMMAND.to_string(),
-                args: vec!["internal-claude-oauth-token".to_string()],
+                args: vec!["internal-claude-oauth-token".into()],
                 timeout_ms: NonZeroU64::new(60_000).expect("timeout should be non-zero"),
                 refresh_interval_ms: 0,
                 cwd: expected_auth_cwd,
@@ -928,7 +797,7 @@ fn test_create_claude_plan_provider() {
             wire_api: WireApi::Anthropic,
             query_params: None,
             http_headers: Some(maplit::hashmap! {
-                "anthropic-beta".to_string() => "claude-code-20250219,oauth-2025-04-20".to_string(),
+                "anthropic-beta".to_string() => "claude-code-20250219,oauth-2025-04-20".into(),
             }),
             env_http_headers: None,
             chat_completions_provider: None,
@@ -944,6 +813,13 @@ fn test_create_claude_plan_provider() {
             supports_websockets: false,
             supports_standalone_web_search: false,
             billing: None,
+            model_catalog_url: None,
+            gateway_oauth: None,
+            project_id: None,
+            location: None,
+            credential_file: None,
+            capabilities: None,
+            include_internal_metadata: false,
         }
     );
     assert_eq!(CLAUDE_PLAN_MODEL, "claude-opus-5-plan");
@@ -957,16 +833,6 @@ fn test_create_claude_plan_provider() {
 }
 
 #[test]
-fn test_amazon_bedrock_provider_adds_mantle_client_agent_header() {
-    let api_provider = ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None)
-        .to_api_provider(/*auth_mode*/ None)
-        .expect("Amazon Bedrock provider should build API provider");
-||||||| 413492cd6c
-fn test_amazon_bedrock_provider_adds_mantle_client_agent_header() {
-    let api_provider = ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None)
-        .to_api_provider(/*auth_mode*/ None)
-        .expect("Amazon Bedrock provider should build API provider");
-=======
 fn test_amazon_bedrock_providers_add_mantle_client_agent_header() {
     for provider in [
         ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None),
@@ -991,7 +857,6 @@ fn test_amazon_bedrock_providers_add_mantle_client_agent_header() {
 #[test]
 fn test_built_in_model_providers_include_amazon_bedrock_endpoints() {
     let providers = built_in_model_providers(/*openai_base_url*/ None);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     assert_eq!(
         [
@@ -1162,7 +1027,7 @@ fn test_built_in_model_providers_include_claude_plan() {
             .http_headers
             .as_ref()
             .and_then(|headers| headers.get("anthropic-beta"))
-            .map(String::as_str),
+            .map(|value| value.as_str()),
         Some("claude-code-20250219,oauth-2025-04-20")
     );
     assert!(!claude_plan.requires_openai_auth);
@@ -1809,13 +1674,7 @@ fn test_merge_configured_model_providers_rejects_amazon_bedrock_non_default_fiel
             configured_model_providers,
         ),
         Err(
-<<<<<<< HEAD
-            "model_providers.amazon-bedrock only supports changing `base_url`, `auth`, `http_headers`, `aws.profile`, `aws.region`, and `billing`; other non-default provider fields are not supported"
-||||||| 413492cd6c
-            "model_providers.amazon-bedrock only supports changing `base_url`, `auth`, `http_headers`, `aws.profile`, and `aws.region`; other non-default provider fields are not supported"
-=======
-            "model_providers.amazon-bedrock only supports changing `base_url`, `auth`, `http_headers`, `aws.profile`, `aws.region`, `aws.credential_export`, and `aws.auth_refresh`; other non-default provider fields are not supported"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            "model_providers.amazon-bedrock only supports changing `base_url`, `auth`, `http_headers`, `aws.profile`, `aws.region`, `aws.credential_export`, `aws.auth_refresh`, and `billing`; other non-default provider fields are not supported"
                 .to_string()
         )
     );
@@ -2009,7 +1868,6 @@ refresh_interval_ms = 0
 }
 
 #[test]
-<<<<<<< HEAD
 fn corrected_catalog_provider_fixes_impossible_pairs_only() {
     // Field incidents: fixed.
     assert_eq!(
@@ -2362,13 +2220,17 @@ fn debug_redacts_credentials_and_keeps_names() {
         base_url: Some(
             "https://user:fake-userinfo-sentinel@example.com/v1?key=fake-url-sentinel".to_string(),
         ),
-        experimental_bearer_token: Some("fake-bearer-sentinel".to_string()),
+        model_catalog_url: Some(
+            "https://user:fake-catalog-userinfo@example.com/models?key=fake-catalog-sentinel"
+                .into(),
+        ),
+        experimental_bearer_token: Some("fake-bearer-sentinel".into()),
         http_headers: Some(maplit::hashmap! {
-            "X-Version".to_string() => "fake-version-sentinel".to_string(),
-            "Authorization".to_string() => "Bearer fake-header-sentinel".to_string(),
+            "X-Version".to_string() => "fake-version-sentinel".into(),
+            "Authorization".to_string() => "Bearer fake-header-sentinel".into(),
         }),
         query_params: Some(maplit::hashmap! {
-            "key".to_string() => "fake-query-sentinel".to_string(),
+            "key".to_string() => "fake-query-sentinel".into(),
         }),
         env_http_headers: Some(maplit::hashmap! {
             "X-Project".to_string() => "PROJECT_ENV".to_string(),
@@ -2377,7 +2239,7 @@ fn debug_redacts_credentials_and_keeps_names() {
     };
     assert_eq!(
         format!("{provider:?}"),
-        "ModelProviderInfo { name: \"Example\", base_url: Some(\"https://<redacted>@example.com/v1?<redacted>\"), env_key: None, env_key_instructions: None, experimental_bearer_token: Some(\"<redacted>\"), auth: None, aws: None, wire_api: Responses, query_params: Some({\"key\": \"<redacted>\"}), http_headers: Some({\"Authorization\": \"<redacted>\", \"X-Version\": \"<redacted>\"}), env_http_headers: Some({\"X-Project\": \"PROJECT_ENV\"}), chat_completions_provider: None, request_max_retries: None, stream_max_retries: None, stream_idle_timeout_ms: None, stream_actionable_timeout_ms: None, stream_long_failure_retry_threshold_ms: None, stream_long_failure_max_retries: None, runtime_policy: ProviderRuntimePolicy { request_body_max_bytes: 30000000, retry_request_body_max_bytes: 15000000, web_search_max_uses: None }, websocket_connect_timeout_ms: None, requires_openai_auth: false, supports_websockets: false, supports_standalone_web_search: false, billing: None, account: None }"
+        "ModelProviderInfo { name: \"Example\", base_url: Some(\"https://<redacted>@example.com/v1?<redacted>\"), model_catalog_url: Some(\"https://<redacted>@example.com/models?<redacted>\"), env_key: None, env_key_instructions: None, experimental_bearer_token: Some(\"<redacted>\"), auth: None, gateway_oauth: None, aws: None, project_id: None, location: None, credential_file: None, wire_api: Responses, capabilities: None, query_params: Some({\"key\": \"<redacted>\"}), http_headers: Some({\"Authorization\": \"<redacted>\", \"X-Version\": \"<redacted>\"}), env_http_headers: Some({\"X-Project\": \"PROJECT_ENV\"}), chat_completions_provider: None, request_max_retries: None, stream_max_retries: None, stream_idle_timeout_ms: None, stream_actionable_timeout_ms: None, stream_long_failure_retry_threshold_ms: None, stream_long_failure_max_retries: None, runtime_policy: ProviderRuntimePolicy { request_body_max_bytes: 30000000, retry_request_body_max_bytes: 15000000, web_search_max_uses: None }, websocket_connect_timeout_ms: None, requires_openai_auth: false, supports_websockets: false, supports_standalone_web_search: false, billing: None, account: None, include_internal_metadata: false }"
     );
 }
 
@@ -2567,8 +2429,10 @@ fn retired_opus_4_8_resolves_to_the_provider_default() {
                 .as_deref(),
             Some(current)
         );
-||||||| 413492cd6c
-=======
+    }
+}
+
+#[test]
 fn model_catalog_url_deserializes_without_changing_inference_routing() {
     let provider: ModelProviderInfo = toml::from_str(
         r#"
@@ -2712,6 +2576,5 @@ fn cyber_access_program_capability_uses_provider_identity_and_explicit_overrides
                 toml::from_str(&toml::to_string(&provider).unwrap()).unwrap();
             assert_eq!(round_trip, provider);
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }

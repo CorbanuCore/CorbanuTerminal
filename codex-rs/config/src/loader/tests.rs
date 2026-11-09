@@ -18,7 +18,6 @@ use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use tempfile::tempdir;
 
-<<<<<<< HEAD
 #[test]
 fn incomplete_project_security_warning_names_the_refused_config_file() {
     let tmp = tempdir().expect("tempdir");
@@ -35,10 +34,6 @@ fn incomplete_project_security_warning_names_the_refused_config_file() {
     );
 }
 
-struct TestFileSystem;
-||||||| 413492cd6c
-struct TestFileSystem;
-=======
 pub(super) struct TestFileSystem;
 
 #[test]
@@ -470,7 +465,6 @@ async fn managed_browser_import_denial_survives_user_and_session_config() {
         &toml::from_str::<ConfigRequirementsToml>(deny).expect("expected requirement"),
     );
 }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 impl ExecutorFileSystem for TestFileSystem {
     fn canonicalize<'a>(

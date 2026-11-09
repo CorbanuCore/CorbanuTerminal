@@ -204,10 +204,7 @@ fn model_provider_from_proto(
         requires_openai_auth: provider.requires_openai_auth,
         supports_websockets: provider.supports_websockets,
         supports_standalone_web_search: provider.supports_standalone_web_search,
-<<<<<<< HEAD
         billing: None,
-||||||| 413492cd6c
-=======
         capabilities: provider
             .capabilities
             .map(|capabilities| ModelProviderCapabilities {
@@ -218,7 +215,6 @@ fn model_provider_from_proto(
         location: provider.location,
         credential_file: provider.credential_file.map(Into::into),
         include_internal_metadata: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
     Ok((id, info))
 }
@@ -256,15 +252,11 @@ fn model_provider_to_proto(
         requires_openai_auth,
         supports_websockets,
         supports_standalone_web_search,
-<<<<<<< HEAD
         billing: _,
         account: _,
-||||||| 413492cd6c
-=======
         include_internal_metadata: _,
         credential_file,
         capabilities,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     } = provider;
 
     proto::ModelProvider {
@@ -654,17 +646,10 @@ mod tests {
             requires_openai_auth: false,
             supports_websockets: true,
             supports_standalone_web_search: true,
-<<<<<<< HEAD
             billing: None,
-||||||| 413492cd6c
-=======
             gateway_oauth: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             aws: None,
-<<<<<<< HEAD
             runtime_policy: Default::default(),
-||||||| 413492cd6c
-=======
             capabilities: Some(ModelProviderCapabilities {
                 cyber_access_programs: Some(true),
                 ..Default::default()
@@ -673,7 +658,6 @@ mod tests {
             location: None,
             credential_file: None,
             include_internal_metadata: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 

@@ -74,6 +74,7 @@ fn composition_applies_each_layers_base_and_home_to_policy() {
     expected.entries.push(FileSystemSandboxEntry::new(
         FileSystemPath::GlobPattern {
             pattern: r"C:\first\private/*.key".to_string(),
+            scan: None,
         },
         FileSystemAccessMode::Deny,
     ));
