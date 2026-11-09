@@ -4078,14 +4078,30 @@ impl AuthManager {
         )
         .await?;
         let auth = self.without_restricted_default_login(auth);
-        Ok(auth.filter(|auth| {
+        let policy_violation = auth.as_ref().and_then(|auth| {
             validate_auth_restrictions(
                 Some(&allowed_login_methods),
                 effective_chatgpt_workspaces.as_deref(),
                 auth,
             )
-            .is_ok()
-        }))
+            .err()
+        });
+        let Some(violation) = policy_violation else {
+            return Ok(auth);
+        };
+        // A login ruled out only by the administrator's policy is hidden with
+        // its reason too, so requests are refused instead of going out
+        // without credentials (#570).
+        if hides_restricted {
+            let reason = default_login_unusable_message(&format!(
+                "the administrator's login policy does not allow it ({violation})."
+            ));
+            tracing::warn!("the default login is not used in this process: {reason}");
+            if let Ok(mut current) = self.hidden_default_login_reason.write() {
+                *current = Some(reason);
+            }
+        }
+        Ok(None)
     }
 
     /// PF-84-S06 (#570): whether this default-login manager treats a login
