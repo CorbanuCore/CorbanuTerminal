@@ -2789,6 +2789,71 @@ printf '%s\n' '{"AccessKeyId":"exported","SecretAccessKey":"secret"}'
         }
     }
 
+    /// A provider key stored by `corbanu login` (no environment variable)
+    /// lists the provider's models too, and the catalog is published.
+    #[tokio::test]
+    async fn env_key_provider_catalog_uses_a_stored_key_without_the_env_var() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/models"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "application/json")
+                    .set_body_json(ModelsResponse {
+                        models: vec![remote_model("stored-key-model")],
+                    }),
+            )
+            .mount(&server)
+            .await;
+        let key_var = "CORBANU_TEST_S1B2_STORED_CATALOG_PROVIDER_KEY";
+        let home = tempfile::tempdir().expect("home");
+        login_with_provider_api_key(
+            home.path(),
+            key_var,
+            "stored-catalog-key",
+            AuthCredentialsStoreMode::File,
+            AuthKeyringBackendKind::default(),
+        )
+        .expect("stored provider key");
+        let mut provider_info = provider_for(server.uri());
+        provider_info.env_key = Some(key_var.to_string());
+        provider_info.model_catalog_url = Some(format!("{}/models", server.uri()).into());
+        let provider = create_model_provider(
+            provider_info,
+            Some(AuthManager::from_auth_for_testing_with_home(
+                CodexAuth::create_dummy_chatgpt_auth_for_testing(),
+                home.path().to_path_buf(),
+            )),
+        );
+        let manager = provider.models_manager(
+            home.path().to_path_buf(),
+            /*config_model_catalog*/ None,
+        );
+        manager.set_api_key_model_discovery_enabled(/*enabled*/ true);
+        let catalog = manager
+            .raw_model_catalog(
+                RefreshStrategy::Online,
+                HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
+            )
+            .await;
+
+        assert!(
+            catalog
+                .models
+                .iter()
+                .any(|model| model.slug == "stored-key-model")
+        );
+        for request in server.received_requests().await.expect("requests") {
+            assert_eq!(
+                request
+                    .headers
+                    .get("authorization")
+                    .and_then(|value| value.to_str().ok()),
+                Some("Bearer stored-catalog-key")
+            );
+        }
+    }
+
     #[tokio::test]
     async fn configured_provider_models_manager_uses_provider_bearer_token() {
         let server = MockServer::start().await;

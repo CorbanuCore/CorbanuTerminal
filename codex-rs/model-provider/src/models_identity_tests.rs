@@ -113,3 +113,27 @@ fn cache_identity_tracks_catalog_url() {
     assert_ne!(bundled, first);
     assert_ne!(first, second);
 }
+
+/// Corbanu: an env_key provider's identity comes from its resolved key (a
+/// stored or named-account key), so it is computed without the environment
+/// variable, and a different key is a different catalog.
+#[test]
+fn env_key_identity_uses_the_resolved_key_without_reading_the_environment() {
+    let mut provider = ModelProviderInfo {
+        env_key: Some("CORBANU_TEST_S1B2_UNSET_IDENTITY_KEY".to_string()),
+        base_url: Some("https://provider.example/v1".to_string()),
+        requires_openai_auth: false,
+        ..ModelProviderInfo::default()
+    };
+    let first = CodexAuth::from_api_key("stored-key-one");
+    let key = identity(&provider, Some(&first)).expect("identity without the env var");
+    assert_ne!(
+        identity(&provider, Some(&CodexAuth::from_api_key("stored-key-two"))).unwrap(),
+        key
+    );
+    provider.account = Some(codex_model_provider_info::NamedProviderAccount {
+        provider_id: "custom".to_string(),
+        name: "work".to_string(),
+    });
+    identity(&provider, Some(&first)).expect("a named account's identity");
+}

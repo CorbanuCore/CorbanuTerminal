@@ -65,7 +65,6 @@ for row in rows:
         default = (messages.get('instructions_variables') or {}).get('personality_default') or ''
         messages['instructions_template'] = template.replace('{{ personality }}', default)
         print('corbanu-row personality placeholder rendered', row['slug'])
-open(OUT, 'w').write(json.dumps(out, indent=2, ensure_ascii=False) + '\n')
 if not any(r['slug'] == 'gpt-6.1-terra' for r in rows):
     sol_index = next(i for i, r in enumerate(rows) if r['slug'] == 'gpt-6.1-sol')
     terra = copy.deepcopy(rows[sol_index])
@@ -91,5 +90,5 @@ if not any(r['slug'] == 'gpt-6.1-terra' for r in rows):
                                      'cache_write_milli_usd_per_million_tokens': 2500}},
     }
     rows.insert(sol_index + 1, terra)
-    open(OUT, 'w').write(json.dumps(out, indent=2, ensure_ascii=False) + '\n')
     print('corbanu-row added (required by Bedrock/Vertex catalogs) gpt-6.1-terra')
+open(OUT, 'w').write(json.dumps(out, indent=2, ensure_ascii=False) + '\n')

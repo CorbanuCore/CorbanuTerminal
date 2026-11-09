@@ -71,16 +71,26 @@ pub(crate) fn identity(
                 ) && (auth.get_chatgpt_user_id().is_some() || auth.get_account_email().is_some())
             }
     });
+    // Corbanu: an env_key provider's key is the resolved `auth` (a stored or
+    // named-account key, or the broker placeholder); Core never reads it from
+    // the environment here.
     let explicit_bearer =
-        provider_info.api_key()?.is_some() || provider_info.experimental_bearer_token.is_some();
+        provider_info.env_key.is_some() || provider_info.experimental_bearer_token.is_some();
     // Command auth also returns opaque API keys. A changed key may belong to a
     // different account, so reuse requires stable owner metadata. Explicit provider
     // keys take precedence over the header auth's account identity.
     if !has_stable_account || explicit_bearer {
-        let headers = resolve_provider_auth(auth, provider_info)?
-            .to_auth_headers()
-            .map_err(|error| codex_api::map_api_error(error.into()))?;
-        api_provider.headers.extend(headers);
+        if explicit_bearer && crate::model_key_broker::model_key_broker_required() {
+            // PF-27-S05: the broker holds the key; name its source instead.
+            field(b"brokered-provider-key");
+            field(format!("{:?}", provider_info.env_key).as_bytes());
+            field(format!("{:?}", provider_info.account).as_bytes());
+        } else {
+            let headers = resolve_provider_auth(auth, provider_info)?
+                .to_auth_headers()
+                .map_err(|error| codex_api::map_api_error(error.into()))?;
+            api_provider.headers.extend(headers);
+        }
     }
     let mut headers: Vec<_> = api_provider.headers.iter().collect();
     headers.sort_by(|(a, av), (b, bv)| {
