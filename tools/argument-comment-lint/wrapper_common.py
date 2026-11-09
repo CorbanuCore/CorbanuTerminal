@@ -18,15 +18,9 @@ STRICT_LINTS = [
     "uncommented-anonymous-literal-argument",
 ]
 NOISE_LINT = "unknown_lints"
-<<<<<<< HEAD
 TOOLCHAIN_CHANNEL = "nightly-2026-08-08"
 # `main` -> `refs/remotes/master`; see `add_clippy_master_ref`.
 CLIPPY_MASTER_REFSPEC = "+refs/heads/*ain:refs/remotes/*aster"
-||||||| 413492cd6c
-TOOLCHAIN_CHANNEL = "nightly-2025-09-18"
-=======
-TOOLCHAIN_CHANNEL = "nightly-2026-08-20"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 _TARGET_SELECTION_ARGS = {
     "--all-targets",
@@ -39,7 +33,9 @@ _TARGET_SELECTION_ARGS = {
 }
 _TARGET_SELECTION_PREFIXES = ("--bin=", "--test=", "--example=", "--bench=")
 _TARGET_SELECTION_WITH_VALUE = {"--bin", "--test", "--example", "--bench"}
-_NIGHTLY_LIBRARY_PATTERN = re.compile(r"^(.+@nightly-[0-9]{4}-[0-9]{2}-[0-9]{2})-.+$")
+_NIGHTLY_LIBRARY_PATTERN = re.compile(
+    r"^(.+@nightly-[0-9]{4}-[0-9]{2}-[0-9]{2})-.+$"
+)
 
 
 @dataclass
@@ -183,9 +179,7 @@ def require_command(name: str, install_message: str | None = None) -> str:
     return executable
 
 
-def run_capture(
-    args: Sequence[str], env: MutableMapping[str, str] | None = None
-) -> str:
+def run_capture(args: Sequence[str], env: MutableMapping[str, str] | None = None) -> str:
     try:
         completed = subprocess.run(
             list(args),
@@ -207,7 +201,6 @@ def run_capture(
 
 def ensure_source_prerequisites(env: MutableMapping[str, str]) -> None:
     require_command(
-<<<<<<< HEAD
         "cargo-dylint",
         "argument-comment-lint source wrapper requires cargo-dylint and dylint-link.\n"
         "Install them with:\n"
@@ -220,21 +213,6 @@ def ensure_source_prerequisites(env: MutableMapping[str, str]) -> None:
         "  cargo install --locked cargo-dylint@6.1.1 dylint-link@6.1.1",
     )
     require_command(
-||||||| 413492cd6c
-        "cargo-dylint",
-        "argument-comment-lint source wrapper requires cargo-dylint and dylint-link.\n"
-        "Install them with:\n"
-        "  cargo install --locked cargo-dylint dylint-link",
-    )
-    require_command(
-        "dylint-link",
-        "argument-comment-lint source wrapper requires cargo-dylint and dylint-link.\n"
-        "Install them with:\n"
-        "  cargo install --locked cargo-dylint dylint-link",
-    )
-    require_command(
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         "rustup",
         "argument-comment-lint source wrapper requires rustup.\n"
         f"Install the {TOOLCHAIN_CHANNEL} toolchain with:\n"
@@ -254,21 +232,6 @@ def ensure_source_prerequisites(env: MutableMapping[str, str]) -> None:
             "    --component rustc-dev \\\n"
             "    --component rust-src"
         )
-
-    require_command(
-        "cargo-dylint",
-        "argument-comment-lint source wrapper requires cargo-dylint and dylint-link.\n"
-        "Install them with:\n"
-        f"  rustup run {TOOLCHAIN_CHANNEL} cargo install --locked "
-        "cargo-dylint@6.1.0 dylint-link@6.1.0",
-    )
-    require_command(
-        "dylint-link",
-        "argument-comment-lint source wrapper requires cargo-dylint and dylint-link.\n"
-        "Install them with:\n"
-        f"  rustup run {TOOLCHAIN_CHANNEL} cargo install --locked "
-        "cargo-dylint@6.1.0 dylint-link@6.1.0",
-    )
 
 
 def prefer_rustup_shims(env: MutableMapping[str, str]) -> None:
@@ -293,18 +256,14 @@ def prefer_rustup_shims(env: MutableMapping[str, str]) -> None:
             env["RUSTUP_HOME"] = rustup_home
 
 
-def fetch_packaged_entrypoint(
-    dotslash_manifest: Path, env: MutableMapping[str, str]
-) -> Path:
+def fetch_packaged_entrypoint(dotslash_manifest: Path, env: MutableMapping[str, str]) -> Path:
     require_command(
         "dotslash",
         "argument-comment-lint prebuilt wrapper requires dotslash.\n"
         "Install dotslash, or use:\n"
         "  ./tools/argument-comment-lint/run.py ...",
     )
-    entrypoint = run_capture(
-        ["dotslash", "--", "fetch", str(dotslash_manifest)], env=env
-    )
+    entrypoint = run_capture(["dotslash", "--", "fetch", str(dotslash_manifest)], env=env)
     return Path(entrypoint).resolve()
 
 
