@@ -141,15 +141,9 @@ async fn end_to_end_login_flow_persists_auth_json() -> Result<()> {
     let opts = ServerOptions {
         codex_home: server_home,
         cli_auth_credentials_store_mode: AuthCredentialsStoreMode::File,
-<<<<<<< HEAD
-        auth_route_config: codex_login::test_support::transport_default_auth_route_config(),
+        auth_route_config: routes,
         named_account: None,
         named_account_must_be_new: false,
-||||||| 413492cd6c
-        auth_route_config: codex_login::test_support::transport_default_auth_route_config(),
-=======
-        auth_route_config: routes,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         client_id: codex_login::CLIENT_ID.to_string(),
         issuer: issuer.clone(),
         port: 0,

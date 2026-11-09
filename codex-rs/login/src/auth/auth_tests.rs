@@ -203,13 +203,8 @@ async fn refresh_without_id_token() -> anyhow::Result<()> {
         .context("stored tokens")?;
     let updated = super::persist_tokens(
         &storage,
-<<<<<<< HEAD
-        /*refreshed_from*/ "unused-for-the-default-login",
-||||||| 413492cd6c
-=======
         &initial,
         Some(provenance.clone()),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         /*id_token*/ None,
         Some("new-access-token".to_string()),
         Some("new-refresh-token".to_string()),
@@ -1843,7 +1838,6 @@ async fn external_bearer_only_auth_manager_returns_none_when_command_fails() {
 }
 
 #[tokio::test]
-<<<<<<< HEAD
 async fn provider_auth_command_validation_accepts_a_usable_token_without_returning_it() {
     let script = ProviderAuthScript::new(&["provider-token"]).unwrap();
 
@@ -2015,8 +2009,9 @@ async fn internal_helper_exit_75_marks_an_unreadable_home() {
         marked.push(codex_protocol::home_unreadable::is_home_unreadable(&error));
     }
     assert_eq!(marked, vec![true, false]);
-||||||| 413492cd6c
-=======
+}
+
+#[tokio::test]
 async fn unauthorized_recovery_retries_provider_command_after_initial_failure() {
     let script = ProviderAuthScript::new(&["provider-token"]).unwrap();
     std::fs::write(script.tempdir.path().join("fail-once"), "").unwrap();
@@ -2052,7 +2047,6 @@ fn unauthorized_recovery_without_an_external_provider_still_requires_refreshable
         assert!(!recovery.has_next());
         assert_eq!(recovery.unavailable_reason(), "not_chatgpt_auth");
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test]
@@ -2415,21 +2409,9 @@ tail -n +2 tokens.txt > tokens.next
 mv tokens.next tokens.txt
 "#,
             )?;
-<<<<<<< HEAD
             // Execute the stable interpreter, not a just-written script whose write
             // descriptor another test's fork may still hold (ETXTBSY on Linux).
             ("/bin/sh".to_string(), vec!["./print-token.sh".to_string()])
-||||||| 413492cd6c
-            let mut permissions = std::fs::metadata(&script_path)?.permissions();
-            {
-                use std::os::unix::fs::PermissionsExt;
-                permissions.set_mode(0o755);
-            }
-            std::fs::set_permissions(&script_path, permissions)?;
-            ("./print-token.sh".to_string(), Vec::new())
-=======
-            ("./print-token.sh".to_string(), Vec::new())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
 
         #[cfg(windows)]
@@ -2487,19 +2469,7 @@ move /y tokens.next tokens.txt >nul
 exit 1
 "#,
             )?;
-<<<<<<< HEAD
             ("/bin/sh".to_string(), vec!["./fail.sh".to_string()])
-||||||| 413492cd6c
-            let mut permissions = std::fs::metadata(&script_path)?.permissions();
-            {
-                use std::os::unix::fs::PermissionsExt;
-                permissions.set_mode(0o755);
-            }
-            std::fs::set_permissions(&script_path, permissions)?;
-            ("./fail.sh".to_string(), Vec::new())
-=======
-            ("./fail.sh".to_string(), Vec::new())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
 
         #[cfg(windows)]

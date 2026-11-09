@@ -92,8 +92,27 @@ impl GatedAuthStorage {
 }
 
 impl AuthStorageBackend for GatedAuthStorage {
+    // The wrapped store's commit lock and generation checks apply unchanged.
+    fn persistent_home(&self) -> Option<&std::path::Path> {
+        self.inner.persistent_home()
+    }
+
+    fn lock_for_write(
+        &self,
+    ) -> std::io::Result<(std::sync::MutexGuard<'static, ()>, Option<std::fs::File>)> {
+        self.inner.lock_for_write()
+    }
+
     fn load(&self) -> std::io::Result<Option<AuthDotJson>> {
         let auth = self.inner.load()?;
+        if let Some(auth) = &auth {
+            self.protect(auth)?;
+        }
+        Ok(auth)
+    }
+
+    fn load_account_grant(&self) -> std::io::Result<Option<AuthDotJson>> {
+        let auth = self.inner.load_account_grant()?;
         if let Some(auth) = &auth {
             self.protect(auth)?;
         }
@@ -103,6 +122,11 @@ impl AuthStorageBackend for GatedAuthStorage {
     fn save(&self, auth: &AuthDotJson) -> std::io::Result<()> {
         self.protect(auth)?;
         self.inner.save(auth)
+    }
+
+    fn compare_and_save(&self, expected: &AuthDotJson, auth: &AuthDotJson) -> std::io::Result<()> {
+        self.protect(auth)?;
+        self.inner.compare_and_save(expected, auth)
     }
 
     fn delete(&self) -> std::io::Result<bool> {

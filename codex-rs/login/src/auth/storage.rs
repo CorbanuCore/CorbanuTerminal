@@ -665,18 +665,6 @@ impl AuthStorageBackend for AutoAuthStorage {
     }
 
     fn delete(&self) -> std::io::Result<bool> {
-<<<<<<< HEAD
-        match self.keyring_storage.delete() {
-            Ok(removed) => Ok(removed),
-            Err(err) => {
-                warn!("failed to delete auth from keyring, falling back to file storage: {err}");
-                self.file_storage.delete()
-            }
-        }
-||||||| 413492cd6c
-        // Keyring storage will delete from disk as well
-        self.keyring_storage.delete()
-=======
         // Keyring storage will delete from disk as well
         let mut telemetry = storage_telemetry::telemetry(
             AuthCredentialsStoreMode::Auto,
@@ -685,8 +673,16 @@ impl AuthStorageBackend for AutoAuthStorage {
         );
         let result = self.keyring_storage.delete();
         telemetry.record_delete_attempt(Store::Multiple, &result);
-        result
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        match result {
+            Ok(removed) => Ok(removed),
+            Err(err) => {
+                // Corbanu: an unreadable keyring must not leave the file copy behind.
+                warn!("failed to delete auth from keyring, falling back to file storage: {err}");
+                let result = self.file_storage.delete();
+                telemetry.record_delete_attempt(Store::File, &result);
+                result
+            }
+        }
     }
 }
 
@@ -748,12 +744,7 @@ fn create_auth_storage_with_store(
     keyring_store: Arc<dyn KeyringStore>,
     keyring_backend_kind: AuthKeyringBackendKind,
 ) -> Arc<dyn AuthStorageBackend> {
-<<<<<<< HEAD
-||||||| 413492cd6c
-    match mode {
-=======
     let commit_home = codex_home.clone();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let storage: Arc<dyn AuthStorageBackend> = match mode {
         AuthCredentialsStoreMode::File => Arc::new(FileAuthStorage::new(codex_home)),
         AuthCredentialsStoreMode::Keyring => {
@@ -766,17 +757,13 @@ fn create_auth_storage_with_store(
         )),
         AuthCredentialsStoreMode::Ephemeral => Arc::new(EphemeralAuthStorage::new(codex_home)),
     };
-<<<<<<< HEAD
-    storage_gate::GatedAuthStorage::wrap(storage)
-||||||| 413492cd6c
-    }
-=======
-    storage_commit::wrap(
+    // PF-28-S01: the secret output gate sees every credential the committed,
+    // observed store loads or saves.
+    storage_gate::GatedAuthStorage::wrap(storage_commit::wrap(
         storage_telemetry::observe(storage, mode, keyring_backend_kind),
         commit_home,
         mode,
-    )
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    ))
 }
 
 fn create_keyring_auth_storage(

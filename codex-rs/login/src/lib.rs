@@ -16,7 +16,6 @@ mod pkce;
 mod server;
 mod success_page;
 
-<<<<<<< HEAD
 /// #1201: unit tests that run a provider-auth helper hold this for reading;
 /// the one test that spawns a copy of this test binary holds it for writing.
 /// On the Windows test lane, helper runs that normally take milliseconds
@@ -26,11 +25,8 @@ mod success_page;
 #[cfg(test)]
 pub(crate) static TEST_CHILD_PROCESSES: std::sync::RwLock<()> = std::sync::RwLock::new(());
 
-||||||| 413492cd6c
-=======
 pub use callback_params::LoginCallbackResult;
 pub use callback_params::LoginOnboardingEntrypoint;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use codex_config::types::AuthCredentialsStoreMode;
 pub use codex_http_client::BuildCustomCaTransportError as BuildLoginHttpClientError;
 pub use device_code_auth::DeviceCode;
@@ -46,14 +42,10 @@ pub use success_page::CODEX_OPEN_APP_URL;
 pub use success_page::LoginSuccessPage;
 pub use success_page::LoginSuccessPageBrand;
 
-<<<<<<< HEAD
 pub use auth::AMBIENT_API_KEY_ENV_VAR;
-||||||| 413492cd6c
-=======
 pub use auth::AccountOAuthGrant;
 pub use auth::AccountOAuthGrantLease;
 pub use auth::AccountOAuthGrantRevision;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use auth::AgentIdentityAuthPolicy;
 pub use auth::AuthChangeState;
 pub use auth::AuthConfig;
@@ -88,13 +80,9 @@ pub use auth::ProviderApiKeyStorageSource;
 pub use auth::REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR;
 pub use auth::REVOKE_TOKEN_URL_OVERRIDE_ENV_VAR;
 pub use auth::RefreshTokenError;
-<<<<<<< HEAD
+pub use auth::RequestAuthChange;
 pub use auth::SessionSignIn;
 pub use auth::SessionSignInRegistration;
-||||||| 413492cd6c
-=======
-pub use auth::RequestAuthChange;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use auth::UnauthorizedRecovery;
 pub use auth::current_named_sign_in;
 pub use auth::default_client;
@@ -102,13 +90,9 @@ pub use auth::default_login_left_unenforced;
 pub use auth::delete_provider_api_key;
 pub use auth::email_hint;
 pub use auth::enforce_login_restrictions;
-<<<<<<< HEAD
+pub use auth::is_workload_identity_selected;
 pub use auth::leave_default_login_unenforced;
 pub use auth::legacy_codex_home_for_product_home;
-||||||| 413492cd6c
-=======
-pub use auth::is_workload_identity_selected;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use auth::load_auth_dot_json;
 pub use auth::login_named_account_with_api_key;
 pub use auth::login_with_access_token;

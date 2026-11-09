@@ -339,17 +339,23 @@ impl AuthManager {
                 permanent_refresh_failure: None,
             }),
             auth_change_tx,
+            auth_change_state_tx: watch::channel(super::AuthChangeState::default()).0,
+            workspace_routing_resolver: std::sync::OnceLock::new(),
             enable_codex_api_key_env: false,
             openai_api_key_env: OpenAiApiKeyEnv::Ignore,
             auth_credentials_store_mode: self.auth_credentials_store_mode,
             keyring_backend_kind: self.keyring_backend_kind,
             forced_chatgpt_workspace_id: RwLock::new(self.forced_chatgpt_workspace_id()),
+            managed_auth_policy: self.managed_auth_policy.clone(),
             chatgpt_base_url: self.chatgpt_base_url.clone(),
             agent_identity_authapi_base_url: self.agent_identity_authapi_base_url.clone(),
-            refresh_lock: Semaphore::new(/*permits*/ 1),
+            refresh_lock: Arc::new(Semaphore::new(/*permits*/ 1)),
+            unsettled_chatgpt_refresh: Mutex::new(None),
             agent_identity_lock: Semaphore::new(/*permits*/ 1),
             agent_identity_bootstrap_cooldown: Default::default(),
             external_auth: RwLock::new(None),
+            workload_identity_selected: false,
+            allowed_auth_modes: RwLock::new(None),
             provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
             auth_route_config: self.auth_route_config.clone(),
             named_store: Some(NamedAccountStore::new(codex_vault::Vault::new(
@@ -419,7 +425,12 @@ impl AuthManager {
                     .map(CodexAuth::from_api_key)),
                 AuthMode::Chatgpt => {
                     let client = create_default_auth_client(
-                        &refresh_token_endpoint(),
+                        &refresh_token_endpoint(
+                            auth_dot_json
+                                .tokens
+                                .as_ref()
+                                .and_then(|tokens| tokens.oauth_provenance.as_ref()),
+                        ),
                         &self.auth_route_config,
                     )?;
                     Ok(Some(CodexAuth::Chatgpt(ChatgptAuth {
@@ -467,6 +478,7 @@ impl AuthManager {
             self.keyring_backend_kind,
             self.agent_identity_authapi_base_url.as_deref(),
             &self.auth_route_config,
+            /*cached_auth*/ None,
             Some(storage),
         )
         .await

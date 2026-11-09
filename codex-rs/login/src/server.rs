@@ -451,57 +451,11 @@ async fn process_request(
                         );
                     }
                     // Obtain API key via token-exchange and persist
-<<<<<<< HEAD
-                    let api_key = obtain_api_key(
-                        &opts.issuer,
-                        &opts.client_id,
-                        &tokens.id_token,
-                        &opts.auth_route_config,
-                    )
-                    .await
-                    .ok();
-                    if let Err(err) = persist_tokens_async(
-                        &opts.codex_home,
-                        api_key.clone(),
-                        tokens.id_token.clone(),
-                        tokens.access_token.clone(),
-                        tokens.refresh_token.clone(),
-                        opts.cli_auth_credentials_store_mode,
-                        opts.auth_keyring_backend_kind,
-                        opts.named_account
-                            .clone()
-                            .map(|account| (account, opts.named_account_must_be_new)),
-                        &opts.auth_route_config,
-                    )
-                    .await
-                    {
-||||||| 413492cd6c
-                    let api_key = obtain_api_key(
-                        &opts.issuer,
-                        &opts.client_id,
-                        &tokens.id_token,
-                        &opts.auth_route_config,
-                    )
-                    .await
-                    .ok();
-                    if let Err(err) = persist_tokens_async(
-                        &opts.codex_home,
-                        api_key.clone(),
-                        tokens.id_token.clone(),
-                        tokens.access_token.clone(),
-                        tokens.refresh_token.clone(),
-                        opts.cli_auth_credentials_store_mode,
-                        opts.auth_keyring_backend_kind,
-                    )
-                    .await
-                    {
-=======
                     let api_key =
                         obtain_api_key(&client, &opts.issuer, &opts.client_id, &tokens.id_token)
                             .await
                             .ok();
                     if let Err(err) = persist_tokens_async(opts, api_key.clone(), &tokens).await {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                         eprintln!("Persist error: {err}");
                         return login_error_response(
                             "Sign-in completed but credentials could not be saved locally.",
@@ -890,126 +844,11 @@ async fn send_code_exchange_request(
 pub(crate) async fn persist_tokens_async(
     opts: &ServerOptions,
     api_key: Option<String>,
-<<<<<<< HEAD
-    id_token: String,
-    access_token: String,
-    refresh_token: String,
-    auth_credentials_store_mode: AuthCredentialsStoreMode,
-    keyring_backend_kind: AuthKeyringBackendKind,
-    named_account: Option<(crate::NamedChatgptAccount, bool)>,
-    auth_route_config: &AuthRouteConfig,
-||||||| 413492cd6c
-    id_token: String,
-    access_token: String,
-    refresh_token: String,
-    auth_credentials_store_mode: AuthCredentialsStoreMode,
-    keyring_backend_kind: AuthKeyringBackendKind,
-=======
     exchanged: &ExchangedTokens,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 ) -> io::Result<()> {
     // Reuse existing synchronous logic but run it off the async runtime.
-<<<<<<< HEAD
-    let codex_home = codex_home.to_path_buf();
-    let codex_home_for_revoke = codex_home.clone();
-    let revoke_if_refused = match &named_account {
-        Some((account, true)) => Some(account.clone()),
-        _ => None,
-    };
-    let refused = tokio::task::spawn_blocking(
-        move || -> io::Result<Result<(), (io::Error, AuthDotJson)>> {
-            let mut tokens = TokenData {
-                id_token: parse_chatgpt_jwt_claims(&id_token).map_err(io::Error::other)?,
-                access_token,
-                refresh_token,
-                account_id: None,
-            };
-            if let Some(acc) = jwt_auth_claims(&id_token)
-                .get("chatgpt_account_id")
-                .and_then(|v| v.as_str())
-            {
-                tokens.account_id = Some(acc.to_string());
-            }
-            let auth = AuthDotJson {
-                auth_mode: Some(AuthMode::Chatgpt),
-                openai_api_key: api_key,
-                tokens: Some(tokens),
-                last_refresh: Some(Utc::now()),
-                agent_identity: None,
-                personal_access_token: None,
-                bedrock_api_key: None,
-            };
-            Ok(match named_account {
-                // A refused first sign-in (the account exists) hands its new
-                // tokens back so they can be revoked.
-                Some((account, must_be_new)) => {
-                    crate::save_named_account_auth(&codex_home, &account, &auth, must_be_new)
-                        .map_err(|error| (error, auth))
-                }
-                None => save_auth(
-                    &codex_home,
-                    &auth,
-                    auth_credentials_store_mode,
-                    keyring_backend_kind,
-                )
-                .map_err(|error| (error, auth)),
-            })
-        },
-    )
-    .await
-    .map_err(|e| io::Error::other(format!("persist task failed: {e}")))??;
-    match refused {
-        Ok(()) => Ok(()),
-        Err((error, auth)) => {
-            if let Some(account) = revoke_if_refused
-                && let Err(revoke_error) = crate::auth::revoke_unsaved_sign_in(
-                    &codex_home_for_revoke,
-                    &account,
-                    &auth,
-                    auth_route_config,
-                )
-                .await
-            {
-                tracing::warn!("failed to revoke an unsaved sign-in: {revoke_error}");
-            }
-            Err(error)
-        }
-    }
-||||||| 413492cd6c
-    let codex_home = codex_home.to_path_buf();
-    tokio::task::spawn_blocking(move || {
-        let mut tokens = TokenData {
-            id_token: parse_chatgpt_jwt_claims(&id_token).map_err(io::Error::other)?,
-            access_token,
-            refresh_token,
-            account_id: None,
-        };
-        if let Some(acc) = jwt_auth_claims(&id_token)
-            .get("chatgpt_account_id")
-            .and_then(|v| v.as_str())
-        {
-            tokens.account_id = Some(acc.to_string());
-        }
-        let auth = AuthDotJson {
-            auth_mode: Some(AuthMode::Chatgpt),
-            openai_api_key: api_key,
-            tokens: Some(tokens),
-            last_refresh: Some(Utc::now()),
-            agent_identity: None,
-            personal_access_token: None,
-            bedrock_api_key: None,
-        };
-        save_auth(
-            &codex_home,
-            &auth,
-            auth_credentials_store_mode,
-            keyring_backend_kind,
-        )
-    })
-    .await
-    .map_err(|e| io::Error::other(format!("persist task failed: {e}")))?
-=======
     let codex_home = opts.codex_home.clone();
+    let codex_home_for_revoke = codex_home.clone();
     let auth_credentials_store_mode = opts.cli_auth_credentials_store_mode;
     let keyring_backend_kind = opts.auth_keyring_backend_kind;
     let id_token = exchanged.id_token.clone();
@@ -1020,52 +859,92 @@ pub(crate) async fn persist_tokens_async(
         issuer: opts.issuer.clone(),
         client_id: opts.client_id.clone(),
     };
+    // PF-84-S06: a named account's sign-in goes to its vault store.
+    let named_account = opts
+        .named_account
+        .clone()
+        .map(|account| (account, opts.named_account_must_be_new));
+    let revoke_if_refused = match &named_account {
+        Some((account, true)) => Some(account.clone()),
+        _ => None,
+    };
     // Blocking tasks don't inherit task-local context.
     // Preserve the initiating client for credential-storage metrics.
     let originator = AuthStorageOriginator::current();
 
-    let persist_task = tokio::task::spawn_blocking(move || {
-        originator.sync_scope(|| {
-            let mut tokens = TokenData {
-                id_token: parse_chatgpt_jwt_claims(&id_token).map_err(io::Error::other)?,
-                access_token,
-                refresh_token,
-                oauth_provenance: Some(provenance),
-                login_owner_id: Some(generate_state()),
-                account_id: None,
-            };
-            if let Some(acc) = jwt_auth_claims(&id_token)
-                .get("chatgpt_account_id")
-                .and_then(|v| v.as_str())
-            {
-                tokens.account_id = Some(acc.to_string());
-            }
-            let auth = AuthDotJson {
-                auth_mode: Some(AuthMode::Chatgpt),
-                openai_api_key: api_key,
-                tokens: Some(tokens),
-                last_refresh: Some(Utc::now()),
-                agent_identity: None,
-                personal_access_token: None,
-                bedrock_api_key: None,
-                bedrock_access_keys: None,
-            };
-            if let Some(login) = workspace_login {
-                return login.save(auth);
-            }
-            save_auth(
-                &codex_home,
-                &auth,
-                auth_credentials_store_mode,
-                keyring_backend_kind,
-            )
-        })
-    });
+    let persist_task = tokio::task::spawn_blocking(
+        move || -> io::Result<Result<(), (io::Error, AuthDotJson)>> {
+            originator.sync_scope(|| {
+                let mut tokens = TokenData {
+                    id_token: parse_chatgpt_jwt_claims(&id_token).map_err(io::Error::other)?,
+                    access_token,
+                    refresh_token,
+                    oauth_provenance: Some(provenance),
+                    login_owner_id: Some(generate_state()),
+                    account_id: None,
+                };
+                if let Some(acc) = jwt_auth_claims(&id_token)
+                    .get("chatgpt_account_id")
+                    .and_then(|v| v.as_str())
+                {
+                    tokens.account_id = Some(acc.to_string());
+                }
+                let auth = AuthDotJson {
+                    auth_mode: Some(AuthMode::Chatgpt),
+                    openai_api_key: api_key,
+                    tokens: Some(tokens),
+                    last_refresh: Some(Utc::now()),
+                    agent_identity: None,
+                    personal_access_token: None,
+                    bedrock_api_key: None,
+                    bedrock_access_keys: None,
+                };
+                if let Some((account, must_be_new)) = named_account {
+                    // A refused first sign-in (the account exists) hands its new
+                    // tokens back so they can be revoked.
+                    return Ok(crate::save_named_account_auth(
+                        &codex_home,
+                        &account,
+                        &auth,
+                        must_be_new,
+                    )
+                    .map_err(|error| (error, auth)));
+                }
+                if let Some(login) = workspace_login {
+                    login.save(auth)?;
+                    return Ok(Ok(()));
+                }
+                save_auth(
+                    &codex_home,
+                    &auth,
+                    auth_credentials_store_mode,
+                    keyring_backend_kind,
+                )?;
+                Ok(Ok(()))
+            })
+        },
+    );
 
-    persist_task
+    let refused = persist_task
         .await
-        .map_err(|e| io::Error::other(format!("persist task failed: {e}")))?
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        .map_err(|e| io::Error::other(format!("persist task failed: {e}")))??;
+    match refused {
+        Ok(()) => Ok(()),
+        Err((error, auth)) => {
+            if let Some(account) = revoke_if_refused
+                && let Err(revoke_error) = crate::auth::revoke_unsaved_sign_in(
+                    &codex_home_for_revoke,
+                    &account,
+                    &auth,
+                    &opts.auth_route_config,
+                )
+                .await
+            {
+                tracing::warn!("failed to revoke an unsaved sign-in: {revoke_error}");
+            }
+            Err(error)
+        }
+    }
 }
 
 /// Validates the ID token against an optional workspace restriction.

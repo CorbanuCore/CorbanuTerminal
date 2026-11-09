@@ -39,7 +39,6 @@ pub use external_bearer::is_claude_plan_token_helper;
 pub use external_bearer::validate_provider_auth_command;
 pub use external_bearer::validate_provider_auth_command_for_account;
 pub use manager::*;
-<<<<<<< HEAD
 pub use named_chatgpt::NamedChatgptAccount;
 pub use named_chatgpt::NamedSignInSummary;
 pub use named_chatgpt::PreviousSignIn;
@@ -57,7 +56,4 @@ pub use provider_key_vault::provider_account_api_key;
 pub use provider_key_vault::provider_account_aws_profile;
 pub use provider_key_vault::provider_account_holds;
 pub use provider_key_vault::provider_account_sign_in;
-||||||| 413492cd6c
-=======
 pub use workload_identity::is_workload_identity_selected;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
