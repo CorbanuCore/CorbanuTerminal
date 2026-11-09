@@ -25,14 +25,16 @@ skeleton merge is up as #1690 into it.
 Known red lanes on sync PRs until their slices land (expected; a red lane on a slice whose own paths are
 marker-free is real): `Blob size policy` (`tui/src/bottom_pane/chat_composer.rs` is 548 KiB with markers, S4b);
 `repo-checks` (markers in `scripts/codex_package`, `scripts/install`, S1d; `test_bazel_unit_test_alone` needs
-S1d's `defs.bzl`, three `windows_sandbox_nextest_groups` tests need S2's core tests); `corbanu-terminal-ci` and
-the `v8-canary` builds (crates with markers). The cache-save and schema-watch failures from upstream's CI files
-are fixed by sync-s0c (below).
+S1d's `defs.bzl`, three `windows_sandbox_nextest_groups` tests need S2's core tests); `corbanu-terminal-ci`
+(crates with markers); the `v8-canary` builds on PRs that touch canary paths (our kept `v8-canary.yml` passes
+`--config=rusty-v8-upstream-libcxx`, `v8-target-*` and `v8-release-compat`, which upstream removed: needs S1d's
+`.bazelrc` and S4's port of upstream's `v8-canary.yml`/`rusty-v8-release.yml`). The cache-save and schema-watch
+failures from upstream's CI files are fixed by sync-s0c (below).
 
 ## S0 `ci-review` rows (sync-s0c, 2026-11-09)
 
 All 77 open `ci-review` rows (upstream `.github/` changes that merged without conflict) are resolved, in two PRs:
-27 rows for files Corbanu's lanes use (#1929, with 3 `follow-up` rows) and 50 inert rows (this ledger-only PR).
+27 rows for files Corbanu's lanes use (#1929, with 3 `follow-up` rows) and 50 inert rows (ledger only, #1930).
 The rule: take upstream where a lane we run gains or loses nothing Corbanu decided; keep Corbanu's behaviour
 where it differs. Corbanu-specific choices (each in its row's note, `S0c:`):
 
