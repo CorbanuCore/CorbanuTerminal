@@ -183,6 +183,7 @@ pub(super) async fn load_local_config_layers_with_overrides(
         &trust_context.project_root,
         &trust_context,
         codex_home.as_path(),
+        overrides.user_home_dir.as_deref(),
         /*strict_config*/ false,
     )
     .await?;

@@ -60,6 +60,7 @@ async fn named_profile_uses_only_that_profile() {
         "work",
         /*region_override*/ None,
         SERVICE,
+        test_factory(),
         Some(files()),
     )
     .await
@@ -72,6 +73,7 @@ async fn named_profile_uses_only_that_profile() {
         "work",
         Some(" eu-central-1 ".to_string()),
         SERVICE,
+        test_factory(),
         Some(files()),
     )
     .await
@@ -85,6 +87,7 @@ async fn missing_profile_fails_without_falling_back_to_default() {
         "gone",
         /*region_override*/ None,
         SERVICE,
+        test_factory(),
         Some(files()),
     )
     .await
@@ -107,6 +110,7 @@ async fn profile_without_region_is_refused() {
         "noregion",
         /*region_override*/ None,
         SERVICE,
+        test_factory(),
         Some(files()),
     )
     .await
@@ -136,6 +140,7 @@ async fn credential_sources_outside_the_files_are_refused() {
             profile,
             /*region_override*/ None,
             SERVICE,
+            test_factory(),
             Some(files()),
         )
         .await
@@ -172,6 +177,7 @@ async fn role_chain_without_a_region_reports_the_region() {
         "rolechain",
         /*region_override*/ None,
         SERVICE,
+        test_factory(),
         Some(files()),
     )
     .await
@@ -180,4 +186,10 @@ async fn role_chain_without_a_region_reports_the_region() {
         error.to_string(),
         AwsAuthError::MissingProfileRegion("rolechain".to_string()).to_string()
     );
+}
+
+fn test_factory() -> codex_http_client::HttpClientFactory {
+    codex_http_client::HttpClientFactory::new(
+        codex_http_client::OutboundProxyPolicy::ReqwestDefault,
+    )
 }

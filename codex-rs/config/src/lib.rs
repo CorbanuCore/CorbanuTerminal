@@ -208,14 +208,17 @@ pub use merge::merge_toml_values;
 pub use merge::shell_environment_filter_entry;
 pub use model_provider_defaults::apply_default_gcp_auth;
 pub use overrides::build_cli_overrides_layer;
-<<<<<<< HEAD
-pub use planted_project_metadata::PLANTED_PROJECT_METADATA_WARNING_PREFIX;
-pub use planted_project_metadata::PlantedProjectMetadata;
-pub use planted_project_metadata::planted_project_metadata;
-||||||| 413492cd6c
-=======
 pub use path_context::ConfigPathContext;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+pub use planted_project_metadata::PLANTED_GIT_WARNING_PREFIX;
+pub use planted_project_metadata::PLANTED_PROJECT_METADATA_WARNING_PREFIX;
+pub use planted_project_metadata::PlantedGitChange;
+pub use planted_project_metadata::PlantedProjectMetadata;
+pub use planted_project_metadata::git_changes_to_show;
+pub use planted_project_metadata::git_changes_warning;
+pub use planted_project_metadata::is_git_dir;
+pub use planted_project_metadata::planted_after_command_notice;
+pub use planted_project_metadata::planted_git_changes;
+pub use planted_project_metadata::planted_project_metadata;
 pub use plugin_edit::PluginConfigEdit;
 pub use plugin_edit::apply_user_plugin_config_edits;
 pub use plugin_edit::clear_user_plugin;
@@ -231,17 +234,13 @@ pub use requirements_exec_policy::RequirementsExecPolicyPrefixRuleToml;
 pub use requirements_exec_policy::RequirementsExecPolicyToml;
 pub use requirements_layers::RequirementsLayerEntry;
 pub use requirements_layers::compose_requirements;
-<<<<<<< HEAD
+pub use requirements_layers::compose_requirements_for_hostname;
 pub use security_state::AUTHORITATIVE_COMMIT_SCHEMA_VERSION;
 pub use security_state::AUTHORITATIVE_STATE_SCHEMA_VERSION;
 pub use security_state::AuthoritativeSecurityState;
 pub use security_state::AuthoritativeStateCommit;
 pub use security_state::AuthoritativeStateOwner;
 pub use security_state::AuthoritativeStateValidationError;
-||||||| 413492cd6c
-=======
-pub use requirements_layers::compose_requirements_for_hostname;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 pub use shell_environment_policy::validate_shell_environment_policy_filter_config;
 pub use skills_config::BundledSkillsConfig;
 pub use skills_config::ScopedSkillsConfig;
