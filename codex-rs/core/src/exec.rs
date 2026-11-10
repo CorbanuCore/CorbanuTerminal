@@ -45,13 +45,10 @@ pub(crate) use codex_sandboxing::is_likely_sandbox_denied;
 #[cfg(test)]
 use codex_sandboxing::permission_profile_supports_windows_restricted_token_sandbox;
 use codex_sandboxing::record_filesystem_sandbox_violation;
-#[cfg(test)]
 use codex_sandboxing::resolve_windows_elevated_filesystem_overrides;
-#[cfg(test)]
 use codex_sandboxing::resolve_windows_restricted_token_filesystem_overrides;
 #[cfg(test)]
 use codex_sandboxing::unsupported_windows_restricted_token_sandbox_reason;
-#[cfg(any(test, target_os = "windows"))]
 use codex_sandboxing::windows_sandbox_uses_elevated_backend;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_path_uri::PathUri;
@@ -389,6 +386,21 @@ pub async fn build_exec_request(
         enforce_managed_network,
     );
     tracing::debug!("Sandbox type: {sandbox_type:?}");
+    // #1863: a `\\localhost` folder is refused at every level, as on main.
+    for folder in [&cwd, sandbox_cwd] {
+        refuse_localhost_unc_folder(folder)?;
+    }
+    // D446 before any override resolution, so a network working folder gets
+    // its own refusal rather than a path error from the resolver.
+    // `attach_windows_sandbox_filesystem_overrides` checks it again.
+    if sandbox_type == SandboxType::WindowsRestrictedToken
+        && !windows_sandbox_uses_elevated_backend(windows_sandbox_level, enforce_managed_network)
+    {
+        for folder in [cwd.as_path(), sandbox_cwd.as_path()] {
+            codex_sandboxing::refuse_network_working_folder(folder)
+                .map_err(CodexErr::UnsupportedOperation)?;
+        }
+    }
 
     if let Some(network) = network.as_ref() {
         network
@@ -437,13 +449,60 @@ pub async fn build_exec_request(
             windows_sandbox_level,
         })
         .map_err(CodexErr::from)?;
-<<<<<<< HEAD
+    // These hints belong to the native Windows backend. Other backends use
+    // the materialized profile and must not project executor paths onto this host.
+    let windows_sandbox_workspace_roots = if sandbox_type == SandboxType::WindowsRestrictedToken {
+        if windows_sandbox_workspace_roots.is_empty() {
+            vec![sandbox_cwd.clone()]
+        } else {
+            windows_sandbox_workspace_roots
+                .iter()
+                .map(PathUri::to_abs_path)
+                .collect::<io::Result<Vec<_>>>()
+                .map_err(|err| {
+                    CodexErr::InvalidRequest(format!(
+                        "invalid Windows sandbox workspace roots: {err}"
+                    ))
+                })?
+        }
+    } else {
+        Vec::new()
+    };
+    let mut exec_req =
+        ExecRequest::from_sandbox_exec_request(request, options, windows_sandbox_workspace_roots)
+            .await?;
     attach_windows_sandbox_filesystem_overrides(
         &mut exec_req,
         sandbox_cwd,
         crate::security::launch_contract::active(),
     )?;
     Ok(exec_req)
+}
+
+/// #1863: main refused a `\\localhost` working folder for command/exec at
+/// every sandbox level, because its path URI lost `localhost`. Upstream's
+/// path URIs now keep such a folder, so command/exec refuses it here, with
+/// the same message. Covers `\\localhost\`, `\\?\UNC\localhost\` and
+/// `\\.\UNC\localhost\`, in any letter case.
+fn refuse_localhost_unc_folder(folder: &AbsolutePathBuf) -> Result<()> {
+    if !cfg!(windows) {
+        return Ok(());
+    }
+    let path = folder.as_path().to_string_lossy().to_ascii_lowercase();
+    let server_and_rest = [r"\\?\unc\", r"\\.\unc\", r"\\"]
+        .into_iter()
+        .find_map(|prefix| path.strip_prefix(prefix));
+    let is_localhost =
+        server_and_rest.is_some_and(|rest| rest.split(['\\', '/']).next() == Some("localhost"));
+    if !is_localhost {
+        return Ok(());
+    }
+    Err(CodexErr::Io(io::Error::new(
+        io::ErrorKind::InvalidInput,
+        codex_utils_path_uri::PathUriParseError::LocalhostUncPath {
+            path: folder.as_path().display().to_string(),
+        },
+    )))
 }
 
 /// Resolves the Windows sandbox's filesystem overrides (deny-read and
@@ -471,39 +530,21 @@ pub(crate) fn attach_windows_sandbox_filesystem_overrides(
             &exec_req.permission_profile,
             sandbox_cwd,
             use_windows_elevated_backend,
+            &exec_req.env,
         )
-||||||| 413492cd6c
-    let use_windows_elevated_backend = windows_sandbox_uses_elevated_backend(
-        exec_req.windows_sandbox_level,
-        exec_req.network.is_some(),
-    );
-    exec_req.windows_sandbox_filesystem_overrides = if use_windows_elevated_backend {
-        resolve_windows_elevated_filesystem_overrides(
-            exec_req.sandbox,
-            &exec_req.permission_profile,
-            sandbox_cwd,
-            use_windows_elevated_backend,
-        )
-=======
-    // These hints belong to the native Windows backend. Other backends use
-    // the materialized profile and must not project executor paths onto this host.
-    let windows_sandbox_workspace_roots = if sandbox_type == SandboxType::WindowsRestrictedToken {
-        if windows_sandbox_workspace_roots.is_empty() {
-            vec![sandbox_cwd.clone()]
-        } else {
-            windows_sandbox_workspace_roots
-                .iter()
-                .map(PathUri::to_abs_path)
-                .collect::<io::Result<Vec<_>>>()
-                .map_err(|err| {
-                    CodexErr::InvalidRequest(format!(
-                        "invalid Windows sandbox workspace roots: {err}"
-                    ))
-                })?
-        }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     } else {
-<<<<<<< HEAD
+        // D446: `command/exec` (this function's only non-admin caller) runs
+        // in neither a command nor a sandbox working folder on a network.
+        if exec_req.sandbox == SandboxType::WindowsRestrictedToken
+            && exec_req.windows_sandbox_level
+                != codex_protocol::config_types::WindowsSandboxLevel::Elevated
+        {
+            let cwd = exec_req.cwd.to_abs_path()?;
+            for folder in [cwd.as_path(), sandbox_cwd.as_path()] {
+                codex_sandboxing::refuse_network_working_folder(folder)
+                    .map_err(CodexErr::UnsupportedOperation)?;
+            }
+        }
         resolve_windows_restricted_token_filesystem_overrides(
             exec_req.sandbox,
             &exec_req.permission_profile,
@@ -532,21 +573,6 @@ pub(crate) fn attach_windows_sandbox_filesystem_overrides(
         overrides.additional_deny_read.extend(protected);
     }
     Ok(())
-||||||| 413492cd6c
-        resolve_windows_restricted_token_filesystem_overrides(
-            exec_req.sandbox,
-            &exec_req.permission_profile,
-            sandbox_cwd,
-            exec_req.windows_sandbox_level,
-        )
-    }
-    .map_err(CodexErr::UnsupportedOperation)?;
-    Ok(exec_req)
-=======
-        Vec::new()
-    };
-    ExecRequest::from_sandbox_exec_request(request, options, windows_sandbox_workspace_roots).await
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 pub(crate) async fn execute_exec_request(
@@ -783,7 +809,7 @@ async fn exec_windows_sandbox(
     let command_path = command.first().cloned();
     let sandbox_level = windows_sandbox_level;
     let proxy_enforced = network.is_some();
-    let use_elevated = windows_sandbox_uses_elevated_backend(sandbox_level);
+    let use_elevated = windows_sandbox_uses_elevated_backend(sandbox_level, proxy_enforced);
     let additional_deny_write_paths = windows_sandbox_filesystem_overrides
         .map(|overrides| overrides.additional_deny_write_paths.clone())
         .unwrap_or_default();
@@ -1388,3 +1414,7 @@ mod windows_unc_tests;
 #[cfg(test)]
 #[path = "exec_tests.rs"]
 mod tests;
+
+#[cfg(all(test, windows))]
+#[path = "exec_windows_d398_tests.rs"]
+mod windows_d398_tests;

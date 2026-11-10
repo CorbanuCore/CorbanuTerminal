@@ -143,7 +143,7 @@ impl ExecRequest {
                 .to_abs_path()
                 .map_err(|err| CodexErr::InvalidRequest(format!("invalid sandbox cwd: {err}")))?;
             let use_windows_elevated_backend =
-                windows_sandbox_uses_elevated_backend(windows_sandbox_level);
+                windows_sandbox_uses_elevated_backend(windows_sandbox_level, network.is_some());
             if use_windows_elevated_backend {
                 resolve_windows_elevated_filesystem_overrides(
                     sandbox,

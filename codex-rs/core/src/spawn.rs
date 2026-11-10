@@ -61,13 +61,9 @@ pub(crate) async fn spawn_child_async(request: SpawnChildRequest<'_>) -> std::io
         mut env,
     } = request;
 
-<<<<<<< HEAD
-    // Never log environment values: they routinely carry API keys (#179).
-||||||| 413492cd6c
-=======
     env.retain(|name, _| !is_non_inheritable_env_var(name));
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    // Never log environment values: they routinely carry API keys (#179).
     trace!(
         "spawn_child_async: {program:?} {args:?} {arg0:?} {cwd:?} {network_sandbox_policy:?} {stdio_policy:?} env_names={:?}",
         sorted_env_names(&env)
