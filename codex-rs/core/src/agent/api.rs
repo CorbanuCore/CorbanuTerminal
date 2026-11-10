@@ -41,6 +41,14 @@ const _: Option<&dyn AgentControl> = None;
 pub trait AgentControl: Send + Sync {
     fn identity(&self) -> SessionId;
 
+    /// Corbanu: the in-process backend, for Corbanu's agent graph, durable mailbox and
+    /// security-policy state, which upstream's backend-neutral contract does not carry.
+    /// Other backends keep the default, so Corbanu-only operations fail closed on them.
+    /// Reach it through `<dyn AgentControl>::local()`.
+    fn local_backend_any(&self) -> Option<&dyn std::any::Any> {
+        None
+    }
+
     /// Resolve an ID or a name relative to the caller's captured source, without loading.
     /// The local backend lazily registers callers with no parent before resolving, including
     /// for direct IDs. Keeping resolution separate preserves tool error and analytics ordering.
@@ -158,6 +166,24 @@ pub trait AgentControl: Send + Sync {
         window: &'a str,
         reminder: RolloutBudgetReminder,
     ) -> BoxFuture<'a, ()>;
+}
+
+impl dyn AgentControl + '_ {
+    /// Corbanu: the local backend behind this controller, if that is what it is. Use only
+    /// where `None` is harmless (display, lookups); security and admission checks use
+    /// [`Self::local_or_unsupported`].
+    pub(crate) fn local(&self) -> Option<&crate::agent::LocalAgentControl> {
+        self.local_backend_any()?.downcast_ref()
+    }
+
+    /// Corbanu: the local backend, or an error so callers fail closed on any other backend.
+    pub(crate) fn local_or_unsupported(&self) -> Result<&crate::agent::LocalAgentControl> {
+        self.local().ok_or_else(|| {
+            codex_protocol::error::CodexErr::UnsupportedOperation(
+                "this agent operation needs Corbanu's local agent backend".to_string(),
+            )
+        })
+    }
 }
 
 /// References resolve relative to the registered caller. IDs retain each operation's
