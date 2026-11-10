@@ -402,7 +402,7 @@ fn always_allow_lasts_only_the_session(
 /// Whether a project config layer mentions `server` under `mcp_servers`, as
 /// a whole definition or only some fields (layers merge deeply), or has an
 /// `mcp_servers` value that is not a table.
-fn project_layer_mentions_mcp_server(config: &Config, server: &str) -> bool {
+pub(crate) fn project_layer_mentions_mcp_server(config: &Config, server: &str) -> bool {
     config
         .config_layer_stack
         .layers_high_to_low()
@@ -2521,7 +2521,7 @@ async fn persist_non_app_mcp_tool_approval(
     anyhow::bail!("MCP server `{server}` is not configured in config.toml or an enabled plugin")
 }
 
-fn custom_mcp_tool_approval_config_builder(
+pub(crate) fn custom_mcp_tool_approval_config_builder(
     config: &Config,
     server: &str,
 ) -> anyhow::Result<Option<ConfigEditsBuilder>> {

@@ -685,3 +685,7 @@ mod tests;
 #[cfg(test)]
 #[path = "role_project_tests.rs"]
 mod project_tests;
+
+#[cfg(test)]
+#[path = "role_project_rules_tests.rs"]
+mod project_rules_tests;
