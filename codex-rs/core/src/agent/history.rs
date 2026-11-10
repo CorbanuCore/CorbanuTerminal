@@ -82,10 +82,13 @@ fn keep_forked_rollout_item(item: &RolloutItem, preserve_context_baselines: bool
         RolloutItem::TurnContext(_) | RolloutItem::WorldState(_) => preserve_context_baselines,
         // Child threads inherit model context, not the parent's cumulative usage state.
         RolloutItem::TokenUsageRecord(_) => false,
+        // Corbanu (PF-30): origin records are content-keyed, so a dropped item's record
+        // matches nothing.
         RolloutItem::DynamicToolsUpdated { .. }
         | RolloutItem::Compacted(_)
         | RolloutItem::EventMsg(_)
-        | RolloutItem::SessionMeta(_) => true,
+        | RolloutItem::SessionMeta(_)
+        | RolloutItem::SourceOrigin(_) => true,
     }
 }
 
@@ -425,7 +428,8 @@ pub(super) async fn prepare_forked_history(
             | RolloutItem::SessionMeta(_)
             | RolloutItem::TurnContext(_)
             | RolloutItem::InterAgentCommunication(_)
-            | RolloutItem::InterAgentCommunicationMetadata { .. } => true,
+            | RolloutItem::InterAgentCommunicationMetadata { .. }
+            | RolloutItem::SourceOrigin(_) => true,
             RolloutItem::RetainedContext(_)
             | RolloutItem::TokenUsageRecord(_)
             | RolloutItem::SecurityRiskScore(_) => false,

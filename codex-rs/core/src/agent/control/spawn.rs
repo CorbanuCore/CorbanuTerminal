@@ -7,7 +7,7 @@ use super::*;
 use crate::agent::child_config::build_agent_resume_config;
 use crate::agent::history::load_agent_model_context;
 use crate::agent::history::prepare_forked_history;
-use crate::agent::role::apply_role_to_config;
+use crate::agent::role::apply_role_to_config_for_multi_agent_v2;
 use crate::agent::types::AgentMetadata;
 use crate::agent::types::LiveAgent;
 use crate::agent::types::SpawnAgentOptions;
@@ -26,139 +26,21 @@ use futures::StreamExt;
 use futures::stream;
 use std::time::Instant;
 
-<<<<<<< HEAD
-struct SpawnAgentThreadInheritance {
-    environments: Option<TurnEnvironmentSnapshot>,
-    exec_policy: Option<Arc<crate::exec_policy::ExecPolicyManager>>,
-}
-||||||| 413492cd6c
-const AGENT_NAMES: &str = include_str!("../agent_names.txt");
-
-struct SpawnAgentThreadInheritance {
-    environments: Option<TurnEnvironmentSnapshot>,
-    exec_policy: Option<Arc<crate::exec_policy::ExecPolicyManager>>,
-}
-=======
-const AGENT_NAMES: &str = include_str!("../../../assets/agent/agent_names.txt");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-
 /// Initial input delivered after a spawned agent acquires execution capacity.
 ///
 /// V2 communication spawns keep the communication and its context paired so centralized
 /// submission and lifecycle logging cannot receive one without the other. Other spawn sources
 /// provide user input directly, making an uncontextualized inter-agent communication
 /// unrepresentable.
-<<<<<<< HEAD
 #[allow(
     clippy::large_enum_variant,
     reason = "the value is short-lived and boxing would complicate the spawn handoff boundary"
 )]
-enum SpawnInitialInput {
-||||||| 413492cd6c
-enum SpawnInitialInput {
-=======
-#[allow(clippy::large_enum_variant)]
 pub(super) enum SpawnInitialInput {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     UserInput(Vec<UserInput>),
     InterAgentCommunication(InterAgentCommunication, AgentCommunicationContext),
 }
 
-<<<<<<< HEAD
-fn keep_forked_rollout_item(item: &RolloutItem, preserve_reference_context_item: bool) -> bool {
-    match item {
-        RolloutItem::ResponseItem(ResponseItem::Message { role, phase, .. }) => match role.as_str()
-        {
-            "system" | "developer" | "user" => true,
-            "assistant" => *phase == Some(MessagePhase::FinalAnswer),
-            _ => false,
-        },
-        RolloutItem::ResponseItem(
-            ResponseItem::AdditionalTools { .. }
-            | ResponseItem::AgentMessage { .. }
-            | ResponseItem::Reasoning { .. }
-            | ResponseItem::LocalShellCall { .. }
-            | ResponseItem::FunctionCall { .. }
-            | ResponseItem::ToolSearchCall { .. }
-            | ResponseItem::FunctionCallOutput { .. }
-            | ResponseItem::CustomToolCall { .. }
-            | ResponseItem::CustomToolCallOutput { .. }
-            | ResponseItem::ToolSearchOutput { .. }
-            | ResponseItem::WebSearchCall { .. }
-            | ResponseItem::ImageGenerationCall { .. }
-            | ResponseItem::Compaction { .. }
-            | ResponseItem::CompactionTrigger { .. }
-            | ResponseItem::ContextCompaction { .. }
-            | ResponseItem::Other,
-        ) => false,
-        RolloutItem::InterAgentCommunication(_)
-        | RolloutItem::InterAgentCommunicationMetadata { .. } => false,
-        // Full-history forks preserve the cached prompt prefix and can keep diffing
-        // from the parent's durable baseline. Truncated forks drop part of that prompt,
-        // so they must rebuild context on their first child turn.
-        RolloutItem::TurnContext(_) | RolloutItem::WorldState(_) => preserve_reference_context_item,
-        // Origin records are content-keyed: a dropped item's record matches nothing.
-        RolloutItem::Compacted(_)
-        | RolloutItem::EventMsg(_)
-        | RolloutItem::SessionMeta(_)
-        | RolloutItem::SourceOrigin(_) => true,
-||||||| 413492cd6c
-fn default_agent_nickname_list() -> Vec<&'static str> {
-    AGENT_NAMES
-        .lines()
-        .map(str::trim)
-        .filter(|name| !name.is_empty())
-        .collect()
-}
-
-pub(super) fn agent_nickname_candidates(config: &Config, role_name: Option<&str>) -> Vec<String> {
-    let role_name = role_name.unwrap_or(DEFAULT_ROLE_NAME);
-    if let Some(candidates) =
-        resolve_role_config(config, role_name).and_then(|role| role.nickname_candidates.clone())
-    {
-        return candidates;
-    }
-
-    default_agent_nickname_list()
-        .into_iter()
-        .map(ToOwned::to_owned)
-        .collect()
-}
-
-fn keep_forked_rollout_item(item: &RolloutItem, preserve_reference_context_item: bool) -> bool {
-    match item {
-        RolloutItem::ResponseItem(ResponseItem::Message { role, phase, .. }) => match role.as_str()
-        {
-            "system" | "developer" | "user" => true,
-            "assistant" => *phase == Some(MessagePhase::FinalAnswer),
-            _ => false,
-        },
-        RolloutItem::ResponseItem(
-            ResponseItem::AdditionalTools { .. }
-            | ResponseItem::AgentMessage { .. }
-            | ResponseItem::Reasoning { .. }
-            | ResponseItem::LocalShellCall { .. }
-            | ResponseItem::FunctionCall { .. }
-            | ResponseItem::ToolSearchCall { .. }
-            | ResponseItem::FunctionCallOutput { .. }
-            | ResponseItem::CustomToolCall { .. }
-            | ResponseItem::CustomToolCallOutput { .. }
-            | ResponseItem::ToolSearchOutput { .. }
-            | ResponseItem::WebSearchCall { .. }
-            | ResponseItem::ImageGenerationCall { .. }
-            | ResponseItem::Compaction { .. }
-            | ResponseItem::CompactionTrigger { .. }
-            | ResponseItem::ContextCompaction { .. }
-            | ResponseItem::Other,
-        ) => false,
-        RolloutItem::InterAgentCommunication(_)
-        | RolloutItem::InterAgentCommunicationMetadata { .. } => false,
-        // Full-history forks preserve the cached prompt prefix and can keep diffing
-        // from the parent's durable baseline. Truncated forks drop part of that prompt,
-        // so they must rebuild context on their first child turn.
-        RolloutItem::TurnContext(_) | RolloutItem::WorldState(_) => preserve_reference_context_item,
-        RolloutItem::Compacted(_) | RolloutItem::EventMsg(_) | RolloutItem::SessionMeta(_) => true,
-=======
 pub(in crate::agent) async fn effective_spawn_config(
     thread: &CodexThread,
 ) -> CodexResult<ThreadConfigSnapshot> {
@@ -172,28 +54,6 @@ pub(in crate::agent) async fn effective_spawn_config(
         .or_else(|| model_info.default_reasoning_level.clone())
         .map(|effort| model_info.resolve_reasoning_effort(effort));
     Ok(config)
-}
-
-fn default_agent_nickname_list() -> Vec<&'static str> {
-    AGENT_NAMES
-        .lines()
-        .map(str::trim)
-        .filter(|name| !name.is_empty())
-        .collect()
-}
-
-pub(super) fn agent_nickname_candidates(config: &Config, role_name: Option<&str>) -> Vec<String> {
-    let role_name = role_name.unwrap_or(DEFAULT_ROLE_NAME);
-    if let Some(candidates) =
-        resolve_role_config(config, role_name).and_then(|role| role.nickname_candidates.clone())
-    {
-        return candidates;
-    }
-
-    default_agent_nickname_list()
-        .into_iter()
-        .map(ToOwned::to_owned)
-        .collect()
 }
 
 pub(in crate::agent) async fn fresh_child_history_and_tools(
@@ -223,51 +83,6 @@ pub(in crate::agent) async fn inherited_dynamic_tools(
         parent.session.dynamic_tools().await.to_vec()
     } else {
         Vec::new()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-    }
-}
-
-<<<<<<< HEAD
-fn is_multi_agent_v2_usage_hint_message(item: &ResponseItem, usage_hint_texts: &[String]) -> bool {
-    let ResponseItem::Message { role, content, .. } = item else {
-        return false;
-    };
-    if role != "developer" {
-        return false;
-    }
-    let [ContentItem::InputText { text }] = content.as_slice() else {
-        return false;
-    };
-
-    usage_hint_texts
-        .iter()
-        .any(|usage_hint_text| usage_hint_text == text)
-}
-
-async fn load_agent_model_context(
-    state: &ThreadManagerState,
-    thread_id: ThreadId,
-    history_mode: ThreadHistoryMode,
-) -> CodexResult<Option<Vec<RolloutItem>>> {
-    match history_mode {
-        ThreadHistoryMode::Legacy => Ok(state
-            .read_stored_thread(ReadThreadParams {
-                thread_id,
-                include_archived: true,
-                include_history: true,
-            })
-            .await?
-            .history
-            .map(|history| history.items)),
-        ThreadHistoryMode::Paginated => Ok(Some(
-            state
-                .load_latest_model_context(LoadThreadHistoryParams {
-                    thread_id,
-                    include_archived: true,
-                })
-                .await?
-                .items,
-        )),
     }
 }
 
@@ -316,55 +131,7 @@ fn recorded_account_from_model_context<'a>(
     })?
 }
 
-impl AgentControl {
-||||||| 413492cd6c
-fn is_multi_agent_v2_usage_hint_message(item: &ResponseItem, usage_hint_texts: &[String]) -> bool {
-    let ResponseItem::Message { role, content, .. } = item else {
-        return false;
-    };
-    if role != "developer" {
-        return false;
-    }
-    let [ContentItem::InputText { text }] = content.as_slice() else {
-        return false;
-    };
-
-    usage_hint_texts
-        .iter()
-        .any(|usage_hint_text| usage_hint_text == text)
-}
-
-async fn load_agent_model_context(
-    state: &ThreadManagerState,
-    thread_id: ThreadId,
-    history_mode: ThreadHistoryMode,
-) -> CodexResult<Option<Vec<RolloutItem>>> {
-    match history_mode {
-        ThreadHistoryMode::Legacy => Ok(state
-            .read_stored_thread(ReadThreadParams {
-                thread_id,
-                include_archived: true,
-                include_history: true,
-            })
-            .await?
-            .history
-            .map(|history| history.items)),
-        ThreadHistoryMode::Paginated => Ok(Some(
-            state
-                .load_latest_model_context(LoadThreadHistoryParams {
-                    thread_id,
-                    include_archived: true,
-                })
-                .await?
-                .items,
-        )),
-    }
-}
-
-impl AgentControl {
-=======
 impl LocalAgentControl {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     /// Restore persisted V2 agent identities without reopening their runtimes.
     pub(crate) async fn restore_v2_agent_metadata(
         &self,
@@ -458,17 +225,8 @@ impl LocalAgentControl {
         initial_input: Vec<UserInput>,
         session_source: Option<SessionSource>,
     ) -> CodexResult<ThreadId> {
-<<<<<<< HEAD
         let options = SpawnAgentOptions::default();
-        let control = self
-            .control_with_live_parent_security_policy(session_source.as_ref(), &options)
-            .await?;
-        let spawned_agent = Box::pin(control.spawn_agent_internal(
-||||||| 413492cd6c
-        let spawned_agent = Box::pin(self.spawn_agent_internal(
-=======
         let (spawned_agent, _) = Box::pin(self.spawn_agent_internal(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             config,
             SpawnInitialInput::UserInput(initial_input),
             session_source,
@@ -480,73 +238,6 @@ impl LocalAgentControl {
 
     fn validate_loaded_v2_child(
         &self,
-<<<<<<< HEAD
-        config: Config,
-        initial_input: Vec<UserInput>,
-        session_source: Option<SessionSource>,
-        options: SpawnAgentOptions, // TODO(jif) drop with new fork.
-    ) -> CodexResult<LiveAgent> {
-        let control = self
-            .control_with_live_parent_security_policy(session_source.as_ref(), &options)
-            .await?;
-        Box::pin(control.spawn_agent_internal(
-            config,
-            SpawnInitialInput::UserInput(initial_input),
-            session_source,
-            options,
-        ))
-        .await
-    }
-
-    pub(crate) async fn spawn_agent_with_communication(
-        &self,
-        config: Config,
-        communication: InterAgentCommunication,
-        context: AgentCommunicationContext,
-        session_source: Option<SessionSource>,
-        options: SpawnAgentOptions,
-    ) -> CodexResult<LiveAgent> {
-        let control = self
-            .control_with_live_parent_security_policy(session_source.as_ref(), &options)
-            .await?;
-        Box::pin(control.spawn_agent_internal(
-            config,
-            SpawnInitialInput::InterAgentCommunication(communication, context),
-            session_source,
-            options,
-        ))
-        .await
-||||||| 413492cd6c
-        config: Config,
-        initial_input: Vec<UserInput>,
-        session_source: Option<SessionSource>,
-        options: SpawnAgentOptions, // TODO(jif) drop with new fork.
-    ) -> CodexResult<LiveAgent> {
-        Box::pin(self.spawn_agent_internal(
-            config,
-            SpawnInitialInput::UserInput(initial_input),
-            session_source,
-            options,
-        ))
-        .await
-    }
-
-    pub(crate) async fn spawn_agent_with_communication(
-        &self,
-        config: Config,
-        communication: InterAgentCommunication,
-        context: AgentCommunicationContext,
-        session_source: Option<SessionSource>,
-        options: SpawnAgentOptions,
-    ) -> CodexResult<LiveAgent> {
-        Box::pin(self.spawn_agent_internal(
-            config,
-            SpawnInitialInput::InterAgentCommunication(communication, context),
-            session_source,
-            options,
-        ))
-        .await
-=======
         thread: &CodexThread,
         parent_thread_id: ThreadId,
     ) -> CodexResult<()> {
@@ -564,58 +255,10 @@ impl LocalAgentControl {
             "multi-agent v2 child {} is not owned by its loaded parent",
             thread.session.thread_id
         )))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
-<<<<<<< HEAD
-    async fn control_with_live_parent_security_policy(
-        &self,
-        session_source: Option<&SessionSource>,
-        options: &SpawnAgentOptions,
-    ) -> CodexResult<Self> {
-        let parent_thread_id = options.parent_thread_id.or_else(|| {
-            session_source.and_then(|source| match source {
-                SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-                    parent_thread_id, ..
-                }) => Some(*parent_thread_id),
-                _ => None,
-            })
-        });
-        let Some(parent_thread_id) = parent_thread_id else {
-            return Ok(self.clone());
-        };
-        if self
-            .security_policy
-            .snapshot_for_agent(parent_thread_id)
-            .is_ok()
-        {
-            return Ok(self.clone());
-        }
-
-        let state = self.upgrade()?;
-        let parent_thread = state.get_thread(parent_thread_id).await?;
-        let parent_control = parent_thread.session.services.agent_control.clone();
-        parent_control
-            .security_policy
-            .snapshot_for_agent(parent_thread_id)
-            .map_err(|error| {
-                CodexErr::Fatal(format!(
-                    "live parent has no effective security policy: {error}"
-                ))
-            })?;
-
-        let mut control = self.clone();
-        control.session_id = parent_control.session_id;
-        control.security_policy = parent_control.security_policy;
-        control.trusted_security_controller = parent_control.trusted_security_controller;
-        Ok(control)
-    }
-
-||||||| 413492cd6c
-=======
     /// A provided parent enables owner-validated reloads; `None` preserves sender-driven reloads.
     /// Keep the returned residency pin until the caller has submitted its input.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub(crate) async fn ensure_v2_agent_loaded(
         &self,
         mut config: Config,
@@ -643,17 +286,6 @@ impl LocalAgentControl {
                 )));
             }
         }
-<<<<<<< HEAD
-        // The caller's runtime provider, before the stored runtime replaces it.
-        let caller = (
-            config.model_provider_id.clone(),
-            config.model_provider.clone(),
-        );
-        if self.state.agent_metadata_for_thread(thread_id).is_none() {
-            warn!(%thread_id, "cannot cold-load V2 agent without restored metadata");
-||||||| 413492cd6c
-        if self.state.agent_metadata_for_thread(thread_id).is_none() {
-=======
         if owner_thread_id.is_none()
             && let Ok(thread) = state.get_thread(thread_id).await
         {
@@ -665,7 +297,7 @@ impl LocalAgentControl {
             .agent_metadata_for_thread(thread_id)
             .is_none()
         {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            warn!(%thread_id, "cannot cold-load V2 agent without restored metadata");
             return Err(CodexErr::ThreadNotFound(thread_id));
         }
         let evicted_environments = self.runtime.registry.evicted_environments(thread_id);
@@ -680,52 +312,55 @@ impl LocalAgentControl {
                 include_archived: true,
                 include_history: false,
             })
-<<<<<<< HEAD
             .await
             .inspect_err(|err| warn!(%thread_id, %err, "failed to read stored V2 agent"))?;
-||||||| 413492cd6c
-            .await?;
-=======
-            .await?;
         let stored_model = stored_thread.model.clone();
         let stored_model_provider = stored_thread.model_provider.clone();
         let stored_reasoning_effort = stored_thread.reasoning_effort.clone();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let stored_source = stored_thread.source.clone();
         let stored_parent_thread_id = stored_thread.parent_thread_id;
-<<<<<<< HEAD
-        let stored_role = stored_thread
-            .agent_role
-            .clone()
-            .or_else(|| stored_source.get_agent_role());
-        if let Some(role_name) = stored_role.as_deref() {
-||||||| 413492cd6c
         let history = load_agent_model_context(&state, thread_id, stored_thread.history_mode)
-            .await?
-            .ok_or(CodexErr::ThreadNotFound(thread_id))?;
-        let initial_history = InitialHistory::Resumed(ResumedHistory {
-            conversation_id: thread_id,
-            history: Arc::new(history),
-            rollout_path: stored_thread.rollout_path,
-        });
-        if initial_history.get_multi_agent_version() != Some(MultiAgentVersion::V2) {
-            return Err(CodexErr::ThreadNotFound(thread_id));
-        }
-        let (session_source, _) = initial_history
-            .get_resumed_session_sources()
-            .unwrap_or((stored_source, None));
-        if let Some(role_name) = session_source.get_agent_role() {
-=======
-        let history = load_agent_model_context(&state, thread_id, stored_thread.history_mode)
-            .await?
-            .ok_or(CodexErr::ThreadNotFound(thread_id))?;
+            .await
+            .inspect_err(|err| warn!(%thread_id, %err, "failed to load V2 agent history"))?
+            .ok_or_else(|| {
+                warn!(%thread_id, "stored V2 agent has no resumable history");
+                CodexErr::ThreadNotFound(thread_id)
+            })?;
+        // Corbanu (#1129): the runtime and account the agent last ran on, read before the
+        // history moves into the resumed session. The stored thread's runtime wins; the newest
+        // recorded turn context fills what it lacks.
+        let (history_model, history_provider, history_reasoning_effort) =
+            latest_runtime_from_model_context(&history.items);
+        let stored_provider_id = if stored_model_provider.is_empty() {
+            history_provider.ok_or_else(|| {
+                CodexErr::InvalidRequest(format!(
+                    "cannot resume agent {thread_id}: its persisted runtime has no provider"
+                ))
+            })?
+        } else {
+            stored_model_provider
+        };
+        let recorded_account =
+            recorded_account_from_model_context(&history.items, &stored_provider_id)
+                .map(str::to_owned);
         let initial_history = InitialHistory::Resumed(ResumedHistory {
             history_revision: history.revision,
             conversation_id: thread_id,
             history: Arc::new(history.items),
             rollout_path: stored_thread.rollout_path,
         });
-        if initial_history.get_multi_agent_version() != Some(MultiAgentVersion::V2) {
+        // Older persisted histories can predate the explicit V2 marker even though the
+        // current runtime and agent graph are V2. The configured feature is therefore an
+        // equally authoritative recovery signal at this cold-load boundary.
+        if config.multi_agent_version_from_features() != MultiAgentVersion::V2
+            && initial_history.get_multi_agent_version() != Some(MultiAgentVersion::V2)
+        {
+            warn!(
+                %thread_id,
+                configured_version = ?config.multi_agent_version_from_features(),
+                persisted_version = ?initial_history.get_multi_agent_version(),
+                "refusing to cold-load an agent without a V2 recovery signal"
+            );
             return Err(CodexErr::ThreadNotFound(thread_id));
         }
         let (session_source, _) = initial_history
@@ -763,9 +398,17 @@ impl LocalAgentControl {
         } else {
             None
         };
-        config.model_reasoning_effort = stored_reasoning_effort;
-        if let Some(role_name) = session_source.get_agent_role() {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        // Corbanu (#1074): the caller's runtime provider, before the stored runtime replaces it.
+        let caller = (
+            config.model_provider_id.clone(),
+            config.model_provider.clone(),
+        );
+        // Corbanu: the persisted role (thread metadata first, then the recorded source).
+        let stored_role = stored_thread
+            .agent_role
+            .clone()
+            .or_else(|| session_source.get_agent_role());
+        if let Some(role_name) = stored_role {
             let runtime_approval_policy = config.permissions.approval_policy.value();
             let runtime_approvals_reviewer = config.approvals_reviewer;
             let runtime_cwd = config.cwd.clone();
@@ -782,16 +425,10 @@ impl LocalAgentControl {
                 ),
             };
 
-<<<<<<< HEAD
             // Reapply the persisted role before resolving the stored runtime. Role files may own
             // custom provider definitions; resolving first makes a valid cold-resumed agent look
             // unconfigured. The persisted provider/model below still win over role-file changes.
-            apply_role_to_config_for_multi_agent_v2(&mut config, Some(role_name))
-||||||| 413492cd6c
             apply_role_to_config_for_multi_agent_v2(&mut config, Some(&role_name))
-=======
-            apply_role_to_config(&mut config, Some(&role_name))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 .await
                 .map_err(CodexErr::InvalidRequest)?;
             config
@@ -810,34 +447,14 @@ impl LocalAgentControl {
                     CodexErr::InvalidRequest(format!("permission_profile is invalid: {err}"))
                 })?;
         }
-<<<<<<< HEAD
-        let history = load_agent_model_context(&state, thread_id, stored_thread.history_mode)
-            .await
-            .inspect_err(|err| warn!(%thread_id, %err, "failed to load V2 agent history"))?
-            .ok_or_else(|| {
-                warn!(%thread_id, "stored V2 agent has no resumable history");
-                CodexErr::ThreadNotFound(thread_id)
-            })?;
-        let (history_model, history_provider, history_reasoning_effort) =
-            latest_runtime_from_model_context(&history);
-        let stored_model = stored_thread
-            .model
-            .clone()
-            .or(history_model)
-            .ok_or_else(|| {
-                CodexErr::InvalidRequest(format!(
-                    "cannot resume agent {thread_id}: its persisted runtime has no model"
-                ))
-            })?;
-        let stored_provider_id = if stored_thread.model_provider.is_empty() {
-            history_provider.ok_or_else(|| {
-                CodexErr::InvalidRequest(format!(
-                    "cannot resume agent {thread_id}: its persisted runtime has no provider"
-                ))
-            })?
-        } else {
-            stored_thread.model_provider.clone()
-        };
+        config.service_tier = self.root_service_tier();
+        // Corbanu (#1129, #1074): resume on the persisted runtime, back on the account it ran
+        // on, or refuse; a connection without a credential of its own is refused before start.
+        let stored_model = stored_model.or(history_model).ok_or_else(|| {
+            CodexErr::InvalidRequest(format!(
+                "cannot resume agent {thread_id}: its persisted runtime has no model"
+            ))
+        })?;
         let mut stored_provider = config
             .model_providers
             .get(&stored_provider_id)
@@ -847,8 +464,7 @@ impl LocalAgentControl {
                     "cannot resume agent {thread_id}: persisted provider `{stored_provider_id}` is not configured"
                 ))
             })?;
-        // #1129: back on the account it ran on, or refused.
-        if let Some(recorded) = recorded_account_from_model_context(&history, &stored_provider_id) {
+        if let Some(recorded) = recorded_account.as_deref() {
             crate::config::restore_recorded_agent_account(
                 &config,
                 &stored_provider_id,
@@ -857,8 +473,6 @@ impl LocalAgentControl {
             )
             .map_err(CodexErr::InvalidRequest)?;
         }
-        // #1074: refused before it starts when its connection has no
-        // credential of its own (#689).
         if let Some(message) = crate::config::resume_default_key_error(
             &config,
             &stored_provider_id,
@@ -871,65 +485,9 @@ impl LocalAgentControl {
         config.model = Some(stored_model);
         config.model_provider_id = stored_provider_id;
         config.model_provider = stored_provider;
-        config.model_reasoning_effort = stored_thread
-            .reasoning_effort
-            .clone()
-            .or(history_reasoning_effort);
-        let initial_history = InitialHistory::Resumed(ResumedHistory {
-            conversation_id: thread_id,
-            history: Arc::new(history),
-            rollout_path: stored_thread.rollout_path,
-        });
-        // Older persisted histories can predate the explicit V2 marker even though the
-        // current runtime and agent graph are V2. The configured feature is therefore an
-        // equally authoritative recovery signal at this cold-load boundary.
-        if config.multi_agent_version_from_features() != MultiAgentVersion::V2
-            && initial_history.get_multi_agent_version() != Some(MultiAgentVersion::V2)
-        {
-            warn!(
-                %thread_id,
-                configured_version = ?config.multi_agent_version_from_features(),
-                persisted_version = ?initial_history.get_multi_agent_version(),
-                "refusing to cold-load an agent without a V2 recovery signal"
-            );
-            return Err(CodexErr::ThreadNotFound(thread_id));
-        }
-        let (session_source, _) = initial_history
-            .get_resumed_session_sources()
-            .unwrap_or((stored_source, None));
-        let residency_slot = self
-            .reserve_v2_residency_slot(&state, &config, Some(thread_id))
-            .await?;
-
-        let parent_thread_id = initial_history
-            .get_resumed_parent_thread_id()
-||||||| 413492cd6c
-        let residency_slot = self
-            .reserve_v2_residency_slot(&state, &config, Some(thread_id))
-            .await?;
-
-        let parent_thread_id = initial_history
-            .get_resumed_parent_thread_id()
-=======
-        config.service_tier = self.root_service_tier();
-        if let Some(model) = stored_model {
-            config.model = Some(model);
-        }
-        if config.model_provider_id != stored_model_provider {
-            config.model_provider = config
-                .model_providers
-                .get(&stored_model_provider)
-                .cloned()
-                .ok_or_else(|| {
-                    CodexErr::InvalidRequest(format!(
-                        "Model provider `{stored_model_provider}` not found"
-                    ))
-                })?;
-            config.model_provider_id = stored_model_provider;
-        }
+        config.model_reasoning_effort = stored_reasoning_effort.or(history_reasoning_effort);
         let parent_thread_id = owner_thread_id
             .or_else(|| initial_history.get_resumed_parent_thread_id())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             .or(stored_parent_thread_id);
         let (inherited_environments, inherited_exec_policy, client_mcp_extensions) = if let Some(
             (parent, parent_environments),
@@ -1111,23 +669,13 @@ impl LocalAgentControl {
             .await
         {
             Ok(reloaded_thread) => {
-<<<<<<< HEAD
-                residency_slot.commit(reloaded_thread.thread_id);
-                state.notify_thread_created(reloaded_thread.thread_id);
-                self.recover_inter_agent_communications(reloaded_thread.thread_id)
-                    .await?;
-                Ok(())
-||||||| 413492cd6c
-                residency_slot.commit(reloaded_thread.thread_id);
-                state.notify_thread_created(reloaded_thread.thread_id);
-                Ok(())
-=======
                 if let Some(parent_thread_id) = owner_thread_id {
                     self.validate_loaded_v2_child(&reloaded_thread.thread, parent_thread_id)?;
                 }
+                let reloaded_thread_id = reloaded_thread.thread_id;
                 let runtime = self.runtime.clone();
                 // Finish registration even if the sender is cancelled while acquiring its pin.
-                tokio::spawn(async move {
+                let residency_pin = tokio::spawn(async move {
                     let _membership = membership;
                     let residency_pin = runtime
                         .pin_v2_residency(&state, &reloaded_thread.thread)
@@ -1145,10 +693,14 @@ impl LocalAgentControl {
                             .await;
                     }
                     state.notify_thread_created(reloaded_thread.thread_id);
-                    Ok(residency_pin)
+                    Ok::<_, CodexErr>(residency_pin)
                 })
-                .await?
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                .await??;
+                // Corbanu (#1545): requeue durable mailbox rows that the replaced session never
+                // applied, now that the reloaded session can receive them.
+                self.recover_inter_agent_communications(reloaded_thread_id)
+                    .await?;
+                Ok(residency_pin)
             }
             Err(err) => {
                 if let Ok(thread) = state.get_thread(thread_id).await {
@@ -1181,6 +733,42 @@ impl LocalAgentControl {
             .as_ref()
             .and_then(SessionSource::parent_thread_id)
             .or(options.parent_thread_id);
+        // Corbanu (PF-23-S03): a child inherits its live parent's effective security policy.
+        // A handle whose tree does not hold the parent's binding (a control materialized for
+        // another tree) spawns through the parent's own control, which does; a parent with
+        // no binding anywhere refuses the spawn.
+        if let Some(parent_thread_id) = parent_thread_id
+            && self
+                .runtime
+                .security_policy
+                .snapshot_for_agent(parent_thread_id)
+                .is_err()
+        {
+            let parent_thread = state.get_thread(parent_thread_id).await?;
+            let parent_control = parent_thread
+                .session
+                .services
+                .agent_control
+                .local_or_unsupported()?
+                .clone();
+            parent_control
+                .runtime
+                .security_policy
+                .snapshot_for_agent(parent_thread_id)
+                .map_err(|error| {
+                    CodexErr::Fatal(format!(
+                        "live parent has no effective security policy: {error}"
+                    ))
+                })?;
+            drop(membership);
+            return Box::pin(parent_control.spawn_agent_internal(
+                config,
+                initial_input,
+                session_source,
+                options,
+            ))
+            .await;
+        }
         let multi_agent_version = state
             .effective_multi_agent_version_for_spawn(
                 &InitialHistory::New,
@@ -1190,7 +778,6 @@ impl LocalAgentControl {
                 &config,
             )
             .await;
-<<<<<<< HEAD
         if let Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
             parent_thread_id,
             depth,
@@ -1210,10 +797,7 @@ impl LocalAgentControl {
                 )));
             }
         }
-||||||| 413492cd6c
-=======
         let product_sku = config.apps_mcp_product_sku.clone();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         if let Some(session_source) = session_source.as_ref() {
             self.prepare_durable_thread_spawn_parent(session_source, config.ephemeral)
                 .await?;
@@ -1348,35 +932,6 @@ impl LocalAgentControl {
             }
             (None, _) => None,
         };
-<<<<<<< HEAD
-        if let Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-            parent_thread_id, ..
-        })) = notification_source.as_ref()
-        {
-            let task_id =
-                security_task_id.unwrap_or_else(|| format!("task:spawn:{}", new_thread.thread_id));
-            if let Err(error) = self.security_policy.inherit_child(
-                *parent_thread_id,
-                new_thread.thread_id,
-                task_id,
-                configured_child_security_level,
-            ) {
-                let _ = state.remove_thread(&new_thread.thread_id).await;
-                return Err(CodexErr::Fatal(format!(
-                    "failed to inherit effective security policy: {error}"
-                )));
-            }
-        }
-        agent_metadata.agent_id = Some(new_thread.thread_id);
-        reservation.commit(agent_metadata.clone());
-        if let Some(residency_slot) = residency_slot {
-            residency_slot.commit(new_thread.thread_id);
-||||||| 413492cd6c
-        agent_metadata.agent_id = Some(new_thread.thread_id);
-        reservation.commit(agent_metadata.clone());
-        if let Some(residency_slot) = residency_slot {
-            residency_slot.commit(new_thread.thread_id);
-=======
         // Fork startup can persist copied history before returning a live child.
         // Publish its deletion relationship before any child storage is created.
         let child_thread_id = self.runtime.generate_thread_id();
@@ -1385,7 +940,6 @@ impl LocalAgentControl {
                 "thread {child_thread_id} is already running",
             ))
             .with_agent_context(AgentErrorContext::ChildStartup));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
         start_options.reserved_thread_id = Some(child_thread_id);
         let mut pending_spawn = PendingSpawn::new(
@@ -1417,6 +971,26 @@ impl LocalAgentControl {
             .map_err(|err| err.with_agent_context(AgentErrorContext::ChildStartup))?;
         let child_create = child_create_started_at.elapsed();
         agent_metadata.agent_id = Some(new_thread.thread_id);
+        // Corbanu (PF-23-S03): bind the child to its parent's effective security policy before
+        // it can receive any input. Failing closes the spawn.
+        if let Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            parent_thread_id, ..
+        })) = notification_source.as_ref()
+        {
+            let task_id =
+                security_task_id.unwrap_or_else(|| format!("task:spawn:{}", new_thread.thread_id));
+            if let Err(error) = self.runtime.security_policy.inherit_child(
+                *parent_thread_id,
+                new_thread.thread_id,
+                task_id,
+                configured_child_security_level,
+            ) {
+                let _ = state.remove_thread(&new_thread.thread_id).await;
+                return Err(CodexErr::Fatal(format!(
+                    "failed to inherit effective security policy: {error}"
+                )));
+            }
+        }
         if let Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
             parent_thread_id, ..
         })) = notification_source.as_ref()
@@ -1447,28 +1021,31 @@ impl LocalAgentControl {
         }
         let durability_wait = edge_write + durability_wait_started_at.elapsed();
 
-<<<<<<< HEAD
         self.persist_durable_thread_spawn(
             new_thread.thread.as_ref(),
             new_thread.thread_id,
             notification_source.as_ref(),
         )
         .await?;
-||||||| 413492cd6c
-        self.persist_thread_spawn_edge_for_source(
-            new_thread.thread.as_ref(),
-            new_thread.thread_id,
-            notification_source.as_ref(),
-        )
-        .await;
-=======
         // Capture startup settings before the child can publish metadata for a later turn.
         let spawn_config = if multi_agent_version == MultiAgentVersion::V2 {
             Some(effective_spawn_config(&new_thread.thread).await?)
         } else {
             None
         };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+
+        // D435: until its first turn starts, an interrupt must still reach it.
+        let starts_turn = match &initial_input {
+            SpawnInitialInput::UserInput(_) => true,
+            SpawnInitialInput::InterAgentCommunication(communication, _) => {
+                communication.trigger_turn
+            }
+        };
+        new_thread
+            .thread
+            .session
+            .spawned_with_first_turn
+            .store(starts_turn, std::sync::atomic::Ordering::Release);
 
         let start_options = TurnStartOptions {
             parent_turn_id: options.parent_turn_id,
@@ -1480,7 +1057,6 @@ impl LocalAgentControl {
         let input_admission_started_at = Instant::now();
         match initial_input {
             SpawnInitialInput::UserInput(input) => {
-<<<<<<< HEAD
                 // The spawning agent wrote this task; it carries that agent's standing.
                 let sender = options
                     .parent_thread_id
@@ -1496,22 +1072,10 @@ impl LocalAgentControl {
                     sender,
                     &state,
                     input,
-                    options.parent_turn_id,
+                    start_options,
                 )
-                .await?;
-||||||| 413492cd6c
-                self.send_input_after_capacity_check(
-                    new_thread.thread_id,
-                    &state,
-                    input,
-                    options.parent_turn_id,
-                )
-                .await?;
-=======
-                self.send_input(new_thread.thread_id, input, start_options)
-                    .await
-                    .map_err(|err| err.with_agent_context(AgentErrorContext::InputAdmission))?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                .await
+                .map_err(|err| err.with_agent_context(AgentErrorContext::InputAdmission))?;
             }
             SpawnInitialInput::InterAgentCommunication(communication, context) => {
                 self.send_inter_agent_communication_after_capacity_check(
@@ -1570,456 +1134,6 @@ impl LocalAgentControl {
             &session_telemetry,
             options.fork_mode.as_ref(),
             multi_agent_version,
-<<<<<<< HEAD
-            config
-                .multi_agent_v2
-                .subagent_developer_instructions
-                .as_ref(),
-        ) {
-            (MultiAgentVersion::V2, Some(_)) => {
-                let parent_developer_instructions = match parent_thread
-                    .session
-                    .new_default_turn()
-                    .await
-                    .developer_instructions
-                    .clone()
-                {
-                    Some(instructions) if !instructions.is_empty() => Some(instructions),
-                    Some(_) | None => None,
-                };
-                (
-                    Some(config.developer_instructions.clone().unwrap_or_default()),
-                    parent_developer_instructions,
-                )
-            }
-            (MultiAgentVersion::Disabled | MultiAgentVersion::V1, _)
-            | (MultiAgentVersion::V2, None) => (None, None),
-        };
-        let parent_history_mode = parent_thread.config_snapshot().await.history_mode;
-        // `record_conversation_items` only queues persistence writes asynchronously.
-        // Flush before snapshotting store history for a fork.
-        parent_thread.ensure_rollout_materialized().await;
-        parent_thread.flush_rollout().await?;
-
-        let destination_history_mode = matches!(parent_history_mode, ThreadHistoryMode::Paginated)
-            .then_some(ThreadHistoryMode::Paginated);
-        let mut forked_rollout_items =
-            load_agent_model_context(state, parent_thread_id, parent_history_mode)
-                .await?
-                .ok_or_else(|| {
-                    CodexErr::Fatal(format!(
-                        "parent thread history unavailable for fork: {parent_thread_id}"
-                    ))
-                })?;
-
-        let selected_capability_roots = forked_rollout_items
-            .iter()
-            .find_map(|item| {
-                let RolloutItem::SessionMeta(meta_line) = item else {
-                    return None;
-                };
-                Some(meta_line.meta.selected_capability_roots.clone())
-            })
-            .unwrap_or_default();
-        if let SpawnAgentForkMode::LastNTurns(last_n_turns) = fork_mode {
-            forked_rollout_items =
-                truncate_rollout_to_last_n_fork_turns(forked_rollout_items, *last_n_turns);
-        }
-        let multi_agent_v2_usage_hint_texts_to_filter: Vec<String> =
-            if multi_agent_version == MultiAgentVersion::V2 {
-                let parent_config = parent_thread.session.get_config().await;
-                [
-                    parent_config
-                        .multi_agent_v2
-                        .root_agent_usage_hint_text
-                        .clone(),
-                    parent_config
-                        .multi_agent_v2
-                        .subagent_usage_hint_text
-                        .clone(),
-                ]
-                .into_iter()
-                .flatten()
-                .collect()
-            } else {
-                Vec::new()
-            };
-        let mut preserve_reference_context_item =
-            matches!(fork_mode, SpawnAgentForkMode::FullHistory);
-        if preserve_reference_context_item {
-            for item in forked_rollout_items.iter().rev() {
-                let RolloutItem::Compacted(compacted) = item else {
-                    continue;
-                };
-                // Legacy checkpoints force the child to rebuild context regardless of the
-                // live parent's reference baseline; an older superseded checkpoint does not.
-                if compacted.replacement_history.is_none() {
-                    preserve_reference_context_item = false;
-                }
-                break;
-            }
-        }
-        let mut replaced_parent_developer_instructions = false;
-        // Scrub inherited hints and replace only the parent's developer-instruction fragment.
-        // Compaction stores response items separately, so sanitize both top-level messages and
-        // compacted replacement histories with the same policy.
-        let retain_forked_item = |response_item: &mut ResponseItem, replaced: &mut bool| {
-            if matches!(response_item, ResponseItem::AgentMessage { .. }) {
-                return false;
-            }
-            if is_multi_agent_v2_usage_hint_message(
-                response_item,
-                &multi_agent_v2_usage_hint_texts_to_filter,
-            ) {
-                return false;
-            }
-
-            if let Some(parent_developer_instructions) = parent_developer_instructions.as_ref()
-                && let Some(subagent_developer_instructions) =
-                    subagent_developer_instructions.as_ref()
-                && matches!(response_item, ResponseItem::Message { role, .. } if role == "developer")
-            {
-                response_item.retain_message_content(|content_item| {
-                    let ContentItem::InputText { text } = content_item else {
-                        return true;
-                    };
-                    // TODO(anp) track better message fragment provenance in rollouts.
-                    if !text.contains(parent_developer_instructions) {
-                        return true;
-                    }
-
-                    *replaced = true;
-                    let replacement = if preserve_reference_context_item {
-                        subagent_developer_instructions.as_str()
-                    } else {
-                        ""
-                    };
-                    *text = text.replace(parent_developer_instructions, replacement);
-                    !text.is_empty()
-                });
-                return !matches!(
-                    response_item,
-                    ResponseItem::Message { content, .. } if content.is_empty()
-                );
-            }
-
-            true
-        };
-        forked_rollout_items.retain_mut(|item| {
-            if !keep_forked_rollout_item(item, preserve_reference_context_item)
-                || destination_history_mode == Some(ThreadHistoryMode::Paginated)
-                    && matches!(
-                        &*item,
-                        RolloutItem::EventMsg(
-                            EventMsg::ItemCompleted(_)
-                                | EventMsg::TokenCount(_)
-                                | EventMsg::ThreadGoalUpdated(_)
-                                | EventMsg::ThreadSettingsApplied(_),
-                        )
-                    )
-            {
-                return false;
-            }
-
-            match item {
-                RolloutItem::ResponseItem(response_item) => {
-                    retain_forked_item(response_item, &mut replaced_parent_developer_instructions)
-                }
-                RolloutItem::Compacted(compacted) => {
-                    if let Some(replacement_history) = compacted.replacement_history.as_mut() {
-                        // Matches before this checkpoint cannot survive its replacement history.
-                        replaced_parent_developer_instructions = false;
-                        replacement_history.retain_mut(|response_item| {
-                            retain_forked_item(
-                                response_item,
-                                &mut replaced_parent_developer_instructions,
-                            )
-                        });
-                    }
-                    true
-                }
-                RolloutItem::EventMsg(_)
-                | RolloutItem::SessionMeta(_)
-                | RolloutItem::TurnContext(_)
-                | RolloutItem::InterAgentCommunication(_)
-                | RolloutItem::InterAgentCommunicationMetadata { .. }
-                | RolloutItem::WorldState(_)
-                | RolloutItem::SourceOrigin(_) => true,
-            }
-        });
-        // Full forks reuse the parent's reference context instead of rebuilding it. If that
-        // context omitted the parent's developer fragment, append the child's override so its
-        // instructions still reach the model exactly once.
-        if let Some(subagent_developer_instructions) = subagent_developer_instructions.as_ref()
-            && preserve_reference_context_item
-            && !replaced_parent_developer_instructions
-            && !subagent_developer_instructions.is_empty()
-            && parent_thread
-                .session
-                .reference_context_item()
-                .await
-                .is_some()
-            && let Some(developer_message) =
-                crate::context_manager::updates::build_developer_update_item(vec![
-                    subagent_developer_instructions.clone(),
-                ])
-        {
-            forked_rollout_items.push(RolloutItem::ResponseItem(developer_message));
-        }
-        if preserve_reference_context_item
-            && multi_agent_version == MultiAgentVersion::V2
-            && let Some(subagent_usage_hint_text) =
-                config.multi_agent_v2.subagent_usage_hint_text.clone()
-            && let Some(subagent_usage_hint_message) =
-                crate::context_manager::updates::build_developer_update_item(vec![
-                    subagent_usage_hint_text,
-                ])
-        {
-            forked_rollout_items.push(RolloutItem::ResponseItem(subagent_usage_hint_message));
-        }
-        let mut thread_extension_init = ExtensionDataInit::new();
-        thread_extension_init.insert(selected_capability_roots);
-
-        state
-            .fork_thread_with_source(
-                config.clone(),
-                InitialHistory::Forked(forked_rollout_items),
-                destination_history_mode,
-                self.clone(),
-                session_source,
-                /*thread_source*/ Some(ThreadSource::Subagent),
-                /*parent_thread_id*/ Some(parent_thread_id),
-                /*forked_from_thread_id*/ Some(parent_thread_id),
-                inherited_environments,
-                inherited_exec_policy,
-                options.environments.clone(),
-                thread_extension_init,
-            )
-            .await
-||||||| 413492cd6c
-            config
-                .multi_agent_v2
-                .subagent_developer_instructions
-                .as_ref(),
-        ) {
-            (MultiAgentVersion::V2, Some(_)) => {
-                let parent_developer_instructions = match parent_thread
-                    .session
-                    .new_default_turn()
-                    .await
-                    .developer_instructions
-                    .clone()
-                {
-                    Some(instructions) if !instructions.is_empty() => Some(instructions),
-                    Some(_) | None => None,
-                };
-                (
-                    Some(config.developer_instructions.clone().unwrap_or_default()),
-                    parent_developer_instructions,
-                )
-            }
-            (MultiAgentVersion::Disabled | MultiAgentVersion::V1, _)
-            | (MultiAgentVersion::V2, None) => (None, None),
-        };
-        let parent_history_mode = parent_thread.config_snapshot().await.history_mode;
-        // `record_conversation_items` only queues persistence writes asynchronously.
-        // Flush before snapshotting store history for a fork.
-        parent_thread.ensure_rollout_materialized().await;
-        parent_thread.flush_rollout().await?;
-
-        let destination_history_mode = matches!(parent_history_mode, ThreadHistoryMode::Paginated)
-            .then_some(ThreadHistoryMode::Paginated);
-        let mut forked_rollout_items =
-            load_agent_model_context(state, parent_thread_id, parent_history_mode)
-                .await?
-                .ok_or_else(|| {
-                    CodexErr::Fatal(format!(
-                        "parent thread history unavailable for fork: {parent_thread_id}"
-                    ))
-                })?;
-
-        let selected_capability_roots = forked_rollout_items
-            .iter()
-            .find_map(|item| {
-                let RolloutItem::SessionMeta(meta_line) = item else {
-                    return None;
-                };
-                Some(meta_line.meta.selected_capability_roots.clone())
-            })
-            .unwrap_or_default();
-        if let SpawnAgentForkMode::LastNTurns(last_n_turns) = fork_mode {
-            forked_rollout_items =
-                truncate_rollout_to_last_n_fork_turns(forked_rollout_items, *last_n_turns);
-        }
-        let multi_agent_v2_usage_hint_texts_to_filter: Vec<String> =
-            if multi_agent_version == MultiAgentVersion::V2 {
-                let parent_config = parent_thread.session.get_config().await;
-                [
-                    parent_config
-                        .multi_agent_v2
-                        .root_agent_usage_hint_text
-                        .clone(),
-                    parent_config
-                        .multi_agent_v2
-                        .subagent_usage_hint_text
-                        .clone(),
-                ]
-                .into_iter()
-                .flatten()
-                .collect()
-            } else {
-                Vec::new()
-            };
-        let mut preserve_reference_context_item =
-            matches!(fork_mode, SpawnAgentForkMode::FullHistory);
-        if preserve_reference_context_item {
-            for item in forked_rollout_items.iter().rev() {
-                let RolloutItem::Compacted(compacted) = item else {
-                    continue;
-                };
-                // Legacy checkpoints force the child to rebuild context regardless of the
-                // live parent's reference baseline; an older superseded checkpoint does not.
-                if compacted.replacement_history.is_none() {
-                    preserve_reference_context_item = false;
-                }
-                break;
-            }
-        }
-        let mut replaced_parent_developer_instructions = false;
-        // Scrub inherited hints and replace only the parent's developer-instruction fragment.
-        // Compaction stores response items separately, so sanitize both top-level messages and
-        // compacted replacement histories with the same policy.
-        let retain_forked_item = |response_item: &mut ResponseItem, replaced: &mut bool| {
-            if matches!(response_item, ResponseItem::AgentMessage { .. }) {
-                return false;
-            }
-            if is_multi_agent_v2_usage_hint_message(
-                response_item,
-                &multi_agent_v2_usage_hint_texts_to_filter,
-            ) {
-                return false;
-            }
-
-            if let Some(parent_developer_instructions) = parent_developer_instructions.as_ref()
-                && let Some(subagent_developer_instructions) =
-                    subagent_developer_instructions.as_ref()
-                && let ResponseItem::Message { role, content, .. } = response_item
-                && role == "developer"
-            {
-                content.retain_mut(|content_item| {
-                    let ContentItem::InputText { text } = content_item else {
-                        return true;
-                    };
-                    // TODO(anp) track better message fragment provenance in rollouts.
-                    if !text.contains(parent_developer_instructions) {
-                        return true;
-                    }
-
-                    *replaced = true;
-                    let replacement = if preserve_reference_context_item {
-                        subagent_developer_instructions.as_str()
-                    } else {
-                        ""
-                    };
-                    *text = text.replace(parent_developer_instructions, replacement);
-                    !text.is_empty()
-                });
-                return !content.is_empty();
-            }
-
-            true
-        };
-        forked_rollout_items.retain_mut(|item| {
-            if !keep_forked_rollout_item(item, preserve_reference_context_item)
-                || destination_history_mode == Some(ThreadHistoryMode::Paginated)
-                    && matches!(
-                        &*item,
-                        RolloutItem::EventMsg(
-                            EventMsg::ItemCompleted(_)
-                                | EventMsg::TokenCount(_)
-                                | EventMsg::ThreadGoalUpdated(_)
-                                | EventMsg::ThreadSettingsApplied(_),
-                        )
-                    )
-            {
-                return false;
-            }
-
-            match item {
-                RolloutItem::ResponseItem(response_item) => {
-                    retain_forked_item(response_item, &mut replaced_parent_developer_instructions)
-                }
-                RolloutItem::Compacted(compacted) => {
-                    if let Some(replacement_history) = compacted.replacement_history.as_mut() {
-                        // Matches before this checkpoint cannot survive its replacement history.
-                        replaced_parent_developer_instructions = false;
-                        replacement_history.retain_mut(|response_item| {
-                            retain_forked_item(
-                                response_item,
-                                &mut replaced_parent_developer_instructions,
-                            )
-                        });
-                    }
-                    true
-                }
-                RolloutItem::EventMsg(_)
-                | RolloutItem::SessionMeta(_)
-                | RolloutItem::TurnContext(_)
-                | RolloutItem::InterAgentCommunication(_)
-                | RolloutItem::InterAgentCommunicationMetadata { .. }
-                | RolloutItem::WorldState(_) => true,
-            }
-        });
-        // Full forks reuse the parent's reference context instead of rebuilding it. If that
-        // context omitted the parent's developer fragment, append the child's override so its
-        // instructions still reach the model exactly once.
-        if let Some(subagent_developer_instructions) = subagent_developer_instructions.as_ref()
-            && preserve_reference_context_item
-            && !replaced_parent_developer_instructions
-            && !subagent_developer_instructions.is_empty()
-            && parent_thread
-                .session
-                .reference_context_item()
-                .await
-                .is_some()
-            && let Some(developer_message) =
-                crate::context_manager::updates::build_developer_update_item(vec![
-                    subagent_developer_instructions.clone(),
-                ])
-        {
-            forked_rollout_items.push(RolloutItem::ResponseItem(developer_message));
-        }
-        if preserve_reference_context_item
-            && multi_agent_version == MultiAgentVersion::V2
-            && let Some(subagent_usage_hint_text) =
-                config.multi_agent_v2.subagent_usage_hint_text.clone()
-            && let Some(subagent_usage_hint_message) =
-                crate::context_manager::updates::build_developer_update_item(vec![
-                    subagent_usage_hint_text,
-                ])
-        {
-            forked_rollout_items.push(RolloutItem::ResponseItem(subagent_usage_hint_message));
-        }
-        let mut thread_extension_init = ExtensionDataInit::new();
-        thread_extension_init.insert(selected_capability_roots);
-
-        state
-            .fork_thread_with_source(
-                config.clone(),
-                InitialHistory::Forked(forked_rollout_items),
-                destination_history_mode,
-                self.clone(),
-                session_source,
-                /*thread_source*/ Some(ThreadSource::Subagent),
-                /*parent_thread_id*/ Some(parent_thread_id),
-                /*forked_from_thread_id*/ Some(parent_thread_id),
-                inherited_environments,
-                inherited_exec_policy,
-                options.environments.clone(),
-                thread_extension_init,
-            )
-            .await
-=======
             SpawnMeasurements {
                 history_mode: config.history_mode,
                 residency_reservation,
@@ -2031,7 +1145,6 @@ impl LocalAgentControl {
             },
         );
         Ok((agent, config))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// Resume an existing agent thread from a recorded rollout file.
@@ -2042,7 +1155,6 @@ impl LocalAgentControl {
         thread_id: ThreadId,
         session_source: SessionSource,
     ) -> CodexResult<ThreadId> {
-<<<<<<< HEAD
         self.resume_agent_tree_from_rollout(config, thread_id, session_source)
             .await
             .map(|(thread_id, _)| thread_id)
@@ -2059,23 +1171,14 @@ impl LocalAgentControl {
         thread_id: ThreadId,
         session_source: SessionSource,
     ) -> CodexResult<(ThreadId, Vec<(ThreadId, String)>)> {
-||||||| 413492cd6c
-=======
         let _membership = self.runtime.admit_start()?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let root_depth = thread_spawn_depth(&session_source).unwrap_or(0);
         let (resumed_thread_id, resumed_multi_agent_version) = Box::pin(
             self.resume_single_agent_from_rollout(config.clone(), thread_id, session_source),
         )
         .await?;
-<<<<<<< HEAD
         let mut refused_descendants = Vec::new();
-        let state = self.upgrade()?;
-||||||| 413492cd6c
-        let state = self.upgrade()?;
-=======
         let state = self.runtime.upgrade()?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         if config.multi_agent_version_from_features() == MultiAgentVersion::V2
             || resumed_multi_agent_version == MultiAgentVersion::V2
         {
@@ -2171,7 +1274,7 @@ impl LocalAgentControl {
         // #1129: an agent that ran on another account of its parent's
         // provider is resumed on that account, or refused.
         if let Some(recorded) =
-            recorded_account_from_model_context(&history, &config.model_provider_id)
+            recorded_account_from_model_context(&history.items, &config.model_provider_id)
         {
             let parent = config.model_provider.clone();
             let mut provider = parent.clone();
@@ -2279,29 +1382,12 @@ impl LocalAgentControl {
                 agent_metadata.agent_path.clone(),
             );
         }
-<<<<<<< HEAD
         self.persist_durable_thread_spawn(
             resumed_thread.thread.as_ref(),
             resumed_thread.thread_id,
             Some(&notification_source),
         )
         .await?;
-||||||| 413492cd6c
-        self.persist_thread_spawn_edge_for_source(
-            resumed_thread.thread.as_ref(),
-            resumed_thread.thread_id,
-            Some(&notification_source),
-        )
-        .await;
-=======
-        let _ = self
-            .persist_thread_spawn_edge_for_source(
-                resumed_thread.thread.config_snapshot().await.ephemeral,
-                resumed_thread.thread_id,
-                Some(&notification_source),
-            )
-            .await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         Ok((resumed_thread.thread_id, multi_agent_version))
     }
