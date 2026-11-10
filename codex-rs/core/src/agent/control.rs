@@ -550,6 +550,8 @@ impl LocalAgentControl {
             // reloaded session, whose recovery then runs after the admission.
             let threads = state.threads.read().await;
             if !threads.contains_key(&agent_id) {
+                // As upstream's unloaded path: a tree that is shutting down takes no new mail.
+                let _membership = self.runtime.admit_start()?;
                 self.runtime.ensure_agent_known(agent_id)?;
                 // Read the sender's database handle from the held map: taking the thread map
                 // again here could deadlock behind a queued writer.
