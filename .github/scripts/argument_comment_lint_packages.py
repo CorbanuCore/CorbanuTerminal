@@ -101,22 +101,22 @@ def cargo_packages(root: Path) -> dict[str, str]:
     return packages
 
 
-def package_for(path: str, packages: dict[str, str]) -> str | None:
-    """Return the package owning `path`, preferring the most deeply nested crate."""
-    for parent in PurePosixPath(path).parents:
-        package = packages.get(str(parent))
-        if package is not None:
-            return package
-    return None
+def packages_for(path: str, packages: dict[str, str]) -> list[str]:
+    """Return every package owning `path`. A crate nested in another
+    (`core/tests/common`) selects its parent too: the parent's tests are
+    where its functions are called, and so where argument comments are."""
+    return [
+        package
+        for parent in PurePosixPath(path).parents
+        if (package := packages.get(str(parent))) is not None
+    ]
 
 
 def lint_packages(files: list[str], packages: dict[str, str]) -> list[str]:
     selected = set()
     for path in files:
         if path.endswith(".rs"):
-            package = package_for(path, packages)
-            if package is not None:
-                selected.add(package)
+            selected.update(packages_for(path, packages))
         if path.startswith(LINT_JOB_PATHS):
             selected.add(CANARY_PACKAGE)
     return sorted(selected)

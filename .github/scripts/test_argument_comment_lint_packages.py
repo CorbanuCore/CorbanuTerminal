@@ -135,10 +135,12 @@ class ArgumentCommentLintPackagesTest(unittest.TestCase):
             ["codex-core", "codex-tui"],
         )
 
-    def test_nested_crate_wins_over_its_parent(self) -> None:
+    def test_nested_crate_selects_its_parent_too(self) -> None:
+        # The parent's tests call the nested support crate, so a renamed
+        # parameter there must re-check their argument comments.
         self.assertEqual(
             lint_packages(["codex-rs/core/tests/common/lib.rs"], PACKAGES),
-            ["core_test_support"],
+            ["codex-core", "core_test_support"],
         )
 
     def test_non_rust_and_out_of_workspace_files_select_nothing(self) -> None:
@@ -175,17 +177,25 @@ class ArgumentCommentLintPackagesTest(unittest.TestCase):
         # though `members` omits them; the job lints them like the changed-
         # crate test job tests them (#2027).
         packages = cargo_packages(ROOT)
-        for path, package in (
-            ("codex-rs/chatgpt/src/lib.rs", "codex-chatgpt"),
-            ("codex-rs/message-history/src/lib.rs", "codex-message-history"),
-            ("codex-rs/windows-sandbox-rs/src/lib.rs", "codex-windows-sandbox"),
-            ("codex-rs/core/tests/common/lib.rs", "core_test_support"),
-            ("codex-rs/app-server/tests/common/lib.rs", "app_test_support"),
-            ("codex-rs/mcp-server/tests/common/lib.rs", "mcp_test_support"),
+        members = workspace_packages(ROOT).values()
+        for path, expected in (
+            ("codex-rs/chatgpt/src/lib.rs", ["codex-chatgpt"]),
+            ("codex-rs/message-history/src/lib.rs", ["codex-message-history"]),
+            ("codex-rs/windows-sandbox-rs/src/lib.rs", ["codex-windows-sandbox"]),
+            ("codex-rs/core/tests/common/lib.rs", ["codex-core", "core_test_support"]),
+            (
+                "codex-rs/app-server/tests/common/lib.rs",
+                ["app_test_support", "codex-app-server"],
+            ),
+            (
+                "codex-rs/mcp-server/tests/common/lib.rs",
+                ["codex-mcp-server", "mcp_test_support"],
+            ),
         ):
             with self.subTest(path=path):
-                self.assertNotIn(package, workspace_packages(ROOT).values())
-                self.assertEqual(lint_packages([path], packages), [package])
+                # Each case adds one crate the `members` list lacks.
+                self.assertEqual(len(set(expected) - set(members)), 1)
+                self.assertEqual(lint_packages([path], packages), expected)
 
     def test_both_changed_crate_jobs_share_one_crate_list(self) -> None:
         import changed_crate_test_packages
