@@ -27,7 +27,7 @@ use tracing::trace;
 use tracing::trace_span;
 use tracing::warn;
 
-use crate::agent::control::AgentExecutionGuard;
+use crate::agent::types::AgentExecutionGuard;
 use crate::codex_thread::BackgroundTerminalInfo;
 use crate::config::Config;
 use crate::context::ContextualUserFragment;
@@ -591,7 +591,7 @@ impl Session {
             return;
         }
 
-        let turn_context = self.new_default_turn_with_sub_id(sub_id.clone()).await;
+        let turn_context = self.new_default_turn().await;
         // #1331 (D171): nor while its named account is removed or signed out.
         if let Some(err) = crate::session::turn::turn_refusal(self, &turn_context).await {
             let message = format!(
@@ -1309,26 +1309,34 @@ impl Session {
     ) {
         for (input, final_output_json_schema) in follow_up_input {
             let op = match input {
-                TurnInput::UserInput { content, client_id } => {
+                TurnInput::UserInput {
+                    content,
+                    client_id,
+                    metadata,
+                } => {
                     // Nothing waits for the reply: a refusal is reported to the client by
                     // the submission itself.
                     let (reply, _) = tokio::sync::oneshot::channel();
+                    let mut request = TurnInputRequest::new(SubmittedTurnInput::UserInput {
+                        content,
+                        client_id,
+                    })
+                    .on_start(TurnStartOptions {
+                        final_output_json_schema,
+                        // Keeps a heartbeat's origin (`UserInputOrigin::from_turn_trigger`).
+                        turn_trigger: (metadata.origin == codex_history::UserInputOrigin::Heartbeat)
+                            .then(|| "automation_heartbeat_scheduled".to_string()),
+                        ..Default::default()
+                    });
+                    request.user_item_uuid = metadata.response_item_uuid;
                     Op::TurnInput {
-                        request: Box::new(
-                            TurnInputRequest::new(SubmittedTurnInput::UserInput {
-                                content,
-                                client_id,
-                            })
-                            .on_start(TurnStartOptions {
-                                final_output_json_schema,
-                                ..Default::default()
-                            }),
-                        ),
+                        request: Box::new(request),
                         mode: TurnInputMode::StartOrSteer,
                         reply,
                     }
                 }
-                TurnInput::InterAgentCommunication(mut communication) => {
+                TurnInput::InterAgentCommunication(communication) => {
+                    let mut communication = (*communication).clone();
                     communication.trigger_turn = true;
                     Op::InterAgentCommunication {
                         communication,

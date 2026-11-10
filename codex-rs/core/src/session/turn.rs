@@ -58,6 +58,7 @@ use crate::session::output_text_stream::PendingOutputText;
 use crate::session::daemon_recovery::RecordedTurnInput;
 use crate::session::session::Session;
 use crate::session::step_context::StepContext;
+use crate::session::step_settings::ResolvedStepSettings;
 use crate::session::turn_completion::CompletionAction;
 use crate::session::turn_completion::CompletionProgressState;
 use crate::session::turn_completion::assess_turn_completion;
@@ -106,10 +107,12 @@ use codex_file_system::find_nearest_ancestor_with_markers;
 use codex_hooks::ModelRequestHookEvent::PostModelRequest;
 use codex_hooks::ModelRequestHookEvent::PreModelRequest;
 use codex_hooks::ModelRequestStatus;
+use codex_history::ResponseItemEnvelope;
 use codex_login::CodexAuth;
 use codex_model_provider::RemoteCompactionSupport;
 use codex_model_provider_info::ChatStopSemantics;
 use codex_protocol::ResponseItemId;
+use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::config_types::AutoCompactTokenLimitScope;
 use codex_protocol::config_types::ModeKind;
 use codex_protocol::config_types::ServiceTier;
@@ -1243,7 +1246,7 @@ pub(crate) fn turn_inputs_are_terminal_result_only<'a>(
             {
                 saw_terminal_result = true;
             }
-            TurnInput::ResponseItem(_) => {}
+            TurnInput::ResponseItem(_) | TurnInput::FunctionCallOutput(_) => {}
             TurnInput::UserInput { .. } | TurnInput::InterAgentCommunication(_) => return false,
         }
     }
@@ -1260,7 +1263,9 @@ pub(crate) fn turn_inputs_expect_parent_completion<'a>(
             TurnInput::InterAgentCommunication(communication) if communication.trigger_turn => {
                 saw_triggering_collaboration_work = true;
             }
-            TurnInput::ResponseItem(_) | TurnInput::InterAgentCommunication(_) => {}
+            TurnInput::ResponseItem(_)
+            | TurnInput::FunctionCallOutput(_)
+            | TurnInput::InterAgentCommunication(_) => {}
         }
     }
     saw_triggering_collaboration_work
@@ -3362,6 +3367,8 @@ async fn drain_in_flight(
 async fn acquire_provider_request_lease(
     sess: &Session,
     turn_context: &TurnContext,
+    settings: &ResolvedStepSettings,
+    effort: Option<ReasoningEffortConfig>,
     client_session: &ModelClientSession,
     prompt: &Prompt,
     responses_metadata: &CodexResponsesMetadata,
@@ -3379,7 +3386,7 @@ async fn acquire_provider_request_lease(
         &codex_home,
         turn_context.config.model_provider_id.as_str(),
         turn_context.provider.info(),
-        turn_context.model_info.slug.as_str(),
+        settings.model_info.slug.as_str(),
         || auth_mode,
     )
     .boxed()
@@ -3411,10 +3418,10 @@ async fn acquire_provider_request_lease(
     let request_bytes = client_session
         .serialized_request_body_bytes(
             prompt,
-            &turn_context.model_info,
-            turn_context.reasoning_effort.clone(),
-            turn_context.reasoning_summary,
-            turn_context.config.service_tier.clone(),
+            &settings.model_info,
+            effort,
+            settings.reasoning_summary,
+            settings.service_tier.clone(),
             responses_metadata,
             turn_context
                 .auth_manager
@@ -4017,6 +4024,8 @@ async fn try_run_sampling_request(
     let provider_request_throttle = acquire_provider_request_lease(
         sess.as_ref(),
         turn_context.as_ref(),
+        &step_context.settings,
+        effort.clone(),
         client_session,
         &prompt,
         responses_metadata,
