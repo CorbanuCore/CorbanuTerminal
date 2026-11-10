@@ -405,6 +405,11 @@ does not send OAuth requests through a remote executor that predates this
 policy; sign-in fails with `MCP OAuth request not sent: ...` until the
 executor is updated.
 
+Enterprise-managed MCP authorization (`ema_auth`) follows the same rule: the
+token exchange with the MCP authorization server takes its policy from the
+MCP server `url`, and requests to the enterprise identity provider take it
+from the configured IdP issuer URL, never from endpoints a server advertises.
+
 <a id="telegram"></a>
 
 ## Telegram Connector

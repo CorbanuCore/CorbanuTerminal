@@ -82,6 +82,7 @@ async fn exchange(server: &MockServer, refresh_token: &str) -> Result<EmaAccessT
         EmaIdJagExchangeRequest {
             idp_client_authentication: EmaClientAuthentication::None,
             resource_client_authentication: EmaClientAuthentication::None,
+            server_url: &format!("{}/mcp", server.uri()),
             resource: &format!("{}/mcp", server.uri()),
             scopes: &[],
             mcp_client_id: "mcp-client",
@@ -161,6 +162,7 @@ async fn client_round_trip_preserves_signed_narrowing() -> Result<()> {
             EmaIdJagExchangeRequest {
                 idp_client_authentication: authentication(idp_method, idp_secret)?,
                 resource_client_authentication: authentication(resource_method, resource_secret)?,
+                server_url: &resource,
                 resource: &resource,
                 scopes,
                 mcp_client_id: "mcp-client",
