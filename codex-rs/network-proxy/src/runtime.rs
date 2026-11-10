@@ -2024,7 +2024,7 @@ mod tests {
     async fn host_blocked_subdomain_wildcards_exclude_apex() {
         // Exercise domain matching independently of DNS/local-address checks.
         let state = network_proxy_state_for_policy(NetworkProxyConfig {
-            allow_local_binding: true,
+            allow_local_binding: Some(true),
             ..network_settings(&["*.openai.com"], &[])
         });
 
@@ -2045,7 +2045,7 @@ mod tests {
     async fn host_blocked_subdomain_wildcards_work_offline_and_keep_deny_precedence() {
         // .invalid cannot resolve: these assertions must remain DNS-independent.
         let state = network_proxy_state_for_policy(NetworkProxyConfig {
-            allow_local_binding: true,
+            allow_local_binding: Some(true),
             ..network_settings(&["*.example.invalid"], &["blocked.example.invalid"])
         });
 

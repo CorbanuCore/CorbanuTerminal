@@ -371,7 +371,7 @@ fn sec_974_heap_allocations_include_every_heap() {
     use windows_sys::Win32::System::Memory::HeapCreate;
     // SAFETY: a private growable heap, never destroyed (see below).
     let private = unsafe { HeapCreate(0, 0, 0) };
-    assert!(private != 0, "private heap");
+    assert!(!private.is_null(), "private heap");
     // SAFETY: allocates from the private heap.
     let block = unsafe { HeapAlloc(private, 0, 64) };
     assert!(!block.is_null());

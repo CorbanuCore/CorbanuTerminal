@@ -388,8 +388,11 @@ fn child_scan() {
 /// object (inherited CI pipes do), so each runs on a thread with a deadline.
 fn pipe_name_with_timeout(handle: HANDLE) -> Option<String> {
     let (sender, receiver) = std::sync::mpsc::channel();
-    // HANDLE is an integer in windows-sys 0.52, so it moves to the thread.
+    // HANDLE is a raw pointer in windows-sys 0.61, so it moves to the thread
+    // as an address.
+    let raw_handle = handle as usize;
     std::thread::spawn(move || {
+        let handle = raw_handle as HANDLE;
         // SAFETY: `handle` is valid in this process.
         let name = (unsafe { GetFileType(handle) } == FILE_TYPE_PIPE)
             .then(|| pipe_name(handle))
@@ -440,7 +443,7 @@ fn inheritable(handle: HANDLE) -> bool {
 }
 
 fn inheritable_duplicate(handle: HANDLE) -> HANDLE {
-    let mut duplicate: HANDLE = 0;
+    let mut duplicate: HANDLE = std::ptr::null_mut();
     // SAFETY: duplicates a valid handle within this process.
     let ok = unsafe {
         DuplicateHandle(
@@ -554,14 +557,17 @@ fn run_restricted_child(role: &str, name: &str) -> String {
         restricted.expect("restricted token").0
     };
     let spawned = codex_windows_sandbox::spawn_process_with_pipes(
-        token,
+        // SAFETY: `token` stays open until it is closed below.
+        unsafe { std::os::windows::io::BorrowedHandle::borrow_raw(token) },
         &argv,
         &cwd,
         &env,
         StdinMode::Closed,
         StderrMode::MergeStdout,
         ConsoleMode::NoWindow,
-        /*use_private_desktop*/ false,
+        // The sync branch launches every legacy command on a private desktop.
+        codex_windows_sandbox::LaunchDesktop::prepare_for_token(token, /*logs_base_dir*/ None)
+            .expect("desktop"),
         /*logs_base_dir*/ None,
     )
     .expect("spawn restricted child");
@@ -569,7 +575,10 @@ fn run_restricted_child(role: &str, name: &str) -> String {
     // Not joined: a process spawned concurrently by another test can inherit
     // the pipe's write end while it is briefly inheritable, so EOF may come
     // late. The report line is all that is needed.
-    let _reader = codex_windows_sandbox::read_handle_loop(spawned.stdout_read, move |chunk| {
+    // SAFETY: the spawn hands over the pipe's read end.
+    let stdout_read =
+        unsafe { std::os::windows::io::FromRawHandle::from_raw_handle(spawned.stdout_read) };
+    let _reader = codex_windows_sandbox::read_handle_loop(stdout_read, move |chunk| {
         let _ = sender.send(chunk.to_vec());
     });
     // SAFETY: the handles stay valid until closed here.

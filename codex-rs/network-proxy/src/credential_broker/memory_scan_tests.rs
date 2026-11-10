@@ -85,7 +85,7 @@ fn describe(address: usize) -> String {
             std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
         )
     };
-    let mut heaps = vec![0; 64];
+    let mut heaps = vec![std::ptr::null_mut(); 64];
     // SAFETY: fills at most 64 handles.
     let count = unsafe { GetProcessHeaps(64, heaps.as_mut_ptr()) } as usize;
     let mut block = String::from("no heap block");
