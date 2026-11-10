@@ -320,4 +320,9 @@ pub enum NotSubmittedReason {
 
     /// `start_or_steer_turn` or `steer_turn` reached a steering path with empty user input.
     EmptyInput,
+
+    /// Corbanu: the active turn was admitted under other permissions (approval policy,
+    /// permission profile, approvals reviewer or Windows sandbox) than the session has
+    /// now. Steered input would run under the old ones, so it is returned instead.
+    AuthorizationChanged,
 }
