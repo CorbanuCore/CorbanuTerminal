@@ -366,6 +366,13 @@ impl<'a> ToolRuntime<UnifiedExecRequest, UnifiedExecProcess> for UnifiedExecRunt
         req.turn_environment.workspace_roots()
     }
 
+    fn turn_environment<'b>(
+        &self,
+        req: &'b UnifiedExecRequest,
+    ) -> Option<&'b crate::session::turn_context::TurnEnvironment> {
+        Some(&req.turn_environment)
+    }
+
     fn sandbox_cwd<'b>(&self, req: &'b UnifiedExecRequest) -> Option<&'b PathUri> {
         Some(&req.sandbox_cwd)
     }

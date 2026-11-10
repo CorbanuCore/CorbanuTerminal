@@ -1,4 +1,5 @@
 mod address_policy;
+mod host_sandbox;
 mod network_policy;
 mod process_id;
 mod protocol;
@@ -9,6 +10,7 @@ pub mod rpc;
 mod glob_scan_transport_tests;
 
 pub use address_policy::*;
+pub use host_sandbox::*;
 pub use network_policy::*;
 pub use process_id::ProcessId;
 pub use protocol::*;

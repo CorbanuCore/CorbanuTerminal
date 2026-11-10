@@ -232,6 +232,13 @@ impl ToolRuntime<ShellRequest, ExecToolCallOutput> for ShellRuntime {
         req.turn_environment.workspace_roots()
     }
 
+    fn turn_environment<'a>(
+        &self,
+        req: &'a ShellRequest,
+    ) -> Option<&'a crate::session::turn_context::TurnEnvironment> {
+        Some(&req.turn_environment)
+    }
+
     fn command_cwd(&self, req: &ShellRequest) -> Option<AbsolutePathBuf> {
         Some(req.cwd.clone())
     }

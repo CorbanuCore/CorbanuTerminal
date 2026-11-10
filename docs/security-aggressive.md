@@ -230,7 +230,9 @@ create files there too.
 
 On Windows without any Windows sandbox, Aggressive refuses every agent command
 and file tool access, with the steps to set the default sandbox up (#1976;
-see `docs/sandbox.md`).
+see `docs/sandbox.md`). So does a session working on a remote Windows
+machine without one, from any computer, or on a remote machine whose
+exec-server is too old to say (#2050).
 
 Under Moderate no agent command runs outside the sandbox, even when you
 approve it; Aggressive keeps every command in its sandbox too, once it applies

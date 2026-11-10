@@ -1303,6 +1303,12 @@ async fn danger_full_access_tool_attempts_do_not_enforce_managed_network() -> an
         fn workspace_roots<'a>(&self, _req: &'a ()) -> &'a [PathUri] {
             &[]
         }
+        fn turn_environment<'a>(
+            &self,
+            _req: &'a (),
+        ) -> Option<&'a crate::session::turn_context::TurnEnvironment> {
+            None
+        }
 
         async fn run(
             &mut self,

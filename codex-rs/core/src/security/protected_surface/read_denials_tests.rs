@@ -197,7 +197,7 @@ async fn pf_23_s01_file_tools_get_the_denials_after_taint() {
     let context =
         || turn.file_system_sandbox_context(/*additional_permissions*/ None, &environment);
     // Issue #239: under Moderate the denials apply before taint too.
-    let before = protect_file_tool_context(&session, &turn, context());
+    let before = protect_file_tool_context(&session, &turn, &environment, context());
     assert!(readable(context()));
     assert!(!readable(before));
 
@@ -205,7 +205,7 @@ async fn pf_23_s01_file_tools_get_the_denials_after_taint() {
         .services
         .model_client()
         .note_unrecorded_input_for_taint();
-    let after = protect_file_tool_context(&session, &turn, context());
+    let after = protect_file_tool_context(&session, &turn, &environment, context());
     assert!(readable(context()));
     assert!(!readable(after));
 }
@@ -1532,7 +1532,7 @@ async fn pf_23_s02_protected_levels_apply_the_rules_from_the_start() {
         session.services.replace_model_client(client);
         let context =
             turn.file_system_sandbox_context(/*additional_permissions*/ None, &environment);
-        let protected_context = protect_file_tool_context(&session, &turn, context.clone());
+        let protected_context = protect_file_tool_context(&session, &turn, &environment, context.clone());
         assert_eq!(readable(protected_context), !protected, "{level:?}");
         assert_eq!(
             post_taint_read_policy(&session, &turn).is_some(),
@@ -1745,7 +1745,7 @@ async fn issue_239_read_denials_apply_under_protected_level_before_taint() {
             .taint_generation,
         0
     );
-    let before_taint = protect_file_tool_context(&session, &turn, context());
+    let before_taint = protect_file_tool_context(&session, &turn, &environment, context());
     assert!(
         readable(context()),
         "baseline workspace-write reads the credential file"
@@ -1949,7 +1949,7 @@ async fn issue_506_file_tools_cannot_list_the_home_under_aggressive() {
             .clone();
         let context =
             turn.file_system_sandbox_context(/*additional_permissions*/ None, &environment);
-        let protected = protect_file_tool_context(&session, &turn, context);
+        let protected = protect_file_tool_context(&session, &turn, &environment, context);
         let profile = PermissionProfile::try_from(protected.permissions).unwrap();
         let unlistable = profile
             .file_system_sandbox_policy()

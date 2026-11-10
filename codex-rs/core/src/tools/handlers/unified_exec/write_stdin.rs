@@ -117,6 +117,32 @@ impl WriteStdinHandler {
             );
             return Err(FunctionCallError::RespondToModel(refusal));
         }
+        // #2050 (D510): the same for a process on a remote machine without a
+        // sandbox for the level it started with (or one that cannot say).
+        if typing
+            && let Some((environment_id, environment, started_with)) = session
+                .services
+                .unified_exec_manager
+                .process_remote_environment(args.session_id)
+                .await
+            && let Some(refusal) =
+                crate::security::windows_unsandboxed::session_remote_typing_refusal(
+                    &session,
+                    &environment_id,
+                    &environment,
+                    started_with,
+                )
+                .await
+        {
+            crate::security::inspection::record_refusal(
+                session.thread_id(),
+                crate::security::windows_unsandboxed::INSPECTED_TYPING,
+                crate::security::windows_unsandboxed::inspected_outcome(
+                    session.services.model_client().live_level(),
+                ),
+            );
+            return Err(FunctionCallError::RespondToModel(refusal));
+        }
         if !args.chars.is_empty() && !is_interrupt(&args.chars) {
             typed_link_check(&session, &turn, &args).await?;
         }

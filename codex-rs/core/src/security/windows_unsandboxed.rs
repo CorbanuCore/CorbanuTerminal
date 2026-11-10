@@ -126,13 +126,171 @@ fn started_unsandboxed_refusal(level: SecurityLevel) -> String {
     )
 }
 
-/// The refusal a file tool's sandbox context carries (see
-/// `FileSystemSandboxContext::unsandboxed_refusal`), if any.
-pub(crate) fn session_file_refusal(
+/// #2050 (D510): the same rule where the work actually runs. A remote
+/// environment's executor reports its own platform sandbox; under Moderate or
+/// Aggressive, work for a remote Windows machine without a Windows sandbox for
+/// this session's `[windows] sandbox` (none, or the elevated one not set up
+/// there) is refused, and so is work for an executor that cannot say (an
+/// older one that does not clearly run on Linux or macOS, or one that does
+/// not answer). Local environments keep the check above, and so does a
+/// Windows client sending work to a remote Linux machine (#2049).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RemoteGap {
+    WindowsWithoutSandbox,
+    Unreported,
+}
+
+/// How to set the sandbox up for a remote Windows machine.
+const REMOTE_STEPS: &str = "To set it up, run Corbanu Terminal on that machine, open \
+     /permissions, choose a mode that uses the sandbox (such as \"Ask for approval\") and pick \
+     \"Set up default sandbox\" (it needs Administrator permission there), using the same \
+     Corbanu home as its exec-server; then set `sandbox = \"elevated\"` under `[windows]` in \
+     config.toml on this computer and start a new session with /new.";
+
+/// How to get a report from an executor that gives none.
+const UNREPORTED_STEPS: &str = "Update Corbanu Terminal on that machine to this version so its \
+     exec-server reports its sandbox, and check that it is reachable. If it runs on Windows, \
+     it also needs the default Windows sandbox set up there, with `sandbox = \"elevated\"` \
+     under `[windows]` in config.toml on this computer.";
+
+/// The way out of a protected level for remote work.
+const REMOTE_PERMISSIVE: &str =
+    "Or a person can switch to Permissive in /security (it applies after a restart).";
+
+/// The gap of `environment` for work sent with `windows_sandbox_level`, if
+/// it is remote and does not confine that work.
+pub(crate) async fn remote_gap(
+    environment: &codex_exec_server::Environment,
+    windows_sandbox_level: WindowsSandboxLevel,
+) -> Option<RemoteGap> {
+    if !environment.is_remote() {
+        return None;
+    }
+    match environment.info().await {
+        Ok(info) => match info.host_sandbox_verdict(windows_sandbox_level) {
+            codex_exec_server::HostSandboxVerdict::Confined => None,
+            codex_exec_server::HostSandboxVerdict::WindowsWithoutSandbox => {
+                Some(RemoteGap::WindowsWithoutSandbox)
+            }
+            codex_exec_server::HostSandboxVerdict::Unreported => Some(RemoteGap::Unreported),
+        },
+        Err(err) => {
+            tracing::warn!("remote environment did not report its sandbox: {err}");
+            Some(RemoteGap::Unreported)
+        }
+    }
+}
+
+fn remote_reason(environment_id: &str, gap: RemoteGap) -> (String, &'static str) {
+    match gap {
+        RemoteGap::WindowsWithoutSandbox => (
+            format!(
+                "the default Windows sandbox, which is not set up for this session on the \
+                 remote Windows machine of environment `{environment_id}`"
+            ),
+            REMOTE_STEPS,
+        ),
+        RemoteGap::Unreported => (
+            format!(
+                "a sandbox, and the remote machine of environment `{environment_id}` did not \
+                 report one (its exec-server may be older than this version)"
+            ),
+            UNREPORTED_STEPS,
+        ),
+    }
+}
+
+/// The refusal of an agent command for a remote environment.
+pub(crate) fn remote_command_refusal(
+    level: SecurityLevel,
+    environment_id: &str,
+    gap: RemoteGap,
+) -> String {
+    let level = name(level);
+    let (reason, steps) = remote_reason(environment_id, gap);
+    format!(
+        "Security level {level} refused this command: {level} runs agent commands only inside \
+         {reason}, so nothing ran. {steps} {REMOTE_PERMISSIVE}"
+    )
+}
+
+/// The refusal of typing into a running command of a remote environment.
+pub(crate) fn remote_typing_refusal(
+    level: SecurityLevel,
+    environment_id: &str,
+    gap: RemoteGap,
+) -> String {
+    let level = name(level);
+    let (reason, steps) = remote_reason(environment_id, gap);
+    format!(
+        "Security level {level} refused typing into this command: {level} runs agent commands \
+         only inside {reason}. {steps} {REMOTE_PERMISSIVE}"
+    )
+}
+
+/// The refusal a file tool's sandbox context carries for a remote
+/// environment. Its executor's report is checked when the file tool runs
+/// (`RemoteFileSystem`), so this names both gaps.
+pub(crate) fn remote_file_refusal(level: SecurityLevel, environment_id: &str) -> String {
+    let level = name(level);
+    format!(
+        "Security level {level} refused this file access: {level} lets file tools read and \
+         write only inside a sandbox, and the remote machine of environment `{environment_id}` \
+         has none for this session (a Windows machine without the default Windows sandbox set \
+         up, or an exec-server too old to report one). {REMOTE_STEPS} {UNREPORTED_STEPS} \
+         {REMOTE_PERMISSIVE}"
+    )
+}
+
+/// The refusal of an agent command for `environment` in `session`'s turn,
+/// if it is remote and does not confine it.
+pub(crate) async fn session_remote_command_refusal(
     session: &crate::session::session::Session,
+    environment: &crate::session::turn_context::TurnEnvironment,
     windows_sandbox_level: WindowsSandboxLevel,
 ) -> Option<String> {
     let level = session.services.model_client().live_level();
+    if level == SecurityLevel::Permissive {
+        return None;
+    }
+    let gap = remote_gap(&environment.environment, windows_sandbox_level).await?;
+    Some(remote_command_refusal(
+        level,
+        &environment.environment_id,
+        gap,
+    ))
+}
+
+/// The refusal of typing into a process of a remote environment, judged by
+/// the Windows sandbox the process started with.
+pub(crate) async fn session_remote_typing_refusal(
+    session: &crate::session::session::Session,
+    environment_id: &str,
+    environment: &codex_exec_server::Environment,
+    started_with: WindowsSandboxLevel,
+) -> Option<String> {
+    let level = session.services.model_client().live_level();
+    if level == SecurityLevel::Permissive {
+        return None;
+    }
+    let gap = remote_gap(environment, started_with).await?;
+    Some(remote_typing_refusal(level, environment_id, gap))
+}
+
+/// The refusal a file tool's sandbox context carries (see
+/// `FileSystemSandboxContext::unsandboxed_refusal`) for `environment` under
+/// `level`, if any: the local check, and for a remote environment, any
+/// protected level (judged against the executor's report when the file tool
+/// runs).
+pub(crate) fn environment_file_refusal(
+    level: SecurityLevel,
+    windows_sandbox_level: WindowsSandboxLevel,
+    environment: &crate::session::turn_context::TurnEnvironment,
+) -> Option<String> {
+    if environment.environment.is_remote() {
+        return (level != SecurityLevel::Permissive)
+            .then(|| remote_file_refusal(level, &environment.environment_id));
+    }
     applies(level, windows_sandbox_level).then(|| file_refusal(level))
 }
 

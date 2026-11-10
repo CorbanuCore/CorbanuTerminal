@@ -38,6 +38,37 @@ described below, because that sandbox can't block reads. With the default
 sandbox selected, nothing changes: if its setup hasn't run yet, the first
 sandboxed command runs it.
 
+### Remote Windows machines
+
+The same rule applies where the commands actually run (#2050, D510). When
+this session's environment is a remote machine (an exec-server, for example
+a Windows PC driven from a Mac or Linux computer), that machine's
+exec-server reports its operating system and whether the default Windows
+sandbox is set up there. Under Moderate or Aggressive, if it is Windows and
+it has no Windows sandbox for this session, every agent command, typing into
+a running command there and every file tool access there is refused, naming
+the level and the environment. "No Windows sandbox for this session" means
+either that this computer's config asks for none (no `[windows] sandbox`
+setting: the remote machine uses the setting of the computer that sends the
+work) or that it asks for the default sandbox and that machine has not set
+it up. To fix it:
+
+- On the remote machine, run Corbanu Terminal with the same Corbanu home as
+  its exec-server, open `/permissions`, choose a mode that uses the sandbox
+  and pick "Set up default sandbox" (it needs Administrator permission
+  there).
+- On this computer, set `[windows] sandbox = "elevated"` and start a new
+  session with `/new`.
+- Or switch to Permissive in `/security` (it applies after a restart).
+
+An exec-server older than this version can't report its sandbox. Under
+Moderate or Aggressive, work for such a machine is refused too (fail
+closed), unless it clearly runs on Linux or macOS (its working folder or
+shell is a POSIX one): update Corbanu Terminal on that machine. Remote Linux
+and macOS machines use their own sandbox and are unchanged. A Windows
+computer without its own sandbox still refuses commands for every
+environment, remote Linux ones included (#2049).
+
 ## Windows non-admin sandbox
 
 On Windows, Corbanu Terminal can sandbox commands in two ways. The **default

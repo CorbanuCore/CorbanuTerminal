@@ -53,6 +53,7 @@ pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
             crate::security::protected_surface::protect_file_tool_context(
                 sess,
                 &step_context.turn,
+                environment,
                 step_context
                     .turn
                     .file_system_sandbox_context(/*additional_permissions*/ None, environment),
@@ -586,6 +587,7 @@ mod tests {
         let sandbox = crate::security::protected_surface::protect_file_tool_context(
             &session,
             &step_context.turn,
+            environment,
             step_context
                 .turn
                 .file_system_sandbox_context(/*additional_permissions*/ None, environment),

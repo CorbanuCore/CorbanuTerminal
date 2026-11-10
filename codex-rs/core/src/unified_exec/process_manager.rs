@@ -638,6 +638,16 @@ impl UnifiedExecProcessManager {
                 network_denial_monitor,
                 Arc::clone(&transcript),
                 Arc::clone(&initial_exec_command_active),
+                request
+                    .turn_environment
+                    .environment
+                    .is_remote()
+                    .then(|| {
+                        (
+                            request.turn_environment.environment_id.clone(),
+                            Arc::clone(&request.turn_environment.environment),
+                        )
+                    }),
             )
             .await;
             Some(InitialExecCommandGuard {
@@ -1113,6 +1123,7 @@ impl UnifiedExecProcessManager {
         network_denial_monitor: Option<tokio::task::JoinHandle<()>>,
         transcript: Arc<tokio::sync::Mutex<HeadTailBuffer>>,
         initial_exec_command_active: Arc<AtomicBool>,
+        remote_environment: Option<(String, Arc<codex_exec_server::Environment>)>,
     ) {
         let entry = ProcessEntry {
             process: Arc::clone(&process),
@@ -1126,6 +1137,7 @@ impl UnifiedExecProcessManager {
             session: Arc::downgrade(&context.session),
             last_used: started_at,
             windows_sandbox_level: context.turn.windows_sandbox_level,
+            remote_environment,
         };
         let pruned_entry = {
             let mut store = self.process_store.lock().await;
@@ -1695,6 +1707,23 @@ impl UnifiedExecProcessManager {
             .processes
             .get(&process_id)
             .map(|entry| entry.windows_sandbox_level)
+    }
+
+    /// #2050: the remote environment a process runs in, with the Windows
+    /// sandbox level it started with; `None` for a process on this host or
+    /// an unknown one.
+    pub(crate) async fn process_remote_environment(
+        &self,
+        process_id: i32,
+    ) -> Option<(
+        String,
+        Arc<codex_exec_server::Environment>,
+        codex_protocol::config_types::WindowsSandboxLevel,
+    )> {
+        let store = self.process_store.lock().await;
+        let entry = store.processes.get(&process_id)?;
+        let (environment_id, environment) = entry.remote_environment.clone()?;
+        Some((environment_id, environment, entry.windows_sandbox_level))
     }
 
     pub(crate) async fn list_processes(&self) -> Vec<BackgroundTerminalInfo> {
