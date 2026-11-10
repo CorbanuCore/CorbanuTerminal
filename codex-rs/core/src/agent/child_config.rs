@@ -70,6 +70,19 @@ pub(crate) async fn prepare_agent_spawn_config(
         .model_provider
         .map(str::trim)
         .filter(|provider| !provider.is_empty() && !options.full_history_fork);
+    // Corbanu (as main's V2 handler): a session may still run a model that was later hidden or
+    // disabled in the refreshed catalogue. A V2 child that inherits that already-authorized
+    // runtime keeps the session contract; a runtime selected for the child still fails closed.
+    let child_runtime_was_selected = options.version == SpawnConfigVersion::V1
+        || options.model_provider.is_some()
+        || options.model.is_some()
+        || options.reasoning_effort.is_some()
+        || options.role_name.is_some()
+        || turn.config.agent_default_subagent_model.is_some()
+        || turn
+            .config
+            .agent_default_subagent_reasoning_effort
+            .is_some();
     if model_provider.is_none() {
         apply_requested_spawn_agent_runtime_overrides(
             session,
@@ -111,7 +124,9 @@ pub(crate) async fn prepare_agent_spawn_config(
     apply_spawn_agent_runtime_overrides(&mut config, turn)?;
     // Corbanu: the resolved runtime must clear the operator's spend policy and be usable.
     ensure_spawn_provider_authorized(&config, &config.model_provider_id)?;
-    ensure_spawn_runtime_eligible(session, &config).await?;
+    if child_runtime_was_selected {
+        ensure_spawn_runtime_eligible(session, &config).await?;
+    }
 
     // Remember an applied configured default so cold reload reapplies its restrictions.
     let role_name = options
