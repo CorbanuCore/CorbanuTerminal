@@ -52,8 +52,8 @@ class ChangedCrateTestPackagesTest(unittest.TestCase):
         self.assertEqual(packages["codex-rs/exec-server"], "codex-exec-server")
 
     def test_path_dependency_members_are_packages(self) -> None:
-        # #2027: Cargo makes `[workspace.dependencies]` path crates members
-        # though `members` omits them; the job must see them too.
+        # #2027: Cargo makes the crates members depend on by path members
+        # too, though `members` omits them; the job must see them.
         self.assertNotIn("codex-rs/windows-sandbox-rs", workspace_packages(ROOT))
         packages = tested_packages(ROOT)
         self.assertEqual(
@@ -70,13 +70,17 @@ class ChangedCrateTestPackagesTest(unittest.TestCase):
             "Cargo.toml": (
                 '[workspace]\nmembers = ["a"]\nexclude = ["skip"]\n'
                 "[workspace.dependencies]\n"
-                'b = { path = "b" }\nv = "1"\nout = { path = "../out" }\n'
-                's = { path = "skip/c" }\nroot = { path = "" }\n'
+                'b = { path = "b" }\nunused = { path = "unused" }\nv = "1"\n'
+                'out = { path = "../out" }\ns = { path = "skip/c" }\n'
+                'root = { path = "" }\n'
             ),
             "a/Cargo.toml": (
                 '[package]\nname = "a"\n[dependencies]\nc = { path = "../c" }\n'
+                "b = { workspace = true }\nv = { workspace = true }\n"
+                "out = { workspace = true }\ns = { workspace = true }\n"
+                "root = { workspace = true }\n"
                 "[target.'cfg(windows)'.dev-dependencies]\n"
-                'd = { path = "../x/../d" }\nb = { path = "../b" }\n'
+                'd = { path = "../x/../d" }\n'
             ),
             "b/Cargo.toml": '[package]\nname = "b"\n',
             "c/Cargo.toml": (
@@ -84,6 +88,7 @@ class ChangedCrateTestPackagesTest(unittest.TestCase):
             ),
             "d/Cargo.toml": '[package]\nname = "d"\n',
             "e/Cargo.toml": '[package]\nname = "e"\n',
+            "unused/Cargo.toml": '[package]\nname = "unused"\n',
         }
         with tempfile.TemporaryDirectory() as tmp:
             for name, text in manifests.items():

@@ -74,50 +74,58 @@ HELPER_BINARIES = {
 DEPENDENCY_TABLES = ("dependencies", "dev-dependencies", "build-dependencies")
 
 
-def path_dependencies(table: dict) -> list[str]:
-    """The `path`s of a manifest's dependency tables (target tables too)."""
+def path_dependencies(table: dict, base: str, shared: dict[str, str]) -> list[str]:
+    """The directories (relative to the workspace) of the crates a manifest
+    in `base` depends on by path, directly or through `workspace = true` on a
+    `shared` (`[workspace.dependencies]`) path entry; target tables too."""
     found = []
     for name in DEPENDENCY_TABLES:
-        for dependency in table.get(name, {}).values():
-            if isinstance(dependency, dict) and "path" in dependency:
-                found.append(dependency["path"])
+        for key, dependency in table.get(name, {}).items():
+            if not isinstance(dependency, dict):
+                continue
+            if "path" in dependency:
+                found.append(os.path.normpath(os.path.join(base, dependency["path"])))
+            elif dependency.get("workspace") is True and key in shared:
+                found.append(shared[key])
     for target in table.get("target", {}).values():
-        found.extend(path_dependencies(target))
+        found.extend(path_dependencies(target, base, shared))
     return found
 
 
 def tested_packages(root: Path) -> dict[str, str]:
     """The workspace members plus the crates Cargo makes members because a
     member depends on them by path (#2027: missing these, the job never ran
-    codex-windows-sandbox's tests, and #2011 broke two of them): path
-    dependencies inside the workspace and not excluded, in `[workspace.
-    dependencies]` or a member's own tables, and theirs in turn."""
+    codex-windows-sandbox's tests, and #2011 broke two of them), and theirs in
+    turn, unless outside the workspace or excluded. An unused
+    `[workspace.dependencies]` path entry is not a member."""
     packages = workspace_packages(root)
-    manifest = tomllib.loads((root / WORKSPACE / "Cargo.toml").read_text())
-    workspace = manifest["workspace"]
+    workspace = tomllib.loads((root / WORKSPACE / "Cargo.toml").read_text())[
+        "workspace"
+    ]
+    shared = {
+        key: os.path.normpath(dependency["path"])
+        for key, dependency in workspace.get("dependencies", {}).items()
+        if isinstance(dependency, dict) and "path" in dependency
+    }
     excluded = [os.path.normpath(path) for path in workspace.get("exclude", [])]
-    # (directory relative to the workspace, dependency paths relative to it)
-    pending = [(".", path_dependencies(workspace))]
+    pending = []
     for directory in packages:
         member = tomllib.loads((root / directory / "Cargo.toml").read_text())
-        pending.append(
-            (os.path.relpath(directory, WORKSPACE), path_dependencies(member))
-        )
+        base = os.path.relpath(directory, WORKSPACE)
+        pending.extend(path_dependencies(member, base, shared))
     while pending:
-        base, paths = pending.pop()
-        for path in paths:
-            crate = os.path.normpath(os.path.join(base, path))
-            # Outside the workspace, or the virtual root manifest itself.
-            if os.path.isabs(crate) or crate in (".", "..") or crate.startswith("../"):
-                continue
-            if any(crate == ex or crate.startswith(ex + "/") for ex in excluded):
-                continue
-            directory = f"{WORKSPACE}/{crate}"
-            if directory in packages:
-                continue
-            member = tomllib.loads((root / directory / "Cargo.toml").read_text())
-            packages[directory] = member["package"]["name"]
-            pending.append((crate, path_dependencies(member)))
+        crate = pending.pop()
+        # Outside the workspace, or the virtual root manifest itself.
+        if os.path.isabs(crate) or crate in (".", "..") or crate.startswith("../"):
+            continue
+        if any(crate == ex or crate.startswith(ex + "/") for ex in excluded):
+            continue
+        directory = f"{WORKSPACE}/{crate}"
+        if directory in packages:
+            continue
+        manifest = tomllib.loads((root / directory / "Cargo.toml").read_text())
+        packages[directory] = manifest["package"]["name"]
+        pending.extend(path_dependencies(manifest, crate, shared))
     return packages
 
 
