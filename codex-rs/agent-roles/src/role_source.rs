@@ -1,0 +1,166 @@
+//! Corbanu: where an agent role was declared, and which of a role file's keys
+//! are applied when an agent is spawned with it.
+
+use codex_config::ConfigLayerSource;
+use codex_config::loader::sanitize_project_role_config;
+use std::path::Path;
+use toml::Value as TomlValue;
+
+/// The kind of config that declared an agent role's config file.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum AgentRoleSource {
+    /// Shipped with Corbanu.
+    BuiltIn,
+    /// The person's own config (user config, `~/.codex/agents/`) or launch
+    /// flags.
+    User,
+    /// System, MDM, packaged or enterprise-managed config.
+    Managed,
+    /// A trusted project's `.codex` folder: repository contents, so the
+    /// project-config denylist applies (D512, #1997). The default, so a role
+    /// whose origin was not recorded gets the denylist.
+    #[default]
+    Project,
+}
+
+impl AgentRoleSource {
+    pub fn from_layer(source: &ConfigLayerSource) -> Self {
+        match source {
+            ConfigLayerSource::Project { .. } => Self::Project,
+            ConfigLayerSource::User { .. } | ConfigLayerSource::SessionFlags => Self::User,
+            ConfigLayerSource::PackagedDefaults { .. }
+            | ConfigLayerSource::Mdm { .. }
+            | ConfigLayerSource::System { .. }
+            | ConfigLayerSource::EnterpriseManaged { .. }
+            | ConfigLayerSource::LegacyManagedConfigTomlFromFile { .. }
+            | ConfigLayerSource::LegacyManagedConfigTomlFromMdm => Self::Managed,
+        }
+    }
+}
+
+/// The `[agents]` keys that are settings rather than role declarations: the
+/// named fields of `AgentsToml`, including the `max_threads` alias.
+pub const AGENTS_SETTINGS_KEYS: &[&str] = &[
+    "enabled",
+    "max_concurrent_threads_per_session",
+    "max_threads",
+    "max_depth",
+    "default_subagent_model",
+    "default_subagent_reasoning_effort",
+    "job_max_runtime_seconds",
+    "interrupt_message",
+    "provider_allowlist",
+];
+
+/// The top-level role file keys a spawned agent applies (D526 (a), provisional):
+/// upstream's role fields plus base instructions, the provider choice and
+/// `allow_login_shell = false`. Everything else, permission settings included,
+/// leaves the parent's value in place.
+pub const APPLIED_ROLE_KEYS: &[&str] = &[
+    "developer_instructions",
+    "instructions",
+    "base_instructions",
+    "model",
+    "model_provider",
+    "model_providers",
+    "model_reasoning_effort",
+    "model_reasoning_summary",
+    "model_verbosity",
+    "personality",
+    "service_tier",
+    "features",
+    "skills",
+    "allow_login_shell",
+];
+
+/// Strips the project-config denylist, and any role declarations, from a role
+/// file's config layer when a project declared the role (D512, #1997),
+/// returning the removed keys. User, managed and built-in roles are unchanged.
+pub fn sanitize_role_config_layer(source: AgentRoleSource, config: &mut TomlValue) -> Vec<String> {
+    match source {
+        AgentRoleSource::Project => {
+            let mut ignored_keys = sanitize_project_role_config(config);
+            // A project role must not declare roles of its own: they would
+            // reach a grandchild unsanitized. Every `agents` key that is not a
+            // setting declares a role (as a table, or as an array serde reads
+            // like one), so only the settings stay.
+            if let Some(agents) = config.get_mut("agents").and_then(TomlValue::as_table_mut) {
+                let roles = agents
+                    .keys()
+                    .filter(|key| !AGENTS_SETTINGS_KEYS.contains(&key.as_str()))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                for name in roles {
+                    agents.remove(&name);
+                    ignored_keys.push(format!("agents.{name}"));
+                }
+            }
+            ignored_keys
+        }
+        AgentRoleSource::BuiltIn | AgentRoleSource::User | AgentRoleSource::Managed => Vec::new(),
+    }
+}
+
+/// The warning for keys a project's role file sets that project config may
+/// not, worded like the project config warning.
+pub fn project_role_ignored_keys_warning(role_file: &Path, ignored_keys: &[String]) -> String {
+    format!(
+        "Ignored unsupported project-local config keys in agent role file {}: {}. \
+         A project's agent roles can't set what a project's config can't set; if you \
+         want these settings to apply, declare the role in your user-level config.",
+        role_file.display(),
+        ignored_keys.join(", "),
+    )
+}
+
+/// The top-level keys of a role file's config layer that a spawned agent does
+/// not apply (D526 (a)), sorted.
+pub fn unapplied_role_keys(config: &TomlValue) -> Vec<String> {
+    let mut keys: Vec<String> = config
+        .as_table()
+        .map(|table| {
+            table
+                .iter()
+                .filter(|(key, value)| {
+                    // A table the denylist emptied sets nothing.
+                    !APPLIED_ROLE_KEYS.contains(&key.as_str())
+                        && !value.as_table().is_some_and(toml::map::Map::is_empty)
+                })
+                .map(|(key, _)| key.clone())
+                .collect()
+        })
+        .unwrap_or_default();
+    keys.sort();
+    keys
+}
+
+/// The warning for role file keys a spawned agent does not apply.
+pub fn unapplied_role_keys_warning(role_file: &Path, keys: &[String]) -> String {
+    format!(
+        "Agent role file {} sets {}, which an agent spawned with this role does not apply: \
+         it keeps its parent's settings for them. A role may change the model, provider, \
+         instructions and reasoning settings, and may only make permissions stricter \
+         (for example `allow_login_shell = false` or turning features off).",
+        role_file.display(),
+        keys.join(", "),
+    )
+}
+
+/// Startup warnings for one role file's config layer: keys the project
+/// denylist removes (D512) and keys a spawned agent does not apply (D526).
+pub fn push_role_file_warnings(
+    source: AgentRoleSource,
+    role_file: &Path,
+    config: &TomlValue,
+    startup_warnings: &mut Vec<String>,
+) {
+    let mut config = config.clone();
+    let ignored_keys = sanitize_role_config_layer(source, &mut config);
+    if !ignored_keys.is_empty() {
+        startup_warnings.push(project_role_ignored_keys_warning(role_file, &ignored_keys));
+    }
+    let unapplied_keys = unapplied_role_keys(&config);
+    if !unapplied_keys.is_empty() {
+        startup_warnings.push(unapplied_role_keys_warning(role_file, &unapplied_keys));
+    }
+}
