@@ -37,6 +37,10 @@ impl AgentControl for LocalAgentControl {
         self.session_id()
     }
 
+    fn local_backend_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
+    }
+
     fn resolve<'a>(
         &'a self,
         caller: ThreadId,
