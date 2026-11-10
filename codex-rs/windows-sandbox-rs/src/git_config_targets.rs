@@ -262,7 +262,8 @@ enum Source {
     /// share or device.
     Named,
     /// D517: a config read from a share (or a file it includes) names it:
-    /// never opened on a share either, mapped network drives included.
+    /// never opened on a share either, mapped network drives included, nor
+    /// without a drive or server (`/x`, on the current drive).
     NamedFromShare,
 }
 
@@ -451,9 +452,18 @@ fn read_config(
     let network = || crate::local_drive::is_network_path(path);
     let on_share =
         source == Source::Environment && !crate::git_watch::has_device_name(path) && network();
+    // A path with no drive or server (`/x`) is on the current drive, which
+    // may be a mapped network drive.
+    let unanchored = || {
+        cfg!(windows)
+            && !matches!(
+                path.components().next(),
+                Some(std::path::Component::Prefix(_))
+            )
+    };
     let refused = !on_share
         && (crate::git_watch::is_remote_or_device(path)
-            || (source == Source::NamedFromShare && network()));
+            || (source == Source::NamedFromShare && (unanchored() || network())));
     if refused {
         return;
     }

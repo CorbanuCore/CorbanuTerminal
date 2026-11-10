@@ -662,8 +662,9 @@ fn share_reads_wait_until_the_deadline_only() {
 /// D517 (#1877 item 7(a)): global configs on a share that can't be reached
 /// count as changed after every look; a look waits about [`SHARE_TIMEOUT`]
 /// at most in all, and the next one not at all while those reads still
-/// hang. Windows: an unroutable server (a first read hangs for about 21 s,
-/// later ones fail at once; both count). Elsewhere: FIFOs no one writes, so
+/// hang. Windows: a TEST-NET-1 server (RFC 5737; never a real host, so no
+/// credentials go anywhere; a first read hangs for about 21 s, later ones
+/// fail at once; both count). Elsewhere: FIFOs no one writes, so
 /// opening them hangs.
 #[test]
 fn global_config_on_an_unreachable_share_counts_as_changed() {
@@ -673,8 +674,8 @@ fn global_config_on_an_unreachable_share_counts_as_changed() {
     #[cfg(windows)]
     let (globals, fifos) = (
         vec![
-            PathBuf::from(r"\\10.255.255.1\share\.config\git\config"),
-            PathBuf::from(r"\\10.255.255.1\share\.gitconfig"),
+            PathBuf::from(r"\\192.0.2.1\share\.config\git\config"),
+            PathBuf::from(r"\\192.0.2.1\share\.gitconfig"),
         ],
         Vec::<PathBuf>::new(),
     );
@@ -722,7 +723,8 @@ fn global_config_on_an_unreachable_share_counts_as_changed() {
 
 /// D517 (#1877 item 7(a)): a global config on a share that can be reached
 /// is read, and what it names is watched; the include paths it names on a
-/// share are never opened, while a local one is followed. A repository's
+/// share, or on Windows with no drive (`/x`, the current drive), are never
+/// opened, while a local one is followed. A repository's
 /// own config on a share is still never read (only the global and system
 /// configs from the environment are).
 #[test]
@@ -750,9 +752,22 @@ fn global_config_on_a_share_is_read_but_not_its_share_includes() {
     )
     .expect("local include");
     fs::write(
+        base.join("rootless.cfg"),
+        format!(
+            "[core]\n\tfsmonitor = {}\n",
+            slash(&work.join("from-rootless.exe"))
+        ),
+    )
+    .expect("rootless include");
+    // `/...` with no drive: on Windows the current drive, maybe a mapped one.
+    let rootless = slash(&base.join("rootless.cfg"));
+    let rootless = rootless
+        .split_once(':')
+        .map_or(rootless.clone(), |(_, rest)| rest.to_string());
+    fs::write(
         share.join(".gitconfig"),
         format!(
-            "[core]\n\thooksPath = {}\n[include]\n\tpath = inc.cfg\n\tpath = {}\n\tpath = {}\n",
+            "[core]\n\thooksPath = {}\n[include]\n\tpath = inc.cfg\n\tpath = {}\n\tpath = {}\n\tpath = {rootless}\n",
             slash(&work.join("hooks")),
             slash(&on_share(&share.join("inc.cfg"))),
             slash(&base.join("local.cfg")),
@@ -781,14 +796,22 @@ fn global_config_on_a_share_is_read_but_not_its_share_includes() {
         .map(|state| (state.path.clone(), state.why.clone()))
         .collect();
     watched.sort();
+    let mut expected = vec![
+        (work.join("from-local.exe"), "core.fsmonitor".to_string()),
+        (work.join("hooks"), "core.hooksPath".to_string()),
+        (work.join("hooks").join("_"), "core.hooksPath".to_string()),
+    ];
+    // Elsewhere `/...` is a full path on this machine.
+    if !cfg!(windows) {
+        expected.insert(
+            1,
+            (work.join("from-rootless.exe"), "core.fsmonitor".to_string()),
+        );
+    }
     assert_eq!(
         (watched, unchanged, changed),
         (
-            vec![
-                (work.join("from-local.exe"), "core.fsmonitor".to_string()),
-                (work.join("hooks"), "core.hooksPath".to_string()),
-                (work.join("hooks").join("_"), "core.hooksPath".to_string()),
-            ],
+            expected,
             Vec::new(),
             vec![(
                 work.join("hooks"),
