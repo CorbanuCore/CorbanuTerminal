@@ -59,7 +59,7 @@ setup_remote_env() {
     --privileged \
     --security-opt seccomp=unconfined \
     ubuntu:24.04 sleep infinity >/dev/null
-  if ! docker exec "${container_name}" sh -lc "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y python3 zsh bubblewrap git"; then
+  if ! install_remote_env_packages "${container_name}"; then
     docker rm -f "${container_name}" >/dev/null 2>&1 || true
     return 1
   fi
@@ -91,6 +91,27 @@ setup_remote_env() {
   export CODEX_TEST_REMOTE_ENV="${container_name}"
   export CODEX_TEST_REMOTE_ENV_CONTAINER_NAME="${container_name}"
   export CODEX_TEST_ENVIRONMENT="docker"
+}
+
+# An Ubuntu mirror caught mid-sync fails `apt-get update` with "File has
+# unexpected size" until the sync finishes; that turned postmerge CI red on
+# 2026-11-10. Retry the whole update + install a bounded number of times.
+install_remote_env_packages() {
+  local container_name="$1"
+  local attempt
+  local attempts=3
+
+  for (( attempt = 1; attempt <= attempts; attempt++ )); do
+    if docker exec "${container_name}" sh -lc "apt-get -o Acquire::Retries=3 update && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 install -y python3 zsh bubblewrap git"; then
+      return 0
+    fi
+    if (( attempt < attempts )); then
+      echo "apt-get failed in ${container_name} (attempt ${attempt}/${attempts}); retrying in $((attempt * 30))s" >&2
+      sleep $((attempt * 30))
+    fi
+  done
+  echo "apt-get failed in ${container_name} after ${attempts} attempts" >&2
+  return 1
 }
 
 wait_for_remote_exec_server_port() {

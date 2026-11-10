@@ -17,8 +17,14 @@ starts, so you can set the sandbox up or change the level:
 
 - In the TUI, open `/permissions`, choose a mode that uses the sandbox (such
   as "Ask for approval") and pick "Set up default sandbox" (it needs
-  Administrator permission). A session keeps the Windows sandbox it started
-  with, so start a new session with `/new` afterwards.
+  Administrator permission). The running session uses it from your next
+  message (#2000), child agents started after that included; there is no need
+  to start a new one. A turn that is still running finishes as it started,
+  and commands and child agents started before the setup (background
+  terminals, running agents) keep running without the sandbox: under Moderate
+  and Aggressive typing into such commands stays refused, so start them
+  again. If the session can't switch, the TUI says so
+  and the sandbox applies from `/new`.
 - Or set `[windows] sandbox = "elevated"` as below; it applies from the next
   session.
 - Or switch to Permissive in `/security` (it applies after a restart).
@@ -107,7 +113,10 @@ doesn't load its config, hooks or skills, warns you at startup, and asks in
 the TUI whether to load it (once the command, and anything it left running,
 has ended); a warning follows the command too (or a later command, if it
 left processes running). Check its
-contents before you choose to load it. Such folders
+contents before you choose to load it. Your choice covers what the prompt
+showed: if another command plants or changes it again while the prompt is
+on screen, loading it is refused and you're asked again (the same holds for
+the `.git` folders and repositories below). Such folders
 deeper in your workspace are covered too. One that is new, or was replaced,
 when the command ends is treated the same way. A read-only `.codex` or
 `.agents` folder your permission profile names that doesn't exist yet (or
@@ -192,6 +201,16 @@ names by drive letter, or through a link, is. A global or system
 git config that lies in such a folder is recorded too. A new, changed or
 removed file there is flagged like a changed repository, and so is one
 that appears where a config points (a new repository's `.githooks`, say).
+The one network path that is read is a global or system git config whose
+own path is on a network share or mapped network drive, such as
+`.gitconfig` in a home folder on a share (D517). It is read on a
+background thread, and each check waits at most about 2 seconds in all
+for such configs; one not read in time, or whose read fails, counts as
+changed after every command (it is flagged, and the command is held up by
+no more than that wait). The include paths such a config names are never
+opened on a share or mapped network drive, nor by a path without a drive
+or server (`/x`), so settings in an included file there aren't checked.
+A config on this machine is read as before.
 For Husky, the files named after git hooks in the folder above `_` count,
 and so does the `_` folder below any hooks folder. Rewriting a file with
 the same content (as `npm install` does when it reruns Husky) isn't a
