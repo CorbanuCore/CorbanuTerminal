@@ -5,6 +5,7 @@ use codex_security_policy::SecurityLevel;
 use pretty_assertions::assert_eq;
 
 use super::super::session::SessionSettingsUpdate;
+use super::super::tests::make_session_and_context;
 use super::super::tests::make_session_and_context_with_rx;
 use super::raise_windows_sandbox;
 use crate::windows_sandbox::WindowsSandboxLevelExt;
@@ -13,7 +14,17 @@ use crate::windows_sandbox::WindowsSandboxLevelExt;
 /// settings, including changes made after the thread started.
 #[tokio::test]
 async fn issue_2015_detached_agent_config_follows_the_live_session() {
-    let (session, _turn, _rx) = make_session_and_context_with_rx().await;
+    let (mut session, _turn) = make_session_and_context().await;
+    session.services.agent_control = session
+        .services
+        .agent_control
+        .clone()
+        .with_effective_security_policy(
+            SecurityLevel::Permissive,
+            session.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
+        .expect("security policy");
     session
         .update_settings(SessionSettingsUpdate {
             approval_policy: Some(AskForApproval::UnlessTrusted),
@@ -23,6 +34,10 @@ async fn issue_2015_detached_agent_config_follows_the_live_session() {
         })
         .await
         .expect("settings update");
+    assert_eq!(
+        session.detached_agent_config().await.security_level,
+        SecurityLevel::Permissive
+    );
     let controller = session
         .services
         .agent_control
