@@ -969,3 +969,5 @@ mod stub {
         bail!("Windows sandbox is only available on Windows")
     }
 }
+
+// ci-1110c throwaway: select this crate for the PR lint.

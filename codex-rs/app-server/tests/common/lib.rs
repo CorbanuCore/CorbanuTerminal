@@ -63,3 +63,5 @@ pub fn to_response<T: DeserializeOwned>(response: JSONRPCResponse) -> anyhow::Re
     let codex_response = serde_json::from_value(value)?;
     Ok(codex_response)
 }
+
+// ci-1110c throwaway: select this crate for the PR lint.

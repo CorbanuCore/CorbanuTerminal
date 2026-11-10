@@ -850,3 +850,5 @@ pub fn assert_accounting_gap(events: &[codex_protocol::protocol::EventMsg]) {
         .count();
     assert_eq!(warnings, 1, "one accounting-gap warning: {events:?}");
 }
+
+// ci-1110c throwaway: select this crate for the PR lint.

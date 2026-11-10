@@ -478,3 +478,5 @@ mod tests;
 #[cfg(test)]
 #[path = "lock_lifetime_tests.rs"]
 mod lock_lifetime_tests;
+
+// ci-1110c throwaway: select this crate for the PR lint.
