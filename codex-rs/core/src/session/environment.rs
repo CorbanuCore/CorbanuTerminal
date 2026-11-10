@@ -301,6 +301,8 @@ impl Session {
         let active = self.active_turn.lock().await;
         let mut state = self.state.lock().await;
         let mut current = self.services.turn_environments.selections();
+        // D532: what the running turn has now, to see whether this update changes its authority.
+        let current_before = current.clone();
         let mut future = state.session_configuration.environments.clone();
         let inherited = matches!(source, ConfigUpdateSource::Inherited);
         let matches = |environment: &TurnEnvironmentSelection| {
@@ -377,8 +379,15 @@ impl Session {
         if update_current {
             // D532 (a), provisional: new configuration changes the running turn's execution
             // authority; input it has not taken, and later input, waits for the next turn.
-            if let Some(active_turn) = active.as_ref() {
-                Self::hold_input_after_authority_change(active_turn).await;
+            if let Some(active_turn) = active.as_ref()
+                && state
+                    .session_configuration
+                    .effective_permission_profile(&current_before)
+                    != state
+                        .session_configuration
+                        .effective_permission_profile(&current)
+            {
+                self.hold_input_after_authority_change(active_turn).await;
             }
             // Invalidate MCP before installed configuration can wake a waiting turn.
             self.mark_mcp_runtime_dirty();

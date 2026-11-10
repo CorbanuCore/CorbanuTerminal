@@ -365,7 +365,9 @@ impl Session {
             // #505: approval for every command, set when a person confirmed Aggressive,
             // holds until the restart; a live reviewer change does not lower it.
             if state.session_configuration.aggressive_approvals
-                && candidate_settings.approvals_reviewer() != ApprovalsReviewer::User
+                && update
+                    .approvals_reviewer
+                    .is_some_and(|reviewer| reviewer != ApprovalsReviewer::User)
             {
                 return Err(
                     "approval for every command holds until the session restarts".to_string(),
@@ -388,10 +390,17 @@ impl Session {
 
         // D532 (a), provisional: a new reviewer or environment list changes the running turn's
         // execution authority; input not yet taken, and later input, waits for the next turn.
-        let changes_authority = environments.is_some()
-            || candidate_settings.approvals_reviewer() != current.approvals_reviewer();
+        let changes_authority = candidate_settings.approvals_reviewer()
+            != current.approvals_reviewer()
+            || environments.is_some()
+                && state
+                    .session_configuration
+                    .effective_permission_profile(&current_environments)
+                    != state
+                        .session_configuration
+                        .effective_permission_profile(proposed);
         if changes_authority && let Some(active_turn) = active.as_ref() {
-            Self::hold_input_after_authority_change(active_turn).await;
+            self.hold_input_after_authority_change(active_turn).await;
         }
         // Save changed settings first. The manager then installs any new environment list before
         // waking waiting work. The next step cannot read either until we release this lock.

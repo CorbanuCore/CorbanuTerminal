@@ -66,7 +66,6 @@ use crate::session::turn_completion::objective_from_turn_input;
 use crate::session::turn_context::TurnContext;
 use crate::skills::emit_explicit_skill_invocations;
 use crate::stream_events_utils::HandleOutputCtx;
-use crate::stream_events_utils::InFlightFuture;
 use crate::stream_events_utils::TurnItemContributorPolicy;
 use crate::stream_events_utils::finalize_non_tool_response_item;
 use crate::stream_events_utils::handle_non_tool_response_item;
@@ -3986,6 +3985,22 @@ async fn try_run_sampling_request(
     let effort = sess
         .reasoning_effort_for_request(&step_context.settings, super::RequestEffortUsage::Sampling)
         .await;
+    // The lease comes first, so a throttled request runs no model-request hook; a slow
+    // synchronous hook then holds the lease while it runs.
+    let provider_request_throttle = acquire_provider_request_lease(
+        sess.as_ref(),
+        turn_context.as_ref(),
+        &step_context.settings,
+        effort.clone(),
+        client_session,
+        &prompt,
+        responses_metadata,
+        &cancellation_token,
+    )
+    .await?;
+    trace_turn_timing("after_provider_request_lease", try_started_at);
+    let mut provider_request_lease_guard =
+        ProviderRequestLeaseGuard::new(sess.as_ref(), provider_request_throttle);
     let hooks = hooks_for_model_request(&sess, &step_context);
     let post_mode = hooks.execution_mode_for_event(HookEventName::PostModelRequest);
     let defer_tool_dispatch = post_mode == Some(HookExecutionMode::Sync);
@@ -4021,20 +4036,6 @@ async fn try_run_sampling_request(
     {
         run_model_request_hooks(&sess, &step_context, &hooks, PreModelRequest).await;
     }
-    let provider_request_throttle = acquire_provider_request_lease(
-        sess.as_ref(),
-        turn_context.as_ref(),
-        &step_context.settings,
-        effort.clone(),
-        client_session,
-        &prompt,
-        responses_metadata,
-        &cancellation_token,
-    )
-    .await?;
-    trace_turn_timing("after_provider_request_lease", try_started_at);
-    let mut provider_request_lease_guard =
-        ProviderRequestLeaseGuard::new(sess.as_ref(), provider_request_throttle);
     let sampling_timing_guard = turn_context.turn_timing_state.begin_sampling();
     let mut response_id_for_assessment = None;
     let mut pending_assessment: Option<codex_api::GuardianAssessment> = None;
