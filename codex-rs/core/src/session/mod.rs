@@ -6519,10 +6519,10 @@ impl Session {
     /// See `ModelClient::agent_handoff_origin`: the standing of text this
     /// session's model hands to another agent, from its current history.
     pub(crate) async fn agent_handoff_origin(&self) -> crate::security::ingress::MessageOrigin {
-        let state = self.state.lock().await;
+        let history: Vec<_> = self.state.lock().await.history.raw_items().cloned().collect();
         self.services
             .model_client()
-            .agent_handoff_origin(state.history.raw_items())
+            .agent_handoff_origin(&history)
     }
 
     pub(crate) async fn clone_history(&self) -> ContextManager {
