@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::config::ConfigBuilder;
+use crate::config::agent_roles::AGENTS_SETTINGS_KEYS;
 use codex_config::CONFIG_TOML_FILE;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
@@ -223,23 +224,26 @@ async fn roles_record_where_they_were_declared_and_project_roles_warn() {
 
 #[tokio::test]
 async fn project_role_cannot_declare_roles_for_a_grandchild() {
+    for nested_role in [
+        "[agents.inner]\ndescription = \"Inner role\"\nconfig_file = \"../inner/inner.toml\"\n",
+        "[agents]\ninner = { description = \"Inner role\", config_file = \"../inner/inner.toml\" }\n",
+        // serde reads a struct from an array too.
+        "[agents]\ninner = [\"Inner role\", \"../inner/inner.toml\", [\"Nick\"]]\n",
+    ] {
+        project_role_cannot_declare_role_for_a_grandchild(nested_role).await;
+    }
+}
+
+async fn project_role_cannot_declare_role_for_a_grandchild(nested_role: &str) {
     let fixture = Fixture::new();
     let agents = fixture.project_agents();
     Fixture::write(
         &agents,
         "outer.toml",
-        r#"
-name = "outer"
-description = "Outer role"
-developer_instructions = "Delegate"
-
-[agents]
-max_depth = 3
-
-[agents.inner]
-description = "Inner role"
-config_file = "../inner/inner.toml"
-"#,
+        &format!(
+            "name = \"outer\"\ndescription = \"Outer role\"\n\
+             developer_instructions = \"Delegate\"\n\n{nested_role}"
+        ),
     );
     // Outside `.codex/agents/`, so only the outer role's entry names it.
     Fixture::write(
@@ -248,6 +252,7 @@ config_file = "../inner/inner.toml"
         &DENYLISTED_ROLE.replace("name = \"relay\"", "name = \"inner\""),
     );
     let mut config = fixture.config().await;
+    assert!(config.agent_roles.contains_key("outer"), "{nested_role}");
     assert!(!config.agent_roles.contains_key("inner"));
     let before = protected_settings(&config);
 
@@ -255,7 +260,7 @@ config_file = "../inner/inner.toml"
         .await
         .expect("project role should apply");
 
-    assert!(!config.agent_roles.contains_key("inner"));
+    assert!(!config.agent_roles.contains_key("inner"), "{nested_role}");
     assert_eq!(
         apply_role_to_config(&mut config, Some("inner")).await,
         Err("unknown agent_type 'inner'".to_string())
@@ -296,7 +301,10 @@ sqlite_home = "/tmp/state"
 
 [agents]
 max_depth = 3
+max_threads = 2
 provider_allowlist = ["openai"]
+listed = ["Listed role", "/tmp/listed.toml"]
+inline = { description = "Inline role" }
 
 [agents.inner]
 description = "Inner role"
@@ -307,7 +315,13 @@ description = "Inner role"
 
     let ignored = sanitize_role_config_layer(AgentRoleSource::Project, &mut layer);
 
-    assert_eq!(ignored, vec!["sqlite_home", "agents.inner"]);
+    let mut role_keys = ignored[1..].to_vec();
+    role_keys.sort();
+    assert_eq!(ignored[0], "sqlite_home");
+    assert_eq!(
+        role_keys,
+        vec!["agents.inline", "agents.inner", "agents.listed"]
+    );
     assert_eq!(
         layer,
         toml::from_str::<TomlValue>(
@@ -316,6 +330,7 @@ model = "gpt-5.5"
 
 [agents]
 max_depth = 3
+max_threads = 2
 provider_allowlist = ["openai"]
 "#
         )
@@ -330,6 +345,38 @@ provider_allowlist = ["openai"]
         assert!(sanitize_role_config_layer(source, &mut unchanged).is_empty());
         assert_eq!(unchanged, user_layer);
     }
+}
+
+/// Naming every field (no `..`) makes a new `[agents]` setting fail to
+/// compile here until `AGENTS_SETTINGS_KEYS` lists it.
+#[test]
+fn agents_settings_keys_match_agents_toml() {
+    let settings = codex_config::config_toml::AgentsToml {
+        enabled: Some(true),
+        max_concurrent_threads_per_session: Some(1),
+        max_depth: Some(1),
+        default_subagent_model: Some("model".to_string()),
+        default_subagent_reasoning_effort: Some(ReasoningEffort::Low),
+        job_max_runtime_seconds: Some(1),
+        interrupt_message: Some(true),
+        provider_allowlist: Some(Vec::new()),
+        roles: BTreeMap::new(),
+    };
+    let mut keys = TomlValue::try_from(&settings)
+        .expect("serialize")
+        .as_table()
+        .expect("table")
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>();
+    keys.push("max_threads".to_string());
+    keys.sort();
+    let mut expected = AGENTS_SETTINGS_KEYS
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    expected.sort();
+    assert_eq!(keys, expected);
 }
 
 #[test]
