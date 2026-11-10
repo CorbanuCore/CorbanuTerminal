@@ -393,13 +393,33 @@ impl InputQueue {
         input
     }
 
+    #[cfg(test)]
+    pub(crate) async fn get_pending_input(
+        &self,
+        active_turn: &Mutex<Option<ActiveTurn>>,
+    ) -> (Vec<TurnInput>, Option<String>) {
+        self.get_pending_input_inner(active_turn, /*allow_untracked_mailbox*/ true)
+            .await
+    }
+
+    /// Takes input for an already-running task. A task detached by any stop path must not drain
+    /// mailbox mail: it no longer has a turn state that can record its outcome.
+    pub(crate) async fn get_pending_input_for_running_task(
+        &self,
+        active_turn: &Mutex<Option<ActiveTurn>>,
+    ) -> (Vec<TurnInput>, Option<String>) {
+        self.get_pending_input_inner(active_turn, /*allow_untracked_mailbox*/ false)
+            .await
+    }
+
     #[allow(
         clippy::await_holding_invalid_type,
         reason = "taking mail off the queue and noting it in the turn state must remain atomic"
     )]
-    pub(crate) async fn get_pending_input(
+    async fn get_pending_input_inner(
         &self,
         active_turn: &Mutex<Option<ActiveTurn>>,
+        allow_untracked_mailbox: bool,
     ) -> (Vec<TurnInput>, Option<String>) {
         let (pending_input, accepts_mailbox_delivery, turn_id, turn_state) =
             Self::take_turn_pending_input(active_turn).await;
@@ -416,7 +436,12 @@ impl InputQueue {
                 turn_state.track_taken_mailbox_messages(&mailbox_items);
                 (mailbox_items, parent_turn_id)
             }
-            None => self.drain_mailbox_input_for_turn(turn_id.as_deref()).await,
+            // Test-only: older tests poll an empty slot to inspect queued mail. Executing tasks
+            // use the fail-closed path above.
+            None if allow_untracked_mailbox => {
+                self.drain_mailbox_input_for_turn(turn_id.as_deref()).await
+            }
+            None => (Vec::new(), None),
         };
         if pending_input.is_empty() {
             (mailbox_items, parent_turn_id)
@@ -490,6 +515,9 @@ impl InputQueue {
                         Some(Arc::clone(&active_turn.turn_state)),
                     )
                 }
+                // `get_pending_input_for_task_start` also uses this helper. It may legitimately
+                // start from an idle slot and must still inspect ready mailbox work; the running
+                // task path separately refuses to drain without a TurnState (#2010).
                 None => (Vec::new(), true, None, None),
             }
         }
@@ -851,6 +879,55 @@ mod tests {
                 .await
                 .take_unrecorded_mailbox_message_ids(&[]),
             vec![message_id]
+        );
+    }
+
+    #[tokio::test]
+    async fn stopped_turn_keeps_mailbox_items_for_the_next_turn() {
+        let input_queue = InputQueue::new();
+        let stopped_turn = Mutex::new(None);
+        let (mail, _) = mail_with_id("arrived while stopping");
+        input_queue
+            .enqueue_mailbox_communication(mail.clone(), /*parent_turn_id*/ None)
+            .await;
+
+        // The active slot is removed before shutdown waits for the running task. A stale task
+        // reaching its next input poll must leave mail queued rather than silently taking it.
+        assert_eq!(
+            input_queue
+                .get_pending_input_for_running_task(&stopped_turn)
+                .await
+                .0,
+            Vec::new()
+        );
+        assert!(input_queue.has_pending_mailbox_items().await);
+
+        // A subsequently admitted turn receives the preserved item normally.
+        let next_turn = Mutex::new(Some(ActiveTurn::default()));
+        assert_eq!(
+            input_queue.get_pending_input(&next_turn).await.0,
+            vec![TurnInput::InterAgentCommunication(mail)]
+        );
+        assert!(!input_queue.has_pending_mailbox_items().await);
+    }
+
+    #[tokio::test]
+    async fn task_start_still_admits_ready_mail_from_an_idle_slot() {
+        let input_queue = InputQueue::new();
+        let idle_slot = Mutex::new(None);
+        let (mail, _) = mail_with_id("normal task start");
+        input_queue
+            .enqueue_mailbox_communication(mail.clone(), /*parent_turn_id*/ None)
+            .await;
+
+        // Control: the task-admission path may begin with no installed active turn and must
+        // retain its existing ability to take ready mail.
+        assert_eq!(
+            input_queue
+                .get_pending_input_for_task_start(&idle_slot)
+                .await
+                .0,
+            vec![TurnInput::InterAgentCommunication(mail)]
         );
     }
 

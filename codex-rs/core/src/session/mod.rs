@@ -5669,5 +5669,9 @@ mod home_access_session_tests;
 mod stale_approval_tests;
 
 #[cfg(test)]
+#[path = "stale_poll_mail_tests.rs"]
+mod stale_poll_mail_tests;
+
+#[cfg(test)]
 #[path = "withdrawn_approval_tests.rs"]
 mod withdrawn_approval_tests;
