@@ -1585,6 +1585,20 @@ impl FileSystemSandboxPolicy {
         .unwrap_or(false)
     }
 
+    /// D539 (c), provisional: Corbanu's name for
+    /// [`Self::can_read_local_path_with_cwd`] (upstream renamed it), kept so
+    /// `core/src/security` stays identical to main.
+    pub fn can_read_path_with_cwd(&self, path: &Path, cwd: &Path) -> bool {
+        self.can_read_local_path_with_cwd(path, cwd)
+    }
+
+    /// D539 (c), provisional: Corbanu's name for
+    /// [`Self::can_write_local_path_with_cwd`] (upstream renamed it), kept so
+    /// `core/src/security` stays identical to main.
+    pub fn can_write_path_with_cwd(&self, path: &Path, cwd: &Path) -> bool {
+        self.can_write_local_path_with_cwd(path, cwd)
+    }
+
     pub fn resolve_access(
         &self,
         path: &PathUri,
