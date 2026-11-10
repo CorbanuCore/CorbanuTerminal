@@ -3070,7 +3070,7 @@ fn normalize_removes_orphan_function_call_output_in_debug() {
     }];
     let mut h = create_history_with_items(items);
     h.normalize_history(&default_input_modalities());
-    assert_eq!(h.raw_items(), vec![]);
+    assert_eq!(raw_items(&h), vec![]);
 }
 
 #[cfg(debug_assertions)]
@@ -3085,7 +3085,7 @@ fn normalize_removes_orphan_custom_tool_call_output_in_debug() {
     }];
     let mut h = create_history_with_items(items);
     h.normalize_history(&default_input_modalities());
-    assert_eq!(h.raw_items(), vec![]);
+    assert_eq!(raw_items(&h), vec![]);
 }
 
 #[cfg(not(debug_assertions))]
@@ -3119,7 +3119,7 @@ fn normalize_removes_orphan_client_tool_search_output_in_debug() {
     }];
     let mut h = create_history_with_items(items);
     h.normalize_history(&default_input_modalities());
-    assert_eq!(h.raw_items(), vec![]);
+    assert_eq!(raw_items(&h), vec![]);
 }
 
 #[test]

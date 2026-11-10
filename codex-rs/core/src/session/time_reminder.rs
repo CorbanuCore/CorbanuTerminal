@@ -143,10 +143,11 @@ impl Session {
             state.current_time_reminder.last_clock_failure = Some(failure);
         }
         let response_item = ContextualUserFragment::into(CurrentTimeUnavailable);
-        self.record_conversation_items(
+        self.record_conversation_items_from(
             turn_context,
             turn_context.model_info(),
             std::slice::from_ref(&response_item),
+            Some(crate::security::ingress::MessageOrigin::Host),
         )
         .await;
         Ok(None)

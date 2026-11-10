@@ -72,6 +72,10 @@ pub(crate) struct SessionServices {
     pub(crate) session_telemetry: SessionTelemetry,
     pub(crate) tool_approvals: Mutex<ApprovalStore>,
     /// Shared with captured steps so later calls observe newly approved permissions.
+    /// D51 (#1001): session grants must not outlive a security transition. Until
+    /// `session/mod.rs` and `turn_context.rs` are resolved (S2a), every reader and
+    /// writer of this store must fence it by the authority marker the way
+    /// `state::GrantedPermissions` does.
     pub(crate) granted_permissions_by_environment_id:
         Arc<StdMutex<HashMap<String, AdditionalPermissionProfile>>>,
     pub(crate) runtime_handle: Handle,

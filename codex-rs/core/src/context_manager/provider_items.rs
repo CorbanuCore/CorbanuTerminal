@@ -81,7 +81,8 @@ impl ProviderTarget {
 
 /// Adapts `items` for `target`; see the module docs. Returns whether another
 /// provider's compaction summary was left out (the caller logs it once per
-/// session).
+/// session). History uses [`adapt_for_provider_by`] over its envelopes.
+#[cfg(test)]
 pub(crate) fn adapt_for_provider(items: &mut Vec<ResponseItem>, target: &ProviderTarget) -> bool {
     adapt_for_provider_by(items, |item| item, target)
 }
