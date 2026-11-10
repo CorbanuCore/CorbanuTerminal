@@ -168,6 +168,7 @@ fn fixture(
         redirect_policy: HttpRedirectPolicy::Follow,
         request_id: "operation".to_string(),
         stream_response: false,
+        address_policy: None,
     };
     (client, source, params)
 }

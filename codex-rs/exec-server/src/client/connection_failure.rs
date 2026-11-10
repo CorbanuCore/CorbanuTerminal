@@ -57,7 +57,8 @@ impl ExecServerError {
                 | RouteAwareRequestError::Build(_)
                 | RouteAwareRequestError::UnsupportedRedirectScheme(_)
                 | RouteAwareRequestError::TooManyRedirects
-                | RouteAwareRequestError::Timeout,
+                | RouteAwareRequestError::Timeout
+                | RouteAwareRequestError::DisallowedAddress(_),
             ) => None,
         }
     }

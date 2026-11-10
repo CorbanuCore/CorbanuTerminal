@@ -142,7 +142,8 @@ async fn retries_a_native_tls_failure_after_another_request_caches_rustls() {
         .await
         .expect_err("native TLS handshake should fail");
     let rustls_client = pool
-        .rustls_client_for_route(&route)
+        .rustls_client_for_route(destination.as_str(), &route)
+        .await
         .expect("rustls fallback client should build");
     pool.rustls_clients
         .as_ref()
@@ -187,7 +188,8 @@ async fn does_not_retry_a_cached_rustls_tls_protocol_failure() {
     .with_tls_backend_fallback();
     let destination = reqwest::Url::parse(&url).expect("valid HTTPS URL");
     let rustls_client = pool
-        .rustls_client_for_route(&OutboundProxyRoute::Direct)
+        .rustls_client_for_route(destination.as_str(), &OutboundProxyRoute::Direct)
+        .await
         .expect("rustls fallback client should build");
     pool.rustls_clients
         .as_ref()
@@ -351,6 +353,45 @@ async fn does_not_retry_a_non_replayable_streaming_request() {
             .expect("TLS server should finish")
             .expect("TLS server should reject one connection"),
         1
+    );
+}
+
+/// #1947 on the sync branch: the rustls fallback client (built only on this branch's pool)
+/// resolves host names through the pool's address filter, so it can't reach a refused address.
+#[tokio::test]
+async fn rustls_fallback_client_resolves_through_the_address_filter() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
+    listener
+        .set_nonblocking(true)
+        .expect("nonblocking test listener");
+    let port = listener.local_addr().expect("listener address").port();
+    let filter = crate::ResolvedAddressFilter::new(|_| false, |_| false)
+        .with_lookup(|_| vec![std::net::IpAddr::from([127, 0, 0, 1])]);
+    let pool = RouteAwareClientPool::new(
+        HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
+        ClientRouteClass::Other,
+    )
+    .with_tls_backend_fallback()
+    .with_resolved_address_filter(filter);
+    let url = format!("https://blocked.test:{port}/");
+    let client = pool
+        .rustls_client_for_route(&url, &OutboundProxyRoute::Direct)
+        .await
+        .expect("rustls fallback client should build");
+
+    let request = reqwest::Request::new(Method::GET, reqwest::Url::parse(&url).expect("URL"));
+    let error = client
+        .execute_without_request_logging(request)
+        .await
+        .expect_err("the filter must refuse the loopback answer");
+
+    assert!(
+        crate::address_filter::find_disallowed_address(&error).is_some(),
+        "expected a disallowed-address error, got {error:?}"
+    );
+    assert!(
+        matches!(listener.accept(), Err(error) if error.kind() == io::ErrorKind::WouldBlock),
+        "the refused client must not connect"
     );
 }
 

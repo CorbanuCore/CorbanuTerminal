@@ -20,6 +20,7 @@ use crate::HttpClient;
 use crate::HttpClientFactory;
 use crate::HttpClientTlsConfig;
 use crate::OutboundProxyRoute;
+use crate::ResolvedAddressFilter;
 use crate::chatgpt_cloudflare_cookies::ChatGptCookieStore;
 use crate::client::HttpClientBackend;
 use crate::client::RequestLogging;
@@ -42,6 +43,7 @@ pub struct HttpClientBuilder {
     chatgpt_cloudflare_cookie_store: bool,
     chatgpt_cookie_store: Option<Arc<ChatGptCookieStore>>,
     pub(crate) request_logging: RequestLogging,
+    resolved_address_filter: Option<ResolvedAddressFilter>,
     tls_backend: TlsBackend,
     pub(crate) tls: HttpClientTlsConfig,
     #[cfg(windows)]
@@ -158,6 +160,12 @@ impl HttpClientBuilder {
     pub fn with_chatgpt_cookies(mut self, http_client_factory: &HttpClientFactory) -> Self {
         self.chatgpt_cloudflare_cookie_store = true;
         self.chatgpt_cookie_store = http_client_factory.chatgpt_cookie_store();
+        self
+    }
+
+    /// Resolves host names through `filter`, so connections go only to addresses it allows.
+    pub(crate) fn resolved_address_filter(mut self, filter: ResolvedAddressFilter) -> Self {
+        self.resolved_address_filter = Some(filter);
         self
     }
 
@@ -468,6 +476,9 @@ impl HttpClientBuilder {
                 None => with_chatgpt_cloudflare_cookie_store(builder),
             };
         }
+        if let Some(filter) = self.resolved_address_filter {
+            builder = builder.dns_resolver(filter.resolver());
+        }
         builder
     }
 }
@@ -487,6 +498,7 @@ impl Default for HttpClientBuilder {
             tls: HttpClientTlsConfig::default(),
             #[cfg(windows)]
             windows_proxy_pipe_path: None,
+            resolved_address_filter: None,
         }
     }
 }

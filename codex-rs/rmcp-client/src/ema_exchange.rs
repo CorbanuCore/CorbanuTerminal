@@ -45,6 +45,8 @@ impl std::fmt::Debug for EmaAccessToken {
 /// The caller supplies trusted authorization-server metadata and an IdP credential.
 /// This primitive does not perform resource discovery or interactive login.
 pub(crate) struct EmaIdJagExchangeRequest<'a> {
+    /// The configured MCP server URL; it sets the resource exchange's address policy (#1947).
+    pub server_url: &'a str,
     pub resource: &'a str,
     pub scopes: &'a [String],
     pub mcp_client_id: &'a str,
@@ -72,14 +74,17 @@ pub(crate) async fn exchange_id_jag<L: Send, R: Send>(
         request.idp_token_endpoint,
         /*has_configured_headers*/ false,
         StreamableHttpRedirectMode::Legacy,
-    )?;
+    )?
+    .with_address_policy_from(request.idp_issuer);
     let resource_http = OAuthHttpClientAdapter::new_with_redirect_mode(
         request.resource_http_client,
         build_default_headers(/*http_headers*/ None, /*env_http_headers*/ None)?,
         request.authorization_server_token_endpoint,
         /*has_configured_headers*/ false,
         StreamableHttpRedirectMode::Legacy,
-    )?;
+    )?
+    // The token endpoint comes from discovered metadata; the configured server URL sets the policy.
+    .with_address_policy_from(request.server_url);
     let refresh_token = RefreshToken::new(request.refresh_token);
     // Discovery has already verified each registration's authentication method. The SDK owns
     // token validation and the two exchanges; Codex retains routing and credential policy.

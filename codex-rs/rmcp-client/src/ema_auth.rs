@@ -112,6 +112,7 @@ pub async fn exchange_ema_auth_token<L: Send, R: Send>(
     } = request.idp_identity.await?;
     exchange_id_jag(
         EmaIdJagExchangeRequest {
+            server_url: request.server_url,
             resource: &resource,
             scopes: request.scopes,
             mcp_client_id: client_id,

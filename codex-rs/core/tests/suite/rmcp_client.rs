@@ -5298,6 +5298,7 @@ async fn wait_for_remote_streamable_http_server(
             redirect_policy: HttpRedirectPolicy::Follow,
             request_id: "buffered-request".to_string(),
             stream_response: false,
+            address_policy: None,
         };
         match http_client.http_request(request).await {
             Ok(response) if response.status == StatusCode::OK.as_u16() => return Ok(()),
