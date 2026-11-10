@@ -676,7 +676,7 @@ impl LocalAgentControl {
                 let control = self.clone();
                 let runtime = self.runtime.clone();
                 // Finish registration even if the sender is cancelled while acquiring its pin.
-                let residency_pin = tokio::spawn(async move {
+                tokio::spawn(async move {
                     let _membership = membership;
                     let residency_pin = runtime
                         .pin_v2_residency(&state, &reloaded_thread.thread)
