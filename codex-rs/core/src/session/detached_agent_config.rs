@@ -32,11 +32,11 @@ impl Session {
             .snapshot_for_agent(self.thread_id)
         {
             Ok(policy) => config.security_level = config.security_level.max(policy.level),
-            Err(SecurityPolicyError::RuntimePoisoned) => {
-                config.security_level = SecurityLevel::Aggressive;
-            }
             // No level in force for this thread: the configured one stands.
-            Err(_) => {}
+            Err(
+                SecurityPolicyError::RuntimeNotInitialized | SecurityPolicyError::UnknownAgent(_),
+            ) => {}
+            Err(_) => config.security_level = SecurityLevel::Aggressive,
         }
         config
     }
