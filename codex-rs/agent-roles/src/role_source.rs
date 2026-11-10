@@ -174,8 +174,10 @@ pub fn unapplied_role_keys_warning(role_file: &Path, keys: &[String]) -> String 
         "Agent role file {} sets {}, which an agent spawned with this role does not apply: \
          it keeps its parent's settings for them. A role may change the model, a configured \
          provider, instructions and reasoning settings, and may only make permissions stricter \
-         (`allow_login_shell = false`, turning some features off); a stricter sandbox, approval \
-         policy, network setting or permission profile than the parent's refuses the spawn.",
+         (`allow_login_shell = false`, turning some features off); a stricter or \
+         incomparable sandbox_mode, approval_policy, approvals_reviewer, sandbox_workspace_write, \
+         default_permissions, permissions, profile(s), shell_environment_policy or Windows \
+         sandbox setting than the parent's refuses the spawn.",
         role_file.display(),
         keys.join(", "),
     )

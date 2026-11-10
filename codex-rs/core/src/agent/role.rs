@@ -32,6 +32,9 @@ use codex_config::loader::resolve_relative_paths_in_config_toml;
 use codex_exec_server::read_sensitive_file_to_string;
 use codex_features::Feature;
 use codex_features::feature_for_key;
+use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
+use codex_model_provider_info::AMAZON_BEDROCK_RUNTIME_PROVIDER_ID;
+use codex_model_provider_info::GCP_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::WireApi;
 use codex_model_provider_info::built_in_model_providers;
@@ -322,8 +325,24 @@ fn reject_stricter_unapplied_permissions(config: &Config, role: &TomlValue) -> a
     {
         for (key, value) in workspace_write {
             match key.as_str() {
-                // Extra writable roots only widen; the parent's roots are kept.
-                "writable_roots" => {}
+                // The parent's roots are kept, so a list holding all of them only widens;
+                // one that leaves any out is narrower.
+                "writable_roots" => {
+                    let parent_roots = config
+                        .config_layer_stack
+                        .effective_config()
+                        .get("sandbox_workspace_write")
+                        .and_then(|table| table.get("writable_roots"))
+                        .and_then(TomlValue::as_array)
+                        .cloned()
+                        .unwrap_or_default();
+                    let role_roots = value.as_array().cloned().unwrap_or_default();
+                    refuse_unless!(
+                        parent_roots.iter().all(|root| role_roots.contains(root)),
+                        "its sandbox_workspace_write.writable_roots leave out some of its \
+                         parent's, which spawned agents don't apply"
+                    );
+                }
                 "network_access" => refuse_unless!(
                     value.as_bool() != Some(false)
                         || !config.permissions.network_sandbox_policy().is_enabled(),
@@ -384,6 +403,15 @@ fn reject_stricter_unapplied_permissions(config: &Config, role: &TomlValue) -> a
             role_rank.is_some_and(|role_rank| role_rank <= parent_rank),
             "it asks for a stronger Windows sandbox than its parent's, which spawned agents \
              don't apply"
+        );
+    }
+    if cfg!(windows) {
+        refuse_unless!(
+            role.get("windows")
+                .and_then(|windows| windows.get("allow_mxc"))
+                .and_then(TomlValue::as_bool)
+                != Some(false),
+            "it turns allow_mxc off, which spawned agents don't apply"
         );
     }
     Ok(())
@@ -599,6 +627,18 @@ mod role_overrides {
         let accounting_wire = same_provider.then(|| accounting_wire(config)).flatten();
         let built_in =
             built_in_model_providers(/*openai_base_url*/ None).contains_key(&provider_id);
+        // Their config merge replaces fields outright from a fresh built-in, which would reset
+        // the parent's configured endpoint, auth or project; set them in config.toml instead.
+        refuse_unless!(
+            overrides.model_provider_overlay.is_none()
+                || !matches!(
+                    provider_id.as_str(),
+                    AMAZON_BEDROCK_PROVIDER_ID
+                        | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID
+                        | GCP_PROVIDER_ID
+                ),
+            "it changes model provider `{provider_id}`, whose settings a role can't change"
+        );
         let mut provider = match (
             &overrides.model_provider_overlay,
             &overrides.model_provider_overlay_info,
