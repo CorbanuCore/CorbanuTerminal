@@ -172,8 +172,8 @@ DEPENDENCY_POLICY = (
     ".github/workflows/cargo-deny.yml",
 )
 # Paths `main` assigns to @corbanu-security (D318, #1914) that the named list above doesn't already cover, as
-# CODEOWNERS patterns. Keeps the sync branch's coverage a superset of `main`'s until main's own block arrives
-# with a main merge. Update when main's block changes.
+# CODEOWNERS patterns. Since main merge #2c footprint.NAMED carries main's whole block (except CODEOWNERS), so
+# this list is a fallback; `codeowners drift` checks both against origin/main's block.
 MAIN_D318 = (
     "/.github/CODEOWNERS",
     "/codex-rs/bwrap/",
@@ -286,7 +286,30 @@ def codeowners(action, wt, owner=None):
         ]
         if missing:
             sys.exit("sync block misses main's D318 patterns: " + ", ".join(missing))
-        print("sync block covers main's D318 block")
+        unanchored = [
+            line
+            for line in main[m_start:m_end].splitlines()
+            if line.strip() and not line.startswith(("#", "/"))
+        ]
+        if unanchored:
+            sys.exit("error: main's D318 block has unanchored patterns: " + ", ".join(unanchored))
+        # SG2/SG3 read security_paths.txt, whose named layer is footprint.NAMED; the file must be regenerated
+        # from NAMED and name main's paths (CODEOWNERS itself stays out, plan section 4).
+        expected = list(dict.fromkeys(footprint.NAMED))
+        listed = [line.strip() for line in open(os.path.join(HERE, "security_paths.txt")) if line.strip()]
+        if listed[: len(expected)] != expected:
+            sys.exit("error: security_paths.txt's named layer differs from footprint.NAMED; regenerate it")
+        named = set(listed)
+        unnamed = [
+            line.split()[0]
+            for line in main[m_start:m_end].splitlines()
+            if line.startswith("/")
+            and line.split()[0] != "/.github/CODEOWNERS"
+            and line.split()[0][1:] not in named
+        ]
+        if unnamed:
+            sys.exit("security_paths.txt misses main's D318 patterns: " + ", ".join(unnamed))
+        print("sync block and security_paths.txt cover main's D318 block")
         return
     if action == "check":
         if start != -1:
@@ -301,9 +324,12 @@ def codeowners(action, wt, owner=None):
         ):
             sys.exit("error: codeowners apply needs an @owner")
         # Last matching pattern wins, so this block goes at the end.
-        patterns = [
-            codeowners_pattern(spec) for spec in [*footprint.NAMED, *DEPENDENCY_POLICY]
-        ]
+        patterns = list(
+            dict.fromkeys(
+                codeowners_pattern(spec)
+                for spec in [*footprint.NAMED, *DEPENDENCY_POLICY]
+            )
+        )
         patterns += [p for p in MAIN_D318 + SYNC_SUCCESSORS if p not in patterns]
         block = [CO_BEGIN] + [f"{p} {owner}" for p in patterns] + [CO_END]
         text = text.rstrip("\n") + "\n\n" + "\n".join(block) + "\n"

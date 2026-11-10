@@ -1,15 +1,7 @@
-<<<<<<< HEAD
-use super::multi_agents_common::MAX_SPAWN_AGENT_MODEL_OVERRIDES;
+use crate::agent::child_config::MAX_SPAWN_AGENT_MODEL_OVERRIDES;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelBilling;
 use codex_protocol::openai_models::ModelCapabilityTier;
-||||||| 413492cd6c
-use super::multi_agents_common::MAX_SPAWN_AGENT_MODEL_OVERRIDES;
-use super::multi_agents_common::model_supports_multi_agent_backend;
-=======
-use crate::agent::child_config::MAX_SPAWN_AGENT_MODEL_OVERRIDES;
-use crate::agent::child_config::model_supports_multi_agent_backend;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_tools::JsonSchema;
@@ -24,30 +16,15 @@ use std::collections::BTreeMap;
 pub const MULTI_AGENT_V1_NAMESPACE: &str = "multi_agent_v1";
 const MULTI_AGENT_V1_NAMESPACE_DESCRIPTION: &str = "Tools for spawning and managing sub-agents.";
 
-<<<<<<< HEAD
 const SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V1: &str = "Spawned agents inherit your current model by default. Omit `model` to use that preferred default; set `model` only when an explicit override is needed.";
 const SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2: &str = "Spawned agents inherit your current provider and model by default. Omit both `model_provider` and `model` to inherit that runtime. To use another runtime, set both fields explicitly.";
-||||||| 413492cd6c
-const SPAWN_AGENT_INHERITED_MODEL_GUIDANCE: &str = "Spawned agents inherit your current model by default. Omit `model` to use that preferred default; set `model` only when an explicit override is needed.";
-=======
-const SPAWN_AGENT_INHERITED_MODEL_GUIDANCE: &str = "Spawned agents inherit your current model by default. Omit `model` to use that preferred default; set `model` only when an explicit override is needed.";
-const SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2: &str = "Spawned agents inherit your current model by default. Do not set the `model` field unless the user explicitly asks for a different model.";
 const SPAWN_AGENT_MODEL_CATALOG_GUIDANCE: &str =
     "Pick model overrides from the latest <model_catalog> listing.";
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 const SPAWN_AGENT_TYPE_OVERRIDE_DESCRIPTION_V1: &str = "Agent type override for the new agent. Omit to inherit the parent agent type with a full-history fork; otherwise, `default` is used.";
 const SPAWN_AGENT_ACCOUNT_DESCRIPTION: &str = "Named account of the spawned agent's provider. Omit to use the parent's account; `default` uses the provider's default credentials. Only accounts the user has configured are accepted, and under the Aggressive security level the user must approve the switch. Never retry a refused account on another one without the user's consent.";
 const SPAWN_AGENT_MODEL_OVERRIDE_DESCRIPTION: &str =
     "Model override for the new agent. Omit unless an explicit override is needed.";
-<<<<<<< HEAD
 const SPAWN_AGENT_PROVIDER_OVERRIDE_DESCRIPTION: &str = "Provider override for the new agent. Set this together with `model`; omit both to inherit the parent runtime.";
-const SPAWN_AGENT_SERVICE_TIER_OVERRIDE_DESCRIPTION: &str =
-    "Service tier override for the new agent. Omit unless explicitly requested.";
-||||||| 413492cd6c
-const SPAWN_AGENT_SERVICE_TIER_OVERRIDE_DESCRIPTION: &str =
-    "Service tier override for the new agent. Omit unless explicitly requested.";
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 const MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION: usize = 64;
 const MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION: usize = MAX_SPAWN_AGENT_MODEL_OVERRIDES;
 
@@ -59,13 +36,7 @@ pub struct SpawnAgentToolOptions {
     pub expose_agent_type: bool,
     pub hide_agent_type_model_reasoning: bool,
     pub expose_spawn_agent_model_overrides: bool,
-<<<<<<< HEAD
-||||||| 413492cd6c
-    pub multi_agent_version: MultiAgentVersion,
-=======
-    pub multi_agent_version: MultiAgentVersion,
     pub model_catalog_in_context: bool,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub usage_hint_text: Option<String>,
     /// PF-84: offer the `account` argument (named accounts are on).
     pub expose_account: bool,
@@ -88,13 +59,7 @@ impl Default for SpawnAgentToolOptions {
             expose_agent_type: true,
             hide_agent_type_model_reasoning: false,
             expose_spawn_agent_model_overrides: false,
-<<<<<<< HEAD
-||||||| 413492cd6c
-            multi_agent_version: MultiAgentVersion::Disabled,
-=======
-            multi_agent_version: MultiAgentVersion::Disabled,
             model_catalog_in_context: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             usage_hint_text: None,
             expose_account: false,
         }
@@ -119,30 +84,16 @@ impl Default for WaitAgentTimeoutOptions {
 }
 
 pub fn create_spawn_agent_tool_v1(options: SpawnAgentToolOptions) -> ToolSpec {
-<<<<<<< HEAD
-    let available_models_description = (!options.hide_agent_type_model_reasoning).then(|| {
-        spawn_agent_models_description(
-            &options.available_models,
-            options.inherited_runtime.as_ref(),
-        )
-    });
-    let inherited_model_guidance = (!options.hide_agent_type_model_reasoning)
-        .then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V1);
-||||||| 413492cd6c
-    let available_models_description = (!options.hide_agent_type_model_reasoning).then(|| {
-        spawn_agent_models_description(&options.available_models, options.multi_agent_version)
-    });
-    let inherited_model_guidance =
-        (!options.hide_agent_type_model_reasoning).then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE);
-=======
     let available_models_description = (!options.model_catalog_in_context
         && !options.hide_agent_type_model_reasoning)
         .then(|| {
-            spawn_agent_models_description(&options.available_models, options.multi_agent_version)
+            spawn_agent_models_description(
+                &options.available_models,
+                options.inherited_runtime.as_ref(),
+            )
         });
-    let inherited_model_guidance =
-        (!options.hide_agent_type_model_reasoning).then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    let inherited_model_guidance = (!options.hide_agent_type_model_reasoning)
+        .then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V1);
     let return_value_description =
         "Returns the spawned agent id plus the user-facing nickname when available.";
     let mut properties = spawn_agent_common_properties_v1(&options.agent_type_description);
@@ -176,26 +127,6 @@ pub fn create_spawn_agent_tool_v1(options: SpawnAgentToolOptions) -> ToolSpec {
     })
 }
 
-<<<<<<< HEAD
-pub fn create_spawn_agent_tool_v2(options: SpawnAgentToolOptions) -> ToolSpec {
-    let available_models_description = options.expose_spawn_agent_model_overrides.then(|| {
-        spawn_agent_models_description(
-            &options.available_models,
-            options.inherited_runtime.as_ref(),
-        )
-    });
-    let inherited_model_guidance = (options.expose_spawn_agent_model_overrides
-        && !options.hide_agent_type_model_reasoning)
-        .then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2);
-||||||| 413492cd6c
-pub fn create_spawn_agent_tool_v2(options: SpawnAgentToolOptions) -> ToolSpec {
-    let available_models_description = options.expose_spawn_agent_model_overrides.then(|| {
-        spawn_agent_models_description(&options.available_models, options.multi_agent_version)
-    });
-    let inherited_model_guidance = (options.expose_spawn_agent_model_overrides
-        && !options.hide_agent_type_model_reasoning)
-        .then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE);
-=======
 pub fn create_spawn_agent_tool_v2(
     options: SpawnAgentToolOptions,
     description_override: Option<&str>,
@@ -203,17 +134,21 @@ pub fn create_spawn_agent_tool_v2(
     let available_models_description = (!options.model_catalog_in_context
         && options.expose_spawn_agent_model_overrides)
         .then(|| {
-            spawn_agent_models_description(&options.available_models, options.multi_agent_version)
+            spawn_agent_models_description(
+                &options.available_models,
+                options.inherited_runtime.as_ref(),
+            )
         });
+    // Corbanu: the V2 guidance names `model_provider` too (main's text), with or without the
+    // in-context model catalogue.
     let inherited_model_guidance = if options.model_catalog_in_context {
         options
             .expose_spawn_agent_model_overrides
             .then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2)
     } else {
         (options.expose_spawn_agent_model_overrides && !options.hide_agent_type_model_reasoning)
-            .then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE)
+            .then_some(SPAWN_AGENT_INHERITED_MODEL_GUIDANCE_V2)
     };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let mut properties = spawn_agent_common_properties_v2(&options.agent_type_description);
     if !options.expose_agent_type {
         properties.remove("agent_type");
@@ -479,13 +414,12 @@ pub fn create_interrupt_agent_tool_v2() -> ToolSpec {
         description: "Interrupt an agent's current model turn with an operator-visible reason, and return its previous status. The agent remains available for messages and follow-up tasks.".to_string(),
         strict: false,
         defer_loading: None,
-<<<<<<< HEAD
         parameters: JsonSchema::object(
             properties,
             Some(vec!["target".to_string(), "reason".to_string()]),
             Some(false.into()),
         ),
-        output_schema: Some(interrupt_agent_output_schema()),
+        output_schema: Some(interrupt_agent_output_schema().into()),
     })
 }
 
@@ -510,6 +444,7 @@ pub(crate) fn apply_openai_reserved_collaboration_schema(spec: ToolSpec) -> Tool
                             apply_openai_reserved_collaboration_function_schema(tool),
                         )
                     }
+                    other => other,
                 })
                 .collect();
             ToolSpec::Namespace(namespace)
@@ -543,12 +478,13 @@ fn apply_openai_reserved_collaboration_function_schema(
                 }
             }
             tool.description = spawn_agent_tool_description_v2(
-                /*available_models_description*/ None, /*inherited_model_guidance*/ None,
-                /*usage_hint_text*/ None,
+                /*available_models_description*/ None,
+                /*model_catalog_in_context*/ false, /*model_catalog_guidance*/ None,
+                /*inherited_model_guidance*/ None, /*usage_hint_text*/ None,
+                /*description*/ None,
             );
-            tool.output_schema = Some(openai_spawn_agent_output_schema_v2(
-                /*hide_agent_metadata*/ true,
-            ));
+            tool.output_schema =
+                Some(openai_spawn_agent_output_schema_v2(/*hide_agent_metadata*/ true).into());
         }
         "send_message" | "followup_task" => {
             if let Some(message) = tool
@@ -561,7 +497,7 @@ fn apply_openai_reserved_collaboration_function_schema(
             }
         }
         "wait_agent" => {
-            tool.output_schema = Some(openai_wait_output_schema_v2());
+            tool.output_schema = Some(openai_wait_output_schema_v2().into());
         }
         "interrupt_agent" => {
             let properties = BTreeMap::from([(
@@ -576,12 +512,15 @@ fn apply_openai_reserved_collaboration_function_schema(
                 Some(vec!["target".to_string()]),
                 Some(false.into()),
             );
-            tool.output_schema = Some(agent_previous_status_output_schema(
-                "The agent status observed before the interrupt request was handled.",
-            ));
+            tool.output_schema = Some(
+                agent_previous_status_output_schema(
+                    "The agent status observed before the interrupt request was handled.",
+                )
+                .into(),
+            );
         }
         "list_agents" => {
-            tool.output_schema = Some(openai_list_agents_output_schema());
+            tool.output_schema = Some(openai_list_agents_output_schema().into());
         }
         _ => {}
     }
@@ -604,20 +543,6 @@ fn interrupt_agent_output_schema() -> Value {
         },
         "required": ["previous_status", "actor", "target", "reason", "superseding_task", "process_effect"],
         "additionalProperties": false
-||||||| 413492cd6c
-        parameters: JsonSchema::object(properties, Some(vec!["target".to_string()]), Some(false.into())),
-        output_schema: Some(agent_previous_status_output_schema(
-            "The agent status observed before the interrupt request was handled.",
-        )),
-=======
-        parameters: JsonSchema::object(properties, Some(vec!["target".to_string()]), Some(false.into())),
-        output_schema: Some(
-            agent_previous_status_output_schema(
-                "The agent status observed before the interrupt request was handled.",
-            )
-            .into(),
-        ),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     })
 }
 

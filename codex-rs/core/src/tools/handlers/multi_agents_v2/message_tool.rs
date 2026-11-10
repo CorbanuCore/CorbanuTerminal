@@ -5,63 +5,16 @@
 
 use super::analytics::ToolCallAnalytics;
 use super::*;
-<<<<<<< HEAD
-||||||| 413492cd6c
-use crate::agent_communication::AgentCommunicationContext;
-use crate::agent_communication::AgentCommunicationKind;
-=======
 use crate::TurnStartOptions;
-use crate::agent::api::AgentInput;
-use crate::agent::api::AgentTarget;
-use crate::agent::api::SendRequest;
 use crate::agent::child_config::build_agent_resume_config;
 use crate::agent::types::MessageDeliveryMode;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use crate::agent_communication::AgentCommunicationContext;
+use crate::agent_communication::AgentCommunicationKind;
 use crate::tools::context::FunctionToolOutput;
-use codex_protocol::protocol::InterAgentCommunication;
+use codex_protocol::AgentPath;
+use codex_protocol::error::CodexErr;
 use codex_protocol::protocol::MAX_AGENT_MESSAGE_BYTES;
 
-<<<<<<< HEAD
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum MessageDeliveryMode {
-    QueueOnly,
-    TriggerTurn,
-}
-
-impl MessageDeliveryMode {
-    fn trigger_turn(self) -> bool {
-        match self {
-            Self::QueueOnly => false,
-            Self::TriggerTurn => true,
-        }
-    }
-
-    fn apply(self, communication: InterAgentCommunication) -> InterAgentCommunication {
-        InterAgentCommunication {
-            trigger_turn: self.trigger_turn(),
-            ..communication
-        }
-    }
-}
-
-||||||| 413492cd6c
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum MessageDeliveryMode {
-    QueueOnly,
-    TriggerTurn,
-}
-
-impl MessageDeliveryMode {
-    fn trigger_turn(self) -> bool {
-        match self {
-            Self::QueueOnly => false,
-            Self::TriggerTurn => true,
-        }
-    }
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 /// Input for the MultiAgentV2 `send_message` tool.
@@ -126,34 +79,34 @@ pub(super) async fn handle_message_string_tool(
     }
     let receiver_thread_id = resolve_agent_target(&session, &turn, &target).await?;
     analytics.set_receiver(receiver_thread_id);
-    let resume_config =
-        build_agent_resume_config(&turn).map_err(FunctionCallError::RespondToModel)?;
-    let receipt = session
+    // Corbanu (D527 (a)): main's message flow runs on the shared handle's local backend (the
+    // encoding check needs the recipient's loaded runtime); any other backend fails closed.
+    let local_agent_control = session
         .services
         .agent_control
-        .send(SendRequest {
-            caller: session.thread_id,
-            target: AgentTarget::Id(receiver_thread_id),
-            resume_config,
-            input: AgentInput::Message {
-                message: agent_message_from_tool(message, &source),
-                mode,
-            },
-            start_options: TurnStartOptions {
-                parent_turn_id: (mode == MessageDeliveryMode::TriggerTurn)
-                    .then(|| turn.sub_id.clone()),
-                root_turn_id: turn.turn_metadata_state.root_turn_id(),
-                turn_trigger: turn.turn_metadata_state.current_turn_trigger(),
-                cyber_access_program: turn.cyber_access_program,
-                ..Default::default()
-            },
-        })
-        .await
-        .map_err(|err| collab_v2_agent_error(receiver_thread_id, err))?;
-    let receiver_agent_path = receipt.metadata.agent_path.ok_or_else(|| {
+        .local_or_unsupported()
+        .map_err(|err| collab_agent_error(receiver_thread_id, err))?;
+    let receiver_agent = local_agent_control
+        .get_agent_metadata(receiver_thread_id)
+        .ok_or_else(|| {
+            collab_agent_error(
+                receiver_thread_id,
+                CodexErr::ThreadNotFound(receiver_thread_id),
+            )
+        })?;
+    if mode == MessageDeliveryMode::TriggerTurn
+        && receiver_agent
+            .agent_path
+            .as_ref()
+            .is_some_and(AgentPath::is_root)
+    {
+        return Err(FunctionCallError::RespondToModel(
+            "Follow-up tasks can't target the root agent".to_string(),
+        ));
+    }
+    let receiver_agent_path = receiver_agent.agent_path.clone().ok_or_else(|| {
         FunctionCallError::RespondToModel("target agent is missing an agent_path".to_string())
     })?;
-<<<<<<< HEAD
     let author = turn
         .session_source
         .get_agent_path()
@@ -161,16 +114,13 @@ pub(super) async fn handle_message_string_tool(
     // Persisted agents are represented in the control plane before their runtime is loaded.
     // Reopen that runtime first so mailbox admission can use its state database. Live agents
     // take the fast path in `ensure_v2_agent_loaded`.
-    let resume_config = build_agent_resume_config(turn.as_ref())?;
-    session
-        .services
-        .agent_control
-        .ensure_v2_agent_loaded(resume_config, receiver_thread_id)
+    let resume_config =
+        build_agent_resume_config(&turn).map_err(FunctionCallError::RespondToModel)?;
+    let _residency_pin = local_agent_control
+        .ensure_v2_agent_loaded(resume_config, receiver_thread_id, /*parent*/ None)
         .await
         .map_err(|err| collab_agent_error(receiver_thread_id, err))?;
-    let receiver = session
-        .services
-        .agent_control
+    let receiver = local_agent_control
         .get_agent_config_snapshot(receiver_thread_id)
         .await
         .ok_or_else(|| {
@@ -182,9 +132,11 @@ pub(super) async fn handle_message_string_tool(
         MessageDeliveryMode::QueueOnly => ("send_message", PLAINTEXT_SEND_MESSAGE_TOOL),
         MessageDeliveryMode::TriggerTurn => ("followup_task", PLAINTEXT_FOLLOWUP_TASK_TOOL),
     };
+    let codec_provider_id =
+        crate::tools::collaboration_wire::message_source_provider_id(turn.as_ref());
     ensure_message_encoding_matches_target(
         ConfiguredRuntime::from_provider(&turn.config.model_provider_id, turn.provider.info()),
-        crate::tools::collaboration_wire::message_source_provider_id(turn.as_ref()),
+        codec_provider_id,
         &source,
         ConfiguredRuntime::from_snapshot(
             &receiver.model_provider_id,
@@ -200,14 +152,8 @@ pub(super) async fn handle_message_string_tool(
             crate::tools::context::ToolCallSource::DirectPlaintextMessage
         }
     };
-    let mut communication = communication_from_tool_message(
-        author,
-        receiver_agent_path.clone(),
-        message,
-        &source,
-        crate::tools::collaboration_wire::message_source_provider_id(turn.as_ref()),
-        mode.trigger_turn(),
-    );
+    let mut communication = agent_message_from_tool(message, &source, codec_provider_id)
+        .into_communication(author, receiver_agent_path.clone(), mode);
     communication.kind = Some(match mode {
         MessageDeliveryMode::QueueOnly => codex_protocol::protocol::AgentMessageKind::Informational,
         MessageDeliveryMode::TriggerTurn => codex_protocol::protocol::AgentMessageKind::FollowUp,
@@ -217,63 +163,29 @@ pub(super) async fn handle_message_string_tool(
         .metadata
         .get_or_insert_with(codex_protocol::models::ResponseItemMetadata::default)
         .source_call_id = Some(call_id.clone());
-    let communication = mode.apply(communication);
-    session
-        .services
-        .agent_control
-        .admit_inter_agent_communication(receiver_thread_id, &communication)
-        .await
-        .map_err(|err| collab_agent_error(receiver_thread_id, err))?;
-    let result = session
-        .services
-        .agent_control
-        .send_persisted_inter_agent_communication(
-            receiver_thread_id,
-            communication,
-            matches!(mode, MessageDeliveryMode::TriggerTurn).then(|| turn.sub_id.clone()),
-        )
-        .await
-        .map_err(|err| collab_agent_error(receiver_thread_id, err));
-    result?;
-    session
-        .services
-        .agent_control
-        .note_native_agent_dispatch(session.thread_id);
-||||||| 413492cd6c
-    let resume_config = build_agent_resume_config(turn.as_ref())?;
-    session
-        .services
-        .agent_control
-        .ensure_v2_agent_loaded(resume_config, receiver_thread_id)
-        .await
-        .map_err(|err| collab_agent_error(receiver_thread_id, err))?;
-    let author = turn
-        .session_source
-        .get_agent_path()
-        .unwrap_or_else(AgentPath::root);
-    let communication = communication_from_tool_message(
-        author,
-        receiver_agent_path.clone(),
-        message,
-        &source,
-        mode.trigger_turn(),
-    );
     let kind = match mode {
         MessageDeliveryMode::QueueOnly => AgentCommunicationKind::Message,
         MessageDeliveryMode::TriggerTurn => AgentCommunicationKind::Followup,
     };
-    let context = AgentCommunicationContext::new(kind, session.thread_id);
-    let parent_turn_id =
-        matches!(mode, MessageDeliveryMode::TriggerTurn).then(|| turn.sub_id.clone());
-    let result = session
-        .services
-        .agent_control
-        .send_inter_agent_communication(receiver_thread_id, communication, context, parent_turn_id)
+    // The durable mailbox admits the message before the hand-off (#1999/#2033, D485). As main,
+    // a follow-up is admitted even when every agent slot is busy; its turn waits for a slot.
+    local_agent_control
+        .send_inter_agent_communication_without_capacity_check(
+            receiver_thread_id,
+            communication,
+            AgentCommunicationContext::new(kind, session.thread_id),
+            TurnStartOptions {
+                parent_turn_id: (mode == MessageDeliveryMode::TriggerTurn)
+                    .then(|| turn.sub_id.clone()),
+                root_turn_id: turn.turn_metadata_state.root_turn_id(),
+                turn_trigger: turn.turn_metadata_state.current_turn_trigger(),
+                cyber_access_program: turn.cyber_access_program,
+                ..Default::default()
+            },
+        )
         .await
-        .map_err(|err| collab_agent_error(receiver_thread_id, err));
-    result?;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        .map_err(|err| collab_v2_agent_error(receiver_thread_id, err))?;
+    local_agent_control.note_native_agent_dispatch(session.thread_id);
     emit_sub_agent_activity(
         &session,
         &turn,
