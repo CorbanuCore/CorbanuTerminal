@@ -1,10 +1,6 @@
-<<<<<<< HEAD
 use super::Session;
-||||||| 413492cd6c
-=======
 use crate::agent::api::AgentControl;
 use crate::agent_communication::PENDING_MAILBOX_MESSAGES;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::state::ActiveTurn;
 use crate::state::MailboxDeliveryPhase;
 use crate::state::TurnState;
@@ -19,9 +15,11 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::collections::VecDeque;
 use std::sync::Arc;
+use std::sync::Weak;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use tokio::sync::Mutex;
+use tokio::sync::Notify;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::AbortOnDropHandle;
@@ -115,13 +113,12 @@ impl TurnInput {
 #[derive(Default)]
 pub(crate) struct TurnInputQueue {
     items: Vec<TurnInput>,
-<<<<<<< HEAD
-    deferred: Vec<(TurnInput, Option<serde_json::Value>)>,
-||||||| 413492cd6c
-=======
     /// Activity from notifying writes. Passive response items do not wake a wait.
     notified_activity: Option<InputQueueActivity>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    /// Input that arrived under other execution authority than the running turn was admitted
+    /// with. The turn never takes it: it waits for re-admission, and an interrupt hands it back
+    /// to submission admission (`InputQueue::clear_pending`).
+    deferred: Vec<(TurnInput, Option<serde_json::Value>)>,
 }
 
 /// Session-scoped pending input storage and active-turn mailbox delivery coordination.
@@ -131,26 +128,51 @@ pub(crate) struct InputQueue {
     mailbox_pending_mails: Mutex<VecDeque<PendingMailboxCommunication>>,
     capacity_wait_scheduled: AtomicBool,
     interrupted_deferred_input: Mutex<VecDeque<(TurnInput, Option<serde_json::Value>)>>,
-    interrupted_input_ready: tokio::sync::Notify,
+    interrupted_input_ready: Notify,
 }
 
-<<<<<<< HEAD
-struct PendingMailboxCommunication {
-    communication: InterAgentCommunication,
-    parent_turn_id: Option<String>,
-    ready_for_admitted_turn: bool,
-    deferred_for_turn: Option<String>,
-    deferred_turn_state: Option<std::sync::Weak<Mutex<TurnState>>>,
-||||||| 413492cd6c
-struct PendingMailboxCommunication {
-    communication: InterAgentCommunication,
-    parent_turn_id: Option<String>,
-=======
 pub(crate) struct PendingMailboxCommunication {
     pub(crate) communication: crate::PendingAgentMessage,
     start_options: TurnStartOptions,
+    /// Whether the mail may join a newly admitted human turn: trigger-turn mail, or mail that
+    /// arrived while no task ran. Other mail waits for one completed turn boundary.
+    ready_for_admitted_turn: bool,
+    /// The running turn that may not take the mail: it arrived under other execution
+    /// authority than that turn was admitted with.
+    deferred_for_turn: Option<String>,
+    deferred_turn_state: Option<Weak<Mutex<TurnState>>>,
     _diagnostics_guard: GaugeGuard,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+}
+
+/// The task boundary mail arrived at, which decides when a turn may take it.
+#[derive(Default)]
+struct MailAdmission {
+    arrived_idle: bool,
+    deferred_for_turn: Option<String>,
+    deferred_turn_state: Option<Weak<Mutex<TurnState>>>,
+}
+
+impl PendingMailboxCommunication {
+    fn new(
+        communication: crate::PendingAgentMessage,
+        start_options: TurnStartOptions,
+        admission: &MailAdmission,
+    ) -> Self {
+        Self {
+            ready_for_admitted_turn: communication.trigger_turn || admission.arrived_idle,
+            deferred_for_turn: admission.deferred_for_turn.clone(),
+            deferred_turn_state: admission.deferred_turn_state.clone(),
+            communication,
+            start_options,
+            _diagnostics_guard: PENDING_MAILBOX_MESSAGES.track(),
+        }
+    }
+
+    fn deferred_for(&self, turn_state: &Mutex<TurnState>) -> bool {
+        self.deferred_turn_state
+            .as_ref()
+            .is_some_and(|deferred| std::ptr::eq(deferred.as_ptr(), turn_state))
+    }
 }
 
 impl InputQueue {
@@ -162,21 +184,10 @@ impl InputQueue {
             mailbox_pending_mails: Mutex::new(VecDeque::new()),
             capacity_wait_scheduled: AtomicBool::new(false),
             interrupted_deferred_input: Mutex::new(VecDeque::new()),
-            interrupted_input_ready: tokio::sync::Notify::new(),
+            interrupted_input_ready: Notify::new(),
         }
     }
 
-<<<<<<< HEAD
-    pub(crate) fn try_schedule_capacity_wait(&self) -> bool {
-        self.capacity_wait_scheduled
-            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .is_ok()
-    }
-
-    pub(crate) fn finish_capacity_wait(&self) {
-        self.capacity_wait_scheduled.store(false, Ordering::Release);
-||||||| 413492cd6c
-=======
     pub(crate) fn with_controller(thread_id: ThreadId, control: Arc<dyn AgentControl>) -> Self {
         let updates = control.watch_mailbox(thread_id);
         Self {
@@ -185,30 +196,39 @@ impl InputQueue {
         }
     }
 
+    pub(crate) fn try_schedule_capacity_wait(&self) -> bool {
+        self.capacity_wait_scheduled
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    }
+
+    pub(crate) fn finish_capacity_wait(&self) {
+        self.capacity_wait_scheduled.store(false, Ordering::Release);
+    }
+
     pub(crate) fn mailbox_updates(&self) -> Option<watch::Receiver<bool>> {
         self.controller
             .as_ref()
             .map(|(_, _, updates)| updates.clone())
     }
 
-    pub(crate) fn notify_mailbox(&self) {
-        self.activity_tx.send_replace(InputQueueActivity::Mailbox);
-    }
-
-    fn read_mailbox(&self, pending: &mut VecDeque<PendingMailboxCommunication>) {
-        if let Some((thread_id, control, _)) = &self.controller {
-            pending.extend(
-                control
-                    .take_mailbox(*thread_id)
-                    .into_iter()
-                    .map(|communication| PendingMailboxCommunication {
-                        communication,
-                        start_options: TurnStartOptions::default(),
-                        _diagnostics_guard: PENDING_MAILBOX_MESSAGES.track(),
-                    }),
-            );
-        }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    /// Moves mail the agent controller holds for this thread into the session queue; whether
+    /// any was read. Mail read without the session's task boundary at hand gets the default
+    /// admission: queue-only mail then waits for one completed turn boundary.
+    fn read_mailbox(
+        &self,
+        pending: &mut VecDeque<PendingMailboxCommunication>,
+        admission: &MailAdmission,
+    ) -> bool {
+        let Some((thread_id, control, _)) = &self.controller else {
+            return false;
+        };
+        let mail = control.take_mailbox(*thread_id);
+        let read = !mail.is_empty();
+        pending.extend(mail.into_iter().map(|communication| {
+            PendingMailboxCommunication::new(communication, TurnStartOptions::default(), admission)
+        }));
+        read
     }
 
     pub(crate) async fn subscribe_activity(
@@ -219,33 +239,22 @@ impl InputQueue {
         Option<InputQueueActivity>,
     ) {
         let activity_rx = self.activity_tx.subscribe();
-        let turn_activity = if let Some(turn_state) = turn_state {
-            turn_state.lock().await.pending_input.pending_activity()
-        } else {
-            None
+        let turn_activity = match turn_state {
+            Some(turn_state) => turn_state.lock().await.pending_input.pending_activity(),
+            // Turn-local waiters cannot consume input still waiting for re-admission.
+            None => (!self.interrupted_deferred_input.lock().await.is_empty())
+                .then_some(InputQueueActivity::Steer),
         };
-<<<<<<< HEAD
-        // Turn-local waiters cannot consume input still waiting for re-admission.
-        let has_pending_steer = has_pending_steer
-            || (turn_state.is_none() && !self.interrupted_deferred_input.lock().await.is_empty());
-        let pending_activity = if has_pending_steer {
-            Some(InputQueueActivity::Steer)
-        } else if self.mailbox_pending_mails.lock().await.iter().any(|mail| {
-            !turn_state.is_some_and(|turn_state| {
-                mail.deferred_turn_state
-                    .as_ref()
-                    .is_some_and(|deferred| std::ptr::eq(deferred.as_ptr(), turn_state))
-            })
-        }) {
-||||||| 413492cd6c
-        let pending_activity = if has_pending_steer {
-            Some(InputQueueActivity::Steer)
-        } else if self.has_pending_mailbox_items().await {
-=======
         let pending_activity = if let Some(activity) = turn_activity {
             Some(activity)
-        } else if self.has_pending_mailbox_items().await {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        } else if self
+            .mailbox_pending_mails
+            .lock()
+            .await
+            .iter()
+            .any(|mail| !turn_state.is_some_and(|turn_state| mail.deferred_for(turn_state)))
+            || self.has_unread_controller_mail()
+        {
             Some(InputQueueActivity::Mailbox)
         } else {
             None
@@ -253,139 +262,142 @@ impl InputQueue {
         (activity_rx, pending_activity)
     }
 
-<<<<<<< HEAD
-    #[cfg(test)]
-||||||| 413492cd6c
-=======
+    /// Delivers a notice into the running turn when it can take it now. A turn running under
+    /// other execution authority than the session's current one takes no new input.
     #[expect(
         clippy::await_holding_invalid_type,
         reason = "active turn checks and turn state updates must remain atomic"
     )]
     pub(crate) async fn deliver_mailbox_communication_to_current_turn(
         &self,
-        active_turn: &Mutex<Option<ActiveTurn>>,
+        session: &Session,
         communication: InterAgentCommunication,
         expected_turn_id: Option<&str>,
     ) -> bool {
-        let active = active_turn.lock().await;
-        let Some(active_turn) = active.as_ref().filter(|turn| {
-            turn.task.as_ref().is_some_and(|task| {
-                expected_turn_id.is_none_or(|id| {
-                    task.turn_context.sub_id == id && !task.cancellation_token.is_cancelled()
+        let active = session.active_turn.lock().await;
+        let Some((active_turn, task)) = active.as_ref().and_then(|turn| {
+            turn.task
+                .as_ref()
+                .map(|task| (turn, task))
+                .filter(|(_, task)| {
+                    expected_turn_id.is_none_or(|id| {
+                        task.turn_context.sub_id == id && !task.cancellation_token.is_cancelled()
+                    })
                 })
-            })
         }) else {
             return false;
         };
+        if !Session::authorization_matches(
+            &session.state.lock().await.session_configuration,
+            &task.turn_context,
+        ) {
+            return false;
+        }
         let mut turn_state = active_turn.turn_state.lock().await;
         if !turn_state.accepts_mailbox_delivery_for_current_turn() {
             return false;
         }
-        turn_state
-            .pending_input
-            .items
-            .push(TurnInput::InterAgentCommunication(communication.into()));
+        let input = TurnInput::InterAgentCommunication(communication.into());
+        // #1952 (D485): noted in the same step as the take.
+        turn_state.track_taken_mailbox_messages([&input]);
+        turn_state.pending_input.items.push(input);
         self.activity_tx.send_replace(InputQueueActivity::Mailbox);
         true
     }
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    #[cfg(test)]
     pub(crate) async fn enqueue_mailbox_communication(
         &self,
         communication: crate::PendingAgentMessage,
         start_options: TurnStartOptions,
     ) {
-<<<<<<< HEAD
-        self.mailbox_pending_mails
-            .lock()
-            .await
-            .push_back(PendingMailboxCommunication {
-                ready_for_admitted_turn: communication.trigger_turn,
-                deferred_for_turn: None,
-                deferred_turn_state: None,
-                communication,
-                parent_turn_id,
-            });
-||||||| 413492cd6c
-        self.mailbox_pending_mails
-            .lock()
-            .await
-            .push_back(PendingMailboxCommunication {
-                communication,
-                parent_turn_id,
-            });
-=======
+        let admission = MailAdmission::default();
         let mut pending = self.mailbox_pending_mails.lock().await;
-        // Mail retained while unloaded precedes new submissions to the loaded session.
-        self.read_mailbox(&mut pending);
-        pending.push_back(PendingMailboxCommunication {
+        self.read_mailbox(&mut pending, &admission);
+        pending.push_back(PendingMailboxCommunication::new(
             communication,
             start_options,
-            _diagnostics_guard: PENDING_MAILBOX_MESSAGES.track(),
-        });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            &admission,
+        ));
         self.activity_tx.send_replace(InputQueueActivity::Mailbox);
     }
 
     /// Enqueues mailbox delivery relative to the session's actual task boundary.
-    ///
-    /// Holding `active_turn` while the queue entry is created closes the race with task
+    pub(crate) async fn enqueue_mailbox_communication_for_session(
+        &self,
+        session: &Session,
+        communication: crate::PendingAgentMessage,
+        start_options: TurnStartOptions,
+    ) {
+        self.admit_mailbox_for_session(session, Some((communication, start_options)))
+            .await;
+    }
+
+    /// Moves mail the agent controller holds into the session queue, admitted at the session's
+    /// current task boundary. Call it when the controller signals new mail.
+    pub(crate) async fn admit_controller_mailbox(&self, session: &Session) {
+        self.admit_mailbox_for_session(session, /*communication*/ None)
+            .await;
+    }
+
+    /// Holding `active_turn` while the queue entries are created closes the race with task
     /// completion: mail received after the task has been detached is immediately eligible for
     /// the next admitted human turn, while mail received during the task is advanced by that
-    /// task's terminal boundary.
+    /// task's terminal boundary. Mail that arrives under other execution authority than the
+    /// running turn was admitted with waits for a turn admitted under the current one.
     #[allow(
         clippy::await_holding_invalid_type,
         reason = "active-turn and mailbox admission must remain atomic across both locks"
     )]
-    pub(crate) async fn enqueue_mailbox_communication_for_session(
+    async fn admit_mailbox_for_session(
         &self,
         session: &Session,
-        communication: InterAgentCommunication,
-        parent_turn_id: Option<String>,
+        communication: Option<(crate::PendingAgentMessage, TurnStartOptions)>,
     ) {
         let active_turn = session.active_turn.lock().await;
         let state = session.state.lock().await;
-        let deferred_for_turn = active_turn
-            .as_ref()
-            .and_then(|turn| turn.task.as_ref())
+        let task = active_turn.as_ref().and_then(|turn| turn.task.as_ref());
+        let deferred_for_turn = task
             .filter(|task| {
                 !Session::authorization_matches(&state.session_configuration, &task.turn_context)
             })
             .map(|task| task.turn_context.sub_id.clone());
-        let notify_waiters = deferred_for_turn.is_none();
-        let deferred_turn_state = active_turn
-            .as_ref()
-            .filter(|_| deferred_for_turn.is_some())
-            .map(|turn| Arc::downgrade(&turn.turn_state));
-        let ready_for_admitted_turn = communication.trigger_turn
-            || active_turn
+        let admission = MailAdmission {
+            arrived_idle: task.is_none(),
+            deferred_turn_state: active_turn
                 .as_ref()
-                .and_then(|active_turn| active_turn.task.as_ref())
-                .is_none();
-        self.mailbox_pending_mails
-            .lock()
-            .await
-            .push_back(PendingMailboxCommunication {
+                .filter(|_| deferred_for_turn.is_some())
+                .map(|turn| Arc::downgrade(&turn.turn_state)),
+            deferred_for_turn,
+        };
+        let mut pending = self.mailbox_pending_mails.lock().await;
+        // Mail retained while unloaded precedes new submissions to the loaded session.
+        let mut added = self.read_mailbox(&mut pending, &admission);
+        if let Some((communication, start_options)) = communication {
+            pending.push_back(PendingMailboxCommunication::new(
                 communication,
-                parent_turn_id,
-                ready_for_admitted_turn,
-                deferred_for_turn,
-                deferred_turn_state,
-            });
+                start_options,
+                &admission,
+            ));
+            added = true;
+        }
+        drop(pending);
         drop(state);
         drop(active_turn);
         // Deferred mail cannot interrupt a waiter in the turn that cannot consume it.
-        if notify_waiters {
+        if added && admission.deferred_for_turn.is_none() {
             self.activity_tx.send_replace(InputQueueActivity::Mailbox);
         }
     }
 
+    fn has_unread_controller_mail(&self) -> bool {
+        self.controller
+            .as_ref()
+            .is_some_and(|(_, _, updates)| *updates.borrow())
+    }
+
     pub(crate) async fn has_pending_mailbox_items(&self) -> bool {
-        !self.mailbox_pending_mails.lock().await.is_empty()
-            || self
-                .controller
-                .as_ref()
-                .is_some_and(|(_, _, updates)| *updates.borrow())
+        !self.mailbox_pending_mails.lock().await.is_empty() || self.has_unread_controller_mail()
     }
 
     pub(crate) async fn has_trigger_turn_mailbox_items(&self) -> bool {
@@ -396,45 +408,50 @@ impl InputQueue {
             .any(|mail| mail.communication.trigger_turn)
     }
 
-<<<<<<< HEAD
+    pub(crate) async fn drain_mailbox(&self) -> Vec<PendingMailboxCommunication> {
+        let mut pending = self.mailbox_pending_mails.lock().await;
+        self.read_mailbox(&mut pending, &MailAdmission::default());
+        pending.drain(..).collect()
+    }
+
     #[cfg(test)]
-    pub(crate) async fn drain_mailbox_input_items(&self) -> (Vec<TurnInput>, Option<String>) {
+    pub(crate) async fn drain_mailbox_input_items(&self) -> (Vec<TurnInput>, TurnStartOptions) {
         self.drain_mailbox_input_for_turn(/*turn_id*/ None).await
     }
 
     async fn drain_mailbox_input_for_turn(
         &self,
         turn_id: Option<&str>,
-    ) -> (Vec<TurnInput>, Option<String>) {
+    ) -> (Vec<TurnInput>, TurnStartOptions) {
+        // Mail the controller still holds is not read here: a running turn takes it only after
+        // `admit_controller_mailbox` checked it against the turn's authority.
         let mut pending_mails = self.mailbox_pending_mails.lock().await;
-        let (ready, deferred) = pending_mails.drain(..).partition(|mail| {
-            mail.deferred_for_turn.is_none() || mail.deferred_for_turn.as_deref() != turn_id
-        });
+        let (ready, deferred): (VecDeque<_>, VecDeque<_>) =
+            pending_mails.drain(..).partition(|mail| {
+                mail.deferred_for_turn.is_none() || mail.deferred_for_turn.as_deref() != turn_id
+            });
         *pending_mails = deferred;
         Self::mailbox_input_items(ready.into())
     }
 
     /// Drains only mail that is eligible to join a newly admitted human turn.
     ///
-    /// Trigger-turn mail is immediately eligible. Queue-only mail becomes eligible after one
-    /// active-turn boundary, which prevents mail queued while idle from being pulled into the
-    /// very next request while still allowing it to accompany the following human turn.
-    pub(crate) async fn drain_ready_mailbox_input_items(&self) -> (Vec<TurnInput>, Option<String>) {
+    /// Trigger-turn mail and mail that arrived while no task ran are immediately eligible.
+    /// Other queue-only mail becomes eligible after one active-turn boundary, so mail that
+    /// arrived during a turn does not start a mail-only model turn of its own.
+    pub(crate) async fn drain_ready_mailbox_input_items(
+        &self,
+    ) -> (Vec<TurnInput>, TurnStartOptions) {
         let ready_mails = {
             let mut pending_mails = self.mailbox_pending_mails.lock().await;
-            let mut ready_mails = Vec::new();
-            let mut waiting_mails = VecDeque::new();
-            while let Some(mail) = pending_mails.pop_front() {
-                if mail.ready_for_admitted_turn {
-                    ready_mails.push(mail);
-                } else {
-                    waiting_mails.push_back(mail);
-                }
-            }
+            self.read_mailbox(&mut pending_mails, &MailAdmission::default());
+            let (ready_mails, waiting_mails): (VecDeque<_>, VecDeque<_>) = pending_mails
+                .drain(..)
+                .partition(|mail| mail.ready_for_admitted_turn);
             *pending_mails = waiting_mails;
             ready_mails
         };
-        Self::mailbox_input_items(ready_mails)
+        Self::mailbox_input_items(ready_mails.into())
     }
 
     /// Advances queue-only mail across a completed turn boundary without starting a turn.
@@ -446,26 +463,7 @@ impl InputQueue {
 
     fn mailbox_input_items(
         pending_mails: Vec<PendingMailboxCommunication>,
-    ) -> (Vec<TurnInput>, Option<String>) {
-        let parent_turn_id = pending_mails
-||||||| 413492cd6c
-    pub(crate) async fn drain_mailbox_input_items(&self) -> (Vec<TurnInput>, Option<String>) {
-        let pending_mails = self
-            .mailbox_pending_mails
-            .lock()
-            .await
-            .drain(..)
-            .collect::<Vec<_>>();
-        let parent_turn_id = pending_mails
-=======
-    pub(crate) async fn drain_mailbox(&self) -> Vec<PendingMailboxCommunication> {
-        let mut pending = self.mailbox_pending_mails.lock().await;
-        self.read_mailbox(&mut pending);
-        pending.drain(..).collect()
-    }
-
-    pub(crate) async fn drain_mailbox_input_items(&self) -> (Vec<TurnInput>, TurnStartOptions) {
-        let pending_mails = self.drain_mailbox().await;
+    ) -> (Vec<TurnInput>, TurnStartOptions) {
         // A later follow-up supersedes the earlier choice, including an omitted choice.
         let mut start_options = pending_mails
             .iter()
@@ -474,7 +472,6 @@ impl InputQueue {
             .map(|mail| mail.start_options.clone())
             .unwrap_or_default();
         start_options.parent_turn_id = pending_mails
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             .iter()
             .filter(|mail| mail.communication.trigger_turn)
             .map(|mail| mail.start_options.parent_turn_id.as_deref())
@@ -537,17 +534,16 @@ impl InputQueue {
         })))
     }
 
-    /// Clear any pending waiters and input buffered for the current turn.
+    /// Clear any pending waiters and input buffered for the current turn. Input deferred to
+    /// re-admission goes back to submission admission.
     pub(crate) async fn clear_pending(&self, active_turn: &ActiveTurn) {
-<<<<<<< HEAD
-        // Release the turn-state lock before taking the interrupted-input lock:
-        // holding one tokio mutex guard across another await is disallowed.
-        let deferred = {
-            let mut turn_state = active_turn.turn_state.lock().await;
-            turn_state.clear_pending_waiters();
-            turn_state.pending_input.items.clear();
-            std::mem::take(&mut turn_state.pending_input.deferred)
-        };
+        let mut turn_state = active_turn.turn_state.lock().await;
+        turn_state.clear_pending_waiters();
+        // Pending mail can own extension attachments whose destructors need the lock released.
+        let mut pending_input = std::mem::take(&mut turn_state.pending_input);
+        drop(turn_state);
+        let deferred = std::mem::take(&mut pending_input.deferred);
+        drop(pending_input);
         if !deferred.is_empty() {
             self.interrupted_deferred_input
                 .lock()
@@ -568,18 +564,6 @@ impl InputQueue {
             }
             ready.await;
         }
-||||||| 413492cd6c
-        let mut turn_state = active_turn.turn_state.lock().await;
-        turn_state.clear_pending_waiters();
-        turn_state.pending_input.items.clear();
-=======
-        let mut turn_state = active_turn.turn_state.lock().await;
-        turn_state.clear_pending_waiters();
-        // Pending mail can own extension attachments whose destructors need the lock released.
-        let pending_input = std::mem::take(&mut turn_state.pending_input);
-        drop(turn_state);
-        drop(pending_input);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(crate) async fn defer_mailbox_delivery_to_next_turn(
@@ -652,7 +636,6 @@ impl InputQueue {
     ) {
         turn_state.lock().await.pending_input.items.extend(input);
     }
-
     pub(crate) async fn defer_input_for_turn_state(
         &self,
         turn_state: &Mutex<TurnState>,
@@ -666,45 +649,80 @@ impl InputQueue {
         );
     }
 
+    /// The turn's leftover input, deferred input last, each with the output schema it was
+    /// submitted with.
     pub(crate) async fn take_pending_input_for_turn_state(
         &self,
         turn_state: &Mutex<TurnState>,
-<<<<<<< HEAD
     ) -> Vec<(TurnInput, Option<serde_json::Value>)> {
-        let mut state = turn_state.lock().await;
-        let mut input: Vec<_> = std::mem::take(&mut state.pending_input.items)
+        let pending = std::mem::take(&mut turn_state.lock().await.pending_input);
+        let mut input: Vec<_> = pending
+            .items
             .into_iter()
             .map(|input| (input, None))
             .collect();
-        input.append(&mut state.pending_input.deferred);
+        input.extend(pending.deferred);
         input
-||||||| 413492cd6c
-    ) -> Vec<TurnInput> {
-        turn_state.lock().await.pending_input.items.split_off(0)
-=======
-    ) -> Vec<TurnInput> {
-        std::mem::take(&mut turn_state.lock().await.pending_input).items
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
+    #[cfg(test)]
     pub(crate) async fn get_pending_input(
         &self,
         active_turn: &Mutex<Option<ActiveTurn>>,
-<<<<<<< HEAD
-    ) -> (Vec<TurnInput>, Option<String>) {
-        let (pending_input, accepts_mailbox_delivery, turn_id) =
+    ) -> (Vec<TurnInput>, TurnStartOptions) {
+        self.get_pending_input_inner(active_turn, /*allow_untracked_mailbox*/ true)
+            .await
+    }
+
+    /// Takes input for an already-running task. Mail the agent controller holds is admitted at
+    /// the session's task boundary first. A task detached by any stop path must not drain
+    /// mailbox mail: it no longer has a turn state that can record its outcome (#2010).
+    pub(crate) async fn get_pending_input_for_running_task(
+        &self,
+        session: &Session,
+    ) -> (Vec<TurnInput>, TurnStartOptions) {
+        self.admit_controller_mailbox(session).await;
+        self.get_pending_input_inner(&session.active_turn, /*allow_untracked_mailbox*/ false)
+            .await
+    }
+
+    #[allow(
+        clippy::await_holding_invalid_type,
+        reason = "taking mail off the queue and noting it in the turn state must remain atomic"
+    )]
+    async fn get_pending_input_inner(
+        &self,
+        active_turn: &Mutex<Option<ActiveTurn>>,
+        allow_untracked_mailbox: bool,
+    ) -> (Vec<TurnInput>, TurnStartOptions) {
+        let (pending_input, accepts_mailbox_delivery, turn_id, turn_state) =
             Self::take_turn_pending_input(active_turn).await;
         if !accepts_mailbox_delivery {
-            return (pending_input, None);
+            return (pending_input, TurnStartOptions::default());
         }
-        let (mailbox_items, parent_turn_id) =
-            self.drain_mailbox_input_for_turn(turn_id.as_deref()).await;
+        let (mailbox_items, start_options) = match turn_state {
+            // #1952 (D485): the turn notes the mail it takes in the same step, with no await
+            // between, so an interrupt that stops the turn knows what it took.
+            Some(turn_state) => {
+                let mut turn_state = turn_state.lock().await;
+                let (mailbox_items, start_options) =
+                    self.drain_mailbox_input_for_turn(turn_id.as_deref()).await;
+                turn_state.track_taken_mailbox_messages(&mailbox_items);
+                (mailbox_items, start_options)
+            }
+            // Test-only: older tests poll an empty slot to inspect queued mail. Executing tasks
+            // use the fail-closed path above.
+            None if allow_untracked_mailbox => {
+                self.drain_mailbox_input_for_turn(turn_id.as_deref()).await
+            }
+            None => (Vec::new(), TurnStartOptions::default()),
+        };
         if pending_input.is_empty() {
-            (mailbox_items, parent_turn_id)
+            (mailbox_items, start_options)
         } else {
             let mut pending_input = pending_input;
             pending_input.extend(mailbox_items);
-            (pending_input, parent_turn_id)
+            (pending_input, start_options)
         }
     }
 
@@ -717,23 +735,23 @@ impl InputQueue {
     pub(crate) async fn get_pending_input_for_task_start(
         &self,
         active_turn: &Mutex<Option<ActiveTurn>>,
-    ) -> (Vec<TurnInput>, Option<String>) {
-        let (pending_input, accepts_mailbox_delivery, turn_id) =
+    ) -> (Vec<TurnInput>, TurnStartOptions) {
+        let (pending_input, accepts_mailbox_delivery, turn_id, _turn_state) =
             Self::take_turn_pending_input(active_turn).await;
         if !accepts_mailbox_delivery {
-            return (pending_input, None);
+            return (pending_input, TurnStartOptions::default());
         }
         debug_assert!(
             turn_id.is_none(),
             "task start must precede task installation"
         );
-        let (mailbox_items, parent_turn_id) = self.drain_ready_mailbox_input_items().await;
+        let (mailbox_items, start_options) = self.drain_ready_mailbox_input_items().await;
         if pending_input.is_empty() {
-            (mailbox_items, parent_turn_id)
+            (mailbox_items, start_options)
         } else {
             let mut pending_input = pending_input;
             pending_input.extend(mailbox_items);
-            (pending_input, parent_turn_id)
+            (pending_input, start_options)
         }
     }
 
@@ -743,63 +761,37 @@ impl InputQueue {
     )]
     async fn take_turn_pending_input(
         active_turn: &Mutex<Option<ActiveTurn>>,
-    ) -> (Vec<TurnInput>, bool, Option<String>) {
-        {
-||||||| 413492cd6c
-    ) -> (Vec<TurnInput>, Option<String>) {
-        let (pending_input, accepts_mailbox_delivery) = {
-=======
-    ) -> (Vec<TurnInput>, TurnStartOptions) {
-        let (pending_input, accepts_mailbox_delivery) = {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-            let mut active = active_turn.lock().await;
-            match active.as_mut() {
-                Some(active_turn) => {
-                    let mut turn_state = active_turn.turn_state.lock().await;
-                    let accepts_mailbox_delivery =
-                        turn_state.accepts_mailbox_delivery_for_current_turn();
-                    let pending_input = if accepts_mailbox_delivery {
-                        std::mem::take(&mut turn_state.pending_input).items
-                    } else {
-                        Vec::new()
-                    };
-                    (
-                        pending_input,
-                        accepts_mailbox_delivery,
-                        active_turn
-                            .task
-                            .as_ref()
-                            .map(|task| task.turn_context.sub_id.clone()),
-                    )
-                }
-                None => (Vec::new(), true, None),
+    ) -> (
+        Vec<TurnInput>,
+        bool,
+        Option<String>,
+        Option<Arc<Mutex<TurnState>>>,
+    ) {
+        let mut active = active_turn.lock().await;
+        match active.as_mut() {
+            Some(active_turn) => {
+                let mut turn_state = active_turn.turn_state.lock().await;
+                let accepts_mailbox_delivery =
+                    turn_state.accepts_mailbox_delivery_for_current_turn();
+                let pending_input = if accepts_mailbox_delivery {
+                    turn_state.pending_input.take_items()
+                } else {
+                    Vec::new()
+                };
+                (
+                    pending_input,
+                    accepts_mailbox_delivery,
+                    active_turn
+                        .task
+                        .as_ref()
+                        .map(|task| task.turn_context.sub_id.clone()),
+                    Some(Arc::clone(&active_turn.turn_state)),
+                )
             }
-<<<<<<< HEAD
-||||||| 413492cd6c
-        };
-        if !accepts_mailbox_delivery {
-            return (pending_input, None);
-        }
-        let (mailbox_items, parent_turn_id) = self.drain_mailbox_input_items().await;
-        if pending_input.is_empty() {
-            (mailbox_items, parent_turn_id)
-        } else {
-            let mut pending_input = pending_input;
-            pending_input.extend(mailbox_items);
-            (pending_input, parent_turn_id)
-=======
-        };
-        if !accepts_mailbox_delivery {
-            return (pending_input, TurnStartOptions::default());
-        }
-        let (mailbox_items, start_options) = self.drain_mailbox_input_items().await;
-        if pending_input.is_empty() {
-            (mailbox_items, start_options)
-        } else {
-            let mut pending_input = pending_input;
-            pending_input.extend(mailbox_items);
-            (pending_input, start_options)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            // `get_pending_input_for_task_start` also uses this helper. It may legitimately
+            // start from an idle slot and must still inspect ready mailbox work; the running
+            // task path separately refuses to drain without a TurnState (#2010).
+            None => (Vec::new(), true, None, None),
         }
     }
 
@@ -834,11 +826,13 @@ impl InputQueue {
         if has_turn_pending_input {
             return true;
         }
-        self.mailbox_pending_mails
-            .lock()
-            .await
-            .iter()
-            .any(|mail| mail.deferred_for_turn.is_none() || mail.deferred_for_turn != turn_id)
+        self.has_unread_controller_mail()
+            || self
+                .mailbox_pending_mails
+                .lock()
+                .await
+                .iter()
+                .any(|mail| mail.deferred_for_turn.is_none() || mail.deferred_for_turn != turn_id)
     }
 }
 
@@ -849,8 +843,27 @@ impl TurnInputQueue {
             .any(|input| matches!(input, TurnInput::UserInput { .. }))
     }
 
+    /// Whether the turn has input it may take; input deferred to re-admission is not counted.
     pub(crate) fn is_empty(&self) -> bool {
         self.items.is_empty()
+    }
+
+    /// Takes the input the turn may take, leaving input deferred to re-admission.
+    fn take_items(&mut self) -> Vec<TurnInput> {
+        self.notified_activity = None;
+        std::mem::take(&mut self.items)
+    }
+
+    /// #1952: whether `message_id` waits in input deferred to re-admission, which an interrupt
+    /// keeps (`InputQueue::clear_pending`).
+    pub(crate) fn defers_mailbox_message(&self, message_id: &str) -> bool {
+        self.deferred.iter().any(|(input, _)| {
+            matches!(
+                input,
+                TurnInput::InterAgentCommunication(communication)
+                    if communication.message_id.as_deref() == Some(message_id)
+            )
+        })
     }
 
     fn pending_activity(&self) -> Option<InputQueueActivity> {
@@ -1239,17 +1252,17 @@ mod tests {
             /*trigger_turn*/ false,
         );
         input_queue
-            .enqueue_mailbox_communication(queued_mail.clone(), /*parent_turn_id*/ None)
+            .enqueue_mailbox_communication(queued_mail.clone().into(), Default::default())
             .await;
 
         assert_eq!(
-            input_queue.drain_ready_mailbox_input_items().await,
-            (Vec::new(), None)
+            input_queue.drain_ready_mailbox_input_items().await.0,
+            Vec::new()
         );
         input_queue.mark_mailbox_ready_for_next_turn().await;
         assert_eq!(
-            input_queue.drain_ready_mailbox_input_items().await,
-            (vec![TurnInput::InterAgentCommunication(queued_mail)], None)
+            input_queue.drain_ready_mailbox_input_items().await.0,
+            vec![TurnInput::InterAgentCommunication(queued_mail.into())]
         );
     }
 
@@ -1267,14 +1280,14 @@ mod tests {
         input_queue
             .enqueue_mailbox_communication_for_session(
                 &session,
-                queued_mail.clone(),
-                /*parent_turn_id*/ None,
+                queued_mail.clone().into(),
+                TurnStartOptions::default(),
             )
             .await;
 
         assert_eq!(
-            input_queue.drain_ready_mailbox_input_items().await,
-            (vec![TurnInput::InterAgentCommunication(queued_mail)], None)
+            input_queue.drain_ready_mailbox_input_items().await.0,
+            vec![TurnInput::InterAgentCommunication(queued_mail.into())]
         );
     }
 
@@ -1288,15 +1301,142 @@ mod tests {
             /*trigger_turn*/ true,
         );
         input_queue
-            .enqueue_mailbox_communication(trigger_mail.clone(), Some("parent-turn".to_string()))
+            .enqueue_mailbox_communication(
+                trigger_mail.clone().into(),
+                TurnStartOptions {
+                    parent_turn_id: Some("parent-turn".to_string()),
+                    ..Default::default()
+                },
+            )
             .await;
 
+        let (items, start_options) = input_queue.drain_ready_mailbox_input_items().await;
         assert_eq!(
-            input_queue.drain_ready_mailbox_input_items().await,
+            (items, start_options.parent_turn_id),
             (
-                vec![TurnInput::InterAgentCommunication(trigger_mail)],
+                vec![TurnInput::InterAgentCommunication(trigger_mail.into())],
                 Some("parent-turn".to_string())
             )
+        );
+    }
+
+    fn mail_with_id(content: &str) -> (InterAgentCommunication, String) {
+        let mut mail = make_mail(
+            AgentPath::root(),
+            AgentPath::try_from("/root/worker").expect("agent path"),
+            content,
+            /*trigger_turn*/ true,
+        );
+        let message_id = mail.ensure_message_identity().to_string();
+        (mail, message_id)
+    }
+
+    #[tokio::test]
+    async fn running_turn_notes_the_mail_it_takes() {
+        let input_queue = InputQueue::new();
+        let active_turn = Mutex::new(Some(ActiveTurn::default()));
+        let (mail, message_id) = mail_with_id("taken mid-turn");
+        input_queue
+            .enqueue_mailbox_communication(mail.clone().into(), Default::default())
+            .await;
+
+        let (input, _) = input_queue.get_pending_input(&active_turn).await;
+
+        assert_eq!(input, vec![TurnInput::InterAgentCommunication(mail.into())]);
+        let turn_state = Arc::clone(
+            &active_turn
+                .lock()
+                .await
+                .as_ref()
+                .expect("active turn")
+                .turn_state,
+        );
+        assert_eq!(
+            turn_state
+                .lock()
+                .await
+                .take_unrecorded_mailbox_message_ids(&[]),
+            vec![message_id]
+        );
+    }
+
+    #[tokio::test]
+    async fn stopped_turn_keeps_mailbox_items_for_the_next_turn() {
+        let input_queue = InputQueue::new();
+        let stopped_turn = Mutex::new(None);
+        let (mail, _) = mail_with_id("arrived while stopping");
+        input_queue
+            .enqueue_mailbox_communication(mail.clone().into(), Default::default())
+            .await;
+
+        // The active slot is removed before shutdown waits for the running task. A stale task
+        // reaching its next input poll must leave mail queued rather than silently taking it.
+        assert_eq!(
+            input_queue
+                .get_pending_input_inner(&stopped_turn, /*allow_untracked_mailbox*/ false)
+                .await
+                .0,
+            Vec::new()
+        );
+        assert!(input_queue.has_pending_mailbox_items().await);
+
+        // A subsequently admitted turn receives the preserved item normally.
+        let next_turn = Mutex::new(Some(ActiveTurn::default()));
+        assert_eq!(
+            input_queue.get_pending_input(&next_turn).await.0,
+            vec![TurnInput::InterAgentCommunication(mail.into())]
+        );
+        assert!(!input_queue.has_pending_mailbox_items().await);
+    }
+
+    #[tokio::test]
+    async fn task_start_still_admits_ready_mail_from_an_idle_slot() {
+        let input_queue = InputQueue::new();
+        let idle_slot = Mutex::new(None);
+        let (mail, _) = mail_with_id("normal task start");
+        input_queue
+            .enqueue_mailbox_communication(mail.clone().into(), Default::default())
+            .await;
+
+        // Control: the task-admission path may begin with no installed active turn and must
+        // retain its existing ability to take ready mail.
+        assert_eq!(
+            input_queue
+                .get_pending_input_for_task_start(&idle_slot)
+                .await
+                .0,
+            vec![TurnInput::InterAgentCommunication(mail.into())]
+        );
+    }
+
+    #[tokio::test]
+    async fn unrecorded_mail_leaves_out_recorded_and_deferred_mail() {
+        let input_queue = InputQueue::new();
+        let turn_state = Mutex::new(TurnState::default());
+        let (recorded, recorded_id) = mail_with_id("recorded");
+        let (deferred, _) = mail_with_id("deferred");
+        let (lost, lost_id) = mail_with_id("lost");
+        let taken = [recorded, deferred.clone(), lost]
+            .into_iter()
+            .map(|mail| TurnInput::InterAgentCommunication(mail.into()))
+            .collect::<Vec<_>>();
+        turn_state.lock().await.track_taken_mailbox_messages(&taken);
+        input_queue
+            .defer_input_for_turn_state(
+                &turn_state,
+                vec![TurnInput::InterAgentCommunication(deferred.into())],
+                /*final_output_json_schema*/ None,
+            )
+            .await;
+
+        let mut turn_state = turn_state.lock().await;
+        assert_eq!(
+            turn_state.take_unrecorded_mailbox_message_ids(&[recorded_id]),
+            vec![lost_id]
+        );
+        assert_eq!(
+            turn_state.take_unrecorded_mailbox_message_ids(&[]),
+            Vec::<String>::new()
         );
     }
 }

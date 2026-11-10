@@ -279,7 +279,7 @@ impl MessageBoardHost for LocalBoardHost {
                     .session
                     .input_queue
                     .deliver_mailbox_communication_to_current_turn(
-                        &recipient.session.active_turn,
+                        &recipient.session,
                         communication,
                         self.expected_turn_id.as_deref(),
                     )

@@ -7,6 +7,8 @@
 //! their next use, and a grant answered before it is not recorded after it.
 
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 
 use codex_protocol::models::AdditionalPermissionProfile;
 use codex_sandboxing::policy_transforms::merge_permission_profiles;
@@ -65,6 +67,69 @@ impl GrantedPermissions {
     }
 }
 
+/// Where a [`SessionGrantStore`] reads the policy marker in force; `None` when it cannot be
+/// read (no local agent backend), which grants nothing.
+type AuthorityMarkerSource = Arc<dyn Fn() -> Option<AuthorityMarker> + Send + Sync>;
+
+/// D520 (a), provisional: the session's "for session" grants. Upstream shares one bare map
+/// with every turn and captured step; this store checks the policy marker in force on every
+/// read and write instead, so grants made before a security transition end at it whichever
+/// reader reaches them.
+#[derive(Clone)]
+pub(crate) struct SessionGrantStore {
+    grants: Arc<StdMutex<GrantedPermissions>>,
+    authority_marker: AuthorityMarkerSource,
+}
+
+impl SessionGrantStore {
+    pub(crate) fn new(
+        authority_marker: impl Fn() -> Option<AuthorityMarker> + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            grants: Arc::default(),
+            authority_marker: Arc::new(authority_marker),
+        }
+    }
+
+    /// The policy marker in force; `None` when it cannot be read, which grants nothing.
+    pub(crate) fn authority_marker(&self) -> Option<AuthorityMarker> {
+        (self.authority_marker)()
+    }
+
+    /// Records a grant answered to a request shown under `granted_under`; whether it was
+    /// recorded. A poisoned lock records nothing.
+    pub(crate) fn record(
+        &self,
+        environment_id: &str,
+        permissions: AdditionalPermissionProfile,
+        granted_under: AuthorityMarker,
+    ) -> bool {
+        let Ok(mut grants) = self.grants.lock() else {
+            return false;
+        };
+        // Read under the lock: a later grant is never recorded under an earlier marker.
+        let Some(current) = self.authority_marker() else {
+            return false;
+        };
+        grants.record(environment_id, permissions, granted_under, current)
+    }
+
+    /// The grants for `environment_id` still in force. A poisoned lock grants nothing.
+    pub(crate) fn get(&self, environment_id: &str) -> Option<AdditionalPermissionProfile> {
+        let mut grants = self.grants.lock().ok()?;
+        let current = self.authority_marker()?;
+        grants.get(environment_id, current)
+    }
+}
+
+impl std::fmt::Debug for SessionGrantStore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SessionGrantStore")
+            .field("grants", &self.grants)
+            .finish_non_exhaustive()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -96,5 +161,31 @@ mod tests {
         assert!(grants.record("local", network(), /*granted_under*/ None, after));
         assert_eq!(grants.get("local", after), Some(network()));
         assert_eq!(grants.get("remote", after), None);
+    }
+
+    #[test]
+    fn d520_session_store_follows_the_live_policy_marker() {
+        let marker = Arc::new(StdMutex::new(Some((1, 0))));
+        let source = Arc::clone(&marker);
+        let store = SessionGrantStore::new(move || Some(*source.lock().expect("marker")));
+        let shared = store.clone();
+        assert!(store.record("local", network(), Some((1, 0))));
+        assert_eq!(shared.get("local"), Some(network()), "shared with clones");
+        // A transition committed elsewhere: every holder loses the grant.
+        *marker.lock().expect("marker") = Some((2, 0));
+        assert_eq!(shared.get("local"), None);
+        *marker.lock().expect("marker") = Some((1, 0));
+        assert_eq!(store.get("local"), None, "not restored");
+        // Answered before a transition, recorded after it: not kept.
+        *marker.lock().expect("marker") = Some((3, 0));
+        assert!(!store.record("local", network(), Some((1, 0))));
+        assert_eq!(store.get("local"), None);
+    }
+
+    #[test]
+    fn d520_session_store_grants_nothing_without_a_readable_marker() {
+        let store = SessionGrantStore::new(|| None);
+        assert!(!store.record("local", network(), /*granted_under*/ None));
+        assert_eq!(store.get("local"), None);
     }
 }

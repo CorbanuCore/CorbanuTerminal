@@ -322,7 +322,7 @@ impl SessionConfiguration {
 >>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
-    fn effective_permission_profile(
+    pub(super) fn effective_permission_profile(
         &self,
         environments: &[TurnEnvironmentSelection],
     ) -> PermissionProfile {
@@ -2256,6 +2256,14 @@ impl Session {
                 Ok(trace) => (trace, None),
                 Err(err) => (ThreadTraceContext::disabled(), Some(err)),
             };
+            // D520 (a): the session grant store reads the live policy marker, as
+            // `SessionServices::authority_marker` does.
+            let session_grants = {
+                let agent_control = Arc::clone(&agent_control);
+                crate::state::SessionGrantStore::new(move || {
+                    crate::state::local_authority_marker(agent_control.as_ref())
+                })
+            };
             let services = SessionServices {
                 // Start with an empty connection set. The initialized set is
                 // published after SessionConfigured so MCP events follow it.
@@ -2285,7 +2293,7 @@ impl Session {
                 models_manager: Arc::clone(&models_manager),
                 git_root_discovery,
                 tool_approvals: Mutex::new(ApprovalStore::default()),
-                granted_permissions_by_environment_id: Arc::default(),
+                session_grants,
                 runtime_handle: tokio::runtime::Handle::current(),
                 skills_service,
                 agents_md_manager,

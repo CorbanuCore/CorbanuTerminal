@@ -10,6 +10,9 @@ use crate::exec_policy::AllowPrefixRules;
 use crate::shell_snapshot::ShellSnapshot;
 use crate::shell_snapshot::ShellSnapshotFile;
 use crate::shell_snapshot::ShellSnapshotSandbox;
+use crate::state::AuthorityMarker;
+use crate::state::GrantedPermissions;
+use crate::state::SessionGrantStore;
 use crate::tools::sandboxing::configured_windows_sandbox_selection;
 use crate::tools::sandboxing::executor_windows_sandbox_selection;
 use arc_swap::ArcSwap;
@@ -28,6 +31,8 @@ use codex_protocol::config_types::ShellEnvironmentPolicy;
 use codex_protocol::models::AdditionalPermissionProfile;
 use codex_protocol::openai_models::CatalogModel;
 use codex_protocol::openai_models::MODEL_SPECIALTY_CYBER;
+use codex_protocol::openai_models::ModelBilling;
+use codex_protocol::openai_models::ModelCapabilityTier;
 use codex_protocol::openai_models::ModelOrigin;
 use codex_protocol::permissions::RawFileSystemSandboxPolicy;
 use codex_protocol::protocol::EnvironmentConfig;
@@ -438,6 +443,9 @@ impl TurnEnvironment {
             ),
             windows_sandbox_proxy_settings_mode: None,
             use_legacy_landlock: config.use_legacy_landlock,
+            // #1976 (D491): set by `TurnContext::file_system_sandbox_context`, which knows the
+            // session's security level.
+            unsandboxed_refusal: None,
         }
     }
 
@@ -558,30 +566,25 @@ pub struct TurnContext {
     /// child's structural parent.
     pub(crate) parent_completion_expected: Arc<AtomicBool>,
     pub(crate) terminal_error: Arc<Mutex<Option<ErrorEvent>>>,
-<<<<<<< HEAD
     pub(crate) model_edit_protocol_state: Arc<ModelEditProtocolState>,
     pub(crate) explicit_tool_budget_state: Arc<ExplicitToolBudgetState>,
     pub(crate) malformed_tool_call_state: Arc<MalformedToolCallState>,
     pub(crate) repeated_tool_call_state: Arc<RepeatedToolCallState>,
     pub(crate) pending_tool_calls: Arc<crate::tools::parallel::PendingToolCalls>,
-||||||| 413492cd6c
-=======
-    /// Shares the session-owned store; session approvals remain live across turns.
-    session_grants: Arc<StdMutex<HashMap<String, AdditionalPermissionProfile>>>,
+    /// Shares the session-owned store; session approvals remain live across turns. D520 (a):
+    /// the store is fenced by the policy marker, so its grants end at a security transition.
+    session_grants: SessionGrantStore,
     /// Retained by background cells so a later active turn cannot replace their grants.
     turn_grants: Arc<StdMutex<TurnGrants>>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub(crate) server_model_warning_emitted: AtomicBool,
     pub(crate) provider_cache_pressure_warning_emitted: AtomicBool,
     pub(crate) model_verification_emitted: AtomicBool,
-<<<<<<< HEAD
     /// The turn already warned that developer accounting stopped recording it.
     pub(crate) accounting_gap_warning_emitted: AtomicBool,
-||||||| 413492cd6c
-=======
     /// Effective cyber treatment for this turn, including any child-agent inheritance.
     pub(crate) cyber_access_program: Option<CyberAccessProgram>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    /// The execution authority this turn was admitted under.
+    pub(crate) authority: TurnAuthority,
 }
 
 /// Selects which preparation is needed when building a turn context.
@@ -656,77 +659,81 @@ impl TurnContext {
             turn_metadata_state,
             extension_data,
             turn_timing_state: Arc::new(TurnTimingState::default()),
+            parent_completion_expected: Arc::new(AtomicBool::new(false)),
             terminal_error: Arc::new(Mutex::new(None)),
-            session_grants: Arc::clone(&self.session_grants),
+            model_edit_protocol_state: Arc::new(ModelEditProtocolState::default()),
+            explicit_tool_budget_state: Arc::new(ExplicitToolBudgetState::default()),
+            malformed_tool_call_state: Arc::new(MalformedToolCallState::default()),
+            repeated_tool_call_state: Arc::new(RepeatedToolCallState::default()),
+            pending_tool_calls: Arc::default(),
+            session_grants: self.session_grants.clone(),
             turn_grants: Arc::default(),
             server_model_warning_emitted: AtomicBool::new(false),
+            provider_cache_pressure_warning_emitted: AtomicBool::new(false),
             model_verification_emitted: AtomicBool::new(false),
+            accounting_gap_warning_emitted: AtomicBool::new(false),
             cyber_access_program: None,
+            authority: self.authority.clone(),
         }
     }
 
-    /// Returns current session and turn grants for this environment.
-    #[expect(
-        clippy::expect_used,
-        reason = "poisoned grant state must not authorize further operations"
-    )]
+    /// Returns current session and turn grants for this environment. D520 (a): both are read
+    /// under the policy marker in force, so grants made before a security transition are gone.
     pub(crate) fn granted_permissions(
         &self,
         environment_id: &str,
     ) -> Option<AdditionalPermissionProfile> {
-        let session_grants = self
-            .session_grants
-            .lock()
-            .expect("session permission grants lock poisoned")
-            .get(environment_id)
-            .cloned();
-        let turn_grants = self
-            .turn_grants
-            .lock()
-            .expect("turn permission grants lock poisoned")
-            .granted_permissions_by_environment_id
-            .get(environment_id)
-            .cloned();
+        let session_grants = self.session_grants.get(environment_id);
+        // A poisoned lock grants nothing.
+        let turn_grants = self.granted_turn_permissions(environment_id);
         merge_permission_profiles(session_grants.as_ref(), turn_grants.as_ref())
     }
 
-    #[expect(
-        clippy::expect_used,
-        reason = "poisoned grant state must not authorize further operations"
-    )]
+    /// This turn's own grants for this environment, under the policy marker in force.
+    pub(crate) fn granted_turn_permissions(
+        &self,
+        environment_id: &str,
+    ) -> Option<AdditionalPermissionProfile> {
+        let mut grants = self.turn_grants.lock().ok()?;
+        let current = self.session_grants.authority_marker()?;
+        grants.granted.get(environment_id, current)
+    }
+
+    /// Records a turn grant answered to a request shown under `granted_under`; whether it was
+    /// recorded. D51 (#1001): it holds only while no security transition is committed, and
+    /// strict auto-review comes with the grant and ends with it.
     pub(crate) fn record_granted_permissions(
         &self,
         environment_id: &str,
         permissions: AdditionalPermissionProfile,
         strict_auto_review: bool,
-    ) {
-        let mut grants = self
-            .turn_grants
-            .lock()
-            .expect("turn permission grants lock poisoned");
-        let granted_permissions = merge_permission_profiles(
-            grants
-                .granted_permissions_by_environment_id
-                .get(environment_id),
-            Some(&permissions),
-        );
-        if let Some(granted_permissions) = granted_permissions {
-            grants
-                .granted_permissions_by_environment_id
-                .insert(environment_id.to_string(), granted_permissions);
+        granted_under: AuthorityMarker,
+    ) -> bool {
+        let Ok(mut grants) = self.turn_grants.lock() else {
+            return false;
+        };
+        // Read under the lock: a later grant is never recorded under an earlier marker.
+        let Some(current) = self.session_grants.authority_marker() else {
+            return false;
+        };
+        let recorded = grants
+            .granted
+            .record(environment_id, permissions, granted_under, current);
+        if recorded && strict_auto_review {
+            grants.strict_auto_review_under = Some(current);
         }
-        grants.strict_auto_review_enabled |= strict_auto_review;
+        recorded
     }
 
-    #[expect(
-        clippy::expect_used,
-        reason = "poisoned grant state must not authorize further operations"
-    )]
+    /// Whether strict auto-review is on under the policy in force: not after a security
+    /// transition (D51). A poisoned lock or an unreadable marker keeps it on.
     pub(crate) fn strict_auto_review_enabled(&self) -> bool {
-        self.turn_grants
-            .lock()
-            .expect("turn permission grants lock poisoned")
-            .strict_auto_review_enabled
+        let Some(current) = self.session_grants.authority_marker() else {
+            return true;
+        };
+        self.turn_grants.lock().map_or(true, |grants| {
+            grants.strict_auto_review_under == Some(current)
+        })
     }
 
     pub(crate) fn attribution(&self) -> codex_history::TurnAttribution {
@@ -1157,17 +1164,13 @@ impl TurnContext {
             turn_timing_state: Arc::clone(&self.turn_timing_state),
             parent_completion_expected: Arc::clone(&self.parent_completion_expected),
             terminal_error: Arc::clone(&self.terminal_error),
-<<<<<<< HEAD
             model_edit_protocol_state: Arc::clone(&self.model_edit_protocol_state),
             explicit_tool_budget_state: Arc::clone(&self.explicit_tool_budget_state),
             malformed_tool_call_state: Arc::clone(&self.malformed_tool_call_state),
             repeated_tool_call_state: Arc::clone(&self.repeated_tool_call_state),
             pending_tool_calls: Arc::clone(&self.pending_tool_calls),
-||||||| 413492cd6c
-=======
-            session_grants: Arc::clone(&self.session_grants),
+            session_grants: self.session_grants.clone(),
             turn_grants: Arc::clone(&self.turn_grants),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             server_model_warning_emitted: AtomicBool::new(
                 self.server_model_warning_emitted.load(Ordering::Relaxed),
             ),
@@ -1178,86 +1181,53 @@ impl TurnContext {
             model_verification_emitted: AtomicBool::new(
                 self.model_verification_emitted.load(Ordering::Relaxed),
             ),
-<<<<<<< HEAD
             accounting_gap_warning_emitted: AtomicBool::new(
                 self.accounting_gap_warning_emitted.load(Ordering::Relaxed),
             ),
-||||||| 413492cd6c
-=======
             cyber_access_program: self.cyber_access_program,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            authority: self.authority.clone(),
         }
     }
 
-<<<<<<< HEAD
+    /// The sandbox context of a file tool in `environment`: the environment's, with
+    /// `additional_permissions`, narrowed by Corbanu's launch contract (PF-27-S02) and refused
+    /// where the host has no platform sandbox (#1976, D491).
     pub(crate) fn file_system_sandbox_context(
         &self,
         additional_permissions: Option<AdditionalPermissionProfile>,
         environment: &TurnEnvironment,
     ) -> FileSystemSandboxContext {
-        let mut permissions = effective_permission_profile(
-            self.config.permissions.permission_profile(),
-            additional_permissions.as_ref(),
-        );
+        let mut context = environment.sandbox_context(additional_permissions);
         // PF-27-S02: in-process file tools get the protected profile, or no
         // file access when the turn's permissions cannot be protected.
         if let Some(contract) = crate::security::launch_contract::active() {
             let cwd = environment.cwd().to_abs_path().ok();
             let sandboxed = cwd.is_some() && cfg!(any(target_os = "macos", target_os = "linux"));
             let cwd = cwd.map(|cwd| cwd.to_path_buf()).unwrap_or_default();
-            permissions = contract.file_tool_permissions(&permissions, sandboxed, &cwd);
+            context.permissions =
+                contract.file_tool_permissions(&context.permissions, sandboxed, &cwd);
         }
-        FileSystemSandboxContext {
-            permissions: permissions.into(),
-            cwd: Some(environment.cwd().clone()),
-            workspace_roots: environment.workspace_roots().to_vec(),
-            windows_sandbox_level: self.windows_sandbox_level,
-            windows_sandbox_private_desktop: self
-                .config
-                .permissions
-                .windows_sandbox_private_desktop,
-            windows_sandbox_proxy_settings_mode: None,
-            use_legacy_landlock: self.config.features.use_legacy_landlock(),
-            // #1976 (D491): refused where the host has no platform sandbox.
-            unsandboxed_refusal: crate::security::windows_unsandboxed::applies(
-                self.config.security_level,
-                self.windows_sandbox_level,
-            )
-            .then(|| {
-                crate::security::windows_unsandboxed::file_refusal(self.config.security_level)
-            }),
-        }
+        // #1976 (D491): refused where the host has no platform sandbox. D522 (a), provisional:
+        // upstream's MXC backend counts as no sandbox here until S3b shows Corbanu's
+        // protections hold under it, however it was selected (explicitly, at level `Disabled`,
+        // or by `prefer_mxc` at an elevated or restricted-token level).
+        let windows_sandbox_level = if matches!(
+            context.windows_sandbox_selection,
+            codex_file_system::WindowsSandboxSelection::Mxc
+        ) {
+            WindowsSandboxLevel::Disabled
+        } else {
+            self.windows_sandbox_level
+        };
+        context.unsandboxed_refusal = crate::security::windows_unsandboxed::applies(
+            self.config.security_level,
+            windows_sandbox_level,
+        )
+        .then(|| crate::security::windows_unsandboxed::file_refusal(self.config.security_level));
+        context
     }
 
-    fn non_legacy_file_system_sandbox_policy(&self) -> Option<FileSystemSandboxPolicy> {
-||||||| 413492cd6c
-    pub(crate) fn file_system_sandbox_context(
-        &self,
-        additional_permissions: Option<AdditionalPermissionProfile>,
-        environment: &TurnEnvironment,
-    ) -> FileSystemSandboxContext {
-        let permissions = effective_permission_profile(
-            self.config.permissions.permission_profile(),
-            additional_permissions.as_ref(),
-        );
-        FileSystemSandboxContext {
-            permissions: permissions.into(),
-            cwd: Some(environment.cwd().clone()),
-            workspace_roots: environment.workspace_roots().to_vec(),
-            windows_sandbox_level: self.windows_sandbox_level,
-            windows_sandbox_private_desktop: self
-                .config
-                .permissions
-                .windows_sandbox_private_desktop,
-            windows_sandbox_proxy_settings_mode: None,
-            use_legacy_landlock: self.config.features.use_legacy_landlock(),
-        }
-    }
-
-    fn non_legacy_file_system_sandbox_policy(&self) -> Option<FileSystemSandboxPolicy> {
-=======
     fn non_legacy_file_system_sandbox_policy(&self) -> Option<RawFileSystemSandboxPolicy> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         // Omit the derived split filesystem policy when it is equivalent to
         // the legacy sandbox policy. This keeps turn-context payloads stable
         // while both fields exist; once callers consume only the split policy,
@@ -1303,8 +1273,7 @@ impl TurnContext {
                 TurnEnvironment::active_permission_profile,
             ),
             file_system_sandbox_policy: self.non_legacy_file_system_sandbox_policy(),
-<<<<<<< HEAD
-            model: self.model_info.slug.clone(),
+            model: self.model_info().slug.clone(),
             model_provider: Some(self.config.model_provider_id.clone()),
             provider_account: self
                 .config
@@ -1324,41 +1293,58 @@ impl TurnContext {
                         },
                     )
                 }),
-            comp_hash: self.model_info.comp_hash.clone(),
-            personality: self.personality,
-||||||| 413492cd6c
-            model: self.model_info.slug.clone(),
-            comp_hash: self.model_info.comp_hash.clone(),
-            personality: self.personality,
-=======
-            model: self.model_info().slug.clone(),
             comp_hash: self.model_info().comp_hash.clone(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             collaboration_mode: Some(self.collaboration_mode()),
             multi_agent_version: Some(self.multi_agent_version),
             realtime_active: Some(self.realtime_active),
-<<<<<<< HEAD
-            effort: self.reasoning_effort.clone(),
-            security_level: Some(self.config.security_level),
-            summary: ReasoningSummaryConfig::Auto,
-||||||| 413492cd6c
-            effort: self.reasoning_effort.clone(),
-            summary: ReasoningSummaryConfig::Auto,
-=======
             cyber_access_program: self.cyber_access_program,
             effort: self.reasoning_effort().cloned(),
+            security_level: Some(self.config.security_level),
             summary: Some(ReasoningSummaryConfig::None),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        }
+    }
+}
+
+/// The execution authority a turn was admitted under: its approval policy, its permission
+/// profile with project roots expanded from the primary environment (so moving the working
+/// folder or workspace roots changes it, as on `main`), approvals reviewer, and Windows
+/// sandbox level and backend. Input that arrives under other authority (a steer, agent mail)
+/// does not join the running turn; it waits for a turn admitted under the current one. Both
+/// sides are read from the session configuration the same way, so user-layer reloads, model
+/// settings and config provenance cannot affect the comparison.
+///
+/// A snapshot taken when the turn is built: upstream's live turn-settings and environment
+/// updates (`step_activation.rs`, `environment.rs`) do not refresh it yet (open security rows).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct TurnAuthority {
+    approval_policy: AskForApproval,
+    permission_profile: PermissionProfile,
+    approvals_reviewer: ApprovalsReviewer,
+    windows_sandbox_level: WindowsSandboxLevel,
+    windows_sandbox_type: SandboxType,
+}
+
+impl TurnAuthority {
+    pub(crate) fn of(configuration: &SessionConfiguration) -> Self {
+        Self {
+            approval_policy: configuration.step_settings.approval_policy.value(),
+            permission_profile: configuration
+                .effective_permission_profile(&configuration.environments),
+            approvals_reviewer: configuration.step_settings.approvals_reviewer,
+            windows_sandbox_level: configuration.windows_sandbox_level,
+            windows_sandbox_type: configuration.windows_sandbox_type,
         }
     }
 }
 
 /// Grants and their review requirement share a lock so readers cannot see a new grant before
-/// its strict-review requirement.
+/// its strict-review requirement. D51 (#1001): both are bound to the policy marker they were
+/// given under.
 #[derive(Debug, Default)]
 struct TurnGrants {
-    granted_permissions_by_environment_id: HashMap<String, AdditionalPermissionProfile>,
-    strict_auto_review_enabled: bool,
+    granted: GrantedPermissions,
+    /// The marker strict auto-review was turned on under, with the grant it came with.
+    strict_auto_review_under: Option<AuthorityMarker>,
 }
 
 fn local_time_context() -> (String, String) {
@@ -1381,14 +1367,13 @@ impl Session {
         // todo(aibrahim): store this state somewhere else so we don't need to mut config
         let config = session_configuration.original_config_do_not_use.clone();
         let mut per_turn_config = (*config).clone();
-<<<<<<< HEAD
-        per_turn_config.model = Some(session_configuration.collaboration_mode.model().to_string());
-        per_turn_config.cwd = cwd;
-        let workspace_roots = session_configuration.primary_workspace_roots();
-||||||| 413492cd6c
-        per_turn_config.cwd = cwd;
-        let workspace_roots = session_configuration.primary_workspace_roots();
-=======
+        per_turn_config.model = Some(
+            session_configuration
+                .step_settings
+                .collaboration_mode
+                .model()
+                .to_string(),
+        );
         // Config is consumed by host plugins and MCP processes. Executor paths and
         // permissions remain on their captured environment attachments.
         per_turn_config.cwd = local_environment
@@ -1406,33 +1391,10 @@ impl Session {
         );
         per_turn_config.permissions.approval_policy =
             session_configuration.step_settings.approval_policy.clone();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         per_turn_config.workspace_roots = workspace_roots.clone();
         per_turn_config
             .permissions
             .set_workspace_roots(workspace_roots);
-<<<<<<< HEAD
-        per_turn_config.model_reasoning_effort =
-            session_configuration.collaboration_mode.reasoning_effort();
-        per_turn_config.model_reasoning_summary = session_configuration.model_reasoning_summary;
-        if let Some(runtime_limit) = session_configuration.runtime_model_context_window {
-            per_turn_config.model_context_window = Some(
-                per_turn_config
-                    .model_context_window
-                    .map_or(runtime_limit, |configured| configured.min(runtime_limit)),
-            );
-        }
-        per_turn_config.service_tier = session_configuration.service_tier.clone();
-        per_turn_config.personality = session_configuration.personality;
-        per_turn_config.approvals_reviewer = session_configuration.approvals_reviewer;
-||||||| 413492cd6c
-        per_turn_config.model_reasoning_effort =
-            session_configuration.collaboration_mode.reasoning_effort();
-        per_turn_config.model_reasoning_summary = session_configuration.model_reasoning_summary;
-        per_turn_config.service_tier = session_configuration.service_tier.clone();
-        per_turn_config.personality = session_configuration.personality;
-        per_turn_config.approvals_reviewer = session_configuration.approvals_reviewer;
-=======
         per_turn_config.model_reasoning_effort = session_configuration
             .step_settings
             .collaboration_mode
@@ -1442,7 +1404,13 @@ impl Session {
         per_turn_config.service_tier = session_configuration.step_settings.service_tier.clone();
         per_turn_config.personality = session_configuration.step_settings.personality;
         per_turn_config.approvals_reviewer = session_configuration.step_settings.approvals_reviewer;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        if let Some(runtime_limit) = session_configuration.runtime_model_context_window {
+            per_turn_config.model_context_window = Some(
+                per_turn_config
+                    .model_context_window
+                    .map_or(runtime_limit, |configured| configured.min(runtime_limit)),
+            );
+        }
         session_configuration
             .apply_permission_profile_to_permissions(&mut per_turn_config.permissions);
         let permission_profile = session_configuration.permission_profile();
@@ -1496,7 +1464,7 @@ impl Session {
     pub(crate) fn make_turn_context(
         thread_id: ThreadId,
         session_id: SessionId,
-        session_grants: Arc<StdMutex<HashMap<String, AdditionalPermissionProfile>>>,
+        session_grants: SessionGrantStore,
         auth_manager: Option<Arc<AuthManager>>,
         session_telemetry: &SessionTelemetry,
         provider: SharedModelProvider,
@@ -1514,10 +1482,6 @@ impl Session {
         let model_info = &step_settings.model_info;
         let session_telemetry_for_context = step_settings.telemetry(session_telemetry);
         let session_source = session_configuration.session_source.clone();
-<<<<<<< HEAD
-        let auth_manager_for_context = auth_manager.clone();
-        let provider_for_context = create_model_provider(provider, auth_manager);
-        let session_telemetry_for_context = session_telemetry;
         let mut available_models = models_manager.try_list_models().unwrap_or_default();
         let runtime_provider_id = per_turn_config.model_provider_id.clone();
         if runtime_provider_id.starts_with("gpu-")
@@ -1525,7 +1489,7 @@ impl Session {
                 .iter()
                 .any(|preset| preset.model == model_info.slug)
         {
-            let mut preset = ModelPreset::from(model_info.clone());
+            let mut preset = ModelPreset::from((*model_info.model).clone());
             preset.provider_id = Some(runtime_provider_id.clone());
             preset.orchestration = Some(ModelOrchestrationMetadata::Eligible {
                 provider_id: runtime_provider_id,
@@ -1534,26 +1498,6 @@ impl Session {
             });
             available_models.push(preset);
         }
-        let unified_exec_shell_mode = UnifiedExecShellMode::for_session(
-            codex_tools::unified_exec_feature_mode_for_features(per_turn_config.features.get()),
-            crate::tools::tool_user_shell_type(user_shell),
-            shell_zsh_path,
-            main_execve_wrapper_exe,
-        );
-||||||| 413492cd6c
-        let auth_manager_for_context = auth_manager.clone();
-        let provider_for_context = create_model_provider(provider, auth_manager);
-        let session_telemetry_for_context = session_telemetry;
-        let available_models = models_manager.try_list_models().unwrap_or_default();
-        let unified_exec_shell_mode = UnifiedExecShellMode::for_session(
-            codex_tools::unified_exec_feature_mode_for_features(per_turn_config.features.get()),
-            crate::tools::tool_user_shell_type(user_shell),
-            shell_zsh_path,
-            main_execve_wrapper_exe,
-        );
-=======
-        let available_models = models_manager.try_list_models().unwrap_or_default();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         let mut per_turn_config = per_turn_config;
         let configured_token_budget = per_turn_config.token_budget.clone();
@@ -1649,138 +1593,25 @@ impl Session {
             turn_timing_state: Arc::new(TurnTimingState::default()),
             parent_completion_expected: Arc::new(AtomicBool::new(false)),
             terminal_error: Arc::new(Mutex::new(None)),
-<<<<<<< HEAD
             model_edit_protocol_state: Arc::new(ModelEditProtocolState::default()),
             explicit_tool_budget_state: Arc::new(ExplicitToolBudgetState::default()),
             malformed_tool_call_state: Arc::new(MalformedToolCallState::default()),
             repeated_tool_call_state: Arc::new(RepeatedToolCallState::default()),
             pending_tool_calls: Arc::default(),
-||||||| 413492cd6c
-=======
             session_grants,
             turn_grants: Arc::default(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             server_model_warning_emitted: AtomicBool::new(false),
             provider_cache_pressure_warning_emitted: AtomicBool::new(false),
             model_verification_emitted: AtomicBool::new(false),
-<<<<<<< HEAD
             accounting_gap_warning_emitted: AtomicBool::new(false),
-||||||| 413492cd6c
-=======
             cyber_access_program: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            authority: TurnAuthority::of(session_configuration),
         }
     }
 
     pub(crate) async fn new_turn_with_sub_id(
         &self,
         sub_id: String,
-<<<<<<< HEAD
-        mut updates: SessionSettingsUpdate,
-    ) -> CodexResult<Arc<TurnContext>> {
-        // GPU endpoints are process-local controller transports and can change while a
-        // session remains open. Refresh the selected runtime provider before every turn so
-        // recovery does not leave the session's ModelClient pinned to a dead local port.
-        self.ensure_runtime_model_provider(&mut updates).await;
-        let notify_config_contributors = !self.services.extensions.config_contributors().is_empty();
-        let update_result: CodexResult<_> = {
-            let mut state = self.state.lock().await;
-            match state.session_configuration.clone().apply(&updates) {
-                Ok(next) => {
-                    let mcp_inputs_changed = state.session_configuration.mcp_inputs_differ(&next);
-                    let previous_permission_profile =
-                        state.session_configuration.permission_profile();
-                    let next_permission_profile = next.permission_profile();
-                    let permission_profile_changed =
-                        previous_permission_profile != next_permission_profile;
-                    let previous_config = notify_config_contributors.then(|| {
-                        Self::build_effective_session_config(&state.session_configuration)
-                    });
-                    let new_config = notify_config_contributors
-                        .then(|| Self::build_effective_session_config(&next));
-                    let model_provider_changed = state
-                        .session_configuration
-                        .original_config_do_not_use
-                        .model_provider_id
-                        != next.original_config_do_not_use.model_provider_id
-                        || state.session_configuration.provider != next.provider;
-                    // PF-84: as in update_settings, the account follows first.
-                    if model_provider_changed {
-                        self.follow_provider_account(&next);
-                    }
-                    let follows_model_list =
-                        model_provider_changed && self.model_list_follows_this_session(&next);
-                    if model_provider_changed {
-                        // Match update_settings: frame guards must see this provider
-                        // before its configuration is published, under the same writer lock.
-                        self.services
-                            .replace_model_client(self.build_model_client_for_configuration(&next));
-                    }
-                    let stale_startup_prewarm = if model_provider_changed {
-                        state.take_session_startup_prewarm()
-                    } else {
-                        None
-                    };
-                    if updates.environments.is_some() {
-                        self.services
-                            .turn_environments
-                            .update_selections(next.environment_selections());
-                    }
-                    if mcp_inputs_changed {
-                        self.mark_mcp_runtime_dirty();
-                    }
-                    state.session_configuration = next.clone();
-                    Ok((
-                        next,
-                        mcp_inputs_changed,
-                        permission_profile_changed,
-                        previous_config,
-                        new_config,
-                        stale_startup_prewarm,
-                        follows_model_list,
-                    ))
-                }
-                Err(err) => Err(CodexErr::InvalidRequest(err.to_string())),
-            }
-||||||| 413492cd6c
-        updates: SessionSettingsUpdate,
-    ) -> CodexResult<Arc<TurnContext>> {
-        let notify_config_contributors = !self.services.extensions.config_contributors().is_empty();
-        let update_result: CodexResult<_> = {
-            let mut state = self.state.lock().await;
-            match state.session_configuration.clone().apply(&updates) {
-                Ok(next) => {
-                    let mcp_inputs_changed = state.session_configuration.mcp_inputs_differ(&next);
-                    let previous_permission_profile =
-                        state.session_configuration.permission_profile();
-                    let next_permission_profile = next.permission_profile();
-                    let permission_profile_changed =
-                        previous_permission_profile != next_permission_profile;
-                    let previous_config = notify_config_contributors.then(|| {
-                        Self::build_effective_session_config(&state.session_configuration)
-                    });
-                    let new_config = notify_config_contributors
-                        .then(|| Self::build_effective_session_config(&next));
-                    if updates.environments.is_some() {
-                        self.services
-                            .turn_environments
-                            .update_selections(next.environment_selections());
-                    }
-                    if mcp_inputs_changed {
-                        self.mark_mcp_runtime_dirty();
-                    }
-                    state.session_configuration = next.clone();
-                    Ok((
-                        next,
-                        mcp_inputs_changed,
-                        permission_profile_changed,
-                        previous_config,
-                        new_config,
-                    ))
-                }
-                Err(err) => Err(CodexErr::InvalidRequest(err.to_string())),
-            }
-=======
         updates: SessionSettingsUpdate,
         options: NewTurnContextOptions,
     ) -> CodexResult<(Arc<TurnContext>, ThreadSettingsSnapshot)> {
@@ -1789,36 +1620,10 @@ impl Session {
             .await?
         else {
             unreachable!("unconditional turn construction must accept valid settings");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         };
         Ok((turn_context, snapshot))
     }
 
-<<<<<<< HEAD
-        let (
-            session_configuration,
-            mcp_inputs_changed,
-            permission_profile_changed,
-            previous_config,
-            new_config,
-            stale_startup_prewarm,
-            follows_model_list,
-        ) = match update_result {
-            Ok(update) => update,
-            Err(err) => {
-                let message = err.to_string();
-||||||| 413492cd6c
-        let (
-            session_configuration,
-            mcp_inputs_changed,
-            permission_profile_changed,
-            previous_config,
-            new_config,
-        ) = match update_result {
-            Ok(update) => update,
-            Err(err) => {
-                let message = err.to_string();
-=======
     /// Commits accepted settings atomically, then constructs the turn without holding
     /// the state lock. The caller owns admission policy.
     ///
@@ -1838,7 +1643,6 @@ impl Session {
             Ok(None) => return Ok(None),
             Err(error) => {
                 let message = CodexErr::InvalidRequest(error.to_string()).to_string();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 self.send_event_raw(Event {
                     id: sub_id,
                     msg: EventMsg::Error(ErrorEvent {
@@ -1856,22 +1660,6 @@ impl Session {
         if let Some(service_tier) = service_tier_for_turn {
             Arc::make_mut(&mut configuration.step_settings).service_tier = Some(service_tier);
         }
-<<<<<<< HEAD
-        if follows_model_list {
-            self.follow_model_list_account().await;
-        }
-
-        if let Some(startup_prewarm) = stale_startup_prewarm {
-            startup_prewarm.abort().await;
-        }
-
-        if permission_profile_changed {
-            self.refresh_managed_network_proxy_for_current_permission_profile()
-||||||| 413492cd6c
-
-        if permission_profile_changed {
-            self.refresh_managed_network_proxy_for_current_permission_profile()
-=======
         if !crate::guardian::is_basic_session_source(&configuration.session_source) {
             self.services
                 .models_manager
@@ -1879,7 +1667,6 @@ impl Session {
                     self.build_effective_session_config(&configuration)
                         .http_client_factory(),
                 )
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 .await;
         }
         let turn_environments = self.activate_turn_environments(&configuration).await;
@@ -1943,56 +1730,37 @@ impl Session {
         let cwd = primary_turn_environment
             .and_then(|environment| environment.cwd().to_abs_path().ok())
             .unwrap_or_else(|| session_configuration.cwd().clone());
-<<<<<<< HEAD
-        let per_turn_config = Self::build_per_turn_config(&session_configuration, cwd.clone());
-        // PF-84 (#572): Bedrock's own metadata after a switch to Bedrock.
-        let model_info = crate::model_info_for_provider::model_info_for_config(
-            &self.services.models_manager,
-            session_configuration.collaboration_mode.model(),
-            &per_turn_config,
-        )
-        .await;
-        self.services
-            .thread_extension_data
-            .insert(model_info.clone());
-
-        let multi_agent_version = match multi_agent_runtime {
-            TurnMultiAgentRuntime::ResolveAndStore => {
-||||||| 413492cd6c
-        let per_turn_config = Self::build_per_turn_config(&session_configuration, cwd.clone());
-        let model_info = self
-            .services
-            .models_manager
-            .get_model_info(
-                session_configuration.collaboration_mode.model(),
-                &per_turn_config.to_models_manager_config(),
-            )
-            .await;
-        self.services
-            .thread_extension_data
-            .insert(model_info.clone());
-
-        let multi_agent_version = match multi_agent_runtime {
-            TurnMultiAgentRuntime::ResolveAndStore => {
-=======
         let network_permission_profile = primary_turn_environment
             .map(TurnEnvironment::permission_profile)
             .cloned()
             .unwrap_or_else(|| session_configuration.permission_profile());
-        let model_info = session_configuration
+        let mut model_info = session_configuration
             .step_settings
             .resolve_model_info(
                 self.services.models_manager.as_ref(),
                 &session_configuration.model_info_overrides,
             )
             .await;
+        // PF-84 (#572): Bedrock's own metadata after a switch to Bedrock.
+        if crate::model_info_for_provider::is_synthetic(&model_info)
+            && per_turn_config.model_provider.is_amazon_bedrock()
+        {
+            model_info = crate::model_info_for_provider::model_info_for_config(
+                &self.services.models_manager,
+                session_configuration
+                    .step_settings
+                    .collaboration_mode
+                    .model(),
+                &per_turn_config,
+            )
+            .await;
+        }
         let multi_agent_version = match build_mode {
             TurnContextBuildMode::Full => {
                 // Only execution and initial context creation publish model metadata.
                 self.services
                     .thread_extension_data
                     .insert_arc(Arc::clone(&model_info.model));
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 self.resolve_multi_agent_version_for_model(&model_info, &per_turn_config)
             }
             TurnContextBuildMode::StartupPrewarm | TurnContextBuildMode::InjectItems => {
@@ -2043,14 +1811,8 @@ impl Session {
         let mut turn_context: TurnContext = Self::make_turn_context(
             self.thread_id(),
             self.session_id(),
-<<<<<<< HEAD
+            self.services.session_grants.clone(),
             Some(self.services.auth_manager()),
-||||||| 413492cd6c
-            Some(Arc::clone(&self.services.auth_manager)),
-=======
-            Arc::clone(&self.services.granted_permissions_by_environment_id),
-            Some(Arc::clone(&self.services.auth_manager)),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             &self.services.session_telemetry,
             session_configuration.provider.clone(),
             &session_configuration,
@@ -2213,10 +1975,9 @@ impl Session {
 }
 
 #[cfg(test)]
-<<<<<<< HEAD
-#[path = "turn_context_tests.rs"]
-||||||| 413492cd6c
-=======
 #[path = "active_plugin_inventory_tests.rs"]
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod tests;
+
+#[cfg(test)]
+#[path = "turn_context_tests.rs"]
+mod turn_context_tests;
