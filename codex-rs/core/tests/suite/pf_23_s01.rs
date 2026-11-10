@@ -119,6 +119,7 @@ fn insert_rmcp_server(config: &mut Config) -> anyhow::Result<()> {
             supports_parallel_tool_calls: false,
             disabled_reason: None,
             startup_timeout_sec: Some(Duration::from_secs(10)),
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             // Would run every call unasked.
             default_tools_approval_mode: Some(AppToolApproval::Approve),
