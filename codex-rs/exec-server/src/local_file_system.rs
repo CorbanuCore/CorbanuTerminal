@@ -95,6 +95,7 @@ impl LocalFileSystem {
         &'a dyn ExecutorFileSystem,
         Option<&'a FileSystemSandboxContext>,
     )> {
+        refuse_without_platform_sandbox(sandbox)?;
         if let Some(sandbox) = sandbox {
             sandbox.validate_file_system_paths_for_current_host()?;
         }
@@ -112,6 +113,7 @@ impl LocalFileSystem {
         &'a dyn ExecutorFileSystem,
         Option<&'a FileSystemSandboxContext>,
     )> {
+        refuse_without_platform_sandbox(sandbox)?;
         if let Some(sandbox) = sandbox {
             sandbox.validate_file_system_paths_for_current_host()?;
         }
@@ -123,6 +125,33 @@ impl LocalFileSystem {
     }
 }
 
+/// #1976 (D491): a context carrying `unsandboxed_refusal` is refused, with
+/// that text, when this host has no platform sandbox for it (Windows without
+/// the Windows sandbox), whether or not its permissions would pick one.
+pub(crate) fn refuse_without_platform_sandbox(
+    sandbox: Option<&FileSystemSandboxContext>,
+) -> io::Result<()> {
+    let Some((refusal, context)) = sandbox.and_then(|context| {
+        context
+            .unsandboxed_refusal
+            .as_ref()
+            .map(|refusal| (refusal, context))
+    }) else {
+        return Ok(());
+    };
+    let windows_sandbox_enabled = !matches!(
+        context.windows_sandbox_selection,
+        codex_file_system::WindowsSandboxSelection::Disabled
+    );
+    if codex_sandboxing::get_platform_sandbox(windows_sandbox_enabled).is_some() {
+        return Ok(());
+    }
+    Err(io::Error::new(
+        io::ErrorKind::PermissionDenied,
+        refusal.clone(),
+    ))
+}
+
 impl LocalFileSystem {
     pub(crate) async fn open_file(
         &self,
@@ -130,6 +159,7 @@ impl LocalFileSystem {
         mode: FsOpenMode,
         sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<tokio::fs::File> {
+        refuse_without_platform_sandbox(sandbox)?;
         if let Some(sandbox) = sandbox {
             sandbox.validate_file_system_paths_for_current_host()?;
             let needs_sandbox = match mode {
@@ -1298,6 +1328,10 @@ fn system_time_to_unix_ms(time: SystemTime) -> i64 {
 #[cfg(all(test, any(unix, windows)))]
 #[path = "local_file_system_path_uri_tests.rs"]
 mod path_uri_tests;
+
+#[cfg(test)]
+#[path = "local_file_system_unsandboxed_refusal_tests.rs"]
+mod unsandboxed_refusal_tests;
 
 #[cfg(all(test, unix))]
 mod tests {

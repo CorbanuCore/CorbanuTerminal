@@ -41,6 +41,7 @@ pub(super) fn deny_glob(pattern: impl Into<String>) -> FileSystemSandboxEntry {
     FileSystemSandboxEntry::new(
         FileSystemPath::GlobPattern {
             pattern: pattern.into(),
+            scan: None,
         },
         FileSystemAccessMode::Deny,
     )

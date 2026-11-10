@@ -1,6 +1,58 @@
 use super::*;
 use pretty_assertions::assert_eq;
 
+type ListHook = std::sync::Arc<dyn Fn(&Path) + Send + Sync>;
+
+/// #1909: called (on any walk thread) with each folder just before it is
+/// opened to be listed; tests filter by their own folder.
+static BEFORE_LIST: std::sync::Mutex<Option<ListHook>> = std::sync::Mutex::new(None);
+
+pub(crate) fn before_list(path: &Path) {
+    let hook = BEFORE_LIST
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    if let Some(hook) = hook {
+        hook(path);
+    }
+}
+
+/// Runs `body` with `hook` called on each folder just before it is listed,
+/// one such test at a time.
+fn with_before_list<T>(
+    hook: impl Fn(&Path) + Send + Sync + 'static,
+    body: impl FnOnce() -> T,
+) -> T {
+    static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    struct Clear;
+    impl Drop for Clear {
+        fn drop(&mut self) {
+            *BEFORE_LIST
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        }
+    }
+    let _one = ONE_AT_A_TIME
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    *BEFORE_LIST.lock().expect("hook") = Some(std::sync::Arc::new(hook));
+    let _clear = Clear;
+    body()
+}
+
+/// Swaps the folder `path` for a junction to `target` once, as a process a
+/// command left running could, if `path` is `swap`.
+fn swap_folder_once(swap: PathBuf, target: PathBuf) -> impl Fn(&Path) + Send + Sync + 'static {
+    let done = std::sync::atomic::AtomicBool::new(false);
+    move |path| {
+        if same_path(path, &swap) && !done.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            let aside = swap.with_extension("aside");
+            std::fs::rename(&swap, aside).expect("move the folder aside");
+            junction(&swap, &target);
+        }
+    }
+}
+
 fn junction(link: &Path, target: &Path) {
     let status = std::process::Command::new("cmd")
         .args(["/d", "/c", "mklink", "/J"])
@@ -319,6 +371,187 @@ fn contents_stay_equal_until_something_inside_changes() {
     assert_eq!(
         (unchanged, deleted, restored, changed),
         ((true, true), true, true, true)
+    );
+}
+
+/// #1909: a file inside a `.codex` folder swapped for a link after it was
+/// looked at is never read through.
+#[test]
+fn contents_do_not_read_a_link_swapped_in() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dunce::canonicalize(dir.path()).expect("canonical");
+    if !crate::git_watch::tests::symlinks_allowed(&root) {
+        return;
+    }
+    let folder = root.join("a\\.codex");
+    std::fs::create_dir_all(&folder).expect("create");
+    std::fs::write(folder.join("p.md"), "p\n").expect("write");
+    let secret = root.join("secret");
+    std::fs::write(&secret, "secret\n").expect("write");
+    let secret_print = contents(&secret);
+
+    let prints = crate::git_watch::tests::with_before_read(
+        move |path| {
+            if path.ends_with("p.md") {
+                crate::git_watch::tests::swap_for_link(path, &secret);
+            }
+        },
+        || contents(&folder),
+    );
+
+    assert_eq!(
+        (
+            prints.get("p.md").map(String::as_str),
+            prints
+                .values()
+                .any(|print| Some(print) == secret_print.get("")),
+        ),
+        (Some("unreadable"), false)
+    );
+}
+
+/// #1909 (#1902 item 5): a junction inside a `.codex` folder is recorded by
+/// its target, and nothing behind it is read.
+#[test]
+fn contents_record_a_junction_by_its_target() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dunce::canonicalize(dir.path()).expect("canonical");
+    let folder = root.join("a\\.codex");
+    std::fs::create_dir_all(&folder).expect("create");
+    let outside = root.join("outside");
+    std::fs::create_dir_all(&outside).expect("create");
+    std::fs::write(outside.join("s.md"), "s\n").expect("write");
+    junction(&folder.join("j"), &outside);
+
+    let prints = contents(&folder)
+        .into_iter()
+        .map(|(name, print)| (name, print.replace(r"\\?\", "")))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        prints,
+        vec![("j".to_string(), format!("link to {}", outside.display()))]
+    );
+}
+
+/// #1909: a folder swapped for a junction after the walk found it is not
+/// listed through the junction (which could lead to a network share): it
+/// counts as unlistable, and what lies behind the junction isn't reported.
+#[test]
+fn find_does_not_list_through_a_junction_swapped_in() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dunce::canonicalize(dir.path()).expect("canonical");
+    let outside = tempfile::tempdir().expect("outside");
+    let outside = dunce::canonicalize(outside.path()).expect("canonical outside");
+    std::fs::create_dir_all(outside.join(".codex")).expect("create outside");
+    let swapped = root.join("a\\sub");
+    std::fs::create_dir_all(&swapped).expect("create");
+
+    let found = with_before_list(swap_folder_once(swapped.clone(), outside), || {
+        find(std::slice::from_ref(&root))
+    });
+
+    assert_eq!(
+        (
+            found.unlistable,
+            found
+                .entries
+                .iter()
+                .map(|entry| entry.path.clone())
+                .collect::<Vec<_>>(),
+        ),
+        (vec![swapped], Vec::new())
+    );
+}
+
+/// #1909: a folder inside a `.codex` folder swapped for a junction after it
+/// was found is not listed through the junction; it differs every time.
+#[test]
+fn contents_do_not_list_through_a_junction_swapped_in() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dunce::canonicalize(dir.path()).expect("canonical");
+    let folder = root.join("a\\.codex");
+    let swapped = folder.join("skills");
+    std::fs::create_dir_all(&swapped).expect("create");
+    let outside = root.join("outside");
+    std::fs::create_dir_all(&outside).expect("create");
+    std::fs::write(outside.join("secret.md"), "s\n").expect("write");
+
+    let prints = with_before_list(swap_folder_once(swapped, outside), || contents(&folder));
+
+    let names: Vec<&str> = prints.keys().map(String::as_str).collect();
+    assert_eq!(
+        (
+            names,
+            prints
+                .get("skills\\")
+                .is_some_and(|print| print.starts_with("truncated at")),
+        ),
+        (vec!["skills", "skills\\"], true)
+    );
+}
+
+/// #1909: a `.codex` folder whose parent was swapped for a junction after
+/// the folder was recorded is not listed through the junction (it is
+/// reached from the top of the volume, following no link); it differs
+/// every time.
+#[test]
+fn contents_do_not_list_through_a_parent_swapped_in() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dunce::canonicalize(dir.path()).expect("canonical");
+    let folder = root.join("a\\.codex");
+    std::fs::create_dir_all(&folder).expect("create");
+    std::fs::write(folder.join("p.md"), "p\n").expect("write");
+    let outside = root.join("outside");
+    std::fs::create_dir_all(outside.join(".codex")).expect("create");
+    std::fs::write(outside.join(".codex\\secret.md"), "s\n").expect("write");
+    let recorded = identity(&folder);
+    std::fs::rename(root.join("a"), root.join("a.aside")).expect("move aside");
+    junction(&root.join("a"), &outside);
+
+    let prints = contents_of(&folder, recorded);
+
+    assert_eq!(
+        (
+            prints.keys().cloned().collect::<Vec<_>>(),
+            prints
+                .get("")
+                .is_some_and(|print| print.starts_with("truncated at")),
+        ),
+        (vec![String::new()], true)
+    );
+}
+
+/// #1909: a `.codex` folder replaced by another plain folder of the same
+/// name after it was checked (just before it is listed) is not listed: it
+/// is no longer the folder recorded, so it differs every time.
+#[test]
+fn contents_do_not_list_a_folder_replaced_after_the_check() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dunce::canonicalize(dir.path()).expect("canonical");
+    let folder = root.join("a\\.codex");
+    std::fs::create_dir_all(&folder).expect("create");
+    std::fs::write(folder.join("p.md"), "p\n").expect("write");
+    let recorded = identity(&folder);
+    let replaced = folder.clone();
+    let swap = move |path: &Path| {
+        if same_path(path, &replaced) && !replaced.with_extension("aside").exists() {
+            std::fs::rename(&replaced, replaced.with_extension("aside")).expect("move aside");
+            std::fs::create_dir(&replaced).expect("replace");
+            std::fs::write(replaced.join("other.md"), "o\n").expect("write");
+        }
+    };
+
+    let prints = with_before_list(swap, || contents_of(&folder, recorded));
+
+    assert_eq!(
+        (
+            prints.keys().cloned().collect::<Vec<_>>(),
+            prints
+                .get("")
+                .is_some_and(|print| print.starts_with("truncated at")),
+        ),
+        (vec![String::new()], true)
     );
 }
 

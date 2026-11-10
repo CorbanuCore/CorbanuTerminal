@@ -1,5 +1,6 @@
 use super::RunnerTransportRequest;
 use super::spawn_runner_transport_with_retry;
+use super::start_runner_off_async_thread;
 use crate::WindowsSandboxProxySettingsMode;
 use crate::identity::SandboxCreds;
 use crate::ipc_framed::ErrorPayload;
@@ -259,5 +260,87 @@ fn unified_exec_logon_1056_retries_original_request_and_runs_command_once() {
         std::fs::read_to_string(workspace.path().join("command-launches.txt"))
             .expect("read command launch marker"),
         "launched\r\n"
+    );
+}
+
+/// A request for tests that don't look at it.
+fn plain_request() -> RunnerTransportRequest {
+    runner_transport_request()
+}
+
+/// Stands in for the planted-folder watch: records the thread it ends on.
+struct Watch(std::sync::Arc<std::sync::Mutex<Option<std::thread::ThreadId>>>);
+
+impl Drop for Watch {
+    fn drop(&mut self) {
+        *self.0.lock().expect("lock") = Some(std::thread::current().id());
+    }
+}
+
+fn runner_cannot_start(
+    _codex_home: &Path,
+    _cwd: &Path,
+    _sandbox_creds: &SandboxCreds,
+    _log_dir: Option<&Path>,
+    _spawn_request: SpawnRequest,
+) -> anyhow::Result<()> {
+    anyhow::bail!("the runner can't start")
+}
+
+fn runner_starts(
+    _codex_home: &Path,
+    _cwd: &Path,
+    _sandbox_creds: &SandboxCreds,
+    _log_dir: Option<&Path>,
+    _spawn_request: SpawnRequest,
+) -> anyhow::Result<()> {
+    Ok(())
+}
+
+fn creds() -> SandboxCreds {
+    SandboxCreds {
+        username: "sandbox".to_string(),
+        password: "secret".to_string(),
+    }
+}
+
+/// #1909 item 6 (#1903 review): when the elevated runner can't start, the
+/// error comes back and the planted-folder watch has already ended, off the
+/// async thread (ending it walks the writable roots); when it starts, the
+/// watch comes back with it, still running.
+#[tokio::test(flavor = "current_thread")]
+async fn planted_watch_ends_off_the_async_thread_when_the_runner_cannot_start() {
+    let async_thread = std::thread::current().id();
+    let ended = std::sync::Arc::new(std::sync::Mutex::new(None));
+
+    let failed = start_runner_off_async_thread(
+        creds(),
+        plain_request(),
+        Watch(std::sync::Arc::clone(&ended)),
+        runner_cannot_start,
+    )
+    .await
+    .map(|_| ())
+    .map_err(|err| err.to_string());
+    let ended_on = ended.lock().expect("lock").take();
+
+    let started = start_runner_off_async_thread(
+        creds(),
+        plain_request(),
+        Watch(std::sync::Arc::clone(&ended)),
+        runner_starts,
+    )
+    .await
+    .expect("runner starts");
+    let still_running = ended.lock().expect("lock").is_none();
+    drop(started);
+
+    assert_eq!(
+        (
+            failed,
+            ended_on.is_some_and(|thread| thread != async_thread),
+            still_running,
+        ),
+        (Err("the runner can't start".to_string()), true, true)
     );
 }
