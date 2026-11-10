@@ -222,8 +222,10 @@ struct ThreadSettingsBuildParams {
 
 /// #2000: the Windows sandbox level a `refreshWindowsSandbox` update applies:
 /// the one config selects, read by the server and never taken from the
-/// client. The elevated sandbox must be set up first. Core keeps the thread's
-/// level when it is the same and rejects a weaker one.
+/// client. The elevated sandbox must be set up first (stricter than thread
+/// start, where its first command runs the setup: a refresh only follows a
+/// completed setup). Core keeps the thread's level when it is the same and
+/// rejects a weaker one.
 fn refreshed_windows_sandbox_level(
     windows: bool,
     configured: WindowsSandboxLevel,

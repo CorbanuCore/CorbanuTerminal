@@ -18,7 +18,12 @@ starts, so you can set the sandbox up or change the level:
 - In the TUI, open `/permissions`, choose a mode that uses the sandbox (such
   as "Ask for approval") and pick "Set up default sandbox" (it needs
   Administrator permission). The running session uses it from your next
-  message (#2000); there is no need to start a new one.
+  message (#2000), child agents started after that included; there is no need
+  to start a new one. A turn that is still running finishes as it started,
+  and commands started before the setup (background terminals) keep running
+  without the sandbox: under Moderate and Aggressive typing into them stays
+  refused, so start them again. If the session can't switch, the TUI says so
+  and the sandbox applies from `/new`.
 - Or set `[windows] sandbox = "elevated"` as below; it applies from the next
   session.
 - Or switch to Permissive in `/security` (it applies after a restart).

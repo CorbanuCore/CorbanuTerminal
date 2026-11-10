@@ -817,6 +817,18 @@ impl Session {
             );
         }
         per_turn_config.features = config.features.clone();
+        // #2000: a Windows sandbox set up during the session (it only gets
+        // stronger) is the one for everything started from this config, such
+        // as child agents, not the one the session started with.
+        match session_configuration.windows_sandbox_level {
+            WindowsSandboxLevel::Elevated => {
+                per_turn_config.set_windows_elevated_sandbox_enabled(/*value*/ true);
+            }
+            WindowsSandboxLevel::RestrictedToken => {
+                per_turn_config.set_windows_sandbox_enabled(/*value*/ true);
+            }
+            WindowsSandboxLevel::Disabled => {}
+        }
         per_turn_config
     }
 

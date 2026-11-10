@@ -123,6 +123,7 @@ async fn issue_2000_a_sandbox_set_up_mid_thread_applies_to_it() -> Result<()> {
 
     const RAN: &str = "issue2000-ran";
     const MISSING: &str = "runs agent commands only inside the default Windows sandbox";
+    const UNELEVATED: &str = "this Windows sandbox mode (unelevated) can't";
     let echo = |call_id: &str| {
         create_shell_command_sse_response(
             vec!["echo".to_string(), RAN.to_string()],
@@ -259,6 +260,10 @@ async fn issue_2000_a_sandbox_set_up_mid_thread_applies_to_it() -> Result<()> {
     if cfg!(windows) {
         assert!(before.contains(MISSING), "{before}");
         assert!(!before.contains(RAN), "{before}");
+        // Now the non-admin sandbox decides: under Moderate it runs the
+        // command or refuses the profile's protected reads (#300), but not
+        // for a missing sandbox.
+        assert!(after.contains(RAN) || after.contains(UNELEVATED), "{after}");
     } else {
         assert!(before.contains(RAN), "{before}");
         assert!(after.contains(RAN), "{after}");

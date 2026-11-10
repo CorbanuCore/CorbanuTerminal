@@ -31,6 +31,7 @@ use serde_json::json;
 
 const RAN: &str = "issue2000-ran";
 const MISSING_SANDBOX: &str = "runs agent commands only inside the default Windows sandbox";
+const UNELEVATED: &str = "this Windows sandbox mode (unelevated) can't";
 
 /// The model runs `echo` once in a turn, then finishes it.
 fn command_turn(call_id: &str) -> Vec<String> {
@@ -135,8 +136,11 @@ async fn issue_2000_a_windows_sandbox_set_up_mid_session_applies_to_it() -> anyh
     turn(&test).await?;
     let after = output("call-after");
     assert!(!after.contains(MISSING_SANDBOX), "{after}");
-    if !cfg!(windows) {
-        assert!(after.contains(RAN), "{after}");
-    }
+    // The non-admin sandbox now decides: under Moderate it runs the command
+    // or refuses the profile's protected reads (#300), not a missing sandbox.
+    assert!(
+        after.contains(RAN) || (cfg!(windows) && after.contains(UNELEVATED)),
+        "{after}"
+    );
     Ok(())
 }

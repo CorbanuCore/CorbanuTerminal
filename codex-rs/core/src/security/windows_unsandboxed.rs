@@ -84,6 +84,48 @@ pub(crate) fn session_command_refusal(
     applies(level, windows_sandbox_level).then(|| command_refusal(level))
 }
 
+/// The refusal of typing into a running command in `session`'s turn, if
+/// any. #2000: a command started before the session's Windows sandbox was
+/// set up (`started_with`) still runs without it, so typing into it stays
+/// refused.
+pub(crate) fn session_typing_refusal(
+    session: &crate::session::session::Session,
+    windows_sandbox_level: WindowsSandboxLevel,
+    started_with: Option<WindowsSandboxLevel>,
+) -> Option<String> {
+    typing_refusal_on(
+        cfg!(windows),
+        session.services.model_client().live_level(),
+        windows_sandbox_level,
+        started_with,
+    )
+}
+
+fn typing_refusal_on(
+    windows: bool,
+    level: SecurityLevel,
+    windows_sandbox_level: WindowsSandboxLevel,
+    started_with: Option<WindowsSandboxLevel>,
+) -> Option<String> {
+    if applies_on(windows, level, windows_sandbox_level) {
+        return Some(command_refusal(level));
+    }
+    (started_with == Some(WindowsSandboxLevel::Disabled)
+        && applies_on(windows, level, WindowsSandboxLevel::Disabled))
+    .then(|| started_unsandboxed_refusal(level))
+}
+
+/// The refusal of typing into a command that started before the Windows
+/// sandbox was set up.
+fn started_unsandboxed_refusal(level: SecurityLevel) -> String {
+    let level = name(level);
+    format!(
+        "Security level {level} refused typing into this command: it started before the \
+         Windows sandbox was set up, so it runs without it. Start the command again; new \
+         commands run inside the sandbox."
+    )
+}
+
 /// The refusal a file tool's sandbox context carries (see
 /// `FileSystemSandboxContext::unsandboxed_refusal`), if any.
 pub(crate) fn session_file_refusal(
