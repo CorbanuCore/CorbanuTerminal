@@ -218,11 +218,13 @@ pub(crate) fn flatten_namespaced_tools(
 }
 
 fn tool_identity(tool_name: &ToolName) -> String {
-    format!(
-        "{}\0{}",
-        tool_name.namespace.as_deref().unwrap_or_default(),
-        tool_name.name
-    )
+    // Plain names hash as before upstream named their namespace `functions`.
+    let namespace = if tool_name.is_default_namespace() {
+        ""
+    } else {
+        tool_name.namespace.as_deref().unwrap_or_default()
+    };
+    format!("{namespace}\0{}", tool_name.name)
 }
 
 fn hashed_flat_name(preferred: &str, identity: &str, attempt: u32) -> String {

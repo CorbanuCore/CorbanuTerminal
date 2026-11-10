@@ -449,6 +449,7 @@ pub(crate) fn with_granted_permissions(
         additional_permissions.as_ref(),
         granted_permissions.as_ref(),
     );
+    // Only resolves the grants' paths for the comparison below; it grants nothing.
     let sandbox_context = environment.sandbox_context(/*additional_permissions*/ None);
     let context = file_system_sandbox_policy_context_for_cwd(&sandbox_context, cwd);
     let preapproved_permissions = granted_permissions.as_ref().and_then(|granted| {
