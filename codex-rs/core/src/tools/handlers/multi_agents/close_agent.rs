@@ -41,10 +41,15 @@ async fn handle_close_agent(
     let arguments = function_arguments(payload)?;
     let args: CloseAgentArgs = parse_arguments(&arguments)?;
     let agent_id = parse_agent_id_target(&args.target)?;
+    // #1756: only the caller's own agents (and theirs) can be closed.
+    ensure_own_agent(&session, "close_agent", agent_id).await?;
+    // Corbanu (D527 (a)): upstream's local control is the shared handle's local backend; any
+    // other backend fails closed (`ensure_own_agent` already refused it).
     let local_agent_control = session
         .services
-        .local_agent_runtime
-        .control(session.session_id());
+        .agent_control
+        .local_or_unsupported()
+        .map_err(|err| collab_agent_error(agent_id, err))?;
     let receiver_agent = local_agent_control.get_agent_metadata(agent_id);
     let receiver_agent = receiver_agent.unwrap_or_default();
     session
@@ -65,94 +70,16 @@ async fn handle_close_agent(
             }),
         )
         .await;
-<<<<<<< HEAD
-    let status = match session
-        .services
-        .agent_control
-        .subscribe_status(agent_id)
-        .await
-    {
-        Ok(mut status_rx) => status_rx.borrow_and_update().clone(),
-        Err(err)
-            if known_agent && matches!(err.details(), CodexErrorDetails::ThreadNotFound(_)) =>
-        {
-            session.services.agent_control.get_status(agent_id).await
-        }
-        Err(err) => {
-            let status = session.services.agent_control.get_status(agent_id).await;
-            session
-                .emit_turn_item_completed(
-                    &turn,
-                    TurnItem::CollabAgentToolCall(CollabAgentToolCallItem {
-                        id: call_id.clone(),
-                        tool: CollabAgentTool::CloseAgent,
-                        status: collab_tool_call_status(&status, Some(agent_id)),
-                        sender_thread_id: session.thread_id(),
-                        receiver_thread_ids: vec![agent_id],
-                        receiver_agents: vec![CollabAgentRef {
-                            thread_id: agent_id,
-                            agent_nickname: receiver_agent.agent_nickname.clone(),
-                            agent_role: receiver_agent.agent_role.clone(),
-                        }],
-                        prompt: None,
-                        model: None,
-                        reasoning_effort: None,
-                        provider_account: None,
-                        agents_states: [(agent_id, status)].into_iter().collect(),
-                    }),
-                )
-                .await;
-            return Err(collab_agent_error(agent_id, err));
-        }
-||||||| 413492cd6c
-    let status = match session
-        .services
-        .agent_control
-        .subscribe_status(agent_id)
-        .await
-    {
-        Ok(mut status_rx) => status_rx.borrow_and_update().clone(),
-        Err(err)
-            if known_agent && matches!(err.details(), CodexErrorDetails::ThreadNotFound(_)) =>
-        {
-            session.services.agent_control.get_status(agent_id).await
-        }
-        Err(err) => {
-            let status = session.services.agent_control.get_status(agent_id).await;
-            session
-                .emit_turn_item_completed(
-                    &turn,
-                    TurnItem::CollabAgentToolCall(CollabAgentToolCallItem {
-                        id: call_id.clone(),
-                        tool: CollabAgentTool::CloseAgent,
-                        status: collab_tool_call_status(&status, Some(agent_id)),
-                        sender_thread_id: session.thread_id(),
-                        receiver_thread_ids: vec![agent_id],
-                        receiver_agents: vec![CollabAgentRef {
-                            thread_id: agent_id,
-                            agent_nickname: receiver_agent.agent_nickname.clone(),
-                            agent_role: receiver_agent.agent_role.clone(),
-                        }],
-                        prompt: None,
-                        model: None,
-                        reasoning_effort: None,
-                        agents_states: [(agent_id, status)].into_iter().collect(),
-                    }),
-                )
-                .await;
-            return Err(collab_agent_error(agent_id, err));
-        }
-=======
     // Shutdown may remove the target before a descendant fails to close.
     let previous_status = local_agent_control.get_status(agent_id).await;
     let result = local_agent_control.close_agent(agent_id).await;
     let (status, receiver_agent) = match &result {
         Ok(snapshot) => (
-            snapshot.status().cloned().unwrap_or(AgentStatus::NotFound),
+            // Corbanu (as main): a registered agent that is not loaded reports `Unloaded`.
+            snapshot.status().cloned().unwrap_or(AgentStatus::Unloaded),
             snapshot.metadata().clone(),
         ),
         Err(_) => (previous_status, receiver_agent),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
     session
         .emit_turn_item_completed(

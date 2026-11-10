@@ -230,6 +230,11 @@ layers:
   `login/src/auth/manager.rs`, `secrets/src/local.rs`, `arg0/src/lib.rs`, `cli/src/debug_sandbox.rs`,
   `apply-patch/src/lib.rs`, and tui `approval_overlay.rs` (+1 snapshot), `permission_popups.rs`, `windows_sandbox.rs`.
   The owning slice resolves them; the security owner must approve.
+- **Main's D318 block:** since main merge #2c the named layer also carries every path `main`'s CODEOWNERS gives
+  @corbanu-security (sandboxes, approvals, permission profiles, D487 enforcement, credentials, dependency policy,
+  D465 security CI and release signing; 74 pathspecs), except `.github/CODEOWNERS`. `ci_mode.py codeowners drift`
+  fails when `main`'s block names a path that the sync CODEOWNERS block or this list lacks. `blocking-ci.yml` is on
+  the list, so S4's CI-mode revert appears in the SG3 diff; the integrator points it out when posting SG3.
 - **Footprint:** S0 extends the list from the fork-patch footprint, i.e. the files changed by Corbanu's security
   commits (PF-23 to PF-41 sprints, security-plan PRs), not from path names alone. A keyword match over `main`'s
   commit messages touches 492 of the 899 conflicted files, so S0 curates by commit. Each footprint file gets a ledger

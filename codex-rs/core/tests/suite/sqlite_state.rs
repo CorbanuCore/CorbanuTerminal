@@ -889,6 +889,7 @@ async fn mcp_call_marks_thread_memory_mode_polluted_when_configured() -> Result<
                 omit_tools_from: None,
                 disabled_reason: None,
                 startup_timeout_sec: Some(Duration::from_secs(10)),
+                discover_timeout_sec: None,
                 tool_timeout_sec: None,
                 default_tools_approval_mode: None,
                 enabled_tools: None,

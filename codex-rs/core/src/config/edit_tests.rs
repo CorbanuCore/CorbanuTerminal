@@ -1147,6 +1147,7 @@ fn blocking_replace_mcp_servers_round_trips() {
             omit_tools_from: None,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: Some(vec!["one".to_string(), "two".to_string()]),
@@ -1182,6 +1183,7 @@ fn blocking_replace_mcp_servers_round_trips() {
             omit_tools_from: None,
             disabled_reason: None,
             startup_timeout_sec: Some(std::time::Duration::from_secs(5)),
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -1251,6 +1253,65 @@ B = \"2\"
     assert_eq!(raw, expected);
 }
 
+#[test]
+fn blocking_replace_mcp_servers_round_trips_discover_timeout_sec() {
+    let tmp = tempdir().expect("tmpdir");
+    let codex_home = tmp.path();
+
+    let servers = BTreeMap::from([(
+        "modern".to_string(),
+        McpServerConfig {
+            auth: Default::default(),
+            transport: McpServerTransportConfig::Stdio {
+                command: "modern-server".to_string(),
+                args: Vec::new(),
+                env: None,
+                env_vars: Vec::new(),
+                cwd: None,
+            },
+            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            enabled: true,
+            required: false,
+            supports_parallel_tool_calls: false,
+            disabled_reason: None,
+            startup_timeout_sec: None,
+            discover_timeout_sec: Some(std::time::Duration::from_millis(12_500)),
+            tool_timeout_sec: None,
+            default_tools_approval_mode: None,
+            enabled_tools: None,
+            disabled_tools: None,
+            scopes: None,
+            oauth: None,
+            oauth_resource: None,
+            tools: HashMap::new(),
+        },
+    )]);
+
+    apply_blocking(
+        codex_home,
+        &[ConfigEdit::ReplaceMcpServers(servers.clone())],
+    )
+    .expect("persist");
+
+    let raw = std::fs::read_to_string(codex_home.join(CONFIG_TOML_FILE)).expect("read config");
+    assert_eq!(
+        raw,
+        "\
+[mcp_servers.modern]
+command = \"modern-server\"
+discover_timeout_sec = 12.5
+"
+    );
+    let mut parsed: TomlValue = toml::from_str(&raw).expect("parse config");
+    let loaded: BTreeMap<String, McpServerConfig> = parsed
+        .as_table_mut()
+        .and_then(|table| table.remove("mcp_servers"))
+        .expect("mcp_servers table")
+        .try_into()
+        .expect("deserialize mcp_servers");
+    assert_eq!(loaded, servers);
+}
+
 #[test_case::test_case(30_000; "positive limit")]
 #[test_case::test_case(usize::MAX; "largest native limit")]
 fn blocking_replace_mcp_servers_serializes_tool_approval_overrides(output_token_limit: usize) {
@@ -1278,6 +1339,7 @@ fn blocking_replace_mcp_servers_serializes_tool_approval_overrides(output_token_
             omit_tools_from: None,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: Some(AppToolApproval::Prompt),
             enabled_tools: None,
@@ -1356,6 +1418,7 @@ foo = { command = "cmd" }
             omit_tools_from: None,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -1410,6 +1473,7 @@ foo = { command = "cmd" } # keep me
             omit_tools_from: None,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -1463,6 +1527,7 @@ foo = { command = "cmd", args = ["--flag"] } # keep me
             omit_tools_from: None,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
@@ -1517,6 +1582,7 @@ foo = { command = "cmd" }
             omit_tools_from: None,
             disabled_reason: None,
             startup_timeout_sec: None,
+            discover_timeout_sec: None,
             tool_timeout_sec: None,
             default_tools_approval_mode: None,
             enabled_tools: None,
