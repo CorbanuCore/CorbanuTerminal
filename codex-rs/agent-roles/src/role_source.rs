@@ -113,23 +113,57 @@ pub fn project_role_ignored_keys_warning(role_file: &Path, ignored_keys: &[Strin
     )
 }
 
-/// The top-level keys of a role file's config layer that a spawned agent does
-/// not apply (D526 (a)), sorted.
-pub fn unapplied_role_keys(config: &TomlValue) -> Vec<String> {
-    let mut keys: Vec<String> = config
-        .as_table()
-        .map(|table| {
-            table
-                .iter()
-                .filter(|(key, value)| {
-                    // A table the denylist emptied sets nothing.
-                    !APPLIED_ROLE_KEYS.contains(&key.as_str())
-                        && !value.as_table().is_some_and(toml::map::Map::is_empty)
-                })
-                .map(|(key, _)| key.clone())
-                .collect()
-        })
-        .unwrap_or_default();
+/// The `features` a role may turn off for its child; enabling a feature, or turning off any
+/// other, is not applied (upstream's list).
+pub const APPLIED_FEATURE_DISABLES: &[&str] = &[
+    "shell_tool",
+    "apps",
+    "plugins",
+    "memories",
+    "request_permissions_tool",
+];
+
+/// The keys of a role file's config layer that a spawned agent does not apply (D526 (a)),
+/// sorted: top-level keys outside `APPLIED_ROLE_KEYS`, feature enables and disables outside
+/// `APPLIED_FEATURE_DISABLES`, `allow_login_shell = true`, and provider tables other than the
+/// selected provider's (the role's `model_provider`, else `parent_provider` when known).
+/// `skills` entries are not itemized.
+pub fn unapplied_role_keys(config: &TomlValue, parent_provider: Option<&str>) -> Vec<String> {
+    let Some(table) = config.as_table() else {
+        return Vec::new();
+    };
+    let selected_provider = table
+        .get("model_provider")
+        .and_then(TomlValue::as_str)
+        .or(parent_provider);
+    let mut keys = Vec::new();
+    for (key, value) in table {
+        match key.as_str() {
+            "features" => {
+                for (feature, enabled) in value.as_table().into_iter().flatten() {
+                    if enabled.as_bool() != Some(false)
+                        || !APPLIED_FEATURE_DISABLES.contains(&feature.as_str())
+                    {
+                        keys.push(format!("features.{feature}"));
+                    }
+                }
+            }
+            "allow_login_shell" if value.as_bool() != Some(false) => keys.push(key.clone()),
+            "model_providers" => {
+                if let Some(selected_provider) = selected_provider {
+                    for provider in value.as_table().into_iter().flatten().map(|(id, _)| id) {
+                        if provider != selected_provider {
+                            keys.push(format!("model_providers.{provider}"));
+                        }
+                    }
+                }
+            }
+            // A table the denylist emptied sets nothing.
+            _ if APPLIED_ROLE_KEYS.contains(&key.as_str())
+                || value.as_table().is_some_and(toml::map::Map::is_empty) => {}
+            _ => keys.push(key.clone()),
+        }
+    }
     keys.sort();
     keys
 }
@@ -138,9 +172,10 @@ pub fn unapplied_role_keys(config: &TomlValue) -> Vec<String> {
 pub fn unapplied_role_keys_warning(role_file: &Path, keys: &[String]) -> String {
     format!(
         "Agent role file {} sets {}, which an agent spawned with this role does not apply: \
-         it keeps its parent's settings for them. A role may change the model, provider, \
-         instructions and reasoning settings, and may only make permissions stricter \
-         (for example `allow_login_shell = false` or turning features off).",
+         it keeps its parent's settings for them. A role may change the model, a configured \
+         provider, instructions and reasoning settings, and may only make permissions stricter \
+         (`allow_login_shell = false`, turning some features off); a stricter sandbox, approval \
+         policy, network setting or permission profile than the parent's refuses the spawn.",
         role_file.display(),
         keys.join(", "),
     )
@@ -159,7 +194,7 @@ pub fn push_role_file_warnings(
     if !ignored_keys.is_empty() {
         startup_warnings.push(project_role_ignored_keys_warning(role_file, &ignored_keys));
     }
-    let unapplied_keys = unapplied_role_keys(&config);
+    let unapplied_keys = unapplied_role_keys(&config, /*parent_provider*/ None);
     if !unapplied_keys.is_empty() {
         startup_warnings.push(unapplied_role_keys_warning(role_file, &unapplied_keys));
     }

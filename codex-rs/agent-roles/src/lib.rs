@@ -8,6 +8,7 @@ pub use agent_role_config::ResolvedAgentRoleFile;
 pub use agent_role_config::parse_agent_role_file_contents;
 pub use loader::load_agent_roles;
 pub use role_source::AGENTS_SETTINGS_KEYS;
+pub use role_source::APPLIED_FEATURE_DISABLES;
 pub use role_source::APPLIED_ROLE_KEYS;
 pub use role_source::AgentRoleSource;
 pub use role_source::project_role_ignored_keys_warning;

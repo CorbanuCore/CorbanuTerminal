@@ -37,6 +37,8 @@ use codex_protocol::config_types::ServiceTier;
 use codex_protocol::config_types::Verbosity;
 use codex_protocol::models::BaseInstructionsProvenance;
 use codex_protocol::openai_models::ReasoningEffort;
+use codex_protocol::protocol::AskForApproval;
+use codex_protocol::protocol::SandboxPolicy;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -135,7 +137,9 @@ async fn apply_role_to_config_inner(
     };
     let role_layer_toml =
         load_role_layer_toml(config, config_file, is_built_in, role.source, role_name).await?;
-    let unapplied_keys = unapplied_role_keys(&role_layer_toml);
+    reject_stricter_unapplied_permissions(config, &role_layer_toml)?;
+    let unapplied_keys =
+        unapplied_role_keys(&role_layer_toml, Some(config.model_provider_id.as_str()));
     if !unapplied_keys.is_empty() {
         tracing::warn!(
             "{}",
@@ -216,6 +220,93 @@ async fn apply_role_to_config_inner(
             .and_then(|value| ReasoningEffort::from_str(value).ok());
     }
     *config = next_config;
+    Ok(())
+}
+
+/// Corbanu (D526 (a), provisional): a role's permission settings are not applied to the child,
+/// which keeps its parent's. A setting that would be looser is ignored (reported at startup); one
+/// that would be stricter, or that can't be compared, fails the spawn so the child never runs
+/// looser than its role asked for.
+fn reject_stricter_unapplied_permissions(config: &Config, role: &TomlValue) -> anyhow::Result<()> {
+    if let Some(mode) = role.get("sandbox_mode") {
+        let rank = |mode: &str| match mode {
+            "read-only" => Some(0),
+            "workspace-write" => Some(1),
+            "danger-full-access" => Some(2),
+            _ => None,
+        };
+        let parent_rank = match config
+            .permissions
+            .legacy_sandbox_policy(config.cwd.as_path())
+        {
+            SandboxPolicy::ReadOnly { .. } => 0,
+            SandboxPolicy::WorkspaceWrite { .. } => 1,
+            SandboxPolicy::DangerFullAccess | SandboxPolicy::ExternalSandbox { .. } => 2,
+        };
+        anyhow::ensure!(
+            mode.as_str()
+                .and_then(rank)
+                .is_some_and(|rank| rank >= parent_rank),
+            "this role asks for a stricter sandbox_mode than its parent's, which spawned agents \
+             don't apply yet; the spawn is refused rather than run with the parent's sandbox"
+        );
+    }
+    if let Some(policy) = role.get("approval_policy") {
+        let policy: AskForApproval = policy.clone().try_into()?;
+        let parent = config.permissions.approval_policy.value();
+        // How often each policy asks; granular policies can't be compared.
+        let rank = |policy: &AskForApproval| match policy {
+            AskForApproval::Never => Some(0),
+            AskForApproval::OnRequest => Some(1),
+            AskForApproval::UnlessTrusted => Some(2),
+            AskForApproval::Granular(_) => None,
+        };
+        anyhow::ensure!(
+            policy == parent
+                || rank(&policy)
+                    .zip(rank(&parent))
+                    .is_some_and(|(role, parent)| role <= parent),
+            "this role asks for a stricter approval_policy than its parent's, which spawned \
+             agents don't apply yet; the spawn is refused rather than run with the parent's policy"
+        );
+    }
+    let role_network_off = role
+        .get("sandbox_workspace_write")
+        .and_then(|table| table.get("network_access"))
+        .and_then(TomlValue::as_bool)
+        == Some(false);
+    anyhow::ensure!(
+        !role_network_off || !config.permissions.network_sandbox_policy().is_enabled(),
+        "this role turns network access off, which spawned agents don't apply yet; the spawn is \
+         refused rather than run with the parent's network access"
+    );
+    if let Some(profile) = role.get("default_permissions") {
+        let parent = config.permissions.active_permission_profile();
+        anyhow::ensure!(
+            profile.as_str().is_some_and(|profile| {
+                parent
+                    .as_ref()
+                    .is_some_and(|parent| parent.id.as_str() == profile)
+            }),
+            "this role selects a permission profile other than its parent's, which spawned \
+             agents don't apply; the spawn is refused rather than run with the parent's profile"
+        );
+    }
+    if let Some(mode) = role
+        .get("windows")
+        .and_then(|windows| windows.get("sandbox"))
+        .and_then(TomlValue::as_str)
+    {
+        let parent = config
+            .permissions
+            .windows_sandbox_mode
+            .and_then(|mode| TomlValue::try_from(mode).ok());
+        anyhow::ensure!(
+            mode == "unelevated" || parent.as_ref().and_then(TomlValue::as_str) == Some(mode),
+            "this role asks for a different Windows sandbox than its parent's, which spawned \
+             agents don't apply; the spawn is refused rather than run with the parent's sandbox"
+        );
+    }
     Ok(())
 }
 
@@ -371,12 +462,13 @@ mod role_overrides {
         }
     }
 
-    /// Corbanu (D526 (a)): the role's provider choice. The parent's live provider is the base
-    /// for its own id, the parent's configured entry for another id, and an empty table for a
-    /// provider only the role defines; the role's table for that id is overlaid, including
-    /// nested settings. The account always comes from that base, never from the role (PF-84),
-    /// and the developer accounting binding is kept: a role can't change the wire it was
-    /// approved for. Endpoint changes remain visible to the existing pre-send rejection.
+    /// Corbanu (D526 (a)): the role's provider choice, limited to providers the parent has
+    /// configured and to what managed requirements allow. The parent's live provider is the
+    /// base for its own id and the parent's configured entry for another id; the role's table
+    /// for that id is overlaid, including nested settings. The account always comes from that
+    /// base, never from the role (PF-84), and on the parent's own provider the developer
+    /// accounting binding is kept: a role can't change the wire it was approved for. Endpoint
+    /// changes remain visible to the existing pre-send rejection.
     fn apply_role_provider(
         config: &Config,
         next_config: &mut Config,
@@ -386,15 +478,46 @@ mod role_overrides {
             .model_provider
             .clone()
             .unwrap_or_else(|| config.model_provider_id.clone());
-        let base = if provider_id == config.model_provider_id {
-            Some(config.model_provider.clone())
+        let same_provider = provider_id == config.model_provider_id;
+        // Managed requirements pin the provider and its definition, as they did when a role
+        // rebuilt the config from layers.
+        if let Some(required) = config.config_layer_stack.required_model_provider() {
+            anyhow::ensure!(
+                required == provider_id,
+                "managed requirements select model provider `{required}`; this role can't select \
+                 `{provider_id}`"
+            );
+        }
+        anyhow::ensure!(
+            overrides.model_provider_overlay.is_none()
+                || !config
+                    .config_layer_stack
+                    .requirements_toml()
+                    .model_providers
+                    .as_ref()
+                    .is_some_and(|providers| providers.contains_key(&provider_id)),
+            "managed requirements define model provider `{provider_id}`; this role can't change it"
+        );
+        anyhow::ensure!(
+            same_provider || overrides.model.is_some(),
+            "this role selects model provider `{provider_id}` without a model; set `model` too"
+        );
+        // Only providers the parent has configured: a child rebuilt from its layers must be
+        // able to resolve the provider again.
+        let base = if same_provider {
+            config.model_provider.clone()
         } else {
-            config.model_providers.get(&provider_id).cloned()
+            config
+                .model_providers
+                .get(&provider_id)
+                .cloned()
+                .ok_or_else(|| {
+                    anyhow!(
+                        "this role selects model provider `{provider_id}`, which is not configured"
+                    )
+                })?
         };
-        let mut provider = match &base {
-            Some(base) => TomlValue::try_from(base)?,
-            None => TomlValue::Table(toml::map::Map::new()),
-        };
+        let mut provider = TomlValue::try_from(&base)?;
         if let Some(overlay) = &overrides.model_provider_overlay {
             codex_config::merge_toml_values(&mut provider, overlay);
         }
@@ -402,7 +525,9 @@ mod role_overrides {
             anyhow!("this role's model provider `{provider_id}` is not usable: {err}")
         })?;
         provider.validate().map_err(anyhow::Error::msg)?;
-        if let Some(accounting_wire) = accounting_wire(config) {
+        // As on main: the binding follows the parent's provider; another provider is
+        // rebound per turn by the accounting route.
+        if same_provider && let Some(accounting_wire) = accounting_wire(config) {
             anyhow::ensure!(
                 provider.wire_api == accounting_wire,
                 "this role changes the provider's wire_api, which developer accounting cannot follow; \
@@ -410,10 +535,8 @@ mod role_overrides {
             );
         }
         // Runtime-only fields are not serialized, so they come from the base.
-        provider.account = base.as_ref().and_then(|base| base.account.clone());
-        provider.include_internal_metadata = base
-            .as_ref()
-            .is_some_and(|base| base.include_internal_metadata);
+        provider.account = base.account;
+        provider.include_internal_metadata = base.include_internal_metadata;
         next_config
             .model_providers
             .insert(provider_id.clone(), provider.clone());

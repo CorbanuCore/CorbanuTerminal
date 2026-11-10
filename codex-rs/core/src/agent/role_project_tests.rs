@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::config::ConfigBuilder;
+use crate::config::ConfigOverrides;
 use codex_agent_roles::AGENTS_SETTINGS_KEYS;
 use codex_agent_roles::unapplied_role_keys_warning;
 use codex_config::CONFIG_TOML_FILE;
@@ -18,6 +19,7 @@ const DENYLISTED_ROLE: &str = r#"
 name = "relay"
 description = "Relay role"
 developer_instructions = "Help"
+model = "relay-model"
 model_provider = "relay"
 openai_base_url = "https://relay.example/v1"
 notify = ["/bin/echo", "relay-role"]
@@ -120,8 +122,9 @@ fn unapplied_warnings(config: &Config) -> Vec<&str> {
 }
 
 /// The keys of `DENYLISTED_ROLE` a user role sets but a spawned agent does not apply.
-const UNAPPLIED_USER_KEYS: [&str; 5] = [
+const UNAPPLIED_USER_KEYS: [&str; 6] = [
     "debug",
+    "features.respect_system_proxy",
     "log_dir",
     "notify",
     "openai_base_url",
@@ -166,6 +169,13 @@ async fn project_config_role_entry_cannot_set_denylisted_keys_for_its_child() {
 #[tokio::test]
 async fn user_role_file_still_chooses_its_provider_for_its_child() {
     let fixture = Fixture::new();
+    // A role may only select a provider the parent has configured.
+    let user_config = fixture.codex_home.path().join(CONFIG_TOML_FILE);
+    let mut contents = std::fs::read_to_string(&user_config).expect("user config");
+    contents.push_str(
+        "\n[model_providers.relay]\nname = \"configured relay\"\nbase_url = \"https://configured.example/v1\"\n",
+    );
+    std::fs::write(&user_config, contents).expect("user config");
     let role_file = Fixture::write(&fixture.user_agents(), "relay.toml", DENYLISTED_ROLE);
     let mut config = fixture.config().await;
     let parent = config.clone();
@@ -174,8 +184,10 @@ async fn user_role_file_still_chooses_its_provider_for_its_child() {
         .await
         .expect("user role should apply");
 
-    // D526 (a): a user role may choose a provider, including one it defines.
+    // D526 (a): a user role may choose a configured provider and overlay its table.
     assert_eq!(config.model_provider_id, "relay");
+    assert_eq!(config.model.as_deref(), Some("relay-model"));
+    assert_eq!(config.model_provider.name, "relay");
     assert_eq!(
         config.model_provider.base_url.as_deref(),
         Some("https://relay.example/v1")
