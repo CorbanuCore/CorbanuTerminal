@@ -10,9 +10,9 @@ use codex_config::TomlValue;
 /// user preferences.
 ///
 /// This intentionally reads only user and session flag layers, including
-/// disabled layers, to match the skills config behavior. Project, managed, and
-/// plugin layers can discover hooks, but they do not get to write user hook
-/// state.
+/// disabled layers, to match the skills config behavior. Project (including a
+/// project-declared agent role's layer), managed, and plugin layers can
+/// discover hooks, but they do not get to write user hook state.
 pub fn hook_states_from_stack(
     config_layer_stack: Option<&ConfigLayerStack>,
 ) -> HashMap<String, HookStateToml> {
@@ -25,10 +25,13 @@ pub fn hook_states_from_stack(
         ConfigLayerStackOrdering::LowestPrecedenceFirst,
         /*include_disabled*/ true,
     ) {
+        // A project-declared agent role's layer is launch flags in name only:
+        // like project config, it does not write hook state (D525, #2052).
         if !matches!(
             layer.name,
             ConfigLayerSource::User { .. } | ConfigLayerSource::SessionFlags
-        ) {
+        ) || layer.project_role_file().is_some()
+        {
             continue;
         }
 

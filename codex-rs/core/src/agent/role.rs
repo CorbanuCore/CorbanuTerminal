@@ -23,6 +23,7 @@ use codex_config::config_toml::ConfigToml;
 use codex_config::loader::resolve_relative_paths_in_config_toml;
 use codex_exec_server::LOCAL_FS;
 use codex_protocol::openai_models::ReasoningEffort;
+use codex_utils_absolute_path::AbsolutePathBuf;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -174,10 +175,15 @@ async fn apply_role_to_config_inner(
     let preserved_runtime_reasoning_effort = (!is_built_in && role_reasoning_effort.is_none())
         .then_some(config.model_reasoning_effort.clone())
         .flatten();
+    // D525 (#2052): a project-declared role's layer follows project-config rules.
+    let project_role_file = (!is_built_in && role.source == AgentRoleSource::Project)
+        .then(|| AbsolutePathBuf::from_absolute_path(config_file))
+        .transpose()?;
 
     let mut next_config = reload::build_next_config(
         config,
         role_layer_toml,
+        project_role_file,
         developer_instructions,
         preserve_current_provider,
         preserve_current_service_tier,
@@ -280,6 +286,7 @@ mod reload {
     pub(super) async fn build_next_config(
         config: &Config,
         role_layer_toml: TomlValue,
+        project_role_file: Option<AbsolutePathBuf>,
         developer_instructions: RoleDeveloperInstructions,
         preserve_current_provider: bool,
         preserve_current_service_tier: bool,
@@ -300,7 +307,8 @@ mod reload {
                 .developer_instructions
                 .clone_from(&config.developer_instructions);
         }
-        let config_layer_stack = build_config_layer_stack(config, &role_layer_toml)?;
+        let config_layer_stack =
+            build_config_layer_stack(config, &role_layer_toml, project_role_file)?;
         let merged_config = deserialize_effective_config(config, &config_layer_stack)?;
 
         let mut next_config = Config::load_config_with_layer_stack(
@@ -365,9 +373,13 @@ mod reload {
     fn build_config_layer_stack(
         config: &Config,
         role_layer_toml: &TomlValue,
+        project_role_file: Option<AbsolutePathBuf>,
     ) -> anyhow::Result<ConfigLayerStack> {
         let mut layers = existing_layers(config);
-        insert_layer(&mut layers, role_layer(role_layer_toml.clone()));
+        insert_layer(
+            &mut layers,
+            role_layer(role_layer_toml.clone(), project_role_file),
+        );
         Ok(ConfigLayerStack::new(
             layers,
             config.config_layer_stack.requirements().clone(),
@@ -403,8 +415,17 @@ mod reload {
         layers.insert(insertion_index, layer);
     }
 
-    fn role_layer(role_layer_toml: TomlValue) -> ConfigLayerEntry {
-        ConfigLayerEntry::new(ConfigLayerSource::SessionFlags, role_layer_toml)
+    /// Launch flags by precedence. A project-declared role's layer is marked
+    /// with its file so project-config rules apply to it (D525, #2052).
+    fn role_layer(
+        role_layer_toml: TomlValue,
+        project_role_file: Option<AbsolutePathBuf>,
+    ) -> ConfigLayerEntry {
+        let layer = ConfigLayerEntry::new(ConfigLayerSource::SessionFlags, role_layer_toml);
+        match project_role_file {
+            Some(role_file) => layer.with_project_role_file(role_file),
+            None => layer,
+        }
     }
 
     fn reload_overrides(

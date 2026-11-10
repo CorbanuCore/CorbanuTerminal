@@ -7,6 +7,7 @@ use crate::windows_sandbox::WindowsSandboxLevelExt;
 use crate::windows_sandbox::resolve_windows_sandbox_mode;
 use crate::windows_sandbox::resolve_windows_sandbox_private_desktop;
 use codex_config::CloudConfigBundleLoader;
+use codex_config::ConfigLayerEntry;
 use codex_config::ConfigLayerSource;
 use codex_config::ConfigLayerStack;
 use codex_config::ConfigLayerStackOrdering;
@@ -3032,6 +3033,15 @@ pub enum AgentRoleSource {
 }
 
 impl AgentRoleSource {
+    /// A project-declared agent role's layer (launch flags in name only)
+    /// declares project roles (D525, #2052).
+    pub(crate) fn from_layer_entry(layer: &ConfigLayerEntry) -> Self {
+        if layer.project_role_file().is_some() {
+            return Self::Project;
+        }
+        Self::from_layer(&layer.name)
+    }
+
     pub(crate) fn from_layer(source: &ConfigLayerSource) -> Self {
         match source {
             ConfigLayerSource::Project { .. } => Self::Project,
@@ -4900,6 +4910,8 @@ impl Config {
                 "agents.provider_allowlist must name at least one provider when set",
             ));
         }
+        let agent_provider_allowlist =
+            narrow_project_provider_allowlist(&config_layer_stack, agent_provider_allowlist);
         let agent_max_depth = cfg
             .agents
             .as_ref()
@@ -5917,8 +5929,9 @@ pub async fn apply_agent_role_to_config(
 
 /// The value the person's own configuration sets for `feature` (by its key
 /// or a legacy alias): config files, launch flags and managed layers, the
-/// highest precedence first. A project's `.codex` folder does not count, so a
-/// repository cannot lower a level's default. A stack without layers (config
+/// highest precedence first. A project's `.codex` folder, and an agent role
+/// file a project declared (D525), do not count, so a repository cannot lower
+/// a level's default. A stack without layers (config
 /// built directly from a `ConfigToml`) reads `features`.
 fn explicit_feature_setting(
     stack: &ConfigLayerStack,
@@ -5937,7 +5950,7 @@ fn explicit_feature_setting(
     }
     layers
         .into_iter()
-        .filter(|layer| !matches!(layer.name, ConfigLayerSource::Project { .. }))
+        .filter(|layer| !layer.is_project_scoped())
         .find_map(|layer| {
             layer
                 .config
@@ -5947,6 +5960,61 @@ fn explicit_feature_setting(
                 .filter(|(key, _)| is_feature(key))
                 .find_map(|(_, value)| value.as_bool())
         })
+}
+
+/// D525 (#2052): `agents.provider_allowlist` is operator spend policy. A
+/// project's config or a project-declared agent role can narrow it but not
+/// widen it: a project-scoped list above the highest operator list (user,
+/// managed or launch flags) only removes providers from it. Lists below that
+/// operator list were already overridden. `merged` is the merged value.
+fn narrow_project_provider_allowlist(
+    stack: &ConfigLayerStack,
+    merged: Option<Vec<String>>,
+) -> Option<Vec<String>> {
+    let layers = stack.layers_high_to_low();
+    if layers.is_empty() {
+        return merged;
+    }
+    let list = |layer: &ConfigLayerEntry| {
+        let providers = layer
+            .config
+            .get("agents")?
+            .get("provider_allowlist")?
+            .as_array()?;
+        Some(
+            providers
+                .iter()
+                .filter_map(TomlValue::as_str)
+                .map(str::trim)
+                .filter(|provider| !provider.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>(),
+        )
+    };
+    let mut project_lists = Vec::new();
+    let mut operator = None;
+    for layer in layers {
+        let Some(providers) = list(layer) else {
+            continue;
+        };
+        if layer.is_project_scoped() {
+            project_lists.push(providers);
+        } else {
+            operator = Some(providers);
+            break;
+        }
+    }
+    if project_lists.is_empty() {
+        return merged;
+    }
+    // Lowest first: start from the operator's list (or the lowest project
+    // list when the operator set none) and let each higher list remove.
+    let mut lists = operator.into_iter().chain(project_lists.into_iter().rev());
+    let mut allowed = lists.next()?;
+    for narrower in lists {
+        allowed.retain(|provider| narrower.contains(provider));
+    }
+    Some(allowed)
 }
 
 /// PF-23-S03: the strictest security level any enabled config layer sets.

@@ -23,6 +23,7 @@ use crate::turn_metadata::McpTurnMetadataContext;
 use codex_analytics::AppInvocation;
 use codex_analytics::InvocationType;
 use codex_analytics::build_track_events_context;
+use codex_config::ConfigLayerEntry;
 use codex_config::ConfigLayerSource;
 use codex_config::types::AppToolApproval;
 use codex_config::types::ApprovalsReviewer;
@@ -399,15 +400,24 @@ fn always_allow_lasts_only_the_session(
     aggressive && record_key.is_none()
 }
 
-/// Whether a project config layer mentions `server` under `mcp_servers`, as
-/// a whole definition or only some fields (layers merge deeply), or has an
-/// `mcp_servers` value that is not a table.
+/// Whether a project config layer, or a project-declared agent role's layer
+/// (D525), mentions `server` under `mcp_servers`, as a whole definition or
+/// only some fields (layers merge deeply), or has an `mcp_servers` value that
+/// is not a table.
 pub(crate) fn project_layer_mentions_mcp_server(config: &Config, server: &str) -> bool {
+    layer_mentions_mcp_server(config, server, ConfigLayerEntry::is_project_scoped)
+}
+
+fn layer_mentions_mcp_server(
+    config: &Config,
+    server: &str,
+    include: impl Fn(&ConfigLayerEntry) -> bool,
+) -> bool {
     config
         .config_layer_stack
         .layers_high_to_low()
         .into_iter()
-        .filter(|layer| matches!(layer.name, ConfigLayerSource::Project { .. }))
+        .filter(|layer| include(layer))
         .any(|layer| {
             match layer
                 .config
@@ -2525,6 +2535,15 @@ pub(crate) fn custom_mcp_tool_approval_config_builder(
     config: &Config,
     server: &str,
 ) -> anyhow::Result<Option<ConfigEditsBuilder>> {
+    // D525 (#2052): a project-declared agent role that changes this server
+    // has no config file of the person's to record approval in; the approval
+    // lasts only the session.
+    if layer_mentions_mcp_server(config, server, |layer| layer.project_role_file().is_some()) {
+        anyhow::bail!(
+            "MCP server `{server}` is changed by a project's agent role; \
+             the approval is not saved"
+        );
+    }
     if let Some(project_config_folder) = project_mcp_tool_approval_config_folder(config, server) {
         return Ok(Some(ConfigEditsBuilder::new(&project_config_folder)));
     }

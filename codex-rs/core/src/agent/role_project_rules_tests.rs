@@ -1,12 +1,12 @@
 //! D525 (#2052): settings in a role file a project declares follow the same
 //! rules as the same settings in that project's `.codex/config.toml`: hook
 //! trust, project MCP servers, feature defaults, `[security]`,
-//! `agents.provider_allowlist` and skill settings. User roles are unchanged.
+//! `agents.provider_allowlist` (which project config also may no longer
+//! widen) and skill settings. User roles are unchanged.
 
 use super::*;
 use crate::config::ConfigBuilder;
 use codex_config::CONFIG_TOML_FILE;
-use codex_config::loader::IGNORED_INCOMPLETE_PROJECT_SECURITY_PREFIX;
 use codex_core_skills::config_rules::SkillConfigRuleSelector;
 use codex_core_skills::config_rules::skill_config_rules_from_stack;
 use codex_features::Feature;
@@ -14,6 +14,7 @@ use codex_hooks::HookListEntry;
 use codex_hooks::HooksConfig;
 use codex_protocol::protocol::HookSource;
 use codex_protocol::protocol::HookTrustStatus;
+use codex_security_policy::SecurityLevel;
 use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -238,34 +239,37 @@ async fn project_role_mcp_server_counts_as_a_project_server() {
     ));
 }
 
-const UNVERSIONED_PERMISSIVE: &str = "[security]\nlevel = \"permissive\"\n";
+const PERMISSIVE: &str = "[security]\nversion = 1\nlevel = \"permissive\"\n";
 
 #[tokio::test]
-async fn project_role_incomplete_security_table_is_ignored_with_a_warning() {
-    let fixture = Fixture::new();
-    let role_path = fixture.write_project_role(UNVERSIONED_PERMISSIVE);
-    fixture.write_user_role(UNVERSIONED_PERMISSIVE);
+async fn project_role_security_table_cannot_lower_the_level() {
+    let fixture = Fixture::with_user_config(AGGRESSIVE);
+    fixture.write_project_config(PERMISSIVE);
+    fixture.write_project_role(PERMISSIVE);
 
-    let config = fixture.config().await;
-    let project_child = fixture.child("relay").await;
-    let user_child = fixture.child("helper").await;
+    assert_eq!(
+        fixture.config().await.security_level,
+        SecurityLevel::Aggressive
+    );
+    assert_eq!(
+        fixture.child("relay").await.security_level,
+        SecurityLevel::Aggressive
+    );
+}
+
+#[tokio::test]
+async fn project_role_with_an_incomplete_security_table_is_not_used() {
+    // Project config ignores this table with a warning (#845); a role file
+    // with it does not load at all, which is stricter.
+    let fixture = Fixture::new();
+    fixture.write_project_role("[security]\nlevel = \"permissive\"\n");
+    let mut config = fixture.config().await;
 
     assert!(
-        config.startup_warnings.iter().any(|warning| warning
-            .starts_with(IGNORED_INCOMPLETE_PROJECT_SECURITY_PREFIX)
-            && warning.contains(&role_path.display().to_string())),
-        "{:?}",
-        config.startup_warnings
+        apply_role_to_config(&mut config, Some("relay"))
+            .await
+            .is_err()
     );
-    let security = |config: &Config| {
-        config
-            .config_layer_stack
-            .effective_config()
-            .get("security")
-            .cloned()
-    };
-    assert_eq!(security(&project_child), None);
-    assert!(security(&user_child).is_some());
 }
 
 fn allowlist(providers: &[&str]) -> String {
