@@ -1,0 +1,161 @@
+name: rust-ci changed crate tests (macOS)
+
+# #1989 (owner decision D503): a non-blocking macOS twin of rust-ci.yml's
+# `Changed crate tests` (#1984, Linux only), for a few crates with macOS-only
+# code paths that no PR, postmerge or nightly job tested on macOS. Runs the
+# package's unit and integration tests with nextest, one package per matrix
+# leg, on PRs that change it (the Linux job's selection, through the shared
+# `cargo_packages` list) or this job's files.
+#
+# It is NOT called from blocking-ci.yml, so `CI required` neither waits for it
+# nor fails with it. Known macOS failures are listed with their issues in
+# .github/macos-changed-crate-known-failures.txt and excluded, so a new failure
+# stands out. Make it required only after it has a cost and flake record.
+# Restore-only: it reuses the macOS sccache postmerge's core security job saves
+# (same target and profile) and saves nothing (#636).
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/rust-ci-changed-crate-tests-macos.yml"
+      - ".github/macos-changed-crate-known-failures.txt"
+      - ".github/scripts/argument_comment_lint_packages.py"
+      - ".github/scripts/changed_crate_test_packages.py"
+      - ".github/scripts/macos_changed_crate_tests.py"
+      - ".github/scripts/windows_integration_known_failures.py"
+      - "codex-rs/.config/nextest.toml"
+      - "codex-rs/rust-toolchain.toml"
+      - "codex-rs/exec-server/**"
+      - "codex-rs/keyring-store/**"
+      - "codex-rs/network-proxy/**"
+      - "codex-rs/process-hardening/**"
+      - "codex-rs/sandboxing/**"
+
+concurrency:
+  group: rust-ci-changed-crate-tests-macos::${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  packages:
+    name: Select packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      packages: ${{ steps.select.outputs.packages }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select packages
+        id: select
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          select=.github/scripts/macos_changed_crate_tests.py
+          if [[ "$EVENT" == "pull_request" ]]; then
+            python3 "$select" packages "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          else
+            # Manual runs test every package.
+            python3 "$select" packages --all >> "$GITHUB_OUTPUT"
+          fi
+          grep '^packages=' "$GITHUB_OUTPUT"
+
+  test:
+    name: ${{ matrix.package }}
+    needs: packages
+    if: ${{ needs.packages.outputs.packages != '[]' }}
+    runs-on: macos-15
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.packages.outputs.packages) }}
+    defaults:
+      run:
+        working-directory: codex-rs
+    env:
+      # sccache cannot cache incremental compilations.
+      CARGO_INCREMENTAL: "0"
+      SCCACHE_CACHE_SIZE: 2G
+      # Tests must never reach the runner's OS keyring.
+      CORBANU_TEST_NO_NATIVE_KEYRING: "1"
+      RUST_BACKTRACE: "1"
+      RUST_MIN_STACK: "8388608" # 8 MiB
+      NEXTEST_STATUS_LEVEL: fail
+      PACKAGE: ${{ matrix.package }}
+      TARGET: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
+        with:
+          targets: ${{ env.TARGET }}
+      - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
+        with:
+          tool: sccache
+          version: 0.7.5
+      - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
+        with:
+          tool: nextest
+          version: 0.9.103
+      # Same directory and key as rust-ci-core-security.yml, whose macOS cache
+      # postmerge rust-ci-full saves on main.
+      - name: Configure sccache
+        id: sccache_config
+        run: |
+          set -euo pipefail
+          {
+            echo "SCCACHE_DIR=${CI_BUILD_ROOT}/sccache"
+            echo "RUSTC_WRAPPER=$(command -v sccache)"
+          } >> "$GITHUB_ENV"
+          echo "lockhash=$(cat Cargo.lock rust-toolchain.toml | shasum -a 256 | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Restore sccache cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: sccache-core-security-macos-15-${{ env.TARGET }}-${{ steps.sccache_config.outputs.lockhash }}-${{ github.run_id }}
+          restore-keys: |
+            sccache-core-security-macos-15-${{ env.TARGET }}-${{ steps.sccache_config.outputs.lockhash }}-
+            sccache-core-security-macos-15-${{ env.TARGET }}-
+
+      - name: Build the tests
+        run: cargo nextest run --locked --target "$TARGET" -p "$PACKAGE" --no-run
+
+      - name: cargo nextest run (known macOS failures excluded)
+        run: |
+          set -euo pipefail
+          known=../.github/scripts/macos_changed_crate_tests.py
+          python3 "$known" summary "$PACKAGE" >> "$GITHUB_STEP_SUMMARY"
+          filter="$(python3 "$known" filter "$PACKAGE")"
+          echo "nextest filter: $filter"
+          cargo nextest run --locked --target "$TARGET" -p "$PACKAGE" \
+            --no-fail-fast --no-tests=pass --final-status-level fail -E "$filter"
+
+      - name: Upload nextest JUnit report
+        if: always() && !cancelled()
+        continue-on-error: true
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: nextest-junit-macos-${{ matrix.package }}
+          path: ${{ env.CARGO_TARGET_DIR }}/nextest/default/junit.xml
+          if-no-files-found: ignore
+
+      - name: sccache stats
+        if: always()
+        continue-on-error: true
+        run: sccache --show-stats || true
+
+      - name: Check for a clean worktree
+        if: always() && !cancelled()
+        uses: ./.github/actions/check-clean-worktree
