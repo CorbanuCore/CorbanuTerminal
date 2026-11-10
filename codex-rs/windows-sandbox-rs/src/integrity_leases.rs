@@ -869,7 +869,8 @@ fn repo_paths(
         .filter(|root| !nested_roots.contains(root))
         .cloned()
         .collect();
-    let (behind, behind_notes) = crate::nested_metadata::repos_behind_links(&links, &unwalked);
+    let (behind, behind_notes) =
+        crate::nested_metadata::repos_behind_links(&links, &unwalked, nested_roots);
     repos.extend(behind);
     notes.extend(behind_notes);
     repos.extend(crate::nested_metadata::bare_roots(roots));

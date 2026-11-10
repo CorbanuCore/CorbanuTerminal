@@ -434,6 +434,65 @@ fn contents_record_a_junction_by_its_target() {
     );
 }
 
+/// #1909 item 4: the folders read at one session's start or end share one
+/// budget; the ones read past it differ every time (so they are flagged),
+/// the ones before it are recorded as usual.
+#[test]
+fn contents_share_one_budget() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dunce::canonicalize(dir.path()).expect("canonical");
+    for name in ["a", "b"] {
+        let folder = root.join(name).join(".codex");
+        std::fs::create_dir_all(&folder).expect("create");
+        for file in ["1.md", "2.md", "3.md"] {
+            std::fs::write(folder.join(file), "abcd").expect("write");
+        }
+    }
+    let (a, b) = (root.join("a\\.codex"), root.join("b\\.codex"));
+    let truncated = |prints: &crate::git_watch::Prints| {
+        prints
+            .values()
+            .any(|print| print.starts_with("truncated at"))
+    };
+
+    let entries = ContentBudget::with_limits(5, u64::MAX);
+    let by_entries = (
+        contents_within(&a, &entries) == contents(&a),
+        truncated(&contents_within(&b, &entries)),
+    );
+    let bytes = ContentBudget::with_limits(usize::MAX, 20);
+    let by_bytes = (
+        contents_within(&a, &bytes) == contents(&a),
+        truncated(&contents_within(&b, &bytes)),
+    );
+
+    assert_eq!((by_entries, by_bytes), ((true, true), (true, true)));
+}
+
+/// #1909 item 4: nested folders that are each within the per-folder limits
+/// but together over the total are flagged at the session's end, though
+/// nothing in them changed (before, each was compared in full).
+#[test]
+fn nested_folders_over_the_total_are_flagged() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dunce::canonicalize(dir.path()).expect("canonical");
+    // Five folders of 60 MiB each: within the 64 MiB per folder, over the
+    // 256 MiB total.
+    for n in 0..5 {
+        let folder = root.join(format!("p{n}\\.codex"));
+        std::fs::create_dir_all(&folder).expect("create");
+        let file = std::fs::File::create(folder.join("big.bin")).expect("create file");
+        file.set_len(60 * 1024 * 1024).expect("size");
+    }
+    let found = find(std::slice::from_ref(&root));
+    assert_eq!(found.entries.len(), 5);
+    let before = with_contents(found.entries);
+
+    let flagged = appeared(&before, find(std::slice::from_ref(&root)).entries);
+
+    assert!(!flagged.is_empty(), "nothing flagged past the total");
+}
+
 /// #1909: a folder swapped for a junction after the walk found it is not
 /// listed through the junction (which could lead to a network share): it
 /// counts as unlistable, and what lies behind the junction isn't reported.
@@ -509,7 +568,7 @@ fn contents_do_not_list_through_a_parent_swapped_in() {
     std::fs::rename(root.join("a"), root.join("a.aside")).expect("move aside");
     junction(&root.join("a"), &outside);
 
-    let prints = contents_of(&folder, recorded);
+    let prints = contents_of(&folder, recorded, &ContentBudget::default());
 
     assert_eq!(
         (
@@ -542,7 +601,9 @@ fn contents_do_not_list_a_folder_replaced_after_the_check() {
         }
     };
 
-    let prints = with_before_list(swap, || contents_of(&folder, recorded));
+    let prints = with_before_list(swap, || {
+        contents_of(&folder, recorded, &ContentBudget::default())
+    });
 
     assert_eq!(
         (
@@ -571,5 +632,47 @@ fn entries_without_contents_serialize_as_before() {
     assert_eq!(
         (json.as_str(), read),
         (r#"{"path":"C:\\w\\a\\.codex","identity":null}"#, entry)
+    );
+}
+
+/// #1877 item 4: a folder with exactly as many entries as the budget is
+/// listed whole; one with more isn't listed past it, and the walk is
+/// exhausted.
+#[test]
+fn find_bounded_stops_inside_a_folder_at_the_budget() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dunce::canonicalize(dir.path()).expect("canonical");
+    for name in ["a", "b", "c"] {
+        std::fs::write(root.join(name), "").expect("file");
+    }
+    let walk = |budget: usize| {
+        let mut left = budget;
+        let found = find_bounded(std::slice::from_ref(&root), &mut left);
+        (found.exhausted, left)
+    };
+    assert_eq!((walk(3), walk(2)), ((false, 0), (true, 2)));
+}
+
+/// #1877 item 3: a link into a walked root (a project in `%TEMP%`) isn't
+/// walked again; one into the rest of an unwalked root still is.
+#[test]
+fn repos_behind_links_skip_walked_roots() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let scratch = dunce::canonicalize(dir.path()).expect("canonical");
+    let project = scratch.join("project");
+    for path in ["project\\x\\y\\.git", "sibling\\lib\\.git"] {
+        std::fs::create_dir_all(scratch.join(path)).expect("create");
+    }
+    junction(&project.join("out"), &scratch.join("sibling"));
+    junction(&project.join("back"), &project.join("x"));
+
+    let (repos, notes) = repos_behind_links(
+        &[project.join("out"), project.join("back")],
+        std::slice::from_ref(&scratch),
+        std::slice::from_ref(&project),
+    );
+    assert_eq!(
+        (repos, notes),
+        (vec![project.join("out\\lib\\.git")], Vec::new())
     );
 }

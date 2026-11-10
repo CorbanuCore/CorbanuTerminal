@@ -10,7 +10,6 @@
 # longer exists fails .github/scripts/test_windows_integration_known_failures.py.
 
 codex-core suite::aggressive_refusals::sec_439_no_network_names_the_level_only_under_aggressive #1967
-codex-core suite::issue_1087::issue_1087_a_refused_image_read_names_the_level #1967
 codex-core suite::issue_1139::issue_1139_moderate_git_folder_writes_name_the_level #1967
 codex-core suite::pf_23_s01::pf_23_s01_protected_mcp_call_after_untrusted_content_needs_the_human #1967
 codex-core suite::provenance::pf_30_s03_a_tricked_child_agent_cannot_reach_the_vault #1967

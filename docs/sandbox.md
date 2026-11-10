@@ -156,11 +156,13 @@ elsewhere and linked back, one directly behind a link, and one deeper behind
 a link into a folder the walk doesn't cover (`%TEMP%`). A folder too large
 to look through (over 20,000 entries, more than 2,000 or six levels of
 nested repositories, or a link into `%TEMP%` with more than 20,000 entries
-behind it), or one holding an entry whose name isn't valid Unicode, counts
-as changed after every command. The warning names what
-changed. Nested repositories in the temporary folder (`%TEMP%`) aren't
+behind it, even in one folder), or one holding an entry whose name isn't
+valid Unicode, counts as changed after every command. The warning names
+what changed. Nested repositories in the temporary folder (`%TEMP%`) aren't
 checked, and a nested `.git` link is flagged after every command, as at the
-top.
+top. A link to a folder of the project itself isn't looked through again,
+even when the project lies in `%TEMP%`: the walk of the project covers that
+folder, as it does for a project anywhere else.
 
 **Hooks folders and files a git config names.** Many projects point
 `core.hooksPath` at a folder in the project (Husky's `.husky` or
@@ -176,9 +178,13 @@ folder, each included config file, and each file a program setting names
 in the project: a first word that looks like a path, and every later word),
 when it lies in a folder commands may write to. A path a config or a
 `.git` file names on a network share or a device (`\\server\share`,
-`\\?\`, `CON` ...) is never opened (a link in the project is still
-followed; a device name written with a superscript digit, such as `COM¹`,
-isn't recognized as one). For the same reason, in a writable folder that is
+`\\?\UNC\`, `CON` ...) is never opened (a path a config names with a
+`\\?\` drive-letter prefix, such as `\\?\C:\proj\.githooks`, is read as
+`C:\proj\.githooks` when that names the same file; one that doesn't, such as
+a name ending in a dot or a path over 260 characters, isn't, and nor is a
+`\\?\` path in a `.git` file; a link in the project is still followed;
+a device name written with a superscript digit, such as `COM¹`, isn't
+recognized as one). For the same reason, in a writable folder that is
 itself on a network share or written with a `\\?\` prefix, the config of
 a repository whose git folder lies there isn't read and paths relative to
 that folder aren't recorded, and no warning says so; only a path a config
@@ -190,8 +196,8 @@ For Husky, the files named after git hooks in the folder above `_` count,
 and so does the `_` folder below any hooks folder. Rewriting a file with
 the same content (as `npm install` does when it reruns Husky) isn't a
 change. A hooks folder with more than 1,024 entries, or configs too large to
-read (over 1 MB in one file, 100,000 entries, 4,096 files, more than
-eight `core.worktree` values or 4,096 named paths), count as changed after
+read (over 1 MB in one file or 16 MB in all, 100,000 entries, 4,096
+files, more than eight `core.worktree` values or 4,096 named paths), count as changed after
 every command. Other scripts those hooks call are ordinary project files
 and aren't checked. That includes `node_modules\.bin`: Husky v9 puts it
 first on `PATH` for its hooks, so a hook that runs `npx …` runs whatever is

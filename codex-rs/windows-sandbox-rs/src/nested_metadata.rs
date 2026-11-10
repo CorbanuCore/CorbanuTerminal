@@ -31,7 +31,7 @@ const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
 pub(crate) struct NestedMetadata {
     pub(crate) path: PathBuf,
     pub(crate) identity: Option<FileIdentity>,
-    /// #1896 item 3: what was inside it ([`contents`]), for an elevated
+    /// #1896 item 3: what was inside it ([`contents_of`]), for an elevated
     /// session (`None` otherwise: a legacy session keeps it unchanged).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) contents: Option<crate::git_watch::Prints>,
@@ -39,14 +39,20 @@ pub(crate) struct NestedMetadata {
 
 impl NestedMetadata {
     /// Whether `path`, the file `identity` now, is still this entry: the
-    /// same file, with the same contents when they were recorded.
-    fn unchanged(&self, path: &Path, identity: Option<FileIdentity>) -> bool {
+    /// same file, with the same contents when they were recorded (read
+    /// within `budget`).
+    fn unchanged(
+        &self,
+        path: &Path,
+        identity: Option<FileIdentity>,
+        budget: &ContentBudget,
+    ) -> bool {
         same_path(&self.path, path)
             && self.identity == identity
             && self
                 .contents
                 .as_ref()
-                .is_none_or(|before| *before == contents_of(path, identity))
+                .is_none_or(|before| *before == contents_of(path, identity, budget))
     }
 }
 
@@ -177,6 +183,9 @@ fn find_bounded(roots: &[PathBuf], budget: &mut usize) -> Found {
             }
             let top = dir.parent.is_none();
             list(dir, top, &mut found, budget, &mut stack);
+            if found.exhausted {
+                return found;
+            }
         }
     }
     found
@@ -344,13 +353,17 @@ unsafe fn identity_at(
 /// An entry of a listed folder: its name and its kind.
 type Entry = (Vec<u16>, std::io::Result<crate::acl::walk::Attributes>);
 
-/// The entries of `dir` (open for listing); a reparse
-/// point's attributes and tag are asked of the entry itself, since a listing
-/// that shows one may not carry its tag (#1672).
-fn entries_of(dir: &crate::acl::walk::Handle) -> anyhow::Result<Vec<Entry>> {
+/// The entries of `dir` (open for listing), no more than `at_most` of them
+/// (#1877 item 4: the flag says it holds more, and isn't listed past
+/// that); a reparse point's attributes and tag are asked of the entry
+/// itself, since a listing that shows one may not carry its tag (#1672).
+fn entries_of(
+    dir: &crate::acl::walk::Handle,
+    at_most: usize,
+) -> anyhow::Result<(Vec<Entry>, bool)> {
     // SAFETY: the folder is open for listing.
-    let listed = unsafe { crate::acl::walk::list(dir.0) }?;
-    Ok(listed
+    let (listed, more) = unsafe { crate::acl::walk::list_at_most(dir.0, at_most) }?;
+    let entries = listed
         .into_iter()
         .map(|(name, attributes)| {
             let attributes = if attributes.attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
@@ -361,16 +374,21 @@ fn entries_of(dir: &crate::acl::walk::Handle) -> anyhow::Result<Vec<Entry>> {
             };
             (name, attributes)
         })
-        .collect())
+        .collect();
+    Ok((entries, more))
 }
 
 /// Records what `dir` (`top`: one of the roots) holds in `found`, and adds
-/// the folders to walk next to `stack`, in the order listed.
+/// the folders to walk next to `stack`, in the order listed. #1877 item 4:
+/// a folder holding more entries than are left in `budget` isn't listed
+/// past that, and the walk is exhausted.
 fn list(dir: Pending, top: bool, found: &mut Found, budget: &mut usize, stack: &mut Vec<Pending>) {
     #[cfg(test)]
     tests::before_list(&dir.path);
     let entries = match dir.open() {
-        Ok(handle) => entries_of(&handle).map(|entries| (std::sync::Arc::new(handle), entries)),
+        Ok(handle) => {
+            entries_of(&handle, *budget).map(|entries| (std::sync::Arc::new(handle), entries))
+        }
         // Gone. A folder that is still there but says "not found"
         // (a ProjFS or Cloud Files provider can) is unlistable.
         Err(err) if err.kind() == std::io::ErrorKind::NotFound && dir.is_gone() => return,
@@ -378,10 +396,14 @@ fn list(dir: Pending, top: bool, found: &mut Found, budget: &mut usize, stack: &
     };
     // A listing that fails partway makes the whole folder unlistable
     // (#1909: it is listed in full before anything in it is recorded).
-    let Ok((handle, entries)) = entries else {
+    let Ok((handle, (entries, more))) = entries else {
         found.unlistable.push(dir.path);
         return;
     };
+    if more {
+        found.exhausted = true;
+        return;
+    }
     let dir = dir.path;
     // D420: a `HEAD` or `commondir` makes this folder a candidate
     // bare repository.
@@ -519,12 +541,13 @@ pub(crate) fn to_protect(found: &[NestedMetadata]) -> Vec<NestedMetadata> {
 
 /// The entries of `now` that aren't in `before` as the same file.
 pub(crate) fn appeared(before: &[NestedMetadata], now: Vec<NestedMetadata>) -> Vec<PathBuf> {
+    let budget = ContentBudget::default();
     now.into_iter()
         .filter(|entry| {
             entry.identity.is_none()
                 || !before
                     .iter()
-                    .any(|old| old.unchanged(&entry.path, entry.identity))
+                    .any(|old| old.unchanged(&entry.path, entry.identity, &budget))
         })
         .map(|entry| entry.path)
         .collect()
@@ -548,32 +571,99 @@ pub(crate) fn appeared_in_session(
         return false;
     }
     let now = identity(folder);
-    now.is_none() || !before.iter().any(|old| old.unchanged(folder, now))
+    let budget = ContentBudget::default();
+    now.is_none() || !before.iter().any(|old| old.unchanged(folder, now, &budget))
 }
 
-/// Entries [`contents`] looks at in one folder, all levels together; past
+/// Entries [`contents_of`] looks at in one folder, all levels together; past
 /// that it differs every time.
 const MAX_CONTENT_ENTRIES: usize = 20_000;
-/// Bytes of file content [`contents`] reads in one folder; past that it
+/// Bytes of file content [`contents_of`] reads in one folder; past that it
 /// differs every time.
 const MAX_CONTENT_BYTES: u64 = 64 * 1024 * 1024;
 
+/// #1909 item 4: entries [`contents_of`] looks at in all the folders of one
+/// session's start or end together; past that, each folder still being read
+/// differs every time.
+const MAX_TOTAL_CONTENT_ENTRIES: usize = 100_000;
+/// #1909 item 4: bytes of file content read in all the folders together;
+/// past that, as for entries.
+const MAX_TOTAL_CONTENT_BYTES: u64 = 256 * 1024 * 1024;
+
+/// #1909 item 4: what [`contents_of`] may still look at across several folders
+/// (read on several threads at once). Going over never stops a command: the
+/// folders past it count as changed.
+pub(crate) struct ContentBudget {
+    entries: std::sync::atomic::AtomicUsize,
+    bytes: std::sync::atomic::AtomicU64,
+    max_entries: usize,
+    max_bytes: u64,
+}
+
+impl Default for ContentBudget {
+    fn default() -> Self {
+        Self::with_limits(MAX_TOTAL_CONTENT_ENTRIES, MAX_TOTAL_CONTENT_BYTES)
+    }
+}
+
+impl ContentBudget {
+    fn with_limits(max_entries: usize, max_bytes: u64) -> Self {
+        Self {
+            entries: std::sync::atomic::AtomicUsize::new(0),
+            bytes: std::sync::atomic::AtomicU64::new(0),
+            max_entries,
+            max_bytes,
+        }
+    }
+
+    /// Counts one more entry; false once there have been too many.
+    fn take_entry(&self) -> bool {
+        self.entries
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            .saturating_add(1)
+            <= self.max_entries
+    }
+
+    /// Counts `bytes` more of file content; false once there have been
+    /// too many.
+    fn take_bytes(&self, bytes: u64) -> bool {
+        self.bytes
+            .fetch_add(bytes, std::sync::atomic::Ordering::Relaxed)
+            .saturating_add(bytes)
+            <= self.max_bytes
+    }
+}
+
 /// #1896 item 3 (D425): `entries` (from [`find`]) with what is inside each
-/// identified one ([`contents`]), several at a time.
+/// identified one ([`contents_of`]), several at a time, all within one
+/// [`ContentBudget`].
 pub(crate) fn with_contents(entries: Vec<NestedMetadata>) -> Vec<NestedMetadata> {
+    with_contents_within(entries, &ContentBudget::default())
+}
+
+fn with_contents_within(
+    entries: Vec<NestedMetadata>,
+    budget: &ContentBudget,
+) -> Vec<NestedMetadata> {
     crate::par_map::par_map(&entries, |entry| NestedMetadata {
         contents: entry
             .identity
-            .map(|_| contents_of(&entry.path, entry.identity)),
+            .map(|_| contents_of(&entry.path, entry.identity, budget)),
         ..entry.clone()
     })
 }
 
 /// What is inside the `.codex`/`.agents` folder `folder` (as
-/// [`contents_of`] the file it is now).
+/// [`contents_of`] the file it is now), within a budget of its own.
 #[cfg(test)]
 pub(crate) fn contents(folder: &Path) -> crate::git_watch::Prints {
-    contents_of(folder, identity(folder))
+    contents_of(folder, identity(folder), &ContentBudget::default())
+}
+
+/// [`contents_of`] the file `folder` is now, within `budget`.
+#[cfg(test)]
+fn contents_within(folder: &Path, budget: &ContentBudget) -> crate::git_watch::Prints {
+    contents_of(folder, identity(folder), budget)
 }
 
 /// What is inside the `.codex`/`.agents` folder `folder`, the file
@@ -582,8 +672,9 @@ pub(crate) fn contents(folder: &Path) -> crate::git_watch::Prints {
 /// links and reads only the file itself), a link by its target only (never
 /// followed), a folder as `dir`. A `folder` that is a file is its content
 /// (read the same way). A folder that can't be listed, a name that isn't
-/// valid Unicode, or more than [`MAX_CONTENT_ENTRIES`] entries or
-/// [`MAX_CONTENT_BYTES`] of files make it differ every time.
+/// valid Unicode, more than [`MAX_CONTENT_ENTRIES`] entries or
+/// [`MAX_CONTENT_BYTES`] of files, or going over `budget` (shared with the
+/// other folders, #1909 item 4) make it differ every time.
 ///
 /// #1909: nothing is looked up by path below the top of the volume:
 /// `folder` is reached one folder at a time from there, following no link
@@ -591,7 +682,11 @@ pub(crate) fn contents(folder: &Path) -> crate::git_watch::Prints {
 /// each folder below it is opened through the folder it was listed in.
 /// Otherwise (a folder on the way swapped for a link, say) it differs
 /// every time.
-fn contents_of(folder: &Path, expected: Option<FileIdentity>) -> crate::git_watch::Prints {
+fn contents_of(
+    folder: &Path,
+    expected: Option<FileIdentity>,
+    budget: &ContentBudget,
+) -> crate::git_watch::Prints {
     const FILE_READ_ATTRIBUTES: u32 = 0x80;
     let mut prints = crate::git_watch::Prints::new();
     let reached = open_parent_unfollowed(folder).and_then(|(parent, name)| {
@@ -611,7 +706,7 @@ fn contents_of(folder: &Path, expected: Option<FileIdentity>) -> crate::git_watc
     // A `.codex`/`.agents` that is a file: its content.
     if kind != Kind::Folder {
         let print = crate::git_watch::unfollowed_print_at(parent.0, &name, folder, |size| {
-            size <= MAX_CONTENT_BYTES
+            size <= MAX_CONTENT_BYTES && budget.take_bytes(size)
         });
         prints.insert(String::new(), print);
         return prints;
@@ -628,7 +723,8 @@ fn contents_of(folder: &Path, expected: Option<FileIdentity>) -> crate::git_watc
         #[cfg(test)]
         tests::before_list(&dir.path);
         let listed = dir.open().map_err(anyhow::Error::from).and_then(|handle| {
-            entries_of(&handle).map(|entries| (std::sync::Arc::new(handle), entries))
+            entries_of(&handle, usize::MAX)
+                .map(|(entries, _)| (std::sync::Arc::new(handle), entries))
         });
         let Ok((handle, entries)) = listed else {
             prints.insert(prefix, crate::git_watch::truncated());
@@ -636,7 +732,7 @@ fn contents_of(folder: &Path, expected: Option<FileIdentity>) -> crate::git_watc
         };
         for (wide, metadata) in entries {
             seen += 1;
-            if seen > MAX_CONTENT_ENTRIES {
+            if seen > MAX_CONTENT_ENTRIES || !budget.take_entry() {
                 prints.insert(String::new(), crate::git_watch::truncated());
                 return prints;
             }
@@ -666,7 +762,7 @@ fn contents_of(folder: &Path, expected: Option<FileIdentity>) -> crate::git_watc
                     let print =
                         crate::git_watch::unfollowed_print_at(handle.0, &wide, &path, |size| {
                             bytes = bytes.saturating_add(size);
-                            bytes <= MAX_CONTENT_BYTES
+                            bytes <= MAX_CONTENT_BYTES && budget.take_bytes(size)
                         });
                     prints.insert(child, print);
                 }
@@ -735,10 +831,13 @@ pub(crate) fn git_appeared_in_session(
 /// doesn't cover, such as `%TEMP%`): a command could build one there and
 /// link it in. Each such link is walked by its own path, its links in turn,
 /// up to 20,000 entries in all; past that the link is a note (it counts as
-/// changed after every session).
+/// changed after every session). #1877 item 3: a link whose target lies in
+/// one of `walked` (the roots the walk covers, which may lie inside an
+/// unwalked one: a project in `%TEMP%`) isn't walked again.
 pub(crate) fn repos_behind_links(
     links: &[PathBuf],
     unwalked: &[PathBuf],
+    walked: &[PathBuf],
 ) -> (Vec<PathBuf>, Vec<(PathBuf, String)>) {
     let mut budget = 20_000_usize;
     let mut repos = Vec::new();
@@ -749,7 +848,10 @@ pub(crate) fn repos_behind_links(
         let Ok(target) = dunce::canonicalize(&link) else {
             continue;
         };
-        if !unwalked.iter().any(|root| starts_with(&target, root)) || !visited.insert(target) {
+        if !unwalked.iter().any(|root| starts_with(&target, root))
+            || walked.iter().any(|root| starts_with(&target, root))
+            || !visited.insert(target)
+        {
             continue;
         }
         let found = find_bounded(std::slice::from_ref(&link), &mut budget);

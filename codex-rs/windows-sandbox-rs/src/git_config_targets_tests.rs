@@ -439,3 +439,123 @@ fn remote_gitdirs_device_names_and_kinds() {
         )
     );
 }
+
+/// #1877 item 7(b): a path a config writes with a `\\?\` drive-letter
+/// prefix (`\\?\C:\proj\.githooks`) is read as the plain path, so it is
+/// watched; a `\\?\UNC\` one is still never opened, and one with `..`
+/// (which `\\?\` takes literally) is still dropped.
+#[test]
+fn verbatim_drive_paths_are_read_as_plain_ones() {
+    let (_dir, base) = tempdir();
+    let work = base.join("proj");
+    fs::create_dir_all(work.join(".git")).expect("repo");
+    // As git reads a config: `\\` is one backslash.
+    let verbatim = |name: &str| format!(r"\\?\{}", work.join(name).display()).replace('\\', r"\\");
+    fs::write(
+        work.join(".git").join("config"),
+        format!(
+            "[core]\n\thooksPath = {}\n[include]\n\tpath = {}\n[alias]\n\tt = !{}\n\tu = !{}\n\tv = !{}\n",
+            verbatim(".githooks"),
+            verbatim("extra.cfg"),
+            verbatim("t.sh"),
+            r"\\\\?\\UNC\\server\\share\\x.sh",
+            verbatim("..\\proj\\v.sh"),
+        ),
+    )
+    .expect("config");
+    fs::write(work.join("extra.cfg"), "[core]\n\tfsmonitor = ./fsm.exe\n").expect("include");
+    let found = targets(
+        &work.join(".git"),
+        Some(&work),
+        &[],
+        &[],
+        std::slice::from_ref(&base),
+        &mut ConfigBudget::default(),
+    );
+    let file = |name: &str, why: &str| (PathBuf::from(name), why.to_string(), TargetKind::File);
+    assert_eq!(
+        shown(found, &work),
+        vec![
+            (
+                PathBuf::from(r".githooks\_"),
+                "core.hooksPath".to_string(),
+                TargetKind::Hooks
+            ),
+            (
+                PathBuf::from(".githooks"),
+                "core.hooksPath".to_string(),
+                TargetKind::Hooks
+            ),
+            file("extra.cfg", "include.path"),
+            file("fsm.exe", "core.fsmonitor"),
+            file("t.sh", "alias.t"),
+        ]
+    );
+}
+
+/// #1877 item 6: configs that are each under 1 MiB but together over
+/// 16 MiB count as changed after every look, and none is read past that.
+#[test]
+fn configs_too_large_together_count_every_time() {
+    let (_dir, base) = tempdir();
+    let roots = [base.clone()];
+    let global = base.join("global.cfg");
+    let mut includes = String::from("[include]\n");
+    for n in 0..20 {
+        let part = base.join(format!("part{n}.cfg"));
+        fs::write(&part, format!("# {}\n", "x".repeat(1_000_000))).expect("part");
+        includes.push_str(&format!(
+            "\tpath = {}\n",
+            part.display().to_string().replace('\\', "/")
+        ));
+    }
+    fs::write(&global, includes).expect("global");
+    let look = || target_states_with(&[], &roots, std::slice::from_ref(&global), &[]);
+    let first = look();
+    let again = target_changes(&first, look());
+    // Nothing more is read once over: the global config and 17 parts.
+    let mut budget = ConfigBudget::default();
+    read_configs(std::slice::from_ref(&global), &[], &mut budget);
+    assert_eq!(
+        (
+            first
+                .iter()
+                .filter(|state| state.why == "git config too large to check")
+                .map(|state| state.path.clone())
+                .collect::<Vec<_>>(),
+            again
+                .iter()
+                .any(|(path, _)| *path == base.join("part16.cfg")),
+            budget.files,
+            budget.bytes <= MAX_CONFIG_TOTAL_BYTES,
+        ),
+        (vec![base.join("part16.cfg")], true, 18, true)
+    );
+}
+
+/// #1877 item 7(b): only a `\\?\` drive-letter path from the top of the
+/// drive is simplified; the volume itself (`\\?\C:`, which would become
+/// the relative `C:`), network paths and names `\\?\` takes literally stay
+/// as they are (and are never opened).
+#[test]
+fn local_simplifies_only_rooted_drive_paths() {
+    let local = |path: &str| local(Path::new(path)).display().to_string();
+    assert_eq!(
+        [
+            local(r"\\?\C:\proj\x.sh"),
+            local(r"\\?\C:"),
+            local(r"\\?\UNC\server\share\x"),
+            local(r"\\.\C:\x"),
+            local(r"\\?\C:\proj\x."),
+            local(r"\\?\C:\proj/x"),
+        ],
+        [
+            r"C:\proj\x.sh",
+            r"\\?\C:",
+            r"\\?\UNC\server\share\x",
+            r"\\.\C:\x",
+            r"\\?\C:\proj\x.",
+            r"\\?\C:\proj/x",
+        ]
+    );
+}
