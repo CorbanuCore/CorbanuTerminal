@@ -38,7 +38,7 @@ WORKFLOW = ".github/workflows/rust-ci-changed-crate-tests-macos.yml"
 # Seatbelt policies (sandboxing), the macOS process and file-system sandboxes
 # (exec-server), Keychain access (keyring-store), dyld/ptrace hardening
 # (process-hardening), and native certificates plus the credential broker's
-# Mach memory scan (network-proxy). Each took 2-7 minutes in the trial (#2068).
+# Mach memory scan (network-proxy). Each took 1.6-7 minutes in the trial (#2068).
 # codex-login (14 minutes: its tests build codex-core) and codex-vault (no
 # macOS-only code) passed there but are left out.
 MACOS_PACKAGES = (
@@ -48,21 +48,25 @@ MACOS_PACKAGES = (
     "codex-process-hardening",
     "codex-sandboxing",
 )
-# Editing any of these runs every package, so the PR proves the job works.
+# Editing any of these (a directory: anything under it) runs every package, so
+# the PR proves the job still works.
 JOB_FILES = (
     WORKFLOW,
+    ".github/actions/check-clean-worktree/",
+    ".github/actions/setup-ci/",
     ".github/macos-changed-crate-known-failures.txt",
     ".github/scripts/argument_comment_lint_packages.py",
     ".github/scripts/changed_crate_test_packages.py",
     ".github/scripts/macos_changed_crate_tests.py",
     ".github/scripts/windows_integration_known_failures.py",
     "codex-rs/.config/nextest.toml",
+    "codex-rs/Cargo.toml",
     "codex-rs/rust-toolchain.toml",
 )
 
 
 def changed_packages(files: list[str], packages: dict[str, str]) -> list[str]:
-    if any(path in JOB_FILES for path in files):
+    if any(path.startswith(JOB_FILES) for path in files):
         return list(MACOS_PACKAGES)
     selected = selected_packages(files, packages)
     return [package for package in MACOS_PACKAGES if package in selected]

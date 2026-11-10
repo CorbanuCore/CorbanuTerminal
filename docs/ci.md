@@ -119,8 +119,8 @@ doesn't change (through a dependency) shows up on `main`.
   `codex-process-hardening` and `codex-network-proxy` (native certificates,
   the credential broker's memory scan). It selects them as the Linux job does
   (`.github/scripts/macos_changed_crate_tests.py`, using the shared
-  `cargo_packages` list); a change to the job, its scripts, the toolchain or
-  nextest config runs all five. Known macOS failures are listed with their
+  `cargo_packages` list); a change to the job, its scripts or actions, the
+  workspace `Cargo.toml`, the toolchain or nextest config runs all five. Known macOS failures are listed with their
   issues in `.github/macos-changed-crate-known-failures.txt`, excluded, and
   named in the job summary (#2069). It is a separate workflow, not part of
   `CI required`, until it has a cost and flake record. It restores the macOS

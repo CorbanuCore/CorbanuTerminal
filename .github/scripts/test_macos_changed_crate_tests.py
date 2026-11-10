@@ -39,7 +39,8 @@ class SelectionTest(unittest.TestCase):
         self.assertEqual(macos.changed_packages(["codex-rs/core/src/lib.rs"], PACKAGES), [])
 
     def test_a_job_file_selects_every_package(self) -> None:
-        for path in macos.JOB_FILES:
+        paths = [path + "action.yml" if path.endswith("/") else path for path in macos.JOB_FILES]
+        for path in paths:
             with self.subTest(path=path):
                 self.assertEqual(
                     macos.changed_packages([path], PACKAGES), list(macos.MACOS_PACKAGES)
@@ -51,7 +52,7 @@ class SelectionTest(unittest.TestCase):
         paths = re.search(r"(?ms)^  pull_request:\n    paths:\n(.*?)\n\n", workflow)
         self.assertIsNotNone(paths)
         triggers = set(re.findall(r'^      - "([^"]+)"$', paths.group(1), re.M))
-        expected = set(macos.JOB_FILES)
+        expected = {path + "**" if path.endswith("/") else path for path in macos.JOB_FILES}
         for package in macos.MACOS_PACKAGES:
             with self.subTest(package=package):
                 self.assertIn(package, directories)
@@ -90,7 +91,8 @@ class KnownFailuresTest(unittest.TestCase):
         self.assertIn("Non-blocking", text)
         self.assertIn("- `seatbelt::tests::one` (#1)", text)
         self.assertNotIn("tests::two", text)
-        self.assertNotIn("known macOS failures", macos.summary(entries, "codex-login"))
+        self.assertIn("Known macOS failures excluded (1,", text)
+        self.assertNotIn("Known macOS failures", macos.summary(entries, "codex-login"))
 
 
 if __name__ == "__main__":

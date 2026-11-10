@@ -11,19 +11,22 @@ name: rust-ci changed crate tests (macOS)
 # nor fails with it. Known macOS failures are listed with their issues in
 # .github/macos-changed-crate-known-failures.txt and excluded, so a new failure
 # stands out. Make it required only after it has a cost and flake record.
-# Restore-only: it reuses the macOS sccache postmerge's core security job saves
-# (same target and profile) and saves nothing (#636).
+# Restore-only: it reuses the macOS sccache that postmerge's core security job
+# saves (same target and profile), and saves nothing (#636).
 on:
   workflow_dispatch:
   pull_request:
     paths:
       - ".github/workflows/rust-ci-changed-crate-tests-macos.yml"
+      - ".github/actions/check-clean-worktree/**"
+      - ".github/actions/setup-ci/**"
       - ".github/macos-changed-crate-known-failures.txt"
       - ".github/scripts/argument_comment_lint_packages.py"
       - ".github/scripts/changed_crate_test_packages.py"
       - ".github/scripts/macos_changed_crate_tests.py"
       - ".github/scripts/windows_integration_known_failures.py"
       - "codex-rs/.config/nextest.toml"
+      - "codex-rs/Cargo.toml"
       - "codex-rs/rust-toolchain.toml"
       - "codex-rs/exec-server/**"
       - "codex-rs/keyring-store/**"
