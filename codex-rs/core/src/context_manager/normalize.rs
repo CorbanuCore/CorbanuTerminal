@@ -16,18 +16,12 @@ use crate::util::error_or_panic;
 use tracing::info;
 use tracing::warn;
 
-<<<<<<< HEAD
+/// Unsupported-media placeholder texts; the security ingress registry leaves them out of a
+/// message's identity (`security/ingress/native.rs`).
 pub(crate) const IMAGE_CONTENT_OMITTED_PLACEHOLDER: &str =
     "image content omitted because you do not support image input";
 pub(crate) const AUDIO_CONTENT_OMITTED_PLACEHOLDER: &str =
     "audio content omitted because you do not support audio input";
-||||||| 413492cd6c
-const IMAGE_CONTENT_OMITTED_PLACEHOLDER: &str =
-    "image content omitted because you do not support image input";
-const AUDIO_CONTENT_OMITTED_PLACEHOLDER: &str =
-    "audio content omitted because you do not support audio input";
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 // Changing this value would change model-visible IDs and invalidate prompt caches.
 const SYNTHETIC_OUTPUT_ID_NAMESPACE: Uuid = Uuid::from_u128(0x90d38d3e_6a5b_4d52_bfe2_2f1e634bfac4);
 
@@ -59,17 +53,11 @@ pub(crate) fn ensure_call_outputs_present(items: &mut Vec<ResponseItemEnvelope>)
     // Collect synthetic outputs to insert immediately after their calls.
     // Store the insertion position (index of call) alongside the item so
     // we can insert in reverse order and avoid index shifting.
-<<<<<<< HEAD
-    let mut missing_outputs_to_insert: Vec<(usize, ResponseItem)> = Vec::new();
+    let mut missing_outputs_to_insert: Vec<(usize, ResponseItemEnvelope)> = Vec::new();
     let mut missing_function_outputs = 0usize;
     let mut missing_function_sample: Option<String> = None;
     let mut missing_tool_search_outputs = 0usize;
     let mut missing_tool_search_sample: Option<String> = None;
-||||||| 413492cd6c
-    let mut missing_outputs_to_insert: Vec<(usize, ResponseItem)> = Vec::new();
-=======
-    let mut missing_outputs_to_insert: Vec<(usize, ResponseItemEnvelope)> = Vec::new();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     for (idx, envelope) in items.iter().enumerate() {
         match &envelope.item {
@@ -238,26 +226,8 @@ pub(crate) fn remove_orphan_outputs(items: &mut Vec<ResponseItemEnvelope>) {
         }
     }
 
-    let mut orphan_positions = Vec::new();
-    for (position, envelope) in items.iter().enumerate() {
-        match &envelope.item {
-            ResponseItem::FunctionCallOutput {
-                call_id: Some(call_id),
-                ..
-<<<<<<< HEAD
-            } => Some(call_id.clone()),
-            _ => None,
-        })
-        .collect();
-
-    let custom_tool_call_ids: HashSet<String> = items
-        .iter()
-        .filter_map(|i| match i {
-            ResponseItem::CustomToolCall { call_id, .. } => Some(call_id.clone()),
-            _ => None,
-        })
-        .collect();
-
+    // Orphans are logged once per kind with a count and a sample, never per item and never as
+    // a debug panic: histories from another provider or a resumed session can carry them.
     let mut orphan_function_outputs = 0usize;
     let mut orphan_function_empty_call_ids = 0usize;
     let mut orphan_function_sample: Option<String> = None;
@@ -265,118 +235,57 @@ pub(crate) fn remove_orphan_outputs(items: &mut Vec<ResponseItemEnvelope>) {
     let mut orphan_custom_tool_sample: Option<String> = None;
     let mut orphan_tool_search_outputs = 0usize;
     let mut orphan_tool_search_sample: Option<String> = None;
-
-    items.retain(|item| match item {
-        ResponseItem::FunctionCallOutput { call_id, .. } => {
-            let has_match =
-                function_call_ids.contains(call_id) || local_shell_call_ids.contains(call_id);
-            if !has_match {
+    let mut orphan_positions = Vec::new();
+    for (position, envelope) in items.iter().enumerate() {
+        match &envelope.item {
+            ResponseItem::FunctionCallOutput {
+                call_id: Some(call_id),
+                ..
+            } if !function_call_ids.contains(call_id.as_str()) => {
                 orphan_function_outputs += 1;
                 if call_id.trim().is_empty() {
                     orphan_function_empty_call_ids += 1;
                 } else if orphan_function_sample.is_none() {
                     orphan_function_sample = Some(call_id.clone());
                 }
-||||||| 413492cd6c
-            } => Some(call_id.clone()),
-            _ => None,
-        })
-        .collect();
-
-    let custom_tool_call_ids: HashSet<String> = items
-        .iter()
-        .filter_map(|i| match i {
-            ResponseItem::CustomToolCall { call_id, .. } => Some(call_id.clone()),
-            _ => None,
-        })
-        .collect();
-
-    items.retain(|item| match item {
-        ResponseItem::FunctionCallOutput { call_id, .. } => {
-            let has_match =
-                function_call_ids.contains(call_id) || local_shell_call_ids.contains(call_id);
-            if !has_match {
-                error_or_panic(format!(
-                    "Orphan function call output for call id: {call_id}"
-                ));
-=======
-            } if !function_call_ids.contains(call_id.as_str()) => {
-                error_or_panic(format!(
-                    "Orphan function call output for call id: {call_id}"
-                ));
                 orphan_positions.push(position);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
-<<<<<<< HEAD
-            has_match
-        }
-        ResponseItem::CustomToolCallOutput { call_id, .. } => {
-            let has_match = custom_tool_call_ids.contains(call_id);
-            if !has_match {
+            ResponseItem::CustomToolCallOutput { call_id, .. }
+                if !custom_tool_call_ids.contains(call_id.as_str()) =>
+            {
                 orphan_custom_tool_outputs += 1;
                 if orphan_custom_tool_sample.is_none() {
                     orphan_custom_tool_sample = Some(call_id.clone());
                 }
-||||||| 413492cd6c
-            has_match
-        }
-        ResponseItem::CustomToolCallOutput { call_id, .. } => {
-            let has_match = custom_tool_call_ids.contains(call_id);
-            if !has_match {
-                error_or_panic(format!(
-                    "Orphan custom tool call output for call id: {call_id}"
-                ));
-=======
-            ResponseItem::CustomToolCallOutput { call_id, .. }
-                if !custom_tool_call_ids.contains(call_id.as_str()) =>
-            {
-                error_or_panic(format!(
-                    "Orphan custom tool call output for call id: {call_id}"
-                ));
                 orphan_positions.push(position);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
-<<<<<<< HEAD
-            has_match
-        }
-        ResponseItem::ToolSearchOutput { execution, .. } if execution == "server" => true,
-        ResponseItem::ToolSearchOutput {
-            call_id: Some(call_id),
-            ..
-        } => {
-            let has_match = tool_search_call_ids.contains(call_id);
-            if !has_match {
-                orphan_tool_search_outputs += 1;
-                if orphan_tool_search_sample.is_none() {
-                    orphan_tool_search_sample = Some(call_id.clone());
-                }
-||||||| 413492cd6c
-            has_match
-        }
-        ResponseItem::ToolSearchOutput { execution, .. } if execution == "server" => true,
-        ResponseItem::ToolSearchOutput {
-            call_id: Some(call_id),
-            ..
-        } => {
-            let has_match = tool_search_call_ids.contains(call_id);
-            if !has_match {
-                error_or_panic(format!("Orphan tool search output for call id: {call_id}"));
-=======
             ResponseItem::ToolSearchOutput {
                 call_id: Some(call_id),
                 execution,
                 ..
             } if execution != "server" && !tool_search_call_ids.contains(call_id.as_str()) => {
-                error_or_panic(format!("Orphan tool search output for call id: {call_id}"));
+                orphan_tool_search_outputs += 1;
+                if orphan_tool_search_sample.is_none() {
+                    orphan_tool_search_sample = Some(call_id.clone());
+                }
                 orphan_positions.push(position);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
             _ => {}
         }
-<<<<<<< HEAD
-        ResponseItem::ToolSearchOutput { call_id: None, .. } => true,
-        _ => true,
-    });
+    }
+
+    if !orphan_positions.is_empty() {
+        let mut orphan_positions = orphan_positions.into_iter().peekable();
+        let mut position = 0;
+        items.retain(|_| {
+            let retain = orphan_positions.peek() != Some(&position);
+            if !retain {
+                orphan_positions.next();
+            }
+            position += 1;
+            retain
+        });
+    }
 
     if orphan_function_outputs > 0 {
         warn!(
@@ -399,25 +308,6 @@ pub(crate) fn remove_orphan_outputs(items: &mut Vec<ResponseItemEnvelope>) {
             sample_call_id = orphan_tool_search_sample.as_deref(),
             "orphan tool search outputs removed"
         );
-||||||| 413492cd6c
-        ResponseItem::ToolSearchOutput { call_id: None, .. } => true,
-        _ => true,
-    });
-=======
-    }
-
-    if !orphan_positions.is_empty() {
-        let mut orphan_positions = orphan_positions.into_iter().peekable();
-        let mut position = 0;
-        items.retain(|_| {
-            let retain = orphan_positions.peek() != Some(&position);
-            if !retain {
-                orphan_positions.next();
-            }
-            position += 1;
-            retain
-        });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 

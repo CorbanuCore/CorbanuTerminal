@@ -20,14 +20,14 @@ mod tools;
 mod top_level_tools;
 
 use crate::context::ContextualUserFragment;
-use codex_context_fragments::AttributedFragment;
-use codex_core_skills::injection::HOST_SKILLS_CONTEXT_SOURCE_ID;
+use codex_context_fragments::SourcedFragment;
 use codex_extension_api::PreviousWorldStateSection;
 use codex_extension_api::RenderedWorldStateFragment;
 use codex_extension_api::WorldStateSectionContribution;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ContentItemKind;
 use codex_protocol::models::ResponseItem;
+use codex_skills_extension::HOST_SKILLS_CONTEXT_SOURCE_ID;
 use indexmap::IndexMap;
 use serde::Deserialize;
 use serde::Serialize;
@@ -81,6 +81,20 @@ pub(crate) enum WorldStateUpdateContent {
 }
 
 impl WorldStateUpdate {
+    /// Records `source_id` as the producer of a fragment update (#578).
+    fn attributed_to(self, source_id: &'static str) -> Self {
+        let content = match self.content {
+            WorldStateUpdateContent::Fragment(fragment) => WorldStateUpdateContent::Fragment(
+                Box::new(SourcedFragment::new(source_id, fragment)),
+            ),
+            content @ WorldStateUpdateContent::Item(_) => content,
+        };
+        Self {
+            placement: self.placement,
+            content,
+        }
+    }
+
     pub(crate) fn fragment(fragment: impl ContextualUserFragment + 'static) -> Self {
         Self::boxed_fragment(Box::new(fragment))
     }
@@ -531,26 +545,6 @@ impl WorldState {
         &self,
         stored: Option<&WorldStateSnapshot>,
         mut previous: impl FnMut(&str, &dyn ErasedWorldStateSection) -> PreviousSectionState<'a, Value>,
-<<<<<<< HEAD
-    ) -> Vec<Box<dyn ContextualUserFragment>> {
-        self.sections
-            .iter()
-            .filter_map(|(id, section)| {
-                section
-                    .render_diff(previous(id, section.as_ref()))
-                    .map(|fragment| {
-                        Box::new(AttributedFragment::new(id, fragment))
-                            as Box<dyn ContextualUserFragment>
-                    })
-            })
-            .collect()
-||||||| 413492cd6c
-    ) -> Vec<Box<dyn ContextualUserFragment>> {
-        self.sections
-            .iter()
-            .filter_map(|(id, section)| section.render_diff(previous(id, section.as_ref())))
-            .collect()
-=======
     ) -> (WorldStateSnapshot, Vec<WorldStateUpdate>) {
         let mut snapshot = WorldStateSnapshot::default();
         let mut updates = Vec::new();
@@ -570,10 +564,15 @@ impl WorldState {
                     .sections
                     .insert((*id).to_string(), section_snapshot);
             }
-            updates.extend(section_updates);
+            // Each fragment records the section that produced it, so provider
+            // adapters can tell apart sections that share markers.
+            updates.extend(
+                section_updates
+                    .into_iter()
+                    .map(|update| update.attributed_to(*id)),
+            );
         }
         (snapshot, updates)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 

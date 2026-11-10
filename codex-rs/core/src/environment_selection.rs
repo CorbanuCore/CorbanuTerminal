@@ -13,12 +13,7 @@ use codex_exec_server::EnvironmentConnectionState;
 use codex_exec_server::EnvironmentInfo;
 use codex_exec_server::EnvironmentManager;
 use codex_exec_server::ExecServerError;
-<<<<<<< HEAD
-use codex_exec_server::ExecutorFileSystem;
 use codex_exec_server::LOCAL_ENVIRONMENT_ID;
-||||||| 413492cd6c
-use codex_exec_server::ExecutorFileSystem;
-=======
 use codex_exec_server::SelectedCapabilityRootsStatus;
 use codex_protocol::capabilities::CapabilityRootLocation;
 use codex_protocol::capabilities::EnvironmentCapabilityRoots;
@@ -29,7 +24,6 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EnvironmentConfig;
 use codex_protocol::protocol::EnvironmentConfigState;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::protocol::EnvironmentConnectionEvent;
 use codex_protocol::protocol::Event;
 use codex_protocol::protocol::EventMsg;
@@ -1346,7 +1340,6 @@ impl TurnEnvironmentSnapshot {
         self.turn_environments().next()
     }
 
-<<<<<<< HEAD
     /// True when this turn may run work on a remote executor: a ready remote
     /// environment, or a non-local environment that is still starting.
     pub(crate) fn may_run_remotely(&self) -> bool {
@@ -1355,8 +1348,8 @@ impl TurnEnvironmentSnapshot {
             || self
                 .starting()
                 .any(|environment| environment.selection.environment_id != LOCAL_ENVIRONMENT_ID)
-||||||| 413492cd6c
-=======
+    }
+
     /// Returns the first selection's executor paths, even when setup is not ready yet.
     pub(crate) fn primary_workspace_root_uris(&self) -> &[PathUri] {
         let selection = match self.environments.first() {
@@ -1376,7 +1369,6 @@ impl TurnEnvironmentSnapshot {
         self.primary()
             .map(TurnEnvironment::permission_profile_with_workspace_roots)
             .unwrap_or_else(fallback)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(crate) fn local(&self) -> Option<&TurnEnvironment> {
@@ -1516,15 +1508,8 @@ mod tests {
 
     use crate::config::PermissionProfileSnapshot;
     use codex_exec_server::Environment;
-<<<<<<< HEAD
-    use codex_exec_server::ExecServerRuntimePaths;
-||||||| 413492cd6c
-    use codex_exec_server::ExecServerRuntimePaths;
-    use codex_exec_server::LOCAL_ENVIRONMENT_ID;
-=======
     use codex_exec_server::ExecServerRuntimeOptions;
     use codex_exec_server::LOCAL_ENVIRONMENT_ID;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     use codex_exec_server::REMOTE_ENVIRONMENT_ID;
     use codex_exec_server_test_support::environment_manager_without_environments;
     use codex_http_client::HttpClientFactory;
@@ -2693,36 +2678,49 @@ url = "ws://127.0.0.1:8765"
     async fn may_run_remotely_covers_ready_and_starting_remote_environments() {
         let cwd = AbsolutePathBuf::current_dir().expect("cwd");
         let cwd_uri = PathUri::from_abs_path(&cwd);
+        let selection = |environment_id: &str, config| TurnEnvironmentSelection {
+            selected_capability_roots: Default::default(),
+            environment_id: environment_id.to_string(),
+            cwd: cwd_uri.clone(),
+            workspace_roots: Vec::new(),
+            config,
+        };
         let local = resolve_turn_environments(
             Arc::new(EnvironmentManager::default_for_tests()),
-            &[TurnEnvironmentSelection {
-                environment_id: LOCAL_ENVIRONMENT_ID.to_string(),
-                cwd: cwd_uri.clone(),
-                workspace_roots: Vec::new(),
-            }],
+            &[selection(
+                LOCAL_ENVIRONMENT_ID,
+                EnvironmentConfigState::FromThread,
+            )],
         )
         .await
         .snapshot()
         .await;
         let local_environment = local.primary().expect("local environment").clone();
         let remote_environment = TurnEnvironment::new(
-            REMOTE_ENVIRONMENT_ID.to_string(),
+            selection(
+                REMOTE_ENVIRONMENT_ID,
+                EnvironmentConfigState::Ready(test_environment_config()),
+            ),
+            EnvironmentConfigOrigin::Thread,
             Arc::new(
                 Environment::create_for_tests(Some("ws://127.0.0.1:8765".to_string()))
                     .expect("remote environment"),
             ),
-            cwd_uri.clone(),
-            Vec::new(),
             /*shell*/ None,
         );
         let starting = |environment_id: &str| {
             TurnEnvironmentState::Starting(StartingTurnEnvironment {
-                selection: TurnEnvironmentSelection {
-                    environment_id: environment_id.to_string(),
-                    cwd: cwd_uri.clone(),
-                    workspace_roots: Vec::new(),
-                },
+                selection: selection(
+                    environment_id,
+                    EnvironmentConfigState::Ready(test_environment_config()),
+                ),
+                config_origin: EnvironmentConfigOrigin::Thread,
                 resolution: futures::future::pending().boxed().shared(),
+                environment: Arc::new(
+                    Environment::create_for_tests(/*exec_server_url*/ None)
+                        .expect("starting environment"),
+                ),
+                owner_config_result: None,
             })
         };
         let snapshot = |environments| TurnEnvironmentSnapshot { environments };

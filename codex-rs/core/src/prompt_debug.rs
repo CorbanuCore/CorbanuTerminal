@@ -103,23 +103,15 @@ pub(crate) async fn build_prompt_input_from_session(
         .await;
     }
 
-<<<<<<< HEAD
-    let prompt_input = sess.clone_history().await.for_turn_prompt(&turn_context);
-||||||| 413492cd6c
     let prompt_input = sess
         .clone_history()
         .await
-        .for_prompt(&turn_context.model_info.input_modalities);
-=======
-    let prompt_input = sess
-        .clone_history()
-        .await
-        .for_prompt(
+        .for_turn_prompt(
+            &turn_context,
             &step_context.settings.model_info.input_modalities,
             sess.services.image_store.as_ref(),
         )
         .await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let base_instructions = sess.get_base_instructions().await;
     let prompt = build_prompt(
         prompt_input,

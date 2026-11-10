@@ -216,7 +216,7 @@ pub(crate) async fn run_pre_tool_use_hooks(
         matcher_aliases: tool_name.matcher_aliases().to_vec(),
         tool_use_id,
         tool_input: tool_input.clone(),
-        block_if_hook_cannot_start: turn_context.environments.may_run_remotely(),
+        block_if_hook_cannot_start: step_context.environments.may_run_remotely(),
     };
     let hooks = with_tool_environment_hooks(
         sess,
@@ -894,22 +894,13 @@ pub(crate) async fn record_additional_contexts(
         return;
     }
 
-<<<<<<< HEAD
     sess.record_conversation_items_from(
         turn_context,
+        turn_context.model_info(),
         developer_messages.as_slice(),
         Some(crate::security::ingress::MessageOrigin::External(
             codex_protocol::provenance::SourceKind::Hook,
         )),
-||||||| 413492cd6c
-    sess.record_conversation_items(turn_context, developer_messages.as_slice())
-        .await;
-=======
-    sess.record_conversation_items(
-        turn_context,
-        turn_context.model_info(),
-        developer_messages.as_slice(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     )
     .await;
 }

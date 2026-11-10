@@ -9,14 +9,24 @@ pub(crate) use history::HistoryReplacement;
 pub(crate) use history::estimate_image_reference_bytes;
 pub(crate) use history::estimate_item_token_count;
 pub(crate) use history::is_user_turn_boundary;
-<<<<<<< HEAD
-pub(crate) use history::truncate_function_output_payload;
+pub(crate) use image_availability::replace_unresolvable_image_files;
 pub(crate) use normalize::AUDIO_CONTENT_OMITTED_PLACEHOLDER;
 pub(crate) use normalize::IMAGE_CONTENT_OMITTED_PLACEHOLDER;
+
+/// [`normalize::strip_images_when_unsupported`] over bare response items, as the security
+/// ingress tests hold them.
 #[cfg(test)]
-pub(crate) use normalize::strip_images_when_unsupported;
-||||||| 413492cd6c
-pub(crate) use history::truncate_function_output_payload;
-=======
-pub(crate) use image_availability::replace_unresolvable_image_files;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+pub(crate) fn strip_images_when_unsupported(
+    input_modalities: &[codex_protocol::openai_models::InputModality],
+    items: &mut [codex_protocol::models::ResponseItem],
+) {
+    let mut envelopes: Vec<_> = items
+        .iter()
+        .cloned()
+        .map(codex_history::ResponseItemEnvelope::new)
+        .collect();
+    normalize::strip_images_when_unsupported(input_modalities, &mut envelopes);
+    for (item, envelope) in items.iter_mut().zip(envelopes) {
+        *item = envelope.into_item();
+    }
+}

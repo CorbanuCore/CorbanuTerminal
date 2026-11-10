@@ -661,13 +661,18 @@ impl ContextManager {
         Arc::unwrap_or_clone(self.items)
     }
 
-<<<<<<< HEAD
     /// [`Self::for_prompt`] for a request of `turn_context`'s provider: items
     /// another provider produced are adapted first (#578, see
     /// [`super::provider_items`]).
-    pub(crate) fn for_turn_prompt(mut self, turn_context: &TurnContext) -> Vec<ResponseItem> {
-        let dropped_summary = super::provider_items::adapt_for_provider(
+    pub(crate) async fn for_turn_prompt(
+        mut self,
+        turn_context: &TurnContext,
+        input_modalities: &[InputModality],
+        image_store: &dyn AttachmentStore,
+    ) -> Vec<ResponseItem> {
+        let dropped_summary = super::provider_items::adapt_for_provider_by(
             Arc::make_mut(&mut self.items),
+            |envelope| &envelope.item,
             &super::provider_items::ProviderTarget::for_turn(turn_context),
         );
         // Once per session: prompts are built several times per turn.
@@ -681,15 +686,9 @@ impl ContextManager {
                  provider; it cannot read it"
             );
         }
-        self.for_prompt(&turn_context.model_info.input_modalities)
+        self.for_prompt(input_modalities, image_store).await
     }
 
-    /// Returns raw items in the history.
-    pub(crate) fn raw_items(&self) -> &[ResponseItem] {
-||||||| 413492cd6c
-    /// Returns raw items in the history.
-    pub(crate) fn raw_items(&self) -> &[ResponseItem] {
-=======
     /// Iterates over raw response items without exposing their history envelopes.
     pub(crate) fn raw_items(
         &self,
@@ -704,7 +703,6 @@ impl ContextManager {
 
     /// Returns annotated history items without cloning their response payloads.
     pub(crate) fn annotated_items(&self) -> &[ResponseItemEnvelope] {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         &self.items
     }
 
@@ -1262,58 +1260,6 @@ fn estimate_response_item_model_visible_bytes(item: &ResponseItem) -> i64 {
         | ResponseItem::ContextCompaction {
             encrypted_content: Some(content),
             ..
-<<<<<<< HEAD
-        } => i64::try_from(estimate_reasoning_length(content.len())).unwrap_or(i64::MAX),
-        item => {
-            let raw = serde_json::to_string(item)
-                .map(|serialized| i64::try_from(serialized.len()).unwrap_or(i64::MAX))
-                .unwrap_or_default();
-            let (image_payload_bytes, image_replacement_bytes) =
-                image_data_url_estimate_adjustment(item);
-            let (audio_payload_bytes, audio_replacement_bytes) =
-                audio_data_url_estimate_adjustment(item);
-            let (encrypted_payload_bytes, encrypted_replacement_bytes) =
-                encrypted_function_output_estimate_adjustment(item);
-            // #578: the local producer never reaches the model
-            // (`,"producer":"…"` in the passthrough metadata; history items
-            // always carry a turn ID first, so that is all it adds).
-            let local_provenance_bytes = item.producer().map_or(0, |producer| {
-                i64::try_from(producer.len() + r#","producer":"""#.len()).unwrap_or(0)
-            });
-            let raw = raw.saturating_sub(local_provenance_bytes);
-            // Replace raw base64 payload bytes with per-modality estimates.
-            // We intentionally preserve the data URL prefix and JSON
-            // wrapper bytes already included in `raw`.
-            let raw = raw
-                .saturating_sub(image_payload_bytes)
-                .saturating_add(image_replacement_bytes)
-                .saturating_sub(audio_payload_bytes)
-                .saturating_add(audio_replacement_bytes);
-            raw.saturating_sub(encrypted_payload_bytes)
-                .saturating_add(encrypted_replacement_bytes)
-||||||| 413492cd6c
-        } => i64::try_from(estimate_reasoning_length(content.len())).unwrap_or(i64::MAX),
-        item => {
-            let raw = serde_json::to_string(item)
-                .map(|serialized| i64::try_from(serialized.len()).unwrap_or(i64::MAX))
-                .unwrap_or_default();
-            let (image_payload_bytes, image_replacement_bytes) =
-                image_data_url_estimate_adjustment(item);
-            let (audio_payload_bytes, audio_replacement_bytes) =
-                audio_data_url_estimate_adjustment(item);
-            let (encrypted_payload_bytes, encrypted_replacement_bytes) =
-                encrypted_function_output_estimate_adjustment(item);
-            // Replace raw base64 payload bytes with per-modality estimates.
-            // We intentionally preserve the data URL prefix and JSON
-            // wrapper bytes already included in `raw`.
-            let raw = raw
-                .saturating_sub(image_payload_bytes)
-                .saturating_add(image_replacement_bytes)
-                .saturating_sub(audio_payload_bytes)
-                .saturating_add(audio_replacement_bytes);
-            raw.saturating_sub(encrypted_payload_bytes)
-                .saturating_add(encrypted_replacement_bytes)
-=======
         } => i64::try_from(
             codex_protocol::protocol::estimate_compaction_content_length(content.len()),
         )
@@ -1323,7 +1269,6 @@ fn estimate_response_item_model_visible_bytes(item: &ResponseItem) -> i64 {
             namespace,
             arguments: input,
             ..
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
         | ResponseItem::CustomToolCall {
             name,

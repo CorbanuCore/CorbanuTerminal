@@ -86,7 +86,6 @@ pub fn create_env(
     shell_environment::create_env(policy, thread_id.as_deref())
 }
 
-<<<<<<< HEAD
 /// Builds the environment for a command the model runs. Inherited provider
 /// credential variables are removed unless the policy passes them through (see
 /// [`blocked_provider_auth_env_vars`]); a `set` entry still supplies its own
@@ -182,8 +181,8 @@ where
                 .iter()
                 .any(|blocked| key.eq_ignore_ascii_case(blocked))
     });
-||||||| 413492cd6c
-=======
+}
+
 /// Exposes the shared root-session identity and harness version to shell commands.
 pub(crate) fn inject_session_env(env: &mut HashMap<String, String>, session_id: SessionId) {
     env.insert(CODEX_SESSION_ID_ENV_VAR.to_string(), session_id.to_string());
@@ -194,7 +193,6 @@ pub(crate) fn inject_session_env(env: &mut HashMap<String, String>, session_id: 
         CODEX_VERSION_ENV_VAR.to_string(),
         env!("CARGO_PKG_VERSION").to_string(),
     );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 /// Injects the selected named permission profile into a shell tool's environment.

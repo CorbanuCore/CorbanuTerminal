@@ -81,21 +81,35 @@ impl ProviderTarget {
 
 /// Adapts `items` for `target`; see the module docs. Returns whether another
 /// provider's compaction summary was left out (the caller logs it once per
-/// session).
+/// session). History uses [`adapt_for_provider_by`] over its envelopes.
+#[cfg(test)]
 pub(crate) fn adapt_for_provider(items: &mut Vec<ResponseItem>, target: &ProviderTarget) -> bool {
+    adapt_for_provider_by(items, |item| item, target)
+}
+
+/// [`adapt_for_provider`] over values that wrap a response item, such as
+/// history envelopes; `item_of` returns the wrapped item.
+pub(crate) fn adapt_for_provider_by<T>(
+    items: &mut Vec<T>,
+    item_of: impl Fn(&T) -> &ResponseItem,
+    target: &ProviderTarget,
+) -> bool {
     let mut dropped_summary = false;
-    items.retain(|item| match item.producer() {
-        Some(producer) if producer == target.producer => true,
-        Some(_) => {
-            let keep = adapt_foreign(item, target.wire);
-            dropped_summary |= !keep
-                && matches!(
-                    item,
-                    ResponseItem::Compaction { .. } | ResponseItem::ContextCompaction { .. }
-                );
-            keep
+    items.retain(|value| {
+        let item = item_of(value);
+        match item.producer() {
+            Some(producer) if producer == target.producer => true,
+            Some(_) => {
+                let keep = adapt_foreign(item, target.wire);
+                dropped_summary |= !keep
+                    && matches!(
+                        item,
+                        ResponseItem::Compaction { .. } | ResponseItem::ContextCompaction { .. }
+                    );
+                keep
+            }
+            None => keep_unattributed(item, target),
         }
-        None => keep_unattributed(item, target),
     });
     dropped_summary
 }
