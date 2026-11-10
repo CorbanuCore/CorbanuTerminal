@@ -1672,3 +1672,53 @@ fn long_running_command() -> Vec<String> {
         "Start-Sleep -Seconds 30".to_string(),
     ]
 }
+
+/// D541 (a), provisional: an MXC launch is refused whenever a Corbanu
+/// protection it can't apply would be active; other sandboxes are untouched.
+#[test]
+fn d541_mxc_refused_when_corbanu_protections_apply() {
+    let temp_dir = tempfile::TempDir::new().expect("tempdir");
+    let cwd = temp_dir.path().to_path_buf();
+    let plain = PermissionProfile::workspace_write();
+    let secret = temp_dir.path().join("secret").abs();
+    let denying = PermissionProfile::from_runtime_permissions(
+        &FileSystemSandboxPolicy::restricted(vec![
+            FileSystemSandboxEntry {
+                path: FileSystemPath::Special {
+                    value: codex_protocol::permissions::FileSystemSpecialPath::Root,
+                },
+                access: FileSystemAccessMode::Read,
+                missing_path_behavior: None,
+            },
+            FileSystemSandboxEntry {
+                path: secret.into(),
+                access: FileSystemAccessMode::Deny,
+                missing_path_behavior: None,
+            },
+        ]),
+        NetworkSandboxPolicy::Restricted,
+    );
+    let folders = [cwd.as_path()];
+
+    for sandbox in [
+        SandboxType::None,
+        SandboxType::WindowsRestrictedToken,
+        SandboxType::MacosSeatbelt,
+        SandboxType::LinuxSeccomp,
+    ] {
+        refuse_mxc_without_corbanu_protections(sandbox, &denying, true, &folders)
+            .expect("only MXC is refused here");
+    }
+    refuse_mxc_without_corbanu_protections(SandboxType::WindowsMxc, &plain, false, &folders)
+        .expect("MXC runs when no Corbanu protection applies");
+    for (profile, contract_armed) in [(&plain, true), (&denying, false)] {
+        let err = refuse_mxc_without_corbanu_protections(
+            SandboxType::WindowsMxc,
+            profile,
+            contract_armed,
+            &folders,
+        )
+        .expect_err("MXC is refused");
+        assert!(err.to_string().contains("prefer_mxc"), "{err}");
+    }
+}
