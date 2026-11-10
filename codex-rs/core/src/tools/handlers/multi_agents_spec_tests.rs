@@ -21,6 +21,7 @@ fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {
         orchestration: None,
         display_name: format!("{id} display"),
         description: format!("{id} description"),
+        model_specialty: None,
         default_reasoning_effort: ReasoningEffort::XHigh,
         supported_reasoning_efforts: vec![ReasoningEffortPreset {
             effort: ReasoningEffort::XHigh,
@@ -34,6 +35,7 @@ fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {
             description: "1.5x speed, increased usage".to_string(),
         }],
         default_service_tier: None,
+        available_access_programs: None,
         is_default: false,
         upgrade: None,
         show_in_picker,
@@ -605,7 +607,7 @@ fn wait_agent_tool_v2_uses_timeout_only_summary_output() {
     assert_eq!(parameters.required.as_ref(), None);
     let output_schema = output_schema.expect("wait output schema").to_value();
     assert_eq!(
-        output_schema.expect("wait output schema").to_value()["properties"]["message"]["description"],
+        output_schema["properties"]["message"]["description"],
         json!(
             "Brief wait summary without the agent's final content, including any timeout adjustment."
         )
@@ -757,8 +759,8 @@ fn openai_reserved_collaboration_profile_restores_pinned_argument_contracts() {
         vec!["target".to_string()]
     );
     assert_eq!(
-        interrupt.parameters.required,
-        Some(vec!["target".to_string()])
+        interrupt.parameters.required.as_deref(),
+        Some(["target".to_string()].as_slice())
     );
     assert_eq!(
         interrupt
