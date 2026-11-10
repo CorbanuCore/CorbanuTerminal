@@ -127,7 +127,7 @@ pub(crate) async fn review_tool_call(
         } else {
             ExecCommandLifetime::OneShot
         };
-        let prepared = parsed.prepare(lifetime).map_err(tool_error)?;
+        let prepared = parsed.prepare(lifetime).await.map_err(tool_error)?;
         if codex_apply_patch::MaybeApplyPatch::intercepts_command(
             &prepared.resolved.command,
             &prepared.cwd,
@@ -193,5 +193,6 @@ fn tool_error(error: FunctionCallError) -> CodexErr {
     match error {
         FunctionCallError::RespondToModel(message) => CodexErr::InvalidRequest(message),
         FunctionCallError::Fatal(message) => CodexErr::Fatal(message),
+        FunctionCallError::MalformedToolCall { message, .. } => CodexErr::InvalidRequest(message),
     }
 }

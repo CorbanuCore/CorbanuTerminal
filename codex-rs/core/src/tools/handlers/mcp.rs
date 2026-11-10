@@ -203,25 +203,11 @@ impl ToolExecutor<ToolInvocation> for McpHandler {
             .map(str::to_string),
         });
 
-<<<<<<< HEAD
-        let mut search_info = ToolSearchInfo::from_tool_spec(self.spec(), source_info)?;
-        // MCP metadata already includes the namespace, tool description, and parameter names.
-        // Keep it authoritative instead of appending the generic spec text a second time.
-        search_info.entry.search_text = build_mcp_search_text(&self.tool_info);
-        Some(search_info)
-||||||| 413492cd6c
-        ToolSearchInfo::from_spec(
-            build_mcp_search_text(&self.tool_info),
-            self.spec(),
-            source_info,
-        )
-=======
         ToolSearchInfo::from_shared_spec(
             build_mcp_search_text(&self.definition.tool_info, self.definition.agent_plugin),
             Arc::clone(&self.definition.spec),
             source_info,
         )
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn handle<'a>(&'a self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'a>
@@ -321,11 +307,10 @@ impl McpHandler {
 }
 
 impl CoreToolRuntime for McpHandler {
-<<<<<<< HEAD
     fn tool_origin(&self) -> crate::security::protected_surface::ToolOrigin {
         crate::security::protected_surface::ToolOrigin::Mcp
-||||||| 413492cd6c
-=======
+    }
+
     fn environments_for_input(
         &self,
         invocation: &ToolInvocation,
@@ -361,7 +346,6 @@ impl CoreToolRuntime for McpHandler {
             (code_mode_input_schema_max_bytes, definitions)
         });
         (*cached_budget == code_mode_input_schema_max_bytes).then_some(definitions.as_slice())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn wait_until_ready<'a>(&'a self, session: &'a Arc<Session>) -> Option<BoxFuture<'a, ()>> {

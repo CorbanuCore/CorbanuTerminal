@@ -81,7 +81,7 @@ impl ToolCall {
                 .encrypted_function_args
                 .as_ref()
                 .is_some_and(Vec::is_empty);
-        let is_cross_provider_plaintext_adapter = self.tool_name.namespace.is_none()
+        let is_cross_provider_plaintext_adapter = self.tool_name.is_default_namespace()
             && matches!(
                 self.tool_name.name.as_str(),
                 "spawn_agent_plaintext" | "send_message_plaintext" | "followup_task_plaintext"
@@ -107,21 +107,15 @@ pub(crate) fn tool_log_payload<'a>(
 /// One finalized tool plan: its advertised surfaces and matching executable runtimes.
 pub struct ToolRouter {
     registry: ToolRegistry,
-<<<<<<< HEAD
-    model_visible_specs: Vec<ToolSpec>,
-    /// Flat names offered for namespaced tools on wires without namespaces.
-    flat_tool_names: FlatToolNames,
-    /// Tools left out because a wire without namespaces caps the tool count.
-    omitted_tools: Vec<ToolName>,
-||||||| 413492cd6c
-    model_visible_specs: Vec<ToolSpec>,
-=======
     model_visible_specs: Arc<[ToolSpec]>,
     tool_mode: ToolMode,
     code_mode_tool_names: BTreeMap<String, ToolName>,
     tool_namespaces_info: Option<TurnToolNamespacesInfo>,
     can_manage_children: bool,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    /// Flat names offered for namespaced tools on wires without namespaces.
+    flat_tool_names: FlatToolNames,
+    /// Tools left out because a wire without namespaces caps the tool count.
+    omitted_tools: Vec<ToolName>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -165,30 +159,21 @@ impl ToolRouter {
     ) -> Self {
         let mut router = Self {
             registry,
-<<<<<<< HEAD
-            model_visible_specs,
-            flat_tool_names: FlatToolNames::default(),
-            omitted_tools: Vec::new(),
-        }
-||||||| 413492cd6c
-            model_visible_specs,
-        }
-=======
             model_visible_specs: model_visible_specs.into(),
             tool_mode,
             code_mode_tool_names,
             tool_namespaces_info,
             can_manage_children: false,
+            flat_tool_names: FlatToolNames::default(),
+            omitted_tools: Vec::new(),
         };
         router.can_manage_children = !child_management_tools.is_empty()
             && child_management_tools
                 .iter()
                 .all(|name| router.exposes_tool(name));
         router
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
-<<<<<<< HEAD
     pub(crate) fn with_flat_tool_names(mut self, flat_tool_names: FlatToolNames) -> Self {
         self.flat_tool_names = flat_tool_names;
         self
@@ -215,7 +200,7 @@ impl ToolRouter {
     /// as a namespaced call on the Responses wire. Registered plain tools always
     /// win, and calls that are already namespaced pass through unchanged.
     pub(crate) fn resolve_flat_tool_call(&self, mut call: ToolCall) -> ToolCall {
-        if call.tool_name.namespace.is_none()
+        if call.tool_name.is_default_namespace()
             && !self.flat_tool_names.is_empty()
             && self.registry.tool(&call.tool_name).is_none()
             && let Some(tool_name) = self.flat_tool_names.resolve(&call.tool_name.name)
@@ -225,12 +210,6 @@ impl ToolRouter {
         call
     }
 
-    pub(crate) fn model_visible_specs(&self) -> Vec<ToolSpec> {
-        self.model_visible_specs.clone()
-||||||| 413492cd6c
-    pub(crate) fn model_visible_specs(&self) -> Vec<ToolSpec> {
-        self.model_visible_specs.clone()
-=======
     pub(crate) fn model_visible_specs(&self) -> Arc<[ToolSpec]> {
         Arc::clone(&self.model_visible_specs)
     }
@@ -299,7 +278,6 @@ impl ToolRouter {
                     && (tool.runtime.immutable_spec().is_some()
                         || tool.runtime.search_info().is_some())
             })
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(crate) fn deferred_tool_namespaces(&self) -> BTreeMap<String, String> {
@@ -354,16 +332,6 @@ impl ToolRouter {
                 ref mut encrypted_function_args,
                 ..
             } => {
-<<<<<<< HEAD
-                let tool_name = ToolName::new(namespace, name);
-                let tool_name_text = tool_name.to_string();
-                let _: serde_json::Value = parse_arguments_for_tool(&tool_name_text, &arguments)?;
-                if tool_name.namespace.is_none() && tool_name.name == "structured_write" {
-                    validate_structured_write_arguments(&arguments)?;
-                }
-||||||| 413492cd6c
-                let tool_name = ToolName::new(namespace, name);
-=======
                 let tool_name =
                     ToolName::new(namespace.clone(), name.clone()).with_default_namespace();
                 let retain_native_call = self
@@ -376,7 +344,11 @@ impl ToolRouter {
                     (std::mem::take(arguments), encrypted_function_args.take())
                 };
                 let call_id = call_id.clone();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                let tool_name_text = tool_name.to_string();
+                let _: serde_json::Value = parse_arguments_for_tool(&tool_name_text, &arguments)?;
+                if tool_name.is_default_namespace() && tool_name.name == "structured_write" {
+                    validate_structured_write_arguments(&arguments)?;
+                }
                 Ok(Some(ToolCall {
                     tool_name,
                     call_id,

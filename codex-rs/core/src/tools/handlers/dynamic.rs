@@ -174,19 +174,16 @@ impl DynamicToolHandler {
 }
 
 impl CoreToolRuntime for DynamicToolHandler {
-<<<<<<< HEAD
     fn tool_origin(&self) -> crate::security::protected_surface::ToolOrigin {
         crate::security::protected_surface::ToolOrigin::Dynamic
-||||||| 413492cd6c
-impl CoreToolRuntime for DynamicToolHandler {}
-=======
+    }
+
     fn finishes_on_cancellation(&self) -> bool {
         true
     }
 
     fn is_third_party_tool(&self) -> bool {
         true
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 

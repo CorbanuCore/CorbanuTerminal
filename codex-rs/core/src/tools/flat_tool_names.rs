@@ -93,7 +93,7 @@ fn is_portable_char(c: char) -> bool {
 /// still be too long or collide; [`flatten_namespaced_tools`] resolves both.
 fn preferred_flat_tool_name(tool_name: &ToolName) -> String {
     let joined = code_mode_name_for_tool_name(tool_name);
-    if tool_name.namespace.is_none() {
+    if tool_name.is_default_namespace() {
         joined
     } else {
         portable_chars(&joined)
