@@ -74,9 +74,16 @@ other folders that let everyone do so (such as the machine key folders under
   different extra folders they may write to) aren't kept apart: one can
   borrow the other's access and write in that project's folders while the
   other runs (#1560), and read the other's memory, such as secrets in its
-  environment or what you type at its prompts (#1838). The default sandbox
-  doesn't prevent borrowing yet either (#1560, #1648), so avoid running
-  commands in several projects at once.
+  environment or what you type at its prompts (#1838). The non-admin sandbox
+  can't stop that read as it is built today: every command it runs carries
+  your own account, and Windows decides who may read a program from that
+  alone. We accept this for now (D433) and will look at it again together
+  with the borrowing (#1560). If you work in several projects at once, use
+  the default sandbox: a change awaiting security sign-off (#1800) will stop
+  its commands reading each other's memory (see "Default sandbox: commands can
+  read other projects' running commands" below). The default sandbox
+  doesn't prevent borrowing yet either (#1560, #1648), so until both are
+  closed, avoid running commands in several projects at once.
   In the default sandbox, a command that races another command's start-up
   can also run code with the sandbox account's full access, outside its own
   restrictions (#1721).
@@ -106,7 +113,10 @@ doesn't load its config, hooks or skills, warns you at startup, and asks in
 the TUI whether to load it (once the command, and anything it left running,
 has ended); a warning follows the command too (or a later command, if it
 left processes running). Check its
-contents before you choose to load it. Such folders
+contents before you choose to load it. Your choice covers what the prompt
+showed: if another command plants or changes it again while the prompt is
+on screen, loading it is refused and you're asked again (the same holds for
+the `.git` folders and repositories below). Such folders
 deeper in your workspace are covered too. One that is new, or was replaced,
 when the command ends is treated the same way. A read-only `.codex` or
 `.agents` folder your permission profile names that doesn't exist yet (or
@@ -155,11 +165,13 @@ elsewhere and linked back, one directly behind a link, and one deeper behind
 a link into a folder the walk doesn't cover (`%TEMP%`). A folder too large
 to look through (over 20,000 entries, more than 2,000 or six levels of
 nested repositories, or a link into `%TEMP%` with more than 20,000 entries
-behind it), or one holding an entry whose name isn't valid Unicode, counts
-as changed after every command. The warning names what
-changed. Nested repositories in the temporary folder (`%TEMP%`) aren't
+behind it, even in one folder), or one holding an entry whose name isn't
+valid Unicode, counts as changed after every command. The warning names
+what changed. Nested repositories in the temporary folder (`%TEMP%`) aren't
 checked, and a nested `.git` link is flagged after every command, as at the
-top.
+top. A link to a folder of the project itself isn't looked through again,
+even when the project lies in `%TEMP%`: the walk of the project covers that
+folder, as it does for a project anywhere else.
 
 **Hooks folders and files a git config names.** Many projects point
 `core.hooksPath` at a folder in the project (Husky's `.husky` or
@@ -175,9 +187,13 @@ folder, each included config file, and each file a program setting names
 in the project: a first word that looks like a path, and every later word),
 when it lies in a folder commands may write to. A path a config or a
 `.git` file names on a network share or a device (`\\server\share`,
-`\\?\`, `CON` ...) is never opened (a link in the project is still
-followed; a device name written with a superscript digit, such as `COM¹`,
-isn't recognized as one). For the same reason, in a writable folder that is
+`\\?\UNC\`, `CON` ...) is never opened (a path a config names with a
+`\\?\` drive-letter prefix, such as `\\?\C:\proj\.githooks`, is read as
+`C:\proj\.githooks` when that names the same file; one that doesn't, such as
+a name ending in a dot or a path over 260 characters, isn't, and nor is a
+`\\?\` path in a `.git` file; a link in the project is still followed;
+a device name written with a superscript digit, such as `COM¹`, isn't
+recognized as one). For the same reason, in a writable folder that is
 itself on a network share or written with a `\\?\` prefix, the config of
 a repository whose git folder lies there isn't read and paths relative to
 that folder aren't recorded, and no warning says so; only a path a config
@@ -189,8 +205,8 @@ For Husky, the files named after git hooks in the folder above `_` count,
 and so does the `_` folder below any hooks folder. Rewriting a file with
 the same content (as `npm install` does when it reruns Husky) isn't a
 change. A hooks folder with more than 1,024 entries, or configs too large to
-read (over 1 MB in one file, 100,000 entries, 4,096 files, more than
-eight `core.worktree` values or 4,096 named paths), count as changed after
+read (over 1 MB in one file or 16 MB in all, 100,000 entries, 4,096
+files, more than eight `core.worktree` values or 4,096 named paths), count as changed after
 every command. Other scripts those hooks call are ordinary project files
 and aren't checked. That includes `node_modules\.bin`: Husky v9 puts it
 first on `PATH` for its hooks, so a hook that runs `npx …` runs whatever is
@@ -323,6 +339,23 @@ programs through them. A change awaiting security sign-off (#1800), which
 starts each command on a logon of its own, stops the memory read; a
 follow-up built on it, with a test that checks it, will stop the console
 read. Until then, avoid running commands in several projects at once.
+
+**Default sandbox: the temporary folder.** (D377, #304) Each Corbanu
+Terminal session gives its default sandbox commands a temporary folder of
+their own in `%TEMP%` (`corbanu-sandbox-tmp-…`), as `TEMP` and `TMP`, and
+the sandbox may write only there, not in the rest of `%TEMP%`. The folder is
+removed when the session ends. We accept these limits (D444):
+
+- A command can read, but not change, the temporary folder of another
+  session running at the same time, so it can see what that session's
+  commands put there.
+- The non-admin sandbox doesn't get a folder of its own: its commands still
+  use `%TEMP%` itself, as before.
+- Running an older version of Corbanu Terminal puts back the old access to
+  the whole of `%TEMP%`. The next session of this version that runs a
+  default sandbox command takes it away again, where it can: if you can't
+  change `%TEMP%`'s permissions, the old access stays (the Corbanu home's
+  `.sandbox` log says so).
 
 **How to switch to the default sandbox.**
 

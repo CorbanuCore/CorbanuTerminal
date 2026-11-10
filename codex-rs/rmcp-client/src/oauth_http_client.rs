@@ -1,8 +1,13 @@
+use std::net::IpAddr;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
+use codex_exec_server::HTTP_ADDRESS_POLICY_DENIED_PREFIX;
+use codex_exec_server::HTTP_ADDRESS_POLICY_UNSUPPORTED;
+use codex_exec_server::HttpAddressClass;
+use codex_exec_server::HttpAddressPolicy;
 use codex_exec_server::HttpClient;
 use codex_exec_server::HttpHeader;
 use codex_exec_server::HttpRedirectPolicy;
@@ -15,6 +20,8 @@ use rmcp::transport::auth::OAuthHttpClientError;
 use rmcp::transport::auth::OAuthHttpClientFuture;
 use rmcp::transport::auth::OAuthHttpRedirectPolicy;
 use rmcp::transport::auth::OAuthHttpRequest;
+use url::Host;
+use url::Url;
 
 use crate::auth_status::OAuthDiscoveryTimeout;
 
@@ -27,6 +34,48 @@ enum OAuthHttpClientAdapterError {
     UnsupportedRedirectPolicy,
     #[error("OAuth HTTP response body exceeds {maximum_bytes} bytes")]
     ResponseBodyTooLarge { maximum_bytes: usize },
+    #[error(
+        "MCP OAuth request blocked: {0}. OAuth requests may reach loopback or private \
+         addresses only when the MCP server URL itself is localhost or such an IP address \
+         (see \"MCP OAuth Address Policy\" in docs/config.md)"
+    )]
+    AddressPolicy(String),
+    #[error("MCP OAuth request not sent: {HTTP_ADDRESS_POLICY_UNSUPPORTED}")]
+    AddressPolicyUnsupported,
+}
+
+/// Outbound address policy for OAuth requests made for the MCP server at
+/// `server_url` (#1947), following rmcp's own OAuth client policy.
+///
+/// Public addresses are always allowed. Loopback addresses are allowed when
+/// the server URL is `localhost` or a loopback literal, private addresses when
+/// it is a private literal, and the server's own literal address always. A
+/// host name's DNS answers never widen the policy, since a remote server may
+/// control them.
+pub(crate) fn oauth_address_policy(server_url: &str) -> HttpAddressPolicy {
+    let Ok(url) = Url::parse(server_url) else {
+        return HttpAddressPolicy::default();
+    };
+    let literal = |ip: IpAddr| {
+        let class = HttpAddressClass::of(ip);
+        HttpAddressPolicy {
+            allow_loopback: class == HttpAddressClass::Loopback,
+            allow_private: class == HttpAddressClass::Private,
+            allowed_address: Some(ip),
+        }
+    };
+    match url.host() {
+        Some(Host::Ipv4(ip)) => literal(IpAddr::V4(ip)),
+        Some(Host::Ipv6(ip)) => literal(IpAddr::V6(ip)),
+        Some(Host::Domain(domain)) => {
+            let domain = domain.trim_end_matches('.').to_ascii_lowercase();
+            HttpAddressPolicy {
+                allow_loopback: domain == "localhost" || domain.ends_with(".localhost"),
+                ..HttpAddressPolicy::default()
+            }
+        }
+        None => HttpAddressPolicy::default(),
+    }
 }
 
 fn oauth_http_client_error(
@@ -40,26 +89,33 @@ pub(crate) struct OAuthHttpClientAdapter {
     http_client: Arc<dyn HttpClient>,
     default_headers: HeaderMap,
     timeout: OAuthDiscoveryTimeout,
+    address_policy: HttpAddressPolicy,
 }
 
 impl OAuthHttpClientAdapter {
-    pub(crate) fn new(http_client: Arc<dyn HttpClient>, default_headers: HeaderMap) -> Self {
+    /// `server_url` is the MCP server's URL; it sets the address policy.
+    pub(crate) fn new(
+        http_client: Arc<dyn HttpClient>,
+        default_headers: HeaderMap,
+        server_url: &str,
+    ) -> Self {
         Self {
             http_client,
             default_headers,
             timeout: OAuthDiscoveryTimeout::Requested,
+            address_policy: oauth_address_policy(server_url),
         }
     }
 
     pub(crate) fn new_with_max_timeout(
         http_client: Arc<dyn HttpClient>,
         default_headers: HeaderMap,
+        server_url: &str,
         max_timeout: Duration,
     ) -> Self {
         Self {
-            http_client,
-            default_headers,
             timeout: OAuthDiscoveryTimeout::Capped(max_timeout),
+            ..Self::new(http_client, default_headers, server_url)
         }
     }
 
@@ -117,9 +173,28 @@ impl OAuthHttpClientAdapter {
                 redirect_policy,
                 request_id: format!("oauth-request-{request_id}"),
                 stream_response: true,
+                address_policy: Some(self.address_policy.clone()),
             })
             .await
-            .map_err(oauth_http_client_error)?;
+            .map_err(|error| {
+                let message = error.to_string();
+                if message.contains(HTTP_ADDRESS_POLICY_UNSUPPORTED) {
+                    return oauth_http_client_error(
+                        OAuthHttpClientAdapterError::AddressPolicyUnsupported,
+                    );
+                }
+                match message.find(HTTP_ADDRESS_POLICY_DENIED_PREFIX) {
+                    Some(start) => {
+                        oauth_http_client_error(OAuthHttpClientAdapterError::AddressPolicy(
+                            message[start + HTTP_ADDRESS_POLICY_DENIED_PREFIX.len()..]
+                                .trim_start_matches(':')
+                                .trim()
+                                .to_string(),
+                        ))
+                    }
+                    None => oauth_http_client_error(error),
+                }
+            })?;
         let mut body = Vec::new();
         while let Some(chunk) = body_stream.recv().await.map_err(oauth_http_client_error)? {
             if chunk.len() > MAX_OAUTH_HTTP_RESPONSE_BODY_BYTES - body.len() {
@@ -144,3 +219,7 @@ impl OAuthHttpClient for OAuthHttpClientAdapter {
         Box::pin(self.execute_request(request.request, request.redirect_policy, request.timeout))
     }
 }
+
+#[cfg(test)]
+#[path = "oauth_http_client_tests.rs"]
+mod tests;

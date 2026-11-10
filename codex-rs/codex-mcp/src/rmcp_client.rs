@@ -998,6 +998,15 @@ async fn make_rmcp_client(
     let resolved_environment =
         resolved_environment.map_err(|err| StartupOutcomeError::from(anyhow!(err)))?;
     let is_local_environment = config.is_local_environment();
+    // The discover wait is capped at the startup timeout; a legacy fallback after it gets
+    // the startup timeout again.
+    let discover_timeout = config.discover_timeout_sec.map(|discover_timeout| {
+        discover_timeout.min(
+            config
+                .startup_timeout_sec
+                .unwrap_or(DEFAULT_STARTUP_TIMEOUT),
+        )
+    });
     let McpServerConfig { transport, .. } = config;
 
     match transport {
@@ -1044,6 +1053,7 @@ async fn make_rmcp_client(
                 protocol_mode,
             )
             .await
+            .map(|client| client.with_discover_timeout(discover_timeout))
             .map_err(|err| StartupOutcomeError::from(anyhow!(err)))
         }
         McpServerTransportConfig::StreamableHttp {

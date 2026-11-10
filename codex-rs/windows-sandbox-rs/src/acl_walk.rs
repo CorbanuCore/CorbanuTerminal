@@ -570,7 +570,16 @@ unsafe fn nt_open(
 /// The entries of the folder open as `dir` (with list access and
 /// synchronous I/O) as (name, attributes and reparse tag), without `.` and
 /// `..`. A link's attributes are its own.
-pub(crate) unsafe fn list(dir: HANDLE) -> Result<Vec<(Vec<u16>, Attributes)>> {
+pub(crate) unsafe fn list(dir: HANDLE) -> Result<Vec<Listed>> {
+    list_at_most(dir, usize::MAX).map(|(entries, _)| entries)
+}
+
+/// An entry [`list`] found: its name, attributes and reparse tag.
+pub(crate) type Listed = (Vec<u16>, Attributes);
+
+/// #1877 item 4: [`list`], no more than `at_most` entries; the flag says
+/// the folder holds more (listing stops there).
+pub(crate) unsafe fn list_at_most(dir: HANDLE, at_most: usize) -> Result<(Vec<Listed>, bool)> {
     // `FILE_FULL_DIR_INFO`'s offsets; `EaSize` holds a reparse point's tag.
     const NEXT: usize = 0;
     const ATTRIBUTES: usize = 56;
@@ -590,7 +599,7 @@ pub(crate) unsafe fn list(dir: HANDLE) -> Result<Vec<(Vec<u16>, Attributes)>> {
         {
             let err = GetLastError();
             if err == ERROR_NO_MORE_FILES {
-                return Ok(out);
+                return Ok((out, false));
             }
             bail!("listing a folder failed: {err}");
         }
@@ -613,6 +622,9 @@ pub(crate) unsafe fn list(dir: HANDLE) -> Result<Vec<(Vec<u16>, Attributes)>> {
                 0
             };
             if name != [dot] && name != [dot, dot] {
+                if out.len() == at_most {
+                    return Ok((out, true));
+                }
                 out.push((name, Attributes { attributes, tag }));
             }
             if next == 0 {

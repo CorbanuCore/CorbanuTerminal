@@ -518,7 +518,11 @@ impl OauthLoginFlow {
             http_client,
         } = http_context;
         let default_headers = build_default_headers(http_headers, env_http_headers)?;
-        let oauth_http_client = Arc::new(OAuthHttpClientAdapter::new(http_client, default_headers));
+        let oauth_http_client = Arc::new(OAuthHttpClientAdapter::new(
+            http_client,
+            default_headers,
+            server_url,
+        ));
 
         let scope_refs: Vec<&str> = scopes.iter().map(String::as_str).collect();
         let oauth_state = start_authorization(
@@ -822,6 +826,7 @@ mod tests {
                     OutboundProxyPolicy::ReqwestDefault,
                 ))),
                 HeaderMap::new(),
+                &format!("{base_url}/mcp"),
             )),
             &[],
             "http://127.0.0.1/callback",
@@ -906,6 +911,7 @@ mod tests {
                         OutboundProxyPolicy::ReqwestDefault,
                     ))),
                     HeaderMap::new(),
+                    &format!("{issuer}/mcp"),
                 )),
                 &[],
                 "http://127.0.0.1/callback",

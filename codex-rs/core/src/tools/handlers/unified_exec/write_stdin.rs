@@ -108,6 +108,13 @@ impl WriteStdinHandler {
                     .await,
             )
         {
+            crate::security::inspection::record_refusal(
+                session.thread_id(),
+                crate::security::windows_unsandboxed::INSPECTED_TYPING,
+                crate::security::windows_unsandboxed::inspected_outcome(
+                    session.services.model_client().live_level(),
+                ),
+            );
             return Err(FunctionCallError::RespondToModel(refusal));
         }
         if !args.chars.is_empty() && !is_interrupt(&args.chars) {

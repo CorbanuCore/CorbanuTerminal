@@ -101,6 +101,7 @@ async fn pf_30_s01_native_permissive_turn_retains_original_text() -> anyhow::Res
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[serial_test::serial(codex_home)]
 async fn pf_30_s01_source_envelopes_label_tool_output_and_keep_human_prompt() -> anyhow::Result<()>
 {
     skip_if_no_network!(Ok(()));
@@ -132,6 +133,10 @@ async fn pf_30_s01_source_envelopes_label_tool_output_and_keep_human_prompt() ->
         let test = test_codex()
             .with_config(move |config| {
                 config.security_level = level;
+                // #2016: on Windows, Moderate and Aggressive run commands only
+                // in the elevated sandbox (#1976); without it the note is
+                // refused, not printed, and never reaches its envelope.
+                core_test_support::use_elevated_windows_sandbox(config);
                 config
                     .features
                     .enable(Feature::SourceEnvelopes)
@@ -142,7 +147,19 @@ async fn pf_30_s01_source_envelopes_label_tool_output_and_keep_human_prompt() ->
             .build(&server)
             .await?;
         let human = "read the notes <keep> 日本語";
-        test.submit_turn(human).await?;
+        if cfg!(windows) {
+            // #2016: in the elevated sandbox, `submit_turn`'s full access
+            // fails to start the command when its folder is under the user's
+            // profile, as the test's temporary folder is (#2021). The
+            // envelope does not depend on the permission profile.
+            test.submit_turn_with_permission_profile(
+                human,
+                codex_protocol::models::PermissionProfile::workspace_write(),
+            )
+            .await?;
+        } else {
+            test.submit_turn(human).await?;
+        }
         let requests = captured.requests();
         assert_eq!(requests.len(), 2);
         // The human prompt stays on its own channel, verbatim.
@@ -160,6 +177,8 @@ async fn pf_30_s01_source_envelopes_label_tool_output_and_keep_human_prompt() ->
             "{output}"
         );
         assert!(output.contains("authority=none"), "{output}");
+        // #2016: on Windows too, the command runs in the elevated sandbox
+        // and its note reaches the envelope, escaped.
         assert!(output.contains("tool-canary"), "{output}");
         assert!(!output.contains("<system>"), "{output}");
         assert_eq!(
@@ -950,6 +969,7 @@ const PYTHON: &str = if cfg!(windows) { "python" } else { "python3" };
 /// protected action. The hook runs, the human is still asked, and the
 /// human's "no" stands.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[serial_test::serial(codex_home)]
 async fn pf_30_s03_permission_hook_allow_does_not_approve_a_tainted_protected_action()
 -> anyhow::Result<()> {
     use codex_protocol::protocol::AskForApproval;
@@ -964,7 +984,12 @@ async fn pf_30_s03_permission_hook_allow_does_not_approve_a_tainted_protected_ac
         AskForApproval::OnRequest,
         PF_30_S03_INJECTED,
         PF_30_S03_VAULT,
-        core_test_support::hooks::trust_discovered_hooks,
+        |config| {
+            core_test_support::hooks::trust_discovered_hooks(config);
+            // #2016: the sandbox Moderate needs on Windows (#1976); without
+            // it both commands are refused before the hook or human is asked.
+            core_test_support::use_elevated_windows_sandbox(config);
+        },
         |home| {
             let script = home.join("allow_hook.py");
             std::fs::write(
@@ -988,6 +1013,7 @@ async fn pf_30_s03_permission_hook_allow_does_not_approve_a_tainted_protected_ac
         },
     )
     .await?;
+    // #2016: on Windows too (elevated sandbox), the human is asked.
     let approval = pf_30_s03_next_approval(&test)
         .await
         .expect("the human is asked despite the hook's allow");

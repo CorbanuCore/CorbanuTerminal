@@ -168,6 +168,7 @@ impl StreamableHttpClient for StreamableHttpClientAdapter {
                 redirect_policy,
                 request_id: "buffered-request".to_string(),
                 stream_response: true,
+                address_policy: None,
             })
             .await;
         let (response, mut body_stream) = match response {
@@ -365,6 +366,7 @@ impl StreamableHttpClient for StreamableHttpClientAdapter {
                 redirect_policy,
                 request_id: "buffered-request".to_string(),
                 stream_response: false,
+                address_policy: None,
             })
             .await
             .map_err(StreamableHttpClientAdapterError::from)
@@ -438,6 +440,7 @@ impl StreamableHttpClient for StreamableHttpClientAdapter {
                 redirect_policy,
                 request_id: "buffered-request".to_string(),
                 stream_response: true,
+                address_policy: None,
             })
             .await
             .map_err(StreamableHttpClientAdapterError::from)

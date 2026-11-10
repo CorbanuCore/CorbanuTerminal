@@ -13,6 +13,9 @@ mod issue_1309_line_writes;
 #[path = "issue_1704_code_tables_tests.rs"]
 mod issue_1704_code_tables;
 
+#[path = "issue_1901_disguised_stat_load_tests.rs"]
+mod issue_1901_disguised_stat_load;
+
 #[path = "issue_1276_to_1620_tests.rs"]
 mod issue_1276_to_1620;
 
