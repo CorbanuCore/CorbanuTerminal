@@ -64,9 +64,10 @@ pub fn parse_agent_role_file_contents(
         &format!("agent role file {}.description", role_file_label.display()),
         parsed.description.as_deref(),
     )?;
-    validate_agent_role_file_developer_instructions(
+    validate_agent_role_file_instructions(
         role_file_label,
         parsed.config.developer_instructions.as_deref(),
+        parsed.config.instructions.as_deref(),
         role_name_hint.is_none(),
     )?;
 
@@ -131,11 +132,21 @@ pub(crate) fn normalize_agent_role_description(
     }
 }
 
-fn validate_agent_role_file_developer_instructions(
+fn validate_agent_role_file_instructions(
     role_file_label: &Path,
     developer_instructions: Option<&str>,
+    base_instructions: Option<&str>,
     require_present: bool,
 ) -> std::io::Result<()> {
+    if matches!(base_instructions.map(str::trim), Some("")) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "agent role file at {}.base_instructions cannot be blank",
+                role_file_label.display()
+            ),
+        ));
+    }
     match developer_instructions.map(str::trim) {
         Some("") => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -145,10 +156,11 @@ fn validate_agent_role_file_developer_instructions(
             ),
         )),
         Some(_) => Ok(()),
+        None if base_instructions.is_some() => Ok(()),
         None if require_present => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             format!(
-                "agent role file at {} must define `developer_instructions`",
+                "agent role file at {} must define `developer_instructions` or `base_instructions`",
                 role_file_label.display()
             ),
         )),
