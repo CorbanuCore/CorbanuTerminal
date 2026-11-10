@@ -13,24 +13,16 @@ use codex_model_provider_info::AMAZON_BEDROCK_GPT_5_6_SOL_MODEL_ID;
 use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
-<<<<<<< HEAD
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_models_manager::model_info;
-||||||| 413492cd6c
-=======
 use codex_protocol::AgentPath;
 use codex_protocol::ThreadId;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
-<<<<<<< HEAD
-use codex_protocol::models::PermissionProfile;
-||||||| 413492cd6c
-=======
 use codex_protocol::error::CodexErrorDetails;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ApplyPatchToolType;
 use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::InputModality;
@@ -262,20 +254,10 @@ fn plan_with_model(
         inputs.extension_tool_executors,
         &inputs.dynamic_tools,
     );
-<<<<<<< HEAD
-    ToolRouter::from_tools(
-        step_context.turn.as_ref(),
-        tool_runtimes,
-||||||| 413492cd6c
-    let router = ToolRouter::from_tools(
-        step_context.turn.as_ref(),
-        tool_runtimes,
-=======
     ToolRouter::from_registry(
         turn,
         model_info,
         registry,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         hosted_specs,
         &Default::default(),
     )
@@ -1202,19 +1184,11 @@ async fn multiple_environments_expose_environment_selectors() {
 #[tokio::test]
 async fn environment_tools_follow_the_step_context() {
     let (_session, mut turn) = make_session_and_context().await;
-<<<<<<< HEAD
-    set_feature(&mut turn, Feature::UnifiedExec, /*enabled*/ true);
-    turn.model_info.apply_patch_tool_type = Some(ApplyPatchToolType::Freeform);
-    turn.permission_profile = PermissionProfile::workspace_write();
-||||||| 413492cd6c
-    set_feature(&mut turn, Feature::UnifiedExec, /*enabled*/ true);
-    turn.model_info.apply_patch_tool_type = Some(ApplyPatchToolType::Freeform);
-=======
     update_turn_settings_for_test(&mut turn, |settings| {
         Arc::make_mut(&mut settings.model_info).apply_patch_tool_type =
             Some(ApplyPatchToolType::Freeform);
     });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    turn.permission_profile = PermissionProfile::workspace_write();
 
     let environments = turn.initial_environments.clone();
     turn.initial_environments.environments.clear();
@@ -2348,12 +2322,7 @@ async fn tool_search_cache_rebuilds_when_deferred_sources_change() {
     let cache = ToolSearchHandlerCache::default();
 
     let (_session, mut first_turn) = make_session_and_context().await;
-<<<<<<< HEAD
     use_openai_provider(&mut first_turn);
-    first_turn.model_info.supports_search_tool = true;
-||||||| 413492cd6c
-    first_turn.model_info.supports_search_tool = true;
-=======
     set_feature(
         &mut first_turn,
         Feature::DeferredToolWorldState,
@@ -2362,7 +2331,6 @@ async fn tool_search_cache_rebuilds_when_deferred_sources_change() {
     update_turn_settings_for_test(&mut first_turn, |settings| {
         Arc::make_mut(&mut settings.model_info).supports_search_tool = true;
     });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let first_turn = Arc::new(first_turn);
     let first_step_context = StepContext::for_test(Arc::clone(&first_turn));
     let mut first_registry = build_core_tool_registry(
@@ -2389,12 +2357,7 @@ async fn tool_search_cache_rebuilds_when_deferred_sources_change() {
     let first_plan = ToolPlanProbe::from_router(first_router);
 
     let (_session, mut second_turn) = make_session_and_context().await;
-<<<<<<< HEAD
     use_openai_provider(&mut second_turn);
-    second_turn.model_info.supports_search_tool = true;
-||||||| 413492cd6c
-    second_turn.model_info.supports_search_tool = true;
-=======
     set_feature(
         &mut second_turn,
         Feature::DeferredToolWorldState,
@@ -2403,7 +2366,6 @@ async fn tool_search_cache_rebuilds_when_deferred_sources_change() {
     update_turn_settings_for_test(&mut second_turn, |settings| {
         Arc::make_mut(&mut settings.model_info).supports_search_tool = true;
     });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let second_turn = Arc::new(second_turn);
     let second_step_context = StepContext::for_test(Arc::clone(&second_turn));
     let mut second_registry = build_core_tool_registry(
@@ -3267,12 +3229,7 @@ async fn tool_mode_selector_overrides_feature_flags() {
 #[tokio::test]
 async fn v1_multi_agent_tools_defer_when_tool_search_available() {
     let plan = probe(|turn| {
-<<<<<<< HEAD
         use_openai_provider(turn);
-        turn.model_info.supports_search_tool = true;
-||||||| 413492cd6c
-        turn.model_info.supports_search_tool = true;
-=======
         set_feature(
             turn,
             Feature::DeferredToolWorldState,
@@ -3281,7 +3238,6 @@ async fn v1_multi_agent_tools_defer_when_tool_search_available() {
         update_turn_settings_for_test(turn, |settings| {
             Arc::make_mut(&mut settings.model_info).supports_search_tool = true;
         });
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         set_feature(turn, Feature::Collab, /*enabled*/ true);
         set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
     })
@@ -4247,7 +4203,6 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
     bedrock_with_standalone_web_search.assert_visible_lacks(&["web"]);
 }
 
-<<<<<<< HEAD
 // Issue #820: real tool planning and serde, with disposable config and no provider call.
 fn issue820_use_custom_provider(turn: &mut TurnContext, base_url: &str, wire_api: &str) {
     let provider_info: ModelProviderInfo = toml::from_str(&format!(
@@ -4409,8 +4364,6 @@ async fn issue820_disabled_v2_does_not_add_reserved_adapters() {
         "followup_task_plaintext",
     ]);
 }
-||||||| 413492cd6c
-=======
+
 #[path = "spec_plan_strict_third_party_tests.rs"]
 mod strict_third_party;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a

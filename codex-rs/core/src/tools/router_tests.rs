@@ -21,15 +21,11 @@ use codex_extension_api::ExtensionRegistryBuilder;
 use codex_extension_api::ResponsesApiTool;
 use codex_extension_api::ToolCall as ExtensionToolCall;
 use codex_extension_api::ToolExecutor;
-<<<<<<< HEAD
 use codex_model_provider::create_model_provider;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_models_manager::model_info;
-||||||| 413492cd6c
-=======
 use codex_protocol::DEFAULT_FUNCTION_NAMESPACE;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::dynamic_tools::DynamicToolFunctionSpec;
 use codex_protocol::dynamic_tools::DynamicToolNamespaceSpec;
 use codex_protocol::dynamic_tools::DynamicToolNamespaceTool;
