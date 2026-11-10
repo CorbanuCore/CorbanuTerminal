@@ -69,7 +69,8 @@ fn info(host: Host) -> Value {
 }
 
 /// A fake executor: answers `initialize` and `environment/info`, records
-/// every other request and answers it with an error.
+/// every other request (file requests that carry a file tool's sandbox
+/// context as `<method> sandboxed`) and answers it with an error.
 async fn fake_executor(host: Host) -> anyhow::Result<(String, Arc<Mutex<Vec<String>>>)> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let url = format!("ws://{}", listener.local_addr()?);
@@ -98,7 +99,12 @@ async fn fake_executor(host: Host) -> anyhow::Result<(String, Arc<Mutex<Vec<Stri
                         "initialize" => json!({ "id": id, "result": { "sessionId": "fake" } }),
                         "environment/info" => json!({ "id": id, "result": info(host) }),
                         _ => {
-                            seen.lock().expect("methods").push(method);
+                            let sandboxed = !request["params"]["sandbox"].is_null();
+                            seen.lock().expect("methods").push(if sandboxed {
+                                format!("{method} sandboxed")
+                            } else {
+                                method
+                            });
                             json!({
                                 "id": id,
                                 "error": { "code": -32601, "message": "not served by the fake" },
@@ -122,7 +128,8 @@ async fn fake_executor(host: Host) -> anyhow::Result<(String, Arc<Mutex<Vec<Stri
 struct Outcome {
     output: String,
     /// The requests other than `initialize` and `environment/info` the
-    /// executor got.
+    /// executor got during the turn (the session's own unsandboxed lookups,
+    /// such as for `AGENTS.md`, included).
     reached: Vec<String>,
 }
 
@@ -158,7 +165,10 @@ async fn run(level: SecurityLevel, host: Host, call: Call) -> anyhow::Result<Out
     // Only what the tool call sends counts.
     methods.lock().expect("methods").clear();
     let (tool, arguments) = match call {
-        Call::Command => ("exec_command", json!({ "cmd": "echo issue2050", "yield_time_ms": 500 })),
+        Call::Command => (
+            "exec_command",
+            json!({ "cmd": "echo issue2050", "yield_time_ms": 500 }),
+        ),
         Call::ViewImage => ("view_image", json!({ "path": "C:\\work\\picture.png" })),
     };
     let captured = mount_sse_sequence(
@@ -189,7 +199,10 @@ async fn run(level: SecurityLevel, host: Host, call: Call) -> anyhow::Result<Out
             thread_settings: Default::default(),
         })
         .await?;
-    wait_for_event(&test.codex, |event| matches!(event, EventMsg::TurnComplete(_))).await;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
     let request = captured
         .last_request()
         .ok_or_else(|| anyhow::anyhow!("no request after the tool call"))?;
@@ -225,11 +238,20 @@ async fn issue_2050_remote_windows_without_its_sandbox_refuses_commands_and_file
                     && (client_refuses
                         || (command.output.contains("environment `remote`")
                             && command.output.contains("on that machine")))
-                    && !command.reached.iter().any(|method| method == "process/start")
+                    && !command
+                        .reached
+                        .iter()
+                        .any(|method| method.starts_with("process/start"))
             } else if client_refuses {
-                !command.reached.iter().any(|method| method == "process/start")
+                !command
+                    .reached
+                    .iter()
+                    .any(|method| method.starts_with("process/start"))
             } else {
-                command.reached.iter().any(|method| method == "process/start")
+                command
+                    .reached
+                    .iter()
+                    .any(|method| method.starts_with("process/start"))
             };
             if !ok {
                 wrong.push(format!(
@@ -242,9 +264,15 @@ async fn issue_2050_remote_windows_without_its_sandbox_refuses_commands_and_file
             let ok = if refused {
                 image.output.contains(&expected)
                     && image.output.contains("environment `remote`")
-                    && !image.reached.iter().any(|method| method.starts_with("fs/"))
+                    && !image
+                        .reached
+                        .iter()
+                        .any(|method| method.ends_with(" sandboxed"))
             } else {
-                image.reached.iter().any(|method| method.starts_with("fs/"))
+                image
+                    .reached
+                    .iter()
+                    .any(|method| method.ends_with(" sandboxed"))
             };
             if !ok {
                 wrong.push(format!(
@@ -252,6 +280,117 @@ async fn issue_2050_remote_windows_without_its_sandbox_refuses_commands_and_file
                     image.output, image.reached
                 ));
             }
+        }
+    }
+    assert_eq!(wrong, Vec::<String>::new());
+    Ok(())
+}
+
+/// End to end against a real Windows executor, which reports its own sandbox:
+/// the Wine-exec remote lane, or a Windows PC reached with
+/// `CODEX_TEST_ENVIRONMENT=wine-exec` and `CODEX_TEST_REMOTE_EXEC_SERVER_URL`
+/// (its Corbanu home without the default sandbox set up). Under Moderate and
+/// Aggressive nothing runs there; Permissive runs the command there.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_2050_a_real_windows_executor_without_its_sandbox_refuses_protected_work()
+-> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    if !core_test_support::is_wine_exec_test_environment() {
+        eprintln!("Skipping: needs a Windows executor (CODEX_TEST_ENVIRONMENT=wine-exec).");
+        return Ok(());
+    }
+    const RAN: &str = "issue2050-ran";
+    const IMAGE_CALL_ID: &str = "call-2050-image";
+    let mut wrong = Vec::new();
+    for (level, name) in [
+        (SecurityLevel::Permissive, "Permissive"),
+        (SecurityLevel::Moderate, "Moderate"),
+        (SecurityLevel::Aggressive, "Aggressive"),
+    ] {
+        let server = start_mock_server().await;
+        let test = test_codex()
+            .with_config(move |config| {
+                config.security_level = level;
+                config.permissions.approval_policy = Constrained::allow_any(AskForApproval::Never);
+                config
+                    .features
+                    .enable(Feature::SourceEnvelopes)
+                    .expect("test config should allow feature update");
+                config.use_experimental_unified_exec_tool = true;
+                config
+                    .features
+                    .enable(Feature::UnifiedExec)
+                    .expect("test config should allow feature update");
+                // Full access: this host's sandbox paths mean nothing there.
+                config
+                    .permissions
+                    .set_permission_profile(PermissionProfile::Disabled)
+                    .expect("profile");
+            })
+            .build_with_auto_env(&server)
+            .await?;
+        let arguments = json!({ "cmd": format!("echo {RAN}"), "yield_time_ms": 5000 });
+        let captured = mount_sse_sequence(
+            &server,
+            vec![
+                sse(vec![
+                    ev_response_created(CALL_ID),
+                    ev_function_call(CALL_ID, "exec_command", &arguments.to_string()),
+                    ev_completed(CALL_ID),
+                ]),
+                sse(vec![
+                    ev_response_created(IMAGE_CALL_ID),
+                    ev_function_call(
+                        IMAGE_CALL_ID,
+                        "view_image",
+                        &json!({ "path": "picture.png" }).to_string(),
+                    ),
+                    ev_completed(IMAGE_CALL_ID),
+                ]),
+                sse(vec![
+                    ev_response_created("done"),
+                    ev_assistant_message("msg-done", "done"),
+                    ev_completed("done"),
+                ]),
+            ],
+        )
+        .await;
+        test.codex
+            .submit(Op::UserInput {
+                items: vec![UserInput::Text {
+                    text: "go".into(),
+                    text_elements: Vec::new(),
+                }],
+                final_output_json_schema: None,
+                responsesapi_client_metadata: None,
+                additional_context: Default::default(),
+                thread_settings: Default::default(),
+            })
+            .await?;
+        wait_for_event(&test.codex, |event| {
+            matches!(event, EventMsg::TurnComplete(_))
+        })
+        .await;
+        let requests = captured.requests();
+        let output_of = |call_id: &str| {
+            requests
+                .iter()
+                .find_map(|request| request.function_call_output_text(call_id))
+                .unwrap_or_default()
+        };
+        let output = output_of(CALL_ID);
+        let image = output_of(IMAGE_CALL_ID);
+        eprintln!("issue_2050 real executor, {name}: command {output:?}; image {image:?}");
+        let ok = if level == SecurityLevel::Permissive {
+            // Ran there; the missing image was looked up there.
+            output.contains(RAN) && !image.contains("Security level")
+        } else {
+            output.contains(&format!("Security level {name} refused this command"))
+                && output.contains("on that machine")
+                && image.contains(&format!("Security level {name} refused this file access"))
+        };
+        if !ok {
+            wrong.push(format!("{name}: command {output}; image {image}"));
         }
     }
     assert_eq!(wrong, Vec::<String>::new());

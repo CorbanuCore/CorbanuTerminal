@@ -133,8 +133,7 @@ async fn fake_executor(info: Option<serde_json::Value>) -> String {
                 continue;
             };
             while let Some(Ok(Message::Text(text))) = websocket.next().await {
-                let request: serde_json::Value =
-                    serde_json::from_str(text.as_ref()).expect("json");
+                let request: serde_json::Value = serde_json::from_str(text.as_ref()).expect("json");
                 let Some(id) = request.get("id") else {
                     continue;
                 };
@@ -181,9 +180,21 @@ async fn issue_2050_a_remote_gap_follows_the_executor_report() {
     use WindowsSandboxLevel::Elevated;
     use WindowsSandboxLevel::RestrictedToken;
     let cases = [
-        (Some(windows_info(false)), Disabled, Some(RemoteGap::WindowsWithoutSandbox)),
-        (Some(windows_info(true)), Disabled, Some(RemoteGap::WindowsWithoutSandbox)),
-        (Some(windows_info(false)), Elevated, Some(RemoteGap::WindowsWithoutSandbox)),
+        (
+            Some(windows_info(false)),
+            Disabled,
+            Some(RemoteGap::WindowsWithoutSandbox),
+        ),
+        (
+            Some(windows_info(true)),
+            Disabled,
+            Some(RemoteGap::WindowsWithoutSandbox),
+        ),
+        (
+            Some(windows_info(false)),
+            Elevated,
+            Some(RemoteGap::WindowsWithoutSandbox),
+        ),
         (Some(windows_info(true)), Elevated, None),
         (Some(windows_info(false)), RestrictedToken, None),
         (
@@ -237,7 +248,10 @@ fn issue_2050_remote_refusals_name_the_level_environment_and_steps() {
                 remote_typing_refusal(level, "far", RemoteGap::WindowsWithoutSandbox),
                 "refused typing into this command",
             ),
-            (remote_file_refusal(level, "far"), "refused this file access"),
+            (
+                remote_file_refusal(level, "far"),
+                "refused this file access",
+            ),
         ] {
             assert!(
                 text.starts_with(&format!("Security level {name} {start}")),

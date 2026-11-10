@@ -66,10 +66,15 @@ fn file_requests(methods: &StdMutex<Vec<String>>) -> Vec<String> {
         .collect()
 }
 
-async fn read(info: Value, level: WindowsSandboxLevel, refusal: bool) -> (io::Result<()>, Vec<String>) {
+async fn read(
+    info: Value,
+    level: WindowsSandboxLevel,
+    refusal: bool,
+) -> (io::Result<()>, Vec<String>) {
     let (url, methods) = fake_executor(info).await;
     let environment = Environment::create_for_tests(Some(url)).expect("environment");
-    let mut context = FileSystemSandboxContext::from_permission_profile(PermissionProfile::Disabled);
+    let mut context =
+        FileSystemSandboxContext::from_permission_profile(PermissionProfile::Disabled);
     context.windows_sandbox_level = level;
     context.unsandboxed_refusal = refusal.then(|| REFUSAL.to_string());
     let path = PathUri::parse("file:///C:/work/secret.txt").expect("uri");
@@ -93,7 +98,11 @@ fn assert_refused(result: io::Result<()>, requests: Vec<String>) {
     let error = result.expect_err("refused before reaching the executor");
     assert_eq!(
         (error.kind(), error.to_string(), requests),
-        (io::ErrorKind::PermissionDenied, REFUSAL.to_string(), Vec::new())
+        (
+            io::ErrorKind::PermissionDenied,
+            REFUSAL.to_string(),
+            Vec::new()
+        )
     );
 }
 
@@ -125,7 +134,8 @@ async fn issue_2050_older_executors_fail_closed_unless_clearly_posix() {
     let (result, requests) = read(older_windows, WindowsSandboxLevel::Elevated, true).await;
     assert_refused(result, requests);
     // An older Linux executor keeps working (it re-checks on its side).
-    let older_linux = json!({ "shell": { "name": "bash", "path": "/bin/bash" }, "cwd": "file:///home/me" });
+    let older_linux =
+        json!({ "shell": { "name": "bash", "path": "/bin/bash" }, "cwd": "file:///home/me" });
     let (result, requests) = read(older_linux, WindowsSandboxLevel::Disabled, true).await;
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(requests, vec!["fs/readFile".to_string()]);
@@ -145,6 +155,9 @@ async fn issue_2050_permissive_is_unchanged() {
         .await
         .expect("served");
     let methods = methods.lock().expect("methods").clone();
-    assert!(!methods.contains(&"environment/info".to_string()), "{methods:?}");
+    assert!(
+        !methods.contains(&"environment/info".to_string()),
+        "{methods:?}"
+    );
     assert!(methods.contains(&"fs/readFile".to_string()), "{methods:?}");
 }

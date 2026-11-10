@@ -1532,7 +1532,8 @@ async fn pf_23_s02_protected_levels_apply_the_rules_from_the_start() {
         session.services.replace_model_client(client);
         let context =
             turn.file_system_sandbox_context(/*additional_permissions*/ None, &environment);
-        let protected_context = protect_file_tool_context(&session, &turn, &environment, context.clone());
+        let protected_context =
+            protect_file_tool_context(&session, &turn, &environment, context.clone());
         assert_eq!(readable(protected_context), !protected, "{level:?}");
         assert_eq!(
             post_taint_read_policy(&session, &turn).is_some(),

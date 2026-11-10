@@ -638,16 +638,12 @@ impl UnifiedExecProcessManager {
                 network_denial_monitor,
                 Arc::clone(&transcript),
                 Arc::clone(&initial_exec_command_active),
-                request
-                    .turn_environment
-                    .environment
-                    .is_remote()
-                    .then(|| {
-                        (
-                            request.turn_environment.environment_id.clone(),
-                            Arc::clone(&request.turn_environment.environment),
-                        )
-                    }),
+                request.turn_environment.environment.is_remote().then(|| {
+                    (
+                        request.turn_environment.environment_id.clone(),
+                        Arc::clone(&request.turn_environment.environment),
+                    )
+                }),
             )
             .await;
             Some(InitialExecCommandGuard {

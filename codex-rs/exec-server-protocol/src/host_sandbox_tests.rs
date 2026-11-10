@@ -77,13 +77,14 @@ fn issue_2050_older_executors_fail_closed_unless_clearly_posix() {
         info(ZSH, Some("file:///C:/work"), None),
         info(ZSH, Some("file://server/share/work"), None),
     ] {
-        assert_eq!(verdicts(&older_windows), [Unreported; 3], "{older_windows:?}");
+        assert_eq!(
+            verdicts(&older_windows),
+            [Unreported; 3],
+            "{older_windows:?}"
+        );
     }
     // Nothing to tell the platform by.
-    assert_eq!(
-        verdicts(&info(("sh", "sh"), None, None)),
-        [Unreported; 3]
-    );
+    assert_eq!(verdicts(&info(("sh", "sh"), None, None)), [Unreported; 3]);
     // Older Linux or macOS executors keep working.
     for older_posix in [
         info(ZSH, Some("file:///home/me"), None),

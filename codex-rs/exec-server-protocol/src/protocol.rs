@@ -885,7 +885,7 @@ mod tests {
                 },
                 cwd: None,
                 capabilities: EnvironmentCapabilities::default(),
-    host_sandbox: None,
+                host_sandbox: None,
             }
         );
     }
