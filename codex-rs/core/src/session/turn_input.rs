@@ -911,6 +911,16 @@ impl Session {
         if matches!(input, SubmittedTurnInput::UserInput { content, .. } if content.is_empty()) {
             return Err(NotSubmittedReason::EmptyInput);
         }
+        // Corbanu: a running turn keeps the permissions it was admitted under,
+        // so input never joins it after they changed: its exec sessions could
+        // still be driven through write_stdin. The input is returned instead.
+        // Checked again below, with the session state held through admission.
+        if !Self::authorization_matches(
+            &self.state.lock().await.session_configuration,
+            &active_task.turn_context,
+        ) {
+            return Err(NotSubmittedReason::AuthorizationChanged);
+        }
         // Compare JSON values directly instead of serialized schema text.
         // Value equality ignores object key order while preserving array and
         // scalar distinctions; broader JSON Schema equivalence is out of scope.
@@ -949,12 +959,19 @@ impl Session {
             }
         };
         pending_input.push(input);
+        // Serialize the authorization comparison and admission with settings
+        // updates, so none commits between them.
+        let state = self.state.lock().await;
+        if !Self::authorization_matches(&state.session_configuration, &active_task.turn_context) {
+            return Err(NotSubmittedReason::AuthorizationChanged);
+        }
         self.input_queue
             .extend_pending_input_and_accept_mailbox_delivery_for_turn_state(
                 active_turn.turn_state.as_ref(),
                 pending_input,
             )
             .await;
+        drop(state);
         Ok((
             active_turn_id.clone(),
             active_task.turn_context.root_turn_id(),

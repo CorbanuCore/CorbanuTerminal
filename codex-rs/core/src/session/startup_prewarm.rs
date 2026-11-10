@@ -29,12 +29,9 @@ use codex_otel::STARTUP_PREWARM_DURATION_METRIC;
 use codex_otel::SessionTelemetry;
 use codex_protocol::error::Result as CodexResult;
 use codex_protocol::models::BaseInstructions;
-<<<<<<< HEAD:codex-rs/core/src/session_startup_prewarm.rs
 use codex_protocol::protocol::Event;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::WarningEvent;
-||||||| 413492cd6c:codex-rs/core/src/session_startup_prewarm.rs
-=======
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 
@@ -52,7 +49,6 @@ impl PrewarmInput {
         }
     }
 }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/core/src/session/startup_prewarm.rs
 
 pub(crate) struct SessionStartupPrewarmHandle {
     task: AbortOnDropHandle<CodexResult<ModelClientSession>>,
@@ -213,7 +209,6 @@ impl SessionStartupPrewarmHandle {
 }
 
 impl Session {
-<<<<<<< HEAD:codex-rs/core/src/session_startup_prewarm.rs
     /// `reopened`: the session resumes or forks a saved conversation (#403).
     /// Its warm-up is a paid request the user did not ask for, so it is
     /// labelled as a reopen warm-up, announced once sent, and skipped
@@ -221,17 +216,13 @@ impl Session {
     /// every warm-up, for clients that start a thread only for realtime (#1045).
     pub(crate) async fn schedule_startup_prewarm(
         self: &Arc<Self>,
-        base_instructions: String,
+        input: PrewarmInput,
         reopened: bool,
     ) {
         let config = self.get_config().await;
-        let skip_warmup = config.skip_startup_warmup || (reopened && config.skip_reopen_warmup);
-        if skip_warmup || !self.services.model_client().responses_websocket_enabled() {
-||||||| 413492cd6c:codex-rs/core/src/session_startup_prewarm.rs
-    pub(crate) async fn schedule_startup_prewarm(self: &Arc<Self>, base_instructions: String) {
-        if !self.services.model_client.responses_websocket_enabled() {
-=======
-    pub(crate) async fn schedule_startup_prewarm(self: &Arc<Self>, input: PrewarmInput) {
+        if config.skip_startup_warmup || (reopened && config.skip_reopen_warmup) {
+            return;
+        }
         let websocket_connect_timeout = self.provider().await.websocket_connect_timeout();
         let mut state = self.state.lock().await;
         if state.shutting_down {
@@ -266,8 +257,7 @@ impl Session {
             });
         }
 
-        if !self.services.model_client.responses_websocket_enabled() {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/core/src/session/startup_prewarm.rs
+        if !self.services.model_client().responses_websocket_enabled() {
             // Without websocket prewarm, resolve auth once so Agent Identity bootstrap can
             // register or engage this session's bearer fallback before the first user request.
             let model_client = self.services.model_client();
@@ -284,20 +274,9 @@ impl Session {
         let startup_prewarm_session = Arc::clone(self);
         let startup_prewarm = tokio::spawn(
             async move {
-<<<<<<< HEAD:codex-rs/core/src/session_startup_prewarm.rs
-                let result = schedule_startup_prewarm_inner(
-                    startup_prewarm_session,
-                    base_instructions,
-                    reopened,
-                )
-                .await;
-||||||| 413492cd6c:codex-rs/core/src/session_startup_prewarm.rs
                 let result =
-                    schedule_startup_prewarm_inner(startup_prewarm_session, base_instructions)
+                    schedule_startup_prewarm_inner(startup_prewarm_session, input, reopened)
                         .await;
-=======
-                let result = schedule_startup_prewarm_inner(startup_prewarm_session, input).await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/core/src/session/startup_prewarm.rs
                 let status = if result.is_ok() { "ready" } else { "failed" };
                 session_telemetry.record_startup_phase(
                     "startup_prewarm_total",
@@ -344,17 +323,11 @@ impl Session {
 
 async fn schedule_startup_prewarm_inner(
     session: Arc<Session>,
-<<<<<<< HEAD:codex-rs/core/src/session_startup_prewarm.rs
-    base_instructions: String,
-    reopened: bool,
-||||||| 413492cd6c:codex-rs/core/src/session_startup_prewarm.rs
-    base_instructions: String,
-=======
     input: PrewarmInput,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/core/src/session/startup_prewarm.rs
+    reopened: bool,
 ) -> CodexResult<ModelClientSession> {
     let prewarm_started_at = Instant::now();
-    let mut client_session = session.services.model_client.new_session();
+    let mut client_session = session.services.new_model_client_session();
     let websocket_ready = client_session.is_websocket_prewarmed().await;
     // Count the decision before preparation can fail; fresh clients also need prewarm.
     session.services.session_telemetry.counter(
@@ -379,6 +352,30 @@ async fn schedule_startup_prewarm_inner(
     let startup_turn_context = session
         .new_startup_prewarm_turn_with_sub_id(INITIAL_SUBMIT_ID.to_owned())
         .await;
+    // Prewarm sends the session's whole prompt to prime the model's cache. The
+    // provider charges for those cache writes, so it is inference the operator
+    // paid for and it is collected like any other turn, under its own identity.
+    // Best effort on purpose, exactly as compaction is: a prewarm that cannot be
+    // recorded must still run, because accounting is an observer here and not a
+    // gate on starting a session.
+    let _accounting = match crate::accounting::attach_turn(
+        &session,
+        startup_turn_context.as_ref(),
+        &client_session,
+        if reopened {
+            crate::accounting::reopen_prewarm_turn_label()
+        } else {
+            crate::accounting::prewarm_turn_label()
+        },
+    )
+    .await
+    {
+        Ok(scopes) => Some(scopes),
+        Err(error) => {
+            tracing::warn!(%error, "accounting: startup prewarm proceeding unrecorded");
+            None
+        }
+    };
     startup_turn_context.session_telemetry.record_startup_phase(
         "startup_prewarm_create_turn_context",
         prewarm_started_at.elapsed(),
@@ -409,35 +406,6 @@ async fn schedule_startup_prewarm_inner(
             window_id,
             CodexResponsesRequestKind::Prewarm,
         );
-<<<<<<< HEAD:codex-rs/core/src/session_startup_prewarm.rs
-    let mut client_session = session.services.new_model_client_session();
-    // Prewarm sends the session's whole prompt to prime the model's cache. The
-    // provider charges for those cache writes, so it is inference the operator
-    // paid for and it is collected like any other turn, under its own identity.
-    // Best effort on purpose, exactly as compaction is: a prewarm that cannot be
-    // recorded must still run, because accounting is an observer here and not a
-    // gate on starting a session.
-    let _accounting = match crate::accounting::attach_turn(
-        &session,
-        startup_turn_context.as_ref(),
-        &client_session,
-        if reopened {
-            crate::accounting::reopen_prewarm_turn_label()
-        } else {
-            crate::accounting::prewarm_turn_label()
-        },
-    )
-    .await
-    {
-        Ok(scopes) => Some(scopes),
-        Err(error) => {
-            tracing::warn!(%error, "accounting: startup prewarm proceeding unrecorded");
-            None
-        }
-    };
-||||||| 413492cd6c:codex-rs/core/src/session_startup_prewarm.rs
-    let mut client_session = session.services.model_client.new_session();
-=======
     crate::turn_metadata::ExecutionMetadata::from_settings(&startup_turn_context.initial_settings)
         .apply_to(&mut handshake_metadata);
     let handshake_metadata = session.with_window_and_fork_metadata(
@@ -511,7 +479,6 @@ async fn schedule_startup_prewarm_inner(
     let responses_metadata = session
         .responses_metadata(step_context.as_ref(), CodexResponsesRequestKind::Prewarm)
         .await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a:codex-rs/core/src/session/startup_prewarm.rs
     let websocket_warmup_started_at = Instant::now();
     // Prewarm establishes the request baseline before the first turn can change effort.
     client_session

@@ -34,8 +34,7 @@ impl Session {
         }
         let policy = self
             .services
-            .agent_control
-            .effective_security_policy()
+            .security_policy
             .snapshot_for_agent(self.thread_id)
             .map_err(|_| StageOneMemoryDenial::PolicyUnavailable)?;
         let mut config = (*configuration.original_config_do_not_use).clone();
