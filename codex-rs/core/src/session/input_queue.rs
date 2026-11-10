@@ -398,18 +398,29 @@ impl InputQueue {
         &self,
         active_turn: &Mutex<Option<ActiveTurn>>,
     ) -> (Vec<TurnInput>, Option<String>) {
-        self.get_pending_input_inner(active_turn, /*allow_untracked_mailbox*/ true)
-            .await
+        self.get_pending_input_inner(
+            active_turn,
+            /*owner_turn_id*/ None,
+            /*allow_untracked_mailbox*/ true,
+        )
+        .await
     }
 
-    /// Takes input for an already-running task. A task detached by any stop path must not drain
-    /// mailbox mail: it no longer has a turn state that can record its outcome.
+    /// Takes input for the running task of turn `turn_id`. A task detached by any stop path must
+    /// not drain mailbox mail: it no longer has a turn state that can record its outcome. Nor may
+    /// it take input or mail from a newer turn that started while the stop was still waiting for
+    /// it (guardian stops turns in the background, #2046): only the slot's own task takes from it.
     pub(crate) async fn get_pending_input_for_running_task(
         &self,
         active_turn: &Mutex<Option<ActiveTurn>>,
+        turn_id: &str,
     ) -> (Vec<TurnInput>, Option<String>) {
-        self.get_pending_input_inner(active_turn, /*allow_untracked_mailbox*/ false)
-            .await
+        self.get_pending_input_inner(
+            active_turn,
+            Some(turn_id),
+            /*allow_untracked_mailbox*/ false,
+        )
+        .await
     }
 
     #[allow(
@@ -419,10 +430,11 @@ impl InputQueue {
     async fn get_pending_input_inner(
         &self,
         active_turn: &Mutex<Option<ActiveTurn>>,
+        owner_turn_id: Option<&str>,
         allow_untracked_mailbox: bool,
     ) -> (Vec<TurnInput>, Option<String>) {
         let (pending_input, accepts_mailbox_delivery, turn_id, turn_state) =
-            Self::take_turn_pending_input(active_turn).await;
+            Self::take_turn_pending_input(active_turn, owner_turn_id).await;
         if !accepts_mailbox_delivery {
             return (pending_input, None);
         }
@@ -463,7 +475,7 @@ impl InputQueue {
         active_turn: &Mutex<Option<ActiveTurn>>,
     ) -> (Vec<TurnInput>, Option<String>) {
         let (pending_input, accepts_mailbox_delivery, turn_id, _turn_state) =
-            Self::take_turn_pending_input(active_turn).await;
+            Self::take_turn_pending_input(active_turn, /*owner_turn_id*/ None).await;
         if !accepts_mailbox_delivery {
             return (pending_input, None);
         }
@@ -485,8 +497,11 @@ impl InputQueue {
         clippy::await_holding_invalid_type,
         reason = "active-turn and turn-state inspection must remain atomic"
     )]
+    /// With `owner_turn_id`, takes nothing (and refuses mailbox delivery) unless the slot's task
+    /// is that turn's.
     async fn take_turn_pending_input(
         active_turn: &Mutex<Option<ActiveTurn>>,
+        owner_turn_id: Option<&str>,
     ) -> (
         Vec<TurnInput>,
         bool,
@@ -496,6 +511,16 @@ impl InputQueue {
         {
             let mut active = active_turn.lock().await;
             match active.as_mut() {
+                Some(active_turn)
+                    if owner_turn_id.is_some_and(|owner| {
+                        active_turn
+                            .task
+                            .as_ref()
+                            .is_none_or(|task| task.turn_context.sub_id != owner)
+                    }) =>
+                {
+                    (Vec::new(), false, None, None)
+                }
                 Some(active_turn) => {
                     let mut turn_state = active_turn.turn_state.lock().await;
                     let accepts_mailbox_delivery =
@@ -895,7 +920,7 @@ mod tests {
         // reaching its next input poll must leave mail queued rather than silently taking it.
         assert_eq!(
             input_queue
-                .get_pending_input_for_running_task(&stopped_turn)
+                .get_pending_input_for_running_task(&stopped_turn, "stopped-turn")
                 .await
                 .0,
             Vec::new()
