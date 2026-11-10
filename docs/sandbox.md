@@ -201,6 +201,16 @@ names by drive letter, or through a link, is. A global or system
 git config that lies in such a folder is recorded too. A new, changed or
 removed file there is flagged like a changed repository, and so is one
 that appears where a config points (a new repository's `.githooks`, say).
+The one network path that is read is a global or system git config whose
+own path is on a network share or mapped network drive, such as
+`.gitconfig` in a home folder on a share (D517). It is read on a
+background thread, and each check waits at most about 2 seconds in all
+for such configs; one not read in time, or whose read fails, counts as
+changed after every command (it is flagged, and the command is held up by
+no more than that wait). The include paths such a config names are never
+opened on a share or mapped network drive, nor by a path without a drive
+or server (`/x`), so settings in an included file there aren't checked.
+A config on this machine is read as before.
 For Husky, the files named after git hooks in the folder above `_` count,
 and so does the `_` folder below any hooks folder. Rewriting a file with
 the same content (as `npm install` does when it reruns Husky) isn't a
