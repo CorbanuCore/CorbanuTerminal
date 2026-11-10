@@ -425,9 +425,19 @@ pub struct RmcpClient {
     elicitation_pause_state: ElicitationPauseState,
     tool_list_revision: Arc<AtomicU64>,
     cancel_requests_on_drop: AtomicBool,
+    discover_timeout: Option<Duration>,
 }
 
 impl RmcpClient {
+    /// Bounds how long an opted-in 2026-07-28 stdio server may take to answer
+    /// `server/discover` before it is started again with legacy `initialize`. Without it,
+    /// the startup timeout passed to `initialize` bounds the discover wait. The legacy
+    /// `initialize` then gets that startup timeout again, on its own.
+    pub fn with_discover_timeout(mut self, discover_timeout: Option<Duration>) -> Self {
+        self.discover_timeout = discover_timeout;
+        self
+    }
+
     /// Extend tool-call cancellation to catalog, resource, and custom requests on a shared connection.
     pub fn enable_request_cancellation(&self) {
         self.cancel_requests_on_drop.store(true, Ordering::Relaxed);
@@ -467,6 +477,14 @@ impl RmcpClient {
     pub async fn new_in_process_client(
         factory: Arc<dyn InProcessTransportFactory>,
     ) -> io::Result<Self> {
+        Self::new_in_process_client_with_protocol_mode(factory, McpProtocolMode::Legacy).await
+    }
+
+    /// Constructs an in-process client with an explicitly selected compatibility policy.
+    pub async fn new_in_process_client_with_protocol_mode(
+        factory: Arc<dyn InProcessTransportFactory>,
+        protocol_mode: McpProtocolMode,
+    ) -> io::Result<Self> {
         let transport_recipe = TransportRecipe::InProcess { factory };
         let transport = Self::create_pending_transport(&transport_recipe)
             .await
@@ -478,13 +496,14 @@ impl RmcpClient {
             }),
             stdio_process: None,
             transport_recipe,
-            protocol_mode: McpProtocolMode::Legacy,
+            protocol_mode,
             requires_read_only_tools: false,
             initialize_context: Mutex::new(None),
             session_recovery_lock: Semaphore::new(/*permits*/ 1),
             elicitation_pause_state: ElicitationPauseState::new(),
             tool_list_revision: Arc::default(),
             cancel_requests_on_drop: AtomicBool::new(false),
+            discover_timeout: None,
         })
     }
 
@@ -561,6 +580,7 @@ impl RmcpClient {
             elicitation_pause_state: ElicitationPauseState::new(),
             tool_list_revision: Arc::default(),
             cancel_requests_on_drop: AtomicBool::new(false),
+            discover_timeout: None,
         })
     }
 
@@ -670,6 +690,7 @@ impl RmcpClient {
             elicitation_pause_state: ElicitationPauseState::new(),
             tool_list_revision: Arc::default(),
             cancel_requests_on_drop: AtomicBool::new(false),
+            discover_timeout: None,
         })
     }
 
@@ -2078,6 +2099,10 @@ async fn create_oauth_transport_and_runtime(
         oauth_runtime: runtime,
     })
 }
+
+#[cfg(test)]
+#[path = "rmcp_client_lifecycle_tests.rs"]
+mod lifecycle_tests;
 
 #[cfg(test)]
 #[path = "tool_input_tests.rs"]
