@@ -1189,6 +1189,8 @@ Example request/response:
 
 For a detached review, use `"delivery": "detached"`. The response is the same shape, but `reviewThreadId` will be the id of the new review thread (different from the original `threadId`). The server also emits a `thread/started` notification for that new thread before streaming the review turn. Internally, this is a normal forked thread and turn whose prompt mentions the bundled `$review-agent` skill, so normal turn steering, tool, permission, and item-stream behavior applies.
 
+The review thread runs with the parent thread's current settings (permissions, approval policy, Windows sandbox and security level, including changes made since the parent started), not with the config the server started with; `review_model`, when set, picks its model.
+
 Detached review is unsupported when the parent thread is paginated.
 
 For an inline review, Codex streams the usual `turn/started` notification followed by an `item/started`
