@@ -138,7 +138,7 @@ fn listed_hook(config: &Config) -> HookListEntry {
 #[tokio::test]
 async fn project_config_hook_cannot_mark_itself_trusted() {
     let fixture = Fixture::new();
-    fixture.write_project_config(&hook_toml(None));
+    fixture.write_project_config(&hook_toml(/*trust*/ None));
     let hook = listed_hook(&fixture.config().await);
     fixture.write_project_config(&hook_toml(Some(&hook)));
 
@@ -153,7 +153,7 @@ async fn project_config_hook_cannot_mark_itself_trusted() {
 #[tokio::test]
 async fn project_role_hook_needs_the_same_trust_review_as_project_config_hooks() {
     let fixture = Fixture::new();
-    let role_path = fixture.write_project_role(&hook_toml(None));
+    let role_path = fixture.write_project_role(&hook_toml(/*trust*/ None));
     let hook = listed_hook(&fixture.child("relay").await);
     fixture.write_project_role(&hook_toml(Some(&hook)));
 
@@ -176,7 +176,7 @@ async fn project_role_hook_needs_the_same_trust_review_as_project_config_hooks()
 #[tokio::test]
 async fn project_role_hook_stays_a_project_hook_under_a_nested_role() {
     let fixture = Fixture::new();
-    fixture.write_project_role(&hook_toml(None));
+    fixture.write_project_role(&hook_toml(/*trust*/ None));
     fixture.write_user_role("");
     let hook = listed_hook(&fixture.child("relay").await);
     fixture.write_project_role(&hook_toml(Some(&hook)));
@@ -196,7 +196,7 @@ async fn project_role_hook_stays_a_project_hook_under_a_nested_role() {
 #[tokio::test]
 async fn user_role_hook_keeps_its_own_trust_state() {
     let fixture = Fixture::new();
-    fixture.write_user_role(&hook_toml(None));
+    fixture.write_user_role(&hook_toml(/*trust*/ None));
     let hook = listed_hook(&fixture.child("helper").await);
     fixture.write_user_role(&hook_toml(Some(&hook)));
 
