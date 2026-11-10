@@ -409,7 +409,8 @@ async fn legacy_oauth_discovery_rejects_authorization_metadata_redirect_cycles()
         .context("OAuth metadata redirect cycles must be rejected")?;
     assert!(
         discovery_request_failure(&error)
-            .is_some_and(|reason| reason.contains(" exceeded ") && reason.contains(" redirects")),
+            .is_some_and(|reason| reason.contains("OAuth request exceeded ")
+                && reason.contains(" redirects")),
         "expected the SDK to report its bounded OAuth discovery redirect limit: {error:#}",
     );
     authorization_server.verify().await;

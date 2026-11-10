@@ -157,7 +157,7 @@ async fn oauth_metadata_fallback_preserves_terminal_failures() -> Result<()> {
         "token_endpoint": format!("{}/token", authorization.uri())
     });
     for (fallback, expected_error, request_count) in [
-        (ResponseTemplate::new(404), "503", 3),
+        (ResponseTemplate::new(404), "HTTP status 503", 3),
         (
             ResponseTemplate::new(200).set_body_json(wrong_issuer),
             "issuer mismatch",
@@ -165,13 +165,13 @@ async fn oauth_metadata_fallback_preserves_terminal_failures() -> Result<()> {
         ),
         (
             ResponseTemplate::new(307).insert_header("location", redirect_target.uri()),
-            "503",
+            "HTTP status 503",
             2,
         ),
-        (ResponseTemplate::new(408), "408", 2),
-        (ResponseTemplate::new(425), "425", 2),
-        (ResponseTemplate::new(429), "429", 2),
-        (ResponseTemplate::new(500), "500", 2),
+        (ResponseTemplate::new(408), "HTTP status 408", 2),
+        (ResponseTemplate::new(425), "HTTP status 425", 2),
+        (ResponseTemplate::new(429), "HTTP status 429", 2),
+        (ResponseTemplate::new(500), "HTTP status 500", 2),
     ] {
         authorization.reset().await;
         Mock::given(method("GET"))
@@ -191,6 +191,8 @@ async fn oauth_metadata_fallback_preserves_terminal_failures() -> Result<()> {
             .await
             .expect_err("discovery must fail closed");
         // rmcp 3.9 keeps the failed request's cause in `source()`, not in `Display`.
+        // The expected codes say "HTTP status" because the top-level message names
+        // the random mock-server port.
         let error_chain = std::iter::successors(
             Some(&error as &(dyn std::error::Error + 'static)),
             |error| error.source(),
