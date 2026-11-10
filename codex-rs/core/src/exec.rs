@@ -503,7 +503,7 @@ pub(crate) fn refuse_mxc_without_corbanu_protections(
     }
     let refusal = |why: &str| {
         Err(CodexErr::UnsupportedOperation(format!(
-            "The Windows MXC sandbox can't apply Corbanu's protections here ({why}), so Corbanu doesn't run commands in it; turn off `prefer_mxc` to use the Windows sandbox instead."
+            "The Windows MXC sandbox can't apply Corbanu's protections here ({why}), so Corbanu doesn't run commands in it. Use the elevated or non-admin Windows sandbox instead: set `windows.sandbox` to one of them and turn off `prefer_mxc` (an administrator's `require_mxc` requirement prevents this)."
         )))
     };
     if contract_armed {
