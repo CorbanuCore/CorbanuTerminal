@@ -517,3 +517,56 @@ async fn sec_513_fresh_human_authority_and_remembered_answers() -> anyhow::Resul
     assert!(matches!(fresh.result, Ok(ReviewDecision::Approved)));
     Ok(())
 }
+
+/// PF-30-S03: granted permissions preapprove a patch, but not a post-taint
+/// protected one: with fresh human authority the person is asked.
+#[tokio::test]
+async fn pf_30_s03_fresh_authority_ignores_patch_preapproval() -> anyhow::Result<()> {
+    use anyhow::Context;
+    let (session, turn, events) = make_session_and_context_with_rx().await;
+    *session.active_turn.lock().await = Some(crate::state::ActiveTurn::default());
+    #[allow(deprecated)]
+    let cwd = PathUri::from_abs_path(&turn.cwd);
+    let action = ApprovalAction::ApplyPatch {
+        id: "pf30-patch".to_string(),
+        environment_id: codex_exec_server::LOCAL_ENVIRONMENT_ID.to_string(),
+        cwd: cwd.clone(),
+        files: vec![cwd],
+        patch: "*** Begin Patch\n*** End Patch\n".to_string(),
+        changes: Arc::new(HashMap::new()),
+        permissions_preapproved: true,
+    };
+    let (_, mut context) = exec_approval(&turn, "pf30-patch", ApprovalsReviewer::User);
+    context.tool_name = ToolName::plain("apply_patch");
+
+    let preapproved = session
+        .request_user_approval_with_authority(
+            &action, &context, /*fresh_human_authority*/ false,
+        )
+        .await;
+    assert_eq!(preapproved.decision, ReviewDecision::Approved);
+    assert!(
+        events.try_recv().is_err(),
+        "a preapproved patch asks nobody"
+    );
+
+    let fresh = session.request_user_approval_with_authority(
+        &action, &context, /*fresh_human_authority*/ true,
+    );
+    tokio::pin!(fresh);
+    tokio::select! {
+        resolution = &mut fresh => panic!("expected a prompt, got {resolution:?}"),
+        event = events.recv() => {
+            let codex_protocol::protocol::EventMsg::ApplyPatchApprovalRequest(request) =
+                event.context("receive patch prompt")?.msg
+            else {
+                panic!("expected a patch approval prompt");
+            };
+            session
+                .notify_approval(&request.call_id, ReviewDecision::ApprovedForSession)
+                .await;
+        }
+    }
+    assert_eq!(fresh.await.decision, ReviewDecision::Approved);
+    Ok(())
+}
