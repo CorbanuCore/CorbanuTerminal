@@ -76,7 +76,7 @@ use codex_connectors::connector_runtime_context_key;
 <<<<<<< HEAD
 use codex_core_skills::injection::HOST_SKILLS_CONTEXT_SOURCE_ID;
 use codex_core_skills::injection::HostSkillsCatalogInWorldState;
-||||||| 413492cd6c
+||||||| base
 use codex_core_skills::injection::HostSkillsCatalogInWorldState;
 =======
 use codex_context_fragments::RenderedFragment;
@@ -150,7 +150,7 @@ use codex_protocol::models::SandboxEnforcement;
 use codex_protocol::models::format_allow_prefixes;
 use codex_protocol::openai_models::ModelBilling;
 use codex_protocol::openai_models::ModelCapabilityTier;
-||||||| 413492cd6c
+||||||| base
 use codex_protocol::models::format_allow_prefixes;
 =======
 >>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
@@ -248,7 +248,7 @@ use crate::config::resolve_web_search_mode_for_turn;
 use crate::context_manager::ContextManager;
 <<<<<<< HEAD
 use crate::context_manager::updates::ContextSection;
-||||||| 413492cd6c
+||||||| base
 =======
 use crate::context_manager::HistoryReplacement;
 >>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
@@ -270,7 +270,7 @@ mod code_mode_warning;
 <<<<<<< HEAD
 mod config_lock;
 mod confirmed_aggressive;
-||||||| 413492cd6c
+||||||| base
 mod config_lock;
 =======
 mod config_refresh;
@@ -296,7 +296,7 @@ pub(crate) mod memory_stage_one;
 pub(crate) mod multi_agents;
 <<<<<<< HEAD
 mod output_text_stream;
-||||||| 413492cd6c
+||||||| base
 =======
 mod plugin_selection;
 mod realtime_history;
@@ -342,6 +342,7 @@ use self::turn::agent_message_text;
 #[cfg(test)]
 use self::turn::collect_explicit_app_ids_from_skill_items;
 use self::turn::realtime_text_for_event;
+use self::turn_context::TurnAuthority;
 use self::turn_context::TurnContext;
 #[cfg(test)]
 mod rollout_reconstruction_tests;
@@ -438,7 +439,7 @@ pub(crate) struct PreviousTurnSettings {
 #[cfg(test)]
 use crate::SkillMetadata;
 use crate::SkillsService;
-||||||| 413492cd6c
+||||||| base
 #[derive(Debug, PartialEq)]
 pub enum SteerInputError {
     NoActiveTurn(Vec<UserInput>),
@@ -571,13 +572,8 @@ use codex_protocol::protocol::DeprecationNoticeEvent;
 use codex_protocol::protocol::Event;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::ExecApprovalRequestEvent;
-<<<<<<< HEAD
 use codex_protocol::protocol::ExecApprovalRequestWithdrawnEvent;
 use codex_protocol::protocol::InitialHistory;
-||||||| 413492cd6c
-use codex_protocol::protocol::InitialHistory;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::protocol::ModelRerouteEvent;
 use codex_protocol::protocol::ModelRerouteReason;
 use codex_protocol::protocol::ModelResponseCompletedEvent;
@@ -1173,7 +1169,7 @@ impl Session {
             environments: TurnEnvironmentSelections::new(
                 config.cwd.clone(),
                 environment_selections,
-||||||| 413492cd6c
+||||||| base
             provider: config.model_provider.clone(),
             collaboration_mode,
             model_reasoning_summary: config.model_reasoning_summary,
@@ -1600,7 +1596,7 @@ fn push_prompt_fragment(
     }
 }
 
-||||||| 413492cd6c
+||||||| base
 fn push_prompt_fragment(
     fragment: PromptFragment,
     developer_sections: &mut Vec<String>,
@@ -2063,7 +2059,7 @@ impl Session {
             initial_history_started_at,
         );
         match conversation_history {
-||||||| 413492cd6c
+||||||| base
         match conversation_history {
 =======
         let turn_context = match conversation_history {
@@ -2078,7 +2074,7 @@ impl Session {
                     "record_initial_history_new_done",
                     initial_history_started_at,
                 );
-||||||| 413492cd6c
+||||||| base
 =======
                 None
 >>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
@@ -2091,7 +2087,7 @@ impl Session {
                     "record_initial_history_resumed_after_default_turn",
                     initial_history_started_at,
                 );
-||||||| 413492cd6c
+||||||| base
 =======
                 if matches!(
                     rollout_items.iter().rev().find_map(|item| match item {
@@ -2161,7 +2157,7 @@ impl Session {
                     "record_initial_history_resumed_after_token_seed",
                     initial_history_started_at,
                 );
-||||||| 413492cd6c
+||||||| base
 =======
                 self.state.lock().await.latest_token_usage_record =
                     Self::last_token_usage_record_from_rollout(&rollout_items);
@@ -2198,7 +2194,7 @@ impl Session {
                     "record_initial_history_resumed_done",
                     initial_history_started_at,
                 );
-||||||| 413492cd6c
+||||||| base
 =======
                 None
 >>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
@@ -2292,7 +2288,7 @@ impl Session {
                     "record_initial_history_forked_done",
                     initial_history_started_at,
                 );
-||||||| 413492cd6c
+||||||| base
 =======
                 Some(turn_context)
             }
@@ -2357,7 +2353,7 @@ impl Session {
                 _ => None,
             }),
         );
-||||||| 413492cd6c
+||||||| base
         // This meets media preparation requirements without modifying persisted rollouts.
         prepare_image_response_items(&mut history);
         prepare_audio_response_items(&mut history);
@@ -2497,7 +2493,7 @@ impl Session {
             }
             _ => None,
         })
-||||||| 413492cd6c
+||||||| base
 =======
     fn last_token_usage_record_from_rollout(
         rollout_items: &[RolloutItem],
@@ -2531,14 +2527,6 @@ impl Session {
 
     pub(crate) async fn update_settings(
         &self,
-<<<<<<< HEAD
-        mut updates: SessionSettingsUpdate,
-    ) -> ConstraintResult<()> {
-        self.ensure_runtime_model_provider(&mut updates).await;
-||||||| 413492cd6c
-        updates: SessionSettingsUpdate,
-    ) -> ConstraintResult<()> {
-=======
         updates: SessionSettingsUpdate,
     ) -> ConstraintResult<SessionSettingsCommit> {
         let Some(commit) = self.update_settings_if(updates, |_, _| true).await? else {
@@ -2556,22 +2544,15 @@ impl Session {
     /// other locks, or call back into `Session`.
     async fn update_settings_if(
         &self,
-        updates: SessionSettingsUpdate,
+        mut updates: SessionSettingsUpdate,
         should_commit: impl FnOnce(&SessionConfiguration, &SessionConfiguration) -> bool + Send,
     ) -> ConstraintResult<Option<SessionSettingsCommit>> {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        // GPU endpoints are process-local controller transports and can change while a
+        // session remains open. Refresh the selected runtime provider before every update
+        // (turns included) so recovery does not leave the session's ModelClient pinned to a
+        // dead local port.
+        self.ensure_runtime_model_provider(&mut updates).await;
         let notify_config_contributors = !self.services.extensions.config_contributors().is_empty();
-<<<<<<< HEAD
-        let (
-            previous_config,
-            new_config,
-            permission_profile_changed,
-            mcp_inputs_changed,
-            stale_startup_prewarm,
-            follows_model_list,
-||||||| 413492cd6c
-        let (previous_config, new_config, permission_profile_changed, mcp_inputs_changed) = {
-=======
         let windows_sandbox_changed;
         let (
             commit,
@@ -2580,7 +2561,8 @@ impl Session {
             permission_profile_changed,
             mcp_inputs_changed,
             credential_masking_warning,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            stale_startup_prewarm,
+            follows_model_list,
         ) = {
             let mut state = self.state.lock().await;
             let updated = match self.apply_session_settings(&state.session_configuration, &updates)
@@ -2614,14 +2596,17 @@ impl Session {
             let updated_permission_profile = updated.permission_profile();
             let permission_profile_changed =
                 previous_permission_profile != updated_permission_profile;
-<<<<<<< HEAD
-            let mcp_inputs_changed = state.session_configuration.mcp_inputs_differ(&updated);
+            let root_service_tier_changed = updated.parent_thread_id.is_none()
+                && state.session_configuration.step_settings.service_tier
+                    != updated.step_settings.service_tier;
+            let mcp_inputs_changed = self.mcp_inputs_differ(&state.session_configuration, &updated);
             let model_provider_changed = state
                 .session_configuration
                 .original_config_do_not_use
                 .model_provider_id
                 != updated.original_config_do_not_use.model_provider_id
-                || state.session_configuration.provider != updated.provider;
+                || state.session_configuration.provider.info() != updated.provider.info();
+            // PF-84: the account follows the provider first.
             let account_switched = model_provider_changed && self.follow_provider_account(&updated);
             if model_provider_changed {
                 // Publish while updates are serialized, before the new configuration
@@ -2634,28 +2619,8 @@ impl Session {
             } else {
                 None
             };
-            if updates.environments.is_some() {
-                self.services
-                    .turn_environments
-                    .update_selections(updated.environment_selections());
-            }
             let follows_model_list =
                 model_provider_changed && self.model_list_follows_this_session(&updated);
-            state.session_configuration = updated;
-||||||| 413492cd6c
-            let mcp_inputs_changed = state.session_configuration.mcp_inputs_differ(&updated);
-            if updates.environments.is_some() {
-                self.services
-                    .turn_environments
-                    .update_selections(updated.environment_selections());
-            }
-            state.session_configuration = updated;
-=======
-            let root_service_tier_changed = updated.parent_thread_id.is_none()
-                && state.session_configuration.step_settings.service_tier
-                    != updated.step_settings.service_tier;
-            let mcp_inputs_changed = self.mcp_inputs_differ(&state.session_configuration, &updated);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             if mcp_inputs_changed {
                 self.mark_mcp_runtime_dirty();
             }
@@ -2695,30 +2660,21 @@ impl Session {
                 previous_config,
                 new_config,
                 permission_profile_changed,
-<<<<<<< HEAD
                 mcp_inputs_changed || account_switched,
+                credential_masking_warning,
                 stale_startup_prewarm,
                 follows_model_list,
-||||||| 413492cd6c
-                mcp_inputs_changed,
-=======
-                mcp_inputs_changed,
-                credential_masking_warning,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             )
         };
-<<<<<<< HEAD
         if follows_model_list {
             self.follow_model_list_account().await;
-||||||| 413492cd6c
-=======
+        }
         if windows_sandbox_changed {
             crate::windows_sandbox::log_windows_sandbox_change(
                 commit.configuration.codex_home.as_path(),
                 commit.configuration.windows_sandbox_type,
                 commit.configuration.windows_sandbox_level,
             );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
         self.emit_config_changed_contributors(previous_config.as_ref(), new_config.as_ref());
         if let Some(startup_prewarm) = stale_startup_prewarm {
@@ -2920,29 +2876,15 @@ impl Session {
         &self,
         updates: &SessionSettingsUpdate,
     ) -> ConstraintResult<ThreadConfigSnapshot> {
-<<<<<<< HEAD
         let mut updates = updates.clone();
         self.ensure_runtime_model_provider(&mut updates).await;
-        let state = self.state.lock().await;
-        state
-            .session_configuration
-            .apply(&updates)
-            .map(|configuration| configuration.thread_config_snapshot())
-||||||| 413492cd6c
-        let state = self.state.lock().await;
-        state
-            .session_configuration
-            .apply(updates)
-            .map(|configuration| configuration.thread_config_snapshot())
-=======
         let configuration = {
             let state = self.state.lock().await;
-            self.apply_session_settings(&state.session_configuration, updates)?
+            self.apply_session_settings(&state.session_configuration, &updates)?
         };
         Ok(self
             .effective_thread_config_snapshot(&configuration, configuration.environments.clone())
             .await)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(crate) async fn thread_config_snapshot(&self) -> ThreadConfigSnapshot {
@@ -3344,7 +3286,7 @@ impl Session {
                 next_config.features.enabled(Feature::SecretAuthStorage),
             ) {
                 warn!("failed to refresh MCP auth storage config: {err}");
-||||||| 413492cd6c
+||||||| base
     pub(crate) async fn refresh_runtime_config(&self, next_config: Config) {
         // Refresh only the user layer from the incoming snapshot. Preserve thread-local
         // layers such as request/session overrides that were present when this session
@@ -3566,7 +3508,7 @@ impl Session {
     }
 
     async fn send_gated_event(&self, turn_context: &TurnContext, msg: EventMsg) {
-||||||| 413492cd6c
+||||||| base
 =======
         if let Some((item_id, started_at_ms)) = msg.command_approval_start() {
             // The client can see the command before execution. Keep its first start
@@ -3758,7 +3700,7 @@ impl Session {
             AgentCommunicationContext::new(AgentCommunicationKind::Result, self.thread_id);
         if let Err(err) = self
             .services
-||||||| 413492cd6c
+||||||| base
         self.forward_child_completion_to_parent(
             turn_context,
             *parent_thread_id,
@@ -3923,7 +3865,7 @@ impl Session {
         match crate::security::disclosure_gate::gate_presented(event.msg) {
             Some(msg) => event.msg = msg,
             None => return,
-||||||| 413492cd6c
+||||||| base
 =======
         let flush_guardian_completion = persist
             && matches!(event.msg, EventMsg::TurnComplete(_))
@@ -4117,6 +4059,16 @@ impl Session {
             .map(Some)
     }
 
+    /// Whether `captured` (a running turn) was admitted under the execution
+    /// authority `current` grants now: approval policy, permission profile,
+    /// approvals reviewer and Windows sandbox level (see [`TurnAuthority`]).
+    pub(super) fn authorization_matches(
+        current: &SessionConfiguration,
+        captured: &TurnContext,
+    ) -> bool {
+        TurnAuthority::of(current) == captured.authority
+    }
+
     /// #945: the policy marker the open approval prompt `approval_id` was
     /// shown under; `None` when no such prompt is open.
     #[expect(
@@ -4153,7 +4105,6 @@ impl Session {
         ))
     }
 
-<<<<<<< HEAD
     pub(crate) async fn record_execpolicy_amendment_message(
         &self,
         sub_id: &str,
@@ -4173,25 +4124,6 @@ impl Session {
     /// `shown_under` (#945): the policy marker an allowing answer's prompt
     /// was shown under; when a security transition was committed since,
     /// nothing is changed.
-||||||| 413492cd6c
-    pub(crate) async fn record_execpolicy_amendment_message(
-        &self,
-        sub_id: &str,
-        amendment: &ExecPolicyAmendment,
-    ) {
-        let Some(prefixes) = format_allow_prefixes(vec![amendment.command.clone()]) else {
-            warn!("execpolicy amendment for {sub_id} had no command prefix");
-            return;
-        };
-        let message: ResponseItem =
-            ContextualUserFragment::into(ApprovedCommandPrefixSaved::new(prefixes));
-        let turn_context = self.turn_context_for_sub_id(sub_id).await;
-        self.inject_no_new_turn(vec![message], turn_context.as_deref())
-            .await;
-    }
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub(crate) async fn persist_network_policy_amendment(
         &self,
         amendment: &NetworkPolicyAmendment,
@@ -4414,20 +4346,12 @@ impl Session {
             match active.as_mut() {
                 Some(at) => {
                     let mut ts = at.turn_state.lock().await;
-<<<<<<< HEAD
-                    ts.insert_pending_approval(
-                        effective_approval_id.clone(),
-                        tx_approve,
-                        self.services.authority_marker(),
-                    )
-||||||| 413492cd6c
-                    ts.insert_pending_approval(effective_approval_id.clone(), tx_approve)
-=======
                     let prev = ts.insert_pending_approval(
                         effective_approval_id.clone(),
                         tx_approve,
                         kind,
                         turn_context.sub_id.clone(),
+                        self.services.authority_marker(),
                     );
                     let prompt = network_approval_context.as_ref().map(|_| {
                         ts.track_network_prompt(
@@ -4437,7 +4361,6 @@ impl Session {
                         )
                     });
                     (prev, prompt)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 }
                 None => (None, None),
             }
@@ -4501,7 +4424,7 @@ impl Session {
             available_decisions: Some(available_decisions),
             parsed_cmd,
         });
-<<<<<<< HEAD
+        let _user_wait = self.start_user_wait_timing(turn_context, user_wait_owner.as_deref());
         // #722 (D279): a caller that stops waiting (a remote network request
         // timed out or its process ended) drops this future, and the action is
         // already refused. Tell clients to close the prompt.
@@ -4509,10 +4432,6 @@ impl Session {
             tx_event: self.tx_event.clone(),
             event: Some(withdrawn),
         };
-||||||| 413492cd6c
-=======
-        let _user_wait = self.start_user_wait_timing(turn_context, user_wait_owner.as_deref());
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         self.send_event(turn_context, event).await;
         let decision = rx_approve.await.unwrap_or(ReviewDecision::Abort);
         withdraw_on_drop.disarm();
@@ -4544,14 +4463,9 @@ impl Session {
                     ts.insert_pending_approval(
                         approval_id.clone(),
                         tx_approve,
-<<<<<<< HEAD
-                        self.services.authority_marker(),
-||||||| 413492cd6c
-                    ts.insert_pending_approval(approval_id.clone(), tx_approve)
-=======
                         ExecApprovalKind::Command,
                         turn_context.sub_id.clone(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                        self.services.authority_marker(),
                     )
                 }
                 None => None,
@@ -4581,22 +4495,15 @@ impl Session {
         request: PreparedPermissionRequest,
         cancellation_token: CancellationToken,
     ) -> Option<RequestPermissionsResponse> {
-<<<<<<< HEAD
-        self.request_permissions_explained(
-            turn_context,
-            call_id,
-            args,
-            environment,
-            cancellation_token,
-        )
-        .await
-        .unwrap_or_else(|_refusal| {
-            Some(RequestPermissionsResponse {
-                permissions: RequestPermissionProfile::default(),
-                scope: PermissionGrantScope::Turn,
-                strict_auto_review: false,
+        self.request_permissions_explained(step_context, call_id, request, cancellation_token)
+            .await
+            .unwrap_or_else(|_refusal| {
+                Some(RequestPermissionsResponse {
+                    permissions: RequestPermissionProfile::default(),
+                    scope: PermissionGrantScope::Turn,
+                    strict_auto_review: false,
+                })
             })
-        })
     }
 
     /// [`Self::request_permissions_for_environment`], or `Err` with why when
@@ -4607,16 +4514,16 @@ impl Session {
     )]
     pub(crate) async fn request_permissions_explained(
         self: &Arc<Self>,
-        turn_context: &Arc<TurnContext>,
+        step_context: &Arc<StepContext>,
         call_id: String,
-        args: RequestPermissionsArgs,
-        environment: TurnEnvironmentSelection,
+        mut request: PreparedPermissionRequest,
         cancellation_token: CancellationToken,
     ) -> Result<Option<RequestPermissionsResponse>, String> {
-        match turn_context.as_ref().approval_policy.value() {
-||||||| 413492cd6c
-        match turn_context.as_ref().approval_policy.value() {
-=======
+        let nothing_granted = || RequestPermissionsResponse {
+            permissions: RequestPermissionProfile::default(),
+            scope: PermissionGrantScope::Turn,
+            strict_auto_review: false,
+        };
         let turn_context = &step_context.turn;
         let user_wait_owner = self.user_wait_timing_owner(turn_context, Some(&call_id));
         let approval_policy = step_context.settings.approval_policy();
@@ -4626,172 +4533,64 @@ impl Session {
             .find(|candidate| candidate.selection.environment_id == request.environment_id)
             .cloned()
         else {
-            return Some(RequestPermissionsResponse {
-                permissions: RequestPermissionProfile::default(),
-                scope: PermissionGrantScope::Turn,
-                strict_auto_review: false,
-            });
+            return Ok(Some(nothing_granted()));
         };
         let cwd = environment.cwd();
         match approval_policy {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-            AskForApproval::Never => {
-                return Ok(Some(RequestPermissionsResponse {
-                    permissions: RequestPermissionProfile::default(),
-                    scope: PermissionGrantScope::Turn,
-                    strict_auto_review: false,
-                }));
-            }
+            AskForApproval::Never => return Ok(Some(nothing_granted())),
             AskForApproval::Granular(granular_config)
                 if !granular_config.allows_request_permissions() =>
             {
-                return Ok(Some(RequestPermissionsResponse {
-                    permissions: RequestPermissionProfile::default(),
-                    scope: PermissionGrantScope::Turn,
-                    strict_auto_review: false,
-                }));
+                return Ok(Some(nothing_granted()));
             }
             AskForApproval::OnRequest
             | AskForApproval::UnlessTrusted
             | AskForApproval::Granular(_) => {}
         }
 
-<<<<<<< HEAD
-        let requested_permissions = args.permissions;
+        // The protected-path checks (#584, #245) need a path on this host.
         // TODO(anp): Migrate request_permissions to support paths from foreign environments.
-        let Ok(native_environment_cwd) = environment.cwd.to_abs_path() else {
+        let Ok(native_environment_cwd) = cwd.to_abs_path() else {
             warn!(
-                cwd = %environment.cwd,
+                cwd = %cwd,
                 "request_permissions requires a cwd native to the Codex host"
             );
-            return Ok(Some(RequestPermissionsResponse {
-                permissions: RequestPermissionProfile::default(),
-                scope: PermissionGrantScope::Turn,
-||||||| 413492cd6c
-        let requested_permissions = args.permissions;
-        // TODO(anp): Migrate request_permissions to support paths from foreign environments.
-        let Ok(native_environment_cwd) = environment.cwd.to_abs_path() else {
-            warn!(
-                cwd = %environment.cwd,
-                "request_permissions requires a cwd native to the Codex host"
-            );
-            return Some(RequestPermissionsResponse {
-                permissions: RequestPermissionProfile::default(),
-                scope: PermissionGrantScope::Turn,
-=======
+            return Ok(Some(nothing_granted()));
+        };
+        request.permissions = tokio::select! {
+            biased;
+            _ = cancellation_token.cancelled() => return Ok(None),
+            kept = self.grantable_request(
+                turn_context.as_ref(),
+                std::mem::take(&mut request.permissions),
+                &native_environment_cwd,
+            ) => kept?,
+        };
         let action = request.approval_action(&call_id, &turn_context.sub_id);
-        let requested_permissions = request.permissions;
+        let requested_permissions = request.permissions.clone();
         let sandbox_context = environment.sandbox_context(/*additional_permissions*/ None);
         let context = sandbox_context.policy_context();
         {
+            // #945: the policy the request is reviewed under.
+            let shown_under = self.services.authority_marker();
             let approval_context = ApprovalContext {
                 exec_requirement: None,
                 review_context: crate::guardian::GuardianReviewContext::from(step_context),
                 cancellation_token: Some(cancellation_token.clone()),
                 call_id: call_id.clone(),
                 tool_name: ToolName::plain("request_permissions"),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 strict_auto_review: false,
-<<<<<<< HEAD
-            }));
-        };
-        let requested_permissions = tokio::select! {
-            biased;
-            _ = cancellation_token.cancelled() => return Ok(None),
-            kept = self.grantable_request(
-                turn_context.as_ref(),
-                requested_permissions,
-                &native_environment_cwd,
-            ) => kept?,
-        };
-
-        if crate::guardian::routes_approval_to_guardian(turn_context.as_ref()) {
-            let originating_turn_state = {
-                let active = self.active_turn.lock().await;
-                active.as_ref().map(|active| Arc::clone(&active.turn_state))
-||||||| 413492cd6c
-            });
-        };
-
-        if crate::guardian::routes_approval_to_guardian(turn_context.as_ref()) {
-            let originating_turn_state = {
-                let active = self.active_turn.lock().await;
-                active.as_ref().map(|active| Arc::clone(&active.turn_state))
-=======
                 approval_reason: None,
                 retry_reason: None,
                 network_approval_context: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             };
-<<<<<<< HEAD
-            let review_id = crate::guardian::new_guardian_review_id();
-            // #945: the policy the request is reviewed under.
-            let shown_under = self.services.authority_marker();
-            let session = Arc::clone(self);
-            let turn = Arc::clone(turn_context);
-            let request = crate::guardian::GuardianApprovalRequest::RequestPermissions {
-                id: call_id,
-                turn_id: turn_context.sub_id.clone(),
-                reason: args.reason,
-                permissions: requested_permissions.clone(),
-            };
-            let review_rx = crate::guardian::spawn_approval_request_review(
-                session,
-                turn,
-                review_id,
-                request,
-                /*retry_reason*/ None,
-                GuardianReviewOptions {
-                    plugin_attribution_override: None,
-                    approval_request_source:
-                        codex_analytics::GuardianApprovalRequestSource::MainTurn,
-                    external_cancel: Some(cancellation_token.clone()),
-                },
-            );
-||||||| 413492cd6c
-            let review_id = crate::guardian::new_guardian_review_id();
-            let session = Arc::clone(self);
-            let turn = Arc::clone(turn_context);
-            let request = crate::guardian::GuardianApprovalRequest::RequestPermissions {
-                id: call_id,
-                turn_id: turn_context.sub_id.clone(),
-                reason: args.reason,
-                permissions: requested_permissions.clone(),
-            };
-            let review_rx = crate::guardian::spawn_approval_request_review(
-                session,
-                turn,
-                review_id,
-                request,
-                /*retry_reason*/ None,
-                GuardianReviewOptions {
-                    plugin_attribution_override: None,
-                    approval_request_source:
-                        codex_analytics::GuardianApprovalRequestSource::MainTurn,
-                    external_cancel: Some(cancellation_token.clone()),
-                },
-            );
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             let decision = tokio::select! {
                 biased;
-<<<<<<< HEAD
                 _ = cancellation_token.cancelled() => return Ok(None),
-                decision = review_rx => decision.unwrap_or_else(|_| {
-                    ReviewDecision::denied("automatic approval review could not complete")
-                }),
-||||||| 413492cd6c
-                _ = cancellation_token.cancelled() => return None,
-                decision = review_rx => decision.unwrap_or_else(|_| {
-                    ReviewDecision::denied("automatic approval review could not complete")
-                }),
-=======
-                _ = cancellation_token.cancelled() => return None,
                 decision = self.request_guardian_approval(
                     action,
                     &approval_context,
                 ) => decision,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             };
             if let Some(decision) = decision {
                 let (permissions, scope) = match decision {
@@ -4826,102 +4625,28 @@ impl Session {
                     permissions,
                     scope,
                     strict_auto_review: false,
-<<<<<<< HEAD
-                },
-                ReviewDecision::NetworkPolicyAmendment {
-                    network_policy_amendment,
-                } => match network_policy_amendment.action {
-                    NetworkPolicyRuleAction::Allow => RequestPermissionsResponse {
-                        permissions: requested_permissions.clone(),
-                        scope: PermissionGrantScope::Turn,
-                        strict_auto_review: false,
-                    },
-                    NetworkPolicyRuleAction::Deny => RequestPermissionsResponse {
-                        permissions: RequestPermissionProfile::default(),
-                        scope: PermissionGrantScope::Turn,
-                        strict_auto_review: false,
-                    },
-                },
-                ReviewDecision::Abort
-                | ReviewDecision::Denied { .. }
-                | ReviewDecision::TimedOut => RequestPermissionsResponse {
-                    permissions: RequestPermissionProfile::default(),
-                    scope: PermissionGrantScope::Turn,
-                    strict_auto_review: false,
-                },
-            };
-            let response = self.unless_stale_grant(response, shown_under);
-            let response = Self::normalize_request_permissions_response(
-                requested_permissions,
-                response,
-                native_environment_cwd.as_path(),
-            );
-            let response = self
-                .without_protected_grant(
-                    response,
-                    &native_environment_cwd,
-                    Some(turn_context.as_ref()),
-                )
-                .await;
-            self.record_granted_request_permissions_for_turn(
-                &response,
-                &environment.environment_id,
-                originating_turn_state.as_ref(),
-                shown_under,
-            )
-            .await;
-            return Ok(Some(response));
-||||||| 413492cd6c
-                },
-                ReviewDecision::NetworkPolicyAmendment {
-                    network_policy_amendment,
-                } => match network_policy_amendment.action {
-                    NetworkPolicyRuleAction::Allow => RequestPermissionsResponse {
-                        permissions: requested_permissions.clone(),
-                        scope: PermissionGrantScope::Turn,
-                        strict_auto_review: false,
-                    },
-                    NetworkPolicyRuleAction::Deny => RequestPermissionsResponse {
-                        permissions: RequestPermissionProfile::default(),
-                        scope: PermissionGrantScope::Turn,
-                        strict_auto_review: false,
-                    },
-                },
-                ReviewDecision::Abort
-                | ReviewDecision::Denied { .. }
-                | ReviewDecision::TimedOut => RequestPermissionsResponse {
-                    permissions: RequestPermissionProfile::default(),
-                    scope: PermissionGrantScope::Turn,
-                    strict_auto_review: false,
-                },
-            };
-            let response = Self::normalize_request_permissions_response(
-                requested_permissions,
-                response,
-                native_environment_cwd.as_path(),
-            );
-            self.record_granted_request_permissions_for_turn(
-                &response,
-                &environment.environment_id,
-                originating_turn_state.as_ref(),
-            )
-            .await;
-            return Some(response);
-=======
                 };
+                let response = self.unless_stale_grant(response, shown_under);
                 let response = Self::normalize_request_permissions_response(
                     requested_permissions,
                     response,
                     &context,
                 );
+                let response = self
+                    .without_protected_grant(
+                        response,
+                        &native_environment_cwd,
+                        Some(turn_context.as_ref()),
+                    )
+                    .await;
                 self.record_granted_request_permissions_for_turn(
                     &response,
                     &environment.selection.environment_id,
                     turn_context,
+                    shown_under,
                 );
-                return Some(response);
+                return Ok(Some(response));
             }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
 
         let _elicitation = self.services.elicitations.register();
@@ -4937,12 +4662,8 @@ impl Session {
                             tx_response,
                             requested_permissions: requested_permissions.clone(),
                             environment: environment.clone(),
-<<<<<<< HEAD
-                            shown_under: self.services.authority_marker(),
-||||||| 413492cd6c
-=======
                             turn_context: Arc::clone(turn_context),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                            shown_under: self.services.authority_marker(),
                         },
                     )
                 }
@@ -5081,25 +4802,27 @@ impl Session {
         };
         match entry {
             Some(entry) => {
-<<<<<<< HEAD
+                let sandbox_context = entry
+                    .environment
+                    .sandbox_context(/*additional_permissions*/ None);
+                let response = Self::normalize_request_permissions_response(
+                    entry.requested_permissions,
+                    response,
+                    &sandbox_context.policy_context(),
+                );
                 // TODO(anp): Migrate request_permissions to support paths from foreign environments.
-                let response = match entry.environment.cwd.to_abs_path() {
+                let response = match entry.environment.cwd().to_abs_path() {
                     Ok(native_environment_cwd) => {
-                        let response = Self::normalize_request_permissions_response(
-                            entry.requested_permissions,
-                            response,
-                            native_environment_cwd.as_path(),
-                        );
                         self.without_protected_grant(
                             response,
                             &native_environment_cwd,
-                            /*turn_context*/ None,
+                            Some(entry.turn_context.as_ref()),
                         )
                         .await
                     }
                     Err(err) => {
                         warn!(
-                            cwd = %entry.environment.cwd,
+                            cwd = %entry.environment.cwd(),
                             %err,
                             "request_permissions requires a cwd native to the Codex host"
                         );
@@ -5111,55 +4834,12 @@ impl Session {
                     }
                 };
                 let response = self.unless_stale_grant(response, entry.shown_under);
-||||||| 413492cd6c
-                // TODO(anp): Migrate request_permissions to support paths from foreign environments.
-                let response = match entry.environment.cwd.to_abs_path() {
-                    Ok(native_environment_cwd) => Self::normalize_request_permissions_response(
-                        entry.requested_permissions,
-                        response,
-                        native_environment_cwd.as_path(),
-                    ),
-                    Err(err) => {
-                        warn!(
-                            cwd = %entry.environment.cwd,
-                            %err,
-                            "request_permissions requires a cwd native to the Codex host"
-                        );
-                        RequestPermissionsResponse {
-                            permissions: RequestPermissionProfile::default(),
-                            scope: PermissionGrantScope::Turn,
-                            strict_auto_review: false,
-                        }
-                    }
-                };
-=======
-                let sandbox_context = entry
-                    .environment
-                    .sandbox_context(/*additional_permissions*/ None);
-                let response = Self::normalize_request_permissions_response(
-                    entry.requested_permissions,
-                    response,
-                    &sandbox_context.policy_context(),
-                );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 self.record_granted_request_permissions_for_turn(
                     &response,
-<<<<<<< HEAD
-                    &entry.environment.environment_id,
-                    originating_turn_state.as_ref(),
-                    entry.shown_under,
-                )
-                .await;
-||||||| 413492cd6c
-                    &entry.environment.environment_id,
-                    originating_turn_state.as_ref(),
-                )
-                .await;
-=======
                     &entry.environment.selection.environment_id,
                     &entry.turn_context,
+                    entry.shown_under,
                 );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 entry.tx_response.send(response).ok();
             }
             None => {
@@ -5216,7 +4896,6 @@ impl Session {
         }
     }
 
-<<<<<<< HEAD
     /// #584: under Aggressive no answer grants a protected path or a
     /// read-only one (`ReadOnlyScope::for_grant`; #520: the project's
     /// `.codex` and `.agents` included), so those entries are left out before
@@ -5314,25 +4993,14 @@ impl Session {
     }
 
     /// Records a grant answered to a request shown under `granted_under`.
-    /// D51 (#1001): it holds only while no security transition is committed
-    /// (see [`crate::state::GrantedPermissions`]).
-    pub(crate) async fn record_granted_request_permissions_for_turn(
-||||||| 413492cd6c
-    async fn record_granted_request_permissions_for_turn(
-=======
-    fn record_granted_request_permissions_for_turn(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    /// D51 (#1001), D520 (a): it holds only while no security transition is
+    /// committed (see [`crate::state::GrantedPermissions`]).
+    pub(crate) fn record_granted_request_permissions_for_turn(
         &self,
         response: &RequestPermissionsResponse,
         environment_id: &str,
-<<<<<<< HEAD
-        originating_turn_state: Option<&Arc<Mutex<crate::state::TurnState>>>,
-        granted_under: Option<(u64, u64)>,
-||||||| 413492cd6c
-        originating_turn_state: Option<&Arc<Mutex<crate::state::TurnState>>>,
-=======
         turn_context: &TurnContext,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        granted_under: Option<(u64, u64)>,
     ) {
         if response.permissions.is_empty() {
             return;
@@ -5340,74 +5008,58 @@ impl Session {
         let permissions: AdditionalPermissionProfile = response.permissions.clone().into();
         match response.scope {
             PermissionGrantScope::Turn => {
-<<<<<<< HEAD
-                if let Some(turn_state) = originating_turn_state {
-                    let mut ts = turn_state.lock().await;
-                    // Read under the lock: a later grant is never recorded
-                    // under an earlier marker.
-                    let current = self.services.authority_marker();
-                    let recorded = ts.record_granted_permissions(
-                        environment_id,
-                        permissions,
-                        granted_under,
-                        current,
-                    );
-                    // D51: strict auto-review comes with the grant and ends
-                    // with it.
-                    if recorded && response.strict_auto_review {
-                        ts.enable_strict_auto_review(current);
-                    }
-                }
-||||||| 413492cd6c
-                if let Some(turn_state) = originating_turn_state {
-                    let mut ts = turn_state.lock().await;
-                    let permissions: AdditionalPermissionProfile =
-                        response.permissions.clone().into();
-                    ts.record_granted_permissions(environment_id, permissions);
-                    if response.strict_auto_review {
-                        ts.enable_strict_auto_review();
-                    }
-                }
-=======
-                let permissions: AdditionalPermissionProfile = response.permissions.clone().into();
                 turn_context.record_granted_permissions(
                     environment_id,
                     permissions,
                     response.strict_auto_review,
+                    granted_under,
                 );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
             PermissionGrantScope::Session => {
-<<<<<<< HEAD
-                let mut state = self.state.lock().await;
-                let current = self.services.authority_marker();
-                state.record_granted_permissions(
-||||||| 413492cd6c
-                let mut state = self.state.lock().await;
-                state.record_granted_permissions(
-=======
-                self.services.record_granted_permissions(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-                    environment_id,
-                    permissions,
-                    granted_under,
-                    current,
-                );
+                self.services
+                    .record_granted_permissions(environment_id, permissions, granted_under);
             }
         }
     }
 
+    #[expect(
+        clippy::await_holding_invalid_type,
+        reason = "active turn reads must stay consistent with the matching turn state"
+    )]
     pub(crate) async fn active_turn_context_and_strict_auto_review(
         &self,
-<<<<<<< HEAD
+    ) -> Option<(
+        Arc<TurnContext>,
+        Arc<ResolvedStepSettings>,
+        TurnEnvironmentSnapshot,
+        bool,
+    )> {
+        let active = self.active_turn.lock().await;
+        let active = active.as_ref()?;
+        let task = active.task.as_ref()?;
+        let turn_context = Arc::clone(&task.turn_context);
+        let settings = turn_context.next_step_settings.load_full();
+        let strict_auto_review = turn_context.strict_auto_review_enabled();
+        let environments = self.services.turn_environments.snapshot_now();
+        Some((turn_context, settings, environments, strict_auto_review))
+    }
+
+    async fn active_task_turn_context(&self) -> Option<Arc<TurnContext>> {
+        let active = self.active_turn.lock().await;
+        let task = active.as_ref()?.task.as_ref()?;
+        Some(Arc::clone(&task.turn_context))
+    }
+
+    /// The running turn's own grants for `environment_id`, as later commands
+    /// and file tools may use them (#245; D51: none after a security transition).
+    pub(crate) async fn granted_turn_permissions(
+        &self,
         environment_id: &str,
     ) -> Option<AdditionalPermissionProfile> {
-        let granted = {
-            let active = self.active_turn.lock().await;
-            let active = active.as_ref()?;
-            let mut ts = active.turn_state.lock().await;
-            ts.granted_permissions(environment_id, self.services.authority_marker())
-        };
+        let granted = self
+            .active_task_turn_context()
+            .await?
+            .granted_turn_permissions(environment_id);
         self.usable_grant(granted).await
     }
 
@@ -5452,7 +5104,7 @@ impl Session {
         let state = self.state.lock().await;
         let current = &state.session_configuration;
         let config = &current.original_config_do_not_use;
-        let workspace_roots = current.primary_workspace_roots();
+        let workspace_roots = current.runtime_workspace_roots.clone();
         let mut configs = vec![GrantCheckConfig {
             cwd: cwd.unwrap_or(&config.cwd).clone(),
             workspace_roots: workspace_roots.clone(),
@@ -5473,72 +5125,22 @@ impl Session {
         )
     }
 
-    #[expect(
-        clippy::await_holding_invalid_type,
-        reason = "active turn reads must stay consistent with the matching turn state"
-    )]
+    /// Whether strict auto-review is on for the running turn under the policy
+    /// in force (D51: not after a security transition).
     pub(crate) async fn strict_auto_review_enabled_for_turn(&self) -> bool {
-        let active = self.active_turn.lock().await;
-        let Some(active) = active.as_ref() else {
-            return false;
-        };
-        let ts = active.turn_state.lock().await;
-        ts.strict_auto_review_enabled(self.services.authority_marker())
+        self.active_task_turn_context()
+            .await
+            .is_some_and(|turn_context| turn_context.strict_auto_review_enabled())
     }
 
+    /// The session's grants for `environment_id`, as later commands and file
+    /// tools may use them (#245; D51: none after a security transition).
     pub(crate) async fn granted_session_permissions(
         &self,
         environment_id: &str,
     ) -> Option<AdditionalPermissionProfile> {
-        let granted = {
-            let mut state = self.state.lock().await;
-            state.granted_permissions(environment_id, self.services.authority_marker())
-        };
+        let granted = self.services.session_grants.get(environment_id);
         self.usable_grant(granted).await
-||||||| 413492cd6c
-        environment_id: &str,
-    ) -> Option<AdditionalPermissionProfile> {
-        let active = self.active_turn.lock().await;
-        let active = active.as_ref()?;
-        let ts = active.turn_state.lock().await;
-        ts.granted_permissions(environment_id)
-    }
-
-    #[expect(
-        clippy::await_holding_invalid_type,
-        reason = "active turn reads must stay consistent with the matching turn state"
-    )]
-    pub(crate) async fn strict_auto_review_enabled_for_turn(&self) -> bool {
-        let active = self.active_turn.lock().await;
-        let Some(active) = active.as_ref() else {
-            return false;
-        };
-        let ts = active.turn_state.lock().await;
-        ts.strict_auto_review_enabled()
-    }
-
-    pub(crate) async fn granted_session_permissions(
-        &self,
-        environment_id: &str,
-    ) -> Option<AdditionalPermissionProfile> {
-        let state = self.state.lock().await;
-        state.granted_permissions(environment_id)
-=======
-    ) -> Option<(
-        Arc<TurnContext>,
-        Arc<ResolvedStepSettings>,
-        TurnEnvironmentSnapshot,
-        bool,
-    )> {
-        let active = self.active_turn.lock().await;
-        let active = active.as_ref()?;
-        let task = active.task.as_ref()?;
-        let turn_context = Arc::clone(&task.turn_context);
-        let settings = turn_context.next_step_settings.load_full();
-        let strict_auto_review = turn_context.strict_auto_review_enabled();
-        let environments = self.services.turn_environments.snapshot_now();
-        Some((turn_context, settings, environments, strict_auto_review))
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     #[expect(
@@ -5772,7 +5374,7 @@ impl Session {
         }
         self.services.model_client().note_recorded_for_taint(items);
         self.services.model_client().observe_native_ingress(items);
-||||||| 413492cd6c
+||||||| base
         let items = self.prepare_conversation_items_for_history(turn_context, items);
         let items = items.as_ref();
 =======
@@ -5901,7 +5503,7 @@ impl Session {
         }
         self.persist_rollout_items(&rollout_items).await;
         self.send_raw_response_items(turn_context, items).await;
-||||||| 413492cd6c
+||||||| base
         self.persist_rollout_response_items(items).await;
         self.send_raw_response_items(turn_context, items).await;
 =======
@@ -5984,7 +5586,7 @@ impl Session {
                 Some(crate::security::ingress::MessageOrigin::Host),
             )
             .await;
-||||||| 413492cd6c
+||||||| base
             self.record_conversation_items(turn_context, &items).await;
 =======
             self.record_conversation_items(turn_context, &step_context.settings.model_info, &items)
@@ -6149,7 +5751,7 @@ impl Session {
                 })
                 .collect::<HashMap<_, _>>();
             extension_data.insert(sandbox_contexts);
-||||||| 413492cd6c
+||||||| base
         } else if !turn_context
             .config
             .permissions
@@ -6363,7 +5965,7 @@ impl Session {
             turn_context,
             std::slice::from_ref(&response_item),
         );
-||||||| 413492cd6c
+||||||| base
         communication.set_turn_id_if_missing(&turn_context.sub_id);
         let response_item = communication.to_model_input_item();
         let items = self.prepare_conversation_items_for_history(
@@ -6418,7 +6020,7 @@ impl Session {
         let response_item = items[0].clone();
         // Agent mail is data without standing (PF-30-S03 taint).
         self.services.model_client().note_recorded_for_taint(items);
-||||||| 413492cd6c
+||||||| base
         let response_item = items[0].clone();
 =======
         let mut response_item = ResponseItemEnvelope::new(items[0].clone());
@@ -6504,7 +6106,7 @@ impl Session {
                 ),
             }
         }
-||||||| 413492cd6c
+||||||| base
         self.persist_rollout_items(&[
             RolloutItem::InterAgentCommunicationMetadata {
                 trigger_turn: communication.trigger_turn,
@@ -6673,7 +6275,7 @@ impl Session {
                 .previous_window_id
                 .map(|id| id.to_string()),
             window_id: Some(metadata.window_ids.window_id.to_string()),
-||||||| 413492cd6c
+||||||| base
         items: Vec<ResponseItem>,
         reference_context_item: Option<TurnContextItem>,
         world_state_baseline: Option<Arc<WorldState>>,
@@ -6863,7 +6465,7 @@ impl Session {
         if let Some(world_state_item) = world_state_item {
             self.persist_rollout_items(&[RolloutItem::WorldState(world_state_item)])
                 .await;
-||||||| 413492cd6c
+||||||| base
         self.persist_rollout_items(&[RolloutItem::Compacted(compacted_item)])
             .await;
         // Persist the baseline after the replacement history that established it.
@@ -6899,7 +6501,7 @@ impl Session {
     }
 
 <<<<<<< HEAD
-||||||| 413492cd6c
+||||||| base
     async fn persist_rollout_response_items(&self, items: &[ResponseItem]) {
         let rollout_items: Vec<RolloutItem> = items
             .iter()
@@ -7031,7 +6633,7 @@ impl Session {
                     &mut contextual_user_sections,
                     &mut separate_developer_sections,
                 );
-||||||| 413492cd6c
+||||||| base
                 push_prompt_fragment(
                     fragment,
                     &mut developer_sections,
@@ -7069,7 +6671,7 @@ impl Session {
             items.push(contextual_user_message);
         }
         items
-||||||| 413492cd6c
+||||||| base
         let mut items = Vec::with_capacity(3);
         if let Some(developer_message) =
             crate::context_manager::updates::build_developer_update_item(developer_sections)
@@ -7108,7 +6710,7 @@ impl Session {
         let mut developer_sections = Vec::<ContextSection>::with_capacity(8);
         let mut contextual_user_sections = Vec::<String>::with_capacity(2);
         let mut separate_developer_sections = Vec::<ContextSection>::new();
-||||||| 413492cd6c
+||||||| base
     ) -> Vec<ResponseItem> {
         let mut developer_sections = Vec::<String>::with_capacity(8);
         let mut contextual_user_sections = Vec::<String>::with_capacity(2);
@@ -7172,7 +6774,7 @@ impl Session {
                     HOST_SKILLS_CONTEXT_SOURCE_ID,
                 ));
             }
-||||||| 413492cd6c
+||||||| base
             developer_sections.push(developer_instructions.to_string());
         }
         if turn_context.config.include_skill_instructions
@@ -7261,7 +6863,7 @@ impl Session {
                     &mut contextual_user_sections,
                     &mut separate_developer_sections,
                 );
-||||||| 413492cd6c
+||||||| base
                 push_prompt_fragment(
                     fragment,
                     &mut developer_sections,
@@ -7303,7 +6905,7 @@ impl Session {
                     &mut contextual_user_sections,
                     &mut separate_developer_sections,
                 );
-||||||| 413492cd6c
+||||||| base
                 push_prompt_fragment(
                     fragment,
                     &mut developer_sections,
@@ -7355,7 +6957,7 @@ impl Session {
                 token_budget_hint_placement(separate_stored_data, mcp_result);
             mcp_hint_sections.extend(data_hint);
             developer_sections.push(
-||||||| 413492cd6c
+||||||| base
             let mcp_result = self
                 .services
                 .mcp_runtime
@@ -7439,7 +7041,7 @@ impl Session {
 <<<<<<< HEAD
                 .render()
                 .into(),
-||||||| 413492cd6c
+||||||| base
                 .render(),
 =======
                 .render_with_hints(context_window_hints),
@@ -7471,7 +7073,7 @@ impl Session {
         let multi_agent_v2_usage_hint_text =
             multi_agents::usage_hint_text(turn_context, &session_source);
 
-||||||| 413492cd6c
+||||||| base
         // Render the active mode after the usage hint so it can override that hint.
         let mut initial_multi_agent_mode = None;
         for fragment in world_state.render_full() {
@@ -7599,7 +7201,7 @@ impl Session {
                 ])
         {
             items.push(guardian_developer_message);
-||||||| 413492cd6c
+||||||| base
         }
         if let Some(usage_hint_text) = multi_agent_v2_usage_hint_text
             && let Some(usage_hint_message) =
@@ -7716,7 +7318,7 @@ impl Session {
         let message = format!("{e:#}");
         if crate::home_access::is_operation_not_permitted(&message)
             && let Ok(Some(rollout)) = live_thread.local_rollout_path().await
-||||||| 413492cd6c
+||||||| base
     pub(crate) async fn persist_rollout_items(&self, items: &[RolloutItem]) {
         if let Some(live_thread) = self.live_thread()
             && let Err(e) = live_thread.append_items(items).await
@@ -7733,7 +7335,7 @@ impl Session {
             tokio::task::spawn_blocking(move || {
                 crate::home_access::record_home_access_failure("rollout write", &rollout, &message)
             });
-||||||| 413492cd6c
+||||||| base
             error!("failed to record rollout items: {e:#}");
 =======
             error!("failed to record rollout items: {e:#}");
@@ -7779,7 +7381,7 @@ impl Session {
     }
 
     pub(crate) async fn current_window_id(&self) -> String {
-||||||| 413492cd6c
+||||||| base
     pub(crate) async fn current_window_id(&self) -> String {
 =======
     /// Captures the history lifetime without exposing mutable session state.
@@ -7874,7 +7476,7 @@ impl Session {
             crate::security::ingress::MessageOrigin::Host,
         );
         let turn_context_item = turn_context.to_turn_context_item();
-||||||| 413492cd6c
+||||||| base
         let turn_context_item = turn_context.to_turn_context_item();
 =======
         let context_items =
@@ -7957,7 +7559,7 @@ impl Session {
         let world_state = Arc::new(self.build_world_state_for_step(step_context).await?);
         let reinject_host_context = self.services.model_client().take_host_context_reinjection();
         let should_inject_full_context = reference_context_item.is_none() || reinject_host_context;
-||||||| 413492cd6c
+||||||| base
         let turn_context_item = turn_context.to_turn_context_item();
         let turn_context_changed = reference_context_item.as_ref() != Some(&turn_context_item);
         let should_inject_full_context = reference_context_item.is_none();
@@ -8015,7 +7617,7 @@ impl Session {
                 turn_context,
                 &context_items,
                 Some(crate::security::ingress::MessageOrigin::Host),
-||||||| 413492cd6c
+||||||| base
             self.record_conversation_items(turn_context, &context_items)
                 .await;
 =======
@@ -8187,7 +7789,7 @@ impl Session {
                     AutoCompactTokenLimitScope::BodyAfterPrefix
                 ) {
                     state.ensure_auto_compact_window_server_prefill_from_usage(token_usage);
-||||||| 413492cd6c
+||||||| base
                 state
                     .update_token_info_from_usage(token_usage, turn_context.model_context_window());
                 if matches!(
@@ -8408,7 +8010,7 @@ impl Session {
             Some(origin),
         )
         .await;
-||||||| 413492cd6c
+||||||| base
         let response_item = self.response_item_from_user_input(input.to_vec());
         self.record_conversation_items(turn_context, std::slice::from_ref(&response_item))
             .await;
@@ -8486,20 +8088,8 @@ impl Session {
     }
 
 <<<<<<< HEAD
-    // Compare execution authority directly. User-layer reloads, model settings and
-    // config provenance cannot affect this check.
-    pub(super) fn authorization_matches(
-        current: &SessionConfiguration,
-        captured: &TurnContext,
-    ) -> bool {
-        current.approval_policy.value() == captured.approval_policy.value()
-            && current
-                .permission_profile()
-                .materialize_project_roots_with_workspace_roots(&current.primary_workspace_roots())
-                == captured.permission_profile
-            && current.approvals_reviewer == captured.config.approvals_reviewer
-            && current.windows_sandbox_level == captured.windows_sandbox_level
-    }
+    // `authorization_matches` moved next to `pending_approval_shown_under` (S2a, sync-s2a3):
+    // it now compares `TurnAuthority` snapshots.
 
     /// Inject additional user input into the currently active turn.
     ///
@@ -8655,7 +8245,7 @@ impl Session {
             .map_err(|_| CodexErr::InternalAgentDied)
     }
 
-||||||| 413492cd6c
+||||||| base
     /// Inject additional user input into the currently active turn.
     ///
     /// Returns the active turn id when accepted.
@@ -8942,7 +8532,7 @@ mod stale_approval_tests;
 #[cfg(test)]
 #[path = "withdrawn_approval_tests.rs"]
 mod withdrawn_approval_tests;
-||||||| 413492cd6c
+||||||| base
 =======
 #[path = "world_state_item_tests.rs"]
 mod world_state_item_tests;

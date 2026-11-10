@@ -15,6 +15,7 @@ pub(crate) use auto_compact_window::AutoCompactWindowIds;
 pub(crate) use auto_compact_window::AutoCompactWindowSnapshot;
 pub(crate) use granted_permissions::AuthorityMarker;
 pub(crate) use granted_permissions::GrantedPermissions;
+pub(crate) use granted_permissions::SessionGrantStore;
 pub(crate) use service::SessionServices;
 pub(crate) use session::ReasoningEffortPin;
 pub(crate) use session::SessionState;

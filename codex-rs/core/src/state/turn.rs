@@ -20,17 +20,10 @@ use codex_rmcp_client::ElicitationResponse;
 use rmcp::model::RequestId;
 use tokio::sync::oneshot;
 
-<<<<<<< HEAD
-use crate::agent::control::AgentExecutionGuard;
-use crate::agent::control::NativeAutoTurnGuard;
-use crate::mcp_tool_call::McpToolApprovalMetadata;
-||||||| 413492cd6c
-use crate::agent::control::AgentExecutionGuard;
-use crate::mcp_tool_call::McpToolApprovalMetadata;
-=======
 use super::TurnTokenUsage;
+use crate::agent::control::NativeAutoTurnGuard;
 use crate::agent::types::AgentExecutionGuard;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use crate::session::TurnInput;
 use crate::session::TurnInputQueue;
 use crate::session::step_context::StepContext;
 use crate::session::turn_context::TurnContext;
@@ -95,14 +88,10 @@ pub(crate) struct RunningTask {
     pub(crate) handle: AbortOnDropHandle<()>,
     pub(crate) turn_context: Arc<TurnContext>,
     pub(crate) _agent_execution_guard: Option<AgentExecutionGuard>,
-<<<<<<< HEAD
     /// Covers the complete admitted task, including mailbox input moved out of InputQueue before
     /// the model loop starts.
     pub(crate) _native_auto_turn_guard: NativeAutoTurnGuard,
-||||||| 413492cd6c
-=======
     pub(crate) _diagnostics_guard: GaugeGuard,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     // Timer recorded when the task drops to capture the full turn duration.
     pub(crate) _timer: Option<codex_otel::Timer>,
 }
@@ -110,58 +99,34 @@ pub(crate) struct RunningTask {
 /// Mutable state for a single turn.
 #[derive(Default)]
 pub(crate) struct TurnState {
-<<<<<<< HEAD
-    pending_approvals: HashMap<String, PendingApproval>,
-||||||| 413492cd6c
-    pending_approvals: HashMap<String, oneshot::Sender<ReviewDecision>>,
-=======
     pending_approvals: Arc<PendingApprovals>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pending_request_permissions: HashMap<String, PendingRequestPermissions>,
     pending_user_input: HashMap<String, oneshot::Sender<AcceptedUserInputResponse>>,
     pending_elicitations: HashMap<(String, RequestId), oneshot::Sender<ElicitationResponse>>,
     pending_dynamic_tools: HashMap<String, oneshot::Sender<DynamicToolResponse>>,
     pub(crate) pending_input: TurnInputQueue,
     mailbox_delivery_phase: MailboxDeliveryPhase,
-<<<<<<< HEAD
-    /// D51 (#1001): bound to the policy marker they were granted under.
-    granted_permissions: super::GrantedPermissions,
-    /// D51 (#1001): the policy marker strict auto-review was turned on
-    /// under, with the grant it came with; it ends with that grant. Ending it
-    /// also ends the automatic review of commands that would run unasked:
-    /// deliberately, as the new level's approval rules then govern.
-    strict_auto_review_under: Option<super::AuthorityMarker>,
-||||||| 413492cd6c
-    granted_permissions_by_environment_id: HashMap<String, AdditionalPermissionProfile>,
-    strict_auto_review_enabled: bool,
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub(crate) tool_calls: u64,
     pub(crate) has_memory_citation: bool,
     pub(crate) token_usage_at_turn_start: TokenUsage,
-<<<<<<< HEAD
-    mailbox_message_ids: HashSet<String>,
-}
-
-/// An open approval prompt. #945: it remembers the policy marker (epoch
-/// and revocation generation) it was shown under, so an answer that comes
-/// after a security transition can be told apart.
-struct PendingApproval {
-    tx: oneshot::Sender<ReviewDecision>,
-    shown_under: Option<(u64, u64)>,
-||||||| 413492cd6c
-=======
     pub(crate) token_usage_by_model: TurnTokenUsage,
     /// The last step captured for execution or selected from a speculative fallback.
     /// Remains absent until a step is captured; standalone local compaction has no step.
     pub(crate) last_known_step_context: Option<Arc<StepContext>>,
+    mailbox_message_ids: HashSet<String>,
+    /// #1952 (D485): mailbox messages handed to this turn as input, recorded or not.
+    taken_mailbox_message_ids: HashSet<String>,
 }
 
+/// An open approval prompt. #945: it remembers the policy marker (epoch and revocation
+/// generation) it was shown under, so an answer that comes after a security transition can be
+/// told apart.
 pub(crate) struct PendingApproval {
     pub(crate) sender: oneshot::Sender<ReviewDecision>,
     pub(crate) kind: codex_protocol::approvals::ExecApprovalKind,
     // A yielded cell can emit a prompt for its original turn while a later turn services it.
     pub(crate) turn_id: String,
+    pub(crate) shown_under: Option<(u64, u64)>,
 }
 
 impl PendingApproval {
@@ -184,22 +149,16 @@ pub(crate) struct AcceptedUserInputResponse {
     pub(crate) response: RequestUserInputResponse,
     /// Order reserved when the host accepts this response.
     pub(crate) acceptance_order: u64,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 pub(crate) struct PendingRequestPermissions {
     pub(crate) tx_response: oneshot::Sender<RequestPermissionsResponse>,
     pub(crate) requested_permissions: RequestPermissionProfile,
-<<<<<<< HEAD
-    pub(crate) environment: TurnEnvironmentSelection,
-    /// #945: the policy marker the request was shown under.
-    pub(crate) shown_under: Option<(u64, u64)>,
-||||||| 413492cd6c
-    pub(crate) environment: TurnEnvironmentSelection,
-=======
     pub(crate) environment: TurnEnvironment,
     /// Background cells can request permissions after a different turn becomes active.
     pub(crate) turn_context: Arc<TurnContext>,
+    /// #945: the policy marker the request was shown under.
+    pub(crate) shown_under: Option<(u64, u64)>,
 }
 
 type PendingApprovals = SyncMutex<HashMap<String, PendingApproval>>;
@@ -228,19 +187,50 @@ impl Drop for NetworkApprovalPrompt<'_> {
             },
         });
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl TurnState {
-<<<<<<< HEAD
     pub(crate) fn track_mailbox_message(&mut self, message_id: String) {
         self.mailbox_message_ids.insert(message_id);
     }
 
     pub(crate) fn take_mailbox_message_ids(&mut self) -> Vec<String> {
         self.mailbox_message_ids.drain().collect()
-||||||| 413492cd6c
-=======
+    }
+
+    /// #1952 (D485): notes the mailbox messages among `inputs`, which this turn has taken off
+    /// the mailbox queue. Call it in the same step as the take, with no await in between.
+    pub(crate) fn track_taken_mailbox_messages<'a>(
+        &mut self,
+        inputs: impl IntoIterator<Item = &'a TurnInput>,
+    ) {
+        self.taken_mailbox_message_ids
+            .extend(inputs.into_iter().filter_map(|input| match input {
+                TurnInput::InterAgentCommunication(communication) => {
+                    communication.message_id.clone()
+                }
+                TurnInput::UserInput { .. }
+                | TurnInput::FunctionCallOutput(_)
+                | TurnInput::ResponseItem(_) => None,
+            }));
+    }
+
+    /// #1952 (D485): the mailbox messages this turn took but never recorded (`recorded` holds
+    /// those it did), leaving out any still deferred to re-admission, which outlives the turn.
+    pub(crate) fn take_unrecorded_mailbox_message_ids(
+        &mut self,
+        recorded: &[String],
+    ) -> Vec<String> {
+        let taken = std::mem::take(&mut self.taken_mailbox_message_ids);
+        taken
+            .into_iter()
+            .filter(|message_id| {
+                !recorded.contains(message_id)
+                    && !self.pending_input.defers_mailbox_message(message_id)
+            })
+            .collect()
+    }
+
     pub(crate) fn track_network_prompt<'a>(
         &self,
         events: &'a async_channel::Sender<Event>,
@@ -253,25 +243,15 @@ impl TurnState {
             turn_id,
             approval_id,
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(crate) fn insert_pending_approval(
         &mut self,
         key: String,
         tx: oneshot::Sender<ReviewDecision>,
-<<<<<<< HEAD
-        shown_under: Option<(u64, u64)>,
-    ) -> Option<oneshot::Sender<ReviewDecision>> {
-        self.pending_approvals
-            .insert(key, PendingApproval { tx, shown_under })
-            .map(|previous| previous.tx)
-||||||| 413492cd6c
-    ) -> Option<oneshot::Sender<ReviewDecision>> {
-        self.pending_approvals.insert(key, tx)
-=======
         kind: codex_protocol::approvals::ExecApprovalKind,
         turn_id: String,
+        shown_under: Option<(u64, u64)>,
     ) -> Option<PendingApproval> {
         self.pending_approvals
             .lock()
@@ -282,28 +262,14 @@ impl TurnState {
                     sender: tx,
                     kind,
                     turn_id,
+                    shown_under,
                 },
             )
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     pub(crate) fn remove_pending_approval(
         &mut self,
         key: &str,
-<<<<<<< HEAD
-    ) -> Option<oneshot::Sender<ReviewDecision>> {
-        self.pending_approvals.remove(key).map(|pending| pending.tx)
-    }
-
-    /// #945: the policy marker the open prompt `key` was shown under.
-    pub(crate) fn pending_approval_shown_under(&self, key: &str) -> Option<Option<(u64, u64)>> {
-        self.pending_approvals
-            .get(key)
-            .map(|pending| pending.shown_under)
-||||||| 413492cd6c
-    ) -> Option<oneshot::Sender<ReviewDecision>> {
-        self.pending_approvals.remove(key)
-=======
         expected_turn_id: Option<&str>,
     ) -> Option<PendingApproval> {
         let mut approvals = self
@@ -316,7 +282,15 @@ impl TurnState {
             return None;
         }
         approvals.remove(key)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    }
+
+    /// #945: the policy marker the open prompt `key` was shown under.
+    pub(crate) fn pending_approval_shown_under(&self, key: &str) -> Option<Option<(u64, u64)>> {
+        self.pending_approvals
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(key)
+            .map(|pending| pending.shown_under)
     }
 
     pub(crate) fn clear_pending_waiters(&mut self) {
@@ -406,70 +380,4 @@ impl TurnState {
     pub(crate) fn set_mailbox_delivery_phase(&mut self, phase: MailboxDeliveryPhase) {
         self.mailbox_delivery_phase = phase;
     }
-<<<<<<< HEAD
-
-    pub(crate) fn record_granted_permissions(
-        &mut self,
-        environment_id: &str,
-        permissions: AdditionalPermissionProfile,
-        granted_under: super::AuthorityMarker,
-        current: super::AuthorityMarker,
-    ) -> bool {
-        self.granted_permissions
-            .record(environment_id, permissions, granted_under, current)
-    }
-
-    pub(crate) fn granted_permissions(
-        &mut self,
-        environment_id: &str,
-        current: super::AuthorityMarker,
-    ) -> Option<AdditionalPermissionProfile> {
-        self.granted_permissions.get(environment_id, current)
-    }
-
-    pub(crate) fn enable_strict_auto_review(&mut self, under: super::AuthorityMarker) {
-        self.strict_auto_review_under = Some(under);
-    }
-
-    /// Whether strict auto-review is on under the policy in force
-    /// (`current`): not after a security transition (D51).
-    pub(crate) fn strict_auto_review_enabled(&self, current: super::AuthorityMarker) -> bool {
-        self.strict_auto_review_under == Some(current)
-    }
-||||||| 413492cd6c
-
-    pub(crate) fn record_granted_permissions(
-        &mut self,
-        environment_id: &str,
-        permissions: AdditionalPermissionProfile,
-    ) {
-        let granted_permissions = merge_permission_profiles(
-            self.granted_permissions_by_environment_id
-                .get(environment_id),
-            Some(&permissions),
-        );
-        if let Some(granted_permissions) = granted_permissions {
-            self.granted_permissions_by_environment_id
-                .insert(environment_id.to_string(), granted_permissions);
-        }
-    }
-
-    pub(crate) fn granted_permissions(
-        &self,
-        environment_id: &str,
-    ) -> Option<AdditionalPermissionProfile> {
-        self.granted_permissions_by_environment_id
-            .get(environment_id)
-            .cloned()
-    }
-
-    pub(crate) fn enable_strict_auto_review(&mut self) {
-        self.strict_auto_review_enabled = true;
-    }
-
-    pub(crate) fn strict_auto_review_enabled(&self) -> bool {
-        self.strict_auto_review_enabled
-    }
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }

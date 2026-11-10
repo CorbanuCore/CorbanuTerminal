@@ -4,13 +4,7 @@ use codex_protocol::dynamic_tools::DynamicToolSpec;
 use codex_protocol::models::BaseInstructionsProvenance;
 #[cfg(test)]
 use codex_protocol::models::ResponseItem;
-<<<<<<< HEAD
-||||||| 413492cd6c
-use codex_sandboxing::policy_transforms::merge_permission_profiles;
-use std::collections::HashMap;
-=======
 use codex_protocol::openai_models::ReasoningEffort;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -26,17 +20,11 @@ use crate::session::PreviousTurnSettings;
 use crate::session::session::SessionConfiguration;
 use crate::session::startup_prewarm::SessionStartupPrewarmHandle;
 use crate::session::time_reminder::CurrentTimeReminderState;
-<<<<<<< HEAD
-use crate::session_startup_prewarm::SessionStartupPrewarmHandle;
-use codex_protocol::protocol::AccountTokenUsage;
-||||||| 413492cd6c
-use crate::session_startup_prewarm::SessionStartupPrewarmHandle;
-=======
 use codex_history::ResponseItemEnvelope;
 use codex_history::TurnAttribution;
 use codex_protocol::SessionId;
 use codex_protocol::ThreadId;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_protocol::protocol::AccountTokenUsage;
 use codex_protocol::protocol::RateLimitSnapshot;
 use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::TokenUsageInfo;
@@ -119,15 +107,7 @@ pub(crate) struct SessionState {
     pub(crate) current_time_reminder: CurrentTimeReminderState,
     pub(crate) active_connector_selection: HashSet<String>,
     pub(crate) pending_session_start_sources: VecDeque<codex_hooks::SessionStartSource>,
-<<<<<<< HEAD
-    /// D51 (#1001): bound to the policy marker they were granted under.
-    granted_permissions: super::GrantedPermissions,
-||||||| 413492cd6c
-    granted_permissions_by_environment_id: HashMap<String, AdditionalPermissionProfile>,
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     next_turn_is_first: bool,
-<<<<<<< HEAD
     /// Whether the latest model request was authorised by the `OPENAI_API_KEY`
     /// fallback; the notice is shown only when this turns on.
     openai_api_key_env_fallback_in_use: bool,
@@ -136,10 +116,7 @@ pub(crate) struct SessionState {
     account_token_usage: Vec<AccountTokenUsage>,
     /// #688: tools already reported as left out by the tool-count limit.
     omitted_tools_reported: HashSet<codex_protocol::ToolName>,
-||||||| 413492cd6c
-=======
     initial_settings_pending: bool,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl SessionState {
@@ -181,25 +158,14 @@ impl SessionState {
             current_time_reminder: CurrentTimeReminderState::default(),
             active_connector_selection: HashSet::new(),
             pending_session_start_sources: VecDeque::new(),
-<<<<<<< HEAD
-            granted_permissions: super::GrantedPermissions::default(),
-||||||| 413492cd6c
-            granted_permissions_by_environment_id: HashMap::new(),
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             next_turn_is_first: true,
-<<<<<<< HEAD
             openai_api_key_env_fallback_in_use: false,
             account_token_usage: Vec::new(),
             omitted_tools_reported: HashSet::new(),
-||||||| 413492cd6c
-=======
             initial_settings_pending: true,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 
-<<<<<<< HEAD
     /// Records whether the current request uses the `OPENAI_API_KEY` fallback and
     /// returns true when it newly does (first use, or a switch back to it).
     pub(crate) fn note_openai_api_key_env_fallback(&mut self, in_use: bool) -> bool {
@@ -229,27 +195,6 @@ impl SessionState {
         self.omitted_tools_reported.extend(tools);
     }
 
-    // History helpers
-    pub(crate) fn record_items<I>(&mut self, items: I, policy: TruncationPolicy)
-    where
-        I: IntoIterator,
-        I::Item: std::ops::Deref<Target = ResponseItem>,
-    {
-        self.history.record_items(items, policy);
-    }
-
-||||||| 413492cd6c
-    // History helpers
-    pub(crate) fn record_items<I>(&mut self, items: I, policy: TruncationPolicy)
-    where
-        I: IntoIterator,
-        I::Item: std::ops::Deref<Target = ResponseItem>,
-    {
-        self.history.record_items(items, policy);
-    }
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     pub(crate) fn previous_turn_settings(&self) -> Option<PreviousTurnSettings> {
         self.previous_turn_settings.clone()
     }
@@ -558,54 +503,6 @@ impl SessionState {
     ) -> Option<codex_hooks::SessionStartSource> {
         self.pending_session_start_sources.pop_front()
     }
-<<<<<<< HEAD
-
-    pub(crate) fn record_granted_permissions(
-        &mut self,
-        environment_id: &str,
-        permissions: AdditionalPermissionProfile,
-        granted_under: super::AuthorityMarker,
-        current: super::AuthorityMarker,
-    ) -> bool {
-        self.granted_permissions
-            .record(environment_id, permissions, granted_under, current)
-    }
-
-    pub(crate) fn granted_permissions(
-        &mut self,
-        environment_id: &str,
-        current: super::AuthorityMarker,
-    ) -> Option<AdditionalPermissionProfile> {
-        self.granted_permissions.get(environment_id, current)
-    }
-||||||| 413492cd6c
-
-    pub(crate) fn record_granted_permissions(
-        &mut self,
-        environment_id: &str,
-        permissions: AdditionalPermissionProfile,
-    ) {
-        let granted_permissions = merge_permission_profiles(
-            self.granted_permissions_by_environment_id
-                .get(environment_id),
-            Some(&permissions),
-        );
-        if let Some(granted_permissions) = granted_permissions {
-            self.granted_permissions_by_environment_id
-                .insert(environment_id.to_string(), granted_permissions);
-        }
-    }
-
-    pub(crate) fn granted_permissions(
-        &self,
-        environment_id: &str,
-    ) -> Option<AdditionalPermissionProfile> {
-        self.granted_permissions_by_environment_id
-            .get(environment_id)
-            .cloned()
-    }
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 // Sometimes new snapshots don't include credits or plan information.

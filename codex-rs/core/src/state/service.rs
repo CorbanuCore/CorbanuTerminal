@@ -1,6 +1,4 @@
-use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::Mutex as StdMutex;
 
 use crate::agent::api::AgentControl;
 use crate::agent::control::LocalAgentRuntime;
@@ -42,7 +40,6 @@ use codex_protocol::mcp::ClientMcpExtensions;
 use codex_protocol::models::AdditionalPermissionProfile;
 use codex_rollout::state_db::StateDbHandle;
 use codex_rollout_trace::ThreadTraceContext;
-use codex_sandboxing::policy_transforms::merge_permission_profiles;
 use codex_skills_extension::HostSkillsService;
 use codex_thread_store::LiveThread;
 use codex_thread_store::ThreadStore;
@@ -72,12 +69,9 @@ pub(crate) struct SessionServices {
     pub(crate) session_telemetry: SessionTelemetry,
     pub(crate) tool_approvals: Mutex<ApprovalStore>,
     /// Shared with captured steps so later calls observe newly approved permissions.
-    /// D51 (#1001): session grants must not outlive a security transition. Until
-    /// `session/mod.rs` and `turn_context.rs` are resolved (S2a), every reader and
-    /// writer of this store must fence it by the authority marker the way
-    /// `state::GrantedPermissions` does.
-    pub(crate) granted_permissions_by_environment_id:
-        Arc<StdMutex<HashMap<String, AdditionalPermissionProfile>>>,
+    /// D51 (#1001), D520 (a): fenced by the policy marker, so session grants end at a
+    /// security transition.
+    pub(crate) session_grants: crate::state::SessionGrantStore,
     pub(crate) runtime_handle: Handle,
     pub(crate) skills_service: Arc<HostSkillsService>,
     pub(crate) agents_md_manager: Arc<AgentsMdManager>,
@@ -177,23 +171,15 @@ impl SessionServices {
         }
     }
 
-    #[expect(
-        clippy::expect_used,
-        reason = "poisoned grant state must not authorize further operations"
-    )]
+    /// Records a session grant answered to a request shown under `granted_under`; whether
+    /// it was recorded (D51: not after a security transition).
     pub(crate) fn record_granted_permissions(
         &self,
         environment_id: &str,
         permissions: AdditionalPermissionProfile,
-    ) {
-        let mut grants = self
-            .granted_permissions_by_environment_id
-            .lock()
-            .expect("session permission grants lock poisoned");
-        let granted_permissions =
-            merge_permission_profiles(grants.get(environment_id), Some(&permissions));
-        if let Some(granted_permissions) = granted_permissions {
-            grants.insert(environment_id.to_string(), granted_permissions);
-        }
+        granted_under: Option<(u64, u64)>,
+    ) -> bool {
+        self.session_grants
+            .record(environment_id, permissions, granted_under)
     }
 }

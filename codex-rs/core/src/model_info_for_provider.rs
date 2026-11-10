@@ -2,28 +2,34 @@
 
 use codex_model_provider::create_model_provider;
 use codex_models_manager::manager::SharedModelsManager;
-use codex_protocol::openai_models::ModelInfo;
+use codex_protocol::openai_models::CatalogModel;
+use codex_protocol::openai_models::ModelOrigin;
 
 use crate::config::Config;
 
 /// `models_manager`'s metadata for `model`. A session's models manager is
 /// the one of the provider it started on; after a switch to Amazon Bedrock
-/// (whose models only Bedrock's own catalog knows) its fallback metadata is
-/// replaced by that static catalog's (no network).
+/// (whose models only Bedrock's own catalog knows) its synthesized fallback
+/// metadata is replaced by that static catalog's (no network).
 pub(crate) async fn model_info_for_config(
     models_manager: &SharedModelsManager,
     model: &str,
     config: &Config,
-) -> ModelInfo {
+) -> CatalogModel {
     let models_config = config.to_models_manager_config();
     let model_info = models_manager.get_model_info(model, &models_config).await;
-    if !model_info.used_fallback_model_metadata || !config.model_provider.is_amazon_bedrock() {
+    if !is_synthetic(&model_info) || !config.model_provider.is_amazon_bedrock() {
         return model_info;
     }
     create_model_provider(config.model_provider.clone(), /*auth_manager*/ None)
         .models_manager_without_cache(/*config_model_catalog*/ None)
         .get_model_info(model, &models_config)
         .await
+}
+
+/// Whether `model_info` is generic metadata synthesized for a model no catalog knows.
+pub(crate) fn is_synthetic(model_info: &CatalogModel) -> bool {
+    model_info.origin == ModelOrigin::Synthetic
 }
 
 #[cfg(test)]
@@ -44,24 +50,21 @@ mod tests {
                 Default::default(),
             ));
         let model = codex_model_provider_info::AMAZON_BEDROCK_GPT_5_4_MODEL_ID;
-        assert!(
-            other
+        assert!(is_synthetic(
+            &other
                 .get_model_info(model, &config.to_models_manager_config())
                 .await
-                .used_fallback_model_metadata
-        );
+        ));
 
         config.model_provider =
             ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None);
         let bedrock = model_info_for_config(&other, model, &config).await;
-        assert!(!bedrock.used_fallback_model_metadata);
+        assert!(!is_synthetic(&bedrock));
         assert!(!bedrock.supported_reasoning_levels.is_empty());
 
         config.model_provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
-        assert!(
-            model_info_for_config(&other, "unknown-model-572", &config)
-                .await
-                .used_fallback_model_metadata
-        );
+        assert!(is_synthetic(
+            &model_info_for_config(&other, "unknown-model-572", &config).await
+        ));
     }
 }
