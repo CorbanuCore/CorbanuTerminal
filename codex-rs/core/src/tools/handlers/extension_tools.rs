@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use std::sync::Weak;
 
+use codex_file_system::FileSystemEnvironmentAccessor;
+use codex_file_system::FileSystemSandboxContext;
 use codex_history::ResponseItemEnvelope;
 use codex_protocol::items::TurnItem;
 use codex_protocol::protocol::Event;
@@ -19,9 +21,11 @@ use codex_utils_string::to_ascii_json_string;
 
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
+use crate::session::turn_context::TurnEnvironment;
 use crate::tools::context::ToolEnvironments;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
+use crate::tools::handlers::read_granted_permissions;
 use crate::tools::lifecycle::extension_tool_call_source;
 use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::ToolExecutor;
@@ -60,30 +64,24 @@ impl ToolExecutor<ToolInvocation> for ExtensionToolAdapter {
         self.0.search_info()
     }
 
-<<<<<<< HEAD
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
-        Box::pin(async move {
-            let call = current_extension_call(&invocation, &mut || {}).await?;
-            self.0.handle(call).await
-||||||| 413492cd6c
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
-        Box::pin(async move { self.0.handle(to_extension_call(&invocation).await).await })
-=======
     fn handle<'a>(&'a self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'a>
     where
         ToolInvocation: 'a,
     {
         Box::pin(async move {
-            let step = &invocation.step_context;
-            let selected: Vec<_> = match &invocation.environments {
-                ToolEnvironments::Arguments(environments) => {
-                    environments.iter().map(|(_, env)| env.as_ref()).collect()
-                }
-                _ => step.environments.turn_environments().collect(),
-            };
-            let accessors: Vec<_> = selected
+            let (contexts, built_under) =
+                current_extension_file_contexts(&invocation, &mut || {}).await?;
+            let accessors: Vec<_> = contexts
                 .into_iter()
-                .map(|env| (env, step.fs_accessor(env)))
+                .map(|(environment, sandbox)| {
+                    (
+                        environment,
+                        FileSystemEnvironmentAccessor::new(
+                            environment.environment.filesystem_ref(),
+                            sandbox,
+                        ),
+                    )
+                })
                 .collect();
             let environments = accessors
                 .iter()
@@ -95,10 +93,15 @@ impl ToolExecutor<ToolInvocation> for ExtensionToolAdapter {
                     )
                 })
                 .collect();
-            self.0
-                .handle(to_extension_call(&invocation, environments).await)
-                .await
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            let call = to_extension_call(&invocation, environments).await;
+            // D71 (a): building the call awaits the history; a transition meanwhile
+            // refuses it, as one during the file contexts' build would.
+            if extension_call_basis(invocation.session.as_ref()) != built_under {
+                return Err(codex_tools::FunctionCallError::RespondToModel(
+                    EXTENSION_PREPARED_REFUSAL.to_string(),
+                ));
+            }
+            self.0.handle(call).await
         })
     }
 }
@@ -111,32 +114,73 @@ pub(crate) const EXTENSION_PREPARED_REFUSAL: &str = "Not run: the security polic
 /// The level-dependent state an extension call is built under: the policy
 /// marker its grants are fenced by and the live level its file context is
 /// protected for.
-fn extension_call_basis(
-    session: &Session,
-) -> (Option<(u64, u64)>, codex_security_policy::SecurityLevel) {
+type ExtensionCallBasis = (Option<(u64, u64)>, codex_security_policy::SecurityLevel);
+
+fn extension_call_basis(session: &Session) -> ExtensionCallBasis {
     (
         session.services.authority_marker(),
         session.services.model_client().live_level(),
     )
 }
 
-/// #1057 (D71, option A): the extension call built under the policy in
-/// force when the extension starts. The call's file contexts (grants
-/// included) are built from the policy at build time; when a security
-/// transition lands while it is built, it is rebuilt once under the new
-/// policy, and refused when another lands meanwhile. `after_build` runs
-/// after each build (a test seam). A transition while the extension runs is
-/// not covered (option B).
-async fn current_extension_call(
+/// The file contexts an extension call gets for `environment` (upstream passes each selected
+/// environment's filesystem to the extension): the session's usable grants (#245), Corbanu's
+/// launch contract and Windows no-sandbox refusal (PF-27-S02, D491) and the protected-surface
+/// denials (PF-23-S01), as for the other in-process file tools.
+async fn extension_file_contexts(
     invocation: &ToolInvocation,
+) -> Vec<(&TurnEnvironment, FileSystemSandboxContext)> {
+    let selected: Vec<&TurnEnvironment> = match &invocation.environments {
+        ToolEnvironments::Arguments(environments) => {
+            environments.iter().map(|(_, env)| env.as_ref()).collect()
+        }
+        _ => invocation
+            .step_context
+            .environments
+            .turn_environments()
+            .collect(),
+    };
+    let mut contexts = Vec::with_capacity(selected.len());
+    for environment in selected {
+        let granted =
+            read_granted_permissions(&invocation.session, &environment.selection.environment_id)
+                .await;
+        let context = crate::security::protected_surface::protect_file_tool_context(
+            &invocation.session,
+            &invocation.turn,
+            invocation
+                .turn
+                .file_system_sandbox_context(granted, environment),
+        );
+        contexts.push((environment, context));
+    }
+    contexts
+}
+
+/// #1057 (D71, option A): the extension's file contexts built under the
+/// policy in force when the extension starts, with that policy's basis (the
+/// caller re-checks it once the call is built). They (grants included) are
+/// built from the policy at build time; when a security transition lands
+/// while they are built, they are rebuilt once under the new policy, and the
+/// call is refused when another lands meanwhile. `after_build` runs after each
+/// build (a test seam). A transition while the extension runs is not covered
+/// (option B).
+async fn current_extension_file_contexts<'i>(
+    invocation: &'i ToolInvocation,
     after_build: &mut (dyn FnMut() + Send),
-) -> Result<ExtensionToolCall, codex_tools::FunctionCallError> {
+) -> Result<
+    (
+        Vec<(&'i TurnEnvironment, FileSystemSandboxContext)>,
+        ExtensionCallBasis,
+    ),
+    codex_tools::FunctionCallError,
+> {
     for _ in 0..2 {
         let built_under = extension_call_basis(invocation.session.as_ref());
-        let call = to_extension_call(invocation).await;
+        let contexts = extension_file_contexts(invocation).await;
         after_build();
         if extension_call_basis(invocation.session.as_ref()) == built_under {
-            return Ok(call);
+            return Ok((contexts, built_under));
         }
     }
     Err(codex_tools::FunctionCallError::RespondToModel(
@@ -145,11 +189,10 @@ async fn current_extension_call(
 }
 
 impl CoreToolRuntime for ExtensionToolAdapter {
-<<<<<<< HEAD
     fn tool_origin(&self) -> crate::security::protected_surface::ToolOrigin {
         crate::security::protected_surface::ToolOrigin::Extension
-||||||| 413492cd6c
-=======
+    }
+
     fn environments_for_input(
         &self,
         invocation: &ToolInvocation,
@@ -199,7 +242,6 @@ impl CoreToolRuntime for ExtensionToolAdapter {
                 "list_windows" | "list_items" | "read_item" | "search_contents"
             )
         )
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     fn matches_kind(&self, payload: &ToolPayload) -> bool {
@@ -294,67 +336,6 @@ async fn to_extension_call<'a>(
             &invocation.step_context.settings,
         ))
         .and_then(|metadata| to_ascii_json_string(&metadata).ok());
-<<<<<<< HEAD
-    let mut environments = Vec::new();
-    for environment in invocation.step_context.environments.turn_environments() {
-        // TODO(anp): Migrate extension ToolEnvironment and granted-permission lookup to PathUri
-        // so extensions can receive foreign environment cwd values.
-        let Ok(native_cwd) = environment.cwd().to_abs_path() else {
-            continue;
-        };
-        let additional_permissions = apply_granted_turn_permissions(
-            invocation.session.as_ref(),
-            &environment.environment_id,
-            native_cwd.as_path(),
-            SandboxPermissions::UseDefault,
-            /*additional_permissions*/ None,
-        )
-        .await
-        .additional_permissions;
-        let file_system_sandbox_context =
-            crate::security::protected_surface::protect_file_tool_context(
-                &invocation.session,
-                &invocation.turn,
-                invocation
-                    .turn
-                    .file_system_sandbox_context(additional_permissions, environment),
-            );
-        environments.push(ToolEnvironment {
-            environment_id: environment.environment_id.clone(),
-            cwd: native_cwd,
-            file_system: environment.environment.get_filesystem(),
-            file_system_sandbox_context,
-        });
-    }
-||||||| 413492cd6c
-    let mut environments = Vec::new();
-    for environment in invocation.step_context.environments.turn_environments() {
-        // TODO(anp): Migrate extension ToolEnvironment and granted-permission lookup to PathUri
-        // so extensions can receive foreign environment cwd values.
-        let Ok(native_cwd) = environment.cwd().to_abs_path() else {
-            continue;
-        };
-        let additional_permissions = apply_granted_turn_permissions(
-            invocation.session.as_ref(),
-            &environment.environment_id,
-            native_cwd.as_path(),
-            SandboxPermissions::UseDefault,
-            /*additional_permissions*/ None,
-        )
-        .await
-        .additional_permissions;
-        let file_system_sandbox_context = invocation
-            .turn
-            .file_system_sandbox_context(additional_permissions, environment);
-        environments.push(ToolEnvironment {
-            environment_id: environment.environment_id.clone(),
-            cwd: native_cwd,
-            file_system: environment.environment.get_filesystem(),
-            file_system_sandbox_context,
-        });
-    }
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     ExtensionToolCall {
         turn_id: invocation.turn.sub_id.clone(),
         call_id: invocation.call_id.clone(),

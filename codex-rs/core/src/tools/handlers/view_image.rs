@@ -148,7 +148,6 @@ impl ViewImageHandler {
             ))
         })?;
         let model_visible_path = path_uri.inferred_native_path_string();
-<<<<<<< HEAD
         let own_sandbox = turn
             .file_system_sandbox_context(/*additional_permissions*/ None, turn_environment);
         let sandbox = crate::security::protected_surface::protect_file_tool_context(
@@ -156,12 +155,6 @@ impl ViewImageHandler {
             &turn,
             own_sandbox.clone(),
         );
-||||||| 413492cd6c
-        let sandbox = turn
-            .file_system_sandbox_context(/*additional_permissions*/ None, turn_environment);
-=======
-        let sandbox = turn_environment.sandbox_context(/*additional_permissions*/ None);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let fs = turn_environment.environment.get_filesystem();
         // #1087: a read the protected-path rules refused says so, naming the
         // level, to the person and to the model.
@@ -186,24 +179,13 @@ impl ViewImageHandler {
             FunctionCallError::RespondToModel(format!("{message}\n{explanation}"))
         };
 
-<<<<<<< HEAD
-        let metadata = match fs.get_metadata(&path_uri, Some(&sandbox)).await {
+        let metadata = match fs
+            .get_metadata(&path_uri, GetMetadataOptions::default(), Some(&sandbox))
+            .await
+        {
             Ok(metadata) => metadata,
             Err(error) => {
                 return Err(explain_error(format!(
-||||||| 413492cd6c
-        let metadata = fs
-            .get_metadata(&path_uri, Some(&sandbox))
-            .await
-            .map_err(|error| {
-                FunctionCallError::RespondToModel(format!(
-=======
-        let metadata = fs
-            .get_metadata(&path_uri, GetMetadataOptions::default(), Some(&sandbox))
-            .await
-            .map_err(|error| {
-                FunctionCallError::RespondToModel(format!(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     "unable to locate image at `{model_visible_path}`: {error}"
                 ))
                 .await);
@@ -215,40 +197,23 @@ impl ViewImageHandler {
                 "image path `{model_visible_path}` is not a file"
             )));
         }
-<<<<<<< HEAD
-        let file_bytes = match fs.read_file(&path_uri, Some(&sandbox)).await {
+        let file_bytes = match fs
+            .read_file(&path_uri, ReadFileOptions::default(), Some(&sandbox))
+            .await
+        {
             Ok(bytes) => bytes,
             Err(error) => {
                 return Err(explain_error(format!(
-||||||| 413492cd6c
-        let file_bytes = fs
-            .read_file(&path_uri, Some(&sandbox))
-            .await
-            .map_err(|error| {
-                FunctionCallError::RespondToModel(format!(
-=======
-        let file_bytes = fs
-            .read_file(&path_uri, ReadFileOptions::default(), Some(&sandbox))
-            .await
-            .map_err(|error| {
-                FunctionCallError::RespondToModel(format!(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     "unable to read image at `{model_visible_path}`: {error}"
                 ))
-<<<<<<< HEAD
                 .await);
             }
         };
-||||||| 413492cd6c
-            })?;
-=======
-            })?;
         // Reject non-images before their bytes can reach code mode without changing
         // valid image bytes, metadata, or centralized image preparation.
         image::load_from_memory(&file_bytes).map_err(|_| {
             FunctionCallError::RespondToModel(VIEW_IMAGE_INVALID_MESSAGE.to_string())
         })?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
         let can_request_original_detail =
             can_request_original_image_detail(&step_context.settings.model_info);
