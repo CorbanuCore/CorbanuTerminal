@@ -1,54 +1,30 @@
-<<<<<<< HEAD
 /*
 Module: orchestrator
 
 Central place for approvals + sandbox selection + retry semantics. Drives a
 simple sequence for any ToolRuntime: approval → select sandbox → attempt →
 retry with an escalated sandbox strategy on denial (no re‑approval thanks to
-caching).
+caching). Guardian approval applies to the reviewed authority; escalating a
+sandboxed attempt requires a fresh review of the retry.
 */
+use super::approvals::ApprovalContext;
 use super::approvals::ApprovalResolutionSource;
+use super::approvals::ApprovalResult;
 use super::approvals::ApprovalReviewer;
 use super::approvals::DeclineRecord;
-use super::approvals::resolve_tool_apporval;
-||||||| 413492cd6c
-/*
-Module: orchestrator
-
-Central place for approvals + sandbox selection + retry semantics. Drives a
-simple sequence for any ToolRuntime: approval → select sandbox → attempt →
-retry with an escalated sandbox strategy on denial (no re‑approval thanks to
-caching).
-*/
-use super::approvals::ApprovalReviewer;
-use super::approvals::resolve_tool_apporval;
-=======
-//! Coordinates tool approval, sandbox selection, and retries after sandbox denial.
-//! Guardian approval applies to the reviewed authority; escalating a sandboxed
-//! attempt requires a fresh review of the retry.
+use super::approvals::resolve_tool_action_approval;
+use super::approvals::resolve_tool_approval;
 use crate::config::NetworkProxySpec;
 use crate::guardian::GuardianReviewContext;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::network_policy_decision::network_approval_context_from_payload;
 use crate::sandboxing::SandboxPermissions;
 use crate::tools::approvals::ApprovalAction;
-use crate::tools::approvals::ApprovalContext;
-use crate::tools::approvals::ApprovalResolutionSource;
 use crate::tools::flat_tool_name;
 use crate::tools::network_approval::ActiveNetworkApproval;
 use crate::tools::network_approval::DeferredNetworkApproval;
 use crate::tools::network_approval::NetworkApprovalSpec;
 use crate::tools::network_approval::begin_network_approval;
 use crate::tools::network_approval::finish_deferred_network_approval;
-<<<<<<< HEAD
-use crate::tools::network_approval::finish_immediate_network_approval;
-use crate::tools::sandboxing::ApprovalAction;
-use crate::tools::sandboxing::ApprovalCtx;
-||||||| 413492cd6c
-use crate::tools::network_approval::finish_immediate_network_approval;
-use crate::tools::sandboxing::ApprovalCtx;
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use crate::tools::sandboxing::ExecApprovalRequirement;
 use crate::tools::sandboxing::SandboxAttempt;
 use crate::tools::sandboxing::SandboxOverride;
@@ -72,12 +48,11 @@ use codex_protocol::protocol::ReviewDecision;
 use codex_sandboxing::SandboxManager;
 use codex_sandboxing::SandboxType;
 use codex_sandboxing::policy_transforms::effective_network_sandbox_policy;
+use codex_utils_path_uri::PathUri;
 use std::sync::Arc;
 use std::time::Instant;
 
-<<<<<<< HEAD
 pub(crate) struct ToolOrchestrator {
-    sandbox: SandboxManager,
     handler_basis: Option<HandlerBasis>,
 }
 
@@ -99,13 +74,6 @@ impl HandlerBasis {
         }
     }
 }
-||||||| 413492cd6c
-pub(crate) struct ToolOrchestrator {
-    sandbox: SandboxManager,
-}
-=======
-pub(crate) struct ToolOrchestrator;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
 pub(crate) struct OrchestratorRunResult<Out> {
     pub output: Out,
@@ -114,18 +82,9 @@ pub(crate) struct OrchestratorRunResult<Out> {
 
 impl ToolOrchestrator {
     pub fn new() -> Self {
-<<<<<<< HEAD
         Self {
-            sandbox: SandboxManager::new(),
             handler_basis: None,
         }
-||||||| 413492cd6c
-        Self {
-            sandbox: SandboxManager::new(),
-        }
-=======
-        Self
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     /// #1057: the run was prepared by a handler under `basis`.
@@ -229,7 +188,8 @@ impl ToolOrchestrator {
     where
         T: ToolRuntime<Rq, Out>,
     {
-<<<<<<< HEAD
+        let turn_ctx = tool_ctx.step_context.turn.as_ref();
+        let approval_policy = tool_ctx.step_context.settings.approval_policy();
         let aggressive_at_start = match self.handler_basis {
             Some(basis) => basis.aggressive,
             None => tool_ctx
@@ -317,27 +277,46 @@ impl ToolOrchestrator {
     where
         T: ToolRuntime<Rq, Out>,
     {
-||||||| 413492cd6c
-=======
-        let turn_ctx = tool_ctx.step_context.turn.as_ref();
-        let approval_policy = tool_ctx.step_context.settings.approval_policy();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        let environment = tool.turn_environment(req);
+        let sandbox_config = environment.config();
+        let windows_sandbox_type = codex_protocol::sandbox::effective_windows_sandbox_type(
+            sandbox_config.windows_sandbox_type,
+            sandbox_config.windows_sandbox_level,
+        );
+        // #1976 (D491): under Moderate or Aggressive on Windows without the
+        // Windows sandbox, no agent command runs (read-only ones included),
+        // before anyone is asked; checked each round, so a level raised while
+        // a person was asked counts too. Judged on the sandbox this run's
+        // environment launches with. D522 (a), provisional: upstream's MXC
+        // backend counts as no sandbox, however it was selected.
+        let unsandboxed_level = if windows_sandbox_type == SandboxType::WindowsMxc {
+            WindowsSandboxLevel::Disabled
+        } else {
+            sandbox_config.windows_sandbox_level
+        };
+        if let Some(refusal) = crate::security::windows_unsandboxed::session_command_refusal(
+            &tool_ctx.session,
+            unsandboxed_level,
+        ) {
+            crate::security::inspection::record_refusal(
+                tool_ctx.session.thread_id(),
+                crate::security::windows_unsandboxed::INSPECTED,
+                crate::security::windows_unsandboxed::inspected_outcome(
+                    tool_ctx.session.services.model_client().live_level(),
+                ),
+            );
+            warn(tool_ctx, &refusal).await;
+            return Err(ToolError::Rejected(refusal));
+        }
         let otel = turn_ctx.session_telemetry.clone();
         let otel_tn = flat_tool_name(&tool_ctx.tool_name).into_owned();
         let otel_ci = &tool_ctx.call_id;
         let strict_auto_review = turn_ctx.strict_auto_review_enabled();
         // 1) Approval
-<<<<<<< HEAD
         let mut already_approved = false;
         // Issue #513: who approved this run, if anyone was asked.
         let mut approved_by = None;
-||||||| 413492cd6c
-        let mut already_approved = false;
-=======
-        let mut initial_approval_source = None;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
-        let environment = tool.turn_environment(req);
         let sandbox_manager = SandboxManager::new();
         #[cfg(target_os = "macos")]
         let sandbox_manager = sandbox_manager.with_allowed_symlinked_codex_home(
@@ -346,9 +325,12 @@ impl ToolOrchestrator {
                 .local_runtime_paths()
                 .and_then(|paths| paths.allowed_symlinked_codex_home.clone()),
         );
-        let sandbox_config = environment.config();
         let owner_network_policy = sandbox_config.network_policy.is_some();
         let workspace_roots = environment.workspace_roots();
+        let materialized_workspace_roots = workspace_roots
+            .iter()
+            .filter_map(|workspace_root| workspace_root.to_abs_path().ok())
+            .collect::<Vec<_>>();
         let executor_managed_process_sandbox = tool.uses_executor_managed_process_sandbox(req);
         let permission_profile = environment.permission_profile();
         let permissions = if executor_managed_process_sandbox {
@@ -361,7 +343,10 @@ impl ToolOrchestrator {
         let requirement = tool.exec_approval_requirement(req).unwrap_or_else(|| {
             default_exec_approval_requirement(approval_policy, &file_system_sandbox_policy)
         });
-<<<<<<< HEAD
+        let human_once = matches!(
+            requirement,
+            ExecApprovalRequirement::NeedsHumanApproval { .. }
+        );
         // PF-23-S02: under Aggressive, the grant digest of this exact command.
         // PF-25-S01: while its approval is open, the human may grant it once
         // in the TUI; the offer ends with the approval.
@@ -422,7 +407,11 @@ impl ToolOrchestrator {
         let mut persistence_note = None;
         // PF-30-S03: a protected action after untrusted content needs fresh,
         // exact human approval, whatever the requirement above would allow.
-        let post_taint = post_taint_action(tool, req, tool_ctx, &requirement).await;
+        let (post_taint, post_taint_hint) =
+            match post_taint_action(tool, req, tool_ctx, &requirement).await {
+                Some((action, hint)) => (Some(action), hint),
+                None => (None, None),
+            };
         // D27 (a), D48 (c): the taint generation at which the person was
         // warned, in the prompt they answer, that approving lets this run
         // create user namespaces (only a run whose prompt showed it may).
@@ -457,9 +446,18 @@ impl ToolOrchestrator {
                 || moderate_escalation_before_taint(tool, req, tool_ctx, &requirement);
             let reads = !(state.moderate_bound() && human_route);
             let person_may_decide = human_route
-                || (matches!(requirement, ExecApprovalRequirement::NeedsApproval { .. })
-                    && !strict_auto_review
-                    && ApprovalReviewer::for_turn(turn_ctx) == ApprovalReviewer::User);
+                || (matches!(
+                    requirement,
+                    ExecApprovalRequirement::NeedsApproval { .. }
+                        | ExecApprovalRequirement::NeedsHumanApproval { .. }
+                ) && ApprovalReviewer::for_context(&approval_context(
+                    tool_ctx,
+                    &requirement,
+                    strict_auto_review,
+                    /*approval_reason*/ None,
+                    /*retry_reason*/ None,
+                    /*network_approval_context*/ None,
+                )) == ApprovalReviewer::User);
             let writes = protected_additional::ReadOnlyScope::before_approval(
                 state.level,
                 person_may_decide,
@@ -467,8 +465,14 @@ impl ToolOrchestrator {
             #[allow(deprecated)]
             let turn_cwd = turn_ctx.cwd.clone();
             let cwds = resolution_folders(tool, req, &turn_cwd, &materialized_workspace_roots);
-            let codex_home = tool_ctx.turn.config.codex_home.to_path_buf();
-            let sqlite_home = tool_ctx.turn.config.sqlite.home().to_path_buf();
+            let codex_home = tool_ctx.step_context.turn.config.codex_home.to_path_buf();
+            let sqlite_home = tool_ctx
+                .step_context
+                .turn
+                .config
+                .sqlite
+                .home()
+                .to_path_buf();
             let (roots, profile, additional) = (
                 materialized_workspace_roots.clone(),
                 permissions.clone(),
@@ -564,15 +568,16 @@ impl ToolOrchestrator {
                                     tool.sandbox_permissions(req),
                                     &requirement,
                                     &file_system_sandbox_policy,
+                                    /*already_approved*/ true,
                                 ),
                                 SandboxOverride::BypassSandboxFirstAttempt
                             ))
                             || unsandboxed_execution_allowed(&file_system_sandbox_policy));
                     let unsandboxed = may_leave
-                        || self.sandbox.select_initial(
+                        || sandbox_manager.select_initial(
                             &permissions,
                             tool.sandbox_preference(),
-                            turn_ctx.windows_sandbox_level,
+                            windows_sandbox_type,
                             turn_ctx.network.is_some(),
                         ) == SandboxType::None;
                     GitCheck::first_look(
@@ -643,13 +648,14 @@ impl ToolOrchestrator {
                 }
                 None => user_namespaces_note(tool, req, tool_ctx, turn_ctx).map(|(note, _)| note),
             };
-            let approval_ctx = ApprovalCtx {
-                session: &tool_ctx.session,
-                turn: &tool_ctx.turn,
-                call_id: &tool_ctx.call_id,
-                retry_reason: Some(
+            let approval_ctx = approval_context(
+                tool_ctx,
+                &requirement,
+                strict_auto_review,
+                Some(
                     [
                         Some(action.approval_reason()),
+                        post_taint_hint.map(str::to_string),
                         protected_read_note.clone(),
                         kept_read_note,
                         stays_sandboxed.map(str::to_string),
@@ -660,9 +666,9 @@ impl ToolOrchestrator {
                     .collect::<Vec<_>>()
                     .join(" "),
                 ),
-                network_approval_context: None,
-                fresh_human_authority: true,
-            };
+                /*retry_reason*/ None,
+                /*network_approval_context*/ None,
+            );
             let asked = Instant::now();
             // #442: no grant for an action whose reads stay denied anyway.
             if !action.reads_stay_denied() && protected_read_note.is_none() {
@@ -672,18 +678,18 @@ impl ToolOrchestrator {
                 tool_ctx.session.thread_id(),
                 action.kind,
             );
-            let decision = resolve_tool_apporval(
-                tool,
-                req,
-                tool_ctx.call_id.as_str(),
-                approval_ctx,
-                tool_ctx,
-                ApprovalReviewer::User,
-                &otel,
-                DeclineRecord::ByCaller,
-                asked_again,
-            )
-            .await;
+            let decision = approval_source(
+                resolve_tool_approval(
+                    tool,
+                    req,
+                    approval_ctx,
+                    tool_ctx,
+                    /*fresh_human_authority*/ true,
+                    DeclineRecord::ByCaller,
+                    asked_again,
+                )
+                .await,
+            );
             pending.answered();
             // D50: approved before a security transition; decided again
             // (the recheck below would refuse it).
@@ -701,7 +707,7 @@ impl ToolOrchestrator {
                 },
                 Some(asked.elapsed()),
             );
-            approved_by = Some(decision?);
+            approved_by = decision?;
             post_taint_recheck(action, tool_ctx)?;
             already_approved = true;
         }
@@ -748,28 +754,13 @@ impl ToolOrchestrator {
             None
         };
         let mut escalation_approved_by_human = false;
-||||||| 413492cd6c
-=======
-        let human_once = matches!(
-            requirement,
-            ExecApprovalRequirement::NeedsHumanApproval { .. }
-        );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         match &requirement {
             _ if post_taint.is_some() => {}
             _ if ask_human_to_escalate => {
                 // #747: and it stays inside the sandbox.
                 let note = crate::security::protected_additional::moderate_escalation_note();
-                let mut approval_ctx = ApprovalCtx {
-                    session: &tool_ctx.session,
-                    turn: &tool_ctx.turn,
-                    call_id: &tool_ctx.call_id,
-                    retry_reason: None,
-                    network_approval_context: None,
-                    fresh_human_authority: true,
-                };
                 // Keep why the command runs ahead of the note.
-                let why = escalation_why(tool, req, &requirement, &approval_ctx);
+                let why = escalation_why(tool, req, &requirement, &tool_ctx.call_id);
                 // D27 (a): on Linux, approving also lets this one run create
                 // user namespaces, and the person is warned (only a run whose
                 // prompt showed it may); elsewhere (#826), that what needs one
@@ -790,42 +781,39 @@ impl ToolOrchestrator {
                     Some(user_namespaces) => format!("{note} {user_namespaces}"),
                     None => note,
                 };
-                approval_ctx.retry_reason = Some(match why {
-                    Some(why) => format!("{why} {note}"),
-                    None => note,
-                });
-                approved_by = Some(
-                    resolve_tool_apporval(
+                let approval_ctx = approval_context(
+                    tool_ctx,
+                    &requirement,
+                    strict_auto_review,
+                    Some(match why {
+                        Some(why) => format!("{why} {note}"),
+                        None => note,
+                    }),
+                    /*retry_reason*/ None,
+                    /*network_approval_context*/ None,
+                );
+                approved_by = approval_source(
+                    resolve_tool_approval(
                         tool,
                         req,
-                        tool_ctx.call_id.as_str(),
                         approval_ctx,
                         tool_ctx,
-                        ApprovalReviewer::User,
-                        &otel,
+                        /*fresh_human_authority*/ true,
                         DeclineRecord::Here,
                         asked_again,
                     )
-                    .await?,
-                );
+                    .await,
+                )?;
                 already_approved = true;
                 escalation_approved_by_human = true;
             }
             _ if after_untrusted_warning.is_some() => {
                 // Set: the guard holds.
                 let (warning, at) = after_untrusted_warning.clone().unwrap_or_default();
-                let approval_ctx = ApprovalCtx {
-                    session: &tool_ctx.session,
-                    turn: &tool_ctx.turn,
-                    call_id: &tool_ctx.call_id,
-                    retry_reason: None,
-                    network_approval_context: None,
-                    fresh_human_authority: true,
-                };
                 // Why the command runs, what approving may let it write
                 // (#513), that it stays in the sandbox (#747), the warning.
-                let retry_reason = [
-                    escalation_why(tool, req, &requirement, &approval_ctx),
+                let approval_reason = [
+                    escalation_why(tool, req, &requirement, &tool_ctx.call_id),
                     persistence_note.clone(),
                     moderate_sandbox_note(tool, req, moderate_keeps_sandbox).map(str::to_string),
                     Some(warning),
@@ -834,81 +822,51 @@ impl ToolOrchestrator {
                 .flatten()
                 .collect::<Vec<_>>()
                 .join(" ");
-                approved_by = Some(
-                    resolve_tool_apporval(
+                approved_by = approval_source(
+                    resolve_tool_approval(
                         tool,
                         req,
-                        tool_ctx.call_id.as_str(),
-                        ApprovalCtx {
-                            retry_reason: Some(retry_reason),
-                            ..approval_ctx
-                        },
+                        approval_context(
+                            tool_ctx,
+                            &requirement,
+                            strict_auto_review,
+                            Some(approval_reason),
+                            /*retry_reason*/ None,
+                            /*network_approval_context*/ None,
+                        ),
                         tool_ctx,
-                        ApprovalReviewer::User,
-                        &otel,
+                        /*fresh_human_authority*/ true,
                         DeclineRecord::Here,
                         asked_again,
                     )
-                    .await?,
-                );
+                    .await,
+                )?;
                 already_approved = true;
                 user_namespaces_warned_at = Some(at);
             }
             ExecApprovalRequirement::Skip { .. } => {
                 if strict_auto_review {
-                    let action = tool
-                        .approval_action(req, &tool_ctx.call_id)
-                        .map_err(|err| {
-                            ToolError::Rejected(format!("could not prepare approval action: {err}"))
-                        })?;
-                    let approval_ctx = ApprovalContext {
-                        exec_requirement: Some(requirement.clone()),
-                        review_context: GuardianReviewContext::from(&tool_ctx.step_context),
-                        cancellation_token: Some(tool_ctx.cancellation_token.clone()),
-                        call_id: tool_ctx.call_id.clone(),
-                        tool_name: tool_ctx.tool_name.clone(),
+                    let approval_ctx = approval_context(
+                        tool_ctx,
+                        &requirement,
                         strict_auto_review,
-                        approval_reason: None,
-                        retry_reason: None,
-                        network_approval_context: None,
-                        fresh_human_authority: false,
-                    };
-<<<<<<< HEAD
-                    approved_by = Some(
-                        resolve_tool_apporval(
+                        /*approval_reason*/ None,
+                        /*retry_reason*/ None,
+                        /*network_approval_context*/ None,
+                    );
+                    approved_by = approval_source(
+                        resolve_tool_approval(
                             tool,
                             req,
-                            tool_ctx.call_id.as_str(),
                             approval_ctx,
                             tool_ctx,
-                            ApprovalReviewer::Guardian,
-                            &otel,
+                            /*fresh_human_authority*/ false,
                             DeclineRecord::Here,
                             asked_again,
                         )
-                        .await?,
-                    );
+                        .await,
+                    )?;
                     already_approved = true;
-||||||| 413492cd6c
-                    resolve_tool_apporval(
-                        tool,
-                        req,
-                        tool_ctx.call_id.as_str(),
-                        approval_ctx,
-                        tool_ctx,
-                        ApprovalReviewer::Guardian,
-                        &otel,
-                    )
-                    .await?;
-                    already_approved = true;
-=======
-                    let approval = tool_ctx
-                        .session
-                        .request_approval(action, approval_ctx)
-                        .await;
-                    approval.result?;
-                    initial_approval_source = approval.source;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 } else {
                     otel.tool_decision(
                         &tool_ctx.tool_name,
@@ -921,13 +879,16 @@ impl ToolOrchestrator {
             ExecApprovalRequirement::Forbidden { reason } => {
                 return Err(ToolError::Rejected(reason.clone()));
             }
-<<<<<<< HEAD
-            ExecApprovalRequirement::NeedsApproval { reason, .. } => {
-                let reviewer = if strict_auto_review {
-                    ApprovalReviewer::Guardian
-                } else {
-                    ApprovalReviewer::for_turn(turn_ctx)
-                };
+            ExecApprovalRequirement::NeedsApproval { reason, .. }
+            | ExecApprovalRequirement::NeedsHumanApproval { reason } => {
+                let reviewer = ApprovalReviewer::for_context(&approval_context(
+                    tool_ctx,
+                    &requirement,
+                    strict_auto_review,
+                    /*approval_reason*/ None,
+                    /*retry_reason*/ None,
+                    /*network_approval_context*/ None,
+                ));
                 let protected_read_note = if reviewer == ApprovalReviewer::User {
                     protected_read_note(grant_operation.as_ref(), tool_ctx, turn_ctx).await
                 } else {
@@ -949,11 +910,11 @@ impl ToolOrchestrator {
                         }
                         None => (None, None),
                     };
-                let approval_ctx = ApprovalCtx {
-                    session: &tool_ctx.session,
-                    turn: &tool_ctx.turn,
-                    call_id: &tool_ctx.call_id,
-                    retry_reason: [
+                let approval_ctx = approval_context(
+                    tool_ctx,
+                    &requirement,
+                    strict_auto_review,
+                    [
                         reason.as_ref(),
                         why.as_ref(),
                         protected_read_note.as_ref(),
@@ -967,77 +928,25 @@ impl ToolOrchestrator {
                     .flatten()
                     .cloned()
                     .reduce(|joined, part| format!("{joined} {part}")),
-||||||| 413492cd6c
-            ExecApprovalRequirement::NeedsApproval { reason, .. } => {
-                let approval_ctx = ApprovalCtx {
-                    session: &tool_ctx.session,
-                    turn: &tool_ctx.turn,
-                    call_id: &tool_ctx.call_id,
-                    retry_reason: reason.clone(),
-=======
-            ExecApprovalRequirement::NeedsApproval { reason, .. }
-            | ExecApprovalRequirement::NeedsHumanApproval { reason } => {
-                let action = tool
-                    .approval_action(req, &tool_ctx.call_id)
-                    .map_err(|err| {
-                        ToolError::Rejected(format!("could not prepare approval action: {err}"))
-                    })?;
-                let approval_ctx = ApprovalContext {
-                    exec_requirement: Some(requirement.clone()),
-                    review_context: GuardianReviewContext::from(&tool_ctx.step_context),
-                    cancellation_token: Some(tool_ctx.cancellation_token.clone()),
-                    call_id: tool_ctx.call_id.clone(),
-                    tool_name: tool_ctx.tool_name.clone(),
-                    strict_auto_review,
-                    approval_reason: reason.clone(),
-                    retry_reason: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-                    network_approval_context: None,
-                    fresh_human_authority: false,
-                };
-<<<<<<< HEAD
+                    /*retry_reason*/ None,
+                    /*network_approval_context*/ None,
+                );
                 if reviewer == ApprovalReviewer::User && protected_read_note.is_none() {
                     grant_offer = aggressive_grant_offer(grant_operation.as_ref(), tool_ctx);
                 }
-                approved_by = Some(
-                    resolve_tool_apporval(
+                approved_by = approval_source(
+                    resolve_tool_approval(
                         tool,
                         req,
-                        tool_ctx.call_id.as_str(),
                         approval_ctx,
                         tool_ctx,
-                        reviewer,
-                        &otel,
+                        /*fresh_human_authority*/ false,
                         DeclineRecord::Here,
                         asked_again,
                     )
-                    .await?,
-                );
+                    .await,
+                )?;
                 already_approved = true;
-||||||| 413492cd6c
-                resolve_tool_apporval(
-                    tool,
-                    req,
-                    tool_ctx.call_id.as_str(),
-                    approval_ctx,
-                    tool_ctx,
-                    if strict_auto_review {
-                        ApprovalReviewer::Guardian
-                    } else {
-                        ApprovalReviewer::for_turn(turn_ctx)
-                    },
-                    &otel,
-                )
-                .await?;
-                already_approved = true;
-=======
-                let approval = tool_ctx
-                    .session
-                    .request_approval(action, approval_ctx)
-                    .await;
-                approval.result?;
-                initial_approval_source = approval.source;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             }
         }
 
@@ -1248,24 +1157,26 @@ impl ToolOrchestrator {
             !always_sandboxed && unsandboxed_execution_allowed(&file_system_sandbox_policy);
 
         // 2) First attempt under the selected sandbox.
-<<<<<<< HEAD
         let unkept_override = sandbox_override_for_first_attempt(
-||||||| 413492cd6c
-        let sandbox_override = sandbox_override_for_first_attempt(
-=======
-        let unsandboxed_allowed = unsandboxed_execution_allowed(&file_system_sandbox_policy);
-        let sandbox_override = sandbox_override_for_first_attempt(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             tool.sandbox_permissions(req),
             &requirement,
             &file_system_sandbox_policy,
-            /*already_approved*/ initial_approval_source.is_some(),
+            already_approved,
         );
-<<<<<<< HEAD
-        let sandbox_override = if keeps_sandbox {
-            SandboxOverride::NoOverride
-        } else {
-            unkept_override
+        // Upstream's sandboxed escalation (an approved request to run outside
+        // the sandbox whose profile denies reads) widens the environment's
+        // own profile, which carries none of Corbanu's rules: only where
+        // they left this run's permissions unchanged and nothing keeps it in
+        // the sandbox. Elsewhere the run stays in its sandbox, as on main.
+        let corbanu_rules_apply = keeps_sandbox
+            || denied_exec_server_permissions.is_some()
+            || crate::security::protected_additional::protected_level(&tool_ctx.session).is_some();
+        let sandbox_override = match unkept_override {
+            _ if keeps_sandbox => SandboxOverride::NoOverride,
+            SandboxOverride::EscalatedSandboxWithRestrictions if corbanu_rules_apply => {
+                SandboxOverride::NoOverride
+            }
+            sandbox_override => sandbox_override,
         };
         // #739: a remembered approval or allow rule that would skip the
         // sandbox is not applied silently under protected launch: the run
@@ -1283,10 +1194,6 @@ impl ToolOrchestrator {
             )
             .await;
         }
-        let managed_network_active = turn_ctx.network.is_some();
-||||||| 413492cd6c
-        let managed_network_active = turn_ctx.network.is_some();
-=======
         let (escalated_profile, writable_root_metadata) = if sandbox_override
             == SandboxOverride::EscalatedSandboxWithRestrictions
         {
@@ -1377,7 +1284,6 @@ impl ToolOrchestrator {
         } else {
             turn_ctx.network.is_some()
         };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let sandbox_preference = tool.sandbox_preference();
         let sandbox_requested = match sandbox_override {
             SandboxOverride::BypassSandboxFirstAttempt => false,
@@ -1389,10 +1295,6 @@ impl ToolOrchestrator {
                 )
             }
         };
-        let windows_sandbox_type = codex_protocol::sandbox::effective_windows_sandbox_type(
-            sandbox_config.windows_sandbox_type,
-            sandbox_config.windows_sandbox_level,
-        );
         let initial_sandbox = if sandbox_requested && !executor_managed_process_sandbox {
             sandbox_manager.select_initial(
                 initial_permissions,
@@ -1453,7 +1355,7 @@ impl ToolOrchestrator {
                 tool_ctx
                     .session
                     .send_event(
-                        &tool_ctx.turn,
+                        &tool_ctx.step_context.turn,
                         codex_protocol::protocol::EventMsg::Warning(
                             codex_protocol::protocol::WarningEvent { message },
                         ),
@@ -1516,31 +1418,11 @@ impl ToolOrchestrator {
             );
         }
         let initial_attempt_start = Instant::now();
-<<<<<<< HEAD
-        let (first_result, first_deferred_network_approval) = Self::run_attempt(
-            tool,
-            req,
-            tool_ctx,
-            &initial_attempt,
-            managed_network_active,
-        )
-        .await;
+        let (first_result, first_deferred_network_approval) =
+            Self::run_attempt(tool, req, tool_ctx, &initial_attempt, network_approval_spec).await;
         if let Some(check) = &git_check {
             check.finish(tool_ctx).await;
         }
-||||||| 413492cd6c
-        let (first_result, first_deferred_network_approval) = Self::run_attempt(
-            tool,
-            req,
-            tool_ctx,
-            &initial_attempt,
-            managed_network_active,
-        )
-        .await;
-=======
-        let (first_result, first_deferred_network_approval) =
-            Self::run_attempt(tool, req, tool_ctx, &initial_attempt, network_approval_spec).await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         let initial_duration = initial_attempt_start.elapsed();
         let result = match first_result {
             Ok(out) => {
@@ -1595,7 +1477,6 @@ impl ToolOrchestrator {
                     );
                     return Err(ToolError::Codex(err));
                 }
-<<<<<<< HEAD
                 let sandbox_startup_failure =
                     is_sandbox_startup_failure(initial_sandbox, output.as_ref());
                 // #874: nor while the git check's findings are still there
@@ -1615,11 +1496,6 @@ impl ToolOrchestrator {
                     warn(tool_ctx, &git_held_note(&git_held, Withheld::Rules)).await;
                 }
                 let unsandboxed_allowed = unsandboxed_allowed && git_held.is_empty();
-||||||| 413492cd6c
-                let unsandboxed_allowed =
-                    unsandboxed_execution_allowed(&file_system_sandbox_policy);
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 // Under `Never` or `OnRequest`, do not retry without sandbox;
                 // surface a concise sandbox denial that preserves the original
                 // output. Exception: if the platform sandbox itself failed to
@@ -1688,35 +1564,29 @@ impl ToolOrchestrator {
                         build_denial_reason_from_output(output.as_ref())
                     };
 
-<<<<<<< HEAD
-                // Strict auto-review approval covers the sandboxed attempt only;
+                // Human and policy approvals keep their existing retry scope. A
+                // Guardian verdict only covers the authority of the reviewed action;
+                // strict auto-review approval covers the sandboxed attempt only, so
                 // retrying without the sandbox requires a fresh guardian review.
                 // A post-taint approval covered the sandboxed attempt only.
-                let bypass_retry_approval = !strict_auto_review
-                    && post_taint.is_none()
-                    && (tool.should_bypass_approval(approval_policy, already_approved)
-                        || allow_on_request_sandbox_startup_retry(
-                            approval_policy,
-                            already_approved,
-                            sandbox_startup_failure,
-                        ))
-||||||| 413492cd6c
-                // Strict auto-review approval covers the sandboxed attempt only;
-                // retrying without the sandbox requires a fresh guardian review.
-                let bypass_retry_approval = !strict_auto_review
-                    && tool.should_bypass_approval(approval_policy, already_approved)
-=======
-                // Human and policy approvals keep their existing retry scope. A
-                // Guardian verdict only covers the authority of the reviewed action.
                 let retry_preapproved = !human_once
                     && matches!(
-                        initial_approval_source,
-                        Some(ApprovalResolutionSource::User | ApprovalResolutionSource::Hook)
+                        approved_by,
+                        Some(
+                            ApprovalResolutionSource::User
+                                | ApprovalResolutionSource::Remembered
+                                | ApprovalResolutionSource::Hook
+                        )
                     );
                 let bypass_retry_approval = !human_once
                     && !strict_auto_review
-                    && tool.should_bypass_approval(approval_policy, retry_preapproved)
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                    && post_taint.is_none()
+                    && (tool.should_bypass_approval(approval_policy, retry_preapproved)
+                        || allow_on_request_sandbox_startup_retry(
+                            approval_policy,
+                            retry_preapproved,
+                            sandbox_startup_failure,
+                        ))
                     && network_approval_context.is_none();
                 // D50: a retry due on an approval from before a security
                 // transition (one committed while the first attempt ran) is
@@ -1733,22 +1603,6 @@ impl ToolOrchestrator {
                     return Err(ToolError::Codex(err));
                 }
                 if !bypass_retry_approval {
-<<<<<<< HEAD
-                    let approval_ctx = ApprovalCtx {
-                        session: &tool_ctx.session,
-                        turn: &tool_ctx.turn,
-                        call_id: &tool_ctx.call_id,
-                        retry_reason: Some(match &post_taint {
-                            Some(action) => format!("{} {retry_reason}", action.approval_reason()),
-                            None => retry_reason,
-                        }),
-||||||| 413492cd6c
-                    let approval_ctx = ApprovalCtx {
-                        session: &tool_ctx.session,
-                        turn: &tool_ctx.turn,
-                        call_id: &tool_ctx.call_id,
-                        retry_reason: Some(retry_reason),
-=======
                     let approval_reason = match &requirement {
                         ExecApprovalRequirement::NeedsApproval { reason, .. }
                         | ExecApprovalRequirement::NeedsHumanApproval { reason } => reason.clone(),
@@ -1774,45 +1628,53 @@ impl ToolOrchestrator {
                         *sandbox_permissions = SandboxPermissions::RequireEscalated;
                         *additional_permissions = None;
                     }
-                    let approval_ctx = ApprovalContext {
-                        exec_requirement: Some(requirement.clone()),
-                        review_context: GuardianReviewContext::from(&tool_ctx.step_context),
-                        cancellation_token: Some(tool_ctx.cancellation_token.clone()),
-                        call_id: tool_ctx.call_id.clone(),
-                        tool_name: tool_ctx.tool_name.clone(),
+                    let approval_ctx = approval_context(
+                        tool_ctx,
+                        &requirement,
                         strict_auto_review,
                         approval_reason,
-                        retry_reason: Some(retry_reason),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-                        network_approval_context: network_approval_context.clone(),
-                        fresh_human_authority: post_taint.is_some(),
-                    };
+                        Some(match &post_taint {
+                            Some(action) => format!("{} {retry_reason}", action.approval_reason()),
+                            None => retry_reason,
+                        }),
+                        network_approval_context.clone(),
+                    );
 
-<<<<<<< HEAD
-                    let permission_request_run_id = format!("{}:retry", tool_ctx.call_id);
-                    let retry_approved_by = resolve_tool_apporval(
-                        tool,
-                        req,
-                        &permission_request_run_id,
-                        approval_ctx,
-                        tool_ctx,
-                        if strict_auto_review {
-                            ApprovalReviewer::Guardian
-                        } else {
-                            ApprovalReviewer::for_turn(turn_ctx)
-                        },
-                        &otel,
-                        DeclineRecord::Here,
-                        /*asked_again*/ false,
-                    )
-                    .await?;
+                    if human_once && network_approval_context.is_some() {
+                        let mut network_ctx = approval_ctx.clone();
+                        network_ctx.exec_requirement = None;
+                        approval_source(
+                            resolve_tool_action_approval::<Rq, Out, T>(
+                                tool,
+                                action.clone(),
+                                network_ctx,
+                                tool_ctx,
+                                /*fresh_human_authority*/ post_taint.is_some(),
+                                DeclineRecord::Here,
+                                /*asked_again*/ false,
+                            )
+                            .await,
+                        )?;
+                    }
+                    let retry_approved_by = approval_source(
+                        resolve_tool_action_approval::<Rq, Out, T>(
+                            tool,
+                            action,
+                            approval_ctx,
+                            tool_ctx,
+                            /*fresh_human_authority*/ post_taint.is_some(),
+                            DeclineRecord::Here,
+                            /*asked_again*/ false,
+                        )
+                        .await,
+                    )?;
                     if let Some(action) = &post_taint {
                         post_taint_recheck(action, tool_ctx)?;
                     }
                     // Issue #540: leaving the sandbox here takes a person.
                     if keeps_sandbox
                         && unsandboxed_allowed
-                        && retry_approved_by != ApprovalResolutionSource::User
+                        && retry_approved_by != Some(ApprovalResolutionSource::User)
                     {
                         return Err(ToolError::Rejected(
                             "running outside the sandbox needs a person's approval here"
@@ -1835,38 +1697,6 @@ impl ToolOrchestrator {
                         /*escalated_duration*/ None,
                     );
                     return Err(ToolError::Codex(err));
-||||||| 413492cd6c
-                    let permission_request_run_id = format!("{}:retry", tool_ctx.call_id);
-                    resolve_tool_apporval(
-                        tool,
-                        req,
-                        &permission_request_run_id,
-                        approval_ctx,
-                        tool_ctx,
-                        if strict_auto_review {
-                            ApprovalReviewer::Guardian
-                        } else {
-                            ApprovalReviewer::for_turn(turn_ctx)
-                        },
-                        &otel,
-                    )
-                    .await?;
-=======
-                    if human_once && network_approval_context.is_some() {
-                        let mut network_ctx = approval_ctx.clone();
-                        network_ctx.exec_requirement = None;
-                        tool_ctx
-                            .session
-                            .request_approval(action.clone(), network_ctx)
-                            .await
-                            .result?;
-                    }
-                    tool_ctx
-                        .session
-                        .request_approval(action, approval_ctx)
-                        .await
-                        .result?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 }
 
                 let retry_sandbox_requested = !unsandboxed_allowed
@@ -1964,6 +1794,39 @@ impl ToolOrchestrator {
         };
         result.map(Round::Done)
     }
+}
+
+/// Upstream's approval context for this run: the command's policy result
+/// and the step's review context; `approval_reason` is what the person is
+/// shown (Corbanu's notes joined to the requirement's reason) and
+/// `retry_reason` marks a retry after a sandbox denial.
+fn approval_context(
+    tool_ctx: &ToolCtx,
+    requirement: &ExecApprovalRequirement,
+    strict_auto_review: bool,
+    approval_reason: Option<String>,
+    retry_reason: Option<String>,
+    network_approval_context: Option<codex_protocol::approvals::NetworkApprovalContext>,
+) -> ApprovalContext {
+    ApprovalContext {
+        exec_requirement: Some(requirement.clone()),
+        review_context: GuardianReviewContext::from(&tool_ctx.step_context),
+        cancellation_token: Some(tool_ctx.cancellation_token.clone()),
+        call_id: tool_ctx.call_id.clone(),
+        tool_name: tool_ctx.tool_name.clone(),
+        strict_auto_review,
+        approval_reason,
+        retry_reason,
+        network_approval_context,
+    }
+}
+
+/// Issue #513: who approved, once the approval allowed the run.
+fn approval_source(
+    approval: ApprovalResult,
+) -> Result<Option<ApprovalResolutionSource>, ToolError> {
+    approval.result?;
+    Ok(approval.source)
 }
 
 /// #874, #837 (Travis, 2026-10-16, D6): the repositories whose git folder a
@@ -2259,7 +2122,10 @@ async fn post_taint_action<Rq, Out, T>(
     req: &Rq,
     tool_ctx: &ToolCtx,
     requirement: &ExecApprovalRequirement,
-) -> Option<crate::security::tainted_action::PostTaintAction>
+) -> Option<(
+    crate::security::tainted_action::PostTaintAction,
+    Option<&'static str>,
+)>
 where
     T: ToolRuntime<Rq, Out>,
 {
@@ -2272,21 +2138,13 @@ where
         .model_client()
         .post_taint_state()
         .filter(|state| state.taint_generation > 0)?;
-    let ctx = ApprovalCtx {
-        session: &tool_ctx.session,
-        turn: &tool_ctx.turn,
-        call_id: &tool_ctx.call_id,
-        retry_reason: None,
-        network_approval_context: None,
-        fresh_human_authority: true,
-    };
     // An action the host cannot describe cannot be shown to be ordinary.
     let started = Instant::now();
-    let kind = match tool.approval_action(req, &ctx) {
+    let (kind, hint) = match tool.approval_action(req, &tool_ctx.call_id) {
         Ok(action) => {
             // Classification may look at the filesystem: keep it off the
             // async workers and bounded in time; a stall fails closed.
-            let codex_home = tool_ctx.turn.config.codex_home.to_path_buf();
+            let codex_home = tool_ctx.step_context.turn.config.codex_home.to_path_buf();
             // D85: the zsh exec bridge runs any shell tool `-c` script under
             // zsh, whatever shell the argv names.
             let features = tool_ctx.session.features();
@@ -2295,22 +2153,33 @@ where
             let classified = tokio::time::timeout(
                 POST_TAINT_CLASSIFY_TIMEOUT,
                 tokio::task::spawn_blocking(move || {
-                    if as_named {
+                    let kind = if as_named {
                         crate::security::tainted_action::classify_as_named(&action, &codex_home)
                     } else {
                         crate::security::tainted_action::classify(&action, &codex_home)
-                    }
+                    };
+                    // #1897 follow-up: a quieter form to suggest, if any.
+                    kind.map(|kind| {
+                        (
+                            kind,
+                            crate::security::tainted_action::approval_hint(&action, kind),
+                        )
+                    })
                 }),
             )
             .await;
             match classified {
-                Ok(Ok(kind)) => kind?,
-                Ok(Err(_)) | Err(_) => {
-                    crate::security::tainted_action::ProtectedActionKind::UnseenCode
-                }
+                Ok(Ok(found)) => found?,
+                Ok(Err(_)) | Err(_) => (
+                    crate::security::tainted_action::ProtectedActionKind::UnseenCode,
+                    None,
+                ),
             }
         }
-        Err(_) => crate::security::tainted_action::ProtectedActionKind::UnseenCode,
+        Err(_) => (
+            crate::security::tainted_action::ProtectedActionKind::UnseenCode,
+            None,
+        ),
     };
     tracing::info!(
         target: "codex_core::security::tainted_action",
@@ -2320,7 +2189,10 @@ where
         call_id = %tool_ctx.call_id,
         "post-taint protected action needs fresh human approval"
     );
-    Some(crate::security::tainted_action::PostTaintAction { kind, state })
+    Some((
+        crate::security::tainted_action::PostTaintAction { kind, state },
+        hint,
+    ))
 }
 
 /// #734: after a run in the non-admin Windows sandbox, tells the person
@@ -2432,7 +2304,7 @@ async fn warn(tool_ctx: &ToolCtx, message: &str) {
     tool_ctx
         .session
         .send_event(
-            &tool_ctx.turn,
+            &tool_ctx.step_context.turn,
             codex_protocol::protocol::EventMsg::Warning(codex_protocol::protocol::WarningEvent {
                 message: message.to_string(),
             }),
@@ -2497,7 +2369,7 @@ fn escalation_why<Rq, Out, T>(
     tool: &T,
     req: &Rq,
     requirement: &ExecApprovalRequirement,
-    approval_ctx: &ApprovalCtx<'_>,
+    call_id: &str,
 ) -> Option<String>
 where
     T: ToolRuntime<Rq, Out>,
@@ -2506,12 +2378,12 @@ where
         ExecApprovalRequirement::NeedsApproval {
             reason: Some(reason),
             ..
+        }
+        | ExecApprovalRequirement::NeedsHumanApproval {
+            reason: Some(reason),
         } => Some(reason.clone()),
-        _ => match tool.approval_action(req, approval_ctx) {
-            Ok(
-                ApprovalAction::Shell { justification, .. }
-                | ApprovalAction::ExecCommand { justification, .. },
-            ) => justification,
+        _ => match tool.approval_action(req, call_id) {
+            Ok(ApprovalAction::ExecCommand { justification, .. }) => justification,
             _ => None,
         },
     }
@@ -2531,18 +2403,8 @@ fn runs_known_tool<Rq, Out, T>(
 where
     T: ToolRuntime<Rq, Out>,
 {
-    let ctx = ApprovalCtx {
-        session: &tool_ctx.session,
-        turn: &tool_ctx.turn,
-        call_id: &tool_ctx.call_id,
-        retry_reason: None,
-        network_approval_context: None,
-        fresh_human_authority: true,
-    };
-    let command = match tool.approval_action(req, &ctx) {
-        Ok(ApprovalAction::Shell { command, .. } | ApprovalAction::ExecCommand { command, .. }) => {
-            command
-        }
+    let command = match tool.approval_action(req, &tool_ctx.call_id) {
+        Ok(ApprovalAction::ExecCommand { command, .. }) => command,
         _ => return false,
     };
     #[allow(deprecated)]
@@ -2556,9 +2418,9 @@ where
     );
     // Also where it is reached through a link (`~/bin -> ~/project/bin`).
     let writable = |path: &std::path::Path| {
-        policy.can_write_path_with_cwd(path, cwd.as_path())
+        policy.can_write_local_path_with_cwd(path, cwd.as_path())
             || std::fs::canonicalize(path)
-                .is_ok_and(|real| policy.can_write_path_with_cwd(&real, cwd.as_path()))
+                .is_ok_and(|real| policy.can_write_local_path_with_cwd(&real, cwd.as_path()))
     };
     // As the shell's search decides it (`access(X_OK)`), not by mode bits.
     let executable = |file: &std::path::Path| {
@@ -2607,23 +2469,8 @@ where
         .model_client()
         .post_taint_state()
         .filter(|state| state.level == codex_security_policy::SecurityLevel::Aggressive)?;
-    let ctx = ApprovalCtx {
-        session: &tool_ctx.session,
-        turn: &tool_ctx.turn,
-        call_id: &tool_ctx.call_id,
-        retry_reason: None,
-        network_approval_context: None,
-        fresh_human_authority: true,
-    };
-    Some(match tool.approval_action(req, &ctx).ok()? {
-        ApprovalAction::Shell {
-            command,
-            cwd,
-            sandbox_permissions,
-            additional_permissions,
-            ..
-        }
-        | ApprovalAction::ExecCommand {
+    Some(match tool.approval_action(req, &tool_ctx.call_id).ok()? {
+        ApprovalAction::ExecCommand {
             command,
             cwd,
             sandbox_permissions,
@@ -2642,6 +2489,10 @@ where
             command_operation(&["patch", &cwd.to_string(), &patch]),
             None,
         ),
+        ApprovalAction::WriteStdin { .. }
+        | ApprovalAction::McpToolCall { .. }
+        | ApprovalAction::NetworkAccess { .. }
+        | ApprovalAction::RequestPermissions { .. } => return None,
     })
 }
 
@@ -2684,21 +2535,8 @@ where
     if !cfg!(target_os = "linux") {
         return None;
     }
-    let ctx = ApprovalCtx {
-        session: &tool_ctx.session,
-        turn: &tool_ctx.turn,
-        call_id: &tool_ctx.call_id,
-        retry_reason: None,
-        network_approval_context: None,
-        fresh_human_authority: false,
-    };
-    let (command, justification) = match tool.approval_action(req, &ctx).ok()? {
-        ApprovalAction::Shell {
-            command,
-            justification,
-            ..
-        }
-        | ApprovalAction::ExecCommand {
+    let (command, justification) = match tool.approval_action(req, &tool_ctx.call_id).ok()? {
+        ApprovalAction::ExecCommand {
             command,
             justification,
             ..
@@ -2735,17 +2573,8 @@ where
     {
         return None;
     }
-    let ctx = ApprovalCtx {
-        session: &tool_ctx.session,
-        turn: &tool_ctx.turn,
-        call_id: &tool_ctx.call_id,
-        retry_reason: None,
-        network_approval_context: None,
-        fresh_human_authority: true,
-    };
-    let (command, cwd) = match tool.approval_action(req, &ctx).ok()? {
-        ApprovalAction::Shell { command, cwd, .. }
-        | ApprovalAction::ExecCommand { command, cwd, .. } => (command, cwd),
+    let (command, cwd) = match tool.approval_action(req, &tool_ctx.call_id).ok()? {
+        ApprovalAction::ExecCommand { command, cwd, .. } => (command, cwd),
         _ => return None,
     };
     let cwd = cwd.to_abs_path().ok()?;
@@ -2843,8 +2672,8 @@ fn post_taint_read_denials(
         // read-only in the command's sandbox (under Moderate every command
         // keeps one, #747).
         let mut denials = ReadDenials::for_turn(
-            tool_ctx.turn.config.codex_home.as_path(),
-            tool_ctx.turn.config.sqlite.home(),
+            tool_ctx.step_context.turn.config.codex_home.as_path(),
+            tool_ctx.step_context.turn.config.sqlite.home(),
             &cwd,
             workspace_roots,
             materialized,
@@ -2852,14 +2681,17 @@ fn post_taint_read_denials(
         .runtime_only();
         // #766: the approval lifts no rule a nested `corbanu exec` relies on.
         if !tool_ctx
+            .step_context
             .turn
             .config
             .permissions
             .launch_enforces_aggressive()
         {
-            denials.mark_moderate(tool_ctx.turn.config.codex_home.as_path());
+            denials.mark_moderate(tool_ctx.step_context.turn.config.codex_home.as_path());
         } else {
-            ReadDenials::keep_moderate_marker_readable(tool_ctx.turn.config.codex_home.as_path());
+            ReadDenials::keep_moderate_marker_readable(
+                tool_ctx.step_context.turn.config.codex_home.as_path(),
+            );
         }
         tracing::info!(
             target: "codex_core::security::tainted_action",
@@ -2921,8 +2753,8 @@ fn post_taint_read_denials(
         granted = true;
     }
     let mut denials = ReadDenials::for_turn(
-        tool_ctx.turn.config.codex_home.as_path(),
-        tool_ctx.turn.config.sqlite.home(),
+        tool_ctx.step_context.turn.config.codex_home.as_path(),
+        tool_ctx.step_context.turn.config.sqlite.home(),
         &cwd,
         workspace_roots,
         materialized,
@@ -2940,14 +2772,17 @@ fn post_taint_read_denials(
     // apply (its level file may be unreadable under Core's Moderate rules).
     if state.level == codex_security_policy::SecurityLevel::Moderate
         && !tool_ctx
+            .step_context
             .turn
             .config
             .permissions
             .launch_enforces_aggressive()
     {
-        denials.mark_moderate(tool_ctx.turn.config.codex_home.as_path());
+        denials.mark_moderate(tool_ctx.step_context.turn.config.codex_home.as_path());
     } else {
-        ReadDenials::keep_moderate_marker_readable(tool_ctx.turn.config.codex_home.as_path());
+        ReadDenials::keep_moderate_marker_readable(
+            tool_ctx.step_context.turn.config.codex_home.as_path(),
+        );
     }
     let (Some(exec_server), Some(materialized)) =
         (denials.apply(exec_server), denials.apply(materialized))
@@ -3071,8 +2906,12 @@ async fn refuse_opened(
         );
     }
     let refusal = opened.refusal(level);
-    crate::security::protected_reads::notify(&tool_ctx.session, &tool_ctx.turn, refusal.clone())
-        .await;
+    crate::security::protected_reads::notify(
+        &tool_ctx.session,
+        &tool_ctx.step_context.turn,
+        refusal.clone(),
+    )
+    .await;
     Err(ToolError::Rejected(refusal))
 }
 
