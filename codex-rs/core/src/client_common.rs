@@ -40,7 +40,6 @@ pub struct Prompt {
     /// Whether the Responses API should strictly validate `output_schema`.
     pub output_schema_strict: bool,
 
-<<<<<<< HEAD
     /// #578: the producer of this request's provider (see
     /// `TurnContext::output_producer`). Another producer's items lose their
     /// IDs on a Responses request, after source labelling looked them up by
@@ -51,10 +50,7 @@ pub struct Prompt {
     /// without namespaces, so recorded namespaced calls replay under exactly
     /// the name offered for them. Empty on wires with namespaces.
     pub(crate) flat_tool_names: crate::tools::flat_tool_names::FlatToolNames,
-||||||| 413492cd6c
-=======
     pub(crate) cyber_access_program: Option<codex_protocol::turn_input::CyberAccessProgram>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 impl Default for Prompt {
@@ -66,13 +62,9 @@ impl Default for Prompt {
             base_instructions: BaseInstructions::default(),
             output_schema: None,
             output_schema_strict: true,
-<<<<<<< HEAD
             producer: None,
             flat_tool_names: Default::default(),
-||||||| 413492cd6c
-=======
             cyber_access_program: None,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         }
     }
 }
@@ -88,7 +80,6 @@ impl Prompt {
     }
 }
 
-<<<<<<< HEAD
 /// Keep only the newest version of each turn-scoped developer-context section.
 ///
 /// OpenAI models understand append-only contextual updates and benefit from the stable prompt
@@ -154,12 +145,7 @@ impl NewerSections {
     }
 }
 
-pub(crate) fn strip_image_details(items: &mut [ResponseItem]) {
-||||||| 413492cd6c
-fn strip_image_details(items: &mut [ResponseItem]) {
-=======
-fn normalize_image_details(items: &mut [ResponseItem], model_info: &ModelInfo) {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+pub(crate) fn normalize_image_details(items: &mut [ResponseItem], model_info: &ModelInfo) {
     for item in items {
         match item {
             ResponseItem::Message { content, .. } => {

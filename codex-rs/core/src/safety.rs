@@ -5,6 +5,7 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::permissions::FileSystemSandboxPolicyContext;
 use codex_protocol::permissions::LocalFileSystemPolicyMatcher;
+use codex_protocol::permissions::WritableLinkIntoReadOnlyPath;
 use codex_protocol::protocol::AskForApproval;
 use codex_sandboxing::get_platform_sandbox;
 use codex_utils_path_uri::PathUri;
@@ -34,6 +35,16 @@ pub(crate) struct PatchPolicyMatcher<'a> {
     pub(crate) context: FileSystemSandboxPolicyContext<'a>,
     pub(crate) sandbox_route: PatchSandboxRoute,
     local_matching: Option<LocalFileSystemPolicyMatcher<'a>>,
+    /// #606 (Corbanu): local writable roots the sandboxes leave out (#535:
+    /// links into another root's read-only path), with the native cwd they
+    /// were resolved against. `None` on the executor-managed route. A local
+    /// cwd that cannot be resolved fails closed (nothing is writable).
+    excluded_links: Option<ExcludedLinks>,
+}
+
+struct ExcludedLinks {
+    native_cwd: Option<std::path::PathBuf>,
+    links: Vec<WritableLinkIntoReadOnlyPath>,
 }
 
 impl PatchSandboxRoute {
@@ -42,25 +53,62 @@ impl PatchSandboxRoute {
         configured_policy: &'a FileSystemSandboxPolicy,
         context: &FileSystemSandboxPolicyContext<'a>,
     ) -> io::Result<PatchPolicyMatcher<'a>> {
-        let local_matching = match self {
-            Self::Platform(_) => Some(configured_policy.prepare_local_matching(context)?),
-            Self::ExecutorManaged => None,
+        let (local_matching, excluded_links) = match self {
+            Self::Platform(_) => {
+                let native_cwd = context
+                    .cwd
+                    .to_abs_path()
+                    .ok()
+                    .map(|cwd| cwd.into_path_buf());
+                let links = native_cwd
+                    .as_deref()
+                    .map(|cwd| configured_policy.writable_links_into_read_only_paths(cwd))
+                    .unwrap_or_default();
+                (
+                    Some(configured_policy.prepare_local_matching(context)?),
+                    Some(ExcludedLinks { native_cwd, links }),
+                )
+            }
+            Self::ExecutorManaged => (None, None),
         };
         Ok(PatchPolicyMatcher {
             configured_policy,
             context: *context,
             sandbox_route: self,
             local_matching,
+            excluded_links,
         })
     }
 }
 
 impl PatchPolicyMatcher<'_> {
     pub(crate) fn can_write_path(&self, path: &PathUri) -> io::Result<bool> {
-        match &self.local_matching {
-            Some(matching) => matching.can_write_path(path),
-            None => Ok(self.configured_policy.can_write_path(path, &self.context)),
+        let writable = match &self.local_matching {
+            Some(matching) => matching.can_write_path(path)?,
+            None => self.configured_policy.can_write_path(path, &self.context),
+        };
+        Ok(writable && !self.through_excluded_link(path))
+    }
+
+    /// #606: a write through a writable root the sandboxes leave out (#535)
+    /// is not constrained to writable paths, so approvals must not count it
+    /// as writable either (fail closed).
+    fn through_excluded_link(&self, path: &PathUri) -> bool {
+        let Some(excluded) = &self.excluded_links else {
+            return false;
+        };
+        let Some(native_cwd) = &excluded.native_cwd else {
+            return true;
+        };
+        if excluded.links.is_empty() {
+            return false;
         }
+        let Ok(path) = path.to_abs_path() else {
+            return true;
+        };
+        !self
+            .configured_policy
+            .can_write_path_outside_excluded_links(path.as_path(), native_cwd, &excluded.links)
     }
 }
 
@@ -155,90 +203,6 @@ fn is_write_patch_constrained_to_writable_paths(
     {
         return Ok(true);
     }
-<<<<<<< HEAD
-    // TODO(anp): Make filesystem sandbox policies operate on PathUri.
-    let Ok(native_cwd) = cwd.to_abs_path() else {
-        return false;
-    };
-    // Normalize a path by removing `.` and resolving `..` without touching the
-    // filesystem (works even if the file does not exist).
-    fn normalize(path: &Path) -> Option<PathBuf> {
-        let mut out = PathBuf::new();
-        for comp in path.components() {
-            match comp {
-                Component::ParentDir => {
-                    out.pop();
-                }
-                Component::CurDir => { /* skip */ }
-                other => out.push(other.as_os_str()),
-            }
-        }
-        Some(out)
-    }
-
-    // #606: a writable link the sandboxes leave out (#535: it leads into
-    // another root's read-only path) grants nothing, so a patch through it
-    // is not constrained to writable paths.
-    let excluded = file_system_sandbox_policy.writable_links_into_read_only_paths(&native_cwd);
-    // Determine whether `path` is inside **any** writable root. Both `path`
-    // and roots are converted to absolute, normalized forms before the
-    // prefix check.
-    let is_path_writable = |path: &PathUri| {
-        // TODO(anp): Make sandbox policy path checks accept PathUri without host projection.
-        let Ok(path) = path.to_abs_path() else {
-            return false;
-        };
-        let abs = path.into_path_buf();
-        let abs = match normalize(&abs) {
-            Some(v) => v,
-            None => return false,
-        };
-
-        file_system_sandbox_policy.can_write_path_outside_excluded_links(
-            &abs,
-            &native_cwd,
-            &excluded,
-        )
-    };
-||||||| 413492cd6c
-    // TODO(anp): Make filesystem sandbox policies operate on PathUri.
-    let Ok(native_cwd) = cwd.to_abs_path() else {
-        return false;
-    };
-    // Normalize a path by removing `.` and resolving `..` without touching the
-    // filesystem (works even if the file does not exist).
-    fn normalize(path: &Path) -> Option<PathBuf> {
-        let mut out = PathBuf::new();
-        for comp in path.components() {
-            match comp {
-                Component::ParentDir => {
-                    out.pop();
-                }
-                Component::CurDir => { /* skip */ }
-                other => out.push(other.as_os_str()),
-            }
-        }
-        Some(out)
-    }
-
-    // Determine whether `path` is inside **any** writable root. Both `path`
-    // and roots are converted to absolute, normalized forms before the
-    // prefix check.
-    let is_path_writable = |path: &PathUri| {
-        // TODO(anp): Make sandbox policy path checks accept PathUri without host projection.
-        let Ok(path) = path.to_abs_path() else {
-            return false;
-        };
-        let abs = path.into_path_buf();
-        let abs = match normalize(&abs) {
-            Some(v) => v,
-            None => return false,
-        };
-
-        file_system_sandbox_policy.can_write_path_with_cwd(&abs, &native_cwd)
-    };
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     for (path, change) in action.changes() {
         match change {

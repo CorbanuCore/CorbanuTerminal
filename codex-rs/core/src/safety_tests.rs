@@ -550,29 +550,30 @@ fn patch_through_an_excluded_writable_link_is_not_auto_approved() {
             .len(),
         1
     );
+    let context = local_context(&cwd_uri);
+    let matching = PatchSandboxRoute::Platform(WindowsSandboxLevel::Disabled)
+        .prepare_matching(&file_system_sandbox_policy, &context)
+        .expect("prepare patch matching");
     let hook = link.join("hooks").join("pre-commit");
     let action = ApplyPatchAction::new_add_for_test(&PathUri::from_abs_path(&hook), "x".into());
-    assert!(!is_write_patch_constrained_to_writable_paths(
-        &action,
-        &file_system_sandbox_policy,
-        &cwd_uri,
-    ));
+    assert!(
+        !is_write_patch_constrained_to_writable_paths(&action, &matching)
+            .expect("check writable paths")
+    );
     assert_eq!(
         assess_patch_safety(
             &action,
             AskForApproval::OnRequest,
             &permission_profile,
-            &file_system_sandbox_policy,
-            &cwd_uri,
-            WindowsSandboxLevel::Disabled,
-        ),
+            &matching,
+        )
+        .expect("assess patch safety"),
         SafetyCheck::AskUser,
     );
     let inside = workspace.join("src").join("main.rs");
     let action = ApplyPatchAction::new_add_for_test(&PathUri::from_abs_path(&inside), "x".into());
-    assert!(is_write_patch_constrained_to_writable_paths(
-        &action,
-        &file_system_sandbox_policy,
-        &cwd_uri,
-    ));
+    assert!(
+        is_write_patch_constrained_to_writable_paths(&action, &matching)
+            .expect("check writable paths")
+    );
 }

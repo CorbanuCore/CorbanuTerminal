@@ -38,11 +38,17 @@ pub(crate) struct AsyncCompactionState {
     shutdown_cancellation: CancellationToken,
 }
 
+/// Corbanu: background (speculative) compaction stays off until its requests
+/// are recorded by accounting like every other compaction; its request path
+/// bypasses `ModelClientSession`, where that happens.
+const BACKGROUND_COMPACTION_SUPPORTED: bool = false;
+
 pub(super) fn enabled(turn_context: &TurnContext) -> bool {
-    turn_context
-        .config
-        .features
-        .enabled(Feature::AsyncCompaction)
+    BACKGROUND_COMPACTION_SUPPORTED
+        && turn_context
+            .config
+            .features
+            .enabled(Feature::AsyncCompaction)
         && !turn_context.config.features.enabled(Feature::TokenBudget)
         && matches!(
             turn_context.provider.capabilities().remote_compaction,
@@ -96,7 +102,7 @@ pub(super) async fn maybe_start(
             || state.shutting_down
             || state.async_compaction.last_attempt.as_ref() == Some(&attempt)
             || state.history.annotated_items().is_empty()
-            || sess.services.model_client.auth_owner_generation() != auth_owner_generation
+            || sess.services.model_client().auth_owner_generation() != auth_owner_generation
         {
             return;
         }
@@ -187,7 +193,7 @@ pub(crate) async fn wait_for_pending(
         if attempt.history_version != state.history.history_version()
             || attempt.model_slug != model.slug
             || attempt.compaction_hash != model.comp_hash
-            || attempt.auth_owner_generation != sess.services.model_client.auth_owner_generation()
+            || attempt.auth_owner_generation != sess.services.model_client().auth_owner_generation()
         {
             return None;
         }

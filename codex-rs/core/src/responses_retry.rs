@@ -20,14 +20,10 @@ use codex_protocol::protocol::WarningEvent;
 use tokio::time::Instant;
 use tracing::warn;
 
-<<<<<<< HEAD
-const MAX_SAME_REQUEST_IDLE_FAILURES: u64 = 2;
-const SSE_IDLE_TIMEOUT_MESSAGE: &str = "idle timeout waiting for SSE";
-||||||| 413492cd6c
-=======
 const INITIAL_CONNECTION_RETRY_DELAY: Duration = Duration::from_secs(5);
 const MAX_CONNECTION_RETRY_DELAY: Duration = Duration::from_secs(60);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+const MAX_SAME_REQUEST_IDLE_FAILURES: u64 = 2;
+const SSE_IDLE_TIMEOUT_MESSAGE: &str = "idle timeout waiting for SSE";
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ResponsesStreamRequest {
@@ -35,7 +31,29 @@ pub(crate) enum ResponsesStreamRequest {
     RemoteCompactionV2,
 }
 
-<<<<<<< HEAD
+pub(crate) struct ResponsesStreamRetryState {
+    retries: u64,
+    connection_retries: u64,
+    connection_retry_delay: Duration,
+}
+
+impl ResponsesStreamRetryState {
+    /// Retries used so far; the next attempt's same-turn index is this plus one.
+    pub(crate) fn retries(&self) -> u64 {
+        self.retries
+    }
+}
+
+impl Default for ResponsesStreamRetryState {
+    fn default() -> Self {
+        Self {
+            retries: 0,
+            connection_retries: 0,
+            connection_retry_delay: INITIAL_CONNECTION_RETRY_DELAY,
+        }
+    }
+}
+
 pub(crate) fn guard_same_request_idle_retry(
     err: &CodexErr,
     same_request_idle_failures: &mut u64,
@@ -59,39 +77,8 @@ pub(crate) fn guard_same_request_idle_retry(
 fn is_sse_idle_timeout(err: &CodexErr) -> bool {
     matches!(
         err.details(),
-        codex_protocol::error::CodexErrorDetails::Stream(message)
-            if message.contains(SSE_IDLE_TIMEOUT_MESSAGE)
+        CodexErrorDetails::Stream(message) if message.contains(SSE_IDLE_TIMEOUT_MESSAGE)
     )
-}
-
-/// Handles a retryable stream error and returns `Ok(())` when the caller should
-/// retry the request loop.
-#[allow(
-    clippy::too_many_arguments,
-    reason = "retry state is explicit so both stream callers share one policy boundary"
-)]
-pub(crate) async fn handle_retryable_response_stream_error(
-    retries: &mut u64,
-||||||| 413492cd6c
-/// Handles a retryable stream error and returns `Ok(())` when the caller should
-/// retry the request loop.
-pub(crate) async fn handle_retryable_response_stream_error(
-    retries: &mut u64,
-=======
-pub(crate) struct ResponsesStreamRetryState {
-    retries: u64,
-    connection_retries: u64,
-    connection_retry_delay: Duration,
-}
-
-impl Default for ResponsesStreamRetryState {
-    fn default() -> Self {
-        Self {
-            retries: 0,
-            connection_retries: 0,
-            connection_retry_delay: INITIAL_CONNECTION_RETRY_DELAY,
-        }
-    }
 }
 
 /// Server retry advice retained after stream retries are exhausted. The turn ID
@@ -104,9 +91,12 @@ pub(crate) struct ExhaustedResponseRetry {
 /// Returns `Ok(())` when the caller should retry the request loop, or the original error when
 /// it is terminal or the retry budget is exhausted.
 #[tracing::instrument(level = "trace", skip_all, fields(request = ?request))]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "retry state is explicit so both stream callers share one policy boundary"
+)]
 pub(crate) async fn handle_response_stream_error(
     retry_state: &mut ResponsesStreamRetryState,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     max_retries: u64,
     err: CodexErr,
     client_session: &mut ModelClientSession,
@@ -115,43 +105,8 @@ pub(crate) async fn handle_response_stream_error(
     request: ResponsesStreamRequest,
     attempt_elapsed: Duration,
 ) -> Result<(), CodexErr> {
-<<<<<<< HEAD
-    ensure_gpu_runtime_provider_active(sess, turn_context).await?;
-    let long_failure = attempt_elapsed
-        >= turn_context
-            .provider
-            .info()
-            .stream_long_failure_retry_threshold();
-    let effective_max_retries = effective_max_stream_retries(
-        max_retries,
-        long_failure,
-        turn_context
-            .provider
-            .info()
-            .stream_long_failure_max_retries(),
-    );
-
-    if long_failure {
-        warn_long_stream_failure(
-            sess,
-            turn_context,
-            *retries + 1,
-            effective_max_retries,
-            attempt_elapsed,
-            &err,
-        )
-        .await;
-    }
-
-    if *retries >= effective_max_retries && long_failure {
-        return Err(err);
-    }
-
-    if *retries >= effective_max_retries
-||||||| 413492cd6c
-    if *retries >= max_retries
-=======
     let turn_context = &step_context.turn;
+    ensure_gpu_runtime_provider_active(sess, turn_context).await?;
     if matches!(request, ResponsesStreamRequest::Sampling)
         && matches!(err.details(), CodexErrorDetails::ContentFilter)
     {
@@ -177,6 +132,35 @@ pub(crate) async fn handle_response_stream_error(
         return Err(err);
     };
     let retry_after = err.retry_after();
+    // Corbanu: an attempt that streamed for a long time before failing gets a
+    // smaller retry cap, and the user is told how long it ran.
+    let long_failure = attempt_elapsed
+        >= turn_context
+            .provider
+            .info()
+            .stream_long_failure_retry_threshold();
+    let max_retries = effective_max_stream_retries(
+        max_retries,
+        long_failure,
+        turn_context
+            .provider
+            .info()
+            .stream_long_failure_max_retries(),
+    );
+    if long_failure {
+        warn_long_stream_failure(
+            sess,
+            turn_context,
+            retry_count,
+            max_retries,
+            attempt_elapsed,
+            &err,
+        )
+        .await;
+        if retry_state.retries >= max_retries {
+            return Err(err);
+        }
+    }
 
     if turn_context
         .config
@@ -206,7 +190,6 @@ pub(crate) async fn handle_response_stream_error(
     }
 
     if retry_state.retries >= max_retries
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         && client_session.try_switch_fallback_transport(
             &turn_context.session_telemetry,
             turn_context.model_info(),
@@ -227,20 +210,8 @@ pub(crate) async fn handle_response_stream_error(
         return Ok(());
     }
 
-<<<<<<< HEAD
-    if *retries < effective_max_retries {
-        *retries += 1;
-        let retry_count = *retries;
-        let delay = err.retry_delay().unwrap_or_else(|| backoff(retry_count));
-||||||| 413492cd6c
-    if *retries < max_retries {
-        *retries += 1;
-        let retry_count = *retries;
-        let delay = err.retry_delay().unwrap_or_else(|| backoff(retry_count));
-=======
     if retry_state.retries < max_retries {
         retry_state.retries = retry_count;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         log_retry(request, turn_context, &err, retry_count, max_retries, delay);
 
         // In release builds, hide the first websocket retry notification to reduce noisy
