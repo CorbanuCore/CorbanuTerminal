@@ -326,16 +326,23 @@ struct CurrentClientSetup {
 }
 
 impl CurrentClientSetup {
-    fn build_api_transport(&self, endpoint: &str) -> Result<ReqwestTransport> {
-        let api_provider = &self.api_provider;
-        let redirect_policy = if api_provider
+    /// The redirect policy of this setup's requests: an account-routed request never follows
+    /// a redirect.
+    fn effective_redirect_policy(&self) -> ClientRedirectPolicy {
+        if self
+            .api_provider
             .headers
             .contains_key(codex_model_provider::ACCOUNT_ROUTING_HEADER)
         {
             ClientRedirectPolicy::Reject
         } else {
             self.redirect_policy
-        };
+        }
+    }
+
+    fn build_api_transport(&self, endpoint: &str) -> Result<ReqwestTransport> {
+        let api_provider = &self.api_provider;
+        let redirect_policy = self.effective_redirect_policy();
         let client = create_client_for_route(
             &self.http_client_factory,
             &api_provider.url_for_path(endpoint),
@@ -354,7 +361,7 @@ impl CurrentClientSetup {
             &self.http_client_factory,
             request_url,
             ClientRouteClass::Api,
-            self.redirect_policy,
+            self.effective_redirect_policy(),
         )
         .map_err(std::io::Error::from)?;
         Ok(ReqwestTransport::from_http_client(client))
@@ -1790,6 +1797,7 @@ impl ModelClient {
     /// A client on `provider` with isolated transport and fallback state. Request settings
     /// come from `config` when given, else from this client.
     fn with_provider(&self, provider: SharedModelProvider, config: Option<&Config>) -> Self {
+        let same_provider = provider.info() == self.state.provider.info();
         let codex_api_key_env_enabled = provider
             .auth_manager()
             .as_ref()
@@ -1865,7 +1873,12 @@ impl ModelClient {
                 self.api_key_cyber_access_programs,
                 cyber_access_program::ApiKeyCyberAccessPrograms::from_config,
             ),
-            runtime_auth: self.runtime_auth.clone(),
+            // Upstream's runtime authentication is validated for one first-party provider;
+            // another provider gets none (it would need its own runtime owner).
+            runtime_auth: self
+                .runtime_auth
+                .clone()
+                .filter(|_| same_provider),
         }
     }
 
@@ -2018,6 +2031,8 @@ impl ModelClient {
         &self,
         mut extra_headers: ApiHeaderMap,
     ) -> Result<ApiHeaderMap> {
+        // Issue #445: the sideband carries the session's credential; refused like the call.
+        self.check_source_admission(&Prompt::default())?;
         let client_setup = self.realtime_client_setup().await?;
         if let Some(header_value) = self.generate_attestation_header_for().await {
             extra_headers.insert(X_OAI_ATTESTATION_HEADER, header_value);
@@ -6230,9 +6245,10 @@ fn content_items_to_chat_content(content: &[ContentItem]) -> Option<ChatMessageC
             {
                 Some(ChatContentPart::text(text.clone()))
             }
-            ContentItem::InputImage { image, detail } => {
-                inline_image_url(image).map(|url| chat_image_part(url.to_string(), *detail))
-            }
+            ContentItem::InputImage { image, detail } => Some(match inline_image_url(image) {
+                Some(url) => chat_image_part(url.to_string(), *detail),
+                None => ChatContentPart::text(UNAVAILABLE_IMAGE_TEXT.to_string()),
+            }),
             ContentItem::InputText { .. }
             | ContentItem::OutputText { .. }
             | ContentItem::InputAudio { .. } => None,
@@ -6241,6 +6257,9 @@ fn content_items_to_chat_content(content: &[ContentItem]) -> Option<ChatMessageC
 
     (!parts.is_empty()).then_some(ChatMessageContent::Parts(parts))
 }
+
+/// Sent in place of an image this provider cannot receive (an uploaded Responses file).
+const UNAVAILABLE_IMAGE_TEXT: &str = "[image not available to this provider]";
 
 /// The URL of an inline image; uploaded files (a Responses file id) have none.
 fn inline_image_url(image: &codex_protocol::models::ImageReference) -> Option<&str> {
@@ -6422,7 +6441,10 @@ fn append_anthropic_message_for_response_item(
                     // Only inline images reach these providers; an uploaded file id does not.
                     ContentItem::InputImage { image, .. } => match inline_image_url(&image) {
                         Some(url) => anthropic_image_block(url),
-                        None => continue,
+                        None => json!({
+                            "type": "text",
+                            "text": UNAVAILABLE_IMAGE_TEXT,
+                        }),
                     },
                     ContentItem::InputText { .. }
                     | ContentItem::OutputText { .. }
@@ -7467,8 +7489,10 @@ where
 
     tokio::spawn(async move {
         let mut logged_error = false;
-        let collect_output_items =
-            last_response_tx.is_some() || inference_trace_attempt.needs_output_items();
+        // Corbanu (Vercel): the server-side state records the response's output items too.
+        let collect_output_items = last_response_tx.is_some()
+            || server_conversation_update.is_some()
+            || inference_trace_attempt.needs_output_items();
         let mut items_added: Vec<ResponseItem> = Vec::new();
         let mut active_item_id: Option<ResponseItemId> = None;
         let (request_start, mut ttft_ms) = (Instant::now(), None);
