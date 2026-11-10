@@ -101,7 +101,9 @@ fn write_file(dir: &Path, name: &str, contents: &str) -> PathBuf {
 }
 
 fn role_file(name: &str, body: &str) -> String {
-    format!("name = \"{name}\"\ndescription = \"{name} role\"\n{body}")
+    format!(
+        "name = \"{name}\"\ndescription = \"{name} role\"\ndeveloper_instructions = \"Help\"\n{body}"
+    )
 }
 
 /// A hook, optionally with a `[hooks.state]` entry marking it trusted.
