@@ -6,9 +6,11 @@
 //! since the thread started.
 
 use codex_protocol::config_types::WindowsSandboxLevel;
+use codex_security_policy::SecurityLevel;
 
 use super::session::Session;
 use crate::config::Config;
+use crate::security::SecurityPolicyError;
 use crate::windows_sandbox::WindowsSandboxLevelExt;
 
 impl Session {
@@ -21,14 +23,20 @@ impl Session {
             config
         };
         // A stricter level committed during this session holds for it until
-        // the next start; the new agent starts at least there.
-        if let Ok(policy) = self
+        // the next start; the new agent starts at least there. A policy state
+        // that can no longer be read fails closed.
+        match self
             .services
             .agent_control
             .effective_security_policy()
             .snapshot_for_agent(self.thread_id)
         {
-            config.security_level = config.security_level.max(policy.level);
+            Ok(policy) => config.security_level = config.security_level.max(policy.level),
+            Err(SecurityPolicyError::RuntimePoisoned) => {
+                config.security_level = SecurityLevel::Aggressive;
+            }
+            // No level in force for this thread: the configured one stands.
+            Err(_) => {}
         }
         config
     }

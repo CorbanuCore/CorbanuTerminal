@@ -1519,7 +1519,7 @@ impl TurnRequestProcessor {
         // (permissions, approvals, Windows sandbox, security level), not with
         // the config this server started with.
         let mut config = parent_thread.detached_agent_config().await;
-        if let Some(review_model) = &self.config.review_model {
+        if let Some(review_model) = &config.review_model {
             config.model = Some(review_model.clone());
         }
 

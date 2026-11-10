@@ -1,3 +1,4 @@
+use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::SandboxPolicy;
@@ -28,6 +29,7 @@ async fn issue_2015_detached_agent_config_follows_the_live_session() {
     session
         .update_settings(SessionSettingsUpdate {
             approval_policy: Some(AskForApproval::UnlessTrusted),
+            approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
             sandbox_policy: Some(SandboxPolicy::new_read_only_policy()),
             windows_sandbox_level: Some(WindowsSandboxLevel::RestrictedToken),
             ..Default::default()
@@ -64,6 +66,7 @@ async fn issue_2015_detached_agent_config_follows_the_live_session() {
         config.permissions.approval_policy.value(),
         AskForApproval::UnlessTrusted
     );
+    assert_eq!(config.approvals_reviewer, ApprovalsReviewer::AutoReview);
     assert_eq!(config.permissions.permission_profile(), &permission_profile);
     assert_eq!(
         config.legacy_sandbox_policy(),
