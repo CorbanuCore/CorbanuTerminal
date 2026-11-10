@@ -175,8 +175,11 @@ newer releases wait for the cadence.
   revert doesn't change the SG3 diff.
 - **Main merges** happen at tier exits (end of S1, end of S2) and in S5, numbered: #1 (during S1, #1915/#1922),
   #2 (S1 exit, D471, #2012/#2014), #2b (interim catch-up of `main` 063a1704e9..1855c92ae1 with the #2004 D487
-  security port), #3 (S2 exit), #4 (S5, ≤48 hours before the final merge; the last sync-branch change before the
-  CODEOWNERS revert). Extra interim merges take a letter suffix (#2b, #3b) so these numbers stay fixed. The integrator merges `origin/main` into the
+  security port), #2c (interim catch-up of `main` 1855c92ae1..ede11f0d21; a second PR ports the
+  #1978/#2028/#2030 MCP timeout work and brings the sync CODEOWNERS block and `security_paths.txt` up to `main`'s
+  security paths), #3 (S2 exit), #4 (S5, ≤48 hours before the final merge; the last sync-branch change before the
+  CODEOWNERS revert). Extra interim merges take a letter suffix (#2b, #3b) so these numbers stay fixed. The
+  integrator merges `origin/main` into the
   sync branch. Where `main`'s change to a path that still carries skeleton markers conflicts, the integrator keeps the
   sync side and adds a ledger row "re-apply `git diff <old-main>..<new-main> -- <path>`" for the path's owner; this
   avoids nested markers and keeps one owner per path. Where it merges cleanly, git places it in the ours side and the

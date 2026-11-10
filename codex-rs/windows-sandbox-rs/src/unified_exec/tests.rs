@@ -59,6 +59,13 @@ pub(crate) fn legacy_process_test_guard() -> MutexGuard<'static, ()> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
+/// #1877 item 5: confirms the recorded `path` as a prompt drawn now shows
+/// it.
+pub(crate) fn confirm_shown(path: &Path) -> anyhow::Result<bool> {
+    let shown = crate::planted_stamps()?.get(path).copied();
+    crate::confirm_planted_project_metadata(path, shown)
+}
+
 /// Whether a test in this process holds `legacy_process_test_guard()`. The
 /// elevated setup checks it (#1827): it sets the sandbox users' passwords, so
 /// two tests running it at once make one's logons fail (1326). Under nextest,
@@ -2850,7 +2857,7 @@ fn legacy_planted_project_metadata_survives_a_crash() {
     child.wait().expect("wait for the crash child");
     crate::repair_stale_integrity_labels().expect("repair");
     let crashed = planted();
-    let confirmed = crate::confirm_planted_project_metadata(&dot_codex).expect("confirm");
+    let confirmed = confirm_shown(&dot_codex).expect("confirm");
     let after_confirming = planted();
 
     assert_eq!(
