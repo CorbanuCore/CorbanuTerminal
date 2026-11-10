@@ -32,7 +32,9 @@ use codex_protocol::permissions::FileSystemSandboxEntry;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::permissions::FileSystemSpecialPath;
 use codex_protocol::permissions::NetworkSandboxPolicy;
+use codex_sandboxing::SandboxType;
 use codex_utils_absolute_path::AbsolutePathBuf;
+use codex_utils_path_uri::PathUri;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -375,16 +377,18 @@ async fn run_command_exec(
             network_environment_id: None,
             sandbox_permissions: SandboxPermissions::UseDefault,
             windows_sandbox_level: level,
-            windows_sandbox_private_desktop: false,
             justification: None,
             arg0: None,
         },
         profile,
         &cwd,
-        std::slice::from_ref(&cwd),
+        &[PathUri::from_abs_path(&cwd)],
         &None,
+        /*codex_self_exe*/ &None,
+        SandboxType::WindowsRestrictedToken,
         /*use_legacy_landlock*/ false,
-    );
+    )
+    .await;
     match request {
         Err(err) if err.to_string().contains(SPLIT_ROOTS_REFUSAL) => (
             Outcome::SplitRootsRefused {
