@@ -66,11 +66,11 @@ use codex_protocol::protocol::TurnAbortedEvent;
 use codex_protocol::protocol::TurnCompleteEvent;
 use codex_protocol::protocol::TurnDiffEvent;
 use codex_protocol::protocol::WarningEvent;
-use codex_protocol::turn_input::TurnInput as SubmittedTurnInput;
 use codex_protocol::turn_input::NotSubmittedReason;
+use codex_protocol::turn_input::TurnInput as SubmittedTurnInput;
 use codex_protocol::turn_input::TurnInputMode;
-use codex_protocol::turn_input::TurnInputSubmission;
 use codex_protocol::turn_input::TurnInputRequest;
+use codex_protocol::turn_input::TurnInputSubmission;
 use codex_protocol::turn_input::TurnStartOptions;
 use codex_thread_store::PersistContext;
 
@@ -1377,7 +1377,10 @@ impl Session {
     /// turn ends. Anything else is reported, as for client input.
     async fn settle_follow_up_input(
         &self,
-        reply: std::result::Result<CodexResult<TurnInputSubmission>, tokio::sync::oneshot::error::RecvError>,
+        reply: std::result::Result<
+            CodexResult<TurnInputSubmission>,
+            tokio::sync::oneshot::error::RecvError,
+        >,
         input: TurnInput,
         final_output_json_schema: Option<serde_json::Value>,
     ) {

@@ -871,8 +871,9 @@ impl TurnInputQueue {
         &mut self,
         final_output_json_schema: Option<serde_json::Value>,
     ) {
-        let (admitted, own): (Vec<_>, Vec<_>) =
-            std::mem::take(&mut self.items).into_iter().partition(|input| {
+        let (admitted, own): (Vec<_>, Vec<_>) = std::mem::take(&mut self.items)
+            .into_iter()
+            .partition(|input| {
                 matches!(
                     input,
                     TurnInput::UserInput { .. } | TurnInput::InterAgentCommunication(_)

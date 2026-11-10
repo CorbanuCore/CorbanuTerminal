@@ -396,7 +396,9 @@ impl Session {
                 && state
                     .session_configuration
                     .effective_permission_profile(&current_environments)
-                    != state.session_configuration.effective_permission_profile(proposed);
+                    != state
+                        .session_configuration
+                        .effective_permission_profile(proposed);
         if changes_authority && let Some(active_turn) = active.as_ref() {
             self.hold_input_after_authority_change(active_turn).await;
         }

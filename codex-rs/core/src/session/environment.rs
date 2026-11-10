@@ -383,7 +383,9 @@ impl Session {
                 && state
                     .session_configuration
                     .effective_permission_profile(&current_before)
-                    != state.session_configuration.effective_permission_profile(&current)
+                    != state
+                        .session_configuration
+                        .effective_permission_profile(&current)
             {
                 self.hold_input_after_authority_change(active_turn).await;
             }
