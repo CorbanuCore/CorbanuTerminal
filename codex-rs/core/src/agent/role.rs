@@ -4,17 +4,20 @@
 //! session's authority. A projected layer keeps existing layer-based consumers in sync.
 //!
 //! Corbanu (D526 (a), provisional): besides upstream's fields a role may set base instructions
-//! (the crew roles) and choose a provider, which keeps the parent's account and the developer
-//! accounting wire. Permission settings may only make the child stricter: `allow_login_shell =
-//! false` and upstream's feature/skill disables apply; the parent's sandbox, approvals, network,
-//! raised Windows sandbox and depth limit are kept, and other keys are reported at startup.
-//! A project's role files get the project-config denylist (D512).
+//! (the crew roles) and choose one of the parent's configured providers within managed
+//! requirements; the account always comes from the parent's side and a built-in provider keeps
+//! its routing and authentication. Permission settings are never applied: the child keeps its
+//! parent's sandbox, approvals, network, raised Windows sandbox and depth limit. A permission
+//! setting that is equal or looser is ignored and reported; one that is stricter or can't be
+//! compared refuses the spawn, with the reason. `allow_login_shell = false` and upstream's
+//! feature/skill disables do apply. A project's role files get the project-config denylist (D512).
 
 use crate::config::AccountingMode;
 use crate::config::AgentRoleConfig;
 use crate::config::AgentRoleSource;
 use crate::config::Config;
 use crate::config::deserialize_config_toml_with_base;
+use crate::windows_sandbox::WindowsSandboxLevelExt;
 use anyhow::anyhow;
 use codex_agent_roles::parse_agent_role_file_contents;
 use codex_agent_roles::project_role_ignored_keys_warning;
@@ -31,10 +34,13 @@ use codex_features::Feature;
 use codex_features::feature_for_key;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::WireApi;
+use codex_model_provider_info::built_in_model_providers;
+use codex_model_provider_info::merge_configured_model_providers;
 use codex_protocol::config_types::Personality;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::config_types::ServiceTier;
 use codex_protocol::config_types::Verbosity;
+use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::models::BaseInstructionsProvenance;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::AskForApproval;
@@ -42,6 +48,7 @@ use codex_protocol::protocol::SandboxPolicy;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::LazyLock;
@@ -51,6 +58,27 @@ use toml::Value as TomlValue;
 pub const DEFAULT_ROLE_NAME: &str = "default";
 const AGENT_TYPE_UNAVAILABLE_ERROR: &str = "agent type is currently not available";
 const AGENT_NAMES: &str = include_str!("../../assets/agent/agent_names.txt");
+
+/// Corbanu (D526 (a)): a deliberate refusal of a role, whose reason reaches the caller.
+#[derive(Debug)]
+struct RoleRefusal(String);
+
+impl std::fmt::Display for RoleRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for RoleRefusal {}
+
+/// Refuses the role with a reason the caller sees, unless `$cond` holds.
+macro_rules! refuse_unless {
+    ($cond:expr, $($arg:tt)+) => {
+        if !$cond {
+            return Err(anyhow::Error::new(RoleRefusal(format!($($arg)+))));
+        }
+    };
+}
 
 fn default_agent_nickname_list() -> Vec<&'static str> {
     AGENT_NAMES
@@ -96,6 +124,9 @@ struct AgentRoleOverrides {
     /// layer stack, which may be shown to the user and can hold credentials.
     #[serde(skip)]
     model_provider_overlay: Option<TomlValue>,
+    /// The same table as the role's config read it.
+    #[serde(skip)]
+    model_provider_overlay_info: Option<ModelProviderInfo>,
 }
 
 /// Applies typed role overrides to the existing parent-derived configuration.
@@ -113,7 +144,12 @@ pub(crate) async fn apply_role_to_config(
         .await
         .map_err(|err| {
             tracing::warn!("failed to apply role to config: {err}");
-            AGENT_TYPE_UNAVAILABLE_ERROR.to_string()
+            match err.downcast_ref::<RoleRefusal>() {
+                Some(RoleRefusal(reason)) => {
+                    format!("agent type `{role_name}` was refused: {reason}")
+                }
+                None => AGENT_TYPE_UNAVAILABLE_ERROR.to_string(),
+            }
         })
 }
 
@@ -155,7 +191,8 @@ async fn apply_role_to_config_inner(
         .get("model_providers")
         .and_then(|providers| providers.get(&selected_provider_id))
         .cloned();
-    let role_config = deserialize_config_toml_with_base(role_layer_toml, &config.codex_home)?;
+    let mut role_config = deserialize_config_toml_with_base(role_layer_toml, &config.codex_home)?;
+    let model_provider_overlay_info = role_config.model_providers.remove(&selected_provider_id);
     let mut overrides = AgentRoleOverrides {
         developer_instructions: role_config.developer_instructions,
         instructions: role_config.instructions,
@@ -168,6 +205,7 @@ async fn apply_role_to_config_inner(
         service_tier: role_config.service_tier,
         allow_login_shell: role_config.allow_login_shell.filter(|allowed| !allowed),
         model_provider_overlay,
+        model_provider_overlay_info,
         ..Default::default()
     };
 
@@ -224,9 +262,9 @@ async fn apply_role_to_config_inner(
 }
 
 /// Corbanu (D526 (a), provisional): a role's permission settings are not applied to the child,
-/// which keeps its parent's. A setting that would be looser is ignored (reported at startup); one
-/// that would be stricter, or that can't be compared, fails the spawn so the child never runs
-/// looser than its role asked for.
+/// which keeps its parent's. A setting that is provably equal or looser is ignored (reported at
+/// startup); one that would be stricter, or that can't be compared, refuses the spawn so the
+/// child never runs looser than its role asked for.
 fn reject_stricter_unapplied_permissions(config: &Config, role: &TomlValue) -> anyhow::Result<()> {
     if let Some(mode) = role.get("sandbox_mode") {
         let rank = |mode: &str| match mode {
@@ -243,12 +281,12 @@ fn reject_stricter_unapplied_permissions(config: &Config, role: &TomlValue) -> a
             SandboxPolicy::WorkspaceWrite { .. } => 1,
             SandboxPolicy::DangerFullAccess | SandboxPolicy::ExternalSandbox { .. } => 2,
         };
-        anyhow::ensure!(
+        refuse_unless!(
             mode.as_str()
                 .and_then(rank)
                 .is_some_and(|rank| rank >= parent_rank),
-            "this role asks for a stricter sandbox_mode than its parent's, which spawned agents \
-             don't apply yet; the spawn is refused rather than run with the parent's sandbox"
+            "it asks for a stricter sandbox_mode than its parent's, which spawned agents don't \
+             apply yet"
         );
     }
     if let Some(policy) = role.get("approval_policy") {
@@ -261,50 +299,91 @@ fn reject_stricter_unapplied_permissions(config: &Config, role: &TomlValue) -> a
             AskForApproval::UnlessTrusted => Some(2),
             AskForApproval::Granular(_) => None,
         };
-        anyhow::ensure!(
+        refuse_unless!(
             policy == parent
                 || rank(&policy)
                     .zip(rank(&parent))
                     .is_some_and(|(role, parent)| role <= parent),
-            "this role asks for a stricter approval_policy than its parent's, which spawned \
-             agents don't apply yet; the spawn is refused rather than run with the parent's policy"
+            "it asks for a stricter approval_policy than its parent's, which spawned agents \
+             don't apply yet"
         );
     }
-    let role_network_off = role
+    if let Some(reviewer) = role.get("approvals_reviewer") {
+        let parent = TomlValue::try_from(config.approvals_reviewer).ok();
+        refuse_unless!(
+            parent.as_ref() == Some(reviewer),
+            "it selects an approvals_reviewer other than its parent's, which spawned agents \
+             don't apply"
+        );
+    }
+    if let Some(workspace_write) = role
         .get("sandbox_workspace_write")
-        .and_then(|table| table.get("network_access"))
-        .and_then(TomlValue::as_bool)
-        == Some(false);
-    anyhow::ensure!(
-        !role_network_off || !config.permissions.network_sandbox_policy().is_enabled(),
-        "this role turns network access off, which spawned agents don't apply yet; the spawn is \
-         refused rather than run with the parent's network access"
-    );
+        .and_then(TomlValue::as_table)
+    {
+        for (key, value) in workspace_write {
+            match key.as_str() {
+                // Extra writable roots only widen; the parent's roots are kept.
+                "writable_roots" => {}
+                "network_access" => refuse_unless!(
+                    value.as_bool() != Some(false)
+                        || !config.permissions.network_sandbox_policy().is_enabled(),
+                    "it turns network access off, which spawned agents don't apply yet"
+                ),
+                _ => refuse_unless!(
+                    value.as_bool() == Some(false),
+                    "it sets sandbox_workspace_write.{key}, which spawned agents don't apply"
+                ),
+            }
+        }
+    }
     if let Some(profile) = role.get("default_permissions") {
         let parent = config.permissions.active_permission_profile();
-        anyhow::ensure!(
+        refuse_unless!(
             profile.as_str().is_some_and(|profile| {
                 parent
                     .as_ref()
                     .is_some_and(|parent| parent.id.as_str() == profile)
             }),
-            "this role selects a permission profile other than its parent's, which spawned \
-             agents don't apply; the spawn is refused rather than run with the parent's profile"
+            "it selects a permission profile other than its parent's, which spawned agents \
+             don't apply"
         );
     }
-    if let Some(mode) = role
-        .get("windows")
-        .and_then(|windows| windows.get("sandbox"))
-        .and_then(TomlValue::as_str)
+    // These can't be compared with the parent's: any setting in them refuses the spawn.
+    for key in [
+        "permissions",
+        "profile",
+        "profiles",
+        "shell_environment_policy",
+    ] {
+        refuse_unless!(
+            role.get(key)
+                .is_none_or(|value| value.as_table().is_some_and(toml::map::Map::is_empty)),
+            "it sets {key}, which spawned agents don't apply and which can't be compared with \
+             its parent's"
+        );
+    }
+    // The Windows sandbox only exists on Windows; elsewhere the setting does nothing.
+    if cfg!(windows)
+        && let Some(mode) = role
+            .get("windows")
+            .and_then(|windows| windows.get("sandbox"))
+            .and_then(TomlValue::as_str)
     {
-        let parent = config
-            .permissions
-            .windows_sandbox_mode
-            .and_then(|mode| TomlValue::try_from(mode).ok());
-        anyhow::ensure!(
-            mode == "unelevated" || parent.as_ref().and_then(TomlValue::as_str) == Some(mode),
-            "this role asks for a different Windows sandbox than its parent's, which spawned \
-             agents don't apply; the spawn is refused rather than run with the parent's sandbox"
+        let rank = |level: WindowsSandboxLevel| match level {
+            WindowsSandboxLevel::Disabled => 0,
+            WindowsSandboxLevel::RestrictedToken => 1,
+            WindowsSandboxLevel::Elevated => 2,
+        };
+        let role_rank = match mode {
+            "unelevated" => Some(1),
+            "elevated" => Some(2),
+            _ => None,
+        };
+        let parent_rank = rank(WindowsSandboxLevel::from_config(config));
+        refuse_unless!(
+            role_rank.is_some_and(|role_rank| role_rank <= parent_rank),
+            "it asks for a stronger Windows sandbox than its parent's, which spawned agents \
+             don't apply"
         );
     }
     Ok(())
@@ -482,13 +561,13 @@ mod role_overrides {
         // Managed requirements pin the provider and its definition, as they did when a role
         // rebuilt the config from layers.
         if let Some(required) = config.config_layer_stack.required_model_provider() {
-            anyhow::ensure!(
+            refuse_unless!(
                 required == provider_id,
-                "managed requirements select model provider `{required}`; this role can't select \
+                "managed requirements select model provider `{required}`, so it can't select \
                  `{provider_id}`"
             );
         }
-        anyhow::ensure!(
+        refuse_unless!(
             overrides.model_provider_overlay.is_none()
                 || !config
                     .config_layer_stack
@@ -496,11 +575,11 @@ mod role_overrides {
                     .model_providers
                     .as_ref()
                     .is_some_and(|providers| providers.contains_key(&provider_id)),
-            "managed requirements define model provider `{provider_id}`; this role can't change it"
+            "managed requirements define model provider `{provider_id}`, so it can't change it"
         );
-        anyhow::ensure!(
+        refuse_unless!(
             same_provider || overrides.model.is_some(),
-            "this role selects model provider `{provider_id}` without a model; set `model` too"
+            "it selects model provider `{provider_id}` without a model; set `model` too"
         );
         // Only providers the parent has configured: a child rebuilt from its layers must be
         // able to resolve the provider again.
@@ -512,25 +591,46 @@ mod role_overrides {
                 .get(&provider_id)
                 .cloned()
                 .ok_or_else(|| {
-                    anyhow!(
-                        "this role selects model provider `{provider_id}`, which is not configured"
-                    )
+                    anyhow::Error::new(RoleRefusal(format!(
+                        "it selects model provider `{provider_id}`, which is not configured"
+                    )))
                 })?
         };
-        let mut provider = TomlValue::try_from(&base)?;
-        if let Some(overlay) = &overrides.model_provider_overlay {
-            codex_config::merge_toml_values(&mut provider, overlay);
-        }
-        let mut provider: ModelProviderInfo = provider.try_into().map_err(|err| {
-            anyhow!("this role's model provider `{provider_id}` is not usable: {err}")
-        })?;
+        let accounting_wire = same_provider.then(|| accounting_wire(config)).flatten();
+        let built_in =
+            built_in_model_providers(/*openai_base_url*/ None).contains_key(&provider_id);
+        let mut provider = match (
+            &overrides.model_provider_overlay,
+            &overrides.model_provider_overlay_info,
+        ) {
+            // A built-in provider keeps its identity, routing and authentication, as with
+            // `config.toml`; only what config may change on it applies. Main overlaid the
+            // whole table only for a bound accounting route on the parent's own provider.
+            (Some(_), Some(overlay)) if built_in && accounting_wire.is_none() => {
+                merge_configured_model_providers(
+                    HashMap::from([(provider_id.clone(), base.clone())]),
+                    HashMap::from([(provider_id.clone(), overlay.clone())]),
+                )
+                .map_err(|err| anyhow::Error::new(RoleRefusal(err)))?
+                .remove(&provider_id)
+                .ok_or_else(|| anyhow!("model provider `{provider_id}` disappeared"))?
+            }
+            (Some(overlay), _) => {
+                let mut provider = TomlValue::try_from(&base)?;
+                codex_config::merge_toml_values(&mut provider, overlay);
+                provider.try_into().map_err(|err| {
+                    anyhow!("this role's model provider `{provider_id}` is not usable: {err}")
+                })?
+            }
+            (None, _) => base.clone(),
+        };
         provider.validate().map_err(anyhow::Error::msg)?;
         // As on main: the binding follows the parent's provider; another provider is
         // rebound per turn by the accounting route.
-        if same_provider && let Some(accounting_wire) = accounting_wire(config) {
-            anyhow::ensure!(
+        if let Some(accounting_wire) = accounting_wire {
+            refuse_unless!(
                 provider.wire_api == accounting_wire,
-                "this role changes the provider's wire_api, which developer accounting cannot follow; \
+                "it changes the provider's wire_api, which developer accounting cannot follow; \
                  remove wire_api from the role's [model_providers] overlay"
             );
         }
