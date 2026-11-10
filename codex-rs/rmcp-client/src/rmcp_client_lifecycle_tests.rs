@@ -578,7 +578,14 @@ async fn start_remote_with_hanging_executor(hang: ExecutorHang) -> RemoteStart {
         Vec::new(),
         Some(env),
         &[],
-        Some(std::env::temp_dir().to_string_lossy().into_owned()),
+        // Match the executor stdio integration tests: an absolute cwd with no trailing
+        // separator on every platform.
+        Some(
+            std::env::current_dir()
+                .expect("current dir")
+                .to_string_lossy()
+                .into_owned(),
+        ),
         Arc::new(ExecutorStdioServerLauncher::new(
             Arc::clone(&backend) as Arc<dyn ExecBackend>
         )),
