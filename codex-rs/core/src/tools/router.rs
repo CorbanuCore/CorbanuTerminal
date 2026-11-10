@@ -249,6 +249,10 @@ impl ToolRouter {
     // Answers if the tool plan lets the model invoke the tool directly, through code mode, or deferred tool search.
     pub(crate) fn exposes_tool(&self, name: &ToolName) -> bool {
         let name = name.clone().with_default_namespace();
+        // #688: on wires without namespaces a namespaced tool is offered under a flat name.
+        if self.flat_tool_names.flat_name_for(&name).is_some() {
+            return true;
+        }
         if self
             .code_mode_tool_names
             .values()
