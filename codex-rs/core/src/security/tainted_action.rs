@@ -609,18 +609,30 @@ pub(super) fn classify_as_windows(
     classifier.found
 }
 
-/// #1772 review 1: [`judged`], and when it read some text where main reads
-/// it otherwise (`shell::simple_commands_read`), the action judged again
-/// with main's reading: the stronger finding is kept, so the new reading
-/// only adds findings (`echo '>"'; ./x; echo '"'`, `sh -c 'true &>f ./x'`).
-/// #1772 review 2: the second judgment is main's reading exactly (every
-/// change of reading sets `read_newly`, and the helper lexers read as
-/// main), so the verdict is never quieter than main's.
+/// Judge with literal brace values while preserving the full pre-#1975
+/// verdict: #1772 redirections with old braces, plus the legacy reading.
 fn judged_both(action: &ApprovalAction, homes: impl Fn() -> Homes, as_named: bool) -> Classifier {
-    let mut classifier = judged(action, homes(), as_named, /*main_reading*/ false);
-    if classifier.read_newly {
-        let main = judged(action, homes(), as_named, /*main_reading*/ true);
-        if let Some(kind) = main.found {
+    judged_readings(|reading| judged(action, homes(), as_named, reading))
+}
+
+/// Shared by production classification and the forced-shell measuring
+/// harness. A changed brace reading requires the pre-#1975 redirection
+/// reading, even if the latest reading did not itself change redirections.
+/// Only that baseline's redirection flag determines whether its legacy
+/// fallback is needed. Each pass has fresh classifier state and homes.
+fn judged_readings(read: impl Fn(shell::Reading) -> Classifier) -> Classifier {
+    let mut classifier = read(shell::Reading::LiteralBraces);
+    let mut redirections_read_newly = classifier.redirections_read_newly;
+    if classifier.braces_read_newly {
+        let baseline = read(shell::Reading::Redirections);
+        redirections_read_newly = baseline.redirections_read_newly;
+        if let Some(kind) = baseline.found {
+            classifier.note(kind);
+        }
+    }
+    if redirections_read_newly {
+        let legacy = read(shell::Reading::Legacy);
+        if let Some(kind) = legacy.found {
             classifier.note(kind);
         }
     }
@@ -628,9 +640,13 @@ fn judged_both(action: &ApprovalAction, homes: impl Fn() -> Homes, as_named: boo
 }
 
 /// One judgment of the action, under the path rules of `homes`.
-/// `main_reading`: redirections are lexed as on main
-/// (`shell::simple_commands_read`).
-fn judged(action: &ApprovalAction, homes: Homes, as_named: bool, main_reading: bool) -> Classifier {
+/// `reading` selects independent redirection and brace behavior.
+fn judged(
+    action: &ApprovalAction,
+    homes: Homes,
+    as_named: bool,
+    reading: shell::Reading,
+) -> Classifier {
     // `avoids_zsh` reads command words too, so reset before any reader can
     // observe a changed #1773 sudo option boundary.
     indirect::reset_sudo_option_boundary_changed();
@@ -641,41 +657,34 @@ fn judged(action: &ApprovalAction, homes: Homes, as_named: bool, main_reading: b
             }
             ApprovalAction::ApplyPatch { .. } => false,
         };
-    judged_avoiding_read(action, homes, avoids_zsh, main_reading)
+    judged_avoiding_read(action, homes, avoids_zsh, reading)
 }
 
 /// [`judged`] with the zsh-only checks skipped at the top level when
 /// `avoids_zsh` (#932's measuring harness also judges with it forced), and
-/// judged again with main's reading as [`judged_both`] does.
+/// combined with the full pre-#1975 verdict as [`judged_both`] does.
 #[cfg(test)]
 fn judged_avoiding(
     action: &ApprovalAction,
     homes: impl Fn() -> Homes,
     avoids_zsh: bool,
 ) -> Classifier {
-    indirect::reset_sudo_option_boundary_changed();
-    let mut classifier =
-        judged_avoiding_read(action, homes(), avoids_zsh, /*main_reading*/ false);
-    if classifier.read_newly {
+    judged_readings(|reading| {
         indirect::reset_sudo_option_boundary_changed();
-        let main = judged_avoiding_read(action, homes(), avoids_zsh, /*main_reading*/ true);
-        if let Some(kind) = main.found {
-            classifier.note(kind);
-        }
-    }
-    classifier
+        judged_avoiding_read(action, homes(), avoids_zsh, reading)
+    })
 }
 
 /// One judgment, with the zsh-only checks skipped at the top level when
-/// `avoids_zsh`, and `main_reading` (see [`judged`]).
+/// `avoids_zsh`, under the selected `reading` (see [`judged`]).
 fn judged_avoiding_read(
     action: &ApprovalAction,
     homes: Homes,
     avoids_zsh: bool,
-    main_reading: bool,
+    reading: shell::Reading,
 ) -> Classifier {
     let mut classifier = Classifier::new(homes, avoids_zsh);
-    classifier.main_reading = main_reading;
+    classifier.reading = reading;
     match action {
         ApprovalAction::Shell { command, cwd, .. }
         | ApprovalAction::ExecCommand { command, cwd, .. } => {
@@ -747,8 +756,9 @@ impl Classifier {
             avoids_zsh,
             homes,
             found: None,
-            main_reading: false,
-            read_newly: false,
+            reading: shell::Reading::LiteralBraces,
+            redirections_read_newly: false,
+            braces_read_newly: false,
             scripts_read: 0,
             rebuilt: 0,
             not_shell: 0,
@@ -1497,11 +1507,13 @@ struct Folders {
 struct Classifier {
     homes: Homes,
     found: Option<ProtectedActionKind>,
-    /// #1772 review 1: lex redirections as on main (`judged`).
-    main_reading: bool,
+    /// Redirection and brace behavior for this independent judgment.
+    reading: shell::Reading,
     /// #1772 review 1: some lexed text was read where main reads it
-    /// otherwise (`shell::Lexed::read_newly`).
-    read_newly: bool,
+    /// otherwise (`shell::Lexed::redirections_read_newly`).
+    redirections_read_newly: bool,
+    /// #1975: literal braces changed this reading.
+    braces_read_newly: bool,
     scripts_read: usize,
     /// #1261: under Windows path rules, whether the first judgment lexed
     /// text holding a backslash. Its POSIX lexer drops every backslash
@@ -1947,8 +1959,9 @@ impl Classifier {
             .any(|part| unknown_folder::may_redefine_sudo(part));
         // #841: this line's own sed programs (nested lines have theirs).
         let outer_scope = std::mem::replace(&mut self.sed_scope, SedScope::of(command));
-        let lexed = shell::simple_commands_read(command, self.main_reading);
-        self.read_newly |= lexed.read_newly;
+        let lexed = shell::simple_commands_read(command, self.reading);
+        self.redirections_read_newly |= lexed.redirections_read_newly;
+        self.braces_read_newly |= lexed.braces_read_newly;
         if !self.stat_builtin {
             self.stat_builtin = code_tables::may_load_stat(command, &lexed.commands);
         }
@@ -4024,6 +4037,13 @@ mod tainted_action_linear_tests;
 #[cfg(test)]
 #[path = "tainted_action_git_ext_tests.rs"]
 mod tainted_action_git_ext_tests;
+
+#[cfg(test)]
+#[path = "tainted_action_brace_reading_tests.rs"]
+mod tainted_action_brace_reading_tests;
+#[cfg(test)]
+#[path = "tainted_action_git_option_value_tests.rs"]
+mod tainted_action_git_option_value_tests;
 
 #[cfg(test)]
 #[path = "tainted_action_git_quoted_tests.rs"]
