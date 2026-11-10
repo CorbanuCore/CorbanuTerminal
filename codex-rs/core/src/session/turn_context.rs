@@ -820,15 +820,10 @@ impl Session {
         // #2000: a Windows sandbox set up during the session (it only gets
         // stronger) is the one for everything started from this config, such
         // as child agents, not the one the session started with.
-        match session_configuration.windows_sandbox_level {
-            WindowsSandboxLevel::Elevated => {
-                per_turn_config.set_windows_elevated_sandbox_enabled(/*value*/ true);
-            }
-            WindowsSandboxLevel::RestrictedToken => {
-                per_turn_config.set_windows_sandbox_enabled(/*value*/ true);
-            }
-            WindowsSandboxLevel::Disabled => {}
-        }
+        crate::windows_sandbox::raise_windows_sandbox(
+            &mut per_turn_config,
+            session_configuration.windows_sandbox_level,
+        );
         per_turn_config
     }
 

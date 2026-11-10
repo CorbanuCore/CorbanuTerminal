@@ -184,3 +184,38 @@ fn pf_33_s02_destination_guard_drops_local_binding_from_provisioning() {
         }
     );
 }
+
+/// #2000: a config built from the session's starting layers (as a role
+/// rebuilds a child agent's) gets the session's raised Windows sandbox, and a
+/// stronger one it already selects stays.
+#[tokio::test]
+async fn issue_2000_raise_windows_sandbox_only_raises() {
+    let level = |config: &Config| WindowsSandboxLevel::from_config(config);
+    let mut config = crate::config::test_config().await;
+    config.permissions.windows_sandbox_mode = None;
+    for feature in [Feature::WindowsSandbox, Feature::WindowsSandboxElevated] {
+        config.features.disable(feature).expect("test config");
+    }
+    assert_eq!(level(&config), WindowsSandboxLevel::Disabled);
+    let starting = config.clone();
+
+    for target in [
+        WindowsSandboxLevel::Disabled,
+        WindowsSandboxLevel::RestrictedToken,
+        WindowsSandboxLevel::Elevated,
+    ] {
+        let mut raised = starting.clone();
+        raise_windows_sandbox(&mut raised, target);
+        assert_eq!(level(&raised), target);
+    }
+    let mut elevated = starting.clone();
+    elevated.set_windows_elevated_sandbox_enabled(/*value*/ true);
+    for lower in [
+        WindowsSandboxLevel::Disabled,
+        WindowsSandboxLevel::RestrictedToken,
+    ] {
+        let mut kept = elevated.clone();
+        raise_windows_sandbox(&mut kept, lower);
+        assert_eq!(level(&kept), WindowsSandboxLevel::Elevated);
+    }
+}

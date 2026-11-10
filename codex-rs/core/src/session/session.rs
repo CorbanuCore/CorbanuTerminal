@@ -394,8 +394,8 @@ impl SessionConfiguration {
             // #2000: mid-session the Windows sandbox only gets stronger (a
             // set-up sandbox applies at once); a weaker one waits for a new
             // session, so nothing can lower it under a running session.
-            if windows_sandbox_strength(windows_sandbox_level)
-                < windows_sandbox_strength(self.windows_sandbox_level)
+            if crate::windows_sandbox::windows_sandbox_strength(windows_sandbox_level)
+                < crate::windows_sandbox::windows_sandbox_strength(self.windows_sandbox_level)
             {
                 return Err(ConstraintError::InvalidValue {
                     field_name: "windows_sandbox_level",
@@ -544,15 +544,6 @@ impl SessionConfiguration {
 
         self.permission_profile_state
             .set_permission_profile_snapshot(permission_snapshot)
-    }
-}
-
-/// #2000: how strongly each Windows sandbox level confines commands.
-fn windows_sandbox_strength(level: WindowsSandboxLevel) -> u8 {
-    match level {
-        WindowsSandboxLevel::Disabled => 0,
-        WindowsSandboxLevel::RestrictedToken => 1,
-        WindowsSandboxLevel::Elevated => 2,
     }
 }
 
