@@ -31,9 +31,9 @@ use codex_protocol::error::Result as CodexResult;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::protocol::Event;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::WarningEvent;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
+use codex_protocol::protocol::WarningEvent;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum PrewarmInput {
@@ -275,8 +275,7 @@ impl Session {
         let startup_prewarm = tokio::spawn(
             async move {
                 let result =
-                    schedule_startup_prewarm_inner(startup_prewarm_session, input, reopened)
-                        .await;
+                    schedule_startup_prewarm_inner(startup_prewarm_session, input, reopened).await;
                 let status = if result.is_ok() { "ready" } else { "failed" };
                 session_telemetry.record_startup_phase(
                     "startup_prewarm_total",

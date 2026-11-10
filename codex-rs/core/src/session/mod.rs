@@ -2329,14 +2329,14 @@ impl Session {
             follows_model_list,
         ) = {
             let mut state = self.state.lock().await;
-            let mut updated = match self.apply_session_settings(&state.session_configuration, &updates)
-            {
-                Ok(updated) => updated,
-                Err(err) => {
-                    warn!("rejected session settings update: {err}");
-                    return Err(err);
-                }
-            };
+            let mut updated =
+                match self.apply_session_settings(&state.session_configuration, &updates) {
+                    Ok(updated) => updated,
+                    Err(err) => {
+                        warn!("rejected session settings update: {err}");
+                        return Err(err);
+                    }
+                };
 
             if !should_commit(&state.session_configuration, &updated) {
                 return Ok(None);
@@ -2487,7 +2487,11 @@ impl Session {
     /// state lock by every path that changes the provider. Returns whether the
     /// account changed; connectors are then marked for reconnection.
     pub(super) fn follow_provider_account(&self, next: &SessionConfiguration) -> bool {
-        if !self.services.active_auth.follow_provider(next.provider.info()) {
+        if !self
+            .services
+            .active_auth
+            .follow_provider(next.provider.info())
+        {
             return false;
         }
         let account = codex_model_provider::named_sign_in_account(next.provider.info())
