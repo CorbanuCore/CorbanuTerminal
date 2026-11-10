@@ -369,15 +369,19 @@ impl AgentRegistry {
         if let Some(agent_nickname) = agent_metadata.agent_nickname.clone() {
             active_agents.used_agent_nicknames.insert(agent_nickname);
         }
-        if let Some(previous_agent) = active_agents
-            .thread_paths
-            .insert(thread_id, RegisteredAgent::new(key.clone()))
-            && previous_agent.path != key
-        {
-            active_agents
-                .agent_tree
-                .remove(previous_agent.path.as_str());
+        // Re-registering a known thread at the same path keeps upstream's saved
+        // eviction data, which the reload path still needs until the thread is pinned.
+        let mut registered = RegisteredAgent::new(key.clone());
+        if let Some(previous_agent) = active_agents.thread_paths.remove(&thread_id) {
+            if previous_agent.path == key {
+                registered.evicted_environments = previous_agent.evicted_environments;
+            } else {
+                active_agents
+                    .agent_tree
+                    .remove(previous_agent.path.as_str());
+            }
         }
+        active_agents.thread_paths.insert(thread_id, registered);
         if let Some(previous_metadata) = active_agents.agent_tree.insert(key, agent_metadata)
             && let Some(previous_thread_id) = previous_metadata.agent_id
             && previous_thread_id != thread_id
