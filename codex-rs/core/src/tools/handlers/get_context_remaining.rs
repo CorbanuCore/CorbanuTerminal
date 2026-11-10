@@ -74,21 +74,12 @@ impl ToolExecutor<ToolInvocation> for GetContextRemainingHandler {
         ToolName::plain(GET_CONTEXT_REMAINING_TOOL_NAME)
     }
 
-    fn supports_parallel_tool_calls(&self) -> bool {
-        true
-    }
-
-<<<<<<< HEAD
     // It only reads state, and may wait for the calling response's usage; it
     // must not hold back other tools while it waits (#564).
     fn supports_parallel_tool_calls(&self) -> bool {
         true
     }
 
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
-||||||| 413492cd6c
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
-=======
     fn spec(&self) -> ToolSpec {
         self.spec.clone()
     }
@@ -97,7 +88,6 @@ impl ToolExecutor<ToolInvocation> for GetContextRemainingHandler {
     where
         ToolInvocation: 'a,
     {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         Box::pin(async move {
             if !matches!(invocation.payload, ToolPayload::Function { .. }) {
                 return Err(FunctionCallError::RespondToModel(

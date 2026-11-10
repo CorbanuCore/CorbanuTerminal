@@ -161,13 +161,11 @@ impl ToolExecutor<ToolInvocation> for SleepHandler {
 }
 
 impl CoreToolRuntime for SleepHandler {
-<<<<<<< HEAD
-    fn repeated_identical_calls_are_polling(&self) -> bool {
-||||||| 413492cd6c
-impl CoreToolRuntime for SleepHandler {}
-=======
     fn is_builtin_control_tool(&self) -> bool {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        true
+    }
+
+    fn repeated_identical_calls_are_polling(&self) -> bool {
         true
     }
 }

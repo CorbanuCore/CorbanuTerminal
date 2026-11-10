@@ -67,7 +67,10 @@ impl ToolExecutor<ToolInvocation> for PlaintextHandler {
         )
     }
 
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle<'a>(&'a self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'a>
+    where
+        ToolInvocation: 'a,
+    {
         Box::pin(async move {
             let mut analytics = ToolCallAnalytics::new(&invocation, CollabAgentTool::FollowupTask);
             let result = async {

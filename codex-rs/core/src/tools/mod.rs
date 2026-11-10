@@ -24,14 +24,10 @@ pub(crate) mod runtimes;
 pub(crate) mod sandboxing;
 pub(crate) mod spec_plan;
 pub(crate) mod tool_dispatch_trace;
-<<<<<<< HEAD
-pub(crate) mod writable_root_notices;
-||||||| 413492cd6c
-=======
 mod tool_namespaces_info;
 mod user_messaging;
 pub(crate) use user_messaging::record_confirmed_code_mode_send;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+pub(crate) mod writable_root_notices;
 
 use std::borrow::Cow;
 
