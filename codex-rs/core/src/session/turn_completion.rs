@@ -205,7 +205,9 @@ pub(super) fn objective_from_turn_input(input: &[TurnInput]) -> String {
         .iter()
         .filter_map(|item| match item {
             TurnInput::UserInput { content, .. } => Some(content),
-            TurnInput::ResponseItem(_) | TurnInput::InterAgentCommunication(_) => None,
+            TurnInput::ResponseItem(_)
+            | TurnInput::FunctionCallOutput(_)
+            | TurnInput::InterAgentCommunication(_) => None,
         })
         .flatten()
         .filter_map(|item| match item {
@@ -292,7 +294,7 @@ async fn stream_turn_completion_assessment(
     let stream_result = client_session
         .stream(
             prompt,
-            &turn_context.model_info,
+            turn_context.model_info(),
             &turn_context.session_telemetry,
             Some(ReasoningEffortConfig::Low),
             ReasoningSummaryConfig::None,
@@ -307,6 +309,7 @@ async fn stream_turn_completion_assessment(
         Err(_) => return Err(CodexErr::TurnAborted),
     };
     let mut output = None;
+    let mut includes_reasoning = turn_context.model_info().use_responses_lite;
     loop {
         let event = match stream.next().or_cancel(cancellation_token).await {
             Ok(Some(event)) => event?,
@@ -318,6 +321,9 @@ async fn stream_turn_completion_assessment(
             Err(_) => return Err(CodexErr::TurnAborted),
         };
         match event {
+            ResponseEvent::ServerReasoningIncluded(included) => {
+                includes_reasoning = included;
+            }
             ResponseEvent::OutputItemDone(item) => {
                 if let Some(text) = raw_assistant_output_text_from_item(&item)
                     && !text.trim().is_empty()
@@ -330,8 +336,12 @@ async fn stream_turn_completion_assessment(
                 finish_reason,
                 ..
             } => {
-                sess.update_token_usage_info(turn_context, token_usage.as_ref())
-                    .await?;
+                sess.update_token_usage_info(
+                    turn_context,
+                    token_usage.as_ref(),
+                    includes_reasoning,
+                )
+                .await?;
                 if let Some(codex_api::CompletionFinishReason::ProviderError(reason)) =
                     finish_reason.as_ref()
                 {
@@ -372,6 +382,8 @@ fn assessment_prompt(objective: &str, assistant_response: &str) -> Prompt {
     let assistant_response = truncate_chars(assistant_response, MAX_ASSISTANT_RESPONSE_CHARS);
     Prompt {
         input: vec![ResponseItem::Message {
+            encrypted_content: None,
+            status: None,
             id: None,
             role: "user".to_string(),
             content: vec![ContentItem::InputText {
@@ -384,6 +396,7 @@ fn assessment_prompt(objective: &str, assistant_response: &str) -> Prompt {
         }],
         base_instructions: BaseInstructions {
             text: ASSESSMENT_INSTRUCTIONS.to_string(),
+            provenance: None,
         },
         output_schema: Some(json!({
             "type": "object",
