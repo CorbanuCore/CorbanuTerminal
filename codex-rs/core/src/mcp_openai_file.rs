@@ -409,8 +409,8 @@ mod tests {
 
     /// #2050: only a local refusal ends an upload before the read; a remote
     /// environment's file system judges it against the executor's report.
-    #[test]
-    fn issue_2050_only_a_local_refusal_ends_an_upload_early() {
+    #[tokio::test]
+    async fn issue_2050_only_a_local_refusal_ends_an_upload_early() {
         let environment = |url: Option<String>| {
             crate::session::turn_context::TurnEnvironment::new(
                 "env".to_string(),
